@@ -245,16 +245,19 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
 
 nonisolated enum AO3AutomatedFeature: CaseIterable, Sendable {
     case rankTop100
+    case queueSourceCounts
 
     var token: String {
         switch self {
         case .rankTop100: "feature=rank-top-100"
+        case .queueSourceCounts: "feature=queue-source-counts"
         }
     }
 
     var phrase: String {
         switch self {
         case .rankTop100: "reader-requested pages 2-5"
+        case .queueSourceCounts: "queue-open first-page counts"
         }
     }
 }

@@ -160,8 +160,8 @@ struct SearchPaginationBar: View {
                     .font(.system(size: totalPagesSize, weight: .medium, design: .monospaced))
                     .foregroundStyle(
                         themeManager.appTheme.isDarkFamily
-                            ? Color.white.opacity(0.60)
-                            : Color.secondary
+                            ? AnyShapeStyle(Color.white.opacity(0.60))
+                            : AnyShapeStyle(.secondaryInk)
                     )
             }
 
@@ -174,8 +174,8 @@ struct SearchPaginationBar: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(
                         themeManager.appTheme.isDarkFamily
-                            ? Color.white.opacity(0.60)
-                            : Color.secondary
+                            ? AnyShapeStyle(Color.white.opacity(0.60))
+                            : AnyShapeStyle(.secondaryInk)
                     )
             }
         }
@@ -386,7 +386,7 @@ private struct PageJumpSheet: View {
         Text(text.uppercased())
             .font(.system(size: 10.5, weight: .bold))
             .tracking(1.26)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
     }
 
     private var fieldSection: some View {
@@ -411,7 +411,7 @@ private struct PageJumpSheet: View {
 
                 Text("of \(totalPages.formatted())")
                     .font(.system(size: totalPagesSize, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             .padding(.horizontal, 13)
             .padding(.vertical, 11)

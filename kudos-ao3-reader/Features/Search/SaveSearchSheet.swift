@@ -40,7 +40,7 @@ struct SaveSearchSheet: View {
 
                     Text("The name comes from your search. You can change it to anything.")
                         .font(.system(size: footnoteSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                         .pageBodyRow(top: 6, gutter: SubjectMetrics.accountGutter)
                 }
@@ -50,7 +50,7 @@ struct SaveSearchSheet: View {
                         if summary.isEmpty {
                             Text("You haven't chosen any filters, so only the name will be saved.")
                                 .font(.system(size: emptySummarySize))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, 14)
@@ -69,7 +69,7 @@ struct SaveSearchSheet: View {
 
                         Text("Only the choices you changed are saved.")
                             .font(.system(size: footnoteSize))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
                 } header: {

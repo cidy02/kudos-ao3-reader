@@ -87,7 +87,7 @@ struct KudosBackupTests {
     @Test func authorIdentityPersistsLocallyWithoutChangingBackupSchema() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let sourceConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -139,7 +139,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -209,7 +209,7 @@ struct KudosBackupTests {
 
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -264,7 +264,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -360,7 +360,7 @@ struct KudosBackupTests {
     @Test func backupRestoresReadingQueuesAndPreservedEPUBs() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -416,7 +416,7 @@ struct KudosBackupTests {
     @Test func restoreMergesByAO3WorkIDBeforeUUID() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -465,7 +465,7 @@ struct KudosBackupTests {
     @Test func restoreMergesByCanonicalAO3URLBeforeUUID() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -512,7 +512,7 @@ struct KudosBackupTests {
     @Test func restorePreservedStatusWithMissingEPUBBecomesMissingFile() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -595,7 +595,7 @@ struct KudosBackupTests {
         let contents = try KudosBackupContents(fileWrapper: wrapper)
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -818,7 +818,7 @@ struct KudosBackupTests {
     @Test func staleArchiveWithoutTagsDoesNotRemoveNewerLocalTag() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let olderArchiveDate = Date(timeIntervalSince1970: 100)
@@ -863,7 +863,7 @@ struct KudosBackupTests {
     @Test func repeatedRestoreOfArchiveTagsIsIdempotent() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let archivedWork = SavedWork(title: "Idempotent Work", author: "Writer")
@@ -896,7 +896,7 @@ struct KudosBackupTests {
     @Test func invalidBackupEPUBLeavesValidLocalEPUBUnchanged() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let workID = UUID()
@@ -984,7 +984,7 @@ struct KudosBackupTests {
     @Test func backupEPUBWithUnreferencedHostileEntryLeavesValidLocalEPUBUnchanged() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let workID = UUID()
@@ -1044,7 +1044,7 @@ struct KudosBackupTests {
     @Test func tombstoneSuppressedWorkDoesNotWriteEPUBBlob() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let workID = UUID()
@@ -1094,7 +1094,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self
         ])
         let collectionID = UUID(uuidString: "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff")!
         let dateAdded = Date(timeIntervalSince1970: 1_719_403_200) // 2024-06-26T12:00:00Z
@@ -1218,7 +1218,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -1336,7 +1336,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -1388,7 +1388,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self
         ])
         let searchID = UUID(uuidString: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")!
         let dateAdded = Date(timeIntervalSince1970: 1_719_403_200) // 2024-06-26T12:00:00Z
@@ -1600,7 +1600,7 @@ struct KudosBackupTests {
     @Test func incomingUnsignedTombstonesAreNotAdoptedOnMerge() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1635,7 +1635,7 @@ struct KudosBackupTests {
     @Test func replaceDoesNotLeaveStandingTombstonesThatBlockLaterMerge() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1689,7 +1689,7 @@ struct KudosBackupTests {
     @Test func fileMergeDoesNotOverwriteActiveOverlapTitleProgressOrUserTags() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1742,7 +1742,7 @@ struct KudosBackupTests {
     @Test func defaultReconcileAppliesLastWriterWinsOnOverlap() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1785,7 +1785,7 @@ struct KudosBackupTests {
     @Test func defaultReconcileDropsIncomingUnsignedTombstonesAndStillInsertsPresentWork() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1830,7 +1830,7 @@ struct KudosBackupTests {
     func existingSavedForLaterKeepsItsNewerMembershipClock(mode: BackupImportMode) throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1861,7 +1861,7 @@ struct KudosBackupTests {
     @Test func repeatedFileMergeKeepsArchivedDeletionsAndLocalRecoveryDeadlines() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1926,7 +1926,7 @@ struct KudosBackupTests {
     @Test func fileMergeUndeletesPendingDeletion() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1957,7 +1957,7 @@ struct KudosBackupTests {
     @Test func repeatedFileMergeUndoesReplaceParkingForWorksCollectionsAndQueues() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -2037,7 +2037,7 @@ struct KudosBackupTests {
     @Test func fileMergeAddsNewAnnotationIDsWithoutOverwritingExisting() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -2093,7 +2093,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
-            ReadingAnnotation.self, SavedSearch.self
+            ReadingAnnotation.self, SavedSearch.self, QueueSavedSearchLink.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -2145,7 +2145,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self
+            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self, QueueSavedSearchLink.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -2195,7 +2195,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self
+            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self, QueueSavedSearchLink.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -2250,7 +2250,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self
+            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self, QueueSavedSearchLink.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -2299,7 +2299,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self
+            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self, QueueSavedSearchLink.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -2393,7 +2393,7 @@ struct KudosBackupTests {
 
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -2454,7 +2454,7 @@ struct KudosBackupTests {
 
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -2515,7 +2515,7 @@ struct KudosBackupTests {
         let peer = TombstoneSigning.makePrivateKey()
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -2557,7 +2557,7 @@ struct KudosBackupTests {
 
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -2599,7 +2599,7 @@ struct KudosBackupTests {
 
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -2640,7 +2640,7 @@ struct KudosBackupTests {
     @Test func retractTombstoneMatchesAO3OrCanonicalURLNotOnlyRecordID() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)

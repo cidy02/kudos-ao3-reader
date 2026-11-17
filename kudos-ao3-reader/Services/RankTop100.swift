@@ -445,7 +445,7 @@ final class RankTop100Controller {
         case .releaseDisabled: "Rank Top 100 is disabled in this release."
         case let .retryAfter(date): "AO3 asked Kudos to wait until \(date.formatted(date: .omitted, time: .shortened))."
         case let .throttledUntil(date):
-            "Rank Top 100 is off until \(date.formatted(date: .abbreviated, time: .shortened))."
+            "Rank Top 100 is off until \(WorkStat.displayDate(date, time: .shortened))."
         case let .budgetRenews(date):
             "The 10-page budget renews at \(date.formatted(date: .omitted, time: .shortened))."
         }
@@ -466,7 +466,7 @@ struct RankTop100ProgressCard: View {
         if let progress = controller.progress {
             Text("\(progress.loadedWorks.formatted()) loaded · ranking updates as each page arrives")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -478,7 +478,7 @@ struct RankTop100ProgressCard: View {
         } else if let message = controller.message ?? controller.availabilityText {
             Text(message)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .frame(maxWidth: .infinity, alignment: .leading)

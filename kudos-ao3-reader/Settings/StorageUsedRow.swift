@@ -54,7 +54,7 @@ struct StorageSummaryRow: View {
                 if let footprint {
                     Text(LocalStorageFootprint.formatted(bytes: footprint.totalBytes))
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 } else {
                     // Measuring walks several directories, so say it is working
                     // rather than show a zero that is about to change.
@@ -107,7 +107,7 @@ struct StorageSummaryRow: View {
                 Circle().fill(color(segment.kind)).frame(width: 8, height: 8)
                 Text("\(segment.title) \(LocalStorageFootprint.formatted(bytes: segment.bytes))")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize()
             }
         }

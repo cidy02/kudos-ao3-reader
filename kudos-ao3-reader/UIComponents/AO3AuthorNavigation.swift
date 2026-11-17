@@ -143,7 +143,7 @@ struct AO3AuthorBylineView: View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             if includesBy {
                 Text("by ")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             if dynamicTypeSize.isAccessibilitySize, tokens.count > 1 {
                 // At the accessibility sizes they do not: side by side, each in its own
@@ -229,7 +229,7 @@ struct AO3AuthorBylineView: View {
             } else {
                 Text(shownName(text))
                     .fontWeight(emphasized ? .semibold : .regular)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
         }
     }

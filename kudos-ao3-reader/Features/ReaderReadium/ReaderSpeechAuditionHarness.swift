@@ -62,7 +62,7 @@ struct ReaderSpeechAuditionHarness: View {
                     Text("Speed")
                     Spacer()
                     Text(rateLabel)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .monospacedDigit()
                 }
                 Slider(value: $rate, in: ReaderSpeechPreferences.rateRange, step: 0.05)

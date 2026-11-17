@@ -492,7 +492,7 @@ enum BackupSyncSummary {
         guard sync.isConnected else { return "No folder connected" }
         let name = sync.folderDisplayName
         guard let date = sync.lastSyncAt else { return name.isEmpty ? "Not synced yet" : "\(name) · Not synced yet" }
-        let synced = "Synced \(date.formatted(date: .abbreviated, time: .shortened))"
+        let synced = "Synced \(WorkStat.displayDate(date, time: .shortened))"
         return name.isEmpty ? synced : "\(name) · \(synced)"
     }
 }
@@ -509,7 +509,7 @@ struct SettingsRowSummary: View {
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                Text(detail).font(.footnote).foregroundStyle(.secondary)
+                Text(detail).font(.footnote).foregroundStyle(.secondaryInk)
             }
         }
         .accessibilityElement(children: .combine)

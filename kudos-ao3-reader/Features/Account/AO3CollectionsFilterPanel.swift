@@ -155,7 +155,7 @@ struct AO3CollectionsFilterPanel: View {
     private func note(_ text: String) -> some View {
         Text(text)
             .font(.system(size: noteSize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
     }

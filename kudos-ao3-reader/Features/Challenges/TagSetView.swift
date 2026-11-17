@@ -471,7 +471,7 @@ struct TagSetView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Text(fieldLabel(nomination.field))
                     .font(.system(size: fieldLabelSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -550,7 +550,7 @@ struct TagSetView: View {
 
             Text("Nothing has been nominated to this tag set.")
                 .font(.system(size: bodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
@@ -593,7 +593,7 @@ struct TagSetView: View {
                 .accentFill()
             Text("Loading tag set…")
                 .font(.system(size: loadingSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .center)
@@ -607,7 +607,7 @@ struct TagSetView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Text(message)
                 .font(.system(size: noticeSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {

@@ -146,7 +146,7 @@ struct FandomListFilterSheet: View {
             if options.minimumWorks != .any {
                 Text(minimumWorksCaption)
                     .font(.system(size: captionSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .padding(.horizontal, 2)
             }
         }
@@ -166,7 +166,7 @@ struct FandomListFilterSheet: View {
             .font(.system(size: 11, weight: .semibold))
             .tracking(0.8)
             .textCase(.uppercase)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .padding(.bottom, 6)
     }
 
@@ -178,7 +178,7 @@ struct FandomListFilterSheet: View {
                     .foregroundStyle(.primary)
                 Text(detail)
                     .font(.system(size: toggleDetailSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .monospacedDigit()
             }
         }

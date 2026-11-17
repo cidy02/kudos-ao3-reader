@@ -147,7 +147,7 @@ struct FolderSyncSettingsSection: View {
                         if !folderStatus.folderPath.isEmpty {
                             Text(folderStatus.folderPath)
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                                 .lineLimit(1)
                         }
                     }
@@ -210,11 +210,11 @@ struct FolderSyncSettingsSection: View {
             }
 
             if let date = persistenceStatus.lastMigrationAttempt {
-                LabeledContent("Last Checked", value: date.formatted(date: .abbreviated, time: .shortened))
+                LabeledContent("Last Checked", value: WorkStat.displayDate(date, time: .shortened))
             }
 
             if let date = folderStatus.lastSyncAt {
-                LabeledContent("Last Synced", value: date.formatted(date: .abbreviated, time: .shortened))
+                LabeledContent("Last Synced", value: WorkStat.displayDate(date, time: .shortened))
             }
 
             Button(action: onRetryPreparation) {
@@ -231,14 +231,14 @@ struct FolderSyncSettingsSection: View {
                 HStack(spacing: 12) {
                     ProgressView().accentFill()
                     Text(isSyncing ? "Syncing library…" : "Preparing your library…")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
 
             if !folderStatus.lastError.isEmpty {
                 Text(folderStatus.lastError)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
         } footer: {
             Text("Kudos stores your library data, including reading history, in the folder you "
@@ -263,7 +263,7 @@ struct FolderSyncDetailsView: View {
                 LabeledContent("Auto Sync", value: folderStatus.autoSyncEnabled ? "On" : "Off")
                 LabeledContent("Pending Changes", value: folderStatus.isDirty ? "Yes" : "No")
                 if let date = folderStatus.lastSyncAt {
-                    LabeledContent("Last Synced", value: date.formatted(date: .abbreviated, time: .standard))
+                    LabeledContent("Last Synced", value: WorkStat.displayDate(date, time: .standard))
                 }
                 if !folderStatus.lastError.isEmpty {
                     LabeledContent("Last Error", value: folderStatus.lastError)
@@ -283,7 +283,7 @@ struct FolderSyncDetailsView: View {
             } else {
                 Section {
                     Text("No sync has run yet this session.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
         }

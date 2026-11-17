@@ -5,7 +5,9 @@ import SwiftUI
 /// Design system:
 /// - Main action: filled capsule. App accent fill (`ThemeManager.effectiveTint`),
 ///   high-contrast readable label via `ThemeManager.label(on:)`. Destructive stays system red.
-/// - Secondary: tinted capsule with a label, or tinted circle when icon-only (rule I-9).
+/// - Secondary: neutral grey capsule with the primary text colour, or a neutral circle when
+///   icon-only (rule I-9; T-545, owner 2026-11-16: the app colour is for the one main action).
+///   Destructive keeps its red tint.
 /// - On a gradient: white capsule with an app-colour label.
 /// - Two sizes per I-9: 50 pt for full-width or sheet confirm (Login, End of work,
 ///   onboarding, Resume) and 44 pt otherwise. `minHeight` is used, never fixed height,
@@ -46,7 +48,6 @@ public struct KudosButtonStyle: ButtonStyle {
     private var sidePadding: CGFloat { dense ? 10 : (size == .confirm ? 22 : 18) }
 
     @Environment(\.accentFill) private var envAccentFill
-    @Environment(\.accentInk) private var envAccentInk
     @Environment(ThemeManager.self) private var themeManager: ThemeManager?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.isEnabled) private var isEnabled
@@ -58,12 +59,8 @@ public struct KudosButtonStyle: ButtonStyle {
         return envAccentFill
     }
 
-    private var effectiveInk: Color {
-        if let themeManager {
-            return themeManager.appTheme.accentInk(for: effectiveAccent)
-        }
-        return envAccentInk
-    }
+    /// The system's own bordered-button grey: reads on a page, on a card and in every theme.
+    private static var neutralFill: Color { Color(.tertiarySystemFill) }
 
     public func makeBody(configuration: Configuration) -> some View {
         let isDestructive = configuration.role == .destructive
@@ -84,8 +81,8 @@ public struct KudosButtonStyle: ButtonStyle {
                     .contentShape(shape)
 
             case .secondary:
-                let bg = isDestructive ? Color.red.opacity(0.12) : effectiveAccent.opacity(0.12)
-                let fg = isDestructive ? Color.red : effectiveInk
+                let bg = isDestructive ? Color.red.opacity(0.12) : Self.neutralFill
+                let fg = isDestructive ? Color.red : Color.primary
                 configuration.label
                     .font(labelFont)
                     .foregroundStyle(fg)
@@ -96,8 +93,8 @@ public struct KudosButtonStyle: ButtonStyle {
                     .contentShape(shape)
 
             case .secondaryCircle:
-                let bg = isDestructive ? Color.red.opacity(0.12) : effectiveAccent.opacity(0.12)
-                let fg = isDestructive ? Color.red : effectiveInk
+                let bg = isDestructive ? Color.red.opacity(0.12) : Self.neutralFill
+                let fg = isDestructive ? Color.red : Color.primary
                 configuration.label
                     .font(.headline)
                     .foregroundStyle(fg)

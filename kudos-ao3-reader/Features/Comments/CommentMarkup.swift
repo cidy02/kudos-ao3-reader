@@ -311,7 +311,7 @@ private struct CommentFormatBarButtonFace: View {
 
     var body: some View {
         glyph
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .frame(width: 34, height: 34)
             .background(Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -508,7 +508,7 @@ private struct CommentFormatTileFace: View {
                 .minimumScaleFactor(0.75)
             Text(tag.tagLabel)
                 .font(.system(.caption2, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
         }

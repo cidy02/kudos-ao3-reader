@@ -381,7 +381,7 @@ private struct CardRow: ViewModifier {
         if let leadingNumber {
             Text("\(leadingNumber)")
                 .font(.system(size: 15, weight: .semibold).monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .frame(width: Self.numberWidth, alignment: .trailing)
                 .padding(.leading, CardListMetrics.sideMargin)
         }

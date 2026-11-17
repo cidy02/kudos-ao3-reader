@@ -74,7 +74,7 @@ struct FilterRangeSlider: View {
         HStack(spacing: 8) {
             Text(title)
                 .font(.system(size: fieldTitleSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize()
             TextField("Any", text: Self.digitsOnly(text))
                 .accessibilityLabel(title)

@@ -45,7 +45,7 @@ struct TagSelectField: View {
                             Text(title)
                                 .foregroundStyle(.primary)
                             Text(selectionSummary)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                         Spacer(minLength: 8)
                     } else {
@@ -53,7 +53,7 @@ struct TagSelectField: View {
                             .foregroundStyle(.primary)
                         Spacer()
                         Text(selectionSummary)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     Image(systemName: "chevron.right")
                         .font(.footnote.weight(.semibold))
@@ -199,7 +199,7 @@ struct TagPickerView: View {
                                 emptyQueryPrompt
                             } else if results.isEmpty {
                                 Text("No tags found for “\(query)”.")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.secondaryInk)
                             } else {
                                 tagRows(results)
                             }
@@ -240,7 +240,7 @@ struct TagPickerView: View {
 
     private var searchPrompt: some View {
         Text("Type above to search AO3 \(title.lowercased()).")
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
     }
 
     /// 1av's opening state when nothing has been typed yet.
@@ -261,7 +261,7 @@ struct TagPickerView: View {
                 Text("Choose a fandom to see its most-used \(title.lowercased()) here.")
                     .font(.footnote)
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -286,7 +286,7 @@ struct TagPickerView: View {
             } label: {
                 HStack {
                     Text(tag)
-                        .foregroundStyle(state == .excluded ? Color.secondary : Color.primary)
+                        .foregroundStyle(state == .excluded ? AnyShapeStyle(.secondaryInk) : AnyShapeStyle(Color.primary))
                         .strikethrough(state == .excluded, color: theme.appTheme.excludeColor.opacity(0.7))
                     Spacer()
                     selectionLabel(for: state)

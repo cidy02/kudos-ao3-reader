@@ -45,7 +45,7 @@ struct WorkBulkTagSheet: View {
                 if allTags.isEmpty {
                     Section {
                         Text("You have no tags yet. Add one above to organize your Library.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     .appThemedRows()
                 } else {
@@ -80,14 +80,14 @@ struct WorkBulkTagSheet: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: symbol(for: coverage))
-                    .foregroundStyle(coverage == .none ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
+                    .foregroundStyle(coverage == .none ? AnyShapeStyle(.secondaryInk) : AnyShapeStyle(.tint))
                 Text(tag.name)
                     .foregroundStyle(.primary)
                 Spacer(minLength: 8)
                 if coverage == .some {
                     Text("some")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
             .contentShape(Rectangle())

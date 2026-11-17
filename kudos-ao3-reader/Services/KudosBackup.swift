@@ -1269,6 +1269,7 @@ nonisolated struct KudosBackupSavedSearch: Codable, Equatable {
     let name: String
     let dateAdded: Date
     let filters: AO3SearchFilters
+    let lastOpenedAt: Date?
 
     @MainActor
     init(savedSearch: SavedSearch) {
@@ -1276,13 +1277,27 @@ nonisolated struct KudosBackupSavedSearch: Codable, Equatable {
         name = savedSearch.name
         dateAdded = savedSearch.dateAdded
         filters = savedSearch.filters
+        lastOpenedAt = savedSearch.lastOpenedAt
     }
 
-    init(id: UUID, name: String, dateAdded: Date, filters: AO3SearchFilters) {
+    init(id: UUID, name: String, dateAdded: Date, filters: AO3SearchFilters, lastOpenedAt: Date? = nil) {
         self.id = id
         self.name = name
         self.dateAdded = dateAdded
         self.filters = filters
+        self.lastOpenedAt = lastOpenedAt
+    }
+}
+
+nonisolated struct KudosBackupQueueSearchLink: Codable, Equatable {
+    let searchID: UUID
+    let lastCheckedAt: Date?
+    let newResultCount: Int?
+
+    @MainActor init(link: QueueSavedSearchLink) {
+        searchID = link.search?.id ?? UUID()
+        lastCheckedAt = link.lastCheckedAt
+        newResultCount = link.newResultCount
     }
 }
 
@@ -1608,6 +1623,8 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
     /// `hue`: an older archive or Android carries none, and `nil` there is "no
     /// description", never an instruction to clear one.
     let notes: String?
+    let searchSources: [KudosBackupQueueSearchLink]?
+    let searchSourcesModifiedAt: Date?
 
     @MainActor
     init(queue: ReadingQueue) {
@@ -1627,6 +1644,10 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
         isPinned = queue.isPinned
         keepsWorksOffline = queue.keepsWorksOffline
         notes = queue.notes
+        let links = queue.searchLinks.filter { $0.search != nil }
+        searchSources = queue.searchSourcesModifiedAt == nil && links.isEmpty
+            ? nil : links.map(KudosBackupQueueSearchLink.init)
+        searchSourcesModifiedAt = queue.searchSourcesModifiedAt
     }
 
     func effectiveModifiedAt(memberships: [KudosBackupReadingQueueMembership]) -> Date? {
@@ -3268,12 +3289,57 @@ enum KudosBackupService {
                 existing.name = archived.name
                 existing.dateAdded = archived.dateAdded
                 existing.filters = archived.filters
+                if let opened = archived.lastOpenedAt,
+                   mode == .replaceLibrary || opened > (existing.lastOpenedAt ?? .distantPast) {
+                    existing.lastOpenedAt = opened
+                }
             } else {
                 let search = SavedSearch(name: archived.name, filters: archived.filters)
                 search.id = archived.id
                 search.dateAdded = archived.dateAdded
+                search.lastOpenedAt = archived.lastOpenedAt
                 context.insert(search)
                 savedSearchesByID[archived.id] = search
+            }
+        }
+        // An absent key is an older or Android snapshot, not a request to
+        // detach sources already recorded on this device.
+        for archived in contents.manifest.readingQueues {
+            guard !suppressedQueueIDs.contains(archived.id),
+                  let sources = archived.searchSources,
+                  let queue = queuesByID[archived.id]
+            else { continue }
+            let sourceStamp = archived.searchSourcesModifiedAt ?? archived.dateUpdated
+            let applyMembership = mode == .replaceLibrary
+                || sourceStamp > (queue.searchSourcesModifiedAt ?? .distantPast)
+            if applyMembership {
+                let incomingIDs = Set(sources.map(\.searchID))
+                for link in queue.searchLinks where link.search.map({ !incomingIDs.contains($0.id) }) ?? true {
+                    context.delete(link)
+                }
+                queue.searchSourcesModifiedAt = sourceStamp
+            }
+            var seenSourceIDs = Set<UUID>()
+            for source in sources {
+                guard seenSourceIDs.insert(source.searchID).inserted else { continue }
+                guard let search = savedSearchesByID[source.searchID] else { continue }
+                let existing = queue.searchLinks.first { $0.search?.id == source.searchID }
+                guard applyMembership || existing != nil else { continue }
+                let link = existing ?? {
+                    let created = QueueSavedSearchLink(queue: queue, search: search)
+                    context.insert(created)
+                    return created
+                }()
+                if let checked = source.lastCheckedAt,
+                   mode == .replaceLibrary || checked > (link.lastCheckedAt ?? .distantPast) {
+                    link.lastCheckedAt = checked
+                    link.newResultCount = source.newResultCount
+                }
+                // A visit clears the badge even when no new check has run.
+                if let opened = search.lastOpenedAt,
+                   opened > (link.lastCheckedAt ?? .distantPast) {
+                    link.newResultCount = 0
+                }
             }
         }
         // Searches this device still has that a trusted tombstone says were

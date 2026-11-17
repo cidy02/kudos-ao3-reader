@@ -66,16 +66,27 @@ struct WorkStatLabelTests {
         #expect(WorkCompletionStatus.unknown.shortText == "Unknown")
     }
 
-    @Test func displayDateParsesTheWorkDetailPageISOFormat() {
-        #expect(WorkStat.displayDate("2025-11-01") == "11/01/2025")
-    }
+    @Test func displayDateFormatsISOAndBlurbDatesInBothLocales() throws {
+        let us = Locale(identifier: "en_US")
+        let gb = Locale(identifier: "en_GB")
 
-    @Test func displayDateParsesTheSearchBlurbFormat() {
-        #expect(WorkStat.displayDate("01 Nov 2025") == "11/01/2025")
+        #expect(WorkStat.displayDate("2026-07-09", locale: us) == "Jul 9, 2026")
+        #expect(WorkStat.displayDate("2026-07-09", locale: gb) == "9 Jul 2026")
+        #expect(WorkStat.displayDate("09 Jul 2026", locale: us) == "Jul 9, 2026")
+        #expect(WorkStat.displayDate("9 Jul 2026", locale: gb) == "9 Jul 2026")
+        #expect(WorkStat.displayDate("2025-11-01", locale: us) == "Nov 1, 2025")
+        #expect(WorkStat.displayDate("01 Nov 2025", locale: gb) == "1 Nov 2025")
+        #expect(WorkStat.displayDate("1 November 2025", locale: us) == "Nov 1, 2025")
+
+        let jul9 = try #require(WorkStat.date(from: "2026-07-09"))
+        #expect(WorkStat.displayDate(jul9, locale: us, timeZone: .gmt) == "Jul 9, 2026")
+        #expect(WorkStat.displayDate(jul9, locale: gb, timeZone: .gmt) == "9 Jul 2026")
     }
 
     @Test func displayDateFallsBackToTheRawStringWhenUnrecognized() {
-        #expect(WorkStat.displayDate("not a date") == "not a date")
+        #expect(WorkStat.displayDate("not a date", locale: Locale(identifier: "en_US")) == "not a date")
+        #expect(WorkStat.displayDate("not a date", locale: Locale(identifier: "en_GB")) == "not a date")
+        #expect(WorkStat.displayDate("") == "")
     }
 
     @Test func searchLedgerMetadataKeepsUnitsAndZeroCountPreference() {

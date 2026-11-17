@@ -44,6 +44,9 @@ struct LibrarySectionListView: View {
     @State private var showingFilters = false
     @State private var isSelecting: Bool
     @State private var selection: Set<UUID>
+    #if os(iOS)
+    @State private var showingEPUBExport = false
+    #endif
     /// Spec 1aj/1ak/1bc/1bd's Works / Authors / Fandoms / Tags strip, and the order
     /// its three aggregate scopes are ranked by. Favorites only.
     @AppStorage("library.favorites.scope") private var favoriteScope: FavoriteScope = .works
@@ -178,6 +181,11 @@ struct LibrarySectionListView: View {
             .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
             .navigationTitle(kind.title)
         #if os(iOS)
+            .sheet(isPresented: $showingEPUBExport) {
+                WorkEPUBExportSheet(works: selectedWorks.filter(\.hasEPUB))
+            }
+        #endif
+        #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif
             .navigationBarBackButtonHidden(isSelecting)
@@ -203,7 +211,8 @@ struct LibrarySectionListView: View {
                             WorkBulkActionBar(
                                 selectedWorks: selectedWorks,
                                 onDeleted: exitSelectMode,
-                                onDone: exitSelectMode
+                                onDone: exitSelectMode,
+                                onExportEPUB: { showingEPUBExport = true }
                             )
                         } label: {
                             Label("Actions", systemImage: "ellipsis.circle")

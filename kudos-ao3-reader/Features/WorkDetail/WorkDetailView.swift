@@ -94,6 +94,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     @State var newTagName = ""
     @State var showingAddToCollection = false
+    @State private var showingEPUBExport = false
     @State var working = false // a download / import is in flight
     @State var loadError: String?
     #if os(iOS)
@@ -197,7 +198,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     )
                     showingSeriesQueuePrompt = true
                 }
-                if DebugLaunchRoute.takeSheet("bookmarkform") { workActions.startBookmark() }
                 #endif
             }
         }
@@ -212,6 +212,11 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             // switching sections re-renders from this already-loaded state without
             // re-fetching anything.
             resolveExistingIfNeeded()
+            #if DEBUG
+            if let workID = ao3WorkID, DebugLaunchRoute.takeSheet("bookmarkform") {
+                workActions.startBookmark(workID: workID, auth: auth)
+            }
+            #endif
             guard let work = localWork else { return }
             ReadingQueueService.normalize(work)
             await WorkTags.backfillFromEPUB(for: work, in: context)
@@ -230,6 +235,11 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 #endif
             }
         }
+        #if os(iOS)
+        .sheet(isPresented: $showingEPUBExport) {
+            if let work = localWork { WorkEPUBExportSheet(works: [work]) }
+        }
+        #endif
         .sheet(isPresented: $showingAddToQueue) {
             if let work = localWork {
                 AddToQueueView(work: work)
@@ -292,7 +302,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
             perform: deleteFromLibrary
         )
-        .ao3WorkActions(workActions, workID: ao3WorkID ?? 0, auth: auth)
+        .ao3WorkActions(workActions, workID: ao3WorkID, auth: auth)
         .sensoryFeedback(.selection, trigger: localWork?.isFavorite ?? false)
         .toolbar { detailToolbar }
         .screenTint(workPalette)
@@ -359,6 +369,10 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// grid no longer opens with a Read tile — two controls for one action, a
     /// thumb-length apart, is a coin toss the reader should not have to make.
     private var resumeCardModel: ResumeCardModel {
+        let coverRecipe: GeneratedCoverRecipe = switch source {
+        case .saved(let work): work.generatedCoverRecipe
+        case .remote(let work): localWork?.generatedCoverRecipe ?? work.generatedCoverRecipe
+        }
         let opened = localWork?.lastReadDate?.formatted(.relative(presentation: .named))
         let chapterProgress = localWork.flatMap {
             WorkReadingPosition.chapterProgress(from: $0.readiumLocator)
@@ -370,6 +384,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             max(0, $0.postedChapterCount - $0.knownChapterCount)
         } ?? 0
         return ResumeCardModel(
+            coverRecipe: coverRecipe,
             title: displayTitle,
             authors: displayAuthorList,
             authorIdentities: displayAuthorIdentities,
@@ -480,7 +495,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     } else if let notice {
                         Text(notice)
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
 
                     if preserving {
@@ -537,13 +552,13 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     .accessibilityAddTraits(.isHeader)
                 Text("Private to this device")
                     .font(.system(size: myCopySubtitleSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Button { showingMyCopy = false } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .frame(width: 28, height: 28)
                     .background(Circle().fill(themeManager.appTheme.glassFill()))
             }
@@ -591,6 +606,14 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
                     Section("Library") {
                         localWorkMenuItems(includesQuickToggles: ao3WorkID != nil)
+                        #if os(iOS)
+                        if let work = localWork, work.hasEPUB {
+                            Button { showingEPUBExport = true } label: {
+                                Label("Export EPUB…", systemImage: "square.and.arrow.up")
+                            }
+                            .disabled(working)
+                        }
+                        #endif
                     }
 
                     if let id = ao3WorkID {
@@ -1474,7 +1497,7 @@ private struct SeriesPreservationPromptSheet: View {
                         Text("Kudos saves the series one work at a time, with the usual pause between "
                             + "visits to AO3.")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
 
                     Section {
@@ -1482,7 +1505,7 @@ private struct SeriesPreservationPromptSheet: View {
                         Text("Kudos saves a series automatically only when the first AO3 page shows "
                             + "the full series and it has \(threshold) works or fewer.")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
 
                     Section {

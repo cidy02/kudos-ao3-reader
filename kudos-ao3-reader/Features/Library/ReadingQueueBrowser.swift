@@ -23,6 +23,8 @@ struct ReadingQueueBrowserView: View {
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) var themeManager
     @Environment(AO3AuthService.self) private var auth
+    @Environment(AppRouter.self) private var router
+    @Environment(\.scenePhase) private var scenePhase
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
     private var allQueues: [ReadingQueue]
     @Query(sort: \Tag.name) private var allTags: [Tag]
@@ -62,6 +64,11 @@ struct ReadingQueueBrowserView: View {
 
     @State private var isReordering = false
     @State private var refreshTask: Task<Void, Never>?
+    @State private var sourcePages: [UUID: AO3SearchPage] = [:]
+    @State private var sourceCheckTask: Task<Void, Never>?
+    @State private var sourceCheckQueueID: UUID?
+    @State private var sourceOpeningTab: AppTab?
+    @State private var isPageVisible = false
     @State private var draggedWorkID: UUID?
     @State private var pendingCompactOrder: [UUID]?
     @State private var isSelecting = false
@@ -350,12 +357,38 @@ struct ReadingQueueBrowserView: View {
             isActive: !works.isEmpty && !isReordering
         )
             .onAppear {
+                isPageVisible = true
                 resolveInitialSelection()
+                sourceOpeningTab = router.selection
+                startSourceCheck()
                 #if DEBUG
                 if DebugLaunchRoute.opensQueueDetails { showingQueueDetails = true }
                 if DebugLaunchRoute.takeSheet("editqueue") { showingEdit = true }
                 if DebugLaunchRoute.takeSheet("addworks") { showingAddWorks = true }
                 #endif
+            }
+            .onChange(of: selectedQueue?.id) { _, _ in startSourceCheck() }
+            .onChange(of: works.count) { _, _ in startSourceCheck() }
+            .onChange(of: router.selection) { _, tab in
+                if tab != sourceOpeningTab {
+                    sourceCheckTask?.cancel()
+                    sourceCheckQueueID = nil
+                } else {
+                    startSourceCheck()
+                }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase != .active {
+                    sourceCheckTask?.cancel()
+                    sourceCheckQueueID = nil
+                } else {
+                    startSourceCheck()
+                }
+            }
+            .onDisappear {
+                isPageVisible = false
+                sourceCheckTask?.cancel()
+                sourceCheckQueueID = nil
             }
             // Per-queue List / Grid. A missing key is List. Compact stored on the
             // old key becomes Grid, once, and that old key stays.
@@ -406,7 +439,9 @@ struct ReadingQueueBrowserView: View {
             }
             .toolbar { manageToolbar }
             .sheet(isPresented: $showingEdit) {
-                if let selectedQueue { EditReadingQueueSheet(queue: selectedQueue) }
+                if let selectedQueue {
+                    EditReadingQueueSheet(queue: selectedQueue)
+                }
             }
             .confirmationDialog(
                 "Delete “\(selectedQueue?.displayName ?? "Queue")”?",
@@ -610,6 +645,7 @@ extension ReadingQueueBrowserView {
                         preservedIDs: Set(preservedWorks.map(\.id)),
                         palette: subjectPalette,
                         onAddTag: { showingQueueTags = true },
+                        onFindMore: { openSearch($0, in: selectedQueue) },
                         filterRail: {
                             if filters.hasActiveFilters || quickFilter != .all {
                                 filterChipRail
@@ -663,6 +699,7 @@ extension ReadingQueueBrowserView {
                             preservedIDs: Set(preservedWorks.map(\.id)),
                             palette: subjectPalette,
                             onAddTag: { showingQueueTags = true },
+                            onFindMore: { openSearch($0, in: selectedQueue) },
                             filterRail: {
                                 if filters.hasActiveFilters || quickFilter != .all {
                                     filterChipRail
@@ -920,6 +957,67 @@ extension ReadingQueueBrowserView {
     }
 
     // MARK: - Actions
+
+    private func startSourceCheck() {
+        guard isPageVisible, scenePhase == .active, router.selection == sourceOpeningTab else { return }
+        guard let selectedQueueID,
+              let selectedQueue = orderedQueues.first(where: { $0.id == selectedQueueID })
+        else { return }
+        guard !ReadingQueueService.orderedWorks(in: selectedQueue).isEmpty else {
+            // An empty queue shows no Find More: stop the previous queue's pass too (third review).
+            sourceCheckTask?.cancel()
+            sourceCheckTask = nil
+            sourceCheckQueueID = nil
+            return
+        }
+        guard sourceCheckQueueID != selectedQueueID else { return }
+        let previous = sourceCheckTask
+        previous?.cancel()
+        sourceCheckQueueID = selectedQueueID
+        sourceCheckTask = Task {
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            await checkSources(in: selectedQueue)
+        }
+    }
+
+    private func checkSources(in queue: ReadingQueue) async {
+        await QueueSourceChecks.run(
+            sources: queue.searchLinks.filter {
+                $0.search.map { QueueSourceChecks.countsNewResults($0.filters) } ?? false
+            },
+            checkedAt: { $0.lastCheckedAt },
+            now: Date.init,
+            sleep: { try await Task.sleep(for: .seconds($0)) },
+            attempt: { link, date in
+                link.lastCheckedAt = date
+                FolderSyncService.markDirty()
+                return context.saveBestEffort(reason: "Saving queue source check failed")
+            },
+            fetch: { link in
+                guard let search = link.search,
+                      let url = AO3Client.searchURL(filters: search.filters, page: 1)
+                else { throw AO3Error.network("Bad queue source URL.") }
+                return try await AO3Client.shared.queueSourcePage(url)
+            },
+            received: { link, page in
+                guard selectedQueue?.id == queue.id, let search = link.search else { return }
+                sourcePages[search.id] = page
+                link.newResultCount = QueueSourceChecks.count(page, since: search.lastOpenedAt)
+                FolderSyncService.markDirty()
+                _ = context.saveBestEffort(reason: "Saving queue source count failed")
+            }
+        )
+    }
+
+    private func openSearch(_ search: SavedSearch, in queue: ReadingQueue) {
+        router.currentQueueID = queue.id
+        router.pendingQueueSearch = QueueSearchRoute(
+            searchID: search.id, queueID: queue.id,
+            page: QueueSourceChecks.cachedPageForFindMore(sourcePages[search.id], isLoggedIn: auth.isLoggedIn)
+        )
+        router.selection = .search
+    }
 
     private func resolveInitialSelection() {
         ReadingQueueService.ensureSavedForLaterQueue(in: context)

@@ -217,7 +217,7 @@ struct AO3NamedSubscriptionsList: View {
             if !row.creators.isEmpty {
                 Text("by " + row.creators.map(\.displayName).joined(separator: ", "))
                     .font(.system(size: rowSubtitleSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

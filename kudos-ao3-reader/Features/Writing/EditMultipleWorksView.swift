@@ -100,7 +100,7 @@ struct EditMultipleWorksView: View {
                     + "for tags. Anything you leave alone stays unchanged.")
 
                     .font(.system(size: noteSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14)

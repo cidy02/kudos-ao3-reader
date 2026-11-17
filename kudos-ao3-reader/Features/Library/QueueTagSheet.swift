@@ -165,7 +165,7 @@ struct QueueTagSheet: View {
             case .some:
                 Text("some")
                     .font(.system(size: someCoverageSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             case .none:
                 EmptyView()
             }

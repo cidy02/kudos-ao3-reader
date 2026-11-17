@@ -99,7 +99,7 @@ struct WorkSignalRow: View {
                 if let note = signal.note, !note.isEmpty {
                     Text(note)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -109,7 +109,7 @@ struct WorkSignalRow: View {
                 if let note = signal.note, !note.isEmpty {
                     Text(note)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }

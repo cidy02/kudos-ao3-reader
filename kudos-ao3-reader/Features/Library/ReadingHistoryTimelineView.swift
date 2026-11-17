@@ -104,7 +104,7 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
                 Section {
                     Text("Nothing read \(periodNoun(timeline)).")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .pageBodyRow(top: 22, gutter: SubjectMetrics.gutter)
                 }
             }
@@ -150,14 +150,14 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(periodName(timeline))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                     Text(ReadingInsights.durationLabel(timeline.totalSeconds))
                         .font(.title.bold())
                         .monospacedDigit()
                         .contentTransition(.numericText())
                     Text(summaryLine(timeline))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .accessibilityElement(children: .combine)
@@ -235,7 +235,7 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
         return HStack(spacing: 12) {
             Text("\(rank)")
                 .font(.subheadline.bold())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             VStack(alignment: .leading, spacing: 4) {
                 if !entry.fandom.isEmpty {
                     SubjectKicker(text: FandomDisplayName.bareTitle(entry.fandom), palette: fandomPalette(work))
@@ -248,7 +248,7 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
             Text(time)
                 .font(.subheadline)
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         }
         .contentShape(Rectangle())
         .subjectRowNavigation(
@@ -280,7 +280,7 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Text(value)
                 .font(.headline)
                 .fixedSize(horizontal: false, vertical: true)
@@ -325,7 +325,7 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
                 Text(time)
                     .font(.caption)
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .frame(width: timeColumnWidth, alignment: .trailing)
                     .padding(.top, 14)
                     .accessibilityHidden(true)
@@ -337,7 +337,7 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
                 if stacked {
                     Text(time)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .accessibilityHidden(true)
                 }
                 SensitiveWorkRow(
@@ -397,7 +397,7 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
                 Text(sitting.detailLine)
                     .font(.footnote)
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let badge = sitting.badge {
@@ -519,12 +519,12 @@ private struct ReadingHistoryChart: View {
                 .lineStyle(StrokeStyle(lineWidth: 0.5))
             if average > 0 {
                 RuleMark(y: .value("Average", average / 60))
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                     .annotation(position: .top, alignment: .trailing, spacing: 2) {
                         Text("avg \(ReadingInsights.durationLabel(average))")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
             }
         }
@@ -551,7 +551,7 @@ private struct ReadingHistoryChart: View {
                     let symbol = (firstWeekday - 1 + offset) % 7
                     Text(initials.indices.contains(symbol) ? initials[symbol] : "")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 ForEach(0..<leading, id: \.self) { _ in
                     Color.clear.frame(height: 1)
@@ -571,7 +571,7 @@ private struct ReadingHistoryChart: View {
                 Text("More")
             }
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
         }
     }
 
@@ -586,7 +586,7 @@ private struct ReadingHistoryChart: View {
             if bucket.seconds > 0, !dynamicTypeSize.isAccessibilitySize {
                 Text("\(Int((bucket.seconds / 60).rounded()))m")
                     .font(.caption2)
-                    .foregroundStyle(strong ? ThemeManager.label(on: themeManager.accentInk).opacity(0.85) : Color.secondary)
+                    .foregroundStyle(strong ? AnyShapeStyle(ThemeManager.label(on: themeManager.accentInk).opacity(0.85)) : AnyShapeStyle(.secondaryInk))
             }
         }
         .lineLimit(1)
@@ -661,7 +661,7 @@ private struct ReadingHistoryChart: View {
                 Text("Number above a bar = works finished")
             }
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
         }
     }
 }

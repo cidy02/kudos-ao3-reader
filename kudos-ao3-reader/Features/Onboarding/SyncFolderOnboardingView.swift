@@ -49,7 +49,7 @@ struct SyncFolderOnboardingView: View {
                     .multilineTextAlignment(.center)
                 Text("Optional. You can set this up anytime in Settings")
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .multilineTextAlignment(.center)
             }
         }

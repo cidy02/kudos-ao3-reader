@@ -101,7 +101,7 @@ struct WritingTextEditor: View {
                 if isPreviewing { preview }
             }
             recoveryNotice
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(.secondaryInk)
                 #if os(iOS)
                 // Leave room to write; the whole status is also in Editor help.
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 1 : nil)
@@ -115,7 +115,7 @@ struct WritingTextEditor: View {
             tagBar
             #else
             formattingNotice
-                .font(.caption2).foregroundStyle(.secondary)
+                .font(.caption2).foregroundStyle(.secondaryInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal).padding(.bottom, 6)
             #endif
@@ -288,7 +288,7 @@ struct WritingTextEditor: View {
                 .font(.caption2)
                 .lineLimit(1)
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .minimumHitTarget()
                 .alert("Editor Help", isPresented: $showEditorHelp) {
                     Button("OK", role: .cancel) {}
@@ -298,7 +298,7 @@ struct WritingTextEditor: View {
             } else {
                 formattingNotice
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -361,7 +361,7 @@ struct WritingTextEditor: View {
                     .font(.system(size: tagLabelFontSize, weight: .semibold, design: .monospaced))
                 Text(tag.name.lowercased())
                     .font(.system(size: tagNameFontSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             #if os(iOS)
             .lineLimit(dynamicTypeSize.isAccessibilitySize ? 1 : nil)
@@ -415,11 +415,11 @@ struct WritingTextEditor: View {
                         get: { copy.id }, set: { selectedRecovery = $0 }
                     )) {
                         ForEach(recoveries) { item in
-                            Text(item.entry.savedAt.formatted(date: .abbreviated, time: .standard)).tag(item.id)
+                            Text(WorkStat.displayDate(item.entry.savedAt, time: .standard)).tag(item.id)
                         }
                     }
                 }
-                Text("A recovery copy was saved on this device \(recovery.savedAt.formatted()).")
+                Text("A recovery copy was saved on this device \(WorkStat.displayDate(recovery.savedAt, time: .shortened)).")
                 if recovery.originalDigest != WritingTextRecovery.digest(original) {
                     Text("The text on the form has changed since this copy began. Review the copy before restoring it.")
                 }
@@ -588,7 +588,7 @@ struct WritingTextEditorRow: View {
                     SubjectFormRow(label: title, showsDisclosure: true) { EmptyView() }
                     Text(detail)
                         .font(.system(size: detailSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 14)

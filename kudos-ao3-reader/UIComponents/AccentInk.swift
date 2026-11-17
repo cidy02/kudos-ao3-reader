@@ -35,6 +35,10 @@ private struct AccentInkKey: EnvironmentKey {
     static let defaultValue: Color = .accentColor
 }
 
+private struct SecondaryInkKey: EnvironmentKey {
+    static let defaultValue: Color? = nil
+}
+
 extension EnvironmentValues {
     /// The original accent, independently of the readable tint used by text.
     var accentFill: Color {
@@ -45,6 +49,12 @@ extension EnvironmentValues {
     var accentInk: Color {
         get { self[AccentInkKey.self] }
         set { self[AccentInkKey.self] = newValue }
+    }
+
+    /// Theme-routed secondary ink (`nil` keeps the system's `.secondary`).
+    var secondaryInk: Color? {
+        get { self[SecondaryInkKey.self] }
+        set { self[SecondaryInkKey.self] = newValue }
     }
 }
 
@@ -64,6 +74,29 @@ extension ShapeStyle where Self == AccentFillStyle {
     static var accentFill: AccentFillStyle { AccentFillStyle() }
 }
 
+/// Secondary text ink routed through the theme: Sepia's warm brown-grey when
+/// installed via `accentTint(_:on:)`, or the untouched system `.secondary`
+/// everywhere else (Light, Dark, OLED).
+struct SecondaryInkStyle: ShapeStyle {
+    func resolve(in environment: EnvironmentValues) -> some ShapeStyle {
+        if let color = Self.themeInk(environment.secondaryInk, scheme: environment.colorScheme) {
+            return AnyShapeStyle(color)
+        }
+        return AnyShapeStyle(.secondary)
+    }
+
+    /// Sepia's brown is measured against its cream page; a card that forces a dark
+    /// scheme (the cover-wearing cards) keeps the system grey, which stays readable
+    /// there (seen 2026-11-17: the brown byline measured 2.6:1 on the Resume card).
+    static func themeInk(_ ink: Color?, scheme: ColorScheme) -> Color? {
+        scheme == .light ? ink : nil
+    }
+}
+
+extension ShapeStyle where Self == SecondaryInkStyle {
+    static var secondaryInk: SecondaryInkStyle { SecondaryInkStyle() }
+}
+
 private struct AccentFill: ViewModifier {
     @Environment(\.accentFill) private var fill
 
@@ -77,6 +110,7 @@ extension View {
         return self.tint(ink)
             .environment(\.accentInk, ink)
             .environment(\.accentFill, tint)
+            .environment(\.secondaryInk, theme.appSecondaryInk)
     }
 
     /// Opt a filled control back into the exact accent; text inherits readable tint.

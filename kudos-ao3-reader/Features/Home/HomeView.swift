@@ -544,12 +544,13 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 }
             } else {
                 let heroWork = readingNow[0]
-                let carouselWorks = Array(readingNow.dropFirst().prefix(3))
+                let carouselWorks = Array(readingNow.dropFirst().prefix(HomeReadingNowCount.carouselLimit))
+                let counts = HomeReadingNowCount.shelfCounts(total: readingNow.count)
                 HomeResumeComposition(
                     hasNext: !carouselWorks.isEmpty,
                     nextSectionTitle: "Reading Now",
-                    nextSectionCount: readingNow.count,
-                    nextSectionVisibleCount: min(readingNow.count, 4),
+                    nextSectionCount: counts.sectionCount,
+                    nextSectionVisibleCount: counts.visibleCount,
                     onSeeAll: { router.showLibrarySection(.readingNow, from: "Home") }
                 ) {
                     HomeResumeHero(

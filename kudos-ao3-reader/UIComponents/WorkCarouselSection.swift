@@ -284,7 +284,7 @@ struct SectionEmptyState: View {
                 .foregroundStyle(.tertiary)
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 8)

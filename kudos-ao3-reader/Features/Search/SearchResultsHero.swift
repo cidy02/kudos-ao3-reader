@@ -193,7 +193,7 @@ struct SearchResultsHero: View {
 
                     Text(countFact)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
 
                 ViewThatFits(in: .horizontal) {
@@ -246,7 +246,7 @@ struct SearchResultsHero: View {
 
             Text(count)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         }
     }
 
@@ -280,7 +280,7 @@ struct SearchResultsHero: View {
                         .lineLimit(1)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
@@ -373,7 +373,7 @@ struct SearchResultsHero: View {
                 // not share an icon inside one card.
                 WorkStatLabel(text: countText, symbol: "doc.text")
                     .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .contentTransition(.numericText())
             }
 
@@ -496,7 +496,7 @@ struct AO3ResultListEndFooter: View {
                             totalPages: totalPages
                         ))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                     }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel(AO3ResultListPaging.footerLoadingText(
@@ -507,7 +507,7 @@ struct AO3ResultListEndFooter: View {
                     VStack(spacing: 6) {
                         Text(errorMessage)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .multilineTextAlignment(.center)
                         Button("Try Again", action: loadNextPage)
                             .buttonStyle(.kudosSecondary)

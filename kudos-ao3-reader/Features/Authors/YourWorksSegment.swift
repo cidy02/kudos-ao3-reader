@@ -86,7 +86,7 @@ struct YourWorksSegmentControl: View {
         Button(action: action) {
             Text(title)
                 .font(.subheadline.weight(isSelected ? .semibold : .regular))
-                .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                .foregroundStyle(isSelected ? AnyShapeStyle(Color.primary) : AnyShapeStyle(.secondaryInk))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: 30)

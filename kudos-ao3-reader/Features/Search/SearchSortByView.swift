@@ -192,7 +192,7 @@ struct SearchSortByView: View {
             if let subtitle {
                 Text(subtitle)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
         }
     }

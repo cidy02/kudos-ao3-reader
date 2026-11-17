@@ -52,7 +52,7 @@ extension WorkDetailView {
                         ? "AO3 hasn't provided tags for this work yet."
                         : "This imported work isn't linked to AO3, so you won't see AO3 tags here.")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .pageBodyRow(top: 6)
                 } else {
                     VStack(alignment: .leading, spacing: 6) {
@@ -76,27 +76,19 @@ extension WorkDetailView {
         return "\(total) tag\(total == 1 ? "" : "s")"
     }
 
-    /// Version E: AO3's compact label column, then comma-separated search links.
-    @ViewBuilder
+    /// The group's name on its own line, its comma-separated search links below it, so the
+    /// tags use the full width (owner, 2026-11-16: "below - not next to - their header").
     private func tagRow(_ group: TagGroup) -> some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: 0) {
-                tagGroupLabel(group)
-                WorkDetailTagLinks(tags: group.tags, field: group.field)
-            }
-        } else {
-            HStack(alignment: .top, spacing: 10) {
-                tagGroupLabel(group)
-                    .frame(width: 92, alignment: .leading)
-                WorkDetailTagLinks(tags: group.tags, field: group.field)
-            }
+        VStack(alignment: .leading, spacing: 2) {
+            tagGroupLabel(group)
+            WorkDetailTagLinks(tags: group.tags, field: group.field)
         }
     }
 
     private func tagGroupLabel(_ group: TagGroup) -> some View {
         Text(group.title)
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .padding(.top, 1)
             .accessibilityAddTraits(.isHeader)
     }
@@ -160,7 +152,7 @@ extension WorkDetailView {
             Section {
                 Text("This work isn't in your Library yet.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .myCopyRow()
             } footer: {
                 // The pre-redesign remote lifecycle guidance (reading downloads
@@ -270,7 +262,7 @@ extension WorkDetailView {
         Text(value)
             .font(.system(size: myCopyValueSize))
             .monospacedDigit()
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .lineLimit(1)
             .truncationMode(.middle)
     }
@@ -398,7 +390,7 @@ extension WorkDetailView {
     private func libraryActivitySection(for work: SavedWork) -> some View {
         Group {
             myCopyHeader("Activity")
-            myCopyValueRow("Added", work.dateAdded.formatted(date: .abbreviated, time: .shortened))
+            myCopyValueRow("Added", WorkStat.displayDate(work.dateAdded, time: .shortened))
             Button { showingDownloadedDateEditor = true } label: {
                 HStack(spacing: 10) {
                     Text("Downloaded")
@@ -406,7 +398,7 @@ extension WorkDetailView {
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     myCopyValue(
-                        work.downloadedAt?.formatted(date: .abbreviated, time: .omitted)
+                        work.downloadedAt.map { WorkStat.displayDate($0) }
                             ?? "Not recorded"
                     )
                     Image(systemName: "chevron.right")
@@ -420,7 +412,7 @@ extension WorkDetailView {
             .myCopyRow()
             myCopyValueRow(
                 "Last opened",
-                work.lastReadDate.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Never"
+                work.lastReadDate.map { WorkStat.displayDate($0, time: .shortened) } ?? "Never"
             )
             // Bar and label share one source: `readingProgress`'s chapter
             // fallback draws a bar for works never opened.

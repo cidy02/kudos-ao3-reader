@@ -84,7 +84,7 @@ struct CollectionLedgerRow: View {
 
             Text("\(totalWorkCount) work\(totalWorkCount == 1 ? "" : "s")")
                 .font(.system(size: detailSize))
-                .foregroundStyle(Color.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
         }
     }

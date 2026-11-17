@@ -93,20 +93,85 @@ extension AO3AuthService {
         )
     }
 
-    /// Subscribes to (or, if already subscribed, unsubscribes from) a work. Reads the
-    /// work page once for the CSRF token + current subscription state, then POSTs the
-    /// matching action. Returns a message describing what happened.
-    func toggleSubscribe(workID: Int) async throws -> String {
+    /// Reads the work page once for CSRF and subscription state. With `want`, AO3's
+    /// fresh state decides whether to write, never which action the reader requested.
+    /// `nil` preserves the plain toggle for callers without an intended state.
+    func toggleSubscribe(
+        workID: Int, to want: Bool? = nil, using client: AO3Client = .shared
+    ) async throws -> String {
+        try await toggleSubscribe(
+            subscribableID: workID,
+            subscribableType: "Work",
+            pageURL: Self.workFormURL(workID: workID),
+            want: want,
+            using: client
+        )
+    }
+
+    /// Subscribes to (or, if already subscribed, unsubscribes from) a series using the
+    /// same subscriptions POST/delete flow as `toggleSubscribe(workID:)`, with
+    /// `subscription[subscribable_type] = "Series"` (otwarchive `SubscriptionsController#create`,
+    /// `SeriesController#show`, `series/_series_navigation.html.erb`, `subscriptions/_form.html.erb`).
+    /// `want` is the state the reader asked for. With it, AO3's fresh page decides only whether a
+    /// write is needed, never which one: a stale screen or a retry after a lost answer can no longer
+    /// send the opposite write (Codex's T-549 review). `nil` keeps the plain toggle.
+    func toggleSubscribe(seriesID: Int, to want: Bool? = nil, using client: AO3Client = .shared) async throws -> String {
+        try await toggleSubscribe(
+            subscribableID: seriesID,
+            subscribableType: "Series",
+            pageURL: AO3Client.seriesURL(seriesID: seriesID),
+            want: want,
+            using: client
+        )
+    }
+
+    private func toggleSubscribe(
+        subscribableID: Int,
+        subscribableType: String,
+        pageURL: URL,
+        want: Bool? = nil,
+        using client: AO3Client
+    ) async throws -> String {
+        try Task.checkCancellation()
         guard isLoggedIn, let username else { throw AO3WriteError.notSignedIn }
-        let workURL = Self.workURL(workID)
-        let (html, token) = try await fetchCSRFPage(at: workURL)
+        let expectedGeneration = sessionGeneration
+        let (html, token) = try await fetchCSRFPage(at: pageURL, using: client)
+        try Task.checkCancellation()
+        try requireSessionGeneration(expectedGeneration)
+
+        // Public pages still return 200 with a guest CSRF meta when the session
+        // has expired; fail before reading forms or POSTing instead of treating
+        // a signed-out page as "not subscribed" or sending an unauthenticated write.
+        guard LiveAO3SessionValidator.isLoggedIn(html: html) else {
+            throw AO3Error.authenticationRequired
+        }
 
         let state = AO3Client.parseSubscription(from: html)
-        if state.isSubscribed, let path = state.unsubscribePath, let url = Self.absoluteURL(path) {
+        let unsubscribeURL = state.unsubscribePath.flatMap { raw -> URL? in
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty,
+                  let url = Self.absoluteURL(trimmed),
+                  AO3RequestDefaults.isTrustedURL(url)
+            else { return nil }
+            return url
+        }
+        // otwarchive@41d3878b subscriptions/_form.html.erb renders a create-or-delete form;
+        // with neither recognised the state is unknown, and nothing is written or claimed.
+        let recognised = state.isSubscribed
+            ? unsubscribeURL != nil
+            : AO3Client.hasSubscribeForm(in: html)
+        guard recognised else { throw AO3Error.parse }
+        if let want {
+            if want == state.isSubscribed {
+                return want ? "You're already subscribed." : "Unsubscribed."
+            }
+        }
+        if state.isSubscribed {
+            guard let url = unsubscribeURL else { throw AO3Error.parse }
             // AO3's unsubscribe form is a POST carrying `_method=delete`.
             let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])
-            let request = try writeRequest(to: url, body: body, csrf: token, referer: workURL, ajax: false)
-            let (status, responseBody) = try await submitWrite(request)
+            let request = try writeRequest(to: url, body: body, csrf: token, referer: pageURL, ajax: false)
+            let (status, responseBody) = try await submitWrite(request, using: client)
             return try Self.readingsWriteResult(
                 status: status, body: responseBody,
                 success: "Unsubscribed.", rejectedFallback: "Couldn't unsubscribe."
@@ -115,22 +180,21 @@ extension AO3AuthService {
 
         let body = Self.formEncoded([
             ("authenticity_token", token),
-            ("subscription[subscribable_id]", String(workID)),
-            ("subscription[subscribable_type]", "Work")
+            ("subscription[subscribable_id]", String(subscribableID)),
+            ("subscription[subscribable_type]", subscribableType)
         ])
         let request = try writeRequest(
             to: Self.subscriptionsEndpoint(username: username),
-            body: body, csrf: token, referer: workURL, ajax: false
+            body: body, csrf: token, referer: pageURL, ajax: false
         )
-        let (status, responseBody) = try await submitWrite(request)
-        if responseBody.localizedCaseInsensitiveContains("already subscribed") {
+        let (status, responseBody) = try await submitWrite(request, using: client)
+        if let error = AO3Client.writeErrorMessage(in: responseBody),
+           error.localizedCaseInsensitiveContains("already subscribed") {
             return "You're already subscribed."
         }
-        if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
-            return "Subscribed."
-        }
-        throw AO3WriteError.rejected(
-            AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't subscribe."
+        return try Self.readingsWriteResult(
+            status: status, body: responseBody,
+            success: "Subscribed.", rejectedFallback: "Couldn't subscribe."
         )
     }
 
@@ -367,9 +431,11 @@ extension AO3AuthService {
     /// re-reads the live page at submit time, so a stale label can never
     /// mis-route an action (`toggleSubscribe` and `saveBookmark` both decide
     /// from the fresh HTML, not from this snapshot).
-    func workActionStates(workID: Int) async throws -> AO3WorkActionStates {
+    func workActionStates(
+        workID: Int, using client: AO3Client = .shared
+    ) async throws -> AO3WorkActionStates {
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
-        let (html, _) = try await fetchCSRFPage(at: Self.workURL(workID))
+        let (html, _) = try await fetchCSRFPage(at: Self.workFormURL(workID: workID), using: client)
         return AO3WorkActionStates(
             isSubscribed: AO3Client.parseSubscription(from: html).isSubscribed,
             existingBookmark: AO3Client.parseExistingBookmark(from: html)
@@ -383,10 +449,18 @@ extension AO3AuthService {
     /// existing bookmark renders an *edit* form (`/bookmarks/<id>` +
     /// `_method=put`, verified live 2026-07-16) whose action is reused here, so
     /// a stale menu label can never turn an update into a duplicate create.
-    func saveBookmark(workID: Int, input: BookmarkInput) async throws -> String {
+    func saveBookmark(
+        workID: Int, input: BookmarkInput, using client: AO3Client = .shared
+    ) async throws -> String {
+        // Before any await: the GET below is the window where the account can change.
+        let expectedGeneration = sessionGeneration
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
-        let workURL = Self.workURL(workID)
-        let (html, token) = try await fetchCSRFPage(at: workURL)
+        // Adult works answer this URL with the real edit form. The plain work URL
+        // is the interstitial (a CSRF token and no bookmark form), so the POST
+        // below would create a second bookmark.
+        let workURL = Self.workFormURL(workID: workID)
+        let (html, token) = try await fetchCSRFPage(at: workURL, using: client)
+        try requireSessionGeneration(expectedGeneration)
 
         let existing = AO3Client.parseExistingBookmark(from: html)
         var params: [(String, String)] = []
@@ -410,7 +484,7 @@ extension AO3AuthService {
             to: endpoint,
             body: Self.formEncoded(params), csrf: token, referer: workURL, ajax: false
         )
-        let (status, responseBody) = try await submitWrite(request)
+        let (status, responseBody) = try await submitWrite(request, using: client)
         if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
             return existing == nil ? "Bookmarked." : "Bookmark updated."
         }
@@ -499,10 +573,16 @@ extension AO3AuthService {
         URL(string: "https://archiveofourown.org/works/\(workID)/comments")!
     }
 
+    /// A work page carrying `view_adult=true` so adult works render their real
+    /// forms (comments, subscription, bookmark) instead of the interstitial.
+    static func workFormURL(workID: Int) -> URL {
+        URL(string: "https://archiveofourown.org/works/\(workID)?view_adult=true")!
+    }
+
     /// The page a top-level comment's CSRF + pseud are scraped from. `view_adult`
     /// so an adult work renders the real comment form, not the interstitial.
     static func commentFormURL(workID: Int) -> URL {
-        URL(string: "https://archiveofourown.org/works/\(workID)?view_adult=true")!
+        workFormURL(workID: workID)
     }
 
     static func subscriptionsEndpoint(username: String) -> URL {

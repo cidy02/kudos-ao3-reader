@@ -234,7 +234,7 @@ struct CustomizeThemeView: View {
                 .padding(4)
                 Text(option.title)
                     .font(.caption2.weight(selected ? .semibold : .regular))
-                    .foregroundStyle(selected ? .primary : .secondary)
+                    .foregroundStyle(selected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondaryInk))
                     // A quarter of the row: at the largest sizes a name broke mid-word ("Ligh/t").
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
@@ -273,7 +273,7 @@ struct CustomizeThemeView: View {
             .padding(4)
             Text("More")
                 .font(.caption2.weight(selected ? .semibold : .regular))
-                .foregroundStyle(selected ? .primary : .secondary)
+                .foregroundStyle(selected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondaryInk))
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
         }
@@ -294,10 +294,10 @@ struct CustomizeThemeView: View {
                 if let valueLabel {
                     Text(valueLabel)
                         .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
-            .foregroundStyle(customize ? .primary : .secondary)
+            .foregroundStyle(customize ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondaryInk))
             Slider(value: value, in: range)
                 // VoiceOver otherwise announces an anonymous slider with a raw
                 // percentage of the range, which can contradict the visible

@@ -340,7 +340,11 @@ struct FandomListView: View {
                 ForEach(Self.indexLetters, id: \.self) { letter in
                     Text(letter)
                         .font(.system(size: indexFontSize, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(available.contains(letter) ? themeManager.accentInk : .secondary)
+                        .foregroundStyle(
+                            available.contains(letter)
+                                ? AnyShapeStyle(themeManager.accentInk)
+                                : AnyShapeStyle(.secondaryInk)
+                        )
                         .opacity(available.contains(letter) ? 1 : 0.28)
                         .frame(maxHeight: .infinity)
                 }
@@ -417,7 +421,7 @@ struct FandomListView: View {
                 options: filterOptions
             ))
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
 
             if FandomFilterState.hasDiffFromDefaults(
                 groupsVariants: groupsVariants,
@@ -426,7 +430,7 @@ struct FandomListView: View {
             ) {
                 Text("·")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 Button("Reset") {
                     resetToDefaults()
                 }
@@ -1001,14 +1005,14 @@ private struct FandomListRow: View {
                     if !splitName.qualifier.isEmpty {
                         Text(splitName.qualifier)
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
                     ForEach(Array(aliases.enumerated()), id: \.offset) { _, alias in
                         aliasText(alias)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -1021,7 +1025,7 @@ private struct FandomListRow: View {
                     ) {
                         Text(subtitle)
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }

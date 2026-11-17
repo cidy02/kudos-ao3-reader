@@ -28,8 +28,8 @@ import SwiftUI
 /// **Tags and the swatch-following wash are built.** Tags are chosen here as
 /// names and written by `ReadingQueueService.createQueue` through
 /// `ReadingQueue.addTag`, the same lookup-before-create `QueueTagSheet` uses, so
-/// nothing is created until Create. The wash, the Create tint, the radio and the
-/// selected tag chips take the tapped swatch's hue.
+/// nothing is created until Create. The wash follows the queue hue; controls
+/// use the app tint.
 ///
 /// **The colour row ends in the "More colours" well** (`SubjectHueSwatchRow`):
 /// any colour, stored exactly as `ReadingQueue.colorHex` (`options.colorHex`
@@ -57,11 +57,13 @@ struct NewReadingQueueSheet: View {
     /// Edit Queue: title and confirm read "Edit queue" / "Save", and Start
     /// from is left out. Set through `init(name:hue:editing:onSave:onCancel:)`.
     var isEditing = false
+    var editingQueue: ReadingQueue?
 
     @Environment(\.modelContext) private var context
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query(sort: \Tag.name) private var allTags: [Tag]
+    @Query(sort: \SavedSearch.name) private var savedSearches: [SavedSearch]
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.title)
     private var libraryWorks: [SavedWork]
     @Environment(PrivacyGate.self) private var gate
@@ -76,6 +78,7 @@ struct NewReadingQueueSheet: View {
     @State private var seedCount: Int?
     @State private var saveFailed = false
     @State private var showingAddWorks = false
+    @State private var showingSearchPicker = false
     @State private var colorWellSession = CustomColorWellSession()
 
     @ScaledMetric(relativeTo: .subheadline) private var nameFieldSize: CGFloat = 16
@@ -98,7 +101,12 @@ struct NewReadingQueueSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                if !isEditing {
+                if isEditing {
+                    Section {
+                        groupLabel("Queue")
+                        coverPreview.pageBodyRow(top: 8, gutter: gutter)
+                    }
+                } else {
                     Section {
                         groupLabel("Preview")
                         coverPreview.pageBodyRow(top: 8, gutter: gutter)
@@ -132,6 +140,28 @@ struct NewReadingQueueSheet: View {
                     groupLabel("Offline")
                     offlinePanel.pageBodyRow(top: 8, gutter: gutter)
                     footnote(Self.offlineFootnote)
+                }
+
+                if isEditing {
+                    Section {
+                        groupLabel("Find More")
+                        ForEach(savedSearches.filter { options.searchIDs.contains($0.id) }) { search in
+                            HStack {
+                                Label(search.name, systemImage: "magnifyingglass")
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Button("Remove \(search.name)", systemImage: "minus.circle") {
+                                    options.searchIDs.removeAll { $0 == search.id }
+                                }
+                                .labelStyle(.iconOnly)
+                                .accessibilityLabel("Remove saved search \(search.name) from queue")
+                            }
+                            .pageBodyRow(top: 8, gutter: gutter)
+                        }
+                        Button("Choose a Saved Search…") { showingSearchPicker = true }
+                            .accessibilityLabel("Choose a saved search for Find More")
+                            .pageBodyRow(top: 8, gutter: gutter)
+                        footnote("The queue opens this search from Find More and counts results posted since your last visit.")
+                    }
                 }
 
                 if !isEditing {
@@ -182,9 +212,8 @@ struct NewReadingQueueSheet: View {
                 }
                 .environment(\.customColorWellSession, colorWellSession)
         }
-        // Outside the stack so the Create button, the toggle and the caret all
-        // take the swatch too, not just the rows.
-        .screenTint(palette)
+        // Controls use the app tint; the queue hue belongs to its cover and wash.
+        .screenTint(theme.scopePalette)
         #if os(iOS)
         // Taller than .medium now: 1j's sheet carries four groups, and a medium
         // detent hid the seed step below the fold — the one decision the board
@@ -216,6 +245,44 @@ struct NewReadingQueueSheet: View {
                 initialSelection: Set(options.seedWorkIDs)
             )
         }
+        .sheet(isPresented: $showingSearchPicker) {
+            NavigationStack {
+                Group {
+                    if savedSearches.isEmpty {
+                        ContentUnavailableView {
+                            Label("No Saved Searches", systemImage: "magnifyingglass")
+                        } description: {
+                            Text("Save a search from the Search tab, then add it here.")
+                        }
+                    } else {
+                        List(savedSearches) { search in
+                            Button {
+                                if !options.searchIDs.contains(search.id) {
+                                    options.searchIDs.append(search.id)
+                                }
+                                showingSearchPicker = false
+                            } label: {
+                                HStack {
+                                    Text(search.name)
+                                    Spacer()
+                                    if options.searchIDs.contains(search.id) {
+                                        Image(systemName: "checkmark").foregroundStyle(.tint)
+                                    }
+                                }
+                            }
+                            .accessibilityLabel("Choose saved search \(search.name)")
+                        }
+                    }
+                }
+                .appThemedScroll()
+                .navigationTitle("Saved Searches")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { showingSearchPicker = false }
+                    }
+                }
+            }
+        }
     }
 
     /// Placeholder until a name is typed. Create stays disabled while it is empty.
@@ -235,14 +302,18 @@ struct NewReadingQueueSheet: View {
     }
 
     private var coverPreview: some View {
-        let backs = seedWorks
+        let coverWorks = editingQueue?.memberships.compactMap(\.work)
+            .filter { !$0.isPendingDeletion } ?? seedWorks
+        let backs = coverWorks
             .filter { !gate.isConcealed($0, enabled: hideMature) }
             .prefix(CoverStackLayout.maxBacks)
-        let footer = ReadingQueueFacts.cardFooter(states: seedWorks.map(\.readingState))
+        let footer = ReadingQueueFacts.cardFooter(states: coverWorks.map(\.readingState))
         return VStack(spacing: 8) {
             StackedWorkCover(
                 kind: .queue,
                 name: previewName,
+                // The queue's id seeds its motif, as on its page; a new queue has none yet.
+                identity: editingQueue?.id,
                 hue: previewHue,
                 pickedHex: options.colorHex,
                 backs: Array(backs),
@@ -255,7 +326,7 @@ struct NewReadingQueueSheet: View {
                 .multilineTextAlignment(.center)
             Text(footer)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(2)
         }
         .frame(maxWidth: .infinity)
@@ -306,7 +377,7 @@ struct NewReadingQueueSheet: View {
                         options.tagNames.append(tagName)
                     }
                 } label: {
-                    SubjectChip(text: tagName, style: isOn ? .tinted : .neutral, palette: palette)
+                    SubjectChip(text: tagName, style: isOn ? .tinted : .neutral, palette: theme.scopePalette)
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
@@ -399,7 +470,7 @@ struct NewReadingQueueSheet: View {
                     if let subtitle = seedSubtitle(seed) {
                         Text(subtitle)
                             .font(.system(size: seedSubtitleSize))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -468,11 +539,13 @@ extension NewReadingQueueSheet {
         name: Binding<String>,
         hue: Binding<Double?>,
         editing options: NewQueueOptions,
+        queue: ReadingQueue,
         onSave: @escaping (NewQueueOptions) -> Bool,
         onCancel: @escaping () -> Void
     ) {
         self.init(name: name, hue: hue, onCreate: onSave, onCancel: onCancel)
         isEditing = true
+        editingQueue = queue
         _options = State(initialValue: options)
     }
 }
@@ -501,8 +574,10 @@ struct EditReadingQueueSheet: View {
             editing: NewQueueOptions(
                 keepsWorksOffline: KeepOffline.queueKeeps(queue.keepsWorksOffline),
                 tagNames: queue.tags.map(\.name).sorted(),
-                colorHex: queue.colorHex
+                colorHex: queue.colorHex,
+                searchIDs: queue.searchLinks.compactMap { $0.search?.id }
             ),
+            queue: queue,
             onSave: { options in
                 let offlineTurnedOn = ReadingQueueService.updateQueue(
                     queue, name: name, hue: hue, options: options, in: context
@@ -556,4 +631,5 @@ nonisolated struct NewQueueOptions: Equatable, Sendable {
     /// Edit Queue leaves this empty: seeding only means something for a queue
     /// that does not exist yet.
     var seedWorkIDs: [UUID] = []
+    var searchIDs: [UUID] = []
 }

@@ -153,6 +153,9 @@ final class ThemeManager {
     /// Text, glyphs and text-button labels; filled controls keep `effectiveTint`.
     var accentInk: Color { appTheme.accentInk(for: effectiveTint) }
 
+    /// Secondary text ink: Sepia's warm brown-grey, or the system secondary grey elsewhere.
+    var secondaryInk: Color { appTheme.appSecondaryInk ?? .secondary }
+
     /// The palette every *scope*-level surface in the redesign draws from — the
     /// Account hub, the pushed Home and Library sections, the inbox, Writing.
     ///

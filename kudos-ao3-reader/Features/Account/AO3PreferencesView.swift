@@ -251,7 +251,7 @@ struct AO3PreferencesView: View {
         } label: {
             Image(systemName: "questionmark.circle")
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .frame(minWidth: 44, minHeight: 44)
                 .contentShape(Rectangle())
         }
@@ -322,7 +322,7 @@ struct AO3PreferencesView: View {
                         if !entry.body.isEmpty {
                             Text(entry.body)
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .textSelection(.enabled)
                         }
@@ -336,7 +336,7 @@ struct AO3PreferencesView: View {
                 Section {
                     Text(footer)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                         .cardRow()
@@ -573,7 +573,7 @@ extension AO3PreferencesView {
         Text("These preferences are saved to your AO3 account and follow you on AO3. "
             + "Settings that affect only Kudos are under Settings.")
             .font(.system(size: footnoteSize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .lineSpacing(1.5)
     }
 

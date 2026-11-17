@@ -272,7 +272,7 @@ struct ReaderFontSection: View {
                         Text(option.name).foregroundStyle(.primary)
                         if option.isCustom {
                             Image(systemName: "person.crop.circle")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(.caption).foregroundStyle(.secondaryInk)
                         }
                         Spacer()
                         if option.id == fontID {
@@ -510,7 +510,7 @@ struct ReplaceLibraryConfirmationView: View {
         if let backupFileName, backupSucceeded {
             Text("A copy of your current library was saved as \(backupFileName).")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         }
         if let backupError {
             VStack(alignment: .leading, spacing: 8) {
@@ -534,7 +534,7 @@ struct ReplaceLibraryConfirmationView: View {
                     Text("You can't replace your library until a copy can be saved. Free some "
                         + "space and try again.")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
         }
@@ -568,7 +568,7 @@ struct ReplaceLibraryConfirmationView: View {
                             Text("If you leave Library Sync on, it will add the removed works back. "
                                 + "Pause it on this device?")
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                         safetyBackupStatus
                     } footer: {
@@ -591,7 +591,7 @@ struct ReplaceLibraryConfirmationView: View {
                         onConfirm(syncIsConnected && pauseSync)
                     }
                     .disabled(!canReplace)
-                    .foregroundStyle(canReplace ? .red : .secondary)
+                    .foregroundStyle(canReplace ? AnyShapeStyle(.red) : AnyShapeStyle(.secondaryInk))
                 }
             }
             .onAppear {

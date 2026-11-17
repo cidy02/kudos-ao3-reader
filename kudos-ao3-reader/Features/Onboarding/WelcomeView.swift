@@ -35,7 +35,7 @@ struct WelcomeView: View {
                     .multilineTextAlignment(.center)
                 Text("Free to use • Ad-free • Built by fans")
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .multilineTextAlignment(.center)
             }
         }

@@ -128,7 +128,7 @@ struct FollowingListView: View {
                     Section {
                         Text(sourceNote)
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -145,7 +145,7 @@ struct FollowingListView: View {
                     Section {
                         Text(cannotNotifySentence)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.vertical, 6)
                             .listRowSeparator(.hidden)
@@ -159,7 +159,7 @@ struct FollowingListView: View {
                     Section {
                         Text("None.")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     } header: {
                         FollowingGroupHeader(title: "Works", count: 0)
                     }
@@ -170,7 +170,7 @@ struct FollowingListView: View {
                         if series.isEmpty {
                             Text("None.")
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                         ForEach(series) { item in seriesRow(item) }
                         if seriesHasMore {
@@ -190,7 +190,7 @@ struct FollowingListView: View {
                         if authors.isEmpty {
                             Text("None.")
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                         ForEach(authors) { item in authorRow(item) }
                         if authorsHasMore {
@@ -367,7 +367,7 @@ private struct FollowedNameRow: View {
             if let subtitle, !subtitle.isEmpty {
                 Text(subtitle)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(1)
             }
         }
@@ -387,7 +387,7 @@ private struct FollowingGroupHeader: View {
                 .foregroundStyle(.primary)
             Text("\(count)")
                 .font(.caption.bold())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 4)
                 .background(.quaternary, in: Capsule())
@@ -429,10 +429,10 @@ private struct FollowingRow: View {
                 }
                 if !work.chapters.isEmpty { WorkStatLabel(text: work.chapters, symbol: "book") }
                 if let words = work.words { WorkStatLabel(text: words.formatted(), symbol: "textformat.size") }
-                if !work.dateUpdated.isEmpty { WorkStatLabel(text: work.dateUpdated, symbol: "calendar") }
+                if !work.dateUpdated.isEmpty { WorkStatLabel(text: WorkStat.displayDate(work.dateUpdated), symbol: "calendar") }
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
 
             Button(action: onUnfollow) {
                 HStack(spacing: 5) {

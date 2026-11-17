@@ -72,6 +72,7 @@ struct CoverAndResumeArtTests {
 
     @Test func resumeRingAndBarsFollowTheWork() {
         let model = ResumeCardModel(
+            coverRecipe: GeneratedCoverRecipe(id: nil, title: "The Salt Road", author: "", fandoms: []),
             title: "The Salt Road",
             authors: ["wren"],
             authorIdentities: [],
@@ -107,6 +108,7 @@ struct CoverAndResumeArtTests {
 
     @Test func anUnreadCompleteWorkNamesItsChapters() {
         let model = ResumeCardModel(
+            coverRecipe: GeneratedCoverRecipe(id: nil, title: "One-shot", author: "", fandoms: []),
             title: "One-shot",
             authors: [],
             authorIdentities: [],
@@ -272,6 +274,7 @@ struct CoverAndResumeArtTests {
         progress: Double?, chapterProgress: Double?, chapterName: String? = nil
     ) -> ResumeCardModel {
         ResumeCardModel(
+            coverRecipe: GeneratedCoverRecipe(id: nil, title: "The Salt Road", author: "", fandoms: []),
             title: "The Salt Road",
             authors: ["wren"],
             authorIdentities: [],

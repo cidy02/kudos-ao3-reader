@@ -201,7 +201,7 @@ struct SettingsReadingQueuesPage: View {
                         HStack(spacing: 12) {
                             Text(savedWorkMigrationProgress ?? "Updating Want to Read…")
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                             Spacer()
                             Button("Cancel") {
                                 cancelSavedWorkMigration()

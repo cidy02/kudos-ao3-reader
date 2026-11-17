@@ -262,7 +262,7 @@ struct ChallengeAssignmentsView: View {
                     Text(secondary)
                         .font(.system(size: captionSize))
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -319,7 +319,7 @@ struct ChallengeAssignmentsView: View {
     private func secondaryLine(for assignment: AO3ChallengeAssignment) -> String? {
         var parts: [String] = []
         if let sentAt = assignment.sentAt {
-            parts.append("Assigned \(mediumDate(sentAt))")
+            parts.append("Assigned \(WorkStat.displayDate(sentAt))")
         }
         if let due = worksDueAt?.dateText {
             parts.append("due \(due)")
@@ -384,7 +384,7 @@ struct ChallengeAssignmentsView: View {
 
             Text(unmatchedProse(pair))
                 .font(.system(size: bodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
 
             // Both buttons opened the same AO3 page; one says what it does. The
@@ -435,16 +435,7 @@ struct ChallengeAssignmentsView: View {
             .padding(.horizontal, 4)
     }
 
-    // MARK: - Helpers & Actions
-
-    private func mediumDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = .autoupdatingCurrent
-        formatter.timeZone = .autoupdatingCurrent
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter.string(from: date)
-    }
+    // MARK: - Actions
 
     private func load() async {
         loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
@@ -541,7 +532,7 @@ extension ChallengeAssignmentsView {
                 .accentFill()
             Text("Loading assignments…")
                 .font(.system(size: loadingSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .center)
@@ -551,7 +542,7 @@ extension ChallengeAssignmentsView {
     private func emptyCard(_ message: String) -> some View {
         Text(message)
             .font(.system(size: bodySize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
@@ -566,7 +557,7 @@ extension ChallengeAssignmentsView {
                 .fixedSize(horizontal: false, vertical: true)
             Text(message)
                 .font(.system(size: failureBodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
@@ -594,7 +585,7 @@ extension ChallengeAssignmentsView {
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             .accessibilityLabel("Dismiss error")
             .buttonStyle(.plain)

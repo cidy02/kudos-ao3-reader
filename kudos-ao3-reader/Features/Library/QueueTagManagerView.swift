@@ -157,10 +157,10 @@ struct QueueTagManagerView: View {
                             Text(count.compactCount)
                                 .font(.system(size: countSize))
                                 .monospacedDigit()
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                             Image(systemName: "ellipsis")
                                 .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                                 .accessibilityHidden(true)
                         }
                     }
