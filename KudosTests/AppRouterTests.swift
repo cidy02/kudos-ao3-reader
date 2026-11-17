@@ -1,5 +1,9 @@
 import Foundation
+import SwiftUI
 import Testing
+#if os(iOS)
+import UIKit
+#endif
 @testable import Kudos
 
 @MainActor
@@ -912,22 +916,80 @@ struct AppRouterTests {
         #expect(router.pendingWorkLink?.id == 222)
     }
 
-    @Test func filterDeferralDroppedWhenHostDisappearsIsNotOpenedLater() {
+    @Test func filterHostRemovalDrainsLinkExactlyOnce() {
         let router = AppRouter()
         router.selection = .search
         router.panel = .searchFilters
         router.openAO3Link(URL(string: "https://archiveofourown.org/works/123")!)
 
-        router.dropPendingAO3LinkAfterPanelDismiss()
+        router.panelDidDismiss()
+        #expect(router.isPresentingLinkedWork)
+        #expect(router.pendingWorkLink?.id == 123)
+        let epoch = router.workLinkEpoch
+        router.isPresentingLinkedWork = false
+        router.linkedWorkDidDismiss()
         router.panelDidDismiss()
 
         #expect(!router.isPresentingLinkedWork)
         #expect(router.pendingWorkLink == nil)
+        #expect(router.workLinkEpoch == epoch)
     }
 
-    @Test func coveredReaderDoesNotClearSharedPanel() {
+    #if os(iOS)
+    @Test func filterPresentationWidthChangeDrainsDeferredLink() async throws {
+        let router = AppRouter()
+        router.selection = .search
+        router.panel = .searchFilters
+        router.openAO3Link(URL(string: "https://archiveofourown.org/works/123")!)
+
+        func root(_ width: UserInterfaceSizeClass) -> AnyView {
+            AnyView(Text("Results")
+                .filterPanelPresentation(
+                    isPresented: router.isShowing(.searchFilters),
+                    onDismiss: { router.panelDidDismiss() }
+                ) { Text("Filters") }
+                .environment(\.horizontalSizeClass, width)
+                .environment(\.verticalSizeClass, .regular))
+        }
+
+        let host = UIHostingController(rootView: root(.compact))
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow()
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        window.rootViewController = host
+        window.isHidden = false
+        defer { window.isHidden = true }
+        host.view.layoutIfNeeded()
+        #expect(!router.isPresentingLinkedWork)
+
+        host.rootView = root(.regular)
+        host.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(50))
+
+        #expect(router.isPresentingLinkedWork)
+        #expect(router.pendingWorkLink?.id == 123)
+        let epoch = router.workLinkEpoch
+        router.panelDidDismiss()
+        #expect(router.workLinkEpoch == epoch)
+    }
+    #endif
+
+    @Test func readerPanelBindingSuppressesAndRestoresCoveredReader() {
         #expect(!AppRouter.readerOwnsSharedPanel(landingCoversReader: true))
         #expect(AppRouter.readerOwnsSharedPanel(landingCoversReader: false))
+        let router = AppRouter()
+        router.panel = .readerDisplay
+        let covered = router.readerPanelBinding(includesFind: true, suppressed: true)
+        #expect(!covered.wrappedValue)
+        covered.wrappedValue = false
+        #expect(router.panel == .readerDisplay)
+        let restored = router.readerPanelBinding(includesFind: true, suppressed: false)
+        #expect(restored.wrappedValue)
+        restored.wrappedValue = false
+        #expect(router.panel == .none)
+        router.panel = .readerFind
+        #expect(!router.readerPanelBinding(includesFind: false, suppressed: false).wrappedValue)
+        #expect(router.readerPanelBinding(includesFind: true, suppressed: false).wrappedValue)
         for panel: AppRouter.Panel in [.readerChapters, .readerDisplay, .readerFind] {
             #expect(!AppRouter.readerClearsSharedPanel(panel, ownsPanel: false))
             #expect(AppRouter.readerClearsSharedPanel(panel, ownsPanel: true))
@@ -936,7 +998,7 @@ struct AppRouterTests {
         #expect(!AppRouter.readerClearsSharedPanel(.none, ownsPanel: true))
     }
 
-    @Test func passwordResetKeepsRestrictedWorkLoginUntilBrowserCloses() throws {
+    @Test func passwordResetBrowserBindingRestoresRestrictedWorkLogin() throws {
         let router = AppRouter()
         let reset = try #require(URL(string: "https://archiveofourown.org/users/password/new"))
         router.openAO3Link(URL(string: "https://archiveofourown.org/works/123/chapters/456")!)
@@ -948,15 +1010,17 @@ struct AppRouterTests {
         router.linkedWorkLoginSheetDidDismiss(isLoggedIn: false, sessionGeneration: 4)
 
         #expect(router.isPresentingWebBrowser)
+        #expect(router.webBrowserPresentation.wrappedValue)
         #expect(!router.isPresentingLinkedWorkLogin)
         #expect(router.pendingLoginWorkLink?.id == 123)
         #expect(router.pendingLoginWorkLink?.chapterID == 456)
 
-        router.isPresentingWebBrowser = false
+        router.webBrowserPresentation.wrappedValue = false
         router.webBrowserDidDismiss()
 
         #expect(router.isPresentingLinkedWorkLogin)
         #expect(!router.isPresentingWebBrowser)
+        #expect(!router.webBrowserPresentation.wrappedValue)
         #expect(router.pendingLoginWorkLink?.id == 123)
         #expect(router.pendingLoginWorkLink?.chapterID == 456)
     }

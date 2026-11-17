@@ -85,13 +85,7 @@ struct ContentView: View {
             }
             // AO3 website sheet is root-hosted so `router.open` never switches the
             // user into Browse — Done returns them to the tab they left.
-            .sheet(isPresented: Binding(
-                get: {
-                    router.isPresentingWebBrowser && !router.isPresentingLinkedWork
-                        && !router.isPresentingLinkedWorkLogin
-                },
-                set: { router.isPresentingWebBrowser = $0 }
-            ), onDismiss: {
+            .sheet(isPresented: router.webBrowserPresentation, onDismiss: {
                 router.webBrowserDidDismiss()
             }) {
                 AO3WebBrowserView()

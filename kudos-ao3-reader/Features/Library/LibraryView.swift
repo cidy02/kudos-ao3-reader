@@ -215,8 +215,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 }
                 .filterPanelPresentation(
                     isPresented: router.isShowing(.libraryFilters),
-                    onDismiss: { router.panelDidDismiss() },
-                    onHostRemoved: { router.dropPendingAO3LinkAfterPanelDismiss() }
+                    onDismiss: { router.panelDidDismiss() }
                 ) {
                     // The lists are drawn from what the Library can show: not a work Hide
                     // mode hides (its fandoms and tags were offered here). A queue's

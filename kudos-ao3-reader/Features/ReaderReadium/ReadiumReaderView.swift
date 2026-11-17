@@ -1704,16 +1704,7 @@ extension ReadiumReaderView {
     #endif
 
     private var readerPanelBinding: Binding<Bool> {
-        let ownsPanel = AppRouter.readerOwnsSharedPanel(landingCoversReader: readerPanelSuppressed)
-        return Binding(
-            get: {
-                ownsPanel && (
-                    router.panel == .readerChapters || router.panel == .readerDisplay
-                        || router.panel == .readerFind
-                )
-            },
-            set: { if !$0, ownsPanel { router.panel = .none } }
-        )
+        router.readerPanelBinding(includesFind: true, suppressed: readerPanelSuppressed)
     }
 
     // MARK: Contents sheet helpers

@@ -132,13 +132,7 @@ struct ReaderView: View {
     /// The reader's chapters/display panels share the app-wide inspector (via
     /// `AppRouter.panel`) so only one inspector is ever open at a time.
     private var readerInspectorBinding: Binding<Bool> {
-        let ownsPanel = AppRouter.readerOwnsSharedPanel(landingCoversReader: readerPanelSuppressed)
-        return Binding(
-            get: {
-                ownsPanel && (router.panel == .readerChapters || router.panel == .readerDisplay)
-            },
-            set: { if !$0, ownsPanel { router.panel = .none } }
-        )
+        router.readerPanelBinding(includesFind: false, suppressed: readerPanelSuppressed)
     }
 
     var body: some View {

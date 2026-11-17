@@ -441,6 +441,16 @@ final class AppRouter {
         panel != .searchFilters && panel != .libraryFilters
     }
 
+    var webBrowserPresentation: Binding<Bool> {
+        Binding(
+            get: {
+                self.isPresentingWebBrowser && !self.isPresentingLinkedWork
+                    && !self.isPresentingLinkedWorkLogin
+            },
+            set: { self.isPresentingWebBrowser = $0 }
+        )
+    }
+
     /// Opens a URL in the in-app AO3 website sheet without changing tabs.
     ///
     /// Scheme + host gates live at this sink, not at the call sites.
@@ -585,13 +595,6 @@ final class AppRouter {
         guard let url = pendingAO3LinkAfterPanelDismiss else { return }
         pendingAO3LinkAfterPanelDismiss = nil
         openAO3Link(url)
-    }
-
-    /// The filter sheet was removed without its dismiss callback (iPad compact →
-    /// regular). Forget a deferred link so a later, unrelated filter close cannot
-    /// open it.
-    func dropPendingAO3LinkAfterPanelDismiss() {
-        pendingAO3LinkAfterPanelDismiss = nil
     }
 
     /// Pushes a verified author route without changing tabs. Keeping the current
@@ -1037,6 +1040,19 @@ final class AppRouter {
     static func readerClearsSharedPanel(_ panel: Panel, ownsPanel: Bool) -> Bool {
         ownsPanel && (
             panel == .readerChapters || panel == .readerDisplay || panel == .readerFind
+        )
+    }
+
+    func readerPanelBinding(includesFind: Bool, suppressed: Bool) -> Binding<Bool> {
+        let ownsPanel = Self.readerOwnsSharedPanel(landingCoversReader: suppressed)
+        return Binding(
+            get: {
+                ownsPanel && (
+                    self.panel == .readerChapters || self.panel == .readerDisplay
+                        || (includesFind && self.panel == .readerFind)
+                )
+            },
+            set: { if !$0, ownsPanel { self.panel = .none } }
         )
     }
 }

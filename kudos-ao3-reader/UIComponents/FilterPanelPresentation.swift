@@ -33,9 +33,8 @@ private struct FilterPanelPresentation<Panel: View>: ViewModifier {
     @Binding var isPresented: Bool
     /// The compact layout's sheet detents; nil keeps the sheet's own full height.
     var detents: Set<PresentationDetent>?
+    /// A width swap can remove the compact sheet without SwiftUI's dismiss callback.
     var onDismiss: (() -> Void)? = nil
-    /// Compact sheet → inspector removes the sheet without `onDismiss`.
-    var onHostRemoved: (() -> Void)? = nil
     @ViewBuilder var panel: () -> Panel
 
     func body(content: Content) -> some View {
@@ -61,7 +60,7 @@ private struct FilterPanelPresentation<Panel: View>: ViewModifier {
             }
         }
         .onChange(of: wide) { _, _ in
-            if !isPresented { onHostRemoved?() }
+            if !isPresented { onDismiss?() }
         }
         #else
         content.inspector(isPresented: $isPresented) { panel() }
@@ -81,12 +80,10 @@ extension View {
         isPresented: Binding<Bool>,
         detents: Set<PresentationDetent>? = nil,
         onDismiss: (() -> Void)? = nil,
-        onHostRemoved: (() -> Void)? = nil,
         @ViewBuilder panel: @escaping () -> some View
     ) -> some View {
         modifier(FilterPanelPresentation(
-            isPresented: isPresented, detents: detents, onDismiss: onDismiss,
-            onHostRemoved: onHostRemoved, panel: panel
+            isPresented: isPresented, detents: detents, onDismiss: onDismiss, panel: panel
         ))
     }
 }
