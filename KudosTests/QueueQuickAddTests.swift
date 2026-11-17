@@ -180,6 +180,7 @@ struct QueueQuickAddTests {
         controller.sourceQueueID = queue.id
         let settings = try defaults()
         controller.quickAdd(summary(511), in: context, defaults: settings) { _, _, _ in }
+        #expect(controller.toastTarget?.priorWorkState == .existing)
         controller.undo()
         #expect(!existing.isPendingDeletion)
         #expect(existing.activeQueueMemberships.isEmpty)
@@ -189,9 +190,31 @@ struct QueueQuickAddTests {
 
         controller.quickAdd(summary(512), in: context, defaults: settings) { _, _, _ in }
         let created = try #require(controller.toastTarget?.work)
+        #expect(controller.toastTarget?.priorWorkState == .inserted)
         controller.undo()
         #expect(created.isPendingDeletion)
         #expect(created.activeQueueMemberships.isEmpty)
+    }
+
+    @Test func undoDoesNotSoftDeleteARevivedWork() throws {
+        let context = try context()
+        let queue = ReadingQueue(name: "List")
+        context.insert(queue)
+        let work = SavedWork(
+            title: "Restorable", author: "Writer", sourceURL: summary(515).workURL.absoluteString
+        )
+        work.ao3WorkID = 515
+        work.hasEPUB = false
+        context.insert(work)
+        PreservedWorkService.softDelete(work, in: context)
+        let controller = RemoteWorkSelectionController()
+        controller.sourceQueueID = queue.id
+        controller.quickAdd(summary(515), in: context, defaults: try defaults()) { _, _, _ in }
+        #expect(controller.toastTarget?.priorWorkState == .revived)
+        controller.undo()
+        #expect(!work.isPendingDeletion)
+        #expect(work.activeQueueMemberships.isEmpty)
+        #expect(try context.fetchCount(FetchDescriptor<SavedWork>()) == 1)
     }
 
     @Test func finishedDownloadsCanBeQueuedAgainAndExplicitDownloadUpgradesActiveItems() {
@@ -244,6 +267,10 @@ struct QueueQuickAddTests {
         DownloadQueue.finishImportedWork(saved, in: context)
         #expect(saved.epubPreservationStatus == .preserved)
         #expect(saved.preservedAt != nil)
+        #expect(saved.metadataSyncStatus == .incomplete)
+        saved.lastTagRefreshAttemptAt = Date() // a failed verification is on cooldown, not complete
+        saved.metadataSyncStatus = .pending
+        DownloadQueue.finishImportedWork(saved, in: context)
         #expect(saved.metadataSyncStatus == .incomplete)
         try context.save()
     }

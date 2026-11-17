@@ -70,7 +70,7 @@ struct QueueAddedToast: View {
                 .padding(.vertical, 6)
                 .background(.white.opacity(0.18), in: Capsule())
         }
-            .buttonStyle(.plain)
-            .minimumHitTarget()
+        .buttonStyle(.plain)
+        .minimumHitTarget()
     }
 }

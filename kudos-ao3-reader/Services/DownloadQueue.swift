@@ -297,7 +297,7 @@ final class DownloadQueue {
         ReadingQueueService.normalize(work)
         if work.isQueuedForLater {
             work.metadataSyncStatus = work.ao3Unavailable ? .failed
-                : (work.needsAO3Refresh ? .incomplete : .complete)
+                : (!work.workTagsFetched || work.needsAO3Refresh ? .incomplete : .complete)
         }
         context.saveBestEffort(reason: "Saving queued import status failed")
     }
