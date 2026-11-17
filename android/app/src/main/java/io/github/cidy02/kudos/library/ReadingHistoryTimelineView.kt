@@ -581,7 +581,7 @@ private fun dayShade(bucket: ReadingHistoryTimeline.Bucket, maxSeconds: Double, 
 }
 
 @Composable
-private fun YearChart(timeline: ReadingHistoryTimeline, zone: ZoneId, locale: Locale) {
+internal fun YearChart(timeline: ReadingHistoryTimeline, zone: ZoneId, locale: Locale) {
     val tokens = LocalKudosTokens.current
     val buckets = timeline.buckets
     val maxHours = maxOf((buckets.maxOfOrNull { it.seconds } ?: 0.0) / 3600.0, 1.0)
@@ -632,10 +632,7 @@ private fun YearChart(timeline: ReadingHistoryTimeline, zone: ZoneId, locale: Lo
                 Box(Modifier.size(10.dp).background(tokens.accent, RoundedCornerShape(2.5.dp)))
                 Text("Hours read", color = tokens.secondaryInk, fontSize = 11.sp)
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text("3", color = tokens.accentInk, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Text("Works finished", color = tokens.secondaryInk, fontSize = 11.sp)
-            }
+            Text("Number above a bar = works finished", color = tokens.secondaryInk, fontSize = 11.sp)
         }
     }
 }
@@ -884,6 +881,7 @@ private fun SittingWorkAndFactsColumn(
         if (work != null) {
             val progress = work.readingProgressFraction() ?: 0.0
             if (ledger) {
+                val (chapterBarLayout, chapterProgressLabel) = io.github.cidy02.kudos.works.rememberWorkChapterBarState(work)
                 WorkLedgerRow(
                     title = work.title,
                     author = work.author.ifBlank { "Anonymous" },
@@ -909,7 +907,9 @@ private fun SittingWorkAndFactsColumn(
                             else -> actions.onOpenWork(work.id)
                         }
                     },
-                    onLongClick = onOpenMenu
+                    onLongClick = onOpenMenu,
+                    chapterBarLayout = chapterBarLayout,
+                    chapterProgressLabel = chapterProgressLabel
                 )
             } else {
                 SensitiveWorkRow(

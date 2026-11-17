@@ -1984,7 +1984,19 @@ object BackupMergeService {
                 resolvedLocalIds += id
                 if (mode != BackupImportMode.MERGE &&
                     SyncMerge.shouldApplyIncoming(existing.lastModifiedAt, incomingModified)
-                ) byId[id] = restored.copy(id = existing.id)
+                ) {
+                    byId[id] = restored.copy(
+                        id = existing.id,
+                        tzOffsetSeconds = archived.tzOffsetSeconds ?: existing.tzOffsetSeconds,
+                        startProgress = archived.startProgress ?: existing.startProgress,
+                        startSpineIndex = archived.startSpineIndex ?: existing.startSpineIndex,
+                        modeRaw = archived.modeRaw ?: existing.modeRaw,
+                        playbackRate = archived.playbackRate ?: existing.playbackRate,
+                        activeSeconds = archived.activeSeconds ?: existing.activeSeconds,
+                        deviceID = archived.deviceID ?: existing.deviceID,
+                        rulesVersion = archived.rulesVersion ?: existing.rulesVersion
+                    )
+                }
             }
         }
 

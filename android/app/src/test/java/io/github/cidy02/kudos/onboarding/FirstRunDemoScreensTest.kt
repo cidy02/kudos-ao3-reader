@@ -123,8 +123,16 @@ class FirstRunDemoScreensTest {
         listOf(KudosThemeMode.Light, KudosThemeMode.Dark, KudosThemeMode.Sepia, KudosThemeMode.Oled).forEach { mode ->
             compose.runOnIdle { theme.value = mode; route.value = "nav:welcome" }
             assertReadable("Welcome to Kudos")
-            assertReadable("Found a bug? Shake your device to send a report, or open an issue on " +
-                "GitHub. The AO3 team can't help with Kudos, so please don't contact them about it.")
+            assertReadable("Free to use • Ad-free • Built by fans")
+            assertReadable("Read anywhere")
+            assertReadable("Download works and read them offline, with themes, fonts, and Read Aloud.")
+            assertReadable("All of AO3, native")
+            assertReadable("Search, browse fandoms, leave kudos and comments, and keep up with subscriptions.")
+            assertReadable("Yours, on this device")
+            assertReadable("Your library, queues, and history stay on your device. No tracking, " +
+                "and mature works can hide behind device unlock.")
+            compose.onNodeWithContentDescription("View on GitHub. Opens the project's source code in your browser")
+                .performScrollTo().assertIsDisplayed()
             assertReadable("Continue")
             compose.runOnIdle { route.value = "nav:sync-onboarding" }
             assertReadable("Protect Your Library")

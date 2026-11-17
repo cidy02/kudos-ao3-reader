@@ -112,7 +112,9 @@ data class ReadingSessionFacts(
     val sessionID: String? = null,
     val title: String = "",
     val endingProgress: Double = 0.0,
-    val chapterCount: Int = 0
+    val chapterCount: Int = 0,
+    /** 0…1 at the start of the sitting (`ReadingSession.startProgress`), when recorded. */
+    val startProgress: Double? = null
 )
 
 /** iOS Reading Insights' session-derived figures. */
@@ -182,6 +184,7 @@ data class ReadingInsights(
                     sessionID = session.id,
                     title = session.workTitle.ifEmpty { work?.title.orEmpty() },
                     endingProgress = session.endingProgress,
+                    startProgress = session.startProgress,
                     chapterCount = if (session.chapterCountAtVisit > 0) {
                         session.chapterCountAtVisit
                     } else {
@@ -192,23 +195,48 @@ data class ReadingInsights(
         }
 
         /**
-         * Progress at the start of each sitting in [facts], in the same index order: 0 for a work's
-         * first sitting or the sitting after a finished read; otherwise the previous sitting's ending
-         * progress. Shared by [wordsRead] and [ReadingHistoryTimeline].
+         * Where each sitting began, 0…1, in [facts] order (owner Q27, 2026-10-20; T-515): its
+         * recorded [ReadingSessionFacts.startProgress] when present, else the previous sitting's
+         * end in words over this sitting's word count, or 0 for a first sitting and for a reread
+         * of a finished work that did not grow. When the work grew and the recorded start equals
+         * the previous end fraction, the start is the previous end in words, not that fraction
+         * times the new count. A sitting that went back is where the next one starts from.
+         * iOS `ReadingInsights.startingProgress(of:)`, the same rule as [wordsRead].
          */
         fun startingProgress(facts: List<ReadingSessionFacts>): List<Double> {
             if (facts.isEmpty()) return emptyList()
-            val orderedIndices = facts.indices.sortedWith { lhs, rhs ->
-                sittingOrder(facts[lhs], facts[rhs])
-            }
             val starts = DoubleArray(facts.size)
-            val startByWork = HashMap<String, Double>()
-            for (index in orderedIndices) {
-                val fact = facts[index]
-                val start = startByWork[fact.workID] ?: 0.0
-                starts[index] = start
-                val end = fact.endingProgress.coerceIn(0.0, 1.0)
-                startByWork[fact.workID] = if (fact.didFinish) 0.0 else end
+            facts.indices.groupBy { facts[it].workID }.values.forEach { indices ->
+                var previousEndFraction = 0.0
+                var previousEndWords = 0.0
+                var previousWords = 0
+                var previousFinished = false
+                indices.sortedWith { lhs, rhs -> sittingOrder(facts[lhs], facts[rhs]) }
+                    .forEach { index ->
+                        val fact = facts[index]
+                        val words = fact.wordCount.coerceAtLeast(0)
+                        val endFraction = fact.endingProgress.coerceIn(0.0, 1.0)
+                        val explicit = fact.startProgress
+                        val startFraction = if (explicit != null) {
+                            val clamped = explicit.coerceIn(0.0, 1.0)
+                            if (previousWords > 0 && words > previousWords && clamped == previousEndFraction) {
+                                (previousEndWords / words).coerceIn(0.0, 1.0)
+                            } else {
+                                clamped
+                            }
+                        } else if (previousFinished && words <= previousWords) {
+                            0.0
+                        } else if (words > 0 && previousWords > 0) {
+                            (previousEndWords / words).coerceIn(0.0, 1.0)
+                        } else {
+                            previousEndFraction
+                        }
+                        starts[index] = startFraction
+                        previousEndFraction = endFraction
+                        previousEndWords = endFraction * words
+                        previousWords = words
+                        previousFinished = fact.didFinish
+                    }
             }
             return starts.toList()
         }
@@ -220,19 +248,43 @@ data class ReadingInsights(
         }
 
         /**
-         * Words each sitting read (owner Q27, 2026-10-20, both apps): the move in position since
-         * the work's sitting before (from the start for its first sitting, or after a sitting
-         * that finished it), times the work's words. A sitting that went back reads nothing and
-         * is where the next one starts from. iOS `ReadingLogService.wordsRead(sessions:)`.
+         * Words each sitting read (owner Q27, 2026-10-20; T-515): this sitting's end in words
+         * (`endingProgress × wordCount`) minus where it started in words (`startProgress ×
+         * wordCount` when recorded, else the previous sitting's end in words, or 0 for a first
+         * sitting or a reread of a finished work that did not grow). When the work grew and the
+         * recorded start equals the previous end fraction, the old end in words is kept rather
+         * than rescaled. Never below zero. A sitting that went back reads nothing and is where
+         * the next one starts from. iOS `ReadingLogService.wordsRead(sessions:)`.
          */
         fun wordsRead(sessions: List<ReadingSessionEntity>): Map<String, Int> {
             val read = HashMap<String, Int>()
             sessions.groupBy { it.workID }.values.forEach { rows ->
-                var start = 0.0
+                var previousEndFraction = 0.0
+                var previousEndWords = 0.0
+                var previousWords = 0
+                var previousFinished = false
                 rows.sortedWith(compareBy({ it.startedAt }, { it.id })).forEach { session ->
-                    val end = session.endingProgress.coerceIn(0.0, 1.0)
-                    read[session.id] = ((end - start).coerceAtLeast(0.0) * session.wordCount).roundToInt()
-                    start = if (session.didFinish) 0.0 else end
+                    val words = session.wordCount.coerceAtLeast(0)
+                    val endFraction = session.endingProgress.coerceIn(0.0, 1.0)
+                    val endWords = endFraction * words
+                    val explicit = session.startProgress
+                    val startWords = if (explicit != null) {
+                        val clamped = explicit.coerceIn(0.0, 1.0)
+                        if (previousWords > 0 && words > previousWords && clamped == previousEndFraction) {
+                            previousEndWords
+                        } else {
+                            clamped * words
+                        }
+                    } else if (previousFinished && words <= previousWords) {
+                        0.0
+                    } else {
+                        previousEndWords
+                    }
+                    read[session.id] = (endWords - startWords).coerceAtLeast(0.0).roundToInt()
+                    previousEndFraction = endFraction
+                    previousEndWords = endWords
+                    previousWords = words
+                    previousFinished = session.didFinish
                 }
             }
             return read

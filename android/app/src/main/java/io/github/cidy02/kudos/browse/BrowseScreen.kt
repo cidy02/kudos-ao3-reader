@@ -190,7 +190,7 @@ fun BrowseScreen(
                                     stats = derived.stats[category.name] ?: CategoryStats(),
                                     onOpen = { onOpenCategory(category) },
                                     onOpenFandom = ::openFandom,
-                                    modifier = Modifier.padding(bottom = 18.dp)
+                                    modifier = Modifier.padding(bottom = 12.dp)
                                 )
                             }
                             item(key = "open-website") {

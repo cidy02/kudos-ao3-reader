@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
-import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Shield
@@ -134,27 +133,19 @@ private fun WelcomePoints() {
     ) {
         OnboardingPoint(
             icon = Icons.AutoMirrored.Outlined.MenuBook,
-            title = "Built for AO3 Readers",
-            body = "An unofficial reader for Archive of Our Own. Kudos is free and open " +
-                "source, has no ads, and isn't affiliated with AO3 or the OTW."
-        )
-        OnboardingPoint(
-            icon = Icons.Outlined.Shield,
-            title = "Your Privacy Matters",
-            body = "Kudos has no ads, analytics, tracking, or hidden data collection. Your " +
-                "AO3 sign-in and the information Kudos needs stay on your device."
+            title = "Read anywhere",
+            body = "Download works and read them offline, with themes, fonts, and Read Aloud."
         )
         OnboardingPoint(
             icon = Icons.Outlined.FavoriteBorder,
-            title = "Community Built",
-            body = "Kudos is made by fans. It doesn't accept donations, but you can " +
-                "contribute to the project."
+            title = "All of AO3, native",
+            body = "Search, browse fandoms, leave kudos and comments, and keep up with subscriptions."
         )
         OnboardingPoint(
-            icon = Icons.Outlined.BugReport,
-            title = "Need Help?",
-            body = "Found a bug? Shake your device to send a report, or open an issue on " +
-                "GitHub. The AO3 team can't help with Kudos, so please don't contact them about it."
+            icon = Icons.Outlined.Shield,
+            title = "Yours, on this device",
+            body = "Your library, queues, and history stay on your device. No tracking, " +
+                "and mature works can hide behind device unlock."
         )
     }
 }

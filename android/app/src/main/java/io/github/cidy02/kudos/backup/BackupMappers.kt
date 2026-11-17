@@ -523,23 +523,36 @@ fun ReadingQueue.toBackupReadingQueue(tagNames: List<String> = emptyList()): Bac
     )
 }
 
-fun ReadingSessionEntity.toBackupReadingSession(): BackupReadingSession = BackupReadingSession(
-    id = BackupPaths.canonicalUuid(id, "readingSession.id"),
-    workID = BackupPaths.canonicalUuid(workID, "readingSession.workID"),
-    ao3WorkID = ao3WorkID,
-    sourceURL = sourceURL,
-    workTitle = workTitle,
-    startedAt = BackupValidator.formatInstant(startedAt),
-    endedAt = BackupValidator.formatInstant(endedAt),
-    durationSeconds = durationSeconds,
-    lastSpineIndex = lastSpineIndex,
-    chapterTitle = chapterTitle,
-    endingProgress = endingProgress,
-    wordCount = wordCount,
-    chapterCountAtVisit = chapterCountAtVisit,
-    didFinish = didFinish,
-    lastModifiedAt = BackupValidator.formatInstant(lastModifiedAt)
-)
+fun ReadingSessionEntity.toBackupReadingSession(): BackupReadingSession {
+    // A sitting from before A-516/T-516 or an older build (rulesVersion 0) recorded none of
+    // these. Leave the keys out, so such an archive re-exports unchanged.
+    val recorded = rulesVersion > 0
+    return BackupReadingSession(
+        id = BackupPaths.canonicalUuid(id, "readingSession.id"),
+        workID = BackupPaths.canonicalUuid(workID, "readingSession.workID"),
+        ao3WorkID = ao3WorkID,
+        sourceURL = sourceURL,
+        workTitle = workTitle,
+        startedAt = BackupValidator.formatInstant(startedAt),
+        endedAt = BackupValidator.formatInstant(endedAt),
+        durationSeconds = durationSeconds,
+        tzOffsetSeconds = tzOffsetSeconds,
+        startProgress = startProgress,
+        startSpineIndex = startSpineIndex,
+        modeRaw = if (recorded) modeRaw else null,
+        playbackRate = playbackRate,
+        activeSeconds = activeSeconds,
+        deviceID = deviceID.ifEmpty { null },
+        rulesVersion = if (recorded) rulesVersion else null,
+        lastSpineIndex = lastSpineIndex,
+        chapterTitle = chapterTitle,
+        endingProgress = endingProgress,
+        wordCount = wordCount,
+        chapterCountAtVisit = chapterCountAtVisit,
+        didFinish = didFinish,
+        lastModifiedAt = BackupValidator.formatInstant(lastModifiedAt)
+    )
+}
 
 fun BackupReadingSession.toReadingSession(exportedAt: Instant? = null): ReadingSessionEntity {
     val started = startedAt.takeIf { it.isNotBlank() }?.let {
@@ -559,6 +572,14 @@ fun BackupReadingSession.toReadingSession(exportedAt: Instant? = null): ReadingS
         startedAt = started,
         endedAt = ended,
         durationSeconds = durationSeconds.coerceAtLeast(0.0),
+        tzOffsetSeconds = tzOffsetSeconds,
+        startProgress = startProgress,
+        startSpineIndex = startSpineIndex,
+        modeRaw = modeRaw ?: io.github.cidy02.kudos.data.local.entity.ReadingSessionMode.READ.rawValue,
+        playbackRate = playbackRate,
+        activeSeconds = activeSeconds,
+        deviceID = deviceID.orEmpty(),
+        rulesVersion = rulesVersion ?: 0,
         lastSpineIndex = lastSpineIndex,
         chapterTitle = chapterTitle,
         endingProgress = endingProgress.coerceIn(0.0, 1.0),
