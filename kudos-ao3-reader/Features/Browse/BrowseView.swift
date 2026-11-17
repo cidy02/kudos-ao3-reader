@@ -93,7 +93,9 @@ struct AO3WebBrowserView: View {
             text: $model.urlString,
             placeholder: "Search AO3 or enter a URL",
             submitLabel: .go,
-            onSubmit: { model.loadFromAddressBar() }
+            onSubmit: {
+                model.loadFromAddressBar()
+            }
         ) {
             Image(systemName: model.isLoading ? "arrow.trianglehead.clockwise" : "magnifyingglass")
                 .font(.caption)

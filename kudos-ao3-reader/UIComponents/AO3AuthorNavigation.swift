@@ -297,7 +297,7 @@ private struct AO3AuthorNavigationModifier: ViewModifier {
             // equality skips same-route re-taps. Epoch always changes; only the
             // router's active root/sheet scope consumes.
             .onChange(of: router.authorProfileNavigationEpoch, initial: true) { _, epoch in
-                guard epoch > 0, router.authorNavigationTarget == tab,
+                guard epoch > 0, !router.isPresentingLinkedWork, router.authorNavigationTarget == tab,
                       let route = router.consumePendingAuthorProfile() else { return }
                 // Wait out the same-touch row NavigationLink (and its deferred
                 // dismiss). Then push author so it ends up on top of the stack —

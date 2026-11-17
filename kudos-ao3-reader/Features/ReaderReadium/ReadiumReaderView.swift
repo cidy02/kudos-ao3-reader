@@ -98,6 +98,7 @@ struct ReadiumReaderView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.readerPanelSuppressed) private var readerPanelSuppressed
 
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
     /// Every annotation in the store; narrowed to this work by `annotations`.
@@ -510,7 +511,12 @@ struct ReadiumReaderView: View {
                 // The lock is the reader's, not the app's — never leave the rest
                 // of the app pinned to whatever orientation reading ended in.
                 orientationLock.release()
-                if router.panel == .readerChapters || router.panel == .readerDisplay {
+                if AppRouter.readerClearsSharedPanel(
+                    router.panel,
+                    ownsPanel: AppRouter.readerOwnsSharedPanel(
+                        landingCoversReader: readerPanelSuppressed
+                    )
+                ) {
                     router.panel = .none
                 }
             }
@@ -1698,13 +1704,7 @@ extension ReadiumReaderView {
     #endif
 
     private var readerPanelBinding: Binding<Bool> {
-        Binding(
-            get: {
-                router.panel == .readerChapters || router.panel == .readerDisplay
-                    || router.panel == .readerFind
-            },
-            set: { if !$0 { router.panel = .none } }
-        )
+        router.readerPanelBinding(includesFind: true, suppressed: readerPanelSuppressed)
     }
 
     // MARK: Contents sheet helpers

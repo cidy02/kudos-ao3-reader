@@ -33,24 +33,40 @@ private struct FilterPanelPresentation<Panel: View>: ViewModifier {
     @Binding var isPresented: Bool
     /// The compact layout's sheet detents; nil keeps the sheet's own full height.
     var detents: Set<PresentationDetent>?
+    /// A width swap can remove the compact sheet without SwiftUI's dismiss callback.
+    var onDismiss: (() -> Void)? = nil
     @ViewBuilder var panel: () -> Panel
 
     func body(content: Content) -> some View {
         #if os(iOS)
-        if WideLayout.isAvailable(horizontal: horizontalSizeClass, vertical: verticalSizeClass) {
-            content.inspector(isPresented: $isPresented) { panel() }
-        } else {
-            content.sheet(isPresented: $isPresented) {
-                panel()
-                    // The panel supplies its own navigation bar; the grabber sits
-                    // above it, so the sheet still reads as swipe-to-dismiss.
-                    .presentationDragIndicator(.visible)
-                    // `[.large]` is what a sheet does when given no detents.
-                    .presentationDetents(detents ?? [.large])
+        let wide = WideLayout.isAvailable(
+            horizontal: horizontalSizeClass, vertical: verticalSizeClass
+        )
+        return Group {
+            if wide {
+                content.inspector(isPresented: $isPresented) { panel() }
+                    .onChange(of: isPresented) { _, presented in
+                        if !presented { onDismiss?() }
+                    }
+            } else {
+                content.sheet(isPresented: $isPresented, onDismiss: onDismiss) {
+                    panel()
+                        // The panel supplies its own navigation bar; the grabber sits
+                        // above it, so the sheet still reads as swipe-to-dismiss.
+                        .presentationDragIndicator(.visible)
+                        // `[.large]` is what a sheet does when given no detents.
+                        .presentationDetents(detents ?? [.large])
+                }
             }
+        }
+        .onChange(of: wide) { _, _ in
+            if !isPresented { onDismiss?() }
         }
         #else
         content.inspector(isPresented: $isPresented) { panel() }
+            .onChange(of: isPresented) { _, presented in
+                if !presented { onDismiss?() }
+            }
         #endif
     }
 }
@@ -63,8 +79,11 @@ extension View {
     func filterPanelPresentation(
         isPresented: Binding<Bool>,
         detents: Set<PresentationDetent>? = nil,
+        onDismiss: (() -> Void)? = nil,
         @ViewBuilder panel: @escaping () -> some View
     ) -> some View {
-        modifier(FilterPanelPresentation(isPresented: isPresented, detents: detents, panel: panel))
+        modifier(FilterPanelPresentation(
+            isPresented: isPresented, detents: detents, onDismiss: onDismiss, panel: panel
+        ))
     }
 }

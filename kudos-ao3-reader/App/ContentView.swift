@@ -61,6 +61,9 @@ struct ContentView: View {
     var body: some View {
         @Bindable var router = router
         content
+            // Readers under the link-landing sheet must not present or clear the
+            // shared panel. The sheet itself opts back in.
+            .environment(\.readerPanelSuppressed, router.isPresentingLinkedWork)
             // Warms WebKit at launch instead of on first real use (the AO3 login
             // sheet, or Browse) — see WebKitPrewarmView.
             .background { WebKitPrewarmView() }
@@ -74,13 +77,45 @@ struct ContentView: View {
             }
             // Home's profile control opens Account as a self-contained sheet.
             // Root-hosting also gives restored/deep-linked Account routes one sink.
-            .sheet(isPresented: $router.isPresentingAccount, onDismiss: router.accountDidDismiss) {
+            .sheet(isPresented: $router.isPresentingAccount, onDismiss: {
+                router.accountDidDismiss()
+                if router.pendingWorkLink != nil { router.isPresentingLinkedWork = true }
+            }) {
                 AccountView()
             }
             // AO3 website sheet is root-hosted so `router.open` never switches the
             // user into Browse — Done returns them to the tab they left.
-            .sheet(isPresented: $router.isPresentingWebBrowser) {
+            .sheet(isPresented: router.webBrowserPresentation, onDismiss: {
+                router.webBrowserDidDismiss()
+            }) {
                 AO3WebBrowserView()
+            }
+            .sheet(isPresented: Binding(
+                get: {
+                    router.isPresentingLinkedWork && !router.isPresentingAccount
+                        && router.canPresentLinkedWorkOverPanel && !showingBugReport
+                        && whatsNewEntries.isEmpty && externalImport.pendingImport == nil
+                        && !onboardingPresented.wrappedValue && !syncFolderOnboardingPresented.wrappedValue
+                },
+                set: { router.isPresentingLinkedWork = $0 }
+            ), onDismiss: {
+                router.linkedWorkDidDismiss()
+            }) {
+                if let link = router.pendingWorkLink {
+                    LinkedWorkLandingView(workID: link.id, chapterID: link.chapterID)
+                        .id(router.workLinkEpoch)
+                }
+            }
+            .sheet(isPresented: $router.isPresentingLinkedWorkLogin, onDismiss: {
+                router.linkedWorkLoginSheetDidDismiss(
+                    isLoggedIn: auth.isLoggedIn,
+                    sessionGeneration: auth.sessionGeneration
+                )
+            }) {
+                if let link = router.pendingLoginWorkLink {
+                    AO3LoginView(contextMessage: "Restricted work",
+                                 contextURL: AO3Client.workURL(workID: link.id))
+                }
             }
             #if DEBUG
             .overlay {
@@ -176,7 +211,11 @@ struct ContentView: View {
             // community-redistributed copy actually reaches the app. Converts
             // non-EPUB formats on the way in; see ExternalFileImport.
             .onOpenURL { url in
-                Task { await externalImport.handle(url) }
+                if AO3Link(url).kind != .notAO3 {
+                    router.openAO3Link(url)
+                } else {
+                    Task { await externalImport.handle(url) }
+                }
             }
             .sheet(isPresented: Binding(
                 get: { externalImport.pendingImport != nil },

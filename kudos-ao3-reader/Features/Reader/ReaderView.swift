@@ -15,6 +15,7 @@ struct ReaderView: View {
     var initialSpineIndex: Int? = nil
 
     @Environment(AppRouter.self) private var router
+    @Environment(\.readerPanelSuppressed) private var readerPanelSuppressed
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var privacyGate
@@ -131,10 +132,7 @@ struct ReaderView: View {
     /// The reader's chapters/display panels share the app-wide inspector (via
     /// `AppRouter.panel`) so only one inspector is ever open at a time.
     private var readerInspectorBinding: Binding<Bool> {
-        Binding(
-            get: { router.panel == .readerChapters || router.panel == .readerDisplay },
-            set: { if !$0 { router.panel = .none } }
-        )
+        router.readerPanelBinding(includesFind: false, suppressed: readerPanelSuppressed)
     }
 
     var body: some View {
@@ -233,7 +231,12 @@ struct ReaderView: View {
                 // re-populates every callback `teardown()` clears.
                 controller.teardown()
                 // Leaving the reader closes its panel so it doesn't linger as state.
-                if router.panel == .readerChapters || router.panel == .readerDisplay {
+                if AppRouter.readerClearsSharedPanel(
+                    router.panel,
+                    ownsPanel: AppRouter.readerOwnsSharedPanel(
+                        landingCoversReader: readerPanelSuppressed
+                    )
+                ) {
                     router.panel = .none
                 }
             }
