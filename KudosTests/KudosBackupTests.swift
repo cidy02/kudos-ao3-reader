@@ -63,6 +63,70 @@ struct KudosBackupTests {
         #expect(edited.generatedCoverRecipe.salt == 1)
     }
 
+    @Test func equalClockRemotePinDoesNotUndoAO3RefreshedShuffle() throws {
+        let id = UUID()
+        let phone = try coverContext()
+        let ipad = try coverContext()
+        let work = SavedWork(id: id, title: "Shared", author: "Author")
+        phone.insert(work)
+        work.pinCover(salt: 1)
+        let stalePin = try #require(work.coverRecipeJSON)
+        _ = try KudosBackupService.restore(coverContents(work), into: ipad, defaults: testDefaults())
+        let remote = try #require(try ipad.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(remote.coverRecipeJSON == stalePin)
+
+        work.wordCount = 92_000
+        work.isComplete = true
+        work.refreshCoverAfterMetadataUpdate(hadEmptyFandoms: false, hadZeroWords: true)
+        work.markModified(Date().addingTimeInterval(60))
+        let refreshedPin = try #require(work.coverRecipeJSON)
+        #expect(GeneratedCoverRecipe.supportedPin(in: refreshedPin)?.tier == 2)
+        #expect(GeneratedCoverRecipe.supportedPin(in: refreshedPin)?.closedRing == true)
+        #expect(GeneratedCoverRecipe.pinnedAt(in: refreshedPin) == GeneratedCoverRecipe.pinnedAt(in: stalePin))
+
+        _ = try KudosBackupService.restore(coverContents(remote), into: phone, defaults: testDefaults())
+        #expect(work.wordCount == 92_000)
+        #expect(work.isComplete)
+        #expect(work.coverRecipeJSON == refreshedPin)
+    }
+
+    @Test func laterRemoteShuffleWinsAndKeepsRefreshedTierAndRing() throws {
+        let id = UUID()
+        let phone = try coverContext()
+        let ipad = try coverContext()
+        let work = SavedWork(id: id, title: "Shared", author: "Author")
+        phone.insert(work)
+        work.pinCover(salt: 1)
+        _ = try KudosBackupService.restore(coverContents(work), into: ipad, defaults: testDefaults())
+        let remote = try #require(try ipad.fetch(FetchDescriptor<SavedWork>()).first)
+
+        work.wordCount = 92_000
+        work.isComplete = true
+        work.refreshCoverAfterMetadataUpdate(hadEmptyFandoms: false, hadZeroWords: true)
+        work.markModified(Date().addingTimeInterval(60))
+        let workClock = work.lastModifiedAt
+        let priorPin = try #require(work.coverRecipeJSON)
+        remote.pinCover(salt: 2)
+        let laterPin = try #require(remote.coverRecipeJSON)
+        let laterRecipe = try #require(GeneratedCoverRecipe.supportedPin(in: laterPin))
+        let priorTime = try #require(GeneratedCoverRecipe.supportedPin(in: priorPin)?.pinnedAt)
+        let laterTime = try #require(laterRecipe.pinnedAt)
+        #expect(laterTime > priorTime)
+        #expect(laterRecipe.tier == 0)
+        #expect(!laterRecipe.closedRing)
+
+        _ = try KudosBackupService.restore(coverContents(remote), into: phone, defaults: testDefaults())
+        let mergedPin = try #require(work.coverRecipeJSON)
+        let merged = try #require(GeneratedCoverRecipe.supportedPin(in: mergedPin))
+        #expect(merged.salt == 2)
+        #expect(merged.pinnedAt == laterRecipe.pinnedAt)
+        #expect(merged.motif == laterRecipe.motif)
+        #expect(merged.hues == laterRecipe.hues)
+        #expect(merged.tier == 2)
+        #expect(merged.closedRing)
+        #expect(work.lastModifiedAt == workClock)
+    }
+
     @Test func nilLocalPinAdoptsIncomingDespiteNewerWorkClock() throws {
         let id = UUID()
         let context = try coverContext()
@@ -197,6 +261,10 @@ struct KudosBackupTests {
         object["pinnedAt"] = Date().timeIntervalSince1970 + 60
         let raw = try #require(String(data: JSONSerialization.data(withJSONObject: object), encoding: .utf8))
         incoming.coverRecipeJSON = raw
+
+        local.wordCount = 92_000
+        local.isComplete = true
+        local.markModified(Date().addingTimeInterval(60))
 
         _ = try KudosBackupService.restore(coverContents(incoming), into: context, defaults: testDefaults())
         #expect(local.coverRecipeJSON == raw)

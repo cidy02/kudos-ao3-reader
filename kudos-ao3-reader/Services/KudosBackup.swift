@@ -4845,6 +4845,7 @@ enum KudosBackupService {
            ) {
             work.coverRecipeJSON = GeneratedCoverRecipe.clampingFuturePinIfSupported(coverRecipeJSON)
         }
+        work.reconcileCoverMetadata()
         work.workTagsFetched = work.workTagsFetched || archived.workTagsFetched
         work.ao3Unavailable = work.ao3Unavailable || archived.ao3Unavailable
         work.isQueuedForLater = work.isQueuedForLater || archived.isQueuedForLater

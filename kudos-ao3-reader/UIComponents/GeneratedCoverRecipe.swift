@@ -371,18 +371,24 @@ extension SavedWork {
         // A reader's Shuffle or Reset is not refined from tags that just arrived.
         // Length tier and the completion ring are the only fields a refresh may move.
         if !automatic {
-            let nextTier = coverTier
-            let nextRing = pinned.closedRing || isComplete
-            guard pinned.tier != nextTier || pinned.closedRing != nextRing else { return }
-            let updated = pinned.updating(tier: nextTier, closedRing: nextRing)
-            guard let data = try? JSONEncoder().encode(updated),
-                  let json = String(data: data, encoding: .utf8) else { return }
-            self.coverRecipeJSON = json
-            FolderSyncService.markDirty()
-            NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+            reconcileCoverMetadata()
             return
         }
         refreshCoverIfNeeded()
+    }
+
+    @MainActor
+    func reconcileCoverMetadata() {
+        guard let coverRecipeJSON, let pinned = GeneratedCoverRecipe.supportedPin(in: coverRecipeJSON) else { return }
+        let nextTier = coverTier
+        let nextRing = pinned.closedRing || isComplete
+        guard pinned.tier != nextTier || pinned.closedRing != nextRing else { return }
+        let updated = pinned.updating(tier: nextTier, closedRing: nextRing)
+        guard let data = try? JSONEncoder().encode(updated),
+              let json = String(data: data, encoding: .utf8) else { return }
+        self.coverRecipeJSON = json
+        FolderSyncService.markDirty()
+        NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
     }
 
     @MainActor
