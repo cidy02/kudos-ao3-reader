@@ -9,17 +9,25 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.room.Room
+import androidx.room.RoomDatabase
 import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.app.LocalPushedShellChrome
 import io.github.cidy02.kudos.app.PushedShellChrome
+import io.github.cidy02.kudos.app.ReaderLaunchRequest
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.files.WorkFileStore
@@ -133,7 +141,7 @@ class WorkDetailShareTest {
                                 writeRepository = AO3WriteRepository(writes),
                                 readingQueueRepository = ReadingQueueRepository(database),
                                 seriesRepository = series,
-                                onLogin = {}, onOpenComments = {}, onOpenReader = {}
+                                onLogin = {}, onOpenComments = {}, onOpenReader = { true }
                             )
                         }
                     }
@@ -184,10 +192,107 @@ class WorkDetailShareTest {
     }
 
     private fun assertLocalWorkCompletionOnRealWorkDetailScreen(work: SavedWork, expected: String) {
+        withOfflineWorkDetailScreen(work = work, tempPrefix = "detail-completion") {
+            compose.onNode(hasContentDescription(expected, substring = true)).assertExists()
+        }
+    }
+
+    @Test
+    fun readAloudDoesNotArmDuringRefreshAndDropsWhenPoppedBeforeNavigation() {
+        val queryPool = java.util.concurrent.Executors.newSingleThreadExecutor()
+        val gateQueries = java.util.concurrent.atomic.AtomicBoolean(false)
+        val queriesAfterGate = java.util.concurrent.atomic.AtomicInteger(0)
+        val enteredRefresh = java.util.concurrent.atomic.AtomicBoolean(false)
+        val releaseRefresh = java.util.concurrent.CountDownLatch(1)
+        val work = SavedWork(title = "Refresh Gate Work", author = "Author", hasEpub = true, isSaved = true)
+        val owner = object : LifecycleOwner {
+            override val lifecycle = LifecycleRegistry.createUnsafe(this).apply {
+                currentState = Lifecycle.State.RESUMED
+            }
+        }
+        val opened = mutableListOf<String>()
+        try {
+            withOfflineWorkDetailScreen(
+                work = work,
+                tempPrefix = "detail-launch-gate",
+                writeDummyEpub = true,
+                lifecycleOwner = owner,
+                onOpenReader = { opened += it; true },
+                configureDatabase = { builder ->
+                    builder.setQueryExecutor { task ->
+                        queryPool.execute {
+                            if (gateQueries.get() && queriesAfterGate.incrementAndGet() >= 4 &&
+                                enteredRefresh.compareAndSet(false, true)
+                            ) {
+                                releaseRefresh.await(5, java.util.concurrent.TimeUnit.SECONDS)
+                            }
+                            task.run()
+                        }
+                    }
+                }
+            ) {
+                compose.onNodeWithContentDescription("Read Aloud").assertIsEnabled()
+                compose.waitForIdle()
+
+                gateQueries.set(true)
+                compose.onNodeWithContentDescription("Read Aloud").performClick()
+                compose.waitUntil(5_000) { enteredRefresh.get() }
+
+                // Still inside refreshLocal: WorkDetailScreen must not have armed ReaderLaunchRequest yet.
+                org.junit.Assert.assertNull(ReaderLaunchRequest.peek(work.id))
+
+                // Simulate a popped NavBackStackEntry staying composed through its ~300 ms exit transition.
+                compose.runOnIdle { owner.lifecycle.currentState = Lifecycle.State.CREATED }
+                releaseRefresh.countDown()
+                compose.waitUntil(5_000) {
+                    compose.onAllNodesWithContentDescription("Read Aloud")
+                        .fetchSemanticsNodes()
+                        .any { SemanticsProperties.Disabled !in it.config }
+                }
+                org.junit.Assert.assertNull(ReaderLaunchRequest.peek(work.id))
+                org.junit.Assert.assertEquals(emptyList<String>(), opened)
+            }
+        } finally {
+            releaseRefresh.countDown()
+            queryPool.shutdownNow()
+        }
+    }
+
+    @Test
+    fun readAloudClearsArmedLaunchWhenOpenReaderReturnsFalse() {
+        val work = SavedWork(title = "Pop Failed Work", author = "Author", hasEpub = true, isSaved = true)
+        val opened = mutableListOf<String>()
+        withOfflineWorkDetailScreen(
+            work = work,
+            tempPrefix = "detail-pop-false",
+            writeDummyEpub = true,
+            onOpenReader = { opened += it; false }
+        ) {
+            compose.onNodeWithContentDescription("Read Aloud").assertIsEnabled().performClick()
+            compose.waitUntil(5_000) {
+                opened == listOf(work.id) &&
+                    compose.onAllNodesWithContentDescription("Read Aloud")
+                        .fetchSemanticsNodes()
+                        .any { SemanticsProperties.Disabled !in it.config }
+            }
+            org.junit.Assert.assertNull(ReaderLaunchRequest.peek(work.id))
+        }
+    }
+
+    private fun withOfflineWorkDetailScreen(
+        work: SavedWork,
+        tempPrefix: String,
+        writeDummyEpub: Boolean = false,
+        lifecycleOwner: LifecycleOwner? = null,
+        onOpenReader: (String) -> Boolean = { true },
+        configureDatabase: (RoomDatabase.Builder<KudosDatabase>) -> RoomDatabase.Builder<KudosDatabase> = { it },
+        block: () -> Unit
+    ) {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val database = Room.inMemoryDatabaseBuilder(context, KudosDatabase::class.java)
-            .allowMainThreadQueries().build()
-        val store = WorkFileStore(java.nio.file.Files.createTempDirectory("detail-completion").toFile().toPath())
+        val database = configureDatabase(
+            Room.inMemoryDatabaseBuilder(context, KudosDatabase::class.java).allowMainThreadQueries()
+        ).build()
+        val store = WorkFileStore(java.nio.file.Files.createTempDirectory(tempPrefix).toFile().toPath())
         val offline = object : AO3Client {
             override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> =
                 error("Unexpected network request: $url")
@@ -209,10 +314,19 @@ class WorkDetailShareTest {
         val chrome = PushedShellChrome()
         var showing by mutableStateOf(true)
         try {
-            runBlocking { repository.upsert(work) }
+            runBlocking {
+                repository.upsert(work)
+                if (writeDummyEpub) {
+                    store.writeWorkEpub(work.id, byteArrayOf(0x50, 0x4B, 0x03, 0x04, 1, 2, 3))
+                }
+            }
             compose.setContent {
                 MaterialTheme {
-                    CompositionLocalProvider(LocalPushedShellChrome provides chrome) {
+                    val hostOwner = lifecycleOwner ?: LocalLifecycleOwner.current
+                    CompositionLocalProvider(
+                        LocalPushedShellChrome provides chrome,
+                        LocalLifecycleOwner provides hostOwner
+                    ) {
                         if (showing) Column {
                             Row { chrome.trailingContent?.invoke(this) }
                             WorkDetailScreen(
@@ -223,7 +337,9 @@ class WorkDetailShareTest {
                                 writeRepository = AO3WriteRepository(writes),
                                 readingQueueRepository = ReadingQueueRepository(database),
                                 seriesRepository = series,
-                                onLogin = {}, onOpenComments = {}, onOpenReader = {}
+                                onLogin = {},
+                                onOpenComments = {},
+                                onOpenReader = onOpenReader
                             )
                         }
                     }
@@ -232,8 +348,9 @@ class WorkDetailShareTest {
             compose.waitUntil(timeoutMillis = 5_000) {
                 compose.onAllNodesWithText(work.title).fetchSemanticsNodes().isNotEmpty()
             }
-            compose.onNode(hasContentDescription(expected, substring = true)).assertExists()
+            block()
         } finally {
+            ReaderLaunchRequest.consume(work.id)
             compose.runOnIdle { showing = false }
             compose.waitForIdle()
             database.close()

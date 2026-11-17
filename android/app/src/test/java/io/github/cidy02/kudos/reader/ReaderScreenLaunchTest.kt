@@ -2,18 +2,29 @@ package io.github.cidy02.kudos.reader
 
 import android.app.Application
 import android.content.Context
+import android.os.Looper
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewModelScope
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
@@ -36,6 +47,7 @@ import java.nio.file.Files
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,6 +69,7 @@ import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.services.content.Content
 import org.readium.r2.shared.publication.services.content.ContentService
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
@@ -75,6 +88,7 @@ class ReaderScreenLaunchTest {
     private lateinit var readerRepository: ReaderRepository
     private lateinit var readingLogService: ReadingLogService
     private lateinit var annotationRepository: AnnotationRepository
+    private val createdViewModels = mutableListOf<ReaderViewModel>()
 
     @Before
     fun setUp() {
@@ -109,6 +123,15 @@ class ReaderScreenLaunchTest {
 
     @After
     fun tearDown() {
+        createdViewModels.forEach { it.viewModelScope.coroutineContext[Job]?.cancel() }
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (createdViewModels.any { it.viewModelScope.coroutineContext[Job]?.isCompleted == false } &&
+            System.nanoTime() < deadline
+        ) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(5)
+        }
+        createdViewModels.clear()
         ReaderLaunchRequest.consume(workIdVoice)
         ReaderLaunchRequest.consume(workIdNoVoice)
         ReaderLaunchRequest.consume(workIdClosePub)
@@ -163,6 +186,76 @@ class ReaderScreenLaunchTest {
             assertEquals(listOf("First paragraph."), tts.spoken)
             assertNull(ReaderLaunchRequest.peek(workId))
             compose.onNodeWithText("High-quality voice model needed (~45MB)").assertDoesNotExist()
+        } finally {
+            compose.runOnIdle { shown = false }
+            compose.waitForIdle()
+        }
+    }
+
+    @Test
+    fun readerScreenFanReadAloudStaysDisabledWhileResolvingThenStartsSpeechOnceResolved() {
+        val workId = workIdVoice
+        prepareWork(workId)
+        val tts = LateFakeTTSService(SpeechStatus.RESOLVING)
+        val viewModel = newViewModel(workId)
+        var shown by mutableStateOf(true)
+        var opened by mutableStateOf(false)
+        val opener: suspend (File) -> ReadiumOpenResult = {
+            opened = true
+            ReadiumOpenResult.Success(fakePublication("First paragraph."))
+        }
+        try {
+            compose.setContent {
+                MaterialTheme {
+                    if (shown) {
+                        ReaderScreen(
+                            viewModel = viewModel,
+                            onBack = { shown = false },
+                            onOpenComments = { _, _ -> },
+                            onOpenWorkDetail = {},
+                            settingsRepository = settingsRepository,
+                            openPublication = opener,
+                            ttsService = tts,
+                            initialChromeVisible = true
+                        )
+                    }
+                }
+            }
+            awaitReaderOpened { opened }
+            compose.waitUntil(5_000) {
+                compose.onAllNodesWithContentDescription("More").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithContentDescription("More").performClick()
+            compose.waitUntil(5_000) {
+                compose.onAllNodesWithContentDescription("Read aloud").fetchSemanticsNodes().isNotEmpty()
+            }
+
+            compose.onNodeWithContentDescription("Read aloud")
+                .assertIsNotEnabled()
+                .assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
+                .performTouchInput { click() }
+            compose.waitForIdle()
+            assertEquals(0, tts.spoken.size)
+
+            // Disabled fan buttons do not intercept clicks (backdrop closes the fan menu),
+            // so reopen More and verify resolving the voice re-enables Read aloud in place.
+            compose.onNodeWithContentDescription("More").performClick()
+            compose.waitUntil(5_000) {
+                compose.onAllNodesWithContentDescription("Read aloud").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithContentDescription("Read aloud").assertIsNotEnabled()
+
+            compose.runOnIdle { tts.status.value = SpeechStatus.STOPPED }
+            compose.waitUntil(5_000) {
+                compose.onAllNodesWithContentDescription("Read aloud")
+                    .fetchSemanticsNodes()
+                    .any { SemanticsProperties.Disabled !in it.config }
+            }
+            compose.onNodeWithContentDescription("Read aloud")
+                .assertIsEnabled()
+                .performClick()
+            awaitCondition { tts.spoken.size == 1 }
+            assertEquals(listOf("First paragraph."), tts.spoken)
         } finally {
             compose.runOnIdle { shown = false }
             compose.waitForIdle()
@@ -427,7 +520,7 @@ class ReaderScreenLaunchTest {
         settingsRepository = settingsRepository,
         annotationRepository = annotationRepository,
         workId = workId
-    )
+    ).also { createdViewModels += it }
 
     private fun fakePublication(paragraph: String): Publication {
         val location = Locator.fromJSON(

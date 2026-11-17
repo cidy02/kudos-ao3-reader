@@ -132,7 +132,7 @@ class SystemTTSService(context: Context) : TTSService {
     private val handover = Any()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val initDeadline = Runnable {
-        if (_status.value == SpeechStatus.RESOLVING) _status.value = SpeechStatus.UNAVAILABLE
+        _status.compareAndSet(SpeechStatus.RESOLVING, SpeechStatus.UNAVAILABLE)
     }
     @Volatile private var shutDown = false
     private lateinit var engine: TextToSpeech

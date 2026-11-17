@@ -9,6 +9,7 @@ import androidx.navigation.testing.TestNavHostController
 import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeKind
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -217,11 +218,11 @@ class RoutesNavigationTest {
         navController.navigate(Routes.reader("one"))
         val original = navController.currentBackStackEntry!!.id
         navController.navigate(Routes.workDetail("local-one"))
-        navController.openReaderFromWorkDetail("one")
+        assertTrue(navController.openReaderFromWorkDetail("one"))
         assertEquals(original, navController.currentBackStackEntry!!.id)
         assertEquals("start", navController.previousBackStackEntry!!.destination.route)
         navController.navigate(Routes.workDetail("local-two"))
-        navController.openReaderFromWorkDetail("two")
+        assertTrue(navController.openReaderFromWorkDetail("two"))
         assertEquals("two", Routes.routeArg(navController.currentBackStackEntry!!, "workId"))
         assertEquals(Routes.WorkDetail, navController.previousBackStackEntry!!.destination.route)
     }

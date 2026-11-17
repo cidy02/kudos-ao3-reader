@@ -162,7 +162,7 @@ class WorkDetailResumeTest {
         val launch = launch {
             launchReaderAfterRefresh("work-cancel", true, true,
                 refresh = { entered.complete(Unit); withContext(NonCancellable) { finishRefresh.await() } },
-                onOpenReader = { navigations++ })
+                onOpenReader = { navigations++; true })
         }
         entered.await()
         assertNull(ReaderLaunchRequest.peek("work-cancel"))
@@ -171,6 +171,34 @@ class WorkDetailResumeTest {
         launch.join()
         assertNull(ReaderLaunchRequest.peek("work-cancel"))
         assertEquals(0, navigations)
+    }
+
+    @Test fun canLaunchFalseAfterRefreshNeverArmsOrOpensReader() = runTest {
+        var navigations = 0
+        launchReaderAfterRefresh(
+            "work-disposed",
+            openContents = true,
+            startReadAloud = true,
+            refresh = {},
+            canLaunch = { false },
+            onOpenReader = { navigations++; true }
+        )
+        assertNull(ReaderLaunchRequest.peek("work-disposed"))
+        assertEquals(0, navigations)
+    }
+
+    @Test fun failedPopNavigationReturningFalseClearsArmedRequest() = runTest {
+        var attempts = 0
+        launchReaderAfterRefresh(
+            "work-pop-failed",
+            openContents = false,
+            startReadAloud = true,
+            refresh = {},
+            canLaunch = { true },
+            onOpenReader = { attempts++; false }
+        )
+        assertEquals(1, attempts)
+        assertNull(ReaderLaunchRequest.peek("work-pop-failed"))
     }
 
     @Test fun failedReaderNavigationClearsItsLaunch() = runTest {

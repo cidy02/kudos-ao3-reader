@@ -111,7 +111,7 @@ class WorkDetailSaveForLaterTest {
                         Row { chrome.trailingContent?.invoke(this) }
                         WorkDetailScreen(WorkDetailSource.LocalWork(anchor.id), works, importer, downloads,
                             AO3WriteRepository(auth), queues, settingsRepository = settings, seriesRepository = series,
-                            onLogin = { throw AssertionError("Opened login") }, onOpenComments = {}, onOpenReader = {},
+                            onLogin = { throw AssertionError("Opened login") }, onOpenComments = {}, onOpenReader = { true },
                             onDismiss = { dismissed = true })
                     }
                 }

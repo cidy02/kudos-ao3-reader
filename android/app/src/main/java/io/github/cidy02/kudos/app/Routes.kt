@@ -704,11 +704,12 @@ object Routes {
 }
 
 /** Work Detail presented over this work's reader returns to that live reader. */
-internal fun androidx.navigation.NavController.openReaderFromWorkDetail(workId: String) {
+internal fun androidx.navigation.NavController.openReaderFromWorkDetail(workId: String): Boolean {
     val previous = previousBackStackEntry
-    if (previous?.destination?.route == Routes.Reader && Routes.routeArg(previous, "workId") == workId) {
+    return if (previous?.destination?.route == Routes.Reader && Routes.routeArg(previous, "workId") == workId) {
         popBackStack()
     } else {
         navigate(Routes.reader(workId))
+        true
     }
 }

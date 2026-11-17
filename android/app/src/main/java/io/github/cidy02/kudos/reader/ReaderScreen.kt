@@ -162,7 +162,8 @@ fun ReaderScreen(
     onOpenAo3Link: (ReaderLinkDestination) -> Unit = {},
     customFontRepository: io.github.cidy02.kudos.files.CustomFontRepository? = null,
     openPublication: (suspend (java.io.File) -> ReadiumOpenResult)? = null,
-    ttsService: TTSService? = null
+    ttsService: TTSService? = null,
+    initialChromeVisible: Boolean = false
 ) {
     val closeReader: () -> Unit = {
         viewModel.cancelPendingLaunch()
@@ -219,7 +220,7 @@ fun ReaderScreen(
             is ReaderUiState.Reading -> ReaderReading(
                 state, viewModel, closeReader, onOpenComments, onOpenWorkDetail, settings,
                 onOpenAo3Link, settingsRepository, customFontRepository,
-                openPublication, ttsService
+                openPublication, ttsService, initialChromeVisible
             )
         }
     }
@@ -238,7 +239,8 @@ private fun ReaderReading(
     settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository?,
     customFontRepository: io.github.cidy02.kudos.files.CustomFontRepository?,
     openPublication: (suspend (java.io.File) -> ReadiumOpenResult)? = null,
-    ttsService: TTSService? = null
+    ttsService: TTSService? = null,
+    initialChromeVisible: Boolean = false
 ) {
     val context = LocalContext.current
     val workActions = remember(context) { ReaderWorkActions(context) }
@@ -272,7 +274,7 @@ private fun ReaderReading(
 
     // Floating chrome visibility state
     // iOS ReadiumBook.chromeHidden starts true: the reader opens immersive; a tap shows the chrome.
-    var chromeVisible by remember { mutableStateOf(false) }
+    var chromeVisible by remember { mutableStateOf(initialChromeVisible) }
     var dismissOffsetY by remember { mutableFloatStateOf(0f) }
     val keepScreenAwake by viewModel.keepScreenAwake.collectAsState()
     val readerView = androidx.compose.ui.platform.LocalView.current

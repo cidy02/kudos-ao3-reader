@@ -61,6 +61,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.app.ReaderLaunchRequest
 import io.github.cidy02.kudos.core.model.KudosSettings
@@ -153,7 +155,7 @@ fun WorkDetailScreen(
     seriesRepository: AO3SeriesRepository = AO3SeriesRepository(),
     onLogin: () -> Unit,
     onOpenComments: (Long) -> Unit,
-    onOpenReader: (String) -> Unit,
+    onOpenReader: (String) -> Boolean,
     onOpenAuthor: (String) -> Unit = {},
     onOpenSeries: (String) -> Unit = {},
     onDismiss: () -> Unit = {},
@@ -207,6 +209,7 @@ fun WorkDetailScreen(
     var conversionIsStale by remember { mutableStateOf(false) }
     var rebuildWork by remember { mutableStateOf<SavedWork?>(null) }
     val scope = rememberCoroutineScope()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     val uriHandler = LocalUriHandler.current
     var downloadWatchJob by remember { mutableStateOf<Job?>(null) }
     val settingsState = settingsRepository?.settings?.collectAsState(initial = KudosSettings.Defaults)
@@ -1228,8 +1231,14 @@ fun WorkDetailScreen(
                     ?: state.remote?.let { workImporter.prepareForReading(it) }
                 when (result) {
                     is WorkImportResult.Success -> {
-                        launchReaderAfterRefresh(result.work.id, openContents, startReadAloud,
-                            refresh = { refreshLocal(result.work.id, state.remote) }, onOpenReader = onOpenReader)
+                        launchReaderAfterRefresh(
+                            result.work.id,
+                            openContents,
+                            startReadAloud,
+                            refresh = { refreshLocal(result.work.id, state.remote) },
+                            canLaunch = { lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) },
+                            onOpenReader = onOpenReader
+                        )
                     }
                     is WorkImportResult.Failure -> state = state.copy(error = result.error.displayMessage())
                     null -> state = state.copy(error = "No work selected.")
@@ -1396,18 +1405,21 @@ internal suspend fun launchReaderAfterRefresh(
     openContents: Boolean,
     startReadAloud: Boolean,
     refresh: suspend () -> Unit,
-    onOpenReader: (String) -> Unit
+    canLaunch: () -> Boolean = { true },
+    onOpenReader: (String) -> Boolean
 ) {
     refresh()
     currentCoroutineContext().ensureActive()
+    if (!canLaunch()) return
     ReaderLaunchRequest.request(workId, openContents, startReadAloud)
     val token = ReaderLaunchRequest.tokenFor(workId)
-    try {
+    val opened = try {
         onOpenReader(workId)
     } catch (error: Exception) {
         if (token != null) ReaderLaunchRequest.clearIfMatches(workId, token)
         throw error
     }
+    if (!opened && token != null) ReaderLaunchRequest.clearIfMatches(workId, token)
 }
 
 @Composable
