@@ -312,6 +312,8 @@ struct NewReadingQueueSheet: View {
             StackedWorkCover(
                 kind: .queue,
                 name: previewName,
+                // The queue's id seeds its motif, as on its page; a new queue has none yet.
+                identity: editingQueue?.id,
                 hue: previewHue,
                 pickedHex: options.colorHex,
                 backs: Array(backs),
