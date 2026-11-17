@@ -1016,7 +1016,8 @@ enum DebugLaunchRoute {
     /// otherwise restores whichever tab the last launch left.
     private static let workRoutes = ["work:", "mycopy:", "read:", "comments:", "compose:", "thread:"]
     /// Queue routes resolve against Home's queues for the same reason.
-    private static let homePrefixRoutes = workRoutes + ["queue:", "queue-details:"]
+    // author: opens on Home too, so a shot never lands on whichever tab the last launch left selected.
+    private static let homePrefixRoutes = workRoutes + ["queue:", "queue-details:", "author:"]
 
     /// `acct:<screen>` on the Account tab (pair with `-KudosFixtureDir` and
     /// `-KudosDemoSignedIn YES`): dashboard, drafts, works, series, inbox,
