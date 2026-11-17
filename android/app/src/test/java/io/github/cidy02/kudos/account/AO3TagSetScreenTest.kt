@@ -288,9 +288,10 @@ class AO3TagSetScreenTest {
         reach("Paper Harbor")
         compose.onNodeWithContentDescription("Reject Paper Harbor").assertIsEnabled()
         reach("Awaiting review")
-        // The three counts share one panel, so equal counts are siblings of every label: 2 awaiting, 1 approved, 2 rejected.
-        compose.onAllNodes(hasText("2") and hasAnySibling(hasText("Awaiting review"))).assertCountEquals(2)
-        compose.onAllNodes(hasText("1") and hasAnySibling(hasText("Awaiting review"))).assertCountEquals(1)
+        // Each count row reads as one element (label and value merged, A-511): 2 awaiting, 1 approved, 2 rejected.
+        compose.onAllNodes(hasText("Awaiting review") and hasText("2")).assertCountEquals(1)
+        compose.onAllNodes(hasText("Approved") and hasText("1")).assertCountEquals(1)
+        compose.onAllNodes(hasText("Rejected") and hasText("2")).assertCountEquals(1)
         assertEquals(4, client.gets.size)
         assertEquals(1, client.posts)
     }
@@ -305,8 +306,9 @@ class AO3TagSetScreenTest {
         compose.onNodeWithContentDescription("Reject Paper Harbor").assertIsEnabled()
         reach("Awaiting review")
         // Unchanged: 3 awaiting, 1 approved, 1 rejected.
-        compose.onAllNodes(hasText("3") and hasAnySibling(hasText("Awaiting review"))).assertCountEquals(1)
-        compose.onAllNodes(hasText("1") and hasAnySibling(hasText("Awaiting review"))).assertCountEquals(2)
+        compose.onAllNodes(hasText("Awaiting review") and hasText("3")).assertCountEquals(1)
+        compose.onAllNodes(hasText("Approved") and hasText("1")).assertCountEquals(1)
+        compose.onAllNodes(hasText("Rejected") and hasText("1")).assertCountEquals(1)
         assertEquals(4, client.gets.size)
         assertEquals(1, client.posts)
     }
