@@ -105,6 +105,7 @@ struct SubscriptionsView: View {
     private func refreshFollowedTags() async {
         guard isTagCheckActive else { return }
         cancelTagCheck()
+        await AO3Client.shared.invalidateCachedResponses()
         await tagUpdates.checkIfNeeded(
             screen: .subscriptions,
             in: modelContext,

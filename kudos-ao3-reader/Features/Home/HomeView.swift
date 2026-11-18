@@ -938,6 +938,8 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     }
 
     private func refreshHome() async {
+        // Pull to refresh lifts any maintenance hold for a single probe.
+        await AO3Client.shared.invalidateCachedResponses()
         _ = await WorkMetadataRefresh.refresh(visibleHomeWorks, in: context, auth: auth)
         await loadSubscriptions()
         #if os(iOS)

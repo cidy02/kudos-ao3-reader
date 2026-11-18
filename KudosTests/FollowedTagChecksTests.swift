@@ -407,13 +407,164 @@ struct FollowedTagChecksTests {
         #expect(FollowedTagProbe.sent.count == 1)
     }
 
-    @Test func forbidden5xxAndMaintenanceStopThePassWithoutTouchingStoredWorks() async throws {
+    @Test func heldMaintenanceWindowLeavesEveryTagUnstampedAndSendsNothing() async throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [FollowedTagProbe.self]
+        let maintenanceBody = Data("<h2>The archive is down for maintenance.</h2>".utf8)
+        FollowedTagProbe.reset { _, _ in
+            FollowedTagProbe.StubResponse(statusCode: 418, headers: [:], body: maintenanceBody)
+        }
+        let client = AO3Client(
+            session: URLSession(configuration: config),
+            paceSleep: { _ in }
+        )
+
+        // An earlier request hits AO3's maintenance page and starts the 60-second hold.
+        await #expect(throws: AO3Error.maintenance) {
+            _ = try await client.getHTML(URL(string: "https://archiveofourown.org/works/1")!)
+        }
+        #expect(await client.isHeldForMaintenance)
+
+        // Reset probe to count any outgoing tag feed requests during the held window.
+        FollowedTagProbe.reset { _, _ in
+            FollowedTagProbe.StubResponse(
+                statusCode: 200,
+                headers: [:],
+                body: Data(
+                    """
+                    <?xml version="1.0" encoding="UTF-8"?>
+                    <feed xmlns="http://www.w3.org/2005/Atom">
+                      <id>tag:archiveofourown.org,2005:/tags/101/feed</id>
+                      <title>Tag</title>
+                    </feed>
+                    """.utf8
+                )
+            )
+        }
+
         let container = try makeContainer()
         let context = container.mainContext
-        let saved = SavedWork(title: "Keep Me Intact", author: "Author")
-        saved.ao3WorkID = 9123456
-        context.insert(saved)
+        let oldCheckedAt = Date(timeIntervalSince1970: 1_750_000_000)
+        let tagNeverChecked = FollowedTag(ao3TagID: 101, name: "Tag 101", showOnHome: true)
+        let tagPreviouslyChecked = FollowedTag(
+            ao3TagID: 202,
+            name: "Tag 202",
+            showOnHome: true,
+            lastCheckedAt: oldCheckedAt
+        )
+        context.insert(tagNeverChecked)
+        context.insert(tagPreviouslyChecked)
         try context.save()
+
+        let storeDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FollowedTagMaintenanceTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: storeDir) }
+        let store = FollowedTagUpdateStore(directory: storeDir, client: client)
+
+        // Automatic foreground pass during maintenance hold sends nothing and leaves stamps untouched.
+        await store.checkIfNeeded(
+            screen: .subscriptions,
+            in: context,
+            ignoringCooldown: false,
+            isScreenActive: { true },
+            defaults: defaults,
+            sleep: { _ in }
+        )
+        #expect(FollowedTagProbe.sent.isEmpty)
+        #expect(tagNeverChecked.lastCheckedAt == nil)
+        #expect(tagPreviouslyChecked.lastCheckedAt == oldCheckedAt)
+
+        // Even ignoring cooldown without clearing the hold must not stamp tags or send.
+        await store.checkIfNeeded(
+            screen: .home,
+            in: context,
+            ignoringCooldown: true,
+            isScreenActive: { true },
+            defaults: defaults,
+            sleep: { _ in }
+        )
+        #expect(FollowedTagProbe.sent.isEmpty)
+        #expect(tagNeverChecked.lastCheckedAt == nil)
+        #expect(tagPreviouslyChecked.lastCheckedAt == oldCheckedAt)
+
+        // Direct pure runner check also skips fetch and attempt when maintenance hold is active.
+        var directFetched: [Int] = []
+        var directStamped: [Int] = []
+        await FollowedTagChecks.run(
+            tags: [101, 202],
+            screen: .subscriptions,
+            showOnHome: { _ in true },
+            checkedAt: { _ in nil },
+            isScreenActive: { true },
+            isRateLimitHeld: { _ in false },
+            isMaintenanceHeld: { true },
+            now: Date.init,
+            sleep: { _ in },
+            attempt: { id, _ in directStamped.append(id); return true },
+            fetch: { id in directFetched.append(id); return sampleFeed() },
+            received: { _, _, _ in }
+        )
+        #expect(directFetched.isEmpty)
+        #expect(directStamped.isEmpty)
+
+        // Pull-to-refresh invalidates the hold so the next check sends a probe.
+        await client.invalidateCachedResponses()
+        await store.checkIfNeeded(
+            screen: .subscriptions,
+            in: context,
+            ignoringCooldown: true,
+            isScreenActive: { true },
+            defaults: defaults,
+            sleep: { _ in }
+        )
+        #expect(FollowedTagProbe.sent.count == 2)
+        #expect(tagNeverChecked.lastCheckedAt != nil)
+        #expect(tagPreviouslyChecked.lastCheckedAt != oldCheckedAt)
+    }
+
+    @Test func forbidden5xxAndMaintenanceStopThePassWithoutTouchingStoredWorks() async throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let container = try makeContainer()
+        let context = container.mainContext
+        let baselineDate = Date(timeIntervalSince1970: 1_750_000_000)
+        let saved = SavedWork(title: "Keep Me Intact", author: "Author", summary: "Existing summary")
+        saved.ao3WorkID = 9123456
+        saved.sourceURL = "https://archiveofourown.org/works/9123456"
+        saved.chapters = "2/5"
+        saved.wordCount = 4321
+        saved.rating = "Mature"
+        saved.isFavorite = true
+        saved.lastModifiedAt = baselineDate
+        let savedID = saved.id
+        context.insert(saved)
+
+        let tag1InitialCheckedAt = baselineDate.addingTimeInterval(-10 * 3600)
+        let tag2InitialCheckedAt = baselineDate.addingTimeInterval(-8 * 3600)
+        let tag1 = FollowedTag(
+            ao3TagID: 1,
+            name: "Tag 1",
+            followedAt: baselineDate.addingTimeInterval(-24 * 3600),
+            lastCheckedAt: tag1InitialCheckedAt
+        )
+        let tag2 = FollowedTag(
+            ao3TagID: 2,
+            name: "Tag 2",
+            followedAt: baselineDate.addingTimeInterval(-24 * 3600),
+            lastCheckedAt: tag2InitialCheckedAt
+        )
+        context.insert(tag1)
+        context.insert(tag2)
+        try context.save()
+
+        let storeDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FollowedTagStoreErrorTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: storeDir) }
+        let store = FollowedTagUpdateStore(directory: storeDir)
 
         let stopErrors: [any Error] = [
             AO3Error.forbidden,
@@ -421,24 +572,29 @@ struct FollowedTagChecksTests {
             AO3Error.maintenance,
             URLError(.notConnectedToInternet)
         ]
+        var checkNow = baselineDate
         for error in stopErrors {
+            tag1.lastCheckedAt = tag1InitialCheckedAt
+            tag2.lastCheckedAt = tag2InitialCheckedAt
+            checkNow = checkNow.addingTimeInterval(60)
             var fetched: [Int] = []
-            var stamped: [Int] = []
-            await FollowedTagChecks.run(
-                tags: [1, 2],
+
+            await store.checkIfNeeded(
                 screen: .subscriptions,
-                showOnHome: { _ in true },
-                checkedAt: { _ in nil },
+                in: context,
                 isScreenActive: { true },
-                isRateLimitHeld: { _ in false },
-                now: Date.init,
+                defaults: defaults,
+                now: { checkNow },
                 sleep: { _ in },
-                attempt: { id, _ in stamped.append(id); return true },
-                fetch: { id in fetched.append(id); throw error },
-                received: { _, _, _ in }
+                fetch: { tag in
+                    fetched.append(tag.ao3TagID)
+                    throw error
+                }
             )
             #expect(fetched == [1])
-            #expect(stamped == [1])
+            #expect(tag1.lastCheckedAt == checkNow)
+            #expect(tag2.lastCheckedAt == tag2InitialCheckedAt)
+            #expect(store.updates.isEmpty)
         }
 
         // Cancelling the enclosing Task mid-sleep aborts unstarted tags cleanly.
@@ -468,8 +624,6 @@ struct FollowedTagChecksTests {
         #expect(taskStamped == [1])
 
         // Consecutive live client calls invoke the 3-second pacer floor between requests.
-        let (defaults, suiteName) = try isolatedDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
         final class PaceRecorder: @unchecked Sendable {
             private let lock = NSLock()
             var waits: [TimeInterval] = []
@@ -504,7 +658,20 @@ struct FollowedTagChecksTests {
 
         let remaining = try context.fetch(FetchDescriptor<SavedWork>())
         #expect(remaining.count == 1)
-        #expect(remaining[0].title == "Keep Me Intact")
+        let untouched = try #require(remaining.first)
+        #expect(untouched.id == savedID)
+        #expect(untouched.title == "Keep Me Intact")
+        #expect(untouched.author == "Author")
+        #expect(untouched.ao3WorkID == 9123456)
+        #expect(untouched.sourceURL == "https://archiveofourown.org/works/9123456")
+        #expect(untouched.summary == "Existing summary")
+        #expect(untouched.chapters == "2/5")
+        #expect(untouched.wordCount == 4321)
+        #expect(untouched.rating == "Mature")
+        #expect(untouched.isFavorite)
+        #expect(untouched.lastModifiedAt == baselineDate)
+        #expect(untouched.deletedAt == nil)
+        #expect(!untouched.isPendingDeletion)
     }
 
     @Test func capOfTwentyTagsIsEnforced() throws {

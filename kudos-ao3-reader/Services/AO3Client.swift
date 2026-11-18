@@ -242,8 +242,15 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         }
     }
 
-    func throwIfHeldForMaintenance() throws {
+    var isHeldForMaintenance: Bool {
         if let until = maintenanceHoldUntil, Date() < until {
+            return true
+        }
+        return false
+    }
+
+    func throwIfHeldForMaintenance() throws {
+        if isHeldForMaintenance {
             throw AO3Error.maintenance
         }
     }

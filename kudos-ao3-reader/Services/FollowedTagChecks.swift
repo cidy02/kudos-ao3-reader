@@ -136,13 +136,20 @@ enum FollowedTagChecks {
         ignoringCooldown: Bool = false,
         isScreenActive: () -> Bool,
         isRateLimitHeld: (Date) -> Bool,
+        isMaintenanceHeld: () async -> Bool = { false },
         now: () -> Date,
         sleep: (TimeInterval) async throws -> Void,
         attempt: (Tag, Date) -> Bool,
         fetch: (Tag) async throws -> AO3TagFeed,
         received: (Tag, AO3TagFeed, Date) -> Void
     ) async {
-        guard isScreenActive(), !isRateLimitHeld(now()) else { return }
+        func canProceed() async -> Bool {
+            guard !Task.isCancelled, isScreenActive(), !isRateLimitHeld(now()) else { return false }
+            if await isMaintenanceHeld() { return false }
+            return !Task.isCancelled && isScreenActive() && !isRateLimitHeld(now())
+        }
+
+        guard await canProceed() else { return }
         let selected = eligible(
             tags,
             screen: screen,
@@ -156,7 +163,7 @@ enum FollowedTagChecks {
         for tag in selected {
             do {
                 try Task.checkCancellation()
-                guard isScreenActive(), !isRateLimitHeld(now()) else { return }
+                guard await canProceed() else { return }
 
                 if let previousStart {
                     let remaining = spacing - now().timeIntervalSince(previousStart)
@@ -166,7 +173,7 @@ enum FollowedTagChecks {
                 }
 
                 try Task.checkCancellation()
-                guard isScreenActive(), !isRateLimitHeld(now()) else { return }
+                guard await canProceed() else { return }
 
                 let started = now()
                 previousStart = started

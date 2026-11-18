@@ -170,5 +170,133 @@ struct FollowedTagBackupTests {
         _ = try KudosBackupService.restore(staleArchive, into: context, defaults: defaults, mode: .reconcile)
         #expect(try context.fetch(FetchDescriptor<FollowedTag>()).isEmpty)
     }
+
+    @Test func reconcileAtTwentyTagCapDeletesTombstonedTagsBeforeInsertingNewFollows() throws {
+        let localContainer = try makeContainer()
+        let localContext = localContainer.mainContext
+        let remoteContainer = try makeContainer()
+        let remoteContext = remoteContainer.mainContext
+        let (defaults, name) = try testDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+
+        let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+        for index in 1 ... 20 {
+            let sharedID = UUID()
+            let localTag = FollowedTag(
+                id: sharedID,
+                ao3TagID: index,
+                name: "Tag \(index)",
+                followedAt: t0,
+                lastModifiedAt: t0
+            )
+            let remoteTag = FollowedTag(
+                id: sharedID,
+                ao3TagID: index,
+                name: "Tag \(index)",
+                followedAt: t0,
+                lastModifiedAt: t0
+            )
+            localContext.insert(localTag)
+            remoteContext.insert(remoteTag)
+        }
+        try localContext.save()
+        try remoteContext.save()
+
+        // Remote device unfollows 16...20 and follows 21...25.
+        let remoteExisting = try remoteContext.fetch(FetchDescriptor<FollowedTag>())
+        for tag in remoteExisting where (16 ... 20).contains(tag.ao3TagID) {
+            FollowedTagStore.unfollow(tag, in: remoteContext, updateStore: nil)
+        }
+        let t1 = Date()
+        for index in 21 ... 25 {
+            _ = try FollowedTagStore.followOrUpdate(
+                ao3TagID: index,
+                name: "Tag \(index)",
+                tagCategoryRaw: "Fandom",
+                tagURLString: nil,
+                showOnHome: true,
+                completeOnly: false,
+                hideExplicit: false,
+                in: remoteContext,
+                now: t1
+            )
+        }
+
+        let remoteTags = try remoteContext.fetch(FetchDescriptor<FollowedTag>())
+        let remoteTombstones = try remoteContext.fetch(FetchDescriptor<SyncTombstone>())
+        let contents = try KudosBackupService.makeContents(
+            works: [],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            followedTags: remoteTags,
+            tombstones: remoteTombstones,
+            defaults: defaults
+        )
+
+        _ = try KudosBackupService.restore(contents, into: localContext, defaults: defaults, mode: .reconcile)
+
+        let finalTags = try localContext.fetch(FetchDescriptor<FollowedTag>())
+        #expect(finalTags.count == 20)
+        #expect(Set(finalTags.map(\.ao3TagID)) == Set(Array(1 ... 15) + Array(21 ... 25)))
+    }
+
+    @Test func newerArchivePreservesLocalSeenWorkIDsAheadOfIncomingIDs() throws {
+        let localContainer = try makeContainer()
+        let localContext = localContainer.mainContext
+        let remoteContainer = try makeContainer()
+        let remoteContext = remoteContainer.mainContext
+        let (defaults, name) = try testDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+
+        let sharedID = UUID()
+        let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+        let t1 = Date(timeIntervalSince1970: 1_750_010_000)
+        let t2 = Date(timeIntervalSince1970: 1_750_020_000)
+
+        let localIDs = Array(1 ... 80)
+        let remoteIDs = Array(1001 ... 1080)
+
+        let localTag = FollowedTag(
+            id: sharedID,
+            ao3TagID: 27785,
+            name: "Doctor Who (2005)",
+            followedAt: t0,
+            seenWorkIDs: localIDs,
+            lastModifiedAt: t1
+        )
+        localContext.insert(localTag)
+        try localContext.save()
+
+        let remoteTag = FollowedTag(
+            id: sharedID,
+            ao3TagID: 27785,
+            name: "Doctor Who (2005)",
+            followedAt: t0,
+            seenWorkIDs: remoteIDs,
+            lastModifiedAt: t2
+        )
+        remoteContext.insert(remoteTag)
+        try remoteContext.save()
+
+        let contents = try KudosBackupService.makeContents(
+            works: [],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            followedTags: [remoteTag],
+            defaults: defaults
+        )
+
+        _ = try KudosBackupService.restore(contents, into: localContext, defaults: defaults, mode: .reconcile)
+
+        let restored = try localContext.fetch(FetchDescriptor<FollowedTag>())
+        #expect(restored.count == 1)
+        let item = try #require(restored.first)
+        #expect(item.seenWorkIDs.count == FollowedTag.seenIDRetentionLimit)
+        #expect(Array(item.seenWorkIDs.prefix(80)) == localIDs)
+        #expect(Set(item.seenWorkIDs).count == 100)
+        #expect(Set(item.seenWorkIDs.dropFirst(80)).isSubset(of: Set(remoteIDs)))
+    }
 }
 }

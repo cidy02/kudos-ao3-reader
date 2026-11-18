@@ -4176,9 +4176,24 @@ enum KudosBackupService {
         guard let archivedTags = contents.manifest.followedTags else { return }
 
         let existing = (try? context.fetch(FetchDescriptor<FollowedTag>())) ?? []
-        var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        // Suppress tombstoned local rows before counting survivors against the 20-tag cap
+        // so unfollows from another device free slots for incoming follows in the same pass.
+        var suppressedLocalIDs: Set<UUID> = []
+        if mode != .replaceLibrary {
+            for tag in existing {
+                if case .suppressStaleData = tombstones.followedTagResolution(
+                    id: tag.id,
+                    incomingModifiedAt: tag.lastModifiedAt
+                ) {
+                    suppressedLocalIDs.insert(tag.id)
+                    context.delete(tag)
+                }
+            }
+        }
+        let survivors = existing.filter { !suppressedLocalIDs.contains($0.id) }
+        var byID = Dictionary(survivors.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var byAO3TagID = Dictionary(
-            existing.map { ($0.ao3TagID, $0) },
+            survivors.map { ($0.ao3TagID, $0) },
             uniquingKeysWith: { first, _ in first }
         )
         var resolvedLocalIDs: Set<UUID> = []
@@ -4204,30 +4219,7 @@ enum KudosBackupService {
                     localModifiedAt: local.lastModifiedAt,
                     incomingModifiedAt: archived.lastModifiedAt
                 ) else { continue }
-                local.ao3TagID = archived.ao3TagID
-                local.name = archived.name
-                local.tagCategoryRaw = archived.tagCategoryRaw
-                local.tagURLString = archived.tagURLString
-                local.showOnHome = archived.showOnHome
-                local.completeOnly = archived.completeOnly
-                local.hideExplicit = archived.hideExplicit
-                local.followedAt = archived.followedAt
-                if let archivedChecked = archived.lastCheckedAt,
-                   local.lastCheckedAt == nil
-                    || archivedChecked > (local.lastCheckedAt ?? .distantPast) {
-                    local.lastCheckedAt = archivedChecked
-                }
-                if let archivedWorkID = archived.lastSeenWorkID,
-                   local.lastSeenPublishedAt == nil
-                    || (archived.lastSeenPublishedAt ?? .distantPast)
-                    >= (local.lastSeenPublishedAt ?? .distantPast) {
-                    local.lastSeenWorkID = archivedWorkID
-                    local.lastSeenPublishedAt = archived.lastSeenPublishedAt
-                }
-                if let archivedSeen = archived.seenWorkIDs, !archivedSeen.isEmpty {
-                    local.seenWorkIDs = archivedSeen + local.seenWorkIDs
-                }
-                local.lastModifiedAt = archived.lastModifiedAt
+                apply(archived, to: local)
                 byID[local.id] = local
                 byAO3TagID[local.ao3TagID] = local
             } else {
@@ -4259,16 +4251,38 @@ enum KudosBackupService {
             }
         }
 
-        applyTombstonesToExisting(existing, in: context, mode: mode) {
-            tombstones.followedTagResolution(id: $0.id, incomingModifiedAt: $0.lastModifiedAt)
-        }
-
         if mode == .replaceLibrary {
             for tag in existing where !resolvedLocalIDs.contains(tag.id) {
                 SyncTombstones.recordDeletion(of: tag, in: context)
                 context.delete(tag)
             }
         }
+    }
+
+    private static func apply(_ archived: KudosBackupFollowedTag, to local: FollowedTag) {
+        local.ao3TagID = archived.ao3TagID
+        local.name = archived.name
+        local.tagCategoryRaw = archived.tagCategoryRaw
+        local.tagURLString = archived.tagURLString
+        local.showOnHome = archived.showOnHome
+        local.completeOnly = archived.completeOnly
+        local.hideExplicit = archived.hideExplicit
+        local.followedAt = archived.followedAt
+        if let archivedChecked = archived.lastCheckedAt,
+           local.lastCheckedAt == nil || archivedChecked > (local.lastCheckedAt ?? .distantPast) {
+            local.lastCheckedAt = archivedChecked
+        }
+        if let archivedWorkID = archived.lastSeenWorkID,
+           local.lastSeenPublishedAt == nil
+            || (archived.lastSeenPublishedAt ?? .distantPast)
+            >= (local.lastSeenPublishedAt ?? .distantPast) {
+            local.lastSeenWorkID = archivedWorkID
+            local.lastSeenPublishedAt = archived.lastSeenPublishedAt
+        }
+        if let archivedSeen = archived.seenWorkIDs, !archivedSeen.isEmpty {
+            local.seenWorkIDs += archivedSeen
+        }
+        local.lastModifiedAt = archived.lastModifiedAt
     }
 
     /// Prevents backup import from resurrecting a record the user explicitly deleted on

@@ -418,10 +418,15 @@ private final class AO3AtomFeedParserDelegate: NSObject, XMLParserDelegate {
             let label = text[..<colon].trimmingCharacters(in: .whitespacesAndNewlines)
             let rawValue = text[text.index(after: colon)...]
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            let listValues = parseCSVList(rawValue)
+            // AO3's `feed_summary` (`works_helper.rb:193`) wraps each tag in `<a>`
+            // joined by `, `, so reading links avoids splitting tags containing commas.
+            let linkTags = ((try? item.select("a").array()) ?? [])
+                .compactMap { try? $0.text().trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            let listValues = linkTags.isEmpty ? parseCSVList(rawValue) : linkTags
             switch label {
             case "Fandoms": result.fandoms = listValues
-            case "Rating": result.rating = rawValue.isEmpty ? nil : rawValue
+            case "Rating": result.rating = linkTags.first ?? (rawValue.isEmpty ? nil : rawValue)
             case "Warnings": result.warnings = listValues
             case "Categories": result.categories = listValues
             case "Characters": result.characters = listValues

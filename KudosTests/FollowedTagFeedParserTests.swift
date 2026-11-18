@@ -127,4 +127,27 @@ struct FollowedTagFeedParserTests {
         #expect(AO3SubscriptionsScope.allCases == [.works, .series, .users])
         #expect(AO3SubscriptionsTab.allCases.contains(.tags))
     }
+
+    @Test func linkedTagsWithCommasAreNotSplit() throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <feed xml:lang="en-US" xmlns="http://www.w3.org/2005/Atom">
+          <id>tag:archiveofourown.org,2005:/tags/27785/feed</id>
+          <title>AO3 works tagged 'Test'</title>
+          <entry>
+            <id>tag:archiveofourown.org,2005:Work/555</id>
+            <published>2026-11-16T12:00:00Z</published>
+            <link rel="alternate" type="text/html" href="https://archiveofourown.org/works/555"/>
+            <title>Comma Tags</title>
+            <summary type="html">&lt;ul&gt;&lt;li&gt;Fandoms: &lt;a class="tag" href="https://archiveofourown.org/tags/Marvel%2C%20616/works"&gt;Marvel, 616&lt;/a&gt;&lt;/li&gt;&lt;li&gt;Rating: &lt;a class="tag" href="https://archiveofourown.org/tags/Explicit/works"&gt;Explicit&lt;/a&gt;&lt;/li&gt;&lt;li&gt;Additional Tags: &lt;a class="tag" href="https://archiveofourown.org/tags/I%20Wrote%20This%20Instead%20of%20Sleeping%2C%20Sorry/works"&gt;I Wrote This Instead of Sleeping, Sorry&lt;/a&gt;, &lt;a class="tag" href="https://archiveofourown.org/tags/Fluff/works"&gt;Fluff&lt;/a&gt;&lt;/li&gt;&lt;/ul&gt;</summary>
+          </entry>
+        </feed>
+        """
+        let feed = try AO3Client.parseTagFeed(Data(xml.utf8))
+        let entry = try #require(feed.entries.first)
+        #expect(entry.fandoms == ["Marvel, 616"])
+        #expect(entry.rating == "Explicit")
+        #expect(entry.isExplicit)
+        #expect(entry.freeforms == ["I Wrote This Instead of Sleeping, Sorry", "Fluff"])
+    }
 }

@@ -20,8 +20,13 @@ final class FollowedTagUpdateStore {
     @ObservationIgnored private var activeCheckTask: Task<Void, Never>?
 
     private let fileURL: URL?
+    private let client: AO3Client
 
-    init(directory: URL? = FollowedTagUpdateStore.defaultDirectory()) {
+    init(
+        directory: URL? = FollowedTagUpdateStore.defaultDirectory(),
+        client: AO3Client = .shared
+    ) {
+        self.client = client
         if let directory {
             fileURL = directory.appendingPathComponent("updates.json")
         } else {
@@ -189,8 +194,9 @@ final class FollowedTagUpdateStore {
         let paceSleep = sleep ?? { seconds in
             try await Task.sleep(nanoseconds: UInt64(max(seconds, 0) * 1_000_000_000))
         }
+        let client = self.client
         let feedFetcher = fetch ?? { tag in
-            try await AO3Client.shared.followedTagFeed(tagID: tag.ao3TagID, defaults: defaults, now: now)
+            try await client.followedTagFeed(tagID: tag.ao3TagID, defaults: defaults, now: now)
         }
 
         await FollowedTagChecks.run(
@@ -202,6 +208,9 @@ final class FollowedTagUpdateStore {
             isScreenActive: isScreenActive,
             isRateLimitHeld: { currentNow in
                 AO3Client.isFollowedTagHeld(now: currentNow, defaults: defaults)
+            },
+            isMaintenanceHeld: {
+                await client.isHeldForMaintenance
             },
             now: now,
             sleep: paceSleep,
