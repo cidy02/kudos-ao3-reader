@@ -434,6 +434,8 @@ struct CommentThreadHandlers {
     /// what makes the synthesized memberwise init treat this param as optional
     /// too, so `.noop` below keeps compiling unchanged.
     var onOpenAuthor: ((AO3AuthorRoute) -> Void)?
+    /// Mutes a commenter on AO3 through the shared moderation confirm/submit path.
+    var onMute: ((AO3AuthorRoute) -> Void)?
 
     static let noop = CommentThreadHandlers(
         onReply: { _ in },
@@ -1519,6 +1521,44 @@ private struct CommentPostRow: View {
 
     @ViewBuilder
     private func commentMenuItems(showsReply: Bool) -> some View {
+        CommentMenuItems(
+            comment: comment,
+            isLoggedIn: auth.isLoggedIn,
+            currentUsername: auth.username,
+            showsReply: showsReply,
+            handlers: handlers
+        )
+    }
+}
+
+struct CommentMenuItems: View {
+    struct MuteDescriptor: Equatable {
+        let title: String
+        let systemImage: String
+        let target: AO3AuthorRoute
+    }
+
+    let comment: AO3Comment
+    let isLoggedIn: Bool
+    let currentUsername: String?
+    let showsReply: Bool
+    let handlers: CommentThreadHandlers
+
+    var muteItem: MuteDescriptor? {
+        guard handlers.onMute != nil,
+              let target = comment.muteTargetRoute(
+                  isLoggedIn: isLoggedIn,
+                  currentUsername: currentUsername
+              )
+        else { return nil }
+        return MuteDescriptor(
+            title: "Mute \(comment.author)",
+            systemImage: "speaker.slash",
+            target: target
+        )
+    }
+
+    var body: some View {
         MenuTopRow {
             if showsReply {
                 Button { handlers.onReply(comment) } label: {
@@ -1555,6 +1595,11 @@ private struct CommentPostRow: View {
            let chapter = comment.storyChapterPosition {
             Button { handlers.onGoToChapter(comment) } label: {
                 Label("Go to Chapter \(chapter)", systemImage: "book")
+            }
+        }
+        if let onMute = handlers.onMute, let item = muteItem {
+            Button { onMute(item.target) } label: {
+                Label(item.title, systemImage: item.systemImage)
             }
         }
         if comment.editPath != nil {
@@ -1776,6 +1821,12 @@ struct CommentAuthorAvatarButton: View {
 }
 
 struct CommentAvatar: View {
+    struct TintPalette: Equatable {
+        let background: Color
+        let foreground: Color
+        let border: Color
+    }
+
     private let isGuest: Bool
     private let avatarURL: URL?
     /// Whose avatar this is, used only for the no-image fallback. Optional so a
@@ -1783,6 +1834,7 @@ struct CommentAvatar: View {
     private let name: String?
     var size: CGFloat = 40
 
+    @Environment(ThemeManager.self) private var theme
     @State private var loadedImage: Image?
 
     private var imageURL: URL? {
@@ -1803,6 +1855,32 @@ struct CommentAvatar: View {
         self.size = size
     }
 
+    /// Deterministic soft per-name tint for a commenter's initial circle.
+    /// Hue comes from `CoverArt.hue(for:)` (djb2 over `unicodeScalars`, never
+    /// `hashValue`), never the app colour, with >= 4.5:1 contrast for the initial
+    /// across all four themes' backgrounds.
+    static func tintPalette(forName name: String, theme: ReaderTheme) -> TintPalette {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hue = CoverArt.hue(for: trimmed)
+        if theme.isDarkFamily {
+            return TintPalette(
+                background: Color(hue: hue, saturation: 0.48, brightness: 0.86).opacity(0.22),
+                foreground: Color(hue: hue, saturation: 0.18, brightness: 0.96),
+                border: Color(hue: hue, saturation: 0.48, brightness: 0.86).opacity(0.30)
+            )
+        }
+        return TintPalette(
+            background: Color(hue: hue, saturation: 0.72, brightness: 0.52).opacity(0.15),
+            foreground: Color(hue: hue, saturation: 0.85, brightness: 0.30),
+            border: Color(hue: hue, saturation: 0.72, brightness: 0.52).opacity(0.22)
+        )
+    }
+
+    private var tintPalette: TintPalette? {
+        guard !isGuest, initial != nil else { return nil }
+        return Self.tintPalette(forName: name ?? "", theme: theme.appTheme)
+    }
+
     var body: some View {
         Group {
             if let loadedImage {
@@ -1814,16 +1892,30 @@ struct CommentAvatar: View {
             }
         }
         .frame(width: size, height: size)
-        .background(.quaternary.opacity(0.5), in: Circle())
+        .background(circleBackground, in: Circle())
         .clipShape(Circle())
         .overlay {
             Circle()
-                .strokeBorder(.quaternary, lineWidth: 0.5)
+                .strokeBorder(circleBorder, lineWidth: 0.5)
         }
         // Hidden when decorative; parent Button supplies the profile label when
         // the avatar is a tappable entry point.
         .accessibilityHidden(true)
         .task(id: imageURL) { await loadImage() }
+    }
+
+    private var circleBackground: AnyShapeStyle {
+        if loadedImage == nil, let tintPalette {
+            return AnyShapeStyle(tintPalette.background)
+        }
+        return AnyShapeStyle(.quaternary.opacity(0.5))
+    }
+
+    private var circleBorder: AnyShapeStyle {
+        if loadedImage == nil, let tintPalette {
+            return AnyShapeStyle(tintPalette.border)
+        }
+        return AnyShapeStyle(.quaternary)
     }
 
     private func loadImage() async {
@@ -1864,10 +1956,10 @@ struct CommentAvatar: View {
     /// down the page — the glyph is the honest answer for someone with no identity.
     @ViewBuilder
     private var placeholder: some View {
-        if !isGuest, let initial {
+        if !isGuest, let initial, let tintPalette {
             Text(initial)
                 .font(.system(size: size * 0.42, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondaryInk)
+                .foregroundStyle(tintPalette.foreground)
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -17,6 +17,7 @@ struct ReaderSpeechSettingsSection: View {
 
     @AppStorage(ReaderSpeechPreferences.engineKey) private var engineID = ""
     @AppStorage(ReaderSpeechPreferences.voiceIDKey) private var voiceID = ""
+    @AppStorage(ReaderSpeechPreferences.voiceNameKey) private var voiceName = ""
     @AppStorage(ReaderSpeechPreferences.readAuthorNotesKey) private var readAuthorNotes = true
     @AppStorage(ReaderSpeechPreferences.rateKey)
     private var rate = ReaderSpeechPreferences.defaultRate
@@ -463,6 +464,7 @@ struct ReaderSpeechSettingsSection: View {
             Button(role: .destructive) {
                 engineID = ""
                 voiceID = ""
+                voiceName = ""
                 rate = ReaderSpeechPreferences.defaultRate
                 pitch = ReaderSpeechPreferences.defaultPitch
                 kokoroModelPackID = KokoroModelPack.defaultPack.rawValue
@@ -717,34 +719,44 @@ struct ReaderSpeechSettingsSection: View {
         switch effectiveEngineKind {
         case .kokoro:
             if KokoroAnePlayback.supportsCoreML() {
-                guard KokoroAneAvailability.isUsableForPlayback else {
+                if KokoroAneAvailability.isUsableForPlayback {
+                    if coreMLKokoroService == nil {
+                        coreMLKokoroService = CoreMLKokoroTTSService()
+                    }
+                    voices = coreMLKokoroService?.availableVoices ?? []
+                } else {
                     voices = []
-                    return
                 }
-                if coreMLKokoroService == nil {
-                    coreMLKokoroService = CoreMLKokoroTTSService()
+            } else if let runtimeConfiguration = effectiveKokoroRuntimeConfiguration {
+                if cachedKokoroRuntimeConfiguration != runtimeConfiguration {
+                    kokoroService = SherpaKokoroTTSService(
+                        modelDirectory: downloadManager.modelDirectory(for: runtimeConfiguration.modelPack),
+                        modelPack: runtimeConfiguration.modelPack,
+                        executionProvider: runtimeConfiguration.executionProvider
+                    )
+                    cachedKokoroRuntimeConfiguration = runtimeConfiguration
                 }
-                voices = coreMLKokoroService?.availableVoices ?? []
-                return
-            }
-            guard let runtimeConfiguration = effectiveKokoroRuntimeConfiguration else {
+                voices = kokoroService?.availableVoices ?? []
+            } else {
                 voices = []
-                return
             }
-            if cachedKokoroRuntimeConfiguration != runtimeConfiguration {
-                kokoroService = SherpaKokoroTTSService(
-                    modelDirectory: downloadManager.modelDirectory(for: runtimeConfiguration.modelPack),
-                    modelPack: runtimeConfiguration.modelPack,
-                    executionProvider: runtimeConfiguration.executionProvider
-                )
-                cachedKokoroRuntimeConfiguration = runtimeConfiguration
-            }
-            voices = kokoroService?.availableVoices ?? []
         case .system:
             kokoroService = nil
             coreMLKokoroService = nil
             cachedKokoroRuntimeConfiguration = nil
             voices = ReaderSpeechPreferences.catalogVoices()
+        }
+        syncStoredVoiceName()
+    }
+
+    private func syncStoredVoiceName() {
+        let updated = ReaderSpeechPreferences.reconciledVoiceName(
+            voiceID: voiceID,
+            currentVoiceName: voiceName,
+            voices: voices
+        )
+        if voiceName != updated {
+            voiceName = updated
         }
     }
 
@@ -856,6 +868,7 @@ struct ReaderSpeechSettingsSection: View {
             Section {
                 voiceRow(
                     id: "",
+                    storedName: "",
                     title: "Automatic (best available)",
                     subtitle: automaticSubtitle
                 )
@@ -865,6 +878,7 @@ struct ReaderSpeechSettingsSection: View {
                 ForEach(sortedVoices, id: \.identifier) { voice in
                     voiceRow(
                         id: voice.identifier,
+                        storedName: voice.name,
                         title: voice.name,
                         subtitle: voiceSubtitle(voice)
                     )
@@ -880,9 +894,10 @@ struct ReaderSpeechSettingsSection: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: updateVoices)
     }
-    private func voiceRow(id: String, title: String, subtitle: String) -> some View {
+    private func voiceRow(id: String, storedName: String, title: String, subtitle: String) -> some View {
         Button {
             voiceID = id
+            voiceName = storedName
         } label: {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {

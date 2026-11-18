@@ -101,6 +101,8 @@ struct CommentsView: View {
     @State private var showingLogin = false
     @State private var pendingDelete: PendingDelete?
     @State private var actionBanner: String?
+    @State private var moderationModel: AO3AuthorProfileModel?
+    @State private var moderationTask: Task<Void, Never>?
     /// Reveal for a work that isn't in the library: this screen only, never the app-wide reveal-all.
     @State private var revealedUnsavedWork = false
     @State private var contextLoadTask: Task<Void, Never>?
@@ -305,6 +307,9 @@ struct CommentsView: View {
                     return
                 }
                 contextLoadTask?.cancel()
+                moderationTask?.cancel()
+                moderationModel?.cancel()
+                moderationModel = nil
                 pendingDelete = nil
                 actionBanner = nil
                 model.syncAuthenticationContext(auth: auth)
@@ -362,6 +367,8 @@ struct CommentsView: View {
             }
             .onDisappear {
                 contextLoadTask?.cancel()
+                moderationTask?.cancel()
+                moderationModel?.cancel()
                 highlightClearTask?.cancel()
                 focusScrollTask?.cancel()
                 router.commentAccessoryTab = nil
@@ -406,6 +413,31 @@ struct CommentsView: View {
                 Button("OK") { actionBanner = nil }
             } message: {
                 Text(actionBanner ?? "")
+            }
+            .alert(
+                moderationModel?.pendingModerationForm?.title ?? "Confirm",
+                isPresented: moderationConfirmPresented
+            ) {
+                Button(
+                    moderationModel?.pendingModerationForm?.submitLabel ?? "Confirm",
+                    role: (moderationModel?.pendingModerationForm?.kind.isUndo ?? false) ? nil : .destructive
+                ) {
+                    guard let moderationModel else { return }
+                    moderationTask?.cancel()
+                    moderationTask = Task { await moderationModel.confirmPendingModeration(auth: auth) }
+                }
+                Button(moderationModel?.pendingModerationForm?.cancelLabel ?? "Cancel", role: .cancel) {
+                    moderationModel?.cancelPendingModeration()
+                }
+            } message: {
+                if let form = moderationModel?.pendingModerationForm {
+                    Text(form.message)
+                }
+            }
+            .alert("AO3", isPresented: moderationMessagePresented) {
+                Button("OK", role: .cancel) { moderationModel?.clearActionMessage() }
+            } message: {
+                Text(moderationModel?.actionMessage ?? "")
             }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -589,7 +621,8 @@ struct CommentsView: View {
             chapterSpineIndex: { chapterSpineIndex(for: $0) },
             onGoToChapter: { openReader(atChapterFor: $0) },
             onRequestLogin: { showingLogin = true },
-            onOpenAuthor: openAuthor
+            onOpenAuthor: openAuthor,
+            onMute: beginMute
         )
     }
 
@@ -1296,6 +1329,20 @@ struct CommentsView: View {
         Binding(get: { actionBanner != nil }, set: { if !$0 { actionBanner = nil } })
     }
 
+    private var moderationConfirmPresented: Binding<Bool> {
+        Binding(
+            get: { moderationModel?.pendingModerationForm != nil },
+            set: { if !$0 { moderationModel?.moderationAlertDidDismiss() } }
+        )
+    }
+
+    private var moderationMessagePresented: Binding<Bool> {
+        Binding(
+            get: { moderationModel?.actionMessage != nil },
+            set: { if !$0 { moderationModel?.clearActionMessage() } }
+        )
+    }
+
     private var chapterPicker: some View {
         NavigationStack {
             List {
@@ -1435,6 +1482,26 @@ struct CommentsView: View {
         NSPasteboard.general.setString(url.absoluteString, forType: .string)
         #endif
         actionBanner = "Link copied."
+    }
+
+    static func muteAction(for target: AO3AuthorRoute, by currentUsername: String) -> AO3AuthorWebAction {
+        AO3AuthorWebAction(
+            label: "Mute",
+            url: target.confirmMuteURL(by: currentUsername),
+            kind: .mute
+        )
+    }
+
+    private func beginMute(_ target: AO3AuthorRoute) {
+        guard auth.isLoggedIn,
+              let currentUsername = auth.username?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !currentUsername.isEmpty,
+              moderationModel?.isPerformingModeration != true else { return }
+        let model = AO3AuthorProfileModel(route: target, reloadsHeaderAfterModeration: false)
+        moderationModel = model
+        let action = Self.muteAction(for: target, by: currentUsername)
+        moderationTask?.cancel()
+        moderationTask = Task { await model.beginModeration(action: action, auth: auth) }
     }
 
 }

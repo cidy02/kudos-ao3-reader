@@ -117,6 +117,16 @@ nonisolated struct AO3AuthorRoute: Hashable, Sendable, Codable, Identifiable {
         Self.makeURL(segments: ["users", username, "profile"])
     }
 
+    /// AO3's mute confirmation page (`/users/<mutingUsername>/muted/users/confirm_mute?muted_id=<target>`).
+    /// Matches `otwarchive` `452391b` `config/routes.rb:370-379` (`confirm_mute_user_muted_users_path`)
+    /// and `app/helpers/mute_helper.rb:13` (`mute_link`), where `:user_id` is the signed-in muter.
+    func confirmMuteURL(by mutingUsername: String) -> URL {
+        Self.makeURL(
+            segments: ["users", mutingUsername, "muted", "users", "confirm_mute"],
+            queryItems: [URLQueryItem(name: "muted_id", value: username)]
+        )
+    }
+
     /// 1v's sort rides here rather than only on the sheet, because AO3 sorts
     /// this index server-side: the control cannot mean anything until the URL
     /// it builds carries `work_search[...]`. Applies only where AO3 actually

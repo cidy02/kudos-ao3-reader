@@ -1773,6 +1773,12 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     var workSymbolPlacement: String?
     /// Nil means an older backup has no opinion about the local preference.
     var useEmbeddedCoverArt: Bool?
+    /// Settings › Listening's pinned voice id (`ReaderSpeechPreferences.voiceIDKey`).
+    /// Nil when absent or nothing is stored so exports with no pinned voice omit it.
+    var readerSpeechVoiceID: String?
+    /// Settings › Listening's picked voice display name (`ReaderSpeechPreferences.voiceNameKey`).
+    /// Applied only alongside `readerSpeechVoiceID` so one device's label never lands on another's id.
+    var readerSpeechVoiceName: String?
 
     init(
         readerFontID: String,
@@ -1798,7 +1804,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         autoPreserveSeriesWorkThreshold: Int,
         libraryPageArrangement: LibraryPageArrangement? = nil,
         workSymbolPlacement: String? = nil,
-        useEmbeddedCoverArt: Bool? = nil
+        useEmbeddedCoverArt: Bool? = nil,
+        readerSpeechVoiceID: String? = nil,
+        readerSpeechVoiceName: String? = nil
     ) {
         self.readerFontID = readerFontID
         self.readerMode = readerMode
@@ -1824,6 +1832,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         self.libraryPageArrangement = libraryPageArrangement
         self.workSymbolPlacement = workSymbolPlacement
         self.useEmbeddedCoverArt = useEmbeddedCoverArt
+        self.readerSpeechVoiceID = readerSpeechVoiceID
+        self.readerSpeechVoiceName = readerSpeechVoiceName
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1851,6 +1861,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         case libraryPageArrangement
         case workSymbolPlacement
         case useEmbeddedCoverArt
+        case readerSpeechVoiceID
+        case readerSpeechVoiceName
     }
 
     init(from decoder: Decoder) throws {
@@ -1903,12 +1915,24 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
                 String.self,
                 forKey: .workSymbolPlacement
             )) ?? nil,
-            useEmbeddedCoverArt: (try? container.decodeIfPresent(Bool.self, forKey: .useEmbeddedCoverArt)) ?? nil
+            useEmbeddedCoverArt: (try? container.decodeIfPresent(Bool.self, forKey: .useEmbeddedCoverArt)) ?? nil,
+            readerSpeechVoiceID: (try? container.decodeIfPresent(
+                String.self,
+                forKey: .readerSpeechVoiceID
+            )) ?? nil,
+            readerSpeechVoiceName: (try? container.decodeIfPresent(
+                String.self,
+                forKey: .readerSpeechVoiceName
+            )) ?? nil
         )
     }
 
     static func capture(defaults: UserDefaults = .standard) -> Self {
-        Self(
+        let capturedVoiceID = nonEmptyString(defaults, ReaderSpeechPreferences.voiceIDKey)
+        let capturedVoiceName = capturedVoiceID == nil
+            ? nil
+            : nonEmptyString(defaults, ReaderSpeechPreferences.voiceNameKey)
+        return Self(
             readerFontID: defaults.string(forKey: "readerFontID") ?? "system",
             readerMode: defaults.string(forKey: "readerMode") ?? ReadingMode.scroll.rawValue,
             readerTwoPage: bool(defaults, "readerTwoPage", fallback: false),
@@ -1962,7 +1986,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             // Only a stored choice, like `accentColorHex`.
             workSymbolPlacement: defaults.string(forKey: WorkSymbolPlacement.storageKey),
             useEmbeddedCoverArt: defaults.object(forKey: "useEmbeddedCoverArt") == nil
-                ? nil : defaults.bool(forKey: "useEmbeddedCoverArt")
+                ? nil : defaults.bool(forKey: "useEmbeddedCoverArt"),
+            readerSpeechVoiceID: capturedVoiceID,
+            readerSpeechVoiceName: capturedVoiceName
         )
     }
 
@@ -2035,6 +2061,27 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             defaults.set(workSymbolPlacement, forKey: WorkSymbolPlacement.storageKey)
         }
         if let useEmbeddedCoverArt { defaults.set(useEmbeddedCoverArt, forKey: "useEmbeddedCoverArt") }
+        // Apply the display name only together with its voice id; an archive
+        // with a name alone must never label a different local voice id.
+        if let voiceID = Self.trimmedNonEmpty(readerSpeechVoiceID) {
+            let localVoiceID = Self.nonEmptyString(defaults, ReaderSpeechPreferences.voiceIDKey)
+            defaults.set(voiceID, forKey: ReaderSpeechPreferences.voiceIDKey)
+            if let voiceName = Self.trimmedNonEmpty(readerSpeechVoiceName) {
+                defaults.set(voiceName, forKey: ReaderSpeechPreferences.voiceNameKey)
+            } else if localVoiceID != voiceID {
+                defaults.removeObject(forKey: ReaderSpeechPreferences.voiceNameKey)
+            }
+        }
+    }
+
+    private static func trimmedNonEmpty(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    private static func nonEmptyString(_ defaults: UserDefaults, _ key: String) -> String? {
+        trimmedNonEmpty(defaults.string(forKey: key))
     }
 
     private static func bool(

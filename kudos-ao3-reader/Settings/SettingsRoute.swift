@@ -172,6 +172,9 @@ struct SettingsHubInputs {
     var matureMode: MaturePrivacyMode
     var folderSync: FolderSyncSnapshot
     var auth: AO3AuthStatus
+    var speechEngineID: String = ""
+    var speechVoiceID: String = ""
+    var speechVoiceName: String = ""
 }
 
 /// The value each hub row shows on its right ("Appearance · Dark"). One rule per
@@ -182,14 +185,28 @@ enum SettingsHubValue {
         case .appearance: theme(app: inputs.appTheme, reader: inputs.readerTheme, matched: inputs.themesMatched)
         case .font: inputs.fontName
         case .reader: inputs.readingMode.title
+        case .listening:
+            listening(
+                engineID: inputs.speechEngineID,
+                voiceID: inputs.speechVoiceID,
+                voiceName: inputs.speechVoiceName
+            )
         case .downloads: downloads(onSubscribe: inputs.downloadOnSubscribe, keepsWorksYouRead: inputs.keepsWorksYouRead)
         case .readingQueues: readingQueues(autoPreserve: inputs.autoPreserveSeries, seriesLimit: inputs.seriesLimit)
         case .syncFolder: syncFolder(inputs.folderSync)
         case .account: account(inputs.auth)
         case .privacySettings: privacy(hidesMature: inputs.hidesMature, mode: inputs.matureMode)
         case .about: Changelog.currentVersion
-        case .listening, .preservation, .library, .backup, .importFiles, .privacy: ""
+        case .preservation, .library, .backup, .importFiles, .privacy: ""
         }
+    }
+
+    static func listening(engineID: String, voiceID: String, voiceName: String) -> String {
+        ReaderSpeechPreferences.listeningSummary(
+            engineID: engineID,
+            voiceID: voiceID,
+            voiceName: voiceName
+        )
     }
 
     static func theme(app: ReaderTheme, reader: ReaderTheme, matched: Bool) -> String {

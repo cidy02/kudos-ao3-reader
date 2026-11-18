@@ -220,19 +220,29 @@ final class AO3AuthorProfileModel {
     private var activeTask: Task<Void, Never>?
     private var sectionTasks: [AuthorProfileOverviewSection: Task<Void, Never>] = [:]
     private var requestedOverviewSections = Set<AuthorProfileOverviewSection>()
+    typealias ModerationSubmitter = @MainActor (AO3AuthorModerationForm, AO3AuthService) async throws -> String
+
     private let pageLoader: PageLoader
+    private let moderationSubmitter: ModerationSubmitter
     private let dashboardOnly: Bool
     private let overviewMode: Bool
+    private let reloadsHeaderAfterModeration: Bool
 
     init(
         route: AO3AuthorRoute,
         dashboardOnly: Bool = false,
         overviewMode: Bool = false,
-        pageLoader: PageLoader? = nil
+        reloadsHeaderAfterModeration: Bool = true,
+        pageLoader: PageLoader? = nil,
+        moderationSubmitter: ModerationSubmitter? = nil
     ) {
         self.route = route
         self.dashboardOnly = dashboardOnly
         self.overviewMode = overviewMode
+        self.reloadsHeaderAfterModeration = reloadsHeaderAfterModeration
+        self.moderationSubmitter = moderationSubmitter ?? { form, auth in
+            try await auth.submitAuthorModeration(form)
+        }
         self.pageLoader = pageLoader ?? { url, auth, bypassCache in
             try await AO3AuthorProfileFetcher.page(
                 at: url,
@@ -533,7 +543,9 @@ final class AO3AuthorProfileModel {
             return message
         } onSuccess: { message in
             actionMessage = message
-            await reloadHeaderTracked(auth: auth)
+            if reloadsHeaderAfterModeration {
+                await reloadHeaderTracked(auth: auth)
+            }
         }
     }
 
@@ -577,7 +589,7 @@ final class AO3AuthorProfileModel {
         moderationFormForSubmit = nil
         defer { isPerformingModeration = false }
         await performFencedAuthorAction(auth: auth) { actionRoute, actionAuthenticationScope in
-            let message = try await auth.submitAuthorModeration(form)
+            let message = try await moderationSubmitter(form, auth)
             await AO3AuthorProfileFetcher.invalidateAuthorDashboards(
                 username: actionRoute.username,
                 authenticationScope: actionAuthenticationScope
@@ -585,7 +597,9 @@ final class AO3AuthorProfileModel {
             return message
         } onSuccess: { message in
             actionMessage = message
-            await reloadHeaderTracked(auth: auth)
+            if reloadsHeaderAfterModeration {
+                await reloadHeaderTracked(auth: auth)
+            }
         }
     }
 
