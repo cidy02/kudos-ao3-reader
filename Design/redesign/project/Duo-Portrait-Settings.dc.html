@@ -26,13 +26,13 @@ button{cursor:pointer}
           <h2 style="margin: 0 0 0 12px; font-size: 13px; line-height: 18px; font-weight: 600; color: #6C6C70">{{g.title}}</h2>
           <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
             <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="3">
-              <button aria-current="{{r.current}}" style="width: 100%; height: 44px; border: none; padding: 0 0 0 12px; display: flex; align-items: center; gap: 12px; background: {{r.rowBg}}; color: {{r.fg}}; font-family: inherit; text-align: left">
+              <button aria-current="{{r.current}}" style="width: 100%; min-height: 44px; border: none; padding: 0 0 0 12px; display: flex; align-items: center; gap: 12px; background: {{r.rowBg}}; color: {{r.fg}}; font-family: inherit; text-align: left">
                 <span aria-hidden="true" style="width: 29px; height: 29px; flex-shrink: 0; border-radius: 7px; background: {{r.bg}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{r.d}}"></path></svg>
                 </span>
-                <span style="flex: 1; min-width: 0; height: 44px; display: flex; align-items: center; gap: 8px; padding-right: 12px; border-top: {{r.sep}}">
-                  <span style="flex-shrink: 0; font-size: 15px; font-weight: {{r.weight}}">{{r.label}}</span>
-                  <span style="flex: 1; min-width: 0; text-align: right; font-size: 15px; color: {{r.valueColor}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.value}}</span>
+                <span style="flex: 1; min-width: 0; min-height: 44px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 5px 12px 5px 0; border-top: {{r.sep}}">
+                  <span style="font-size: 15px; line-height: 20px; font-weight: {{r.weight}}">{{r.label}}</span>
+                  <span style="font-size: 12px; line-height: 16px; color: {{r.valueColor}}">{{r.value}}</span>
                 </span>
               </button>
             </sc-for>
@@ -44,13 +44,13 @@ button{cursor:pointer}
           <h2 style="margin: 0 0 0 12px; font-size: 13px; line-height: 18px; font-weight: 600; color: #6C6C70">{{g.title}}</h2>
           <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
             <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="3">
-              <button aria-current="{{r.current}}" style="width: 100%; height: 44px; border: none; padding: 0 0 0 12px; display: flex; align-items: center; gap: 12px; background: {{r.rowBg}}; color: {{r.fg}}; font-family: inherit; text-align: left">
+              <button aria-current="{{r.current}}" style="width: 100%; min-height: 44px; border: none; padding: 0 0 0 12px; display: flex; align-items: center; gap: 12px; background: {{r.rowBg}}; color: {{r.fg}}; font-family: inherit; text-align: left">
                 <span aria-hidden="true" style="width: 29px; height: 29px; flex-shrink: 0; border-radius: 7px; background: {{r.bg}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{r.d}}"></path></svg>
                 </span>
-                <span style="flex: 1; min-width: 0; height: 44px; display: flex; align-items: center; gap: 8px; padding-right: 12px; border-top: {{r.sep}}">
-                  <span style="flex-shrink: 0; font-size: 15px; font-weight: {{r.weight}}">{{r.label}}</span>
-                  <span style="flex: 1; min-width: 0; text-align: right; font-size: 15px; color: {{r.valueColor}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.value}}</span>
+                <span style="flex: 1; min-width: 0; min-height: 44px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 5px 12px 5px 0; border-top: {{r.sep}}">
+                  <span style="font-size: 15px; line-height: 20px; font-weight: {{r.weight}}">{{r.label}}</span>
+                  <span style="font-size: 12px; line-height: 16px; color: {{r.valueColor}}">{{r.value}}</span>
                 </span>
               </button>
             </sc-for>

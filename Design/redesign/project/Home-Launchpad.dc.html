@@ -22,7 +22,7 @@ a{color:#821019}a:hover{color:#6E0000}
   <main style="padding: 56px 16px 0; display: flex; flex-direction: column; gap: 26px">
     <header style="display: flex; flex-direction: column; gap: 2px">
       <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Home</h1>
-      <a href="Insights.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 15px; line-height: 20px; color: #6C6C70; display: flex; align-items: center; gap: 4px"><span><span style="font-weight: 600; color: #3A3A3C">4 h 10 m</span> this week · <span style="font-weight: 600; color: #3A3A3C">2</span> finished · <span style="font-weight: 600; color: #3A3A3C">9-day</span> streak</span><svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="#AEAEB2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
+      <a href="Insights.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 15px; line-height: 20px; color: #6C6C70; display: flex; align-items: center; gap: 4px"><span><span style="font-weight: 600; color: #3A3A3C">4 h 10 m</span> this week · <span style="font-weight: 600; color: #3A3A3C">2</span> finished</span><svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="#AEAEB2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
     </header>
 
     <section aria-label="Continue Reading" style="display: flex; flex-direction: column; gap: 12px">
@@ -51,11 +51,7 @@ a{color:#821019}a:hover{color:#6E0000}
             <dc-import name="Symbols" variant="grid" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.wc}}" size="24" hint-size="63px,63px"></dc-import>
             <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
               <span style="font-size: 17px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.title}}</span>
-              <div role="img" aria-label="{{w.barsLabel}}" style="height: 16px; display: flex; align-items: flex-end; gap: 2px; max-width: {{w.barsW}}">
-                <sc-for list="{{w.bars}}" as="b" hint-placeholder-count="12">
-                  <span style="flex: 1; min-width: 0; box-sizing: border-box; border-radius: 2px; height: {{b.h}}; background: {{b.bg}}; border: {{b.bd}}"></span>
-                </sc-for>
-              </div>
+              <dc-import name="ChapterBars" planned="{{w.planned}}" posted="{{w.posted}}" fresh="{{w.fresh}}" seed="{{w.title}}" tone="paper" height="16" hint-size="100%,16px"></dc-import>
               <span style="font-size: 13px; line-height: 18px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.author}} · {{w.fandom}} · {{w.when}}</span>
             </div>
             <span style="padding: 0 7px; border-radius: 9px; background: #821019; color: #FFFFFF; font-size: 12px; line-height: 18px; font-weight: 700">{{w.badge}}</span>
@@ -114,29 +110,16 @@ class Component extends DCLogic {
     const rng = (seed) => { let x = seed || 1; return () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return (x % 1000) / 1000; }; };
     const art = (h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
     const rgba = (hex, a) => { const x = hex.replace('#', ''); return 'rgba(' + parseInt(x.slice(0, 2), 16) + ',' + parseInt(x.slice(2, 4), 16) + ',' + parseInt(x.slice(4, 6), 16) + ',' + a + ')'; };
-    // Mini chapter bars for New Chapters: grey = posted before, app colour = new, dashed = not posted yet.
-    const newBars = (w) => {
-      const r = rng(seedOf(w.title + ' chapters'));
-      const out = [];
-      for (let i = 0; i < w.planned; i++) {
-        const height = Math.round(42 + r() * 58);
-        if (i >= w.posted) out.push({ h: '46%', bg: 'transparent', bd: '1.5px dashed #C7C7CC' });
-        else out.push({ h: height + '%', bg: i >= w.posted - w.fresh ? '#821019' : '#D1D1D6', bd: 'none' });
-      }
-      return out;
-    };
+    // Mini chapter bars are drawn by ChapterBars (planned: null = AO3's "5/?"; 1 of 1 = a one-chapter work).
     const updated = [
       { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', planned: 30, posted: 15, fresh: 3, badge: '+3', when: '2 h ago' },
-      { title: 'The Hound, Revisited', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'MM', warnings: 'present', status: 'wip', planned: 6, posted: 5, fresh: 1, badge: '+1', when: 'yesterday' },
-      { title: 'Watson Abroad', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'wip', planned: 1, posted: 1, fresh: 1, badge: 'New', when: 'new work · 5 h ago' },
+      { title: 'The Hound, Revisited', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'MM', warnings: 'present', status: 'wip', planned: null, posted: 5, fresh: 1, badge: '+1', when: 'yesterday' },
+      { title: 'Watson Abroad', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', planned: 1, posted: 1, fresh: 1, badge: 'New', when: 'new work · 5 h ago' },
       { title: 'Northanger Nights', author: 'gothicnovelist', fandom: 'Northanger Abbey', rating: 'T', category: 'FM', warnings: 'none', status: 'wip', planned: 12, posted: 9, fresh: 1, badge: '+1', when: 'Oct 24' }
     ].map((w, i) => ({
       ...w,
       wc: 1,
       sep: i > 0,
-      bars: newBars(w),
-      barsW: Math.min(100, w.planned * 9) + '%',
-      barsLabel: w.badge === 'New' ? 'New work' : w.fresh + (w.fresh === 1 ? ' new chapter' : ' new chapters') + ', ' + w.posted + ' posted'
     }));
     const queue = (name, detail, colour, hues, fills, label) => ({
       name, detail, progressLabel: label,

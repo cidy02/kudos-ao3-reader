@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kudos on Android foldables</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+a{color:#821019}a:hover{color:#6E0000}
+</style>
+</helmet>
+<div style="width: 1460px; height: 1810px; box-sizing: border-box; padding: 56px 64px; background: #FFFFFF; color: #1D1B1B; font-family: Roboto, 'Google Sans', system-ui, sans-serif; display: flex; flex-direction: column; gap: 32px">
+  <header style="display: flex; flex-direction: column; gap: 8px; max-width: 1100px">
+    <h1 style="margin: 0; font-size: 40px; line-height: 48px; font-weight: 700">Kudos on Android foldables and tablets</h1>
+    <p style="margin: 0; font-size: 18px; line-height: 26px; color: #534341">The panes hold what the iPhone Duo boards hold; the frame around them is Material’s. The window’s width picks the navigation, the fold’s posture picks the split, and system Back replaces the Back and Close buttons.</p>
+  </header>
+
+  <div style="display: flex; gap: 48px; align-items: flex-start">
+    <!-- Unfolded, flat · Home -->
+    <figure style="margin: 0; width: 880px; flex-shrink: 0; display: flex; flex-direction: column; gap: 14px">
+      <div style="position: relative; width: 880px; height: 680px; border-radius: 28px; overflow: hidden; background: #FFF8F7; box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 24px 60px rgba(0,0,0,0.10)">
+        <nav aria-label="Navigation" style="position: absolute; left: 0; top: 0; width: 80px; height: 680px; padding: 28px 0 0; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 12px">
+          <a href="Account-Sheet.dc.html" aria-label="Account, saltwindow, 3 unread in Inbox" style="position: relative; width: 48px; height: 48px; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; text-decoration: none"><span style="width: 40px; height: 40px; border-radius: 20px; background: #23506B; color: #FFFFFF; font-size: 17px; font-weight: 500; display: flex; align-items: center; justify-content: center">S</span><span aria-hidden="true" style="position: absolute; top: 0; right: -2px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: #821019; color: #FFFFFF; font-size: 10px; line-height: 16px; font-weight: 500; text-align: center">3</span></a>
+          <sc-for list="{{nav}}" as="n" hint-placeholder-count="5">
+            <button aria-current="{{n.current}}" style="width: 80px; border: none; background: transparent; color: {{n.fg}}; font-family: inherit; font-size: 12px; line-height: 16px; font-weight: {{n.weight}}; letter-spacing: 0.5px; display: flex; flex-direction: column; align-items: center; gap: 4px">
+              <span style="width: 56px; height: 32px; border-radius: 16px; background: {{n.pill}}; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="{{n.fill}}" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{n.d}}"></path></svg></span>
+              {{n.label}}
+            </button>
+          </sc-for>
+        </nav>
+        <section aria-label="Continue Reading" style="position: absolute; left: 96px; top: 28px; width: 368px; display: flex; flex-direction: column; gap: 14px">
+          <header style="display: flex; flex-direction: column; gap: 2px">
+            <h2 style="margin: 0; font-size: 32px; line-height: 40px; font-weight: 400">Home</h2>
+            <a href="Insights.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 14px; line-height: 20px; letter-spacing: 0.25px; color: #534341"><span style="font-weight: 500; color: #1D1B1B">4 h 10 m</span> this week · <span style="font-weight: 500; color: #1D1B1B">2</span> finished ›</a>
+          </header>
+          <dc-import name="ResumeCard" variant="home" width="368" accent="#821019" hint-size="368px,270px"></dc-import>
+          <dc-import name="HomeSections" show="also" covers="2" cover-width="104" font="Roboto, 'Google Sans', system-ui, sans-serif" hint-size="368px,260px"></dc-import>
+        </section>
+        <div style="position: absolute; left: 496px; top: 36px; width: 368px">
+          <dc-import name="HomeSections" show="subs,queues" rows="3" queues="2" gap="20" font="Roboto, 'Google Sans', system-ui, sans-serif" hint-size="368px,600px"></dc-import>
+        </div>
+        <span aria-hidden="true" style="position: absolute; left: 50%; bottom: 8px; width: 108px; height: 4px; margin-left: -54px; border-radius: 2px; background: #1D1B1B; opacity: 0.85"></span>
+      </div>
+      <figcaption style="font-size: 15px; line-height: 22px; color: #534341"><span style="font-weight: 700; color: #1D1B1B">Unfolded, flat · Home.</span> A NavigationRail on the leading edge (the account avatar in its header slot, badged with unread Inbox; Search as the last destination) and two equal panes: the Resume card and Also Reading, then Subscriptions and Queues. The same sections as iPhone Duo’s Open · Home, in the same order.</figcaption>
+    </figure>
+    <section style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding-top: 6px">
+      <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 500">The window’s width picks the navigation</h2>
+      <div style="border-top: 1px solid #D8C2BE">
+        <sc-for list="{{sizes}}" as="s" hint-placeholder-count="3">
+          <div style="display: flex; flex-direction: column; gap: 2px; padding: 12px 0; border-bottom: 1px solid #EDE0DD">
+            <span style="font-size: 15px; line-height: 22px; font-weight: 700">{{s.name}}</span>
+            <span style="font-size: 15px; line-height: 22px; color: #534341">{{s.text}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <p style="margin: 0; font-size: 15px; line-height: 22px; color: #534341">NavigationSuiteScaffold makes the bar-or-rail choice from the window size class. Four destinations for readers, five once the account has a work or draft.</p>
+    </section>
+  </div>
+
+  <div style="display: flex; gap: 48px; align-items: flex-start">
+    <!-- Unfolded, book posture · Reader -->
+    <figure style="margin: 0; width: 880px; flex-shrink: 0; display: flex; flex-direction: column; gap: 14px">
+      <div style="position: relative; width: 880px; height: 680px; border-radius: 28px; overflow: hidden; background: #FFF8F7; box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 24px 60px rgba(0,0,0,0.10)">
+        <div aria-hidden="true" style="position: absolute; left: 420px; top: 0; width: 40px; height: 680px; background: linear-gradient(to right, rgba(0,0,0,0.05), rgba(0,0,0,0) 40%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.05))"></div>
+        <button aria-label="Close" style="position: absolute; left: 16px; top: 28px; width: 48px; height: 48px; border: none; border-radius: 24px; background: #FBEAE7; color: #534341; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+        <div style="position: absolute; right: 16px; top: 28px; height: 48px; border-radius: 24px; background: #FBEAE7; display: flex">
+          <button aria-label="Themes and settings" style="width: 48px; height: 48px; border: none; background: transparent; color: #534341; font-family: inherit; font-size: 16px; font-weight: 500">Aa</button>
+          <button aria-label="More options" style="width: 48px; height: 48px; border: none; background: transparent; color: #534341; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="1.8" fill="currentColor"></circle><circle cx="12" cy="12" r="1.8" fill="currentColor"></circle><circle cx="12" cy="18.5" r="1.8" fill="currentColor"></circle></svg></button>
+        </div>
+        <article style="position: absolute; left: 48px; top: 96px; width: 344px; font-family: Literata, 'Noto Serif', Georgia, serif; font-size: 18px; line-height: 29px; color: #1D1B1B; display: flex; flex-direction: column; gap: 14px">
+          <p style="margin: 0; font-family: Roboto, system-ui, sans-serif; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 1px; text-transform: uppercase; color: #534341">Chapter 7</p>
+          <h2 style="margin: 0 0 4px; font-size: 26px; line-height: 32px; font-weight: 600">The Salt Road</h2>
+          <p style="margin: 0">The road to the coast had not been mapped in forty years, and Elinor suspected her mother had liked it that way.</p>
+          <p style="margin: 0">She walked it anyway, with the brass compass knocking against her hip and a roll of blank vellum under one arm. Every mile she paused, sighted the dunes, and drew what she saw.</p>
+          <p style="margin: 0">“You’re doing it backwards,” Tomas said, when he caught her up at the third milestone.</p>
+        </article>
+        <article style="position: absolute; left: 488px; top: 96px; width: 344px; font-family: Literata, 'Noto Serif', Georgia, serif; font-size: 18px; line-height: 29px; color: #1D1B1B; display: flex; flex-direction: column; gap: 14px">
+          <p style="margin: 0">“There is no forwards,” she said. “There is the road, and there is what the road used to be. I am drawing the first one.”</p>
+          <p style="margin: 0">He looked at the sheet for a long moment. The creek bed was there, and the leaning post, and a small square she had not explained.</p>
+          <p style="margin: 0">“And that?”</p>
+          <p style="margin: 0">“A house,” Elinor said. “It isn’t there any more. I’m told it was ours.”</p>
+        </article>
+        <section aria-label="Reader controls" style="position: absolute; left: 476px; right: 16px; bottom: 28px; height: 72px; padding: 0 8px; box-sizing: border-box; border-radius: 28px; background: #FBEAE7; display: flex; align-items: center; gap: 4px">
+          <button aria-label="Contents" style="width: 48px; height: 48px; border: none; border-radius: 24px; background: transparent; color: #534341; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h9"></path></svg></button>
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 0 8px">
+            <div role="slider" aria-label="Page" aria-valuenow="7" aria-valuemin="1" aria-valuemax="36" style="position: relative; height: 16px; display: flex; align-items: center; gap: 6px">
+              <span style="width: 20%; height: 16px; border-radius: 8px 2px 2px 8px; background: #8F4A45"></span>
+              <span style="width: 4px; height: 28px; border-radius: 2px; background: #8F4A45"></span>
+              <span style="flex: 1; height: 16px; border-radius: 2px 8px 8px 2px; background: #FFDAD5"></span>
+            </div>
+            <span style="font-size: 12px; line-height: 16px; letter-spacing: 0.4px; color: #534341">Pages 7 and 8 of 36 · 21 min left</span>
+          </div>
+          <button aria-label="Read aloud" style="width: 48px; height: 48px; border: none; border-radius: 24px; background: #FFDAD5; color: #410001; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg></button>
+        </section>
+        <span aria-hidden="true" style="position: absolute; left: 50%; bottom: 8px; width: 108px; height: 4px; margin-left: -54px; border-radius: 2px; background: #1D1B1B; opacity: 0.85"></span>
+      </div>
+      <figcaption style="font-size: 15px; line-height: 22px; color: #534341"><span style="font-weight: 700; color: #1D1B1B">Unfolded, book posture · Reader.</span> One page on each side of the hinge and nothing across it. The controls sit on the trailing page only, as on iPhone Duo’s Book pose; a tap hides them. Readium’s Kotlin navigator draws the pages.</figcaption>
+    </figure>
+    <section style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding-top: 6px">
+      <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 500">The fold’s posture picks the split</h2>
+      <div style="border-top: 1px solid #D8C2BE">
+        <sc-for list="{{postures}}" as="s" hint-placeholder-count="3">
+          <div style="display: flex; flex-direction: column; gap: 2px; padding: 12px 0; border-bottom: 1px solid #EDE0DD">
+            <span style="font-size: 15px; line-height: 22px; font-weight: 700">{{s.name}}</span>
+            <span style="font-size: 15px; line-height: 22px; color: #534341">{{s.text}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <p style="margin: 0; font-size: 15px; line-height: 22px; color: #534341">Posture comes from WindowInfoTracker’s FoldingFeature (state, orientation, bounds). Not drawn yet for Android: Library, Search, Work Detail, Settings and Writing unfolded. They follow the iPhone Duo boards pane for pane.</p>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1460,"height":1810}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const navItems = [
+      { id: 'home', label: 'Home', d: 'M12 2.8 2.6 11.2c-.5.5-.2 1.3.5 1.3H5v7.3c0 .6.4 1 1 1h4v-6h4v6h4c.6 0 1-.4 1-1v-7.3h1.9c.7 0 1-.8.5-1.3z' },
+      { id: 'library', label: 'Library', d: 'M3.5 4h4v16h-4zM9.5 4h4v16h-4zM15.6 5.4l3.4-.9 3 15.2-3.4.9z' },
+      { id: 'writing', label: 'Writing', d: 'M16 4.5l3.5 3.5L9 18.5 4.5 19.5l1-4.5zM12.5 20h7' },
+      { id: 'browse', label: 'Browse', d: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z' },
+      { id: 'search', label: 'Search', d: 'M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.5 15.5l5 5' }
+    ];
+    return {
+      nav: navItems.map((n) => { const on = n.id === 'home'; return { ...n, fill: on ? 'currentColor' : 'none', current: on ? 'page' : 'false', pill: on ? '#FFDAD5' : 'transparent', fg: on ? '#410001' : '#534341', weight: on ? 700 : 500 }; }),
+      sizes: [
+        ['Compact, under 600 dp', 'Phones and the folded cover. The phone board: NavigationBar, one pane, sheets from the bottom.'],
+        ['Medium, 600 to 840 dp', 'Unfolded in portrait, small tablets. NavigationRail, one pane, wider margins; the reader caps its line length.'],
+        ['Expanded, 840 dp and up', 'Unfolded in landscape, tablets. NavigationRail and two panes. Shelves, Search results and Subscriptions use ListDetailPaneScaffold; filters and reader settings use SupportingPaneScaffold.']
+      ].map(([name, text]) => ({ name, text })),
+      postures: [
+        ['Flat', 'Panes are equal after the rail. Content may run under a seamless fold.'],
+        ['Book: half open, hinge upright', 'Nothing crosses the hinge. The reader shows one page per side; lists sit on the leading side, detail on the trailing side.'],
+        ['Tabletop: half open, hinge level', 'The reader keeps the page on the top half and moves its controls and Read Aloud to the bottom half.']
+      ].map(([name, text]) => ({ name, text }))
+    };
+  }
+}
+</script>
+</body>
+</html>

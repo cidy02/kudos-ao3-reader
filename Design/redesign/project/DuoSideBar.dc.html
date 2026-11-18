@@ -23,6 +23,10 @@ button{cursor:pointer}
     </div>
   </sc-if>
 
+  <sc-if value="{{hasProfile}}" hint-placeholder-val="{{false}}">
+    <a href="{{profile}}" aria-label="Account, saltwindow, 3 unread in Inbox" style="position: relative; width: 48px; height: 48px; flex-shrink: 0; border-radius: 24px; text-decoration: none; display: flex; align-items: center; justify-content: center; background: #23506B; color: #FFFFFF; font-size: 20px; font-weight: 600; box-shadow: {{shadow}}">S<span aria-hidden="true" style="position: absolute; top: -3px; right: -5px; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 10px; border: 2px solid #FFFFFF; background: {{accent}}; color: #FFFFFF; font-size: 11px; line-height: 16px; font-weight: 700; text-align: center">3</span></a>
+  </sc-if>
+
   <sc-if value="{{hasNav}}" hint-placeholder-val="{{true}}">
     <button aria-label="{{navLabel}}" style="width: 48px; height: 48px; flex-shrink: 0; border: none; border-radius: 24px; color: {{fg}}; display: flex; align-items: center; justify-content: center; background: {{glass}}; box-shadow: {{shadow}}">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="{{navD}}"></path></svg>
@@ -63,13 +67,15 @@ button{cursor:pointer}
   </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"height":{"editor":"int","default":669,"min":300,"max":1000},"nav":{"editor":"enum","options":["back","close","none"],"default":"none"},"primary":{"editor":"enum","options":["none","done","post","play"],"default":"none"},"actions":{"editor":null},"tabs":{"editor":"enum","options":["home","library","browse","writing","search","none"],"default":"home"},"status":{"editor":"boolean","default":true},"theme":{"editor":"enum","options":["light","sepia","dark"],"default":"light"},"accent":{"editor":null,"default":"#821019"},"$preview":{"width":64,"height":669}}'>
+<script type="text/x-dc" data-dc-script data-props='{"height":{"editor":"int","default":669,"min":300,"max":1000},"nav":{"editor":"enum","options":["back","close","none"],"default":"none"},"primary":{"editor":"enum","options":["none","done","post","play"],"default":"none"},"actions":{"editor":null},"tabs":{"editor":"enum","options":["home","library","browse","writing","search","none"],"default":"home"},"status":{"editor":"boolean","default":true},"profile":{"editor":null},"writing":{"editor":"boolean","default":true},"theme":{"editor":"enum","options":["light","sepia","dark"],"default":"light"},"accent":{"editor":null,"default":"#821019"},"$preview":{"width":64,"height":669}}'>
 class Component extends DCLogic {
   renderVals() {
     // iPhone Duo puts the status bar, Dynamic Island, toolbar and tab bar on the
     // trailing edge, lined up with the camera (HIG: Vertical controls). Order from
     // the top: navigation (Back/Close), the prominent action, the toolbar group;
     // the tab bar and Search sit at the bottom. Items overflow bottom to top.
+    // profile="<board>" draws the profile button (Account sheet, Inbox badge) where Back
+    // would sit; tab roots have no Back. writing={false} drops the Writing tab (readers).
     const accent = this.props.accent ?? '#821019';
     const theme = this.props.theme ?? 'light';
     const T = {
@@ -99,12 +105,13 @@ class Component extends DCLogic {
       padBottom: tabsSel === 'none' ? 10 : 14,
       fg: T.fg, glass: T.glass, shadow: T.shadow, accent,
       showStatus: this.props.status ?? true,
+      hasProfile: !!this.props.profile, profile: this.props.profile || '',
       hasNav: nav !== 'none', navLabel: nav === 'close' ? 'Close' : 'Back', navD: nav === 'close' ? 'M6 6l12 12M18 6 6 18' : 'm15 5-7 7 7 7',
       hasPrimary: !!P, primaryLabel: P ? P[0] : '', primaryD: P ? P[1] : '',
       hasActions: actions.length > 0, actions,
       hasTabs: tabsSel !== 'none',
       searchCurrent: tabsSel === 'search' ? 'page' : 'false', searchFg: tabsSel === 'search' ? accent : T.fg, searchBg: tabsSel === 'search' ? 'linear-gradient(' + tint + ', ' + tint + '), ' + T.glass : T.glass,
-      tabs: all.map((t) => ({ ...t, current: t.id === tabsSel ? 'page' : 'false', bg: t.id === tabsSel ? tint : 'transparent', fg: t.id === tabsSel ? accent : T.fg }))
+      tabs: all.filter((t) => t.id !== 'writing' || (this.props.writing ?? true)).map((t) => ({ ...t, current: t.id === tabsSel ? 'page' : 'false', bg: t.id === tabsSel ? tint : 'transparent', fg: t.id === tabsSel ? accent : T.fg }))
     };
   }
 }

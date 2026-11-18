@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Open Library</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+a{color:#821019}a:hover{color:#6E0000}
+</style>
+</helmet>
+<div style="width: 951px; height: 669px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 24px; top: 18px; width: 431px">
+    <dc-import name="Library" embed="a" hint-size="431px,640px"></dc-import>
+  </div>
+  <div style="position: absolute; left: 495px; top: 26px; width: 376px">
+    <dc-import name="Library" embed="b" hint-size="376px,640px"></dc-import>
+  </div>
+  <div style="position: absolute; right: 8px; top: 0; z-index: 2">
+    <dc-import name="DuoSideBar" height="669" tabs="library" actions="{{side}}" accent="#821019" hint-size="64px,669px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":951,"height":669}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Open, flat: the Library root in two panes (the Library board's own sections). Left: the
+    // summary, Favourites, Collections. Right: Downloaded, the shelf tiles, On AO3. New, More
+    // and Select move to the side controls. A shelf tile opens the list-beside-detail board.
+    return { none: [], side: [{ label: 'New: Collection, Queue, Import EPUB', d: 'M12 5v14M5 12h14' }, { label: 'More: Edit Shelves, Reading Insights, Recently Deleted', d: 'dots' }, { label: 'Select', d: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM8.2 12.2l2.6 2.6 5-5.3' }] };
+  }
+}
+</script>
+</body>
+</html>

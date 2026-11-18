@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Generated covers · test shelf</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1616px; min-height: 1810px; box-sizing: border-box; padding: 48px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 36px">
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700">Generated covers · test shelf</h1>
+    <p style="margin: 0; max-width: 1100px; font-size: 15px; line-height: 21px; color: #3A3A3C">The same twelve made-up works in the same order in every row, at the shelf size the app uses (112 pt). Eight are Sherlock Holmes, one of them a crossover with Jane Eyre, and five sit in two series: Baker Street Winters (parts I–III) and The Lamplight Cases (parts I–II).</p>
+    <p style="margin: 0; font-size: 15px; line-height: 21px; font-weight: 600; color: #821019">Try it in each row: find Thaw (Baker Street Winters, Part II). Then find both Lamplight Cases.</p>
+  </div>
+
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 700">A · Previous covers (before 13 Nov)</h2>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70">Fandom picks the colour family; the title picks the shade and one of three layouts. Kept here as a frozen copy for comparison: every other board now draws row C.</p>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px">
+      <sc-for list="{{a}}" as="w" hint-placeholder-count="12">
+        <div style="width: 112px; display: flex; flex-direction: column; gap: 6px">
+          <div style="position: relative; width: 112px; height: 159px; box-sizing: border-box; padding: 11px; border-radius: 16px; overflow: hidden; background: {{w.art}}; color: #FFFFFF; box-shadow: 0 4px 12px rgba(0,0,0,0.14); display: flex; flex-direction: column">
+            <sc-if value="{{w.v0}}" hint-placeholder-val="{{true}}">
+              <span aria-hidden="true" style="position: absolute; right: -8px; top: -19px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 118px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.15)">{{w.initial}}</span>
+              <span style="position: relative; font-size: 8px; line-height: 1.2; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.88)">{{w.fandom}}</span>
+              <span style="position: relative; margin-top: auto; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 15px; line-height: 1.18; font-weight: 600">{{w.title}}</span>
+              <span style="position: relative; margin-top: 4px; font-size: 10px; line-height: 1.2; font-style: italic; color: rgba(255,255,255,0.88)">{{w.author}}</span>
+            </sc-if>
+            <sc-if value="{{w.v1}}" hint-placeholder-val="{{false}}">
+              <span aria-hidden="true" style="position: absolute; right: -8px; bottom: -32px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 118px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.15)">{{w.initial}}</span>
+              <span style="position: relative; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 15px; line-height: 1.18; font-weight: 600">{{w.title}}</span>
+              <span style="position: relative; margin-top: 4px; font-size: 10px; line-height: 1.2; font-style: italic; color: rgba(255,255,255,0.88)">{{w.author}}</span>
+              <span style="position: relative; margin-top: auto; font-size: 8px; line-height: 1.2; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.88)">{{w.fandom}}</span>
+            </sc-if>
+            <sc-if value="{{w.v2}}" hint-placeholder-val="{{false}}">
+              <span aria-hidden="true" style="position: absolute; left: -8px; bottom: -32px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 118px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.15)">{{w.initial}}</span>
+              <span style="position: relative; font-size: 8px; line-height: 1.2; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.88)">{{w.fandom}}</span>
+              <span style="position: relative; margin-top: 10px; text-align: right; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 15px; line-height: 1.18; font-weight: 600">{{w.title}}</span>
+              <span style="position: relative; margin-top: 4px; text-align: right; font-size: 10px; line-height: 1.2; font-style: italic; color: rgba(255,255,255,0.88)">{{w.author}}</span>
+            </sc-if>
+          </div>
+          <dc-import name="Symbols" variant="strip" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.warningCount}}" size="25" theme="light" hint-size="112px,25px"></dc-import>
+          <span style="font-size: 12px; line-height: 16px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.meta}}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 700">B · Gemini’s design, as written</h2>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70">Rating sets light or dark paper, warnings pick the cracked style, tags pick the emblem, kudos and bookmarks add gold, length and chapters add borders, spine and ticks; pairing and word count sit in the footer.</p>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px">
+      <sc-for list="{{g}}" as="c" hint-placeholder-count="12">
+        <div style="width: 112px; display: flex; flex-direction: column; gap: 6px">
+          <div style="position: relative; width: 112px; height: 158px; border-radius: 3px; overflow: hidden; background: {{c.bg}}">
+            <svg aria-hidden="true" width="112" height="158" viewBox="0 0 112 158" fill="none" style="position: absolute; left: 0; top: 0">
+              <path d="{{c.grain}}" stroke="{{c.hair}}" stroke-opacity="0.14" stroke-width="0.4"></path>
+              <path d="{{c.spine}}" stroke="{{c.hair}}" stroke-width="0.8"></path>
+              <path d="{{c.spineHi}}" stroke="{{c.ink}}" stroke-opacity="0.08" stroke-width="0.6"></path>
+              <path d="{{c.frame}}" stroke="{{c.hair}}" stroke-width="0.65"></path>
+              <path d="{{c.frameDash}}" stroke="{{c.hair}}" stroke-width="0.65" stroke-dasharray="3 3"></path>
+              <path d="{{c.inner}}" stroke="{{c.hair}}" stroke-opacity="0.55" stroke-width="0.4"></path>
+              <path d="{{c.ticks}}" stroke="{{c.hair}}" stroke-width="0.45"></path>
+              <path d="{{c.prog}}" stroke="{{c.accent}}" stroke-width="1.1"></path>
+              <path d="{{c.e1.d}}" stroke="{{c.e1.c}}" stroke-opacity="{{c.e1.o}}" stroke-width="{{c.e1.w}}"></path>
+              <path d="{{c.e2.d}}" stroke="{{c.e2.c}}" stroke-opacity="{{c.e2.o}}" stroke-width="{{c.e2.w}}"></path>
+              <path d="{{c.e3.d}}" stroke="{{c.e3.c}}" stroke-opacity="{{c.e3.o}}" stroke-width="{{c.e3.w}}"></path>
+            </svg>
+            <div style="position: absolute; left: 0; top: 0; width: 112px; height: 158px; display: flex; flex-direction: column">
+              <div style="display: flex; align-items: baseline; gap: 3px; padding: 10px 10px 0 {{c.padL}}px">
+                <span style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 8.5px; line-height: 11px; font-weight: 500; letter-spacing: 0.45px; color: {{c.muted}}">{{c.fandom}}</span>
+                <sc-if value="{{c.hasPart}}" hint-placeholder-val="{{false}}">
+                  <span style="flex: none; white-space: nowrap; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 8px; line-height: 11px; color: {{c.accent}}">{{c.part}}</span>
+                </sc-if>
+                <span style="flex: none; margin-left: auto; white-space: nowrap; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 8px; line-height: 11px; letter-spacing: 0.34px; color: {{c.muted}}">{{c.rc}}</span>
+              </div>
+              <div style="flex: 1; min-height: 16px"></div>
+              <div style="display: flex; flex-direction: column; gap: 2px; padding: 0 11.5px 0 {{c.padT}}px; text-align: center">
+                <span style="font-family: {{c.tFont}}; font-size: 13px; line-height: 16px; letter-spacing: {{c.track}}px; color: {{c.ink}}; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden">{{c.title}}</span>
+                <sc-if value="{{c.hasDeck}}" hint-placeholder-val="{{false}}">
+                  <span style="font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-style: italic; font-size: 10.5px; line-height: 13px; color: {{c.muted}}; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">{{c.deck}}</span>
+                </sc-if>
+              </div>
+              <div style="flex: 1; min-height: 54px"></div>
+              <div style="padding: 0 8.7px 3.8px {{c.padF}}px">
+                <span style="display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 6px; line-height: 8px; letter-spacing: 0.22px; color: {{c.muted}}">{{c.footer}}</span>
+              </div>
+            </div>
+          </div>
+          <dc-import name="Symbols" variant="strip" rating="{{c.rating}}" category="{{c.cat}}" warnings="{{c.warn}}" status="{{c.status}}" warning-count="{{c.wc}}" size="25" theme="light" hint-size="112px,25px"></dc-import>
+          <span style="font-size: 12px; line-height: 16px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.meta}}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 700">C · Adopted: every choice has a reason</h2>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70">A reader’s shelf label, drawn by the app from what the AO3 listing already gives it. Rating, warnings, category, pairing and popularity stay in the symbols and meta line. Second line: twelve more Sherlock Holmes one-shots. The grey line under each cover says which rules it got. Drawn by CoverArt, the component every board in the canvas now uses for covers.</p>
+      <div style="margin-top: 10px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px 24px">
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; line-height: 16px; font-weight: 700">Fandom → colour family</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">Fandoms from one source share a family: Persuasion and Pride and Prejudice are both Austen green.</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; line-height: 16px; font-weight: 700">Series → one shared look</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">Same motif, ground and angle for every part. The hue steps with each Part number.</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; line-height: 16px; font-weight: 700">Title → text placement</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">Short titles sit big at the top, long ones at the bottom, subtitled ones right-aligned. The motif takes the space left.</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; line-height: 16px; font-weight: 700">Tone tags → motif family</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">Soft, angular, orderly or celestial, from a short list of AO3 tags. Mixed or no tone tags stay neutral.</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; line-height: 16px; font-weight: 700">Author → motif and title style</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">Which motif within the family, and serif, italic or small caps: a house style per writer.</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; line-height: 16px; font-weight: 700">Length → how full the motif is</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">A short work gets the sparest version of its motif; each step up adds more of it — more rays, rings or waves — never a second copy on top.</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; line-height: 16px; font-weight: 700">Year posted → depth of shade</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">Older works are darker, newer ones lighter.</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; line-height: 16px; font-weight: 700">Status → ring</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">A ring around the motif: closed when the work is complete, open while it is in progress.</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; line-height: 16px; font-weight: 700">Crossover → 60/40 split</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">Always the same diagonal. The first-listed fandom gets the larger part.</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; line-height: 16px; font-weight: 700">Work ID → the leftovers</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">Rotation, scale, ground and line weight only, so two works never match exactly.</span></div>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px">
+      <sc-for list="{{p}}" as="c" hint-placeholder-count="24">
+        <div style="width: 112px; display: flex; flex-direction: column; gap: 6px">
+          <dc-import name="CoverArt" work="{{c.work}}" width="112" height="159" text="{{true}}" radius="14" shadow="0 4px 12px rgba(0,0,0,0.14)" hint-size="112px,159px"></dc-import>
+          <dc-import name="Symbols" variant="strip" rating="{{c.rating}}" category="{{c.cat}}" warnings="{{c.warn}}" status="{{c.status}}" warning-count="{{c.wc}}" size="25" theme="light" hint-size="112px,25px"></dc-import>
+          <span style="font-size: 12px; line-height: 16px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.meta}}</span>
+          <span style="margin-top: -4px; font-size: 10px; line-height: 13px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.why}}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1616,"height":1810}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const PI = Math.PI;
+    const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+    const rng = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+    const between = (R, a, b) => a + R() * (b - a);
+    const intIn = (R, a, b) => a + Math.floor(R() * (b - a + 1));
+    const n = (x) => Math.round(x * 100) / 100;
+    const ok = (l, c, h, a) => 'oklch(' + l + ' ' + c + ' ' + n(((h % 360) + 360) % 360) + (a !== undefined ? ' / ' + a : '') + ')';
+    const P = (x, y) => n(x) + ' ' + n(y);
+    const ell = (cx, cy, rx, ry) => 'M' + P(cx - rx, cy) + 'a' + n(rx) + ' ' + n(ry) + ' 0 1 0 ' + n(2 * rx) + ' 0a' + n(rx) + ' ' + n(ry) + ' 0 1 0 ' + n(-2 * rx) + ' 0';
+    const rect = (x, y, w, h) => 'M' + P(x, y) + 'H' + n(x + w) + 'V' + n(y + h) + 'H' + n(x) + 'Z';
+    const NONE = 'M0 0';
+    const FAN = { 'Sherlock Holmes': 55, 'Persuasion': 0, 'Jane Eyre': 300, 'Pride and Prejudice': 150, 'Original Work': 220 };
+    const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
+    const COMPACT = { MM: 'M/M', FM: 'F/M', FF: 'F/F', Gen: 'GEN', Multi: 'MULTI', Other: 'OTHER' };
+
+    // Gemini's eight emblems, ported as written (parts: d, role, stroke width, opacity)
+    const emblem = (kind, cx, cy, r, R, opt) => {
+      const dz = opt.dens === undefined ? 1 : opt.dens;
+      const cnt = (base, min) => Math.max(min, Math.round(base * dz));
+      if (kind === 'sprig') {
+        const bx = cx - r * 0.12, by = cy + r * 0.95, tx = cx + r * 0.10, ty = cy - r * 0.85;
+        const stem = 'M' + P(bx, by) + 'C' + P(cx - r * 0.28, cy + r * 0.25) + ' ' + P(cx + r * 0.24, cy - r * 0.25) + ' ' + P(tx, ty);
+        const count = cnt(opt.fivePlus ? 6 : intIn(R, 5, 7), 3);
+        let leaves = '', hi = '';
+        for (let i = 0; i < count; i++) {
+          const t = (i + 1) / (count + 1);
+          // Leaf base sits on the stem curve itself (Gemini placed it on a straight line beside it)
+          const u = 1 - t, b0 = u * u * u, b1 = 3 * u * u * t, b2 = 3 * u * t * t, b3 = t * t * t;
+          const px = b0 * bx + b1 * (cx - r * 0.28) + b2 * (cx + r * 0.24) + b3 * tx;
+          const py = b0 * by + b1 * (cy + r * 0.25) + b2 * (cy - r * 0.25) + b3 * ty;
+          const side = i % 2 === 0 ? 1 : -1, len = r * between(R, 0.32, 0.48);
+          const d = 'M' + P(px, py) + 'Q' + P(px + side * len * 0.25, py - len * 0.75) + ' ' + P(px + side * len, py - len * 0.55) + 'Q' + P(px + side * len * 0.75, py - len * 0.1) + ' ' + P(px, py);
+          if (opt.fivePlus && i === count - 1) hi += d; else leaves += d;
+        }
+        return [{ d: stem, role: 'accent', w: 0.75, o: 1 }, { d: leaves, role: 'accent', w: 0.65, o: 1 }, { d: hi, role: 'ink', w: 0.95, o: 1 }];
+      }
+      if (kind === 'kintsugi') {
+        const ox = opt.ox, oy = opt.oy, span = r * 2.4;
+        const rays = intIn(R, 4, 6);
+        let main = '', hair = '';
+        for (let i = 0; i < rays; i++) {
+          const angle = PI + (PI / 2) * (i + 0.3) / rays + between(R, -0.09, 0.09);
+          let x = ox - between(R, 0, 18), y = oy - between(R, 0, 18);
+          main += 'M' + P(x, y);
+          for (let s = 1; s <= 4; s++) {
+            const seg = (span / 4) * between(R, 0.75, 1.25), a = angle + between(R, -0.22, 0.22);
+            x = Math.max(ox - span, x + Math.cos(a) * seg);
+            y = Math.max(oy - span * 1.15, y + Math.sin(a) * seg);
+            main += 'L' + P(x, y);
+            if (s >= 2 && R() > 0.35) {
+              const ba = a + (R() > 0.5 ? 0.65 : -0.65), bl = seg * 0.55;
+              hair += 'M' + P(x, y) + 'L' + P(x + Math.cos(ba) * bl, y + Math.sin(ba) * bl);
+            }
+          }
+        }
+        return [{ d: main, role: 'accent', w: 0.85, o: 1 }, { d: hair, role: 'accent2', w: 0.45, o: 0.55 }];
+      }
+      if (kind === 'orbit') {
+        const spokes = cnt(intIn(R, 6, 8), 3) * 2;
+        let star = '';
+        for (let i = 0; i < spokes / 2; i++) {
+          const th = i * (2 * PI / spokes);
+          star += 'M' + P(cx + Math.cos(th) * r, cy + Math.sin(th) * r) + 'L' + P(cx - Math.cos(th) * r, cy - Math.sin(th) * r);
+        }
+        const off = opt.platonic ? 0 : r * 0.16;
+        return [{ d: star, role: 'hair', w: 0.5, o: 1 }, { d: ell(cx - off * 0.5, cy, r * 0.62, r * 0.62), role: 'accent', w: 0.6, o: 0.6 }, { d: ell(cx + off * 0.5, cy, r * 0.62, r * 0.62), role: 'accent2', w: 0.5, o: 0.5 }];
+      }
+      if (kind === 'rings') {
+        const base = between(R, 0, 2 * PI), N = cnt(5, 2);
+        let rest = '', last = '';
+        for (let i = 0; i < N; i++) {
+          const rr = r * (i + 1) / N, sh = (r - rr) * 0.45;
+          const d = ell(cx + Math.cos(base + i * 0.35) * sh, cy + Math.sin(base + i * 0.35) * sh, rr, rr);
+          if (i === N - 1) last = d; else rest += d;
+        }
+        return [{ d: rest, role: 'hair', w: 0.5, o: 1 }, { d: last, role: 'accent', w: 0.75, o: 1 }];
+      }
+      if (kind === 'cup') {
+        const cw = r * 0.52, ch = r * 0.36;
+        const d = ell(cx, cy + ch * 0.48, cw * 0.75, ch * 0.16) + 'M' + P(cx - cw * 0.5, cy - ch * 0.25) + 'Q' + P(cx, cy + ch * 1.15) + ' ' + P(cx + cw * 0.5, cy - ch * 0.25) + ell(cx, cy - ch * 0.25, cw * 0.5, ch * 0.13) + ell(cx + cw * 0.49, cy + ch * 0.01, cw * 0.14, ch * 0.19);
+        return [{ d, role: 'ink', w: 0.7, o: 0.72 }];
+      }
+      if (kind === 'sigil') {
+        let star = '';
+        for (let i = 0; i <= 8; i++) {
+          const idx = (i * 3) % 8, ang = idx * (2 * PI / 8) - PI / 2;
+          star += (i === 0 ? 'M' : 'L') + P(cx + Math.cos(ang) * r * 0.78, cy + Math.sin(ang) * r * 0.78);
+        }
+        const ir = r * (opt.inner || 0.32);
+        return [{ d: star, role: 'accent', w: 0.65, o: 1 }, { d: ell(cx, cy, ir, ir), role: 'hair', w: 0.55, o: 1 }];
+      }
+      if (kind === 'contours') {
+        const phase = between(R, 0, 2 * PI);
+        let d = '';
+        const N = cnt(5, 2);
+        for (let lv = 1; lv <= N; lv++) {
+          const base = r * 0.85 * lv / N;
+          for (let s = 0; s <= 48; s++) {
+            const th = s / 48 * 2 * PI;
+            const rr = base * (1 + 0.14 * Math.sin(3 * th + phase) + 0.08 * Math.cos(5 * th - phase));
+            d += (s === 0 ? 'M' : 'L') + P(cx + Math.cos(th) * rr, cy + Math.sin(th) * rr * 0.78);
+          }
+        }
+        return [{ d, role: 'accent', w: 0.55, o: 0.65 }];
+      }
+      const fa = intIn(R, 3, 5), fb = fa + 1, dl = between(R, 0.2, 1.4);
+      let d = '';
+      for (let i = 0; i <= 180; i++) {
+        const t = i / 180 * 2 * PI;
+        d += (i === 0 ? 'M' : 'L') + P(cx + Math.sin(fa * t + dl) * r * 0.65, cy + Math.sin(fb * t) * r * 0.65);
+      }
+      return [{ d, role: 'accent', w: 0.55, o: 0.65 }];
+    };
+
+    const parseTitle = (t) => {
+      const m = t.match(/^(.*\S)\s+(\(.*\)|\[.*\])$/);
+      return m ? { main: m[1], deck: m[2] } : { main: t, deck: '' };
+    };
+    const pairing = (w) => {
+      if (!w.rel) return { label: (w.chars || []).slice(0, 2).join(' • ').toUpperCase() || 'ARCHIVE WORK', platonic: true };
+      const platonic = w.rel.includes('&') && !w.rel.includes('/');
+      const sep = platonic ? '&' : '/', join = platonic ? ' & ' : ' / ';
+      const parts = w.rel.split(sep).map((s) => s.trim());
+      let label = parts.join(join).toUpperCase();
+      if (label.length > 28 && parts.length >= 2) label = parts.map((p) => { const ws = p.split(' '); return ws.length > 1 ? ws[ws.length - 1] : p; }).join(join).toUpperCase();
+      return { label, platonic };
+    };
+    const short = (x) => x >= 1000 ? Math.round(x / 1000) + 'k' : String(x);
+    const chap = (w) => w.ch + '/' + (w.exp || '?');
+
+    const SH = ['Sherlock Holmes'];
+    const works = [
+      { id: 1001, title: 'The Long Frost', author: 'fogandlamplight', fandoms: SH, rel: 'Sherlock Holmes/John Watson', rating: 'E', cat: 'MM', warn: 'none', words: 92000, ch: 24, exp: 24, done: true, series: 'Baker Street Winters', sid: 77, part: 1, kudos: 4100, hits: 52000, bm: 620, arch: 'orbit' },
+      { id: 1002, title: 'Thaw', author: 'fogandlamplight', fandoms: SH, rel: 'Sherlock Holmes/John Watson', rating: 'M', cat: 'MM', warn: 'none', words: 41000, ch: 12, exp: 12, done: true, series: 'Baker Street Winters', sid: 77, part: 2, kudos: 1300, hits: 24000, bm: 150, arch: 'sprig' },
+      { id: 1003, title: 'What the Snow Kept (or: five Christmases and one New Year)', author: 'fogandlamplight', fandoms: SH, rel: 'Sherlock Holmes/John Watson', rating: 'T', cat: 'MM', warn: 'none', words: 22000, ch: 8, exp: 0, done: false, series: 'Baker Street Winters', sid: 77, part: 3, kudos: 500, hits: 8000, bm: 40, arch: 'sprig', fivePlus: true },
+      { id: 1004, title: 'The Lamplight Cases', author: 'gaslitgrey', fandoms: SH, rel: 'Sherlock Holmes & John Watson', rating: 'T', cat: 'Gen', warn: 'none', words: 30000, ch: 6, exp: 6, done: true, series: 'The Lamplight Cases', sid: 91, part: 1, kudos: 700, hits: 12000, bm: 60, arch: 'contours' },
+      { id: 1005, title: 'The Hound, Revisited', author: 'gaslitgrey', fandoms: SH, rel: 'Sherlock Holmes & John Watson', rating: 'T', cat: 'Gen', warn: 'present', heavy: true, words: 30000, ch: 5, exp: 0, done: false, series: 'The Lamplight Cases', sid: 91, part: 2, kudos: 300, hits: 6000, bm: 20, arch: 'contours' },
+      { id: 1006, title: 'Whatever Remains', author: 'fogandlamplight', fandoms: SH, rel: 'Sherlock Holmes/John Watson', rating: 'E', cat: 'MM', warn: 'present', warningCount: 2, heavy: true, words: 64000, ch: 18, exp: 18, done: true, kudos: 9800, hits: 61000, bm: 1400, arch: 'kintsugi' },
+      { id: 1007, title: 'A Study in Small Hours', author: 'baskervilled', fandoms: SH, rel: 'Sherlock Holmes/John Watson', rating: 'G', cat: 'MM', warn: 'none', words: 3100, ch: 1, exp: 1, done: true, kudos: 400, hits: 5200, bm: 30, arch: 'sprig' },
+      { id: 1008, title: 'Salt & Starlight', author: 'wrenfield', fandoms: ['Original Work'], rel: '', chars: ['Mara', 'Ilse'], rating: 'M', cat: 'Gen', warn: 'undisclosed', words: 118000, ch: 15, exp: 30, done: false, kudos: 2200, hits: 30000, bm: 300, arch: 'sigil', progress: 0.4 },
+      { id: 1009, title: 'Letters Never Sent', author: 'marginalia', fandoms: ['Persuasion'], rel: 'Anne Elliot/Frederick Wentworth', rating: 'T', cat: 'FM', warn: 'none', words: 18000, ch: 9, exp: 9, done: true, kudos: 600, hits: 9000, bm: 70, arch: 'cup' },
+      { id: 1010, title: 'Moor and Mist', author: 'brontebird', fandoms: ['Jane Eyre'], rel: 'Jane Eyre/Edward Rochester', rating: 'M', cat: 'FM', warn: 'undisclosed', words: 71000, ch: 22, exp: 22, done: true, kudos: 1500, hits: 22000, bm: 240, arch: 'guilloche' },
+      { id: 1011, title: 'Netherfield, Again', author: 'longbournpost', fandoms: ['Pride and Prejudice'], rel: 'Elizabeth Bennet/Fitzwilliam Darcy', rating: 'G', cat: 'FM', warn: 'none', words: 54000, ch: 14, exp: 14, done: true, kudos: 3000, hits: 40000, bm: 380, arch: 'rings' },
+      { id: 1012, title: 'Two Rooms in Baker Street', author: 'thornfieldpress', fandoms: ['Sherlock Holmes', 'Jane Eyre'], rel: 'John Watson/Jane Eyre', rating: 'T', cat: 'Multi', warn: 'none', words: 26000, ch: 7, exp: 12, done: false, kudos: 250, hits: 4000, bm: 15, arch: 'cup' }
+    ];
+
+    const common = (w) => ({
+      rating: w.rating, cat: w.cat, warn: w.warn, status: w.done ? 'complete' : 'wip', wc: w.warningCount || 1,
+      meta: short(w.words) + ' · ' + chap(w)
+    });
+
+    // A · the cover card as it was before 13 Nov (frozen here; CoverCard now draws row C)
+    const seedOf = (t) => { let h = 7; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0; return h; };
+    const OLDHUE = { 'Original Work': 188, 'Persuasion': 335, 'Sherlock Holmes': 32, 'Jane Eyre': 262, 'Northanger Abbey': 290, 'Pride and Prejudice': 150, 'To the Lighthouse': 205 };
+    const a = works.map((w) => {
+      const f = w.fandoms[0], hue = ((OLDHUE[f] ?? seedOf(f) % 360) + (seedOf(w.title) % 25) - 12 + 360) % 360, layout = seedOf(w.title) % 3;
+      return {
+        title: w.title, author: w.author, fandom: f, rating: w.rating, category: w.cat,
+        warnings: w.warn, warningCount: w.warningCount || 1, status: w.done ? 'complete' : 'wip', meta: short(w.words) + ' · ' + chap(w),
+        art: 'linear-gradient(155deg, hsl(' + hue + ', 46%, 27%), hsl(' + ((hue + 22) % 360) + ', 50%, 41%))',
+        initial: w.title.charAt(0), v0: layout === 0, v1: layout === 1, v2: layout === 2
+      };
+    });
+
+    // B · Gemini as written
+    const g = works.map((w) => {
+      const Wd = 112, Ht = 158, inset = Wd * 0.062;
+      let spineR = 0;
+      if (w.words >= 25000 && w.words < 100000) spineR = 0.038;
+      else if (w.words >= 100000) spineR = 0.045 + Math.min(Math.max(Math.log10(w.words) - 5, 0), 1) * 0.025;
+      const spineX = Wd * spineR, L = Math.max(inset, spineX + Wd * 0.025);
+      const top = inset, bot = Ht - inset * 1.45, right = Wd - inset;
+      const f0 = w.fandoms[0], base = FAN[f0], cross = w.fandoms.length > 1;
+      const macro = rng(hash(f0));
+      const a1 = base + ((w.part || 1) - 1) * 18;
+      const delta = w.cat === 'Gen' ? 12 : w.cat === 'Multi' ? 120 : between(rng(hash('meso' + w.rel)), 28, 52);
+      const a2 = cross ? FAN[w.fandoms[1]] : a1 + delta;
+      const foil = (w.kudos + w.bm * 2.5) / Math.max(w.hits, 250) >= 0.095 || w.bm >= 500;
+      const stock = {
+        G: [0.905, 0.018, 75 + between(macro, -8, 8)],
+        T: [0.855, 0.022, base],
+        M: [0.265, 0.028, base],
+        E: [0.195, 0.032, w.heavy ? 22 : base]
+      }[w.rating];
+      const light = w.rating === 'G' || w.rating === 'T';
+      const paper = ok(stock[0], stock[1], stock[2]);
+      const second = ok(n(light ? stock[0] - 0.035 : stock[0] + 0.03), n(stock[1] + 0.005), cross ? a2 : stock[2]);
+      const ink = light ? ok(0.21, 0.015, stock[2]) : ok(0.91, 0.014, 78);
+      const muted = light ? ok(0.42, 0.018, stock[2]) : ok(0.68, 0.016, 78);
+      const hair = light ? ok(0.30, 0.015, stock[2], 0.32) : ok(0.82, 0.015, 78, 0.26);
+      const aL = light ? 0.46 : (foil ? 0.74 : 0.64), aC = foil ? 0.082 : 0.058;
+      const accent = ok(aL, aC, foil && w.arch === 'kintsugi' ? 72 : a1, 0.82);
+      const accent2 = ok(aL, n(aC * 0.85), a2, 0.65);
+      let grain = '';
+      for (let i = 0; i < 90; i++) {
+        const y = macro() * Ht, xs = macro() * Wd * 0.3, xe = xs + between(macro, 0.2, 0.7) * Wd;
+        grain += 'M' + P(xs, y) + 'H' + n(Math.min(xe, Wd));
+      }
+      const wipY = top + (bot - top) * 0.65;
+      let ticks = '';
+      const cnt = Math.min(Math.max(w.ch, 1), 40);
+      if (cnt > 1) for (let i = 0; i < Math.min(cnt, 25); i++) ticks += 'M' + P(L, bot - 12 - i * 4) + 'h' + ((i + 1) % 5 === 0 ? 4.5 : 2.2);
+      const prog = w.progress > 0.01 && w.progress < 0.99 ? 'M' + P(right - 3.5, top + (bot - top) * w.progress) + 'H' + n(right + 3.5) : NONE;
+      const fw = right - L, pr = pairing(w);
+      const parts = emblem(w.arch, L + fw * 0.5, Ht * 0.69, Math.min(fw, Ht) * 0.14, rng(hash('meso' + w.rel + (w.sid || 0)) ^ hash('micro' + w.id)), { platonic: pr.platonic, fivePlus: !!w.fivePlus, ox: right, oy: bot });
+      const roles = { accent, accent2, hair, ink };
+      const slot = (i) => { const p = parts[i]; return p && p.d ? { d: p.d, c: roles[p.role], w: p.w, o: p.o } : { d: NONE, c: hair, w: 0, o: 0 }; };
+      const t = parseTitle(w.title);
+      const upper = ['kintsugi', 'cup', 'sigil'].includes(w.arch);
+      return {
+        ...common(w),
+        bg: cross ? 'linear-gradient(135deg, ' + paper + ', ' + second + ')' : paper,
+        ink, muted, hair, accent,
+        grain,
+        spine: spineX > 0 ? 'M' + n(spineX) + ' 0V' + Ht : NONE,
+        spineHi: spineX > 0 ? 'M' + n(spineX + 1.5) + ' 0V' + Ht : NONE,
+        frame: w.done ? rect(L, top, right - L, bot - top) : 'M' + P(right, wipY) + 'V' + n(top) + 'H' + n(L) + 'V' + n(bot) + 'H' + n(right * 0.75),
+        frameDash: w.done ? NONE : 'M' + P(right, wipY) + 'V' + n(bot) + 'H' + n(right * 0.75),
+        inner: w.words >= 5000 ? rect(L + 3, top + 3, right - L - 6, bot - top - 6) : NONE,
+        ticks: ticks || NONE,
+        prog,
+        e1: slot(0), e2: slot(1), e3: slot(2),
+        padL: n(L + inset * 0.45), padT: n(L + inset * 0.65), padF: n(L + inset * 0.25),
+        fandom: f0.toUpperCase(),
+        hasPart: !!w.part, part: w.part ? '· PART ' + ROMAN[w.part] : '',
+        rc: w.rating + ' | ' + COMPACT[w.cat],
+        title: upper ? t.main.toUpperCase() : t.main,
+        tFont: w.arch === 'cup' ? "-apple-system, 'SF Pro Text', system-ui, sans-serif" : "'New York', 'Iowan Old Style', Georgia, serif",
+        track: w.arch === 'cup' ? 1.01 : w.arch === 'kintsugi' ? 0.56 : 0.11,
+        hasDeck: !!t.deck, deck: t.deck,
+        footer: pr.label + ' • ' + w.words.toLocaleString('en-US') + ' WORDS • ' + (w.done ? 'COMPLETE' : 'WIP')
+      };
+    });
+
+    // ---- Row C: the rules live in CoverArt. This board only feeds it and captions what it got. ----
+    // Tone tags -> motif family. Short allowlist of canonical AO3 tags; mixed or missing tone stays neutral.
+    const TONE = {
+      'Fluff': 'soft', 'Domestic Fluff': 'soft', 'Romance': 'soft', 'Humor': 'soft', 'Slice of Life': 'soft',
+      'Angst': 'angular', 'Drama': 'angular', 'Horror': 'angular', 'Thriller': 'angular',
+      'Case Fic': 'orderly', 'Mystery': 'orderly', 'Politics': 'orderly', 'Character Study': 'orderly',
+      'Fantasy': 'celestial', 'Magic': 'celestial', 'Science Fiction': 'celestial'
+    };
+    const toneOf = (tags) => {
+      const fams = [];
+      (tags || []).forEach((t) => { if (TONE[t] && !fams.includes(TONE[t])) fams.push(TONE[t]); });
+      return fams.length === 1 ? fams[0] : '';
+    };
+    // Year first posted and tone tags for the test works (both come with the AO3 listing)
+    const EXTRA = {
+      1001: [2019, ['Slow Burn', 'Angst']], 1002: [2020, ['Fluff']], 1003: [2021, ['Fluff', 'Humor']],
+      1004: [2016, ['Case Fic']], 1005: [2017, ['Case Fic', 'Mystery']], 1006: [2014, ['Angst', 'Drama']],
+      1007: [2023, ['Fluff', 'Domestic Fluff']], 1008: [2024, ['Fantasy', 'Magic']], 1009: [2018, ['Romance', 'Angst']],
+      1010: [2012, []], 1011: [2022, ['Humor', 'Romance']], 1012: [2025, ['Humor']],
+      2001: [2015, ['Mystery']], 2002: [2021, ['Fluff']], 2003: [2013, ['Character Study']], 2004: [2019, ['Drama']],
+      2005: [2026, ['Romance']], 2006: [2011, []], 2007: [2024, ['Humor']], 2008: [2025, ['Humor', 'Slice of Life']],
+      2009: [2017, ['Angst']], 2010: [2020, ['Case Fic', 'Fluff']], 2011: [2023, ['Angst']], 2012: [2012, ['Angst', 'Drama']],
+      1717: [1998, []]
+    };
+    const TIERS = ['Short', 'Novella', 'Novel', 'Epic'];
+    const cover = (w) => {
+      const year = EXTRA[w.id][0], tags = EXTRA[w.id][1], tone = w.sid ? '' : toneOf(tags);
+      const tier = w.words < 10000 ? 0 : w.words < 40000 ? 1 : w.words < 100000 ? 2 : 3;
+      return {
+        ...common(w),
+        work: { id: w.id, title: w.title, author: w.author, fandoms: w.fandoms, words: w.words, done: w.done, year, tags, sid: w.sid, part: w.part, kind: w.kind },
+        why: w.why || (w.sid ? 'Series look' : tone ? tone.charAt(0).toUpperCase() + tone.slice(1) : 'Neutral') + ' · ' + TIERS[tier] + ' · ' + year
+      };
+    };
+    const more = [
+      { id: 2001, title: 'Gaslight', author: 'baskervilled', rating: 'T', cat: 'Gen', warn: 'none', words: 4200, ch: 1, exp: 1, done: true },
+      { id: 2002, title: 'The Violin at Three in the Morning', author: 'quietharbor', rating: 'G', cat: 'MM', warn: 'none', words: 2600, ch: 1, exp: 1, done: true },
+      { id: 2003, title: 'Brother Mine', author: 'mycroftian', rating: 'T', cat: 'Gen', warn: 'none', words: 8900, ch: 1, exp: 1, done: true },
+      { id: 2004, title: 'A Scandal in Bohemia, Reconsidered', author: 'thewomanwrites', rating: 'M', cat: 'FM', warn: 'undisclosed', words: 15000, ch: 3, exp: 3, done: true },
+      { id: 2005, title: 'Seventeen Steps', author: 'fogandlamplight', rating: 'E', cat: 'MM', warn: 'none', words: 6100, ch: 1, exp: 1, done: true },
+      { id: 2006, title: 'Tobacco and Rain', author: 'gaslitgrey', rating: 'T', cat: 'MM', warn: 'none', words: 3300, ch: 1, exp: 1, done: true },
+      { id: 2007, title: 'The Adventure of the Empty Kettle', author: 'mrshudsonsays', rating: 'G', cat: 'Gen', warn: 'none', words: 1900, ch: 1, exp: 1, done: true },
+      { id: 2008, title: 'Mrs Hudson Knows', author: 'mrshudsonsays', rating: 'G', cat: 'Gen', warn: 'none', words: 2400, ch: 1, exp: 1, done: true },
+      { id: 2009, title: 'Persian Slipper', author: 'quietharbor', rating: 'M', cat: 'MM', warn: 'present', words: 11000, ch: 2, exp: 2, done: true },
+      { id: 2010, title: 'Cold Case, Warm Hands', author: 'baskervilled', rating: 'T', cat: 'MM', warn: 'none', words: 7400, ch: 1, exp: 1, done: true },
+      { id: 2011, title: 'Everything I Never Deduced', author: 'wrenfield', rating: 'M', cat: 'MM', warn: 'none', words: 22000, ch: 4, exp: 5, done: false },
+      { id: 2012, title: 'Reichenbach (a requiem)', author: 'brontebird', rating: 'T', cat: 'Gen', warn: 'present', words: 3800, ch: 1, exp: 1, done: true }
+    ].map((w) => ({ ...w, fandoms: SH }));
+    // One cover that no rule would ever produce: seventeen unit squares in the smallest square known.
+    const egg = {
+      id: 1717, title: 'Seventeen Squares', author: 'tiltedcorner', fandoms: ['Original Work'], rel: '',
+      chars: ['Seventeen Unit Squares'], rating: 'G', cat: 'Gen', warn: 'none', words: 4675, ch: 17, exp: 17,
+      done: true, kudos: 17, hits: 4675, bm: 17, kind: 'packing17', why: 'Easter egg · 17 unit squares in a square of side 4.6755…'
+    };
+    const p = works.concat(more).concat([egg]).map(cover);
+
+    return { a, g, p };
+  }
+}
+</script>
+</body>
+</html>

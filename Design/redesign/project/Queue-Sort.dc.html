@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Queue: sort new works</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; height: 44px; display: flex; align-items: center; justify-content: space-between">
+    <button aria-label="Close" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+    </button>
+    <div style="display: flex; flex-direction: column; align-items: center">
+      <h1 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">Sort New</h1>
+      <span style="font-size: 12px; line-height: 16px; color: #6C6C70">3 of 7 · Summer Reading</span>
+    </div>
+    <button style="height: 44px; padding: 0 16px; border: none; border-radius: 22px; font-family: inherit; font-size: 17px; color: #1C1C1E; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">Undo</button>
+  </div>
+  <div role="img" aria-label="2 of 7 sorted" style="position: absolute; left: 16px; right: 16px; top: 112px; display: flex; gap: 3px">
+    <sc-for list="{{segs}}" as="g" hint-placeholder-count="7">
+      <span style="flex: 1; height: 5px; border-radius: 3px; background: {{g.bg}}"></span>
+    </sc-for>
+  </div>
+
+  <div aria-hidden="true" style="position: absolute; left: 32px; right: 32px; top: 132px; height: 80px; border-radius: 24px; background: #FFFFFF; opacity: 0.7; box-shadow: 0 4px 14px rgba(0,0,0,0.06)"></div>
+  <article style="position: absolute; left: 16px; right: 16px; top: 142px; border-radius: 24px; background: #FFFFFF; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.05)">
+    <dc-import name="WorkRow" work="{{work}}" ledger="{{true}}" wide="{{true}}" accent="#821019" hint-size="100%,400px"></dc-import>
+    <p style="margin: 0; padding: 10px 16px 14px; border-top: 0.5px solid #E5E5EA; font-size: 13px; line-height: 18px; color: #6C6C70">About 37 min to read · found by Holmes casefic under 20k</p>
+  </article>
+
+  <p style="position: absolute; left: 0; right: 0; bottom: 150px; margin: 0; text-align: center; font-size: 13px; line-height: 18px; color: #6C6C70">Swipe left to drop, right to keep</p>
+  <div style="position: absolute; left: 0; right: 0; bottom: 40px; display: flex; justify-content: center; align-items: flex-start; gap: 36px">
+    <button aria-label="Drop from queue" style="border: none; background: transparent; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: inherit; font-size: 13px; font-weight: 600; color: #1C1C1E">
+      <span style="width: 64px; height: 64px; border-radius: 32px; background: #FFFFFF; color: #D70015; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+        <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+      </span>Drop
+    </button>
+    <button aria-label="Decide later" style="border: none; background: transparent; padding: 0; margin-top: 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: inherit; font-size: 13px; font-weight: 600; color: #1C1C1E">
+      <span style="width: 52px; height: 52px; border-radius: 26px; background: #FFFFFF; color: #1C1C1E; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM12 7.5V12l3 2"></path></svg>
+      </span>Later
+    </button>
+    <button aria-label="Keep in queue" style="border: none; background: transparent; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: inherit; font-size: 13px; font-weight: 600; color: #1C1C1E">
+      <span style="width: 64px; height: 64px; border-radius: 32px; background: #821019; color: #FFFFFF; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 20px rgba(130,16,25,0.25)">
+        <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
+      </span>Keep
+    </button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Idea: the step Safari left to you. Works added in bulk wait in New; this goes through them one at a time
+    // with everything AO3 says about each. Keep moves it to In line, Later leaves it in New, Drop removes it.
+    return {
+      segs: [1, 1, 2, 0, 0, 0, 0].map((s) => ({ bg: s === 1 ? '#821019' : s === 2 ? 'rgba(130,16,25,0.45)' : 'rgba(130,16,25,0.15)' })),
+      work: { title: 'The Adventure of the Unlit Lamp', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', language: 'English', words: '9,880', chapters: '1/1', comments: '36', kudos: '1,210', bookmarks: '152', hits: '11.4k', updated: 'Aug 2', expandable: true, expanded: true,
+        summary: 'A keeper vanishes from a locked lamp room on a calm night, and Holmes takes the night train north.',
+        tagLineAll: [{ label: 'Sherlock Holmes & John Watson', ship: true }, 'Casefic', 'Locked Room Mystery', 'Lighthouses', 'Victorian'], moreLines: [['Posted', '2 Aug 2026']] }
+    };
+  }
+}
+</script>
+</body>
+</html>

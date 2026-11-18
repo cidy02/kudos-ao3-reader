@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Search › AO3 results, swipe to queue</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 1500px; position: relative; overflow: hidden">
+  <dc-import name="Search-Results" state="queue" hint-size="390px,1500px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Draws Search-Results in its "queue" state (swipe to add, queued marks, toast), so the states stay one design.
+    return {};
+  }
+}
+</script>
+</body>
+</html>

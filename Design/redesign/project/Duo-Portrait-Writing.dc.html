@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Open portrait Writing</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+a{color:#821019}a:hover{color:#6E0000}
+</style>
+</helmet>
+<div style="width: 669px; height: 951px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <main style="position: absolute; left: 0; top: 0; width: 669px; padding: 84px 16px 0; box-sizing: border-box; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+    <dc-import name="Writing" embed="a" heading="{{false}}" hint-size="100%,800px"></dc-import>
+    <dc-import name="Writing" embed="b" hint-size="100%,800px"></dc-import>
+  </main>
+  <div style="position: absolute; left: 0; top: 0; z-index: 2">
+    <dc-import name="DuoTopBar" title="Writing" title-style="large" actions="{{top}}" accent="#821019" hint-size="669px,80px"></dc-import>
+  </div>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 130px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 0; right: 0; bottom: 24px; display: flex; justify-content: center">
+    <dc-import name="TabBar" selected="writing" accent="#821019" hint-size="358px,62px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":669,"height":951}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Open, portrait: the Writing tab in two columns under the standard bars, one scroll.
+    return { none: [], top: [{ label: 'New Work', d: 'M12 5v14M5 12h14' }, { label: 'More: Import a Work, Stats, Select, Sort', d: 'dots' }] };
+  }
+}
+</script>
+</body>
+</html>

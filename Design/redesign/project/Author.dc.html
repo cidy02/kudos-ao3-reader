@@ -70,7 +70,7 @@ button{cursor:pointer}
     <section aria-label="Latest" style="display: flex; flex-direction: column; gap: 10px">
       <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Latest</h2>
       <a href="iPhone-WorkDetail.dc.html" style="position: relative; overflow: hidden; border-radius: 22px; padding: 16px; display: flex; flex-direction: column; gap: 10px; color: #FFFFFF; text-decoration: none; background: linear-gradient(155deg, hsl(32, 46%, 27%), hsl(54, 50%, 41%))">
-        <span aria-hidden="true" style="position: absolute; right: -6px; top: -26px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 170px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.15)">T</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; bottom: 0; display: flex"><dc-import name="CoverArt" work="{{latestWork}}" width="358" height="230" radius="0" ink="0.4" hint-size="100%,189px"></dc-import></span>
         <span role="button" aria-label="Read The Hound, Revisited" style="position: absolute; right: 14px; top: 14px; z-index: 1; width: 40px; height: 40px; border-radius: 20px; background: #FFFFFF; color: {{accent}}; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="M7.5 4.5v15L20 12z" fill="currentColor"></path></svg></span>
         <span style="position: relative; display: flex; align-items: center; gap: 12px">
           <span style="flex-shrink: 0; padding: 7px; border-radius: 15px; background: rgba(0,0,0,0.22); box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.12); display: flex">
@@ -110,7 +110,7 @@ button{cursor:pointer}
         <sc-for list="{{series}}" as="r" hint-placeholder-count="2">
           <a href="Series.dc.html" style="color: #000000; text-decoration: none; border-radius: 16px; background: #F2F2F7; padding: 12px; display: flex; flex-direction: column; gap: 10px">
             <span aria-hidden="true" style="display: flex; gap: 4px">
-              <sc-for list="{{r.parts}}" as="c" hint-placeholder-count="4"><span style="position: relative; flex: 1; height: 54px; border-radius: 5px; background: {{c.art}}; color: rgba(255,255,255,0.92); font-size: 12px; font-weight: 700; display: flex; align-items: flex-end; padding: 0 0 3px 5px; box-sizing: border-box">{{c.n}}</span></sc-for>
+              <sc-for list="{{r.parts}}" as="c" hint-placeholder-count="4"><span style="position: relative; flex: 1; height: 54px; border-radius: 5px; overflow: hidden; color: rgba(255,255,255,0.92); font-size: 12px; font-weight: 700; display: flex; align-items: flex-end; padding: 0 0 3px 5px; box-sizing: border-box"><span style="position: absolute; left: 0; top: 0"><dc-import name="CoverArt" work="{{c.work}}" width="{{c.w}}" height="54" radius="5" hint-size="{{c.hint}}"></dc-import></span><span style="position: relative">{{c.n}}</span></span></sc-for>
             </span>
             <span style="display: flex; flex-direction: column; gap: 1px">
               <span style="font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: {{r.colour}}">{{r.fandom}}</span>
@@ -134,7 +134,7 @@ button{cursor:pointer}
           <a href="iPhone-WorkDetail.dc.html" style="width: 262px; flex-shrink: 0; box-sizing: border-box; color: #000000; text-decoration: none; border-radius: 16px; background: #F2F2F7; padding: 14px; display: flex; flex-direction: column; gap: 10px">
             <span style="font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 17px; line-height: 23px; font-style: italic; color: #1C1C1E">{{b.note}}</span>
             <span style="display: flex; align-items: center; gap: 10px; border-top: 0.5px solid #D1D1D6; padding-top: 10px">
-              <span aria-hidden="true" style="width: 28px; height: 38px; flex-shrink: 0; border-radius: 4px; background: {{b.art}}"></span>
+              <span aria-hidden="true" style="flex-shrink: 0; display: flex"><dc-import name="CoverArt" work="{{b.work}}" width="28" height="38" radius="4" hint-size="28px,38px"></dc-import></span>
               <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
                 <span style="display: flex; align-items: center; gap: 6px"><span style="flex: 1; min-width: 0; font-size: 15px; line-height: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{b.title}}</span><sc-if value="{{b.rec}}" hint-placeholder-val="{{false}}"><span style="padding: 0 7px; border-radius: 9px; background: rgba(130,16,25,0.1); color: {{accent}}; font-size: 11px; line-height: 18px; font-weight: 700">Rec</span></sc-if></span>
                 <span style="font-size: 12px; line-height: 16px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{b.meta}}</span>
@@ -154,13 +154,14 @@ button{cursor:pointer}
 <script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":1520}}'>
 class Component extends DCLogic {
   renderVals() {
-    const art = (h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
     const popular = [
       { title: 'The Baker Street Irregular', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', meta: '♥ 2,045 · 9,140 words' },
       { title: 'Watson’s Notebook', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'Gen', warnings: 'none', status: 'complete', meta: '♥ 1,990 · 15,200 words' },
       { title: 'Fog Season', author: 'fogandlamplight', fandom: 'Original Work', rating: 'M', category: 'FF', warnings: 'undisclosed', status: 'complete', meta: '♥ 1,320 · 48,000 words' }
     ];
     return {
+      // The latest-work card is that work's cover, enlarged and faded behind the words (no background letter, owner 2026-11-13).
+      latestWork: { title: 'The Hound, Revisited', author: 'fogandlamplight', fandom: 'Sherlock Holmes', status: 'wip', words: '30,600' },
       accent: this.props.accent ?? '#821019',
       popular,
       counts: [['42', 'Works', 'Fandom-Works.dc.html'], ['6', 'Series', 'Series.dc.html'], ['128', 'Bookmarks', 'AO3-Lists.dc.html'], ['9', 'Gifts', 'AO3-Lists.dc.html']].map(([n, label, href], i) => ({ n, label, href, sep: i ? '0.5px solid #D1D1D6' : 'none' })),
@@ -168,11 +169,15 @@ class Component extends DCLogic {
       series: [
         { title: 'The Lamplighter Papers', fandom: 'Original Work', colour: '#2F7A4A', meta: '4 parts · 61.2k words · complete', hues: [150, 172, 128, 196] },
         { title: 'Baker Street, Afterwards', fandom: 'Sherlock Holmes', colour: '#B07D12', meta: '3 parts · 40.1k words · Oct 23', hues: [32, 14, 48] }
-      ].map((r) => ({ ...r, parts: r.hues.map((h, i) => ({ art: art(h), n: i + 1 })) })),
+      ].map((r) => {
+        // One series, one look: CoverArt keeps motif, ground and angle and steps the hue per part
+        const cnt = r.hues.length, w = Math.floor((149 - 4 * (cnt - 1)) / cnt);
+        return { ...r, parts: r.hues.map((h, i) => ({ n: i + 1, w, hint: w + 'px,54px', work: { title: r.title + ', part ' + (i + 1), author: 'fogandlamplight', fandom: r.fandom, series: r.title, part: i + 1, status: r.meta.includes('complete') || i < cnt - 1 ? 'complete' : 'wip' } })) };
+      }),
       bookmarks: [
-        { title: 'The Sign of Five', meta: 'mrshudson221 · Sherlock Holmes · 18,400 words', note: '“The best Mary Morstan in the fandom.”', rec: true, art: art(40) },
-        { title: 'Gaslight Hours', meta: 'inkandthames · Sherlock Holmes · 52,000 words', note: '“Waiting on chapter 9 like it’s 1891.”', rec: false, art: art(20) },
-        { title: 'A Study in Lamplight', meta: 'wrenfield · Original Work · 7,300 words', note: '“Read it in one sitting, in the fog.”', rec: false, art: art(188) }
+        { title: 'The Sign of Five', meta: 'mrshudson221 · Sherlock Holmes · 18,400 words', note: '“The best Mary Morstan in the fandom.”', rec: true, work: { title: 'The Sign of Five', author: 'mrshudson221', fandom: 'Sherlock Holmes', words: 18400 } },
+        { title: 'Gaslight Hours', meta: 'inkandthames · Sherlock Holmes · 52,000 words', note: '“Waiting on chapter 9 like it’s 1891.”', rec: false, work: { title: 'Gaslight Hours', author: 'inkandthames', fandom: 'Sherlock Holmes', words: 52000, status: 'wip' } },
+        { title: 'A Study in Lamplight', meta: 'wrenfield · Original Work · 7,300 words', note: '“Read it in one sitting, in the fog.”', rec: false, work: { title: 'A Study in Lamplight', author: 'wrenfield', fandom: 'Original Work', words: 7300 } }
       ]
     };
   }

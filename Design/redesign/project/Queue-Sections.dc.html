@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Queue with sections</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 1680px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between; z-index: 2">
+    <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+    <div style="height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <button aria-label="Add works" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+      </button>
+      <button aria-label="Edit Queue, Queue Details, Delete Queue" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg>
+      </button>
+    </div>
+  </div>
+
+  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 16px">
+    <header style="display: flex; gap: 14px; align-items: center">
+      <dc-import name="CoverStack" tiles="{{tiles}}" colour="#C25E00" initial="S" kind="queue" width="96" height="96" hint-size="96px,96px"></dc-import>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: 0.35px">Summer Reading</h1>
+        <p style="margin: 0; font-size: 15px; line-height: 20px; color: #3A3A3C">Short, warm things for the train.</p>
+        <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70">15 works · about 14 h · 6 offline</p>
+      </div>
+    </header>
+    <button aria-label="Find more works: 3 sources, 9 new on AO3" style="height: 48px; padding: 0 10px 0 12px; border: none; border-radius: 12px; background: #EFEFF4; font-family: inherit; color: #000000; display: flex; align-items: center; gap: 8px; text-align: left">
+      <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6C6C70" stroke-width="2.2" stroke-linecap="round" style="flex-shrink: 0"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-size: 15px; line-height: 19px; font-weight: 600">Find More</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Holmes casefic under 20k + 4 more</span></span>
+      <span style="flex-shrink: 0; padding: 1px 7px; border-radius: 9px; background: #821019; color: #FFFFFF; font-size: 11px; line-height: 16px; font-weight: 700">9 new</span>
+      <svg aria-hidden="true" width="8" height="13" viewBox="0 0 8 14" fill="none" stroke="#8E8E93" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+    </button>
+
+    <a href="Queue-Sort.dc.html" aria-label="Sort 7 new works" style="min-height: 56px; padding: 8px 8px 8px 12px; box-sizing: border-box; border-radius: 14px; background: rgba(130,16,25,0.10); display: flex; align-items: center; gap: 10px; text-decoration: none; color: #000000">
+      <span aria-hidden="true" style="width: 28px; height: 28px; border-radius: 14px; background: #821019; color: #FFFFFF; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">7</span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+        <span style="font-size: 15px; line-height: 19px; font-weight: 600">New, not sorted yet</span>
+        <span style="font-size: 12px; line-height: 16px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Added today from Find More</span>
+      </span>
+      <span style="height: 36px; padding: 0 16px; border-radius: 18px; background: #821019; color: #FFFFFF; font-size: 15px; font-weight: 600; display: flex; align-items: center">Sort</span>
+    </a>
+
+    <dc-import name="ResumeCard" variant="next" work="{{next}}" accent="#821019" hint-size="358px,250px"></dc-import>
+
+    <section aria-label="In line" style="display: flex; flex-direction: column; gap: 2px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">In line</h2>
+      <div style="margin: 0 -16px">
+        <sc-for list="{{works}}" as="w" hint-placeholder-count="3">
+          <div style="display: flex; align-items: stretch">
+            <span style="width: 28px; flex-shrink: 0; padding-top: 14px; text-align: right; font-size: 15px; font-weight: 600; color: #6C6C70; font-variant-numeric: tabular-nums">{{w.n}}</span>
+            <div style="flex: 1; min-width: 0; margin-left: -6px">
+              <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" accent="#821019" hint-size="100%,100px"></dc-import>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <section aria-label="Waiting" style="display: flex; flex-direction: column; gap: 2px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Waiting</h2>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70">You are caught up. A work moves back to In line when a chapter posts.</p>
+      <div style="margin: 0 -16px">
+        <sc-for list="{{waiting}}" as="w" hint-placeholder-count="2">
+          <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" accent="#821019" hint-size="100%,100px"></dc-import>
+        </sc-for>
+      </div>
+    </section>
+
+    <button aria-expanded="false" style="height: 48px; padding: 0 12px; border: none; border-radius: 12px; background: #EFEFF4; font-family: inherit; color: #000000; display: flex; align-items: center; gap: 8px; text-align: left">
+      <span style="flex: 1; font-size: 17px; line-height: 22px; font-weight: 600">Finished</span>
+      <span style="font-size: 15px; color: #6C6C70">2 works</span>
+      <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+    </button>
+  </main>
+
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, #FFFFFF00, #FFFFFFF0 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; bottom: 28px">
+    <dc-import name="TabBar" selected="library" accent="#821019" hint-size="358px,62px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1680}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Idea: the queue page as four states instead of one list.
+    // New (bulk-added, not looked at yet) > In line (your order) > Waiting (WIPs you are caught up on) > Finished.
+    // A waiting work returns to In line with a "New chapter" mark; each row can say which search it came from.
+    const works = [
+      { title: 'Small Gods of the Kitchen', author: 'hearthwitch', fandom: 'Original Work', rating: 'G', category: 'Gen', warnings: 'none', status: 'wip', words: '14,900', chapters: '4/?', kudos: '455', updated: 'Offline', badge: 'New chapter' },
+      { title: 'The Baker Street Irregular', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', words: '9,140', chapters: '1/1', kudos: '2,045', updated: 'From Holmes casefic' },
+      { title: 'The Lighthouse Keepers', author: 'tidewright', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', words: '40,900', chapters: '10/10', kudos: '3,050', updated: 'From “lighthouse”' }
+    ];
+    const waiting = [
+      { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', words: '118,402', chapters: '15/30', kudos: '5,870', updated: 'Last posted Oct 21' },
+      { title: 'What the Lamp Saw', author: 'quietharbor', fandom: 'To the Lighthouse', rating: 'G', category: 'Gen', warnings: 'none', status: 'wip', words: '5,060', chapters: '2/5', kudos: '312', updated: 'Last posted Oct 20' }
+    ];
+    return {
+      works: works.map((w, i) => ({ ...w, n: i + 2, divider: i < works.length - 1 })),
+      waiting: waiting.map((w, i) => ({ ...w, divider: i < waiting.length - 1 })),
+      tiles: [{ title: 'Five Times Elizabeth Laughed', author: 'quietharbor', fandom: 'Pride and Prejudice', status: 'complete', words: '6,700' }, { title: 'Small Gods of the Kitchen', author: 'hearthwitch', fandom: 'Original Work', status: 'wip', words: '14,900' }],
+      next: { title: 'Five Times Elizabeth Laughed', author: 'quietharbor', fandom: 'Pride and Prejudice', hue: 150, rating: 'G', category: 'Multi', warnings: 'none', status: 'complete', meta: '6,700 words · about 25 min · offline', chapterName: 'One-shot', planned: 1, posted: 1, read: 0, chapterPct: 0, updated: 'Jun 2', pct: 0 }
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -75,7 +75,7 @@ class Component extends DCLogic {
     // Active WIPs: AO3 gets "complete:false revised_at:>now-60d", sorted by date updated.
     // Interval = (last chapter - posted) / (chapters - 1); late ratio = days since / max(14, interval).
     // w1 8 / 14 = 0.6 on schedule; w2 12 / 14 = 0.9 and 18 of 20 posted -> nearly done;
-    // w3 31 / 14 = 2.2 running late; w4 one chapter, so no interval yet. Today is Oct 28.
+    // w3 one chapter, so no interval yet; w4 31 / 14 = 2.2 slower than usual. Today is Oct 28.
     return {
       accent: this.props.accent ?? '#821019',
       total: '212',
@@ -84,7 +84,7 @@ class Component extends DCLogic {
       w1: { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', words: '118,402', chapters: '15/30', kudos: '5,870', hits: '71.4k', updated: 'Oct 20', summary: 'A lighthouse crew, a sea that keeps rising, and thirty nights to decide who stays.', signal: { label: 'On schedule', note: 'About every 9 days', tone: 'good' } },
       w2: { title: 'Tidewater Hours', author: 'pennantgrey', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'wip', words: '88,900', chapters: '18/20', kudos: '2,214', hits: '30.5k', updated: 'Oct 16', summary: 'The ferry runs on the tide table; so, it turns out, does falling in love.', signal: { label: 'Nearly done', note: '18 of 20 · about every 2 weeks', tone: 'good' } },
       w3: { title: 'First Light at Harrow Point', author: 'kittiwake', fandom: 'Original Work', rating: 'G', category: 'Gen', warnings: 'none', status: 'wip', words: '4,120', chapters: '1/?', kudos: '88', hits: '640', updated: 'Oct 24', summary: 'A new keeper arrives with a crate of books and no idea how to work the lamp.', signal: { label: 'Just started', note: '1 chapter · 4 days ago', tone: 'neutral' } },
-      w4: { title: 'The Quiet Year', author: 'lowtidehour', fandom: 'Original Work', rating: 'T', category: 'MM', warnings: 'none', status: 'wip', words: '41,300', chapters: '6/?', kudos: '1,033', hits: '12.8k', updated: 'Sep 27', summary: 'Two caretakers wintering on an island that the mainland has forgotten.', signal: { label: 'Running late', note: 'Usually every 12 days · 31 days since', tone: 'late' } }
+      w4: { title: 'The Quiet Year', author: 'lowtidehour', fandom: 'Original Work', rating: 'T', category: 'MM', warnings: 'none', status: 'wip', words: '41,300', chapters: '6/?', kudos: '1,033', hits: '12.8k', updated: 'Sep 27', summary: 'Two caretakers wintering on an island that the mainland has forgotten.', signal: { label: 'Slower than usual', note: 'Usually every 12 days · 31 days since', tone: 'late' } }
     };
   }
 }

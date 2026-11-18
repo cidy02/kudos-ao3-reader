@@ -66,7 +66,7 @@ class Component extends DCLogic {
     return {
       chartLabel: 'Hours read by month in 2026, highest in June with 25 hours and 11 finished works',
       months: hrs.map((h, i) => ({ fin: fin[i] * 4, rest: Math.max(0, h * 5 - fin[i] * 4), restBg: i > 9 ? 'transparent' : 'rgba(130,16,25,0.3)', l: L[i], fg: i === 9 ? '#821019' : '#6C6C70', weight: i === 9 ? 700 : 400 })),
-      facts: [['Longest streak', '23 days'], ['Most-read fandom', 'Persuasion'], ['Longest work finished', '118k words'], ['Favourite time', 'After 10 pm']].map(([label, value]) => ({ label, value }))
+      facts: [['Busiest month', 'June'], ['Most-read fandom', 'Persuasion'], ['Longest work finished', '118k words'], ['Favourite time', 'After 10 pm']].map(([label, value]) => ({ label, value }))
     };
   }
 }

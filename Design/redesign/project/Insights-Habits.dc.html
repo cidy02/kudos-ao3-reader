@@ -27,7 +27,7 @@ button{cursor:pointer}
         <sc-for list="{{hours}}" as="h" hint-placeholder-count="24"><span style="position: relative; flex: 1; height: {{h.h}}px; border-radius: 3px 3px 1px 1px; background: {{h.color}}"></span></sc-for>
       </div>
       <div aria-hidden="true" style="display: flex; justify-content: space-between; font-size: 11px; color: #6C6C70"><span>0:00</span><span>6:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
-      <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Late night, 1:00–5:00: 1 h 50 m this month</span>
+      <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Late night, 1:00–5:00: 1 h 47 m this month</span>
     </figure>
 
     <figure style="margin: 0; background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
@@ -165,25 +165,29 @@ button{cursor:pointer}
 class Component extends DCLogic {
   renderVals() {
     const accent = this.props.accent ?? '#821019';
-    // Minutes read at each hour of the day over the month.
-    const mins = [42, 30, 26, 14, 6, 0, 0, 4, 8, 6, 4, 6, 18, 12, 6, 8, 10, 14, 26, 40, 58, 92, 104, 70];
+    // Minutes read at each hour of the day over the month. They sum to 850 = 14 h 10 m, the month's
+    // Time reading; 1:00–5:00 holds 107 of them (13%).
+    const mins = [59, 42, 37, 20, 8, 0, 0, 6, 11, 8, 6, 8, 25, 17, 8, 11, 14, 20, 37, 56, 82, 130, 146, 99];
     const max = Math.max(...mins);
     const barW = (326 - 23 * 3) / 24;
     // Words per day (thousands), 1–27 October; 28–31 are still to come.
     const k = [6.2, 9.8, 0, 12.4, 4.1, 7.7, 10.9, 15.2, 0, 3.4, 8.8, 5.1, 9.6, 11.2, 14.7, 6.0, 31.4, 8.2, 7.4, 12.9, 0, 0, 5.6, 9.1, 4.9, 0, 8.0];
-    const shade = (v) => (v === 0 ? '#F2F2F7' : v < 5 ? '#EBC2C2' : v < 10 ? '#D67F7F' : v < 15 ? '#B53B3B' : '#7E0F0F');
+    // Four steps at the quartiles of the reading days (6.1k, 8.5k, 11.1k), as the rule says; this
+    // month stands in for the last twelve.
+    const shade = (v) => (v === 0 ? '#F2F2F7' : v < 6.1 ? '#EBC2C2' : v < 8.5 ? '#D67F7F' : v < 11.1 ? '#B53B3B' : '#7E0F0F');
     const cal = [];
     for (let i = 0; i < 3; i++) cal.push({ label: '', bg: 'transparent', border: 'none', fg: 'transparent' });
     for (let d = 1; d <= 31; d++) {
       if (d <= 27) {
         const v = k[d - 1];
-        cal.push({ label: String(d), bg: shade(v), border: 'none', fg: v >= 10 ? '#FFFFFF' : '#6C6C70' });
+        cal.push({ label: String(d), bg: shade(v), border: 'none', fg: v >= 8.5 ? '#FFFFFF' : '#6C6C70' });
       } else {
         cal.push({ label: String(d), bg: 'transparent', border: '1px dashed #D1D1D6', fg: '#C7C7CC' });
       }
     }
     while (cal.length % 7) cal.push({ label: '', bg: 'transparent', border: 'none', fg: 'transparent' });
-    const sit = [['< 10 m', 6], ['10–30 m', 15], ['30–60 m', 9], ['1–2 h', 4], ['2 h +', 1]];
+    // 35 sittings that can sum to 14 h 10 m with a 24-minute median (the 18th falls in 10–30 m).
+    const sit = [['< 10 m', 9], ['10–30 m', 13], ['30–60 m', 12], ['1–2 h', 1], ['2 h +', 0]];
     const tint = (hex, a) => hex + ['00', '4D', '99', 'FF'][a];
     const lanes = [
       ['Persuasion', '#9C2F6B', [0, 0, 0, 1, 2, 3, 3, 2, 2, 3]],
@@ -199,10 +203,10 @@ class Component extends DCLogic {
       lateWidth: Math.round(4 * (barW + 3) + 1),
       hours: mins.map((m) => ({ h: m ? Math.max(4, Math.round((m / max) * 86)) : 3, color: m ? accent : '#E5E5EA' })),
       cal,
-      sittings: sit.map(([label, n]) => ({ label, n, h: Math.round((n / 15) * 64) + 4 })),
+      sittings: sit.map(([label, n]) => ({ label, n, h: Math.round((n / 13) * 64) + 4 })),
       sitStats: [
         { label: 'Typical sitting', value: '24 min' },
-        { label: 'Chapters each', value: '1.8' },
+        { label: 'Chapters each, avg', value: '1.8' },
         { label: 'End on a chapter', value: '62%' }
       ],
       rereads: [

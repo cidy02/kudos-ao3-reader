@@ -18,8 +18,8 @@ a{color:#821019}a:hover{color:#6E0000}
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 420px; background: linear-gradient(to bottom, rgba(37,119,132,0.20), rgba(37,119,132,0.12) 35%, rgba(37,119,132,0.05) 65%, rgba(37,119,132,0))"></div>
 
   <main style="position: absolute; left: 0; top: 0; width: 669px; padding: 88px 16px 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px">
-  <section aria-label="The Cartographer’s Daughter" style="display: flex; gap: 16px">
-    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+  <section aria-label="The Cartographer’s Daughter" style="display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; flex-direction: column; gap: 12px">
       <div style="display: flex; flex-direction: column; gap: 5px">
         <a href="Fandom-Works.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: hsl(188, 56%, 33%)">Original Work</a>
         <span aria-hidden="true" style="width: 16px; height: 2px; border-radius: 1px; background: hsl(188, 56%, 33%)"></span>
@@ -29,6 +29,9 @@ a{color:#821019}a:hover{color:#6E0000}
         <a href="Author.dc.html" style="align-self: flex-start; font-size: 17px; line-height: 22px; text-decoration: none">inkwell_moth</a>
       </div>
       <dc-import name="Symbols" variant="inline" rating="T" category="FM" warnings="none" status="wip" size="18" hint-size="280px,18px"></dc-import>
+    </div>
+    <div style="display: flex; gap: 16px; align-items: flex-start">
+    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px">
       <dl style="margin: 0; background: #F2F2F7; border-radius: 16px; padding: 12px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 12px">
       <sc-for list="{{stats}}" as="s" hint-placeholder-count="9">
         <div style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-right: {{s.border}}">
@@ -37,17 +40,18 @@ a{color:#821019}a:hover{color:#6E0000}
         </div>
       </sc-for>
     </dl>
-    </div>
-    <div style="width: 320px; flex-shrink: 0">
-      <dc-import name="ResumeCard" variant="detail" width="320" accent="#821019" hint-size="320px,330px"></dc-import>
-    </div>
-  </section>
-    <section aria-label="About this work" style="display: flex; flex-direction: column; gap: 20px">
       <section aria-label="Summary" style="display: flex; flex-direction: column; gap: 6px">
       <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Summary</h2>
       <p style="margin: 0; font-size: 17px; line-height: 22px">Elinor Vane inherits her mother’s instruments and none of her maps. To finish the last chart she must walk the coast road nobody has drawn in forty years, with the one person who remembers why.</p>
       <a href="#notes" style="align-self: flex-start; font-size: 17px; line-height: 22px; text-decoration: none">Notes</a>
     </section>
+    </div>
+    <div style="width: 352px; flex-shrink: 0">
+      <dc-import name="ResumeCard" variant="detail" width="352" accent="#821019" hint-size="352px,330px"></dc-import>
+    </div>
+    </div>
+  </section>
+    <section aria-label="About this work" style="display: flex; flex-direction: column; gap: 20px">
       <section aria-label="Tags" style="display: flex; flex-direction: column; gap: 8px">
       <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Tags</h2>
       <sc-for list="{{tagGroups}}" as="g" hint-placeholder-count="3">

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Queue › Sources</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 940px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Sources" mode="sheet" confirm="Done" height="940" sections="{{sections}}" context="{{context}}" hint-size="390px,940px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":940}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Idea: Find More grows from one saved search to several sources of different kinds.
+    // Each is a listing pinned to the queue; the badge counts works posted since your last visit.
+    return {
+      "context": {
+        "kicker": "Queue · 8 works",
+        "kickerColour": "#C25E00",
+        "title": "Summer Reading",
+        "meta": "About 9 h 40 min · 2 finished · 6 offline",
+        "collection": {"name": "Summer Reading", "colour": "#C25E00"}
+      },
+      "sections": [
+        {
+          "header": "Searches",
+          "rows": [
+            {
+              "label": "Holmes casefic under 20k",
+              "kind": "nav",
+              "sub": "Sherlock Holmes · Gen · under 20,000 words",
+              "badge": "3 new",
+              "tile": "#8E8E93",
+              "icon": "M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.5 15.5l5 5"
+            },
+            {
+              "label": "Lighthouses (any fandom)",
+              "kind": "nav",
+              "sub": "Freeform tag · English",
+              "tile": "#8E8E93",
+              "icon": "M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.5 15.5l5 5"
+            }
+          ]
+        },
+        {
+          "header": "Authors and series",
+          "rows": [
+            {
+              "label": "fogandlamplight",
+              "kind": "nav",
+              "sub": "Author · 14 works",
+              "badge": "1 new",
+              "tile": "#8E8E93",
+              "icon": "M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4.5 20c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5"
+            },
+            {
+              "label": "The Northern Lights",
+              "kind": "nav",
+              "sub": "Series · 2 parts, not finished",
+              "tile": "#8E8E93",
+              "icon": "M6 8h12v12H6zM8 5h8"
+            }
+          ]
+        },
+        {
+          "header": "Tags",
+          "rows": [
+            {
+              "label": "Sherlock Holmes & John Watson",
+              "kind": "nav",
+              "sub": "Relationship · newest first",
+              "badge": "5 new",
+              "tile": "#8E8E93",
+              "icon": "M3.5 12.5V4.5h8l9 9-8 8zM8 8.5h.01"
+            }
+          ]
+        },
+        {
+          "rows": [
+            {
+              "label": "Add a Source…",
+              "kind": "button"
+            }
+          ]
+        },
+        {
+          "header": "New works",
+          "footer": "Kudos checks a source when you open this queue. Nothing is fetched in the background.",
+          "rows": [
+            {
+              "label": "From sources",
+              "kind": "segments",
+              "options": [
+                "Show count",
+                "Add to New"
+              ],
+              "selected": 0
+            }
+          ]
+        }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

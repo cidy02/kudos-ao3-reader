@@ -13,7 +13,8 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 1560px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: {{rootW}}; height: {{rootH}}; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <sc-if value="{{chrome}}" hint-placeholder-val="{{true}}">
   <div style="position: absolute; right: 16px; top: 54px; display: flex; gap: 10px; z-index: 2">
     <div style="height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
       <button aria-label="New: Collection, Queue, Import EPUB" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
@@ -25,10 +26,12 @@ button{cursor:pointer}
     </div>
     <button style="height: 44px; padding: 0 18px; border: none; border-radius: 22px; font-family: inherit; font-size: 17px; color: #1C1C1E; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">Select</button>
   </div>
+  </sc-if>
 
-  <main style="padding: 56px 16px 0; display: flex; flex-direction: column; gap: 26px">
+  <main style="padding: {{mainPad}}; display: flex; flex-direction: column; gap: 26px">
+    <sc-if value="{{partA}}" hint-placeholder-val="{{true}}">
     <header style="display: flex; flex-direction: column; gap: 2px">
-      <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Library</h1>
+      <sc-if value="{{heading}}" hint-placeholder-val="{{true}}"><h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Library</h1></sc-if>
       <a href="Shelf-List.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 15px; line-height: 20px; color: #6C6C70; display: flex; align-items: center; gap: 4px"><span><span style="font-weight: 600; color: #3A3A3C">214 works</span> · 98 downloaded · 2.1 GB</span><svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="#AEAEB2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
     </header>
 
@@ -55,7 +58,7 @@ button{cursor:pointer}
       <div style="display: flex; gap: 16px; margin-right: -16px; overflow: hidden">
         <sc-for list="{{collections}}" as="c" hint-placeholder-count="3">
           <a href="Collection.dc.html" style="width: 150px; flex-shrink: 0; text-decoration: none; color: #000000; display: flex; flex-direction: column; gap: 8px">
-            <dc-import name="CoverStack" tiles="{{c.tiles}}" colour="{{c.colour}}" initial="{{c.initial}}" kind="collection" width="150" height="140" hint-size="150px,140px"></dc-import>
+            <dc-import name="CoverStack" tiles="{{c.tiles}}" colour="{{c.colour}}" initial="{{c.initial}}" collection-name="{{c.name}}" kind="collection" width="150" height="140" hint-size="150px,140px"></dc-import>
             <span style="display: flex; flex-direction: column; gap: 1px">
               <span style="font-size: 15px; line-height: 20px; font-weight: 600; display: flex; align-items: center; gap: 5px; white-space: nowrap">{{c.name}}<sc-if value="{{c.pinned}}" hint-placeholder-val="{{false}}"><svg aria-label="Pinned to Home" width="12" height="12" viewBox="0 0 24 24" fill="#8E8E93"><path d="M15 3l6 6-3 1-4 4 .5 4.5L13 20l-4-4-5 5-1-1 5-5-4-4 1.5-1.5L10 10l4-4z"></path></svg></sc-if></span>
               <span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{c.detail}}</span>
@@ -70,6 +73,8 @@ button{cursor:pointer}
       </div>
     </section>
 
+    </sc-if>
+    <sc-if value="{{partB}}" hint-placeholder-val="{{true}}">
     <section aria-label="Downloaded" style="display: flex; flex-direction: column; gap: 10px">
       <div style="display: flex; align-items: baseline; gap: 8px">
         <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Downloaded</h2>
@@ -117,18 +122,26 @@ button{cursor:pointer}
         </sc-for>
       </section>
     </sc-if>
+    </sc-if>
   </main>
 
+  <sc-if value="{{chrome}}" hint-placeholder-val="{{true}}">
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
   <div style="position: absolute; left: 16px; bottom: 28px">
     <dc-import name="TabBar" selected="library" account="{{account}}" accent="#821019" hint-size="358px,62px"></dc-import>
   </div>
+  </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"account":{"editor":"enum","options":["avatar","tab"],"default":"avatar"},"$preview":{"width":390,"height":1560}}'>
+<script type="text/x-dc" data-dc-script data-props='{"embed":{"editor":"enum","options":["none","a","b","all"],"default":"none"},"heading":{"editor":"boolean","default":true},"account":{"editor":"enum","options":["avatar","tab"],"default":"avatar"},"$preview":{"width":390,"height":1560}}'>
 class Component extends DCLogic {
   renderVals() {
     const account = this.props.account ?? 'avatar';
+    // embed: "none" draws the iPhone screen. "a", "b" and "all" draw only the content, fluid, with no
+    // bars of its own, so the iPhone Duo boards can mount the same sections in their panes
+    // ("a" = the first sections, "b" = the rest). heading={false} drops the large title.
+    const embed = this.props.embed ?? 'none';
+    const E = { rootW: embed === 'none' ? '390px' : '100%', rootH: embed === 'none' ? '1560px' : 'auto', mainPad: embed === 'none' ? '56px 16px 0' : '0', chrome: embed === 'none', partA: embed !== 'b', partB: embed !== 'a', heading: this.props.heading ?? true };
     const art = (h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
     const rgba = (hex, a) => { const x = hex.replace('#', ''); return 'rgba(' + parseInt(x.slice(0, 2), 16) + ',' + parseInt(x.slice(2, 4), 16) + ',' + parseInt(x.slice(4, 6), 16) + ',' + a + ')'; };
     const rows = (list) => list.map(([label, d, count, href], i) => ({ label, d, count, href, sep: i < list.length - 1 ? '0.5px solid #E5E5EA' : 'none' }));
@@ -153,11 +166,17 @@ class Component extends DCLogic {
       queue('Re-reads', '5 works · about 4 h 5 min · all offline', '#1E63C8', [262, 290, 196, 330], [100, 100, 100, 30, 0], '3 of 5 finished, 1 in progress'),
       queue('For the Train', '3 works · about 1 h 50 min', '#2F8F3A', [32, 188, 340, 150], [0, 0, 0], 'none started')
     ].map((q, i) => ({ ...q, sep: i ? '0.5px solid #E5E5EA' : 'none' }));
+    // Behind each collection's own card: its first two works, in its order
+    const FIRST = {
+      'Austen Variations': [{ title: 'A Map of Small Hours', author: 'quietharbor', fandom: 'Pride and Prejudice', status: 'complete', words: '32,050' }, { title: 'Northanger Nights', author: 'gothicnovelist', fandom: 'Northanger Abbey', status: 'wip', words: '47,300' }],
+      'Baker Street': [{ title: 'The Hound, Revisited', author: 'fogandlamplight', fandom: 'Sherlock Holmes', status: 'wip', words: '30,600' }, { title: 'Watson’s Notebook', author: 'fogandlamplight', fandom: 'Sherlock Holmes', status: 'complete', words: '15,200' }],
+      'Comfort Reads': [{ title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', status: 'complete', words: '21,880' }, { title: 'The Lighthouse Keepers', author: 'tidewright', fandom: 'Original Work', status: 'complete', words: '40,900' }]
+    };
     const collections = [
       ['Austen Variations', '12 works', '#9C2F6B', [150, 335, 290], true],
       ['Baker Street', '9 works', '#B8892A', [32, 44, 188], false],
       ['Comfort Reads', '15 works', '#2F7A4A', [262, 188, 150], false]
-    ].map(([name, detail, colour, hues, pinned]) => ({ name, detail, colour, pinned, initial: name.charAt(0), tiles: hues.map(art) }));
+    ].map(([name, detail, colour, hues, pinned]) => ({ name, detail, colour, pinned, initial: name.charAt(0), tiles: FIRST[name] }));
     const ao3 = rows([
       ['Marked for Later', 'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM12 8v4l3 2', '31', ''],
       ['Bookmarks', 'M7 4h10v16l-5-4-5 4z', '142', ''],
@@ -195,7 +214,7 @@ class Component extends DCLogic {
       { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', meta: 'Ch 12 of 30 · 40%', progress: 40, badge: '+3' },
       { title: 'Watson’s Notebook', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'Gen', warnings: 'none', status: 'complete', meta: 'Read Aug 2' }
     ];
-    return { account, isAvatar: account === 'avatar', tiles, queues, collections, ao3, downloaded, favourites };
+    return { ...E, account, isAvatar: account === 'avatar', tiles, queues, collections, ao3, downloaded, favourites };
   }
 }
 </script>

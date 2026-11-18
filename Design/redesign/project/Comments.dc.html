@@ -27,9 +27,7 @@ button{cursor:pointer}
 
   <main style="position: relative; padding: 106px 0 0; display: flex; flex-direction: column">
     <a href="iPhone-WorkDetail.dc.html" aria-label="The Cartographer’s Daughter by inkwell_moth, Chapter 7 of 20" style="margin: 0 16px; padding: 4px 0; display: flex; align-items: center; gap: 12px; text-decoration: none; color: #000000">
-      <span aria-hidden="true" style="position: relative; width: 40px; height: 56px; flex-shrink: 0; border-radius: 6px; overflow: hidden; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%)); box-shadow: 0 2px 6px rgba(0,0,0,0.18)">
-        <span style="position: absolute; left: -3px; bottom: -12px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 44px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.18)">T</span>
-      </span>
+      <span aria-hidden="true" style="flex-shrink: 0; display: flex"><dc-import name="CoverArt" work="{{work}}" width="40" height="56" radius="6" shadow="0 2px 6px rgba(0,0,0,0.18)" hint-size="40px,56px"></dc-import></span>
       <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
         <span style="font-size: 17px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">The Cartographer’s Daughter</span>
         <span style="font-size: 13px; line-height: 18px; color: #6C6C70">inkwell_moth · Chapter 7 of 20</span>
@@ -90,6 +88,7 @@ class Component extends DCLogic {
     ];
     return {
       accent,
+      work: { title: 'The Cartographer’s Daughter', author: 'inkwell_moth', fandom: 'Original Work', status: 'wip' },
       thread: list
     };
   }

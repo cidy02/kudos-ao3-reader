@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chapter bars edge cases</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#821019}a:hover{color:#6E0000}
+</style>
+</helmet>
+<div style="width: 1290px; height: 800px; box-sizing: border-box; padding: 34px 40px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 20px">
+  <header style="display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 26px; font-weight: 700">Chapter bars: the edge cases</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 21px; color: #3A3A3C; max-width: 1080px">Decided 2026-11-12. One rule, drawn by the ChapterBars component, so the Resume card, Work Detail and the Home rows cannot disagree. Every drawing below is the live component with different numbers.</p>
+  </header>
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px">
+    <sc-for list="{{cases}}" as="c" hint-placeholder-count="8">
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+        <div style="height: 104px; box-sizing: border-box; padding: 14px; border-radius: 16px; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%)); display: flex; flex-direction: column; justify-content: flex-end; gap: 6px">
+          <dc-import name="ChapterBars" planned="{{c.planned}}" posted="{{c.posted}}" read="{{c.read}}" chapter-pct="{{c.chapterPct}}" pct="{{c.pct}}" lengths="{{c.lengths}}" seed="{{c.seed}}" fit="37" note="{{true}}" tone="cover" height="44" hint-size="100%,44px"></dc-import>
+          <span style="font-size: 12px; line-height: 16px; color: rgba(255,255,255,0.85)">{{c.under}}</span>
+        </div>
+        <figcaption style="font-size: 13px; line-height: 18px"><b>{{c.title}}</b> {{c.text}}</figcaption>
+      </figure>
+    </sc-for>
+  </div>
+  <div style="display: flex; align-items: flex-start; gap: 36px">
+    <section style="width: 430px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font-size: 17px; font-weight: 700">Home rows use the same rule, smaller</h2>
+      <div style="border-top: 0.5px solid #D1D1D6">
+        <sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
+          <div style="display: flex; align-items: center; gap: 14px; padding: 9px 0; border-bottom: 0.5px solid #E5E5EA">
+            <div style="width: 200px; flex-shrink: 0"><dc-import name="ChapterBars" planned="{{r.planned}}" posted="{{r.posted}}" fresh="{{r.fresh}}" seed="{{r.seed}}" tone="paper" height="16" hint-size="200px,16px"></dc-import></div>
+            <span style="flex: 1; font-size: 13px; line-height: 18px; color: #3A3A3C">{{r.text}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70">Grey is posted before, the app colour is new since you last opened it.</p>
+    </section>
+    <section style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0; font-size: 17px; font-weight: 700">Also settled</h2>
+      <div style="border-top: 0.5px solid #D1D1D6">
+        <sc-for list="{{also}}" as="m" hint-placeholder-count="5">
+          <div style="display: flex; gap: 10px; padding: 7px 0; border-bottom: 0.5px solid #E5E5EA; font-size: 13px; line-height: 18px">
+            <span style="width: 150px; flex-shrink: 0; font-weight: 600">{{m.what}}</span>
+            <span style="flex: 1; color: #3A3A3C">{{m.where}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1290,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const T = 'The Cartographer’s Daughter';
+    return {
+      cases: [
+        { title: 'The usual case.', planned: 20, posted: 12, read: 6, chapterPct: 22, under: 'Ch 7 · 12 of 20 posted', text: 'One bar per chapter, height from its length. White is read, faint is posted, dashed is planned.' },
+        { title: 'Total unknown (12/?).', planned: null, posted: 12, read: 6, chapterPct: 22, under: 'Ch 7 · 12 posted', text: 'Posted bars, then three fading dots. Never a dashed bar: one would promise exactly one more chapter.' },
+        { title: 'One chapter (1/1).', planned: 1, posted: 1, read: 0, chapterPct: 38, pct: 38, under: 'One chapter · 38% read', text: 'No bars. A plain track shows how far through you are, and the button reads Resume, not Resume Chapter 1.' },
+        { title: 'A few chapters (3 of 4).', planned: 4, posted: 3, read: 1, chapterPct: 60, under: 'Ch 2 · 3 of 4 posted', text: 'Bars stop at 27 pt wide and stay left, so four chapters do not stretch across the card.' },
+        { title: 'A long work (143 of 200).', planned: 200, posted: 143, read: 61, chapterPct: 40, under: 'Ch 62 · 143 of 200 posted', text: 'More chapters than fit at 4 pt each: equal groups per bar, and a note says how many. The group you are in is part filled.' },
+        { title: 'Long and unknown (312/?).', planned: null, posted: 312, read: 100, chapterPct: 0, under: 'Ch 101 · 312 posted', text: 'Both rules together: grouped bars, then the dots.' },
+        { title: 'Not downloaded.', planned: 20, posted: 12, read: 0, chapterPct: 0, lengths: 'unknown', under: '12 of 20 posted', text: 'AO3 lists do not give chapter lengths. Until the work is downloaded every bar is one height.' },
+        { title: 'Finished.', planned: 20, posted: 20, read: 20, chapterPct: 0, under: '20 chapters · finished', text: 'All white. A complete work has no dashed bars, read or not.' }
+      ].map((c) => ({ seed: T, ...c })),
+      rows: [
+        { planned: 30, posted: 15, fresh: 3, seed: 'Salt & Starlight', text: '15 of 30, three new' },
+        { planned: null, posted: 5, fresh: 1, seed: 'The Hound, Revisited', text: '5/?, one new: dots, not a dashed bar' },
+        { planned: 1, posted: 1, fresh: 1, seed: 'Watson Abroad', text: 'A new one-chapter work: a short track' },
+        { planned: null, posted: 214, fresh: 2, seed: 'Long Road', text: '214/?, two new: grouped, the newest group part filled' }
+      ],
+      also: [
+        ['Where it fits', 'Bars are never thinner than 4 pt on the card (3 pt in a row). The count that fits comes from the width, so wider panes on iPhone Duo group later than iPhone does.'],
+        ['Chapters removed', 'If the author deletes chapters, your read count is capped at what is posted. The bars never show more read than exists.'],
+        ['Words under the bars', '“12 of 20 posted”, “12 posted” when the total is unknown, “One chapter” for 1/1. The contents link reads “12 of ?”, as AO3 writes it.'],
+        ['VoiceOver', 'The bars are one image with a spoken summary: “Chapters: 6 read, 12 posted, total not set by the author.” No bar is a separate element.'],
+        ['Large text', 'Bar height does not scale with Dynamic Type; the line under the bars wraps instead.']
+      ].map(([what, where]) => ({ what, where }))
+    };
+  }
+}
+</script>
+</body>
+</html>

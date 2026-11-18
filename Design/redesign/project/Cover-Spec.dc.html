@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Generated covers · build spec</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.cs-h2{margin:0;font-size:17px;line-height:22px;font-weight:700}
+.cs-p{margin:0;font-size:13px;line-height:19px;color:#3A3A3C}
+.cs-li{margin:0;padding-left:16px;font-size:13px;line-height:19px;color:#3A3A3C}
+.cs-t{display:grid;gap:0;border:1px solid #D1D1D6;border-radius:10px;overflow:hidden}
+.cs-t>span{padding:6px 10px;font-size:12px;line-height:17px;color:#1C1C1E;border-top:1px solid #E5E5EA}
+.cs-t>span.h{border-top:none;background:#F2F2F7;font-weight:700}
+.cs-code{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px}
+</style>
+</helmet>
+<div style="width: 1240px; min-height: 2700px; box-sizing: border-box; padding: 48px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 28px">
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700">Generated covers · build spec for Claude Code</h1>
+    <p class="cs-p" style="max-width: 1000px; font-size: 15px; line-height: 21px">Build one deterministic cover renderer in Swift and use it everywhere the app draws a work’s cover. The reference implementation is the <span class="cs-code">CoverArt</span> component on the System page: every board on this canvas mounts it, so what the canvas shows is what ships. Row C of the test shelf beside this board previews the rules work by work; rows A and B are comparisons only. This board is the behaviour.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 40px; align-items: start">
+
+    <div style="display: flex; flex-direction: column; gap: 28px">
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h2 class="cs-h2">1 · What a cover is</h2>
+        <ul style="margin: 0; padding: 0; list-style: disc inside; display: flex; flex-direction: column; gap: 4px">
+          <li class="cs-li">A label on the reader’s own shelf, drawn by Kudos. It is not the author’s art and must never look like AO3’s or the author’s.</li>
+          <li class="cs-li">Same work, same cover, on every device and after every launch.</li>
+          <li class="cs-li">No extra requests to AO3. Every input is in data the app already loads.</li>
+          <li class="cs-li">An image the author embedded in the work wins over a generated cover (section 9).</li>
+        </ul>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h2 class="cs-h2">2 · Inputs and what each decides</h2>
+        <div class="cs-t" style="grid-template-columns: 120px 1fr 1fr">
+          <span class="h">Input</span><span class="h">Decides</span><span class="h">Rule</span>
+          <span>Fandom</span><span>Colour family (hue)</span><span>Source’s hue; the fandom shifts inside it. Section 3.</span>
+          <span>Series ID, part</span><span>One shared look</span><span>Series ID replaces work ID and author for motif, ground, angle, scale, line. Hue +18° per part after the first.</span>
+          <span>Title text</span><span>Text placement, size, subtitle</span><span>Section 5.</span>
+          <span>Tone tags</span><span>Motif family</span><span>Allowlist in section 4. Ignored inside a series.</span>
+          <span>Author</span><span>Motif within the family; title style</span><span>Hash of the first-listed author’s name.</span>
+          <span>Word count</span><span>How full the motif is</span><span>Under 10k · 40k · 100k · longer: element counts × 0.7 · 0.95 · 1.2 · 1.5. One motif, never stacked copies.</span>
+          <span>Posting order</span><span>Depth of shade</span><span>Older darker. Section 3.</span>
+          <span>Complete?</span><span>Ring around the motif</span><span>Closed when complete, open while in progress.</span>
+          <span>Work ID + salt</span><span>Leftovers only</span><span>Rotation, scale, ground, line weight and opacity, shape seed.</span>
+        </div>
+        <p class="cs-p"><strong>Never used in the art:</strong> rating, archive warnings, category, relationships, characters, tags outside the allowlist, kudos, hits, bookmarks, comments, summary. They stay in the symbol strip and meta line.</p>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h2 class="cs-h2">3 · Colour (OKLCH, converted to sRGB)</h2>
+        <ul style="margin: 0; padding: 0; list-style: disc inside; display: flex; flex-direction: column; gap: 4px">
+          <li class="cs-li"><strong>Source.</strong> Normalise the fandom name (drop “- All Media Types”, “(TV)”, “&amp; Related Fandoms” and similar), then look it up in a bundled table that maps fandom to source (Persuasion → Jane Austen). No table entry: the fandom is its own source. Do not fetch AO3 tag pages for this.</li>
+          <li class="cs-li"><strong>Hue.</strong> A source in the bundled hue table uses that hue. Otherwise pick from the fixed set 20, 55, 85, 125, 150, 180, 205, 230, 260, 290, 320, 350 by hash of the source name. A fandom that is not its own source shifts by −18, −9, 0, 9 or 18°, by hash of the fandom name.</li>
+          <li class="cs-li"><strong>Lightness.</strong> 0.32 for the oldest works to 0.46 for the newest, linear between two fixed anchors and clamped. The mock-up uses the year posted (2010 to 2026). The search listing only shows the date updated, so in the app derive it from the work ID, which rises with posting order: bundle a small table of ID breakpoints and never use the updated date.</li>
+          <li class="cs-li"><strong>Chroma.</strong> 0.085 for the ground.</li>
+          <li class="cs-li"><strong>Ground, one of four</strong> (work ID): soft gradient at 160° to L+0.07, C 0.09, hue+14 · split, top 58% ground and bottom 42% the lighter tone · band of L−0.05, C 0.08, hue−10 from 62% to 74% of the height · solid.</li>
+          <li class="cs-li"><strong>Crossover.</strong> Hard diagonal at 135°, always that direction. Two fandoms: first-listed 60%, second 40%. Three or more: equal bands in listed order. All at the same lightness.</li>
+          <li class="cs-li"><strong>Text and motif are white.</strong> Title 100%, fandom label 88%, author and subtitle 86%. Every ground in range must give white text 4.5:1 or better.</li>
+        </ul>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h2 class="cs-h2">4 · Motif</h2>
+        <div class="cs-t" style="grid-template-columns: 96px 1fr 1fr">
+          <span class="h">Family</span><span class="h">Tone tags (canonical AO3 names)</span><span class="h">Motifs, in author-hash order</span>
+          <span>Soft</span><span>Fluff, Domestic Fluff, Romance, Humor, Slice of Life</span><span>petals, sprig, waves, rosette</span>
+          <span>Angular</span><span>Angst, Drama, Horror, Thriller</span><span>chevrons, squares, sunburst, sigil</span>
+          <span>Orderly</span><span>Case Fic, Mystery, Politics, Character Study</span><span>truchet, contours, halftone, moiré</span>
+          <span>Celestial</span><span>Fantasy, Magic, Science Fiction</span><span>constellation, orbit, rings, guilloché</span>
+        </div>
+        <ul style="margin: 0; padding: 0; list-style: disc inside; display: flex; flex-direction: column; gap: 4px">
+          <li class="cs-li">Exactly one family among a work’s allowlisted tags: use it, and the author hash picks one of its four motifs. Two or more families, or none: neutral, and the author hash picks from all sixteen.</li>
+          <li class="cs-li">Geometry for all sixteen is in <span class="cs-code">CoverArt.dc.html</span>, functions <span class="cs-code">emblem</span> and <span class="cs-code">motif</span>. Port them as written, including the element counts.</li>
+          <li class="cs-li">Size: motif radius 0.41 × cover width. Length changes how many rays, rings, waves or leaves the one motif has (section 2), not its size.</li>
+          <li class="cs-li">Centre follows the text placement (section 5): top text → 0.71w, 0.74h · bottom text → 0.71w, 0.31h · right-aligned text → 0.29w, 0.73h. It may run off the edge; clip to the cover.</li>
+          <li class="cs-li">Rotation ±12° for sprig, waves, chevrons, truchet and halftone; any angle for the rest. Scale 0.85 to 1.2.</li>
+          <li class="cs-li">Line 1.0 to 1.5 pt at a 112 pt cover, scaling with the cover; round caps and joins; white at 40 to 55%. Halftone and petals are filled, at 0.8 × that opacity, no stroke. Lines are drawn whole: nothing is cut, outlined or marked where they cross.</li>
+          <li class="cs-li">Ring: radius 1.16 × motif radius × scale, 1.2 pt, same opacity, drawn over the motif without cutting it. In progress: leave a gap of about 70° facing the cover’s centre.</li>
+          <li class="cs-li">Sigil: the small inner circle is 0.22 of the star’s radius, clear inside it. The legs pass 0.30 from the centre, so anything near that grazes them.</li>
+          <li class="cs-li">Small covers (under 64 pt wide: list rows, stacks, Now Playing): the sparest version of the motif, and lines never thinner than 0.9 pt on screen. Same ground, motif and placement as the big cover, without the words.</li>
+        </ul>
+      </section>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 28px">
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h2 class="cs-h2">5 · Text on the cover</h2>
+        <ul style="margin: 0; padding: 0; list-style: disc inside; display: flex; flex-direction: column; gap: 4px">
+          <li class="cs-li"><strong>Parse the title.</strong> A trailing “(…)” or “[…]”, or text after “; or, ”, becomes the subtitle.</li>
+          <li class="cs-li"><strong>Placement.</strong> Has a subtitle: fandom label at the top, title, subtitle and author right-aligned under it. Main title of 16 characters or fewer: title and author at the top, fandom label at the bottom. Otherwise: fandom label at the top, title and author at the bottom.</li>
+          <li class="cs-li"><strong>Title size</strong> as a share of cover width: one word of 12 characters or fewer 0.196 · up to 32 characters 0.134 · up to 64 0.116 · longer 0.107. Three lines at most, then truncate.</li>
+          <li class="cs-li"><strong>Title style</strong> (author hash): New York semibold · New York semibold italic · SF bold small caps at 0.8 × size with 0.6 pt tracking.</li>
+          <li class="cs-li">Fandom label: SF semibold caps, 0.076w, one line. Crossovers join the names with “×”. A series adds “PART II” at the trailing end of that line.</li>
+          <li class="cs-li">Subtitle and author: italic, 0.09w; subtitle two lines at most, author one.</li>
+          <li class="cs-li">Padding 0.1w. Cover height 1.42 × width. Corner radius as the cover card today.</li>
+          <li class="cs-li">Cover text scales with the cover, not with Dynamic Type. At accessibility sizes the app keeps using the text card it has today.</li>
+        </ul>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h2 class="cs-h2">6 · Determinism</h2>
+        <ul style="margin: 0; padding: 0; list-style: disc inside; display: flex; flex-direction: column; gap: 4px">
+          <li class="cs-li">Hash: FNV-1a over the UTF-8 bytes of a namespaced key, for example <span class="cs-code">author:fogandlamplight</span>, <span class="cs-code">fine:12345:0</span> (work ID, salt), <span class="cs-code">series-fine:77</span>. Never Swift’s <span class="cs-code">Hasher</span>, which changes per launch.</li>
+          <li class="cs-li">Random numbers: one small seeded generator (SplitMix64 is fine), a fresh instance per purpose, values drawn in a fixed, documented order.</li>
+          <li class="cs-li">The Swift renderer does not have to match the mock-up’s numbers. It has to match itself, on every device, for a given renderer version.</li>
+        </ul>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h2 class="cs-h2">7 · Pin the cover (snapshot)</h2>
+        <ul style="margin: 0; padding: 0; list-style: disc inside; display: flex; flex-direction: column; gap: 4px">
+          <li class="cs-li">When a work is saved to the library, resolve every choice into a small <span class="cs-code">CoverRecipe</span> and store it with the work: renderer version, hues, lightness, ground, motif, layers, ring closed, placement, title style, rotation, scale, line weight and opacity, shape seed, salt.</li>
+          <li class="cs-li">Draw from the recipe from then on. Edited tags, a renamed author or a new renderer version do not change a saved cover.</li>
+          <li class="cs-li">Redraw only when: the work becomes complete (ring closes) · it crosses a length tier (layers) · the reader shuffles · the reader chooses “Update covers” after an app update.</li>
+          <li class="cs-li">The recipe travels with backup and sync, so every device shows the same cover.</li>
+          <li class="cs-li">Works that are not saved (search, browse) are resolved on the fly with the current renderer and salt 0.</li>
+        </ul>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h2 class="cs-h2">8 · Reader controls</h2>
+        <ul style="margin: 0; padding: 0; list-style: disc inside; display: flex; flex-direction: column; gap: 4px">
+          <li class="cs-li"><strong>Shuffle Cover</strong> in the work’s ••• menu: salt + 1, re-resolve the leftovers and the neutral motif pick, pin the result. <strong>Reset Cover</strong> returns to salt 0.</li>
+          <li class="cs-li"><strong>Settings › Appearance › Covers:</strong> “Use art from the work when there is some” (on by default).</li>
+          <li class="cs-li">The “Tap to reveal” blur for mature works stays exactly as it is, over whichever cover is shown.</li>
+        </ul>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h2 class="cs-h2">9 · Art from the work</h2>
+        <ul style="margin: 0; padding: 0; list-style: disc inside; display: flex; flex-direction: column; gap: 4px">
+          <li class="cs-li">Candidates: images in the downloaded work’s front matter or first chapter only.</li>
+          <li class="cs-li">Reject anything under 320 px on its short side, or with a width-to-height ratio outside 0.40 to 1.85 (dividers, banners, icons).</li>
+          <li class="cs-li">Prefer front matter over chapter 1, then the largest. Crop to fill the cover; no text is drawn over it.</li>
+        </ul>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h2 class="cs-h2">10 · Drawing and performance</h2>
+        <ul style="margin: 0; padding: 0; list-style: disc inside; display: flex; flex-direction: column; gap: 4px">
+          <li class="cs-li">One SwiftUI view that takes a recipe, a width and whether to draw the words. Draw the ground and motif in a <span class="cs-code">Canvas</span>; lay the text out with ordinary <span class="cs-code">Text</span> views on top. Cards, stacks, row thumbnails and the Now Playing accessory all use it.</li>
+          <li class="cs-li"><strong>Vector only.</strong> Each cover is a ground, one motif path and one ring, with line widths in the cover’s own units, so it scales and exports to SVG or PDF unchanged. No masks, blend modes, raster textures or screen-space line widths.</li>
+          <li class="cs-li">Draw the motif as one path. Separate translucent strokes overlapping each other paint twice and show as bright dots.</li>
+          <li class="cs-li">Cache the rendered art per recipe, size and display scale. Scrolling a shelf of 200 covers must not drop frames.</li>
+          <li class="cs-li">The art is hidden from VoiceOver. The card’s label stays title, author, fandom, then the four symbols.</li>
+          <li class="cs-li">Covers keep their own colours in Sepia, Dark and OLED for now. Theme-specific grounds are a later pass.</li>
+        </ul>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h2 class="cs-h2">11 · Done when</h2>
+        <ul style="margin: 0; padding: 0; list-style: disc inside; display: flex; flex-direction: column; gap: 4px">
+          <li class="cs-li">Unit test: the same inputs give a byte-identical recipe across launches and on two devices.</li>
+          <li class="cs-li">Unit test: white on every ground the rules can produce is 4.5:1 or better.</li>
+          <li class="cs-li">Unit test: none of the “never used” fields changes the recipe.</li>
+          <li class="cs-li">Three parts of one series share motif, ground and angle and differ only in hue, layers, shade and ring.</li>
+          <li class="cs-li">Editing a saved work’s tags on AO3 and refreshing leaves its cover unchanged; completing it closes the ring.</li>
+          <li class="cs-li">A preview that reproduces row C’s works at 112 pt, checked by eye against this canvas, and the same works as 30 pt row thumbnails.</li>
+          <li class="cs-li">A cover exported to SVG at 3× matches the one on screen, line for line.</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+
+  <section style="display: flex; flex-direction: column; gap: 8px; padding: 18px 20px; border-radius: 12px; background: #F2F2F7">
+    <h2 class="cs-h2">12 · Lessons from the 13 November review (keep these)</h2>
+    <ul style="margin: 0; padding: 0; list-style: disc inside; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 40px">
+      <li class="cs-li"><strong>Fullness, not stacking.</strong> Drawing the same motif four times at shrinking radii, with the same number of lines each time, filled covers into a blob. One motif per cover; length changes its element count.</li>
+      <li class="cs-li"><strong>Lines stay whole.</strong> Tried and rejected for crossings: dark outlines along the lines, cuts from a mask, short gaps at each crossing. With the motif sparse enough, crossings read on their own.</li>
+      <li class="cs-li"><strong>One path per motif.</strong> Splitting a line into pieces drawn as separate translucent strokes put a bright dot at every join.</li>
+      <li class="cs-li"><strong>Vector only.</strong> Covers must scale and export cleanly, so everything is geometry: no masks, effects or bitmaps, and line widths that scale with the cover.</li>
+      <li class="cs-li"><strong>Nothing grazes.</strong> A shape running almost along another reads as a thick smudge (the sigil’s inner circle did); keep shapes clearly apart or clearly crossing.</li>
+      <li class="cs-li"><strong>Small covers are the same cover.</strong> A thumbnail keeps the work’s ground, motif and placement; it only drops the words, uses the sparest version and keeps lines at 0.9 pt or more.</li>
+    </ul>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 8px">
+    <h2 class="cs-h2">13 · Collections and queues (decided 13 November)</h2>
+    <p class="cs-p">One idea: the front card says what the collection is; the cards behind it show what is in it. A queue is an ordered collection and follows the same rules.</p>
+    <ul style="margin: 0; padding: 0; list-style: disc inside; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 40px">
+      <li class="cs-li"><strong>Front card: the collection’s own cover, and it stays put.</strong> Drawn by the same renderer as a work: the reader’s colour as the ground, a motif picked once from the collection’s ID, no ring and no words. Pin it as a recipe when the collection is created; renaming it, or adding and reordering works, never changes it. Shuffle Cover in the collection’s ••• menu does.</li>
+      <li class="cs-li"><strong>Colour: a swatch from the cover palette.</strong> The picker offers the twelve family hues of section 3 plus graphite, not a free colour wheel, and the card is drawn at the cover lightness (L 0.40 to 0.47, C 0.085; graphite C 0.012), so collections and works sit evenly on one shelf. A colour saved before this rule snaps to the nearest swatch by hue.</li>
+      <li class="cs-li"><strong>Behind it: the first two works, in the collection’s order.</strong> Each drawn as its own cover, art only. They change when the order changes. An empty collection shows the front card alone.</li>
+      <li class="cs-li"><strong>No status on the cover.</strong> “All read” or “still adding” lives in the count under the card and on the collection page, which also keeps collections from being mistaken for works.</li>
+      <li class="cs-li"><strong>Queues: the same rules.</strong> The pile is the next two works in line, stacked straight up; the ribbon carries the numbered-list glyph. Collections keep the plain ribbon.</li>
+      <li class="cs-li"><strong>No borrowed art.</strong> A collection never uses an author’s image. If its first work has art from the work, that shows on that work’s card in the pile.</li>
+    </ul>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1240,"height":2700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

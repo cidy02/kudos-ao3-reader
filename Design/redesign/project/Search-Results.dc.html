@@ -14,6 +14,7 @@ button{cursor:pointer}
 </style>
 </helmet>
 <div style="width: 390px; height: 1500px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <sc-if value="{{notSelect}}" hint-placeholder-val="{{true}}">
   <div style="position: absolute; left: 16px; right: 16px; top: 54px; height: 44px; display: flex; align-items: center; justify-content: space-between">
     <button aria-label="Back to Search" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
@@ -22,11 +23,18 @@ button{cursor:pointer}
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v16l-5-4-5 4zM12 7.5v5M9.5 10h5"></path></svg>
     </button>
   </div>
+  </sc-if>
+  <sc-if value="{{isSelect}}" hint-placeholder-val="{{false}}">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
+    <button style="height: 44px; padding: 0 16px; border: none; border-radius: 22px; font-family: inherit; font-size: 17px; color: #1C1C1E; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">Select All</button>
+    <button style="height: 44px; padding: 0 20px; border: none; border-radius: 22px; font-family: inherit; font-size: 17px; font-weight: 600; color: #FFFFFF; background: {{accent}}">Done</button>
+  </div>
+  </sc-if>
 
   <main style="padding: 110px 0 0; display: flex; flex-direction: column; gap: 10px">
     <header style="padding: 0 20px 4px; display: flex; flex-direction: column; gap: 2px">
       <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">“{{query}}”</h1>
-      <span style="font-size: 15px; line-height: 20px; color: #6C6C70">{{total}} works on AO3</span>
+      <span style="font-size: 15px; line-height: 20px; color: #6C6C70">{{sub}}</span>
     </header>
     <div style="padding: 0 16px; display: flex; align-items: center; gap: 8px">
       <button aria-label="Sort by: Best Match" style="height: 32px; padding: 0 12px; border: none; border-radius: 16px; background: #EFEFF4; font-family: inherit; font-size: 14px; color: #000000; display: flex; align-items: center; gap: 4px">Best Match
@@ -48,8 +56,15 @@ button{cursor:pointer}
 
     <div role="list" aria-label="Results" style="margin-top: 2px; border-top: 0.5px solid #D1D1D6">
       <sc-for list="{{works}}" as="w" hint-placeholder-count="6">
-        <div role="listitem">
-          <dc-import name="WorkRow" work="{{w}}" ledger="{{true}}" wide="{{true}}" divider="{{w.divider}}" accent="{{accent}}" hint-size="100%,150px"></dc-import>
+        <div role="listitem" style="position: relative">
+          <sc-if value="{{w.swipeAdd}}" hint-placeholder-val="{{false}}">
+            <div aria-hidden="true" style="position: absolute; left: 0; top: 0; bottom: 0; width: 124px; background: #821019; color: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 13px; line-height: 17px; font-weight: 600; text-align: center">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h12M4 11h12M4 16h7M17 14v6M14 17h6"></path></svg>Add to<br>Summer Reading
+            </div>
+          </sc-if>
+          <div style="position: relative; background: #FFFFFF; transform: {{w.shift}}">
+            <dc-import name="WorkRow" work="{{w}}" ledger="{{true}}" wide="{{notSelect}}" selecting="{{isSelect}}" selected="{{w.selected}}" divider="{{w.divider}}" accent="{{accent}}" hint-size="100%,150px"></dc-import>
+          </div>
         </div>
       </sc-for>
     </div>
@@ -61,6 +76,7 @@ button{cursor:pointer}
   </main>
 
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
+  <sc-if value="{{notSelect}}" hint-placeholder-val="{{true}}">
   <div style="position: absolute; left: 16px; right: 16px; bottom: 28px; display: flex; gap: 10px; align-items: center">
     <button aria-label="Back to Browse" style="width: 54px; height: 54px; flex-shrink: 0; border: none; border-radius: 27px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
       <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"></path></svg>
@@ -73,9 +89,53 @@ button{cursor:pointer}
       </button>
     </label>
   </div>
+  </sc-if>
+  <sc-if value="{{isQueue}}" hint-placeholder-val="{{false}}">
+    <div role="status" style="position: absolute; left: 16px; right: 16px; bottom: 94px; min-height: 52px; border-radius: 26px; padding: 8px 8px 8px 18px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; background: rgba(40,40,44,0.86); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); color: #FFFFFF; box-shadow: 0 10px 30px rgba(0,0,0,0.2)">
+      <span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 5px; background: #C25E00; flex-shrink: 0"></span>
+      <span style="flex: 1; min-width: 0; font-size: 15px; line-height: 20px">Added to Summer Reading</span>
+      <button aria-label="Change queue" style="height: 36px; padding: 0 14px; border: none; border-radius: 18px; background: rgba(255,255,255,0.18); color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600">Change</button>
+    </div>
+  </sc-if>
+  <sc-if value="{{isSelect}}" hint-placeholder-val="{{false}}">
+    <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.12)"></div>
+    <div role="toolbar" aria-label="Actions for 2 selected works" style="position: absolute; left: 16px; right: 16px; bottom: 28px; height: 62px; border-radius: 31px; padding: 4px; box-sizing: border-box; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <sc-for list="{{actions}}" as="a" hint-placeholder-count="3">
+        <button aria-expanded="{{a.open}}" style="flex: 1; height: 54px; border: none; border-radius: 27px; background: {{a.bg}}; color: #1C1C1E; font-family: inherit; font-size: 11px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px">
+          <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{a.d}}"></path></svg>
+          {{a.label}}
+        </button>
+      </sc-for>
+    </div>
+    <div role="menu" aria-label="Add 2 works to a queue" style="position: absolute; left: 50px; bottom: 100px; width: 290px; border-radius: 24px; padding: 4px 0; overflow: hidden; background: rgba(250,250,252,0.9); backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%); box-shadow: 0 18px 50px rgba(0,0,0,0.22), 0 0 0 0.5px rgba(0,0,0,0.08)">
+      <div style="padding: 10px 16px 4px; font-size: 13px; line-height: 18px; color: #6C6C70">Add 2 works to</div>
+      <sc-for list="{{queues}}" as="q" hint-placeholder-count="3">
+        <button role="menuitem" style="width: 100%; min-height: 46px; border: none; background: transparent; padding: 4px 16px; display: flex; align-items: center; gap: 10px; font-family: inherit; text-align: left">
+          <span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 5px; background: {{q.colour}}; flex-shrink: 0"></span>
+          <span style="flex: 1; display: flex; flex-direction: column">
+            <span style="font-size: 16px; line-height: 21px; color: #000000">{{q.name}}</span>
+            <span style="font-size: 12px; line-height: 16px; color: #6C6C70">{{q.detail}}</span>
+          </span>
+        </button>
+      </sc-for>
+      <div style="border-top: 0.5px solid rgba(60,60,67,0.18)">
+        <button role="menuitem" style="width: 100%; min-height: 52px; border: none; background: transparent; padding: 6px 16px; display: flex; align-items: center; gap: 10px; font-family: inherit; text-align: left; color: #821019">
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" style="flex-shrink: 0"><path d="M12 5v14M5 12h14"></path></svg>
+          <span style="flex: 1; display: flex; flex-direction: column">
+            <span style="font-size: 16px; line-height: 21px">New Queue from This Search…</span>
+            <span style="font-size: 12px; line-height: 16px; color: #6C6C70">Keeps “lighthouse” for Find More</span>
+          </span>
+        </button>
+        <button role="menuitem" style="width: 100%; height: 42px; border: none; background: transparent; padding: 0 16px; display: flex; align-items: center; gap: 10px; font-family: inherit; font-size: 16px; color: #821019; text-align: left">
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+          New Queue…
+        </button>
+      </div>
+    </div>
+  </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":1500}}'>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["results","queue","select"],"default":"results"},"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":1500}}'>
 class Component extends DCLogic {
   renderVals() {
     // The full list behind Search's "On AO3" section: the query as the title, AO3's count,
@@ -97,13 +157,38 @@ class Component extends DCLogic {
       { title: 'The Adventure of the Unlit Lamp', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', language: 'English', words: '9,880', chapters: '1/1', comments: '36', kudos: '1,210', bookmarks: '152', hits: '11.4k', updated: 'Aug 2', expandable: true, summary: 'A keeper vanishes from a locked lamp room on a calm night, and Holmes takes the night train north.', tagLineAll: [{ label: 'Sherlock Holmes & John Watson', ship: true }, 'Casefic', 'Locked Room Mystery', 'Lighthouses', 'Victorian'], moreLines: [['Posted', '2 Aug 2026']] },
       { title: 'The Fog Bell Ledger', author: 'harborlight', fandom: 'Original Work', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', language: 'English', words: '61,250', chapters: '18/18', comments: '97', kudos: '960', bookmarks: '298', hits: '14.1k', updated: '14 Mar 2019', expandable: true, summary: 'A bell that rings for ships that never came in, and the clerk who logs every one.', tagLineAll: [{ label: 'Clerk/Captain', ship: true }, 'Epistolary', 'Ghosts', 'Slow Burn', 'Historical'], moreLines: [['Posted', '9 Jan 2019 · completed 14 Mar 2019']] }
     ];
+    // Two more states of the same list, drawn by Search-Results-Queue and Search-Results-Select:
+    // "queue": swipe a result right to add it to the current queue (the one you came from, else the
+    // last one you added to); a toast names the queue and offers Change; results already queued say where.
+    // "select": tick several, then Add to Queue, which can also make a queue that keeps this search.
+    const state = this.props.state ?? 'results';
+    const isQueue = state === 'queue';
+    const isSelect = state === 'select';
+    const marks = isQueue ? { 1: { badge: 'In Summer Reading' }, 2: { swipeAdd: true }, 4: { badge: 'In For the Train' } }
+      : isSelect ? { 0: { selected: true }, 4: { selected: true } } : {};
+    const total = '1,284';
     return {
       accent, tint,
+      isQueue, isSelect, notSelect: !isSelect,
       query: 'lighthouse',
-      total: '1,284',
+      total,
+      sub: (isSelect ? '2 selected · ' : '') + total + ' works on AO3',
       loaded: '20',
       active: ['English', 'Under 100k words'],
-      works: works.map((w, i) => ({ ...w, divider: i < works.length - 1 }))
+      works: works.map((w, i) => {
+        const m = marks[i] || {};
+        return { ...w, ...m, divider: i < works.length - 1, swipeAdd: !!m.swipeAdd, selected: !!m.selected, shift: m.swipeAdd ? 'translateX(124px)' : 'none' };
+      }),
+      actions: [
+        { label: 'Download', d: 'M12 4v11M7 10.5l5 5 5-5M5 20h14', bg: 'transparent', open: 'false' },
+        { label: 'Add to Queue', d: 'M4 6h12M4 11h12M4 16h7M17 14v6M14 17h6', bg: 'rgba(0,0,0,0.06)', open: 'true' },
+        { label: 'Add to Collection', d: 'M6 8h12v12H6zM8 5h8', bg: 'transparent', open: 'false' }
+      ],
+      queues: [
+        ['Summer Reading', '#C25E00', '8 works · about 9 h 40 min'],
+        ['Re-reads', '#1E63C8', '5 works · about 4 h 5 min'],
+        ['For the Train', '#2F8F3A', '3 works · about 1 h 50 min']
+      ].map(([name, colour, detail]) => ({ name, colour, detail }))
     };
   }
 }

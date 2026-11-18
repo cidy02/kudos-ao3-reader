@@ -103,7 +103,7 @@ button{cursor:pointer}
           </label>
           <sc-for list="{{suggest}}" as="w" hint-placeholder-count="4">
             <div style="display: flex; align-items: center; gap: 12px; padding: 8px 16px 8px 12px; border-top: {{w.sep}}">
-              <span aria-hidden="true" style="width: 34px; height: 46px; flex-shrink: 0; border-radius: 5px; background: {{w.art}}"></span>
+              <span aria-hidden="true" style="flex-shrink: 0; display: flex"><dc-import name="CoverArt" work="{{w.work}}" width="34" height="46" radius="5" hint-size="34px,46px"></dc-import></span>
               <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
                 <span style="font-size: 16px; line-height: 21px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.title}}</span>
                 <span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{w.meta}}</span>
@@ -126,23 +126,25 @@ class Component extends DCLogic {
     const art = (h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
     const rgba = (x, a) => 'rgba(' + parseInt(x.slice(1, 3), 16) + ',' + parseInt(x.slice(3, 5), 16) + ',' + parseInt(x.slice(5, 7), 16) + ',' + a + ')';
     const queues = [
-      { name: 'Summer Reading', detail: '8 works · about 9 h 40 min · 6 offline', colour: '#C25E00', hues: [150, 181, 32, 335], fills: [100, 100, 60, 0, 0, 0, 0, 0] },
-      { name: 'Re-reads', detail: '5 works · about 4 h 5 min · all offline', colour: '#1E63C8', hues: [262, 290, 196, 330], fills: [100, 100, 100, 30, 0] },
-      { name: 'For the Train', detail: '3 works · about 1 h 50 min · 3 offline', colour: '#2F8F3A', hues: [32, 188, 340, 150], fills: [0, 0, 0] }
-    ].map((q) => ({ ...q, initial: q.name.charAt(0), tiles: q.hues.map(art), segs: q.fills.map((f) => f + '%'), track: rgba(q.colour, 0.2) }));
-    const colours = [['Orange', '#C25E00'], ['Blue', '#1E63C8'], ['Green', '#2F8F3A'], ['Purple', '#7B3FA0'], ['Pink', '#B3127A'], ['Graphite', '#6C6C70']];
+      { name: 'Summer Reading', detail: '8 works · about 9 h 40 min · 6 offline', colour: '#C25E00', first: [{ title: 'Five Times Elizabeth Laughed', author: 'quietharbor', fandom: 'Pride and Prejudice', status: 'complete', words: '6,700' }, { title: 'Small Gods of the Kitchen', author: 'hearthwitch', fandom: 'Original Work', status: 'wip', words: '12,400' }], fills: [100, 100, 60, 0, 0, 0, 0, 0] },
+      { name: 'Re-reads', detail: '5 works · about 4 h 5 min · all offline', colour: '#1E63C8', first: [{ title: 'Moor and Mist', author: 'brontebird', fandom: 'Jane Eyre', status: 'complete', words: '54,200' }, { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', status: 'complete', words: '21,880' }], fills: [100, 100, 100, 30, 0] },
+      { name: 'For the Train', detail: '3 works · about 1 h 50 min · 3 offline', colour: '#2F8F3A', first: [{ title: 'The Baker Street Irregular', author: 'fogandlamplight', fandom: 'Sherlock Holmes', status: 'complete', words: '9,140' }, { title: 'A Map of Small Hours', author: 'quietharbor', fandom: 'Pride and Prejudice', status: 'complete', words: '32,050' }], fills: [0, 0, 0] }
+    ].map((q) => ({ ...q, initial: q.name.charAt(0), tiles: q.first, segs: q.fills.map((f) => f + '%'), track: rgba(q.colour, 0.2) }));
+    // Cover-palette swatches (the queue's card is drawn in the one picked)
+    const colours = [['Amber', '#76441F'], ['Blue', '#365281'], ['Green', '#2B5F39'], ['Violet', '#524A7E'], ['Rose', '#753E59'], ['Graphite', '#4F5359']];
     return {
       accent,
       accentTint: tint,
       queues: queues.map((q, i) => ({ ...q, sep: i ? '0.5px solid #E5E5EA' : 'none' })),
       chosen: colours[3][1],
-      newTiles: [262, 32].map(art),
+      // The new queue's pile: the two works selected below, in order
+      newTiles: [{ title: 'Moor and Mist', author: 'brontebird', fandom: 'Jane Eyre', status: 'complete', words: '54,200' }, { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', status: 'complete', words: '21,880' }],
       suggest: [
-        ['Moor and Mist', 'Finished 2024 · 54,200 words · tagged reread', 262, true],
-        ['Letters Never Sent', 'Finished twice · 21,880 words', 32, true],
-        ['The Lighthouse Keepers', 'Finished Oct 3 · 40,900 words', 188, false],
-        ['A Map of Small Hours', 'Finished Oct 12 · 32,050 words', 150, false]
-      ].map(([title, meta, h, on], i) => ({ title, meta, art: art(h), on, aria: on ? 'Selected' : 'Not selected', ring: on ? 'none' : '1.5px solid #C7C7CC', fill: on ? '#821019' : 'transparent', sep: i ? '0.5px solid #E5E5EA' : 'none' })),
+        ['Moor and Mist', 'Finished 2024 · 54,200 words · tagged reread', { title: 'Moor and Mist', author: 'brontebird', fandom: 'Jane Eyre', status: 'complete', words: '54,200' }, true],
+        ['Letters Never Sent', 'Finished twice · 21,880 words', { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', status: 'complete', words: '21,880' }, true],
+        ['The Lighthouse Keepers', 'Finished Oct 3 · 40,900 words', { title: 'The Lighthouse Keepers', author: 'tidewright', fandom: 'Original Work', status: 'complete', words: '40,900' }, false],
+        ['A Map of Small Hours', 'Finished Oct 12 · 32,050 words', { title: 'A Map of Small Hours', author: 'quietharbor', fandom: 'Pride and Prejudice', status: 'complete', words: '32,050' }, false]
+      ].map(([title, meta, work, on], i) => ({ title, meta, work, on, aria: on ? 'Selected' : 'Not selected', ring: on ? 'none' : '1.5px solid #C7C7CC', fill: on ? '#821019' : 'transparent', sep: i ? '0.5px solid #E5E5EA' : 'none' })),
       colours: colours.map(([name, h], i) => ({ name, hex: h, checked: i === 3 ? 'true' : 'false', ring: i === 3 ? '0 0 0 2px #FFFFFF, 0 0 0 4px ' + h : 'none' }))
     };
   }

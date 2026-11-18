@@ -14,7 +14,8 @@ button{cursor:pointer}
 a{text-decoration:none}
 </style>
 </helmet>
-<div style="width: 390px; height: 1950px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: {{rootW}}; height: {{rootH}}; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <sc-if value="{{chrome}}" hint-placeholder-val="{{true}}">
   <div style="position: absolute; right: 16px; top: 54px; z-index: 2; height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
     <a href="Work-Editor.dc.html" aria-label="New Work" style="width: 46px; height: 44px; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
       <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5.5H6.5a1.5 1.5 0 0 0-1.5 1.5v10.5A1.5 1.5 0 0 0 6.5 19H17a1.5 1.5 0 0 0 1.5-1.5V12M16.5 4.5l3 3L12 15l-3.5.5.5-3.5z"></path></svg>
@@ -23,10 +24,12 @@ a{text-decoration:none}
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg>
     </button>
   </div>
+  </sc-if>
 
-  <main style="padding: 56px 16px 0; display: flex; flex-direction: column; gap: 26px">
+  <main style="padding: {{mainPad}}; display: flex; flex-direction: column; gap: 26px">
+    <sc-if value="{{partA}}" hint-placeholder-val="{{true}}">
     <header style="display: flex; flex-direction: column; gap: 2px">
-      <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Writing</h1>
+      <sc-if value="{{heading}}" hint-placeholder-val="{{true}}"><h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Writing</h1></sc-if>
       <button aria-label="Posting as saltwindow. Change pseud" style="align-self: flex-start; border: none; background: none; padding: 0; font-family: inherit; font-size: 15px; line-height: 20px; color: #6C6C70; display: flex; align-items: center; gap: 4px">Posting as <span style="font-weight: 600; color: #3A3A3C">saltwindow</span>
         <svg aria-hidden="true" width="9" height="13" viewBox="0 0 12 16" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg>
       </button>
@@ -50,7 +53,7 @@ a{text-decoration:none}
         </sc-for>
       </div>
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
-        <span style="font-size: 13px; line-height: 18px; opacity: 0.85">3,100 words this week · 6-day streak<br>Chapter 3 posted Oct 20</span>
+        <span style="font-size: 13px; line-height: 18px; opacity: 0.85">3,100 words this week<br>Chapter 3 posted Oct 20</span>
         <a href="Text-Editor.dc.html" style="height: 44px; padding: 0 20px; flex-shrink: 0; border-radius: 22px; background: #FFFFFF; color: #821019; font-size: 17px; font-weight: 600; display: flex; align-items: center">Continue</a>
       </div>
     </section>
@@ -89,6 +92,8 @@ a{text-decoration:none}
       </sc-for>
     </section>
 
+    </sc-if>
+    <sc-if value="{{partB}}" hint-placeholder-val="{{true}}">
     <section aria-label="Drafts" style="display: flex; flex-direction: column; gap: 10px">
       <div style="display: flex; align-items: baseline; gap: 8px">
         <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Drafts</h2>
@@ -161,21 +166,30 @@ a{text-decoration:none}
         </a>
       </sc-for>
     </section>
+    </sc-if>
   </main>
 
+  <sc-if value="{{chrome}}" hint-placeholder-val="{{true}}">
   <div aria-hidden="true" style="z-index: 4; position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
   <div style="z-index: 5; position: absolute; left: 16px; bottom: 28px">
     <dc-import name="TabBar" selected="writing" accent="#821019" hint-size="358px,62px"></dc-import>
   </div>
+  </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1950}}'>
+<script type="text/x-dc" data-dc-script data-props='{"embed":{"editor":"enum","options":["none","a","b","all"],"default":"none"},"heading":{"editor":"boolean","default":true},"$preview":{"width":390,"height":1950}}'>
 class Component extends DCLogic {
   renderVals() {
+    // embed: "none" draws the iPhone screen. "a", "b" and "all" draw only the content, fluid, with no
+    // bars of its own, so the iPhone Duo boards can mount the same sections in their panes
+    // ("a" = the first sections, "b" = the rest). heading={false} drops the large title.
+    const embed = this.props.embed ?? 'none';
+    const E = { rootW: embed === 'none' ? '390px' : '100%', rootH: embed === 'none' ? '1950px' : 'auto', mainPad: embed === 'none' ? '56px 16px 0' : '0', chrome: embed === 'none', partA: embed !== 'b', partB: embed !== 'a', heading: this.props.heading ?? true };
     const hue = { 'Original Work': 188, 'Persuasion': 335, 'Sherlock Holmes': 32 };
     const ink = (f) => 'hsl(' + (hue[f] ?? 210) + ', 56%, 33%)';
     const sep = (list) => list.map((x, i) => ({ ...x, sep: i ? '0.5px solid #E5E5EA' : 'none' }));
     return {
+      ...E,
       chapters: [1, 1, 1, 2, 0, 0, 0, 0].map((k) => ({ bg: k === 1 ? '#FFFFFF' : k === 2 ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.18)', bd: k === 2 ? '1.5px solid #FFFFFF' : 'none' })),
       // The Totals block of AO3's /users/<name>/stats, all years: AO3 keeps no daily history.
       heroTotals: [['34,766', 'Hits'], ['3,224', 'Kudos']].map(([value, label]) => ({ value, label })),

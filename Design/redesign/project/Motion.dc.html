@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Motion and haptics</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+@keyframes mo-heart{0%,24%{opacity:0;transform:scale(1)}30%{opacity:1;transform:scale(.8)}40%{opacity:1;transform:scale(1.28)}50%,90%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1)}}
+@keyframes mo-count{0%,32%{transform:translateY(0)}44%,92%{transform:translateY(-34px)}100%{transform:translateY(0)}}
+@keyframes mo-zoom{0%,18%{left:24px;top:66px;width:56px;height:80px;border-radius:8px}48%,88%{left:0;top:0;width:290px;height:170px;border-radius:16px}100%{left:24px;top:66px;width:56px;height:80px;border-radius:8px}}
+@keyframes mo-zoom-in{0%,40%{opacity:0}52%,84%{opacity:1}90%,100%{opacity:0}}
+@keyframes mo-zoom-out{0%,16%{opacity:1}30%,90%{opacity:0}100%{opacity:1}}
+@keyframes mo-bar{0%,20%{width:40%}45%,92%{width:58%}100%{width:40%}}
+@keyframes mo-old{0%,24%{opacity:1}34%,92%{opacity:0}100%{opacity:1}}
+@keyframes mo-new{0%,28%{opacity:0}40%,92%{opacity:1}100%{opacity:0}}
+@keyframes mo-badge{0%,28%{opacity:0;transform:scale(.3)}38%{opacity:1;transform:scale(1.22)}46%,90%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1)}}
+@keyframes mo-slide-front{0%,26%{transform:translateX(0)}44%,90%{transform:translateX(-76px)}100%{transform:translateX(0)}}
+@keyframes mo-slide-back{0%,26%{transform:translateX(0)}44%,90%{transform:translateX(76px)}100%{transform:translateX(0)}}
+@keyframes mo-ring{0%,10%{stroke-dashoffset:113}55%,100%{stroke-dashoffset:0}}
+@keyframes mo-arrow{0%,54%{opacity:1}60%,96%{opacity:0}100%{opacity:1}}
+@keyframes mo-tick{0%,56%{opacity:0;transform:scale(.6)}64%,94%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.6)}}
+@keyframes mo-read{0%,30%{background-color:rgba(130,16,25,.18)}34%,100%{background-color:rgba(130,16,25,0)}}
+@keyframes mo-wave{0%{transform:scaleY(.35)}100%{transform:scaleY(1)}}
+@keyframes mo-lift{0%,18%{transform:translateY(0) scale(1);box-shadow:0 1px 2px rgba(0,0,0,.06)}26%{transform:translateY(0) scale(1.04);box-shadow:0 8px 18px rgba(0,0,0,.18)}50%{transform:translateY(-42px) scale(1.04);box-shadow:0 8px 18px rgba(0,0,0,.18)}58%,90%{transform:translateY(-42px) scale(1);box-shadow:0 1px 2px rgba(0,0,0,.06)}100%{transform:translateY(0) scale(1);box-shadow:0 1px 2px rgba(0,0,0,.06)}}
+@keyframes mo-part{0%,34%{transform:translateY(0)}50%,90%{transform:translateY(42px)}100%{transform:translateY(0)}}
+@keyframes mo-blur{0%,30%{filter:blur(7px)}46%,90%{filter:blur(0)}100%{filter:blur(7px)}}
+@keyframes mo-pill{0%,28%{opacity:1}40%,92%{opacity:0}100%{opacity:1}}
+@media (prefers-reduced-motion: reduce){.mo-anim{animation:none !important}}
+</style>
+</helmet>
+<div style="width: 1290px; min-height: 1700px; box-sizing: border-box; padding: 24px 30px 36px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 24px">
+  <header style="display: flex; flex-direction: column; gap: 4px">
+    <div style="display: flex; align-items: baseline; gap: 12px">
+      <h1 style="margin: 0; font-size: 28px; font-weight: 700">Motion and haptics</h1>
+      <span style="padding: 3px 10px; border-radius: 10px; background: #FFF3D6; color: #8A5A00; font-size: 13px; font-weight: 700">Proposed · not in today's app</span>
+    </div>
+    <p style="margin: 0; max-width: 980px; font-size: 15px; line-height: 21px; color: #3A3A3C">Eight moments get their own motion. Everything else is left to iOS. Each tile loops a sketch of the movement; the timing, haptic and Reduce Motion version are under it.</p>
+  </header>
+
+  <section style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px">
+    <div style="padding: 14px 16px; border-radius: 16px; background: #F2F2F7; display: flex; flex-direction: column; gap: 4px">
+      <h2 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 700">Motion says where it went</h2>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #3A3A3C">Every animation starts at the thing you touched and ends at the thing it became. Nothing moves for decoration.</p>
+    </div>
+    <div style="padding: 14px 16px; border-radius: 16px; background: #F2F2F7; display: flex; flex-direction: column; gap: 4px">
+      <h2 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 700">The page is still</h2>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #3A3A3C">In the reader nothing moves unless the reader moves it or asked for Read Aloud. No looping animation anywhere in the app.</p>
+    </div>
+    <div style="padding: 14px 16px; border-radius: 16px; background: #F2F2F7; display: flex; flex-direction: column; gap: 4px">
+      <h2 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 700">A haptic means AO3 answered</h2>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #3A3A3C">Success when AO3 accepts something you sent. Error when it refuses. Selection ticks while dragging or scrubbing. Nothing else taps.</p>
+    </div>
+    <div style="padding: 14px 16px; border-radius: 16px; background: #F2F2F7; display: flex; flex-direction: column; gap: 4px">
+      <h2 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 700">Three springs, system first</h2>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #3A3A3C">Snappy for controls. Smooth for navigation and progress. Bouncy for kudos and the new-chapter badge only. If iOS already animates it, use that.</p>
+    </div>
+  </section>
+
+  <section style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px 16px">
+
+    <article style="display: flex; flex-direction: column; gap: 10px">
+      <div aria-hidden="true" style="position: relative; height: 170px; border-radius: 16px; overflow: hidden; background: #F2F2F7; display: flex; align-items: center; justify-content: center; gap: 12px">
+        <div style="position: relative; width: 52px; height: 52px">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#821019" stroke-width="1.7" stroke-linejoin="round" style="position: absolute; left: 0; top: 0"><path d="M12 20.5C7 16.6 3 13.4 3 9.2 3 6.3 5.2 4.2 7.9 4.2c1.6 0 3.1.8 4.1 2.1 1-1.3 2.5-2.1 4.1-2.1 2.7 0 4.9 2.1 4.9 5 0 4.2-4 7.4-9 11.3z"></path></svg>
+          <svg class="mo-anim" width="52" height="52" viewBox="0 0 24 24" fill="#821019" stroke="#821019" stroke-width="1.7" stroke-linejoin="round" style="position: absolute; left: 0; top: 0; animation: mo-heart 4s ease-out infinite"><path d="M12 20.5C7 16.6 3 13.4 3 9.2 3 6.3 5.2 4.2 7.9 4.2c1.6 0 3.1.8 4.1 2.1 1-1.3 2.5-2.1 4.1-2.1 2.7 0 4.9 2.1 4.9 5 0 4.2-4 7.4-9 11.3z"></path></svg>
+        </div>
+        <div style="height: 34px; overflow: hidden">
+          <div class="mo-anim" style="display: flex; flex-direction: column; font-size: 28px; line-height: 34px; font-weight: 700; font-variant-numeric: tabular-nums; animation: mo-count 4s ease-in-out infinite"><span>412</span><span>413</span></div>
+        </div>
+      </div>
+      <h3 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 700">1 · Give kudos</h3>
+      <div style="display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 5px 8px; font-size: 12px; line-height: 17px">
+        <span style="font-weight: 700">Moves</span><span style="color: #3A3A3C">The heart fills and bounces once. The count rolls up by one.</span>
+        <span style="font-weight: 700">Feel</span><span style="color: #3A3A3C">Bouncy spring, about 0.4 s.</span>
+        <span style="font-weight: 700">Haptic</span><span style="color: #3A3A3C">Success, once, when AO3 accepts it. Error if it fails, and the heart empties again.</span>
+        <span style="font-weight: 700">Reduce Motion</span><span style="color: #3A3A3C">Heart cross-fades to filled. The count changes without rolling.</span>
+        <span style="font-weight: 700">SwiftUI</span><span style="color: #3A3A3C; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px">symbolEffect(.bounce) · contentTransition(.numericText()) · sensoryFeedback(.success)</span>
+      </div>
+    </article>
+
+    <article style="display: flex; flex-direction: column; gap: 10px">
+      <div aria-hidden="true" style="position: relative; height: 170px; border-radius: 16px; overflow: hidden; background: #F2F2F7">
+        <div class="mo-anim" style="position: absolute; left: 96px; top: 66px; display: flex; gap: 12px; animation: mo-zoom-out 4s ease-in-out infinite">
+          <span style="width: 56px; height: 80px; border-radius: 8px; background: linear-gradient(155deg, hsl(32, 46%, 27%), hsl(54, 50%, 41%))"></span>
+          <span style="width: 56px; height: 80px; border-radius: 8px; background: linear-gradient(155deg, hsl(262, 46%, 27%), hsl(284, 50%, 41%))"></span>
+          <span style="width: 56px; height: 80px; border-radius: 8px; background: linear-gradient(155deg, hsl(150, 46%, 27%), hsl(172, 50%, 41%))"></span>
+        </div>
+        <div class="mo-anim" style="position: absolute; left: 24px; top: 66px; width: 56px; height: 80px; border-radius: 8px; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%)); animation: mo-zoom 4s cubic-bezier(.3,.7,.2,1) infinite"></div>
+        <div class="mo-anim" style="position: absolute; left: 20px; right: 20px; bottom: 18px; display: flex; flex-direction: column; gap: 2px; color: #FFFFFF; animation: mo-zoom-in 4s ease-in-out infinite">
+          <span style="font-size: 10px; line-height: 13px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.88)">Original Work</span>
+          <span style="font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 22px; line-height: 26px; font-weight: 600">The Cartographer’s Daughter</span>
+        </div>
+      </div>
+      <h3 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 700">2 · Open a work</h3>
+      <div style="display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 5px 8px; font-size: 12px; line-height: 17px">
+        <span style="font-weight: 700">Moves</span><span style="color: #3A3A3C">The cover grows into the work’s page and its colour becomes the page’s wash. Back shrinks it into the same cover.</span>
+        <span style="font-weight: 700">Feel</span><span style="color: #3A3A3C">The system zoom. It follows the finger on a swipe back and can be interrupted.</span>
+        <span style="font-weight: 700">Haptic</span><span style="color: #3A3A3C">None.</span>
+        <span style="font-weight: 700">Reduce Motion</span><span style="color: #3A3A3C">The system’s cross-fade.</span>
+        <span style="font-weight: 700">SwiftUI</span><span style="color: #3A3A3C; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px">matchedTransitionSource(id:in:) · navigationTransition(.zoom(sourceID:in:))</span>
+      </div>
+    </article>
+
+    <article style="display: flex; flex-direction: column; gap: 10px">
+      <div aria-hidden="true" style="position: relative; height: 170px; border-radius: 16px; overflow: hidden; background: #F2F2F7; display: flex; align-items: center; justify-content: center">
+        <div style="width: 234px; box-sizing: border-box; padding: 14px; border-radius: 16px; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%)); color: #FFFFFF; display: flex; flex-direction: column; gap: 8px">
+          <span style="font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 16px; line-height: 20px; font-weight: 600">The Cartographer’s Daughter</span>
+          <div style="position: relative; height: 16px; font-size: 12px; line-height: 16px; color: rgba(255,255,255,0.9)">
+            <span class="mo-anim" style="position: absolute; left: 0; top: 0; animation: mo-old 4s ease-in-out infinite">Ch 6 · 33 min left</span>
+            <span class="mo-anim" style="position: absolute; left: 0; top: 0; animation: mo-new 4s ease-in-out infinite">Ch 7 · 21 min left</span>
+          </div>
+          <div style="height: 4px; border-radius: 2px; background: rgba(255,255,255,0.3)"><div class="mo-anim" style="width: 58%; height: 4px; border-radius: 2px; background: #FFFFFF; animation: mo-bar 4s ease-in-out infinite"></div></div>
+        </div>
+      </div>
+      <h3 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 700">3 · Come back to Home</h3>
+      <div style="display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 5px 8px; font-size: 12px; line-height: 17px">
+        <span style="font-weight: 700">Moves</span><span style="color: #3A3A3C">The Resume card’s bar fills from where it was to where you stopped. The time left counts down.</span>
+        <span style="font-weight: 700">Feel</span><span style="color: #3A3A3C">Smooth, 0.5 s, once per return, and only if progress changed.</span>
+        <span style="font-weight: 700">Haptic</span><span style="color: #3A3A3C">None.</span>
+        <span style="font-weight: 700">Reduce Motion</span><span style="color: #3A3A3C">Bar and text show the new value straight away.</span>
+        <span style="font-weight: 700">SwiftUI</span><span style="color: #3A3A3C; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px">animation(.smooth, value: progress) · contentTransition(.numericText())</span>
+      </div>
+    </article>
+
+    <article style="display: flex; flex-direction: column; gap: 10px">
+      <div aria-hidden="true" style="position: relative; height: 170px; border-radius: 16px; overflow: hidden; background: #F2F2F7; display: flex; align-items: center; justify-content: center; gap: 12px">
+        <span class="mo-anim" style="width: 64px; height: 90px; border-radius: 9px; background: linear-gradient(155deg, hsl(150, 46%, 27%), hsl(172, 50%, 41%)); animation: mo-slide-back 4s cubic-bezier(.3,.7,.2,1) infinite"></span>
+        <span class="mo-anim" style="position: relative; width: 64px; height: 90px; border-radius: 9px; background: linear-gradient(155deg, hsl(32, 46%, 27%), hsl(54, 50%, 41%)); animation: mo-slide-front 4s cubic-bezier(.3,.7,.2,1) infinite">
+          <span class="mo-anim" style="position: absolute; right: -8px; top: -8px; min-width: 24px; height: 24px; box-sizing: border-box; padding: 0 6px; border-radius: 12px; background: #821019; color: #FFFFFF; font-size: 13px; line-height: 24px; font-weight: 700; text-align: center; animation: mo-badge 4s ease-out infinite">+1</span>
+        </span>
+        <span style="width: 64px; height: 90px; border-radius: 9px; background: linear-gradient(155deg, hsl(262, 46%, 27%), hsl(284, 50%, 41%))"></span>
+      </div>
+      <h3 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 700">4 · A new chapter arrives</h3>
+      <div style="display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 5px 8px; font-size: 12px; line-height: 17px">
+        <span style="font-weight: 700">Moves</span><span style="color: #3A3A3C">The badge pops onto the cover and the work slides to the front of New Chapters.</span>
+        <span style="font-weight: 700">Feel</span><span style="color: #3A3A3C">Snappy spring; the badge overshoots a little. Only after a refresh the reader can see.</span>
+        <span style="font-weight: 700">Haptic</span><span style="color: #3A3A3C">None in the app. The notification carries its own.</span>
+        <span style="font-weight: 700">Reduce Motion</span><span style="color: #3A3A3C">Badge fades in. The shelf reorders without sliding.</span>
+        <span style="font-weight: 700">SwiftUI</span><span style="color: #3A3A3C; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px">withAnimation(.snappy) · transition(.scale.combined(with: .opacity))</span>
+      </div>
+    </article>
+
+    <article style="display: flex; flex-direction: column; gap: 10px">
+      <div aria-hidden="true" style="position: relative; height: 170px; border-radius: 16px; overflow: hidden; background: #F2F2F7; display: flex; align-items: center; justify-content: center">
+        <div style="position: relative; width: 56px; height: 56px">
+          <svg width="56" height="56" viewBox="0 0 44 44" fill="none" style="position: absolute; left: 0; top: 0; transform: rotate(-90deg)">
+            <circle cx="22" cy="22" r="18" stroke="#D1D1D6" stroke-width="3"></circle>
+            <circle class="mo-anim" cx="22" cy="22" r="18" stroke="#821019" stroke-width="3" stroke-linecap="round" stroke-dasharray="113" stroke-dashoffset="113" style="animation: mo-ring 4s linear infinite"></circle>
+          </svg>
+          <svg class="mo-anim" width="56" height="56" viewBox="0 0 44 44" fill="none" stroke="#821019" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 0; top: 0; animation: mo-arrow 4s ease-in-out infinite"><path d="M22 13v16M15.5 23l6.5 6.5 6.5-6.5"></path></svg>
+          <svg class="mo-anim" width="56" height="56" viewBox="0 0 44 44" fill="none" stroke="#821019" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 0; top: 0; animation: mo-tick 4s ease-out infinite"><path d="M14.5 22.5l5.2 5.2 9.8-10.4"></path></svg>
+        </div>
+      </div>
+      <h3 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 700">5 · Download for offline</h3>
+      <div style="display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 5px 8px; font-size: 12px; line-height: 17px">
+        <span style="font-weight: 700">Moves</span><span style="color: #3A3A3C">A ring fills around the arrow, then the arrow becomes a tick.</span>
+        <span style="font-weight: 700">Feel</span><span style="color: #3A3A3C">The ring follows real progress. The swap is quick.</span>
+        <span style="font-weight: 700">Haptic</span><span style="color: #3A3A3C">None on success: downloads often finish mid-read. Error on failure.</span>
+        <span style="font-weight: 700">Reduce Motion</span><span style="color: #3A3A3C">The ring still fills, because it is progress. The swap cross-fades.</span>
+        <span style="font-weight: 700">SwiftUI</span><span style="color: #3A3A3C; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px">Circle().trim(from:to:) · contentTransition(.symbolEffect(.replace))</span>
+      </div>
+    </article>
+
+    <article style="display: flex; flex-direction: column; gap: 10px">
+      <div aria-hidden="true" style="position: relative; height: 170px; border-radius: 16px; overflow: hidden; background: #FFFFFF; border: 1px solid #E5E5EA; box-sizing: border-box; padding: 18px 20px; display: flex; flex-direction: column; justify-content: space-between">
+        <p style="margin: 0; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 15px; line-height: 25px; color: #1C1C1E"><span class="mo-anim" style="border-radius: 4px; animation: mo-read 4.5s linear infinite">The road to the coast had not been mapped in forty years.</span> <span class="mo-anim" style="border-radius: 4px; animation: mo-read 4.5s linear 1.5s infinite backwards">She walked it anyway.</span> <span class="mo-anim" style="border-radius: 4px; animation: mo-read 4.5s linear 3s infinite backwards">Every mile she paused.</span></p>
+        <div style="display: flex; align-items: center; gap: 3px; height: 18px">
+          <span class="mo-anim" style="width: 3px; height: 18px; border-radius: 2px; background: #821019; transform-origin: center; animation: mo-wave .5s ease-in-out infinite alternate"></span>
+          <span class="mo-anim" style="width: 3px; height: 18px; border-radius: 2px; background: #821019; transform-origin: center; animation: mo-wave .42s ease-in-out .1s infinite alternate"></span>
+          <span class="mo-anim" style="width: 3px; height: 18px; border-radius: 2px; background: #821019; transform-origin: center; animation: mo-wave .6s ease-in-out .05s infinite alternate"></span>
+          <span class="mo-anim" style="width: 3px; height: 18px; border-radius: 2px; background: #821019; transform-origin: center; animation: mo-wave .46s ease-in-out .2s infinite alternate"></span>
+          <span style="margin-left: 8px; font-size: 12px; line-height: 16px; color: #6C6C70">Read Aloud · 1×</span>
+        </div>
+      </div>
+      <h3 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 700">6 · Read Aloud</h3>
+      <div style="display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 5px 8px; font-size: 12px; line-height: 17px">
+        <span style="font-weight: 700">Moves</span><span style="color: #3A3A3C">The highlight glides from sentence to sentence and the page scrolls to keep it in the upper third. The player’s bars move with the voice.</span>
+        <span style="font-weight: 700">Feel</span><span style="color: #3A3A3C">Smooth, 0.25 s per sentence. Nothing else on the page moves.</span>
+        <span style="font-weight: 700">Haptic</span><span style="color: #3A3A3C">None.</span>
+        <span style="font-weight: 700">Reduce Motion</span><span style="color: #3A3A3C">The highlight jumps. The bars stay still.</span>
+        <span style="font-weight: 700">SwiftUI</span><span style="color: #3A3A3C; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px">animation(.smooth, value: sentence) · symbolEffect(.variableColor.iterative)</span>
+      </div>
+    </article>
+
+    <article style="display: flex; flex-direction: column; gap: 10px">
+      <div aria-hidden="true" style="position: relative; height: 170px; border-radius: 16px; overflow: hidden; background: #F2F2F7; box-sizing: border-box; padding: 26px 28px; display: flex; flex-direction: column; gap: 8px">
+        <div class="mo-anim" style="height: 34px; box-sizing: border-box; padding: 0 12px; border-radius: 10px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,0.06); display: flex; align-items: center; font-size: 13px; animation: mo-part 4s cubic-bezier(.3,.7,.2,1) infinite">1 · Five Times Elizabeth Laughed</div>
+        <div class="mo-anim" style="position: relative; z-index: 1; height: 34px; box-sizing: border-box; padding: 0 12px; border-radius: 10px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,0.06); display: flex; align-items: center; font-size: 13px; font-weight: 600; animation: mo-lift 4s cubic-bezier(.3,.7,.2,1) infinite">2 · Small Gods of the Kitchen</div>
+        <div style="height: 34px; box-sizing: border-box; padding: 0 12px; border-radius: 10px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,0.06); display: flex; align-items: center; font-size: 13px">3 · The Baker Street Irregular</div>
+      </div>
+      <h3 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 700">7 · Reorder a queue</h3>
+      <div style="display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 5px 8px; font-size: 12px; line-height: 17px">
+        <span style="font-weight: 700">Moves</span><span style="color: #3A3A3C">The row lifts with a shadow and the others part around it.</span>
+        <span style="font-weight: 700">Feel</span><span style="color: #3A3A3C">The system’s list drag, unchanged.</span>
+        <span style="font-weight: 700">Haptic</span><span style="color: #3A3A3C">A selection tick as it passes each row.</span>
+        <span style="font-weight: 700">Reduce Motion</span><span style="color: #3A3A3C">The system’s behaviour.</span>
+        <span style="font-weight: 700">SwiftUI</span><span style="color: #3A3A3C; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px">List · onMove · sensoryFeedback(.selection, trigger: index)</span>
+      </div>
+    </article>
+
+    <article style="display: flex; flex-direction: column; gap: 10px">
+      <div aria-hidden="true" style="position: relative; height: 170px; border-radius: 16px; overflow: hidden; background: #F2F2F7; display: flex; align-items: center; justify-content: center">
+        <div style="position: relative; width: 84px; height: 119px; border-radius: 12px; overflow: hidden; background: linear-gradient(155deg, hsl(335, 46%, 27%), hsl(357, 50%, 41%))">
+          <div class="mo-anim" style="position: absolute; left: 0; top: 0; width: 84px; height: 119px; box-sizing: border-box; padding: 10px; display: flex; flex-direction: column; justify-content: flex-end; gap: 3px; color: #FFFFFF; animation: mo-blur 4s ease-out infinite">
+            <span style="font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 13px; line-height: 15px; font-weight: 600">Whatever Remains</span>
+            <span style="font-size: 9px; line-height: 12px; font-style: italic">fogandlamplight</span>
+          </div>
+          <span class="mo-anim" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 3px 8px; border-radius: 10px; background: rgba(255,255,255,0.9); color: #3A3A3C; font-size: 9px; line-height: 13px; white-space: nowrap; animation: mo-pill 4s ease-out infinite">Tap to reveal</span>
+        </div>
+      </div>
+      <h3 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 700">8 · Tap to reveal</h3>
+      <div style="display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 5px 8px; font-size: 12px; line-height: 17px">
+        <span style="font-weight: 700">Moves</span><span style="color: #3A3A3C">The blur clears and the pill fades.</span>
+        <span style="font-weight: 700">Feel</span><span style="color: #3A3A3C">Ease out, 0.25 s. Hiding again is instant.</span>
+        <span style="font-weight: 700">Haptic</span><span style="color: #3A3A3C">None.</span>
+        <span style="font-weight: 700">Reduce Motion</span><span style="color: #3A3A3C">Cross-fade.</span>
+        <span style="font-weight: 700">SwiftUI</span><span style="color: #3A3A3C; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px">blur(radius:) · animation(.easeOut(duration: 0.25), value: revealed)</span>
+      </div>
+    </article>
+  </section>
+
+  <section style="display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 24px; align-items: start">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 700">Smaller moments</h2>
+      <div style="display: grid; grid-template-columns: 190px minmax(0, 1fr) 170px; border: 1px solid #D1D1D6; border-radius: 12px; overflow: hidden; font-size: 12px; line-height: 17px">
+        <span style="padding: 7px 10px; background: #F2F2F7; font-weight: 700">Moment</span><span style="padding: 7px 10px; background: #F2F2F7; font-weight: 700">Motion</span><span style="padding: 7px 10px; background: #F2F2F7; font-weight: 700">Haptic</span>
+        <span style="padding: 7px 10px; border-top: 1px solid #E5E5EA">Comment posted</span><span style="padding: 7px 10px; border-top: 1px solid #E5E5EA; color: #3A3A3C">The comment slides into the thread and the field clears.</span><span style="padding: 7px 10px; border-top: 1px solid #E5E5EA; color: #3A3A3C">Success · Error</span>
+        <span style="padding: 7px 10px; border-top: 1px solid #E5E5EA">Bookmark, Mark for Later, Subscribe</span><span style="padding: 7px 10px; border-top: 1px solid #E5E5EA; color: #3A3A3C">The symbol fills, with no bounce. Kudos keeps the bounce to itself.</span><span style="padding: 7px 10px; border-top: 1px solid #E5E5EA; color: #3A3A3C">Success · Error</span>
+        <span style="padding: 7px 10px; border-top: 1px solid #E5E5EA">Finish a work</span><span style="padding: 7px 10px; border-top: 1px solid #E5E5EA; color: #3A3A3C">The ornament under “The End” draws in once. The work is in Finished the next time Library opens.</span><span style="padding: 7px 10px; border-top: 1px solid #E5E5EA; color: #3A3A3C">None</span>
+        <span style="padding: 7px 10px; border-top: 1px solid #E5E5EA">Shuffle Cover</span><span style="padding: 7px 10px; border-top: 1px solid #E5E5EA; color: #3A3A3C">The old cover cross-fades to the new one.</span><span style="padding: 7px 10px; border-top: 1px solid #E5E5EA; color: #3A3A3C">Soft impact</span>
+        <span style="padding: 7px 10px; border-top: 1px solid #E5E5EA">Scrub the progress slider</span><span style="padding: 7px 10px; border-top: 1px solid #E5E5EA; color: #3A3A3C">The page follows the thumb.</span><span style="padding: 7px 10px; border-top: 1px solid #E5E5EA; color: #3A3A3C">Selection tick at each chapter</span>
+        <span style="padding: 7px 10px; border-top: 1px solid #E5E5EA">Post a chapter</span><span style="padding: 7px 10px; border-top: 1px solid #E5E5EA; color: #3A3A3C">Post becomes a progress ring, then a tick. The draft moves into Your Works.</span><span style="padding: 7px 10px; border-top: 1px solid #E5E5EA; color: #3A3A3C">Success · Error</span>
+        <span style="padding: 7px 10px; border-top: 1px solid #E5E5EA">Kudos milestone, Writing tab</span><span style="padding: 7px 10px; border-top: 1px solid #E5E5EA; color: #3A3A3C">The count rolls up to the new total, once, the first time the author sees it.</span><span style="padding: 7px 10px; border-top: 1px solid #E5E5EA; color: #3A3A3C">None</span>
+        <span style="padding: 7px 10px; border-top: 1px solid #E5E5EA">Error or offline</span><span style="padding: 7px 10px; border-top: 1px solid #E5E5EA; color: #3A3A3C">The banner slides down from the bar. Nothing shakes.</span><span style="padding: 7px 10px; border-top: 1px solid #E5E5EA; color: #3A3A3C">Error, once</span>
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 16px">
+      <div style="padding: 14px 16px; border-radius: 16px; background: #F2F2F7; display: flex; flex-direction: column; gap: 4px">
+        <h2 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 700">Leave to iOS</h2>
+        <p style="margin: 0; font-size: 13px; line-height: 18px; color: #3A3A3C">Tab switches, pushes, sheets, menus, context-menu previews, swipe actions, pull to refresh, the keyboard, the large title shrinking into the bar, the tab bar minimising on scroll. No custom timing on any of them.</p>
+      </div>
+      <div style="padding: 14px 16px; border-radius: 16px; background: #F2F2F7; display: flex; flex-direction: column; gap: 4px">
+        <h2 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 700">Never</h2>
+        <p style="margin: 0; font-size: 13px; line-height: 18px; color: #3A3A3C">Confetti. Shaking. Skeletons that shimmer for more than a second. Parallax on covers. Motion on the reader page. A haptic for something only the app did. Sound, apart from Read Aloud.</p>
+      </div>
+      <div style="padding: 14px 16px; border-radius: 16px; background: #F2F2F7; display: flex; flex-direction: column; gap: 4px">
+        <h2 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 700">Settings the app follows</h2>
+        <p style="margin: 0; font-size: 13px; line-height: 18px; color: #3A3A3C">Reduce Motion: every card above has its version. System Haptics off: no haptics, nothing replaces them. Low Power Mode: the Resume bar and the badge appear without animating.</p>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1290,"height":1700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

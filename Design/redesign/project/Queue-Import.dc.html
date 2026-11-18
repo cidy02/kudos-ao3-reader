@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Queues › Add from Links</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Add from Links" mode="sheet" confirm="Add" height="844" sections="{{sections}}" context="{{context}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Idea: bring an old Safari tab group (or any list of AO3 links) into a queue in one paste.
+    // Work links become works; tag, search, author and series links become the queue's sources.
+    return {
+      "sections": [
+        {
+          "header": "Paste links",
+          "footer": "In Safari, open a tab group’s menu and choose Copy Links, then paste here. You can also share any AO3 page to Kudos.",
+          "rows": [
+            {
+              "kind": "textarea",
+              "rows": 4,
+              "text": "archiveofourown.org/works/41270…\narchiveofourown.org/tags/Persuasion…/works\narchiveofourown.org/users/marginalia\n… 17 more links"
+            }
+          ]
+        },
+        {
+          "header": "Found in 20 links",
+          "rows": [
+            {
+              "label": "Works",
+              "kind": "value",
+              "detail": "14",
+              "sub": "2 already in your library",
+              "tile": "#821019",
+              "icon": "M3 5.5c3-1 6-1 9 1 3-2 6-2 9-1v13c-3-1-6-1-9 1-3-2-6-2-9-1zM12 6.5v13"
+            },
+            {
+              "label": "Tags and searches",
+              "kind": "value",
+              "detail": "2",
+              "sub": "Become sources for Find More",
+              "tile": "#8E8E93",
+              "icon": "M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.5 15.5l5 5"
+            },
+            {
+              "label": "Authors",
+              "kind": "value",
+              "detail": "1",
+              "sub": "Becomes a source",
+              "tile": "#8E8E93",
+              "icon": "M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4.5 20c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5"
+            },
+            {
+              "label": "Not AO3 links",
+              "kind": "value",
+              "detail": "3",
+              "sub": "Skipped",
+              "tile": "#C7C7CC",
+              "icon": "M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM9 9l6 6M15 9l-6 6"
+            }
+          ]
+        },
+        {
+          "header": "Add to",
+          "rows": [
+            {
+              "label": "Queue",
+              "kind": "nav",
+              "detail": "New · Persuasion"
+            },
+            {
+              "label": "Keep works offline",
+              "kind": "toggle",
+              "on": true
+            }
+          ]
+        }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

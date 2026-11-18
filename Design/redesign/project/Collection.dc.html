@@ -24,7 +24,7 @@ button{cursor:pointer}
   </div>
   <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 12px">
     <header style="display: flex; gap: 14px; align-items: center">
-      <dc-import name="CoverStack" tiles="{{tiles}}" colour="#9C2F6B" initial="A" kind="collection" width="96" height="96" hint-size="96px,96px"></dc-import>
+      <dc-import name="CoverStack" tiles="{{tiles}}" colour="#9C2F6B" initial="A" collection-name="Austen Variations" kind="collection" width="96" height="96" hint-size="96px,96px"></dc-import>
       <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
         <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: 0.35px">Austen Variations</h1>
         <p style="margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">12 works · about 14 h · custom order</p>
@@ -79,7 +79,8 @@ class Component extends DCLogic {
   renderVals() {
     return {
       accent: this.props.accent ?? '#821019',
-      tiles: [150, 290, 155, 335].map((h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))'),
+      // Behind the collection's own card: its first two works, in its order (a and b below)
+      tiles: [{ title: 'A Map of Small Hours', author: 'quietharbor', fandom: 'Pride and Prejudice', status: 'complete', words: '32,050' }, { title: 'Northanger Nights', author: 'gothicnovelist', fandom: 'Northanger Abbey', status: 'wip', words: '47,300' }],
       a: { title: 'A Map of Small Hours', author: 'quietharbor', fandom: 'Pride and Prejudice', rating: 'G', category: 'FM', warnings: 'none', status: 'complete', words: '32,050', chapters: '9/9', kudos: '1,212' },
       b: { title: 'Northanger Nights', author: 'gothicnovelist', fandom: 'Northanger Abbey', rating: 'T', category: 'FM', warnings: 'none', status: 'wip', words: '47,300', chapters: '9/12', kudos: '980' },
       c: { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', words: '21,880', chapters: '4/4', kudos: '1,530' },

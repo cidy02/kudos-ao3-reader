@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cover art</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div aria-hidden="{{hideAX}}" style="position: relative; width: {{width}}px; height: {{height}}px; box-sizing: border-box; padding: {{pad}}px; border-radius: {{radius}}px; overflow: hidden; background: {{bg}}; color: #FFFFFF; box-shadow: {{shadow}}; display: flex; flex-direction: column; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif">
+  <svg aria-hidden="true" width="{{width}}" height="{{height}}" viewBox="{{vb}}" preserveAspectRatio="none" fill="none" style="position: absolute; left: 0; top: 0">
+    <path d="{{e}}" transform="{{tr}}" stroke="#FFFFFF" stroke-opacity="{{so}}" stroke-width="{{sw}}" fill="{{fill}}" fill-opacity="{{fo}}" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="{{ring}}" stroke="#FFFFFF" stroke-opacity="{{so}}" stroke-width="{{rw}}" fill="none" stroke-linecap="round"></path>
+  </svg>
+  <sc-if value="{{v0}}" hint-placeholder-val="{{false}}">
+    <div style="position: relative; display: flex; align-items: baseline; gap: {{g4}}px">
+      <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: {{lab}}px; line-height: {{labLH}}px; font-weight: 600; letter-spacing: {{labTr}}px; text-transform: uppercase; color: rgba(255,255,255,0.88)">{{fandom}}</span>
+      <sc-if value="{{hasPart}}" hint-placeholder-val="{{false}}"><span style="flex: none; white-space: nowrap; font-size: {{lab}}px; line-height: {{labLH}}px; font-weight: 700; letter-spacing: {{labTr}}px; color: #FFFFFF">{{part}}</span></sc-if>
+    </div>
+    <span style="position: relative; margin-top: auto; font-family: {{tf}}; font-style: {{tfs}}; text-transform: {{ttt}}; letter-spacing: {{tls}}px; font-size: {{ts}}px; line-height: 1.15; font-weight: {{tw}}; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden">{{title}}</span>
+    <sc-if value="{{hasDeck}}" hint-placeholder-val="{{false}}"><span style="position: relative; margin-top: {{g3}}px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-style: italic; font-size: {{sm}}px; line-height: {{smLH}}px; color: rgba(255,255,255,0.86); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">{{deck}}</span></sc-if>
+    <span style="position: relative; margin-top: {{g4}}px; font-size: {{sm}}px; line-height: {{smLH}}px; font-style: italic; color: rgba(255,255,255,0.86); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{author}}</span>
+  </sc-if>
+  <sc-if value="{{v1}}" hint-placeholder-val="{{false}}">
+    <span style="position: relative; font-family: {{tf}}; font-style: {{tfs}}; text-transform: {{ttt}}; letter-spacing: {{tls}}px; font-size: {{ts}}px; line-height: 1.15; font-weight: {{tw}}; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden">{{title}}</span>
+    <sc-if value="{{hasDeck}}" hint-placeholder-val="{{false}}"><span style="position: relative; margin-top: {{g3}}px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-style: italic; font-size: {{sm}}px; line-height: {{smLH}}px; color: rgba(255,255,255,0.86); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">{{deck}}</span></sc-if>
+    <span style="position: relative; margin-top: {{g4}}px; font-size: {{sm}}px; line-height: {{smLH}}px; font-style: italic; color: rgba(255,255,255,0.86); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{author}}</span>
+    <div style="position: relative; margin-top: auto; display: flex; align-items: baseline; gap: {{g4}}px">
+      <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: {{lab}}px; line-height: {{labLH}}px; font-weight: 600; letter-spacing: {{labTr}}px; text-transform: uppercase; color: rgba(255,255,255,0.88)">{{fandom}}</span>
+      <sc-if value="{{hasPart}}" hint-placeholder-val="{{false}}"><span style="flex: none; white-space: nowrap; font-size: {{lab}}px; line-height: {{labLH}}px; font-weight: 700; letter-spacing: {{labTr}}px; color: #FFFFFF">{{part}}</span></sc-if>
+    </div>
+  </sc-if>
+  <sc-if value="{{v2}}" hint-placeholder-val="{{false}}">
+    <div style="position: relative; display: flex; align-items: baseline; gap: {{g4}}px">
+      <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: {{lab}}px; line-height: {{labLH}}px; font-weight: 600; letter-spacing: {{labTr}}px; text-transform: uppercase; color: rgba(255,255,255,0.88)">{{fandom}}</span>
+      <sc-if value="{{hasPart}}" hint-placeholder-val="{{false}}"><span style="flex: none; white-space: nowrap; font-size: {{lab}}px; line-height: {{labLH}}px; font-weight: 700; letter-spacing: {{labTr}}px; color: #FFFFFF">{{part}}</span></sc-if>
+    </div>
+    <span style="position: relative; margin-top: {{g10}}px; text-align: right; font-family: {{tf}}; font-style: {{tfs}}; text-transform: {{ttt}}; letter-spacing: {{tls}}px; font-size: {{ts}}px; line-height: 1.15; font-weight: {{tw}}; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden">{{title}}</span>
+    <sc-if value="{{hasDeck}}" hint-placeholder-val="{{false}}"><span style="position: relative; margin-top: {{g3}}px; text-align: right; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-style: italic; font-size: {{sm}}px; line-height: {{smLH}}px; color: rgba(255,255,255,0.86); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">{{deck}}</span></sc-if>
+    <span style="position: relative; margin-top: {{g4}}px; text-align: right; font-size: {{sm}}px; line-height: {{smLH}}px; font-style: italic; color: rgba(255,255,255,0.86); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{author}}</span>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"work":{"editor":null},"width":{"editor":"int","default":132,"min":20,"max":400},"height":{"editor":null},"text":{"editor":"boolean","default":false},"radius":{"editor":null},"collection":{"editor":null},"shadow":{"editor":null},"ink":{"editor":null},"$preview":{"width":132,"height":187}}'>
+class Component extends DCLogic {
+  // The cover engine, in one place. Every board that draws a work's cover mounts this:
+  // CoverCard (with text), CoverStack, FormScreen and ListScreen rows, and the few boards
+  // with their own thumbnails (art only). Rules: Cover-Spec board. Pure vector: one ground,
+  // one motif path, one ring; line widths in the cover's own units.
+  renderVals() {
+    const PI = Math.PI;
+    const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+    const rng = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+    const between = (R, a, b) => a + R() * (b - a);
+    const intIn = (R, a, b) => a + Math.floor(R() * (b - a + 1));
+    const n = (x) => Math.round(x * 100) / 100;
+    const ok = (l, c, h, a) => 'oklch(' + l + ' ' + c + ' ' + n(((h % 360) + 360) % 360) + (a !== undefined ? ' / ' + a : '') + ')';
+    const P = (x, y) => n(x) + ' ' + n(y);
+    const ell = (cx, cy, rx, ry) => 'M' + P(cx - rx, cy) + 'a' + n(rx) + ' ' + n(ry) + ' 0 1 0 ' + n(2 * rx) + ' 0a' + n(rx) + ' ' + n(ry) + ' 0 1 0 ' + n(-2 * rx) + ' 0';
+    const NONE = 'M0 0';
+    const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
+
+    // The six older emblems (sprig, orbit, rings, sigil, contours, guilloche), as on the test shelf
+    const emblem = (kind, cx, cy, r, R, opt) => {
+      const dz = opt.dens === undefined ? 1 : opt.dens;
+      const cnt = (base, min) => Math.max(min, Math.round(base * dz));
+      if (kind === 'sprig') {
+        const bx = cx - r * 0.12, by = cy + r * 0.95, tx = cx + r * 0.10, ty = cy - r * 0.85;
+        const stem = 'M' + P(bx, by) + 'C' + P(cx - r * 0.28, cy + r * 0.25) + ' ' + P(cx + r * 0.24, cy - r * 0.25) + ' ' + P(tx, ty);
+        const count = cnt(opt.fivePlus ? 6 : intIn(R, 5, 7), 3);
+        let leaves = '', hi = '';
+        for (let i = 0; i < count; i++) {
+          const t = (i + 1) / (count + 1);
+          // Leaf base sits on the stem curve itself (Gemini placed it on a straight line beside it)
+          const u = 1 - t, b0 = u * u * u, b1 = 3 * u * u * t, b2 = 3 * u * t * t, b3 = t * t * t;
+          const px = b0 * bx + b1 * (cx - r * 0.28) + b2 * (cx + r * 0.24) + b3 * tx;
+          const py = b0 * by + b1 * (cy + r * 0.25) + b2 * (cy - r * 0.25) + b3 * ty;
+          const side = i % 2 === 0 ? 1 : -1, len = r * between(R, 0.32, 0.48);
+          const d = 'M' + P(px, py) + 'Q' + P(px + side * len * 0.25, py - len * 0.75) + ' ' + P(px + side * len, py - len * 0.55) + 'Q' + P(px + side * len * 0.75, py - len * 0.1) + ' ' + P(px, py);
+          if (opt.fivePlus && i === count - 1) hi += d; else leaves += d;
+        }
+        return [{ d: stem, role: 'accent', w: 0.75, o: 1 }, { d: leaves, role: 'accent', w: 0.65, o: 1 }, { d: hi, role: 'ink', w: 0.95, o: 1 }];
+      }
+      if (kind === 'kintsugi') {
+        const ox = opt.ox, oy = opt.oy, span = r * 2.4;
+        const rays = intIn(R, 4, 6);
+        let main = '', hair = '';
+        for (let i = 0; i < rays; i++) {
+          const angle = PI + (PI / 2) * (i + 0.3) / rays + between(R, -0.09, 0.09);
+          let x = ox - between(R, 0, 18), y = oy - between(R, 0, 18);
+          main += 'M' + P(x, y);
+          for (let s = 1; s <= 4; s++) {
+            const seg = (span / 4) * between(R, 0.75, 1.25), a = angle + between(R, -0.22, 0.22);
+            x = Math.max(ox - span, x + Math.cos(a) * seg);
+            y = Math.max(oy - span * 1.15, y + Math.sin(a) * seg);
+            main += 'L' + P(x, y);
+            if (s >= 2 && R() > 0.35) {
+              const ba = a + (R() > 0.5 ? 0.65 : -0.65), bl = seg * 0.55;
+              hair += 'M' + P(x, y) + 'L' + P(x + Math.cos(ba) * bl, y + Math.sin(ba) * bl);
+            }
+          }
+        }
+        return [{ d: main, role: 'accent', w: 0.85, o: 1 }, { d: hair, role: 'accent2', w: 0.45, o: 0.55 }];
+      }
+      if (kind === 'orbit') {
+        const spokes = cnt(intIn(R, 6, 8), 3) * 2;
+        let star = '';
+        for (let i = 0; i < spokes / 2; i++) {
+          const th = i * (2 * PI / spokes);
+          star += 'M' + P(cx + Math.cos(th) * r, cy + Math.sin(th) * r) + 'L' + P(cx - Math.cos(th) * r, cy - Math.sin(th) * r);
+        }
+        const off = opt.platonic ? 0 : r * 0.16;
+        return [{ d: star, role: 'hair', w: 0.5, o: 1 }, { d: ell(cx - off * 0.5, cy, r * 0.62, r * 0.62), role: 'accent', w: 0.6, o: 0.6 }, { d: ell(cx + off * 0.5, cy, r * 0.62, r * 0.62), role: 'accent2', w: 0.5, o: 0.5 }];
+      }
+      if (kind === 'rings') {
+        const base = between(R, 0, 2 * PI), N = cnt(5, 2);
+        let rest = '', last = '';
+        for (let i = 0; i < N; i++) {
+          const rr = r * (i + 1) / N, sh = (r - rr) * 0.45;
+          const d = ell(cx + Math.cos(base + i * 0.35) * sh, cy + Math.sin(base + i * 0.35) * sh, rr, rr);
+          if (i === N - 1) last = d; else rest += d;
+        }
+        return [{ d: rest, role: 'hair', w: 0.5, o: 1 }, { d: last, role: 'accent', w: 0.75, o: 1 }];
+      }
+      if (kind === 'cup') {
+        const cw = r * 0.52, ch = r * 0.36;
+        const d = ell(cx, cy + ch * 0.48, cw * 0.75, ch * 0.16) + 'M' + P(cx - cw * 0.5, cy - ch * 0.25) + 'Q' + P(cx, cy + ch * 1.15) + ' ' + P(cx + cw * 0.5, cy - ch * 0.25) + ell(cx, cy - ch * 0.25, cw * 0.5, ch * 0.13) + ell(cx + cw * 0.49, cy + ch * 0.01, cw * 0.14, ch * 0.19);
+        return [{ d, role: 'ink', w: 0.7, o: 0.72 }];
+      }
+      if (kind === 'sigil') {
+        let star = '';
+        for (let i = 0; i <= 8; i++) {
+          const idx = (i * 3) % 8, ang = idx * (2 * PI / 8) - PI / 2;
+          star += (i === 0 ? 'M' : 'L') + P(cx + Math.cos(ang) * r * 0.78, cy + Math.sin(ang) * r * 0.78);
+        }
+        const ir = r * (opt.inner || 0.32);
+        return [{ d: star, role: 'accent', w: 0.65, o: 1 }, { d: ell(cx, cy, ir, ir), role: 'hair', w: 0.55, o: 1 }];
+      }
+      if (kind === 'contours') {
+        const phase = between(R, 0, 2 * PI);
+        let d = '';
+        const N = cnt(5, 2);
+        for (let lv = 1; lv <= N; lv++) {
+          const base = r * 0.85 * lv / N;
+          for (let s = 0; s <= 48; s++) {
+            const th = s / 48 * 2 * PI;
+            const rr = base * (1 + 0.14 * Math.sin(3 * th + phase) + 0.08 * Math.cos(5 * th - phase));
+            d += (s === 0 ? 'M' : 'L') + P(cx + Math.cos(th) * rr, cy + Math.sin(th) * rr * 0.78);
+          }
+        }
+        return [{ d, role: 'accent', w: 0.55, o: 0.65 }];
+      }
+      const fa = intIn(R, 3, 5), fb = fa + 1, dl = between(R, 0.2, 1.4);
+      let d = '';
+      for (let i = 0; i <= 180; i++) {
+        const t = i / 180 * 2 * PI;
+        d += (i === 0 ? 'M' : 'L') + P(cx + Math.sin(fa * t + dl) * r * 0.65, cy + Math.sin(fb * t) * r * 0.65);
+      }
+      return [{ d, role: 'accent', w: 0.55, o: 0.65 }];
+    };
+
+    const parseTitle = (t) => {
+      const m = t.match(/^(.*\S)\s+(\(.*\)|\[.*\])$/);
+      return m ? { main: m[1], deck: m[2] } : { main: t, deck: '' };
+    };
+    const OLD = ['rings', 'orbit', 'contours', 'sigil', 'guilloche', 'sprig'];
+    const KINDS = OLD.concat(['waves', 'halftone', 'truchet', 'rosette', 'sunburst', 'constellation', 'chevrons', 'moire', 'squares', 'petals']);
+    const UPRIGHT = ['sprig', 'waves', 'chevrons', 'truchet', 'halftone'];
+    const FILLED = { halftone: true, petals: true };
+    const motif = (kind, cx, cy, r, R, dens) => {
+      // dens = how full this motif is. One motif per cover; length adds elements, never a second copy on top.
+      const k = dens === undefined ? 1 : dens;
+      const dn = (lo, hi, min) => Math.max(min === undefined ? 3 : min, Math.round(intIn(R, lo, hi) * k));
+      if (OLD.includes(kind)) return emblem(kind, cx, cy, r, R, { platonic: true, fivePlus: false, dens: k * 0.8, inner: 0.22 }).map((x) => x.d).join('');
+      let d = '';
+      if (kind === 'waves') {
+        const count = dn(3, 5), amp = r * between(R, 0.08, 0.16), freq = between(R, 1.5, 3);
+        for (let i = 0; i < count; i++) {
+          const y = cy - r + i * (2 * r / (count - 1));
+          for (let s = 0; s <= 40; s++) d += (s === 0 ? 'M' : 'L') + P(cx - r * 1.3 + s / 40 * 2.6 * r, y + Math.sin(s / 40 * 2 * PI * freq + i * 0.6) * amp);
+        }
+      } else if (kind === 'halftone') {
+        const step = r * between(R, 0.2, 0.28) / k, lim = r * 1.25;
+        for (let gy = -lim; gy <= lim; gy += step) for (let gx = -lim; gx <= lim; gx += step) {
+          const s = step * 0.45 * (1 - Math.hypot(gx, gy) / lim);
+          if (s > 0.6) d += ell(cx + gx, cy + gy, s, s);
+        }
+      } else if (kind === 'truchet') {
+        const N = Math.max(2, Math.round(4 * k)), s = r * 2.5 / N, h = s / 2, A = (sw) => 'A' + n(h) + ' ' + n(h) + ' 0 0 ' + sw + ' ';
+        for (let iy = 0; iy < N; iy++) for (let ix = 0; ix < N; ix++) {
+          const x = cx - r * 1.25 + ix * s, y = cy - r * 1.25 + iy * s;
+          d += R() < 0.5
+            ? 'M' + P(x + h, y) + A(1) + P(x, y + h) + 'M' + P(x + s, y + h) + A(0) + P(x + h, y + s)
+            : 'M' + P(x + h, y) + A(0) + P(x + s, y + h) + 'M' + P(x, y + h) + A(1) + P(x + h, y + s);
+        }
+      } else if (kind === 'rosette') {
+        const k = intIn(R, 3, 7), Rr = r * 0.8, rr = Rr / k, dd = rr * between(R, 0.8, 1.6);
+        for (let i = 0; i <= 360; i++) {
+          const t = i / 360 * 2 * PI;
+          d += (i === 0 ? 'M' : 'L') + P(cx + (Rr - rr) * Math.cos(t) + dd * Math.cos((Rr - rr) / rr * t), cy + (Rr - rr) * Math.sin(t) - dd * Math.sin((Rr - rr) / rr * t));
+        }
+      } else if (kind === 'sunburst') {
+        const rays = dn(7, 10, 5);
+        for (let i = 0; i < rays; i++) { const a = i / rays * 2 * PI; d += 'M' + P(cx + Math.cos(a) * r * 0.25, cy + Math.sin(a) * r * 0.25) + 'L' + P(cx + Math.cos(a) * r * 1.4, cy + Math.sin(a) * r * 1.4); }
+      } else if (kind === 'constellation') {
+        const pts = [];
+        const count = dn(5, 7, 4);
+        for (let i = 0; i < count; i++) { const a = R() * 2 * PI, rad = r * (0.25 + R() * 0.9); pts.push([a, cx + Math.cos(a) * rad, cy + Math.sin(a) * rad]); }
+        pts.sort((u, v) => u[0] - v[0]);
+        pts.forEach((q, i) => { d += (i === 0 ? 'M' : 'L') + P(q[1], q[2]); });
+        pts.forEach((q) => { d += ell(q[1], q[2], 1.8, 1.8); });
+      } else if (kind === 'chevrons') {
+        const count = dn(3, 5), gap = r * 0.32;
+        for (let i = 0; i < count; i++) { const y = cy - r * 0.9 + i * gap; d += 'M' + P(cx - r, y + r * 0.3) + 'L' + P(cx, y - r * 0.05) + 'L' + P(cx + r, y + r * 0.3); }
+      } else if (kind === 'moire') {
+        const off = r * between(R, 0.18, 0.32), a = R() * 2 * PI;
+        const N = Math.max(2, Math.round(3.5 * k));
+        [[cx, cy], [cx + Math.cos(a) * off, cy + Math.sin(a) * off]].forEach((c) => { for (let i = 1; i <= N; i++) d += ell(c[0], c[1], r * i / N * 1.1, r * i / N * 1.1); });
+      } else if (kind === 'squares') {
+        const step = between(R, 6, 12) * PI / 180, N = Math.max(2, Math.round(4 * k));
+        for (let i = 0; i < N; i++) {
+          const s = r * (1.1 - i * 0.15), a = i * step;
+          for (let j = 0; j < 4; j++) { const ang = a + PI / 4 + j * PI / 2; d += (j === 0 ? 'M' : 'L') + P(cx + Math.cos(ang) * s, cy + Math.sin(ang) * s); }
+          d += 'Z';
+        }
+      } else if (kind === 'packing17') {
+        // Easter egg. John Bidwell's 1998 packing of 17 unit squares in a square of side
+        // s = 4.67553..., still the smallest known. Geometry read off the reference SVG at
+        // kingbird.myphotos.cc/packing/square-17.svg: eight squares square-on in the corners,
+        // six tilted by a, one hanging from the top edge, one tilted by b, one on the right edge.
+        const S = 4.675530093604551, A = 39.80495897976779 * PI / 180, B = 36.62378638344659 * PI / 180;
+        const x1 = 0.6401761924292661, v0 = 0.056838696870287317, u1 = 0.2764267668203799, u2 = 0.4044786932768828;
+        const x3 = 1.847324826510285, y4 = 3.113460132512564, r5 = 0.5059274280066374;
+        const box = r * 1.3, sc = box / S, ox = cx - box / 2, oy = cy - box / 2;
+        const put = (bx, by, ang, dx, dy, side) => {
+          const co = Math.cos(ang), si = Math.sin(ang), u = side === undefined ? 1 : side;
+          let out = '';
+          [[0, 0], [u, 0], [u, u], [0, u]].forEach((c, i) => {
+            const lx = dx + c[0], ly = dy + c[1];
+            out += (i === 0 ? 'M' : 'L') + P(ox + (bx + lx * co - ly * si) * sc, oy + (S - (by + lx * si + ly * co)) * sc);
+          });
+          return out + 'Z';
+        };
+        d += put(0, 0, 0, 0, 0, S);
+        [[0, 1], [0, 0], [1, 0], [0, S - 1]].forEach((q) => { d += put(q[0], q[1], 0, 0, 0); d += put(S - q[0] - 1, q[1], 0, 0, 0); });
+        [[0, 0], [1, v0], [u1, -1], [u1 + 1, v0 - 1], [u2, -2], [u2 + 1, v0 - 2]].forEach((o) => { d += put(x1, 2, A, o[0], o[1]); });
+        d += put(x3, S, 0, 0, -1);
+        d += put(x3 + 1, S - 1, -B, 0, -r5);
+        d += put(S, y4, -PI / 2, 0, -1);
+      } else {
+        const count = dn(4, 6);
+        for (let i = 0; i < count; i++) {
+          const a = i / count * 2 * PI;
+          d += 'M' + P(cx, cy) + 'Q' + P(cx + Math.cos(a - 0.32) * r * 0.72, cy + Math.sin(a - 0.32) * r * 0.72) + ' ' + P(cx + Math.cos(a) * r, cy + Math.sin(a) * r) + 'Q' + P(cx + Math.cos(a + 0.32) * r * 0.72, cy + Math.sin(a + 0.32) * r * 0.72) + ' ' + P(cx, cy);
+        }
+      }
+      return d;
+    };
+    const SERIF = "'New York', 'Iowan Old Style', Georgia, serif";
+    const SANS = "-apple-system, 'SF Pro Display', system-ui, sans-serif";
+    // ---- The rules. Every input is in the AO3 work listing the app already loads. ----
+    // Fandom -> colour family. A fandom's parent (AO3 nests fandoms under a source) picks the family hue;
+    // the fandom itself shifts a little inside it. Unknown sources draw from a fixed, contrast-checked set.
+    const PARENT = { 'Persuasion': 'Jane Austen', 'Pride and Prejudice': 'Jane Austen', 'Northanger Abbey': 'Jane Austen', 'Jane Eyre': 'The Brontës' };
+    const FAMILY_HUE = { 'Jane Austen': 150, 'The Brontës': 300, 'Sherlock Holmes': 55, 'Original Work': 220 };
+    const PALETTE = [20, 55, 85, 125, 150, 180, 205, 230, 260, 290, 320, 350];
+    const fandomHue = (f) => {
+      const par = PARENT[f] || f;
+      const base = FAMILY_HUE[par] !== undefined ? FAMILY_HUE[par] : PALETTE[hash('source:' + par) % PALETTE.length];
+      return par === f ? base : base + (hash('fandom:' + f) % 5 - 2) * 9;
+    };
+    // Tone tags -> motif family. Short allowlist of canonical AO3 tags; mixed or missing tone stays neutral.
+    const TONE = {
+      'Fluff': 'soft', 'Domestic Fluff': 'soft', 'Romance': 'soft', 'Humor': 'soft', 'Slice of Life': 'soft',
+      'Angst': 'angular', 'Drama': 'angular', 'Horror': 'angular', 'Thriller': 'angular',
+      'Case Fic': 'orderly', 'Mystery': 'orderly', 'Politics': 'orderly', 'Character Study': 'orderly',
+      'Fantasy': 'celestial', 'Magic': 'celestial', 'Science Fiction': 'celestial'
+    };
+    const FAMILIES = {
+      soft: ['petals', 'sprig', 'waves', 'rosette'],
+      angular: ['chevrons', 'squares', 'sunburst', 'sigil'],
+      orderly: ['truchet', 'contours', 'halftone', 'moire'],
+      celestial: ['constellation', 'orbit', 'rings', 'guilloche']
+    };
+    const toneOf = (tags) => {
+      const fams = [];
+      (tags || []).forEach((t) => { if (TONE[t] && !fams.includes(TONE[t])) fams.push(TONE[t]); });
+      return fams.length === 1 ? fams[0] : '';
+    };
+    const TIERS = ['Short', 'Novella', 'Novel', 'Epic'];
+    const FULL = [0.7, 0.95, 1.2, 1.5];
+
+    // ---- One work in, one cover out. Boards pass whatever they have; the rest falls back as below. ----
+    // A collection or queue (collection={name, colour}) is drawn the same way: its own chosen colour as the ground,
+    // a motif picked by its name, no ring (it has no status) and no words.
+    const C = this.props.collection || null;
+    const W = C ? { title: String(C.name || ''), author: 'collection:' + (C.name || '') + (C.colour || ''), status: 'complete' }
+      : this.props.work || { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', words: '118k', status: 'wip' };
+    const width = Number(this.props.width ?? 132), height = Number(this.props.height ?? Math.round(width * 1.42));
+    const withText = !!this.props.text && !C;
+    const VW = 112, VH = n(VW * height / width);
+    const title = String(W.title || '').replace(/^\d+\.\s*/, ''), author = String(W.author || '');
+    // An older board gives only its old cover colour: read the fandom back out of that colour
+    const OLDFAN = { 188: 'Original Work', 335: 'Persuasion', 32: 'Sherlock Holmes', 262: 'Jane Eyre', 290: 'Northanger Abbey', 150: 'Pride and Prejudice', 205: 'To the Lighthouse' };
+    const hexHue = (hex) => {
+      const x = String(hex).replace('#', ''), c = [0, 2, 4].map((i) => parseInt(x.slice(i, i + 2), 16) / 255);
+      const mx = Math.max(...c), d = mx - Math.min(...c);
+      if (x.length !== 6 || c.some(isNaN)) return null;
+      return !d ? 210 : Math.round(((mx === c[0] ? ((c[1] - c[2]) / d) % 6 : mx === c[1] ? (c[2] - c[0]) / d + 2 : (c[0] - c[1]) / d + 4) * 60 + 360) % 360);
+    };
+    const m = /hsl\((\d+)/.exec(W.cover || W.art || '');
+    const oldHue = m ? Number(m[1]) : /^#[0-9a-f]{6}$/i.test(W.cover || '') ? hexHue(W.cover) : null;
+    const clean = (f) => String(f).split(' - ')[0].replace(/\s*\((TV|Movies|Comics|Anime)\)$/, '').replace(/ & Related Fandoms$/, '').trim();
+    const fandoms = (Array.isArray(W.fandoms) ? W.fandoms : W.fandom ? String(W.fandom).split(/\s+×\s+/) : oldHue !== null && OLDFAN[oldHue] ? [OLDFAN[oldHue]] : []).map(clean).filter(Boolean);
+    const hueOf = (i) => fandoms[i] ? fandomHue(fandoms[i]) : oldHue !== null ? oldHue : PALETTE[hash('title:' + title) % PALETTE.length];
+    const id = W.id ?? hash('work:' + title + '|' + author);
+    const wordsN = typeof W.words === 'number' ? W.words : (() => {
+      const s = String(W.words || '').replace(/,/g, '').trim(), x = parseFloat(s);
+      return isNaN(x) ? 30000 : /k\b|k$/i.test(s) ? Math.round(x * 1000) : x;
+    })();
+    const done = W.done !== undefined ? !!W.done : W.status ? W.status !== 'wip' : true;
+    // Mock-ups rarely carry a posting year; the app derives it from the work ID (see the spec)
+    const year = W.year || 2011 + hash('year:' + id) % 15;
+    const sid = W.sid ?? (W.series ? hash('series:' + W.series) : null), part = W.part || 0;
+    const cross = fandoms.length > 1;
+    const aH = hash('author:' + author);
+    // Tone -> family, author -> which motif in it. A series keeps one motif for all its parts.
+    const tone = sid ? '' : toneOf(W.tags || W.tones || []);
+    const kind = W.kind || (sid ? KINDS[hash('series-kind:' + sid) % KINDS.length] : tone ? FAMILIES[tone][aH % 4] : KINDS[aH % KINDS.length]);
+    const tstyle = (aH >>> 5) % 3;
+    // Work ID (series ID inside a series) -> the leftovers only
+    const fine = rng(sid ? hash('series-fine:' + sid) : hash('fine:' + id));
+    const treat = intIn(fine, 0, 3);
+    const rot = n(W.kind ? 0 : UPRIGHT.includes(kind) ? between(fine, -12, 12) : between(fine, 0, 360));
+    const scale = n(between(fine, 0.85, 1.2));
+    // ink < 1 fades the art where words sit on top of it (the resume, up-next and latest-work cards); covers leave it at 1.
+    const sw0 = n(between(fine, 1, 1.5)), so = n(between(fine, 0.4, 0.55) * Number(this.props.ink ?? 1));
+    // Posting order -> depth of shade (2010 and earlier darkest, 2026 lightest)
+    const Lg = n(0.32 + Math.min(Math.max((year - 2010) / 16, 0), 1) * 0.14);
+    const hue = hueOf(0) + (part ? (part - 1) * 18 : 0);
+    const c1 = ok(Lg, 0.085, hue), c2 = ok(n(Lg + 0.07), 0.09, hue + 14), c3 = ok(n(Lg - 0.05), 0.08, hue - 10);
+    let bg;
+    if (cross) {
+      const cols = fandoms.map((f, i) => (i === 0 ? c1 : ok(Lg, 0.085, hueOf(i))));
+      const cuts = cols.length === 2 ? [0, 60, 100] : cols.map((c, i) => Math.round(i * 100 / cols.length)).concat([100]);
+      bg = 'linear-gradient(135deg, ' + cols.map((c, i) => c + ' ' + cuts[i] + '%, ' + c + ' ' + cuts[i + 1] + '%').join(', ') + ')';
+    } else {
+      bg = [
+        'linear-gradient(160deg, ' + c1 + ', ' + c2 + ')',
+        'linear-gradient(180deg, ' + c1 + ' 0%, ' + c1 + ' 58%, ' + c2 + ' 58%, ' + c2 + ' 100%)',
+        'linear-gradient(180deg, ' + c1 + ' 0%, ' + c1 + ' 62%, ' + c3 + ' 62%, ' + c3 + ' 74%, ' + c1 + ' 74%, ' + c1 + ' 100%)',
+        c1
+      ][treat];
+    }
+    // Title -> placement (also for art-only thumbnails, so a small cover is the big one without its words)
+    const t = parseTitle(title), len = t.main.length;
+    const layout = t.deck ? 2 : len <= 16 ? 1 : 0;
+    const spot = [[80, n(VH * 0.314)], [80, n(VH * 0.742)], [32, n(VH * 0.73)]][layout];
+    // Length -> how full the motif is. Below 64 pt wide every cover takes the sparest version (optical size).
+    const tier = wordsN < 10000 ? 0 : wordsN < 40000 ? 1 : wordsN < 100000 ? 2 : 3;
+    const shapeSeed = sid ? hash('series-shape:' + sid) : hash('shape:' + id);
+    const e = motif(kind, spot[0], spot[1], 46, rng(shapeSeed), FULL[width < 64 ? 0 : tier]);
+    // Status -> ring: closed when complete, open (gap facing the cover's centre) while in progress
+    const rr = 46 * 1.16 * scale, mid = Math.atan2(VH / 2 - spot[1], 56 - spot[0]), gap = 0.6;
+    const ring = done
+      ? ell(spot[0], spot[1], rr, rr)
+      : 'M' + P(spot[0] + Math.cos(mid + gap) * rr, spot[1] + Math.sin(mid + gap) * rr) + 'A' + n(rr) + ' ' + n(rr) + ' 0 1 1 ' + P(spot[0] + Math.cos(mid - gap) * rr, spot[1] + Math.sin(mid - gap) * rr);
+    if (C) {
+      // The reader picks a swatch from the cover palette (the twelve family hues, or graphite), so collections sit at
+      // the same lightness as works. A colour from before that rule snaps to the nearest swatch, by OKLCH hue.
+      const swatch = (() => {
+        if (typeof C.hue === 'number') return { h: C.hue, c: 0.085 };
+        const hx = /^#([0-9a-f]{6})$/i.exec(C.colour || '');
+        if (!hx) return { h: PALETTE[hash('collection:' + title) % PALETTE.length], c: 0.085 };
+        const lin = [0, 2, 4].map((i) => { const v = parseInt(hx[1].slice(i, i + 2), 16) / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+        const l = Math.cbrt(0.4122214708 * lin[0] + 0.5363325363 * lin[1] + 0.0514459929 * lin[2]);
+        const mm = Math.cbrt(0.2119034982 * lin[0] + 0.6806995451 * lin[1] + 0.1073969566 * lin[2]);
+        const s3 = Math.cbrt(0.0883024619 * lin[0] + 0.2817188376 * lin[1] + 0.6299787005 * lin[2]);
+        const a = 1.9779984951 * l - 2.4285922050 * mm + 0.4505937099 * s3, b = 0.0259040371 * l + 0.7827717662 * mm - 0.8086757660 * s3;
+        if (Math.hypot(a, b) < 0.03) return { h: 260, c: 0.012 };
+        const H = (Math.atan2(b, a) * 180 / PI + 360) % 360, dist = (p) => Math.min(Math.abs(p - H), 360 - Math.abs(p - H));
+        return { h: PALETTE.reduce((best, p) => (dist(p) < dist(best) ? p : best), PALETTE[0]), c: 0.085 };
+      })();
+      bg = 'linear-gradient(160deg, ' + ok(0.4, swatch.c, swatch.h) + ', ' + ok(0.47, n(swatch.c + 0.005), swatch.h + 14) + ')';
+    }
+    const filled = !!FILLED[kind];
+    // Lines scale with the cover; on a small one they keep at least 0.9 pt on screen
+    const minLine = 0.9 * VW / width;
+    const sw = Math.max(sw0, minLine);
+    // Text: sizes are shares of the cover width (spec, section 5)
+    const k = width / VW;
+    const base = len <= 12 && !t.main.includes(' ') ? 22 : len <= 32 ? 15 : len <= 64 ? 13 : 12;
+    const f = (x) => n(x * k);
+    return {
+      width, height, vb: '0 0 ' + VW + ' ' + VH,
+      radius: Number(this.props.radius ?? Math.round(width * 0.125)),
+      shadow: this.props.shadow || 'none',
+      hideAX: !withText,
+      pad: withText ? f(11) : 0,
+      bg, e, ring: C ? NONE : ring,
+      tr: 'rotate(' + rot + ' ' + spot[0] + ' ' + spot[1] + ') translate(' + spot[0] + ' ' + spot[1] + ') scale(' + scale + ') translate(' + (-spot[0]) + ' ' + (-spot[1]) + ')',
+      sw: filled ? 0 : n(sw / scale), so, fill: filled ? '#FFFFFF' : 'none', fo: filled ? n(so * 0.8) : 0,
+      rw: n(Math.max(1.2, minLine)),
+      v0: withText && layout === 0, v1: withText && layout === 1, v2: withText && layout === 2,
+      fandom: fandoms.join(' × ') || String(W.fandom || ''),
+      hasPart: !!part, part: part ? 'PART ' + (ROMAN[part] || part) : '',
+      title: t.main, hasDeck: !!t.deck, deck: t.deck, author,
+      ts: f(tstyle === 2 ? Math.round(base * 0.8) : base),
+      tf: tstyle === 2 ? SANS : SERIF, tfs: tstyle === 1 ? 'italic' : 'normal', tw: tstyle === 2 ? 700 : 600,
+      ttt: tstyle === 2 ? 'uppercase' : 'none', tls: tstyle === 2 ? f(0.6) : 0,
+      lab: f(8.5), labLH: f(11), labTr: f(0.6), sm: f(10), smLH: f(12), g3: f(3), g4: f(4), g10: f(10)
+    };
+  }
+}
+</script>
+</body>
+</html>

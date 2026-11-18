@@ -23,7 +23,7 @@ button{cursor:pointer}
       <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Words read</span>
       <div style="display: flex; align-items: baseline; gap: 10px">
         <span style="font-size: 38px; line-height: 44px; font-weight: 700; letter-spacing: -0.5px; font-variant-numeric: tabular-nums">212,600</span>
-        <span style="font-size: 15px; line-height: 20px; color: #3A3A3C; display: flex; align-items: center; gap: 3px"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg>18% vs Sep</span>
+        <span style="font-size: 15px; line-height: 20px; color: #3A3A3C; display: flex; align-items: center; gap: 3px"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg>18% vs Sep 1–27</span>
       </div>
       <span style="font-size: 13px; line-height: 18px; color: #6C6C70">About 3 novels’ worth, at 70,000 words a novel</span>
       <div style="height: 0.5px; background: #E5E5EA; margin: 10px 0 8px"></div>
@@ -143,6 +143,7 @@ class Component extends DCLogic {
   renderVals() {
     const accent = this.props.accent ?? '#821019';
     // Words read each day, in thousands, 1–27 October (sums to 212.6k).
+    // Pace is reading only: 212.6k less the 22.0k heard through Read Aloud, over 12 h 25 m = 15.3k an hour.
     const k = [6.2, 9.8, 0, 12.4, 4.1, 7.7, 10.9, 15.2, 0, 3.4, 8.8, 5.1, 9.6, 11.2, 14.7, 6.0, 31.4, 8.2, 7.4, 12.9, 0, 0, 5.6, 9.1, 4.9, 0, 8.0];
     const max = Math.max(...k);
     const chartH = 96;
@@ -187,7 +188,7 @@ class Component extends DCLogic {
         { label: 'Longest streak', value: '11 days', detail: 'Oct 10–20' },
         { label: 'Biggest day', value: '31.4k', detail: 'Saturday, Oct 17' },
         { label: 'Typical sitting', value: '24 min', detail: 'median of 35 sittings' },
-        { label: 'Pace', value: '15.0k', detail: 'words an hour' }
+        { label: 'Pace', value: '15.3k', detail: 'an hour, reading only' }
       ],
       lengths: [
         { label: 'Under 5k', n: 7 },
@@ -196,7 +197,7 @@ class Component extends DCLogic {
         { label: '150k+', n: 1 }
       ].map((l, i) => ({ ...l, color: ramp[i] })),
       finished: [
-        { title: 'Letters Never Sent', fandom: 'Persuasion', color: '#9C2F6B', detail: '21,880 words · Oct 24 · Read ×2' },
+        { title: 'Letters Never Sent', fandom: 'Persuasion', color: '#9C2F6B', detail: '21,880 words · Oct 24 · Read ×4' },
         { title: 'The Baker Street Irregular', fandom: 'Sherlock Holmes', color: '#B07D12', detail: '9,140 words · Oct 22' },
         { title: 'Thornfield in Winter', fandom: 'Jane Eyre', color: '#2C6DB0', detail: '64,300 words · Oct 19' }
       ].map((w, i) => ({ ...w, sep: i ? '0.5px solid #E5E5EA' : 'none' }))

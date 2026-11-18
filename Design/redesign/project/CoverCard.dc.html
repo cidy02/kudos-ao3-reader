@@ -14,7 +14,8 @@ body{margin:0}
 </helmet>
 <div style="width: {{width}}px; display: flex; flex-direction: column; gap: 6px; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; color: #000000">
   <sc-if value="{{isHidden}}" hint-placeholder-val="{{false}}">
-    <div style="position: relative; width: {{width}}px; height: {{coverH}}px; border-radius: 16px; overflow: hidden; background: {{art}}">
+    <div style="position: relative; width: {{width}}px; height: {{coverH}}px; border-radius: 16px; overflow: hidden">
+      <div aria-hidden="true" style="position: absolute; inset: 0; filter: blur(7px)"><dc-import name="CoverArt" work="{{w}}" width="{{width}}" height="{{coverH}}" radius="16" hint-size="{{coverHint}}"></dc-import></div>
       <div aria-hidden="true" style="position: absolute; inset: 0; padding: 14px 12px; filter: blur(7px); display: flex; flex-direction: column; justify-content: flex-end; gap: 8px">
         <span style="height: 14px; width: 86%; border-radius: 4px; background: rgba(255,255,255,0.6)"></span>
         <span style="height: 14px; width: 60%; border-radius: 4px; background: rgba(255,255,255,0.6)"></span>
@@ -26,26 +27,7 @@ body{margin:0}
     <span style="font-size: 12px; line-height: 16px; color: {{ink2}}">Hidden mature work</span>
   </sc-if>
   <sc-if value="{{isShown}}" hint-placeholder-val="{{true}}">
-    <div style="position: relative; width: {{width}}px; height: {{coverH}}px; box-sizing: border-box; padding: {{pad}}px; border-radius: 16px; overflow: hidden; background: {{art}}; color: #FFFFFF; box-shadow: 0 4px 12px rgba(0,0,0,0.14); display: flex; flex-direction: column">
-      <sc-if value="{{v0}}" hint-placeholder-val="{{true}}">
-        <span aria-hidden="true" style="position: absolute; right: {{ghostIn}}px; top: {{ghostTop}}px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: {{ghostSize}}px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.15)">{{initial}}</span>
-        <span style="position: relative; font-size: {{labelSize}}px; line-height: 1.2; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.88)">{{w.fandom}}</span>
-        <span style="position: relative; margin-top: auto; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: {{titleSize}}px; line-height: 1.18; font-weight: 600">{{w.title}}</span>
-        <span style="position: relative; margin-top: 4px; font-size: {{authorSize}}px; line-height: 1.2; font-style: italic; color: rgba(255,255,255,0.88)">{{w.author}}</span>
-      </sc-if>
-      <sc-if value="{{v1}}" hint-placeholder-val="{{false}}">
-        <span aria-hidden="true" style="position: absolute; right: {{ghostIn}}px; bottom: {{ghostBottom}}px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: {{ghostSize}}px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.15)">{{initial}}</span>
-        <span style="position: relative; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: {{titleSize}}px; line-height: 1.18; font-weight: 600">{{w.title}}</span>
-        <span style="position: relative; margin-top: 4px; font-size: {{authorSize}}px; line-height: 1.2; font-style: italic; color: rgba(255,255,255,0.88)">{{w.author}}</span>
-        <span style="position: relative; margin-top: auto; font-size: {{labelSize}}px; line-height: 1.2; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.88)">{{w.fandom}}</span>
-      </sc-if>
-      <sc-if value="{{v2}}" hint-placeholder-val="{{false}}">
-        <span aria-hidden="true" style="position: absolute; left: {{ghostIn}}px; bottom: {{ghostBottom}}px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: {{ghostSize}}px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.15)">{{initial}}</span>
-        <span style="position: relative; font-size: {{labelSize}}px; line-height: 1.2; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.88)">{{w.fandom}}</span>
-        <span style="position: relative; margin-top: 10px; text-align: right; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: {{titleSize}}px; line-height: 1.18; font-weight: 600">{{w.title}}</span>
-        <span style="position: relative; margin-top: 4px; text-align: right; font-size: {{authorSize}}px; line-height: 1.2; font-style: italic; color: rgba(255,255,255,0.88)">{{w.author}}</span>
-      </sc-if>
-    </div>
+    <dc-import name="CoverArt" work="{{w}}" width="{{width}}" height="{{coverH}}" text="{{true}}" radius="16" shadow="0 4px 12px rgba(0,0,0,0.14)" hint-size="{{coverHint}}"></dc-import>
     <sc-if value="{{hasProgress}}" hint-placeholder-val="{{false}}">
       <div role="progressbar" aria-label="Reading progress" aria-valuenow="{{w.progress}}" aria-valuemin="0" aria-valuemax="100" style="height: 3px; border-radius: 2px; background: {{track}}"><div style="width: {{pct}}; height: 3px; border-radius: 2px; background: {{accent}}"></div></div>
     </sc-if>
@@ -89,43 +71,17 @@ class Component extends DCLogic {
     const tile = Math.floor(width / 4.36);
     const isText = (this.props.variant ?? 'cover') === 'text';
     const innerTile = Math.floor((width - 20) / 4.36);
-    // Generated cover: the fandom picks the colour family, the title picks the shade and the layout.
-    const seedOf = (t) => { let h = 7; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0; return h; };
-    const FAN = { 'Original Work': 188, 'Persuasion': 335, 'Sherlock Holmes': 32, 'Jane Eyre': 262, 'Northanger Abbey': 290, 'Pride and Prejudice': 150, 'To the Lighthouse': 205 };
-    const hexHue = (hex) => {
-      const x = (hex || '').replace('#', '');
-      if (x.length !== 6) return null;
-      const r = parseInt(x.slice(0, 2), 16) / 255, g = parseInt(x.slice(2, 4), 16) / 255, b = parseInt(x.slice(4, 6), 16) / 255;
-      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
-      if (!d) return 210;
-      let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
-      return Math.round(h * 60 + 360) % 360;
-    };
-    const title = w.title || '';
-    const fandomKey = (w.fandom || '').split(' - ')[0];
-    const base = FAN[fandomKey] !== undefined ? FAN[fandomKey] : (w.fandom ? seedOf(w.fandom) % 360 : (hexHue(w.cover) ?? seedOf(title) % 360));
-    const hue = (base + (seedOf(title) % 25) - 12 + 360) % 360;
-    const layout = seedOf(title) % 3;
+    // The cover itself is drawn by CoverArt (the shared engine; rules on the Cover-Spec board).
     return {
       w: { ...w, warningCount: w.warningCount || 1, badge: w.badge || '' },
       width,
       tile,
       stripHint: width + 'px,' + tile + 'px',
       coverH: Math.round(width * 1.42),
-      titleSize: Math.max(13, Math.round(width * 0.135)),
-      authorSize: Math.max(10, Math.round(width * 0.092)),
-      labelSize: Math.max(8, Math.round(width * 0.075)),
-      pad: Math.round(width * 0.1),
-      ghostSize: Math.round(width * 1.05),
-      ghostIn: -Math.round(width * 0.07),
-      ghostTop: -Math.round(width * 0.17),
-      ghostBottom: -Math.round(width * 0.29),
-      art: 'linear-gradient(155deg, hsl(' + hue + ', 46%, 27%), hsl(' + ((hue + 22) % 360) + ', 50%, 41%))',
-      initial: title.charAt(0),
+      coverHint: width + 'px,' + Math.round(width * 1.42) + 'px',
       theme: this.props.theme ?? 'light',
       ink2: { dark: '#AEAEB2', sepia: '#6B645A' }[this.props.theme] || '#6C6C70',
       track: { dark: '#3A3A3C', sepia: 'rgba(60,40,10,0.14)' }[this.props.theme] || '#E5E5EA',
-      v0: layout === 0, v1: layout === 1, v2: layout === 2,
       accent: this.props.accent ?? '#821019',
       meta: w.meta || [w.words, w.chapters].filter(Boolean).join(' · '),
       hasBadge: !!w.badge,

@@ -83,7 +83,7 @@ class Component extends DCLogic {
   renderVals() {
     // Hidden Gems: AO3 sorts by kudos with "hits 300 to 5,000" in the query; Kudos re-ranks
     // the loaded works by the cautious estimate and shows the shrunk one. Worked values:
-    // r1 9.4% vs 3.9% -> 2.4x (cautious 2.3x); r2 10.8% vs 5.6% -> 1.8x (1.7x);
+    // r1 9.4% vs 3.9% -> 2.4x (cautious 2.3x); r2 16.0% vs 5.6% -> 1.8x (1.6x), Early: under 50 kudos;
     // r3 6.8% vs 4.3% -> 1.6x (1.5x). The set-aside row has more kudos than hits.
     return {
       accent: this.props.accent ?? '#821019',
@@ -91,7 +91,7 @@ class Component extends DCLogic {
       loaded: '40',
       sent: ['Hits 300 to 5,000', 'Most kudos first'],
       r1: { title: 'Keeper of the Northern Light', author: 'saltwindow', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', words: '22,410', chapters: '7/7', kudos: '1,804', hits: '19.2k', updated: 'Oct 12', summary: 'Two keepers, one winter, and a logbook that keeps writing itself after midnight.', signal: { label: '2.4× kudos per hit', note: 'Steady · 26% saved', tone: 'high' } },
-      r2: { title: 'What the Lamp Saw', author: 'quietharbor', fandom: 'To the Lighthouse', rating: 'G', category: 'Gen', warnings: 'none', status: 'wip', words: '5,060', chapters: '2/5', kudos: '312', hits: '2.9k', updated: 'Oct 20', summary: 'The Ramsays’ summer, told by the one thing that watched it all.', signal: { label: '1.8× kudos per hit', note: 'Early · few readers yet', tone: 'high' } },
+      r2: { title: 'What the Lamp Saw', author: 'quietharbor', fandom: 'To the Lighthouse', rating: 'G', category: 'Gen', warnings: 'none', status: 'wip', words: '5,060', chapters: '2/5', kudos: '48', hits: '300', updated: 'Oct 20', summary: 'The Ramsays’ summer, told by the one thing that watched it all.', signal: { label: '1.8× kudos per hit', note: 'Early · few readers yet', tone: 'high' } },
       r3: { title: 'The Fog Bell Ledger', author: 'harborlight', fandom: 'Original Work', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', words: '61,250', chapters: '18/18', kudos: '960', hits: '14.1k', updated: '14 Mar 2019', summary: 'A bell that rings for ships that never came in, and the clerk who logs every one.', signal: { label: '1.6× kudos per hit', note: 'Steady · 31% saved', tone: 'high' } },
       odd: { title: 'Every Lamp in the Harbour', author: 'mistralfox', fandom: 'Original Work', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', words: '940', chapters: '1/1', kudos: '18,420', hits: '1,180', updated: 'Oct 2', signal: { label: 'Unusual stats', note: 'More kudos than hits', tone: 'unusual' } }
     };

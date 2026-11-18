@@ -12,7 +12,7 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 1280px; height: 3440px; box-sizing: border-box; padding: 64px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 40px">
+<div style="width: 1280px; height: 4090px; box-sizing: border-box; padding: 64px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 40px">
   <header style="display: flex; flex-direction: column; gap: 10px; max-width: 980px">
     <h1 style="margin: 0; font-size: 44px; line-height: 52px; font-weight: 700">Reading Insights: the data it needs</h1>
     <p style="margin: 0; font-size: 19px; line-height: 27px; color: #3A3A3C">What the code has to record before the four Insights screens can show real numbers, as of 27 October 2026. Everything is computed on the device; nothing about what someone reads is uploaded. Each change below names the cards it unlocks; the next board gives the rule behind every card.</p>
@@ -83,7 +83,7 @@ body{margin:0}
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":3440}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":4090}}'>
 class Component extends DCLogic {
   renderVals() {
     const P = {
@@ -97,7 +97,7 @@ class Component extends DCLogic {
         {
           title: 'ReadingSession (one row per sitting)',
           fields: 'workID · ao3WorkID · workTitle · startedAt · endedAt · durationSeconds · lastSpineIndex · chapterTitle · endingProgress · wordCount · chapterCountAtVisit · didFinish',
-          note: 'Pauses excluded, sittings under 15 s dropped, one row per visit even when backgrounded. Kept when the work is deleted, but only the title survives.'
+          note: 'Pauses excluded, sittings under 15 s dropped, one row per visit even when backgrounded. Kept when the work is deleted, but only the title survives. No idle cut-off: with Keep Screen Awake on, a phone left open keeps counting (D12).'
         },
         {
           title: 'SavedWork (the work and your state)',
@@ -121,14 +121,19 @@ class Component extends DCLogic {
           'SavedWork + readingStatusRaw: reading | onHold | stacking | stopped (empty = derived) · statusChangedAt: Date? · stoppedAt: Date? · stopReasonRaw: lostInterest | tooLong | writingStyle | tagDealbreaker | gotSpoiled | other · stopTag: String · stopNote: String · stackThreshold: Int = 3',
           'Derived, not stored: Caught Up = WIP with every posted chapter read; Finished = isFinished; Saved for Later = isQueuedForLater. isAbandoned stops being a status: it only shows the “Still reading?” card, behind Ask About Untouched Works, and never marks anything. Stacking returns the work to Reading and notifies when the threshold of new chapters is posted. Sync and back up all fields.',
           'ReadingLogService.isAbandoned · SavedWork.keepInProgressOverride'),
+        D('D12', 'P1', 'What can never be recovered later',
+          'Time of Day, Reading Days and streaks that survive travel and clock changes; exact words per sitting; a Pace without idle time; synced history counted once.',
+          'ReadingSession + tzOffsetSeconds: Int · startProgress: Double · startSpineIndex: Int · modeRaw: read | listen · playbackRate: Double · activeSeconds: Double · deviceID: String · rulesVersion: Int',
+          'Added in review, 13 Nov 2026. None of these can be backfilled, so record them from the first build, before any card uses them. Time zone: the hour and the day (4:00 to 4:00) come from the offset when it was read, not the phone’s zone today. Active time stops after 5 minutes with no page turn or scroll. Start position ends the guess that a sitting began where the last one ended, which credits a whole work to its first sitting when progress arrived by sync. Device and rules version let sync count overlapping sittings once and say which counting rules wrote a row.',
+          'Models/ReadingSession.swift · ReadingLogService.persist'),
         D('D3', 'P2', 'Word counts per chapter',
           'Accurate Words Read and Pace, Chapters Each, credit for partly read WIPs.',
-          'SavedWork + chapterWordCountsJSON: [Int] · wordUnitRaw: words | characters · ReadingSession + startProgress: Double · startSpineIndex: Int',
-          'Count chapter text only: AO3 EPUBs also carry the preface, summaries, notes and end notes. Use AO3WordCounter so totals match AO3. Languages written without spaces count characters: keep them out of word totals and pace. If the chapter sum is more than 10% off AO3’s count, fall back to today’s progress × words rule. A revised chapter you already read is not counted again.',
+          'SavedWork + chapterWordCountsJSON: [Int] · wordUnitRaw: words | characters (start position comes from D12)',
+          'Count chapter text only: AO3 EPUBs also carry the preface, summaries, notes and end notes. Use AO3WordCounter so totals match AO3. Languages written without spaces count characters: they get their own total and their own pace (characters an hour) beside the word figures, never mixed into them. If the chapter sum is more than 10% off AO3’s count, fall back to today’s progress × words rule. A revised chapter you already read is not counted again.',
           'Models/AO3WordCounter.swift · ReadingLogService.wordsRead · T-420'),
         D('D4', 'P2', 'Reading or Read Aloud',
           'Reading and Listening, the Count Read Aloud option, a Pace that leaves listening out.',
-          'ReadingSession + modeRaw: read | listen · playbackRate: Double',
+          'modeRaw and playbackRate, recorded since D12',
           'Read Aloud opens and closes sittings through ReadingLogService like the reader does (one tracker, mode listen). A sitting that switches mode splits into two rows.',
           'Features/ReaderReadium (Read Aloud) · ReadingLogService.startSession'),
         D('D5', 'P2', 'Insights options',
@@ -141,10 +146,20 @@ class Component extends DCLogic {
           'no new fields · CSV: one row per sitting + one per work status · JSON: sittings, statuses, reasons, notes',
           'Export goes through the share sheet and respects exclusions and Discreet Mode. Reset deletes ReadingSession rows only, never works, progress or statuses, and asks once with the counts it will remove.',
           'ReadingLogService.delete(_:in:)'),
+        D('D13', 'P2', 'Canonical names, learned in passing',
+          'Tags, Relationships, Characters and Fandoms that merge spellings of one tag; Crossovers that count related fandoms once; Often Together.',
+          'new @Model TagAlias: name · canonicalName · kindRaw: fandom | relationship | character | freeform · parentFandoms: [String] · learnedAt: Date',
+          'Added in review, 13 Nov 2026, in place of “merge only identical strings”. No request is made for it. A row is written when a tag page the reader opened answers under a different, canonical name, and from the filter sidebar on tag pages, which lists canonical tags (AO3Client.parseFacets already reads it). Fandom parents come from fandom pages the reader browses; until one has been seen, the app’s fandom display names stand in. Insights joins through it at query time, so history re-reads correctly as names are learned. To confirm in otwarchive before building: that a synonym’s works page redirects to its canonical tag.',
+          'AO3Client tag pages · AO3Client.parseFacets · fandom display names'),
+        D('D14', 'P2', 'What AO3 knows about a series',
+          'Series: read to the last part, Longest finished, Next Part Waiting; Work Detail’s series line with its real “part 2 of 3”.',
+          'new @Model SavedSeries: ao3SeriesID · title · partCount · isComplete · wordCount · partWorkIDs: [Int] · checkedAt: Date',
+          'Added in review, 13 Nov 2026. The app parses series pages already (AO3SeriesPage) and keeps nothing, so it knows only the parts it has downloaded. Write a row whenever a series page is fetched (the Series screen, Download Whole Series) and refresh it with the throttled metadata refresh: one request per series with a part in the library, monthly at most. Until a series has been checked once it counts as started, never as finished.',
+          'Models/AO3AuthorModels.swift AO3SeriesPage · WorkMetadataRefresh'),
         D('D7', 'P3', 'Time on each chapter',
           'Skimmed, Peeked at the Ending, End on a Chapter.',
           'ReadingSession + chapterSecondsJSON: {spineIndex: seconds} · endedAtChapterEnd: Bool',
-          'Skimmed: a chapter read in less than half the time your median pace needs; its words leave the totals. Peeked: the last chapter opened before reaching 50% of the work. Needs at least 5 sittings of pace history before anything is called skimmed. Gather in memory from locator changes and write it with the sitting; the debounced locator path still never writes a session.',
+          'Skimmed: a chapter of 300 words or more read in under half the time your median pace needs; its words leave the totals. Judged once, when the sitting is saved, from your pace up to then, and stored, so past totals never shift. Peeked: the last chapter opened before reaching 50% of the work. Needs 20 chapters of pace history before anything is called skimmed. Gather in memory from locator changes and write it with the sitting; the debounced locator path still never writes a session.',
           'ReadiumReaderView · ReadingLogService.applyDebouncedReadiumLocator'),
         D('D8', 'P3', 'Where a work came from',
           'How Finished Works Arrived.',
@@ -153,13 +168,13 @@ class Component extends DCLogic {
           'Services/WorkImporter.swift importEPUB / importUserEPUB and their callers'),
         D('D9', 'P3', 'Kudos and hits when saved',
           'Found Early (“310 kudos when saved, 1,530 now”).',
-          'SavedWork + kudosAtSave, hitsAtSave, bookmarksAtSave: Int? · statsSavedAt: Date?',
-          'Written once at import. Metadata refresh keeps updating kudos and hits, which is right for “now”, and must never touch these. Works saved before this ships stay empty and are left out of the card.',
+          'SavedWork + kudosAtSave, hitsAtSave, bookmarksAtSave: Int? · statsSavedAt: Date? · ageDaysAtSave: Int? · fandomWorksAtSave: Int?',
+          'Written once at import. Metadata refresh keeps updating kudos and hits, which is right for “now”, and must never touch these. Works saved before this ships stay empty and are left out of the card. Age comes from the posting date; the fandom’s size from its tag page, when Kudos has seen one.',
           'WorkMetadataRefresh.swift:155 · ReadingQueueService.swift:879 · WorkTags.swift:61'),
         D('D10', 'P3', 'Chapter update events',
           'New Chapters (read after they post) and the Letting Chapters Stack trigger.',
           'new @Model ChapterUpdateEvent: workID · ao3WorkID · chapterCount · detectedAt: Date · postedDate: String',
-          'Written when knownChapterCount rises during the update checks the app already makes; no new AO3 requests. Delay = first sitting that reaches the new chapter minus the posted date (detectedAt when no date).',
+          'Written when knownChapterCount rises during the update checks the app already makes; no new AO3 requests. Delay = first sitting that reaches the new chapter minus the posted date (detectedAt when no date). AO3 gives the day; the subscription email for the chapter, when the mail source has it, gives the hour (to confirm in KudosMail). Chapters not yet read are counted, not dropped.',
           'SavedWork.knownChapterCount · lastUpdateCheck'),
         D('D11', 'P3', 'Your own AO3 actions',
           'Bookmarked and Commented on finished works, the public/private split.',
@@ -169,9 +184,9 @@ class Component extends DCLogic {
       ],
       network: [
         { title: 'No Longer on AO3', text: 'WorkPreservationState already separates “last copy” from “gone, file freed”. Count only confirmed states; a failed check is not a deletion. Keep the neutral wording, and keep these works off any share card.' },
-        { title: 'Works in Progress: active, quiet, dormant', text: 'From dateUpdated, which the throttled metadata refresh already keeps. Active within 6 months, quiet 6–12, dormant over a year. Works never refreshed are shown as “not checked”.' },
+        { title: 'Works in Progress: active, quiet, dormant', text: 'From dateUpdated, which the throttled metadata refresh already keeps. Active within 6 months, quiet 6–12, dormant over a year. Works never refreshed are shown as “not checked”. The refresh must reach every WIP at least once every 30 days, so that group stays empty.' },
         { title: 'Kudos left', text: 'hasGivenKudos is only ever raised, from kudos given in Kudos or seen on a fetched page. Present it as “kudos Kudos knows about”; How Insights Are Counted says so.' },
-        { title: 'Tags stay as written', text: 'No canonical tag lookups: that is one AO3 request per tag. Merge only identical strings. “/” vs “&” comes from the relationship tag text.' },
+        { title: 'Tag names', text: 'No per-tag lookups: that is one AO3 request per tag. D13 learns canonical names from pages the reader opens instead; until a name is learned, identical strings only. “/” vs “&” comes from the relationship tag text.' },
         { title: 'Later, maybe: AO3 History backfill', text: 'Importing AO3 History would add works read before Kudos with no time data. If done, it may count works and words, never time, pace or streaks.' }
       ],
       cut: [

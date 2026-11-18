@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chapter bars</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="display: flex; flex-direction: column; gap: 4px; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif">
+  <div role="img" aria-label="{{label}}" style="height: {{height}}px; max-width: {{maxW}}; display: flex; align-items: flex-end; gap: {{gap}}px">
+    <sc-if value="{{isTrack}}" hint-placeholder-val="{{false}}">
+      <span style="flex: 1; align-self: center; height: 6px; border-radius: 3px; background: {{trackBg}}; overflow: hidden"><span style="display: block; width: {{trackPct}}%; height: 6px; border-radius: 3px; background: {{on}}"></span></span>
+    </sc-if>
+    <sc-for list="{{bars}}" as="b" hint-placeholder-count="12">
+      <span style="flex: 1; min-width: 0; box-sizing: border-box; border-radius: {{radius}}px; height: {{b.h}}; background: {{b.bg}}; border: {{b.bd}}"></span>
+    </sc-for>
+    <sc-if value="{{isOpen}}" hint-placeholder-val="{{false}}">
+      <span aria-hidden="true" style="flex: none; display: flex; align-items: center; gap: 3px; padding: 0 0 3px 3px"><span style="width: 4px; height: 4px; border-radius: 2px; background: {{dot}}"></span><span style="width: 4px; height: 4px; border-radius: 2px; background: {{dot}}; opacity: 0.7"></span><span style="width: 4px; height: 4px; border-radius: 2px; background: {{dot}}; opacity: 0.4"></span></span>
+    </sc-if>
+  </div>
+  <sc-if value="{{hasNote}}" hint-placeholder-val="{{false}}">
+    <span style="font-size: 12px; line-height: 16px; color: {{noteColor}}">{{noteText}}</span>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"planned":{"editor":null},"posted":{"editor":"int","default":12,"min":1,"max":400},"read":{"editor":"int","default":6,"min":0,"max":400},"chapterPct":{"editor":"int","default":22,"min":0,"max":100},"pct":{"editor":null},"fresh":{"editor":"int","default":0,"min":0,"max":50},"tone":{"editor":"enum","options":["cover","paper"],"default":"cover"},"lengths":{"editor":"enum","options":["known","unknown"],"default":"known"},"height":{"editor":"int","default":52},"gap":{"editor":null},"fit":{"editor":null},"barMax":{"editor":null},"note":{"editor":"boolean","default":false},"seed":{"editor":null},"accent":{"editor":null,"default":"#821019"},"$preview":{"width":326,"height":52}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // The one rule for chapter bars (Resume card, Work Detail, Home rows). First match wins:
+    //  1. A finished one-chapter work (1/1): no bars, a plain progress track.
+    //  2. Total unknown (AO3 shows "12/?"): one bar per posted chapter, then three fading
+    //     dots. Never a dashed bar, which would read as "exactly one more to come".
+    //  3. More chapters than fit: equal groups of k chapters per bar (k = ceil(n / fit)),
+    //     and a note says so. A group counts as posted when any chapter in it is.
+    //  4. Otherwise one bar per chapter; dashed = planned but not posted.
+    // Height = chapter length. When lengths are unknown (not downloaded) every bar is one height.
+    // tone "cover": white = read, faint = posted. tone "paper": accent = new, grey = posted before.
+    const p = this.props;
+    const num = (v, d) => { const n = Number(v); return v === null || v === undefined || v === '' || !Number.isFinite(n) ? d : n; };
+    const posted = Math.max(1, num(p.posted, 12));
+    const plannedRaw = p.planned === undefined ? 20 : num(p.planned, 0);
+    const total = plannedRaw >= posted ? plannedRaw : 0; // 0 = the author has not set a total
+    const read = Math.min(posted, Math.max(0, num(p.read, 6)));
+    const chapterPct = Math.min(100, Math.max(0, num(p.chapterPct, 0)));
+    const fresh = Math.min(posted, Math.max(0, num(p.fresh, 0)));
+    const paper = p.tone === 'paper';
+    const gap = num(p.gap, paper ? 2 : 3);
+    const fit = Math.max(4, num(p.fit, paper ? 36 : 46));
+    const barMax = num(p.barMax, paper ? 14 : 27);
+    const accent = p.accent ?? '#821019';
+    const C = paper
+      ? { on: accent, off: '#D1D1D6', dash: '1.5px dashed #C7C7CC', dot: '#8E8E93', note: '#6C6C70', track: '#E5E5EA' }
+      : { on: '#FFFFFF', off: 'rgba(255,255,255,0.30)', dash: '1.5px dashed rgba(255,255,255,0.5)', dot: '#FFFFFF', note: 'rgba(255,255,255,0.85)', track: 'rgba(255,255,255,0.24)' };
+    const seedOf = (t) => { let h = 7; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0; return h; };
+    const rng = (seed) => { let x = seed || 1; return () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return (x % 1000) / 1000; }; };
+    const r = rng(seedOf(String(p.seed ?? 'The Cartographer’s Daughter').replace('’', "'") + ' chapters'));
+    const count = total || posted;
+    const flat = p.lengths === 'unknown';
+    const len = [];
+    for (let i = 0; i < count; i++) { const h = Math.round(42 + r() * 58); len.push(flat ? 70 : h); }
+    // How much of chapter i is "on": read (cover) or new (paper).
+    const onOf = (i) => (paper ? (i >= posted - fresh ? 1 : 0) : (i < read ? 1 : (i === read ? chapterPct / 100 : 0)));
+    const oneShot = total === 1;
+    const k = Math.ceil(count / fit);
+    const bars = [];
+    if (!oneShot) {
+      for (let g = 0; g * k < count; g++) {
+        const from = g * k, to = Math.min(count, from + k);
+        let on = 0, h = 0, live = 0;
+        for (let i = from; i < to; i++) { if (i < posted) { live++; h += len[i]; on += onOf(i); } }
+        if (!live) { bars.push({ h: '46%', bg: 'transparent', bd: C.dash }); continue; }
+        const f = Math.round((on / live) * 100);
+        bars.push({ h: Math.round(h / live) + '%', bd: 'none', bg: f >= 100 ? C.on : f <= 0 ? C.off : 'linear-gradient(to top, ' + C.on + ' ' + f + '%, ' + C.off + ' ' + f + '%)' });
+      }
+    }
+    const isOpen = !total;
+    const said = paper
+      ? (fresh ? fresh + (fresh === 1 ? ' new chapter, ' : ' new chapters, ') : '') + posted + ' posted'
+      : 'Chapters: ' + read + ' read, ' + posted + ' posted';
+    const label = oneShot
+      ? (paper ? (fresh ? 'New work, one chapter' : 'One chapter') : 'One chapter, ' + num(p.pct, chapterPct) + ' percent read')
+      : said + (isOpen ? ', total not set by the author' : (total > posted ? ', ' + (total - posted) + ' not posted yet' : '')) + (k > 1 ? '. Each bar is ' + k + ' chapters' : '');
+    return {
+      bars, label, gap, isOpen,
+      height: num(p.height, paper ? 16 : 52),
+      radius: paper ? 2 : 3,
+      maxW: oneShot ? (paper ? '96px' : '100%') : (bars.length * (barMax + gap) - gap + (isOpen ? 24 : 0)) + 'px',
+      isTrack: oneShot,
+      trackPct: paper ? (fresh ? 100 : 0) : num(p.pct, chapterPct),
+      trackBg: C.track, on: C.on, dot: C.dot,
+      hasNote: !!p.note && k > 1,
+      noteColor: C.note,
+      noteText: 'Each bar is ' + k + ' chapters'
+    };
+  }
+}
+</script>
+</body>
+</html>

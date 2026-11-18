@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>End of a chapter</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FAF7F0; color: #1F1B16; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <article style="padding: 70px 30px 0; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 19px; line-height: 1.56">
+    <p style="margin: 0">She drew the first line of the flats as a single stroke, left to right, without lifting the pen.</p>
+    <p style="margin: 0; text-indent: 1.3em">By the time the light went copper they had reached the fourth milestone, and the vellum was no longer blank.</p>
+    <p style="margin: 0; text-indent: 1.3em">“Tomorrow,” Tomas said, “you can tell me why your mother stopped here.”</p>
+  </article>
+
+  <section aria-label="End of Chapter 7" style="padding: 24px 16px 0; display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; align-items: center; gap: 12px; padding: 0 14px">
+      <span aria-hidden="true" style="flex: 1; height: 0.5px; background: rgba(60,40,10,0.22)"></span>
+      <span style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: #6B645A">End of Chapter 7</span>
+      <span aria-hidden="true" style="flex: 1; height: 0.5px; background: rgba(60,40,10,0.22)"></span>
+    </div>
+    <div style="border-radius: 16px; padding: 14px; background: rgba(60,40,10,0.05); display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 13px; line-height: 18px; font-weight: 600; color: #6B645A">Author’s note</span>
+      <p style="margin: 0; font-size: 15px; line-height: 21px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden">Thank you for every comment on the last chapter. The tide tables here are real ones from 1846; the lighthouse is not. Chapter 8 is written and with my beta, so it should be up within the fortnight. As always, tell me what you think Marguerite knew.</p>
+      <button style="align-self: flex-start; min-height: 28px; border: none; background: none; padding: 0; font-family: inherit; font-size: 15px; font-weight: 600; color: {{accent}}">More</button>
+    </div>
+    <a href="iPhone-Reader.dc.html" style="height: 56px; padding: 0 20px; border-radius: 28px; background: {{accent}}; color: #FFFFFF; text-decoration: none; display: flex; align-items: center; gap: 12px">
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+        <span style="font-size: 17px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Chapter 8: The Tide Table</span>
+        <span style="font-size: 13px; line-height: 16px; color: rgba(255,255,255,0.86)">About 14 min</span>
+      </span>
+      <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+    </a>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <a href="Comments.dc.html" style="height: 44px; border: none; border-radius: 22px; background: rgba(60,40,10,0.07); color: #1F1B16; font-family: inherit; font-size: 16px; font-weight: 600; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 7px"><svg aria-hidden="true" style="flex: none" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"></path></svg>Comment on Ch 7</a>
+      <button aria-pressed="false" style="height: 44px; border: none; border-radius: 22px; background: rgba(60,40,10,0.07); color: #1F1B16; font-family: inherit; font-size: 16px; font-weight: 600; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 7px"><svg aria-hidden="true" style="flex: none" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg>Give Kudos</button>
+    </div>
+    <p style="margin: 0; text-align: center; font-size: 13px; line-height: 18px; color: #6B645A">Chapter 7 of 20 · 12 posted · or keep swiping to read on</p>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // The last page of a chapter, in the page flow (not a sheet): the author's end note, cut to four
+    // lines with More; the next chapter as the one filled button; Comment on this chapter and Kudos.
+    // Swiping on still turns to the next chapter, so nothing here blocks reading. Kudos is per work
+    // on AO3, so once given the button reads Kudos Given. With no end note the note card is absent.
+    return { accent: this.props.accent ?? '#821019' };
+  }
+}
+</script>
+</body>
+</html>

@@ -48,6 +48,9 @@ button{cursor:pointer}
         </sc-for>
       </div>
     </sc-if>
+    <sc-if value="{{hasProfile}}" hint-placeholder-val="{{false}}">
+      <a href="{{profile}}" aria-label="Account, saltwindow, 3 unread in Inbox" style="position: relative; width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; text-decoration: none; display: flex; align-items: center; justify-content: center; background: #23506B; color: #FFFFFF; font-size: 19px; font-weight: 600; box-shadow: {{shadow}}">S<span aria-hidden="true" style="position: absolute; top: -3px; right: -5px; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 10px; border: 2px solid #FFFFFF; background: {{accent}}; color: #FFFFFF; font-size: 11px; line-height: 16px; font-weight: 700; text-align: center">3</span></a>
+    </sc-if>
     <sc-if value="{{hasPrimary}}" hint-placeholder-val="{{false}}">
       <button aria-label="{{primaryLabel}}" style="width: 44px; height: 44px; flex-shrink: 0; border: none; border-radius: 22px; color: #FFFFFF; display: flex; align-items: center; justify-content: center; background: {{accent}}; box-shadow: 0 4px 14px rgba(0,0,0,0.18)">
         <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{primaryD}}"></path></svg>
@@ -56,7 +59,7 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"width":{"editor":"int","default":669},"title":{"editor":"text","default":"Home"},"titleStyle":{"editor":"enum","options":["large","inline","none"],"default":"large"},"nav":{"editor":"enum","options":["back","close","none"],"default":"none"},"primary":{"editor":"enum","options":["none","done","post","play"],"default":"none"},"actions":{"editor":null},"status":{"editor":"boolean","default":true},"theme":{"editor":"enum","options":["light","sepia","dark"],"default":"light"},"accent":{"editor":null,"default":"#821019"},"$preview":{"width":669,"height":80}}'>
+<script type="text/x-dc" data-dc-script data-props='{"width":{"editor":"int","default":669},"title":{"editor":"text","default":"Home"},"titleStyle":{"editor":"enum","options":["large","inline","none"],"default":"large"},"nav":{"editor":"enum","options":["back","close","none"],"default":"none"},"primary":{"editor":"enum","options":["none","done","post","play"],"default":"none"},"actions":{"editor":null},"status":{"editor":"boolean","default":true},"profile":{"editor":null},"theme":{"editor":"enum","options":["light","sepia","dark"],"default":"light"},"accent":{"editor":null,"default":"#821019"},"$preview":{"width":669,"height":80}}'>
 class Component extends DCLogic {
   renderVals() {
     // iPhone Duo, inner display in portrait: the one pose that keeps standard
@@ -87,6 +90,7 @@ class Component extends DCLogic {
       isLarge: style === 'large', isInline: style === 'inline',
       fg: T.fg, glass: T.glass, shadow: T.shadow, accent,
       showStatus: this.props.status ?? true,
+      hasProfile: !!this.props.profile, profile: this.props.profile || '',
       hasNav: nav !== 'none', navLabel: nav === 'close' ? 'Close' : 'Back', navD: nav === 'close' ? 'M6 6l12 12M18 6 6 18' : 'm15 5-7 7 7 7',
       hasPrimary: !!P, primaryLabel: P ? P[0] : '', primaryD: P ? P[1] : '',
       hasActions: actions.length > 0, actions

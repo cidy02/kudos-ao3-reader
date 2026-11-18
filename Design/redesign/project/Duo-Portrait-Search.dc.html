@@ -32,6 +32,16 @@ a{color:#821019}a:hover{color:#6E0000}
         </sc-for>
       </div>
     </section>
+    <section aria-label="Fandoms on AO3" style="display: flex; flex-direction: column">
+      <h2 style="margin: 0 0 4px; font-size: 20px; line-height: 25px; font-weight: 700">Fandoms on AO3</h2>
+      <sc-for list="{{fandoms}}" as="f" hint-placeholder-count="2">
+        <a href="Fandom-Works.dc.html" style="min-height: 48px; display: flex; align-items: center; gap: 10px; border-top: {{f.line}}; text-decoration: none; color: #000000">
+          <span style="flex: 1; font-size: 17px">{{f.name}}</span>
+          <span style="font-size: 15px; color: #6C6C70">{{f.count}} works</span>
+          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+        </a>
+      </sc-for>
+    </section>
     <section aria-label="On AO3" style="display: flex; flex-direction: column; gap: 6px">
       <div style="display: flex; align-items: center; gap: 8px">
         <h2 style="margin: 0; flex: 1; font-size: 20px; line-height: 25px; font-weight: 700">On AO3 <span style="font-weight: 400; color: #6C6C70">1,284 works</span></h2>
@@ -43,16 +53,6 @@ a{color:#821019}a:hover{color:#6E0000}
           <dc-import name="WorkRow" work="{{w}}" show-summary="{{true}}" accent="#821019" hint-size="100%,130px"></dc-import>
         </sc-for>
       </div>
-    </section>
-    <section aria-label="Fandoms on AO3" style="display: flex; flex-direction: column">
-      <h2 style="margin: 0 0 4px; font-size: 20px; line-height: 25px; font-weight: 700">Fandoms on AO3</h2>
-      <sc-for list="{{fandoms}}" as="f" hint-placeholder-count="2">
-        <a href="Fandom-Works.dc.html" style="min-height: 48px; display: flex; align-items: center; gap: 10px; border-top: {{f.line}}; text-decoration: none; color: #000000">
-          <span style="flex: 1; font-size: 17px">{{f.name}}</span>
-          <span style="font-size: 15px; color: #6C6C70">{{f.count}} works</span>
-          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
-        </a>
-      </sc-for>
     </section>
   </section>
 

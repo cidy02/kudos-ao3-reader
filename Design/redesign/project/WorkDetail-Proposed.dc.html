@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Work Detail · proposed</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+a{color:#821019}a:hover{color:#6E0000}
+</style>
+</helmet>
+<div style="width: 390px; height: {{rootH}}px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 380px; background: linear-gradient(to bottom, rgba(37,119,132,0.20), rgba(37,119,132,0.12) 35%, rgba(37,119,132,0.05) 65%, rgba(37,119,132,0))"></div>
+  <main style="position: relative; padding: 108px 16px 0; display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <a href="Fandom-Works.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: hsl(188, 56%, 33%)">Original Work</a>
+      <span aria-hidden="true" style="width: 16px; height: 2px; border-radius: 1px; background: hsl(188, 56%, 33%)"></span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">The Cartographer’s Daughter</h1>
+      <a href="Author.dc.html" style="align-self: flex-start; font-size: 17px; line-height: 22px; text-decoration: none">inkwell_moth</a>
+    </div>
+    <dc-import name="Symbols" variant="inline" rating="T" category="FM" warnings="none" status="wip" size="20" hint-size="358px,20px"></dc-import>
+
+    <sc-if value="{{isReading}}" hint-placeholder-val="{{false}}">
+      <dc-import name="ResumeCard" variant="detail" accent="#821019" hint-size="358px,330px"></dc-import>
+    </sc-if>
+
+    <section aria-label="Relationships and characters" style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Relationships</span>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px">
+          <a href="Search.dc.html" style="height: 32px; padding: 0 12px; border-radius: 16px; background: #EFEFF4; color: #000000; text-decoration: none; font-size: 15px; line-height: 32px; font-weight: 600">Elinor Vane/Tomas Reyes</a>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Characters</span>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px">
+          <a href="Search.dc.html" style="height: 32px; padding: 0 12px; border-radius: 16px; background: #EFEFF4; color: #000000; text-decoration: none; font-size: 15px; line-height: 32px">Elinor Vane</a>
+          <a href="Search.dc.html" style="height: 32px; padding: 0 12px; border-radius: 16px; background: #EFEFF4; color: #000000; text-decoration: none; font-size: 15px; line-height: 32px">Tomas Reyes</a>
+          <a href="Search.dc.html" style="height: 32px; padding: 0 12px; border-radius: 16px; background: #EFEFF4; color: #000000; text-decoration: none; font-size: 15px; line-height: 32px">Marguerite Vane</a>
+        </div>
+      </div>
+    </section>
+
+    <section aria-label="Summary" style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Summary</h2>
+      <p style="margin: 0; font-size: 17px; line-height: 22px">Elinor Vane inherits her mother’s instruments and none of her maps. To finish the last chart she must walk the coast road nobody has drawn in forty years, with the one person who remembers why.</p>
+      <a href="#notes" style="align-self: flex-start; font-size: 17px; line-height: 22px; text-decoration: none">Notes</a>
+    </section>
+
+    <sc-if value="{{isNew}}" hint-placeholder-val="{{true}}">
+      <section aria-label="Start reading" style="position: relative; box-sizing: border-box; overflow: hidden; border-radius: 16px; padding: 16px; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%)); color: #FFFFFF; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 10px 28px rgba(20,40,60,0.20)">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px">
+          <span style="font-size: 17px; line-height: 22px; font-weight: 600">12 of 20 chapters posted</span>
+          <span style="font-size: 13px; line-height: 18px; color: rgba(255,255,255,0.9); white-space: nowrap">Updated Oct 21</span>
+        </div>
+        <div role="img" aria-label="Chapters: 12 posted, 8 not posted yet" style="height: 44px; display: flex; align-items: flex-end; gap: 4px">
+          <sc-for list="{{bars}}" as="b" hint-placeholder-count="20">
+            <span style="flex: 1; min-width: 0; box-sizing: border-box; border-radius: 3px; height: {{b.h}}; background: {{b.bg}}; border: {{b.bd}}"></span>
+          </sc-for>
+        </div>
+        <span style="font-size: 13px; line-height: 18px; color: rgba(255,255,255,0.9)">84,210 words · about 5 h 40 min to read what’s posted</span>
+        <div style="display: flex; align-items: center; gap: 10px">
+          <button style="flex: 1; height: 50px; border: none; border-radius: 25px; background: #FFFFFF; color: #821019; font-family: inherit; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"></path></svg>Start Reading
+          </button>
+          <button aria-label="Read aloud" style="width: 50px; height: 50px; border: none; border-radius: 25px; background: rgba(255,255,255,0.18); color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+            <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg>
+          </button>
+          <button aria-label="Download for offline" style="width: 50px; height: 50px; border: none; border-radius: 25px; background: rgba(255,255,255,0.18); color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+            <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"></path><path d="m7 10.5 5 5 5-5"></path><path d="M5 20h14"></path></svg>
+          </button>
+        </div>
+      </section>
+    </sc-if>
+
+    <section aria-label="Additional tags" style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Tags</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px">
+        <sc-for list="{{tags}}" as="t" hint-placeholder-count="6">
+          <a href="Search.dc.html" style="height: 32px; padding: 0 12px; border-radius: 16px; background: #EFEFF4; color: #000000; text-decoration: none; font-size: 15px; line-height: 32px">{{t}}</a>
+        </sc-for>
+        <button style="height: 32px; padding: 0 12px; border: none; border-radius: 16px; background: transparent; color: #821019; font-family: inherit; font-size: 15px; line-height: 32px">Show All 14</button>
+      </div>
+    </section>
+
+    <dl style="margin: 0; background: #F2F2F7; border-radius: 16px; padding: 14px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 14px">
+      <sc-for list="{{stats}}" as="s" hint-placeholder-count="9">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-right: {{s.border}}">
+          <dt style="font-size: 11px; line-height: 13px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: #6C6C70">{{s.label}}</dt>
+          <dd style="margin: 0; font-family: 'SF Pro Rounded', -apple-system, system-ui, sans-serif; font-size: 17px; line-height: 22px; font-weight: 700">{{s.value}}</dd>
+        </div>
+      </sc-for>
+    </dl>
+
+    <section aria-label="Series" style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Series</h2>
+      <div style="background: #F2F2F7; border-radius: 16px; overflow: hidden">
+        <a href="Series.dc.html" style="min-height: 52px; padding: 8px 16px; display: flex; align-items: center; gap: 8px; text-decoration: none; color: #000000">
+          <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 17px; line-height: 22px">The Coast Road</span><span style="font-size: 13px; line-height: 18px; color: #6C6C70">Part 2 of 3 · 141k words · in progress</span></span>
+          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+        </a>
+        <a href="iPhone-WorkDetail.dc.html" style="min-height: 44px; margin-left: 16px; padding-right: 16px; border-top: 0.5px solid #D1D1D6; display: flex; align-items: center; gap: 10px; text-decoration: none; color: #000000">
+          <span style="width: 18px; font-size: 15px; color: #8E8E93; font-variant-numeric: tabular-nums">1.</span>
+          <span style="flex: 1; min-width: 0; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Salt Marsh Letters</span>
+          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+        </a>
+        <div aria-current="true" style="min-height: 44px; margin-left: 16px; padding-right: 16px; border-top: 0.5px solid #D1D1D6; display: flex; align-items: center; gap: 10px">
+          <span style="width: 18px; font-size: 15px; color: #8E8E93; font-variant-numeric: tabular-nums">2.</span>
+          <span style="flex: 1; min-width: 0; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">The Cartographer’s Daughter</span>
+          <span style="font-size: 13px; color: #8E8E93">This work</span>
+        </div>
+        <a href="iPhone-WorkDetail.dc.html" style="min-height: 44px; margin-left: 16px; padding-right: 16px; border-top: 0.5px solid #D1D1D6; display: flex; align-items: center; gap: 10px; text-decoration: none; color: #000000">
+          <span style="width: 18px; font-size: 15px; color: #8E8E93; font-variant-numeric: tabular-nums">3.</span>
+          <span style="flex: 1; min-width: 0; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">What the Tide Keeps</span>
+          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+        </a>
+        <button style="width: 100%; min-height: 44px; border: none; border-top: 0.5px solid #D1D1D6; background: transparent; padding: 0 16px; font-family: inherit; font-size: 17px; color: #821019; display: flex; align-items: center; gap: 10px; text-align: left">
+          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM12 7.5v8M8.5 12.5 12 16l3.5-3.5"></path></svg>Download Whole Series
+        </button>
+        <button style="width: 100%; min-height: 44px; border: none; border-top: 0.5px solid #D1D1D6; background: transparent; padding: 0 16px; font-family: inherit; font-size: 17px; color: #821019; display: flex; align-items: center; gap: 10px; text-align: left">
+          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM15.5 8.5l-2 5-5 2 2-5z"></path></svg>View Full Series on AO3
+        </button>
+      </div>
+    </section>
+
+    <section aria-label="My copy" style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px">
+      <div style="display: flex; align-items: baseline; justify-content: space-between">
+        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">My copy</h2>
+        <span style="font-size: 13px; line-height: 18px; color: #6C6C70; display: flex; align-items: center; gap: 4px"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="2.5"></rect><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"></path></svg>Private to this device</span>
+      </div>
+      <div style="background: #F2F2F7; border-radius: 16px; overflow: hidden">
+        <sc-for list="{{mine}}" as="m" hint-placeholder-count="6">
+          <sc-if value="{{m.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
+          <div style="min-height: 48px; padding: 6px 16px; display: flex; align-items: center; gap: 8px; box-sizing: border-box">
+            <span style="flex: 1; font-size: 17px">{{m.label}}</span>
+            <span style="font-size: 17px; color: #6C6C70; text-align: right">{{m.value}}</span>
+            <sc-if value="{{m.hasAction}}" hint-placeholder-val="{{false}}">
+              <button style="border: none; background: none; padding: 0 0 0 4px; font-family: inherit; font-size: 17px; color: #821019">{{m.action}}</button>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <a href="Comments.dc.html" style="min-height: 52px; padding: 0 16px; border-radius: 16px; background: #F2F2F7; display: flex; align-items: center; gap: 10px; text-decoration: none; color: #000000">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#821019" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"></path></svg>
+      <span style="flex: 1; font-size: 17px">Comments</span>
+      <span style="font-size: 17px; color: #6C6C70">286</span>
+      <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+    </a>
+  </main>
+
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
+    <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+    <div style="height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <sc-if value="{{isReading}}" hint-placeholder-val="{{false}}">
+        <button aria-label="Kudos given" aria-pressed="true" style="width: 46px; height: 44px; border: none; background: transparent; color: #821019; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg></button>
+      </sc-if>
+      <sc-if value="{{isNew}}" hint-placeholder-val="{{true}}">
+        <button aria-label="Give kudos" aria-pressed="false" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg></button>
+      </sc-if>
+      <button aria-label="Bookmark on AO3" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M7 4h10v16l-5-4-5 4z"></path></svg></button>
+      <a href="Work-Actions.dc.html" aria-label="More actions" style="width: 46px; height: 44px; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg></a>
+    </div>
+  </div>
+
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 140px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 70%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; bottom: 28px">
+    <dc-import name="TabBar" selected="library" variant="minimized" accent="#821019" hint-size="358px,54px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["new","reading"],"default":"new"},"$preview":{"width":390,"height":2180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Two states of one screen. "new": the reader is deciding, so who it is about and the summary come
+    // before the action. "reading": the reader is coming back, so the Resume card stays first, as today.
+    const reading = (this.props.state ?? 'new') === 'reading';
+    const stats = [
+      ['Words', '84,210'], ['Chapters', '12/20'], ['Kudos', '♥ 3,104'],
+      ['Hits', '41.2k'], ['Comments', '286'], ['Bookmarks', '512'],
+      ['Published', 'Mar 3'], ['Updated', 'Oct 21'], ['Language', 'English']
+    ];
+    const mine = reading ? [
+      ['Progress', 'Ch 7 · 58%', ''],
+      ['Downloaded', 'Oct 21', 'Edit'],
+      ['Your tags', 'coast, reread', 'Add'],
+      ['Collections', 'Comfort Reads', 'Add'],
+      ['Queues', 'Summer Reading', 'Add'],
+      ['File', 'EPUB from AO3 · 1.2 MB', '']
+    ] : [
+      ['Progress', 'Not started', ''],
+      ['Downloaded', 'No', 'Download'],
+      ['Your tags', 'None', 'Add'],
+      ['Collections', 'None', 'Add'],
+      ['Queues', 'None', 'Add']
+    ];
+    // One bar per chapter, as on the Resume card: faint = posted, dashed = not posted yet.
+    const heights = [78, 92, 64, 100, 70, 86, 58, 96, 74, 88, 62, 82];
+    const bars = [];
+    for (let i = 0; i < 20; i++) {
+      bars.push(i < 12
+        ? { h: heights[i] + '%', bg: 'rgba(255,255,255,0.42)', bd: 'none' }
+        : { h: '46%', bg: 'transparent', bd: '1.5px dashed rgba(255,255,255,0.5)' });
+    }
+    return {
+      isReading: reading,
+      isNew: !reading,
+      rootH: reading ? 2320 : 2180,
+      stats: stats.map(([label, value], i) => ({ label, value, border: i % 3 === 2 ? 'none' : '0.5px solid #D1D1D6' })),
+      // The first six of fourteen, in the author's order; Show All opens the rest in place.
+      tags: ['Slow Burn', 'Found Family', 'Maps & Mapmaking', 'Hurt/Comfort', 'Road Trip', 'Grief/Mourning'],
+      bars,
+      mine: mine.map(([label, value, action], i) => ({ label, value, action, hasAction: !!action, sep: i > 0 }))
+    };
+  }
+}
+</script>
+</body>
+</html>

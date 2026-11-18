@@ -31,7 +31,7 @@ body{margin:0}
       <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="{{current.d}}"></path></svg>
     </button>
     <div style="flex: 1; min-width: 0; height: 54px; border-radius: 27px; padding: 0 6px 0 11px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
-      <div aria-hidden="true" style="position: relative; width: 28px; height: 40px; flex-shrink: 0; border-radius: 6px; overflow: hidden; background: {{accessoryArt}}; color: #FFFFFF; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 30px; line-height: 1; font-weight: 600"><span style="position: absolute; right: -3px; bottom: -6px; color: rgba(255,255,255,0.22)">{{accessoryInitial}}</span></div>
+      <span aria-hidden="true" style="flex-shrink: 0; display: flex"><dc-import name="CoverArt" work="{{accessoryWork}}" width="28" height="40" radius="6" hint-size="28px,40px"></dc-import></span>
       <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
         <span style="font-size: 14px; line-height: 18px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{accessoryTitle}}</span>
         <span style="font-size: 12px; line-height: 16px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{accessorySubtitle}}</span>
@@ -46,7 +46,7 @@ body{margin:0}
   </sc-if>
 </nav>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","library","writing","browse","account","search"],"default":"home"},"variant":{"editor":"enum","options":["full","minimized"],"default":"full"},"account":{"editor":"enum","options":["avatar","tab"],"default":"avatar"},"accent":{"editor":null,"default":"#821019"},"accessoryTitle":{"editor":null,"default":"Salt & Starlight"},"accessorySubtitle":{"editor":null,"default":"Read Aloud · Ch 15 · 12 min left"},"accessoryCover":{"editor":null,"default":"#2E5339"},"$preview":{"width":358,"height":62}}'>
+<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","library","writing","browse","account","search"],"default":"home"},"variant":{"editor":"enum","options":["full","minimized"],"default":"full"},"account":{"editor":"enum","options":["avatar","tab"],"default":"avatar"},"writing":{"editor":"boolean","default":true},"accent":{"editor":null,"default":"#821019"},"accessoryTitle":{"editor":null,"default":"Salt & Starlight"},"accessorySubtitle":{"editor":null,"default":"Read Aloud · Ch 15 · 12 min left"},"accessoryCover":{"editor":null,"default":"#2E5339"},"accessoryWork":{"editor":null},"$preview":{"width":358,"height":62}}'>
 class Component extends DCLogic {
   renderVals() {
     const accent = this.props.accent ?? '#821019';
@@ -62,8 +62,11 @@ class Component extends DCLogic {
     ];
     // Owner, 2026-10-27: Account lives behind a profile button (Books/Music style) and Writing takes its slot.
     // account="tab" draws the earlier four tabs (Home, Library, Browse, Account) for the boards that compare them.
+    // Owner, 2026-11-12: Writing shows only when the account has a work, series or draft (AO3 or local).
+    // writing={false} draws the three-tab bar readers get; see the Writing-Tab-Rule board.
     const legacy = this.props.account === 'tab';
-    const tabs = all.filter((t) => (legacy ? t.id !== 'writing' : t.id !== 'account')).map((t) => ({
+    const writes = this.props.writing ?? true;
+    const tabs = all.filter((t) => (legacy || !writes ? t.id !== 'writing' : true) && (legacy || t.id !== 'account')).map((t) => ({
       ...t,
       current: t.id === selected ? 'page' : 'false',
       bg: t.id === selected ? tint : 'transparent',
@@ -90,7 +93,9 @@ class Component extends DCLogic {
         const h = !d ? 210 : Math.round(((mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60 + 360) % 360);
         return 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
       })(),
-      accessoryInitial: (this.props.accessoryTitle ?? 'Salt & Starlight').charAt(0)
+      // The work being read aloud, drawn by CoverArt. Boards that change the title without passing the work
+      // get a cover from the title and the old cover colour.
+      accessoryWork: this.props.accessoryWork ?? (this.props.accessoryTitle && this.props.accessoryTitle !== 'Salt & Starlight' ? { title: this.props.accessoryTitle } : { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', words: 118000, status: 'wip' })
     };
   }
 }

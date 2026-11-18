@@ -146,6 +146,14 @@
       "x": 1880,
       "y": 300
     },
+    "Android-Foldable.dc.html": {
+      "h": 1810,
+      "page": "android",
+      "title": "Android · foldables and tablets: unfolded Home, Reader in book posture",
+      "w": 1460,
+      "x": 0,
+      "y": 1480
+    },
     "Android.dc.html": {
       "h": 1360,
       "page": "android",
@@ -266,6 +274,22 @@
       "x": 1880,
       "y": 3200
     },
+    "Chapter-Bars-Cases.dc.html": {
+      "h": 800,
+      "page": "system",
+      "title": "Chapter bars · edge cases and what was decided",
+      "w": 1290,
+      "x": 3634,
+      "y": 0
+    },
+    "ChapterBars.dc.html": {
+      "h": 52,
+      "page": "system",
+      "title": "Chapter bars (component): the one rule for unknown totals, one-chapter and long works",
+      "w": 326,
+      "x": 1360,
+      "y": 1248
+    },
     "ChapterEditor.dc.html": {
       "h": 844,
       "page": "system",
@@ -338,6 +362,30 @@
       "x": 940,
       "y": 4580
     },
+    "Cover-Spec.dc.html": {
+      "h": 2700,
+      "page": "duo",
+      "title": "Generated covers · build spec for Claude Code",
+      "w": 1240,
+      "x": 1696,
+      "y": 4647
+    },
+    "Cover-Test-Shelf.dc.html": {
+      "h": 1810,
+      "page": "duo",
+      "title": "Generated covers · test shelf (previous, Gemini, adopted)",
+      "w": 1616,
+      "x": 0,
+      "y": 4647
+    },
+    "CoverArt.dc.html": {
+      "h": 187,
+      "page": "system",
+      "title": "Cover art (component · the shared cover engine)",
+      "w": 132,
+      "x": 1572,
+      "y": 498
+    },
     "CoverCard.dc.html": {
       "h": 310,
       "page": "system",
@@ -406,7 +454,7 @@
     "Duo-Book-Home.dc.html": {
       "h": 669,
       "page": "duo",
-      "title": "Book pose · Home",
+      "title": "Book pose · Home (launchpad, nothing crosses the fold)",
       "w": 951,
       "x": 2062,
       "y": 2187
@@ -422,7 +470,7 @@
     "Duo-Cover-Home.dc.html": {
       "h": 678,
       "page": "duo",
-      "title": "Cover · Home",
+      "title": "Cover · Home (launchpad; scrolls as iPhone Home)",
       "w": 466,
       "x": 0,
       "y": 0
@@ -438,7 +486,7 @@
     "Duo-Open-Account.dc.html": {
       "h": 669,
       "page": "duo",
-      "title": "Open · Account (superseded: Account sheet + Writing tab)",
+      "title": "Open · Account (inspector beside Home, from the profile button)",
       "w": 951,
       "x": 4124,
       "y": 1098
@@ -446,7 +494,7 @@
     "Duo-Open-Home.dc.html": {
       "h": 669,
       "page": "duo",
-      "title": "Open · Home",
+      "title": "Open · Home (launchpad in two panes)",
       "w": 951,
       "x": 0,
       "y": 1098
@@ -459,10 +507,18 @@
       "x": 8248,
       "y": 1098
     },
+    "Duo-Open-Library-Root.dc.html": {
+      "h": 669,
+      "page": "duo",
+      "title": "Open · Library (root: shelves, shelf tiles, On AO3)",
+      "w": 951,
+      "x": 9279,
+      "y": 1098
+    },
     "Duo-Open-Library.dc.html": {
       "h": 669,
       "page": "duo",
-      "title": "Open · Library",
+      "title": "Open · Library › Reading Now shelf (list beside detail)",
       "w": 951,
       "x": 1031,
       "y": 1098
@@ -507,10 +563,18 @@
       "x": 3093,
       "y": 1098
     },
+    "Duo-Open-Writing.dc.html": {
+      "h": 669,
+      "page": "duo",
+      "title": "Open · Writing tab",
+      "w": 951,
+      "x": 10310,
+      "y": 1098
+    },
     "Duo-Portrait-Account.dc.html": {
       "h": 951,
       "page": "duo",
-      "title": "Open portrait · Account (superseded: Account sheet + Writing tab)",
+      "title": "Open portrait · Account (form sheet over Home)",
       "w": 669,
       "x": 3745,
       "y": 3276
@@ -526,7 +590,7 @@
     "Duo-Portrait-Home.dc.html": {
       "h": 951,
       "page": "duo",
-      "title": "Open portrait · Home",
+      "title": "Open portrait · Home (launchpad)",
       "w": 669,
       "x": 0,
       "y": 3276
@@ -539,10 +603,18 @@
       "x": 6741,
       "y": 3276
     },
+    "Duo-Portrait-Library-Root.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Library (root)",
+      "w": 669,
+      "x": 8239,
+      "y": 3276
+    },
     "Duo-Portrait-Library.dc.html": {
       "h": 951,
       "page": "duo",
-      "title": "Open portrait · Library",
+      "title": "Open portrait · Library › Reading Now shelf",
       "w": 669,
       "x": 749,
       "y": 3276
@@ -595,6 +667,14 @@
       "x": 2996,
       "y": 3276
     },
+    "Duo-Portrait-Writing.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Writing tab",
+      "w": 669,
+      "x": 8988,
+      "y": 3276
+    },
     "DuoSideBar.dc.html": {
       "h": 669,
       "page": "system",
@@ -602,14 +682,6 @@
       "w": 64,
       "x": 2230,
       "y": 2420
-    },
-    "DuoSidebar.dc.html": {
-      "h": 649,
-      "page": "system",
-      "title": "Sidebar, Duo open (component) · earlier, replaced by Duo side controls",
-      "w": 232,
-      "x": 1504,
-      "y": 1248
     },
     "DuoTopBar.dc.html": {
       "h": 80,
@@ -691,6 +763,14 @@
       "x": 0,
       "y": 3440
     },
+    "Flow-Link.dc.html": {
+      "h": 660,
+      "page": "structure",
+      "title": "Flow · arriving from an AO3 link (proposed)",
+      "w": 1290,
+      "x": 0,
+      "y": 11020
+    },
     "Flow-Organise.dc.html": {
       "h": 620,
       "page": "structure",
@@ -755,6 +835,14 @@
       "x": 0,
       "y": 6440
     },
+    "HomeSections.dc.html": {
+      "h": 1150,
+      "page": "system",
+      "title": "Home sections under the Resume card (component, used by every Duo Home)",
+      "w": 364,
+      "x": 3190,
+      "y": 0
+    },
     "IA-Map.dc.html": {
       "h": 1100,
       "page": "structure",
@@ -780,9 +868,9 @@
       "y": 8600
     },
     "Insights-Data.dc.html": {
-      "h": 3440,
+      "h": 4090,
       "page": "insights",
-      "title": "The data Insights needs · D1–D11",
+      "title": "The data Insights needs · D1–D14",
       "w": 1280,
       "x": 2400,
       "y": 0
@@ -804,9 +892,9 @@
       "y": 0
     },
     "Insights-Metrics.dc.html": {
-      "h": 3840,
+      "h": 5740,
       "page": "insights",
-      "title": "What each card counts · rule, data, status",
+      "title": "What each card counts · rule, data, status, and the totals that must agree",
       "w": 1280,
       "x": 3760,
       "y": 0
@@ -923,6 +1011,22 @@
       "x": 470,
       "y": 0
     },
+    "Link-Landing-Restricted.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Opened from an AO3 link · restricted work, logged out: the Log In sheet with the reason (proposed)",
+      "w": 390,
+      "x": 4700,
+      "y": 4580
+    },
+    "Link-Landing.dc.html": {
+      "h": 1010,
+      "page": "iphone",
+      "title": "Opened from an AO3 link · the app’s Work Detail as a sheet, work not started (proposed)",
+      "w": 390,
+      "x": 4230,
+      "y": 4580
+    },
     "ListScreen.dc.html": {
       "h": 844,
       "page": "system",
@@ -962,6 +1066,14 @@
       "w": 270,
       "x": 0,
       "y": 3400
+    },
+    "Motion.dc.html": {
+      "h": 1700,
+      "page": "states",
+      "title": "Motion and haptics · eight moments, the rest left to iOS",
+      "w": 1290,
+      "x": 0,
+      "y": 3240
     },
     "My-Works.dc.html": {
       "h": 844,
@@ -1068,7 +1180,7 @@
       "y": 4900
     },
     "Quality-Method.dc.html": {
-      "h": 3400,
+      "h": 3970,
       "page": "quality",
       "title": "Reader Response · verified facts, signals, Ways to Find, build order",
       "w": 1280,
@@ -1115,13 +1227,53 @@
       "x": 3760,
       "y": 300
     },
+    "Queue-Import.dc.html": {
+      "h": 844,
+      "page": "queue-ideas",
+      "title": "1 · Add from Links (idea)",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
     "Queue-Manage.dc.html": {
-      "h": 1000,
+      "h": 1064,
       "page": "iphone",
       "title": "Queue · swipe and drag",
       "w": 390,
       "x": 1880,
       "y": 11920
+    },
+    "Queue-Sections.dc.html": {
+      "h": 1680,
+      "page": "queue-ideas",
+      "title": "4 · Queue in four states (idea)",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "Queue-Smart.dc.html": {
+      "h": 844,
+      "page": "queue-ideas",
+      "title": "6 · Smart Queue (idea)",
+      "w": 390,
+      "x": 2350,
+      "y": 0
+    },
+    "Queue-Sort.dc.html": {
+      "h": 844,
+      "page": "queue-ideas",
+      "title": "3 · Sort New (idea)",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "Queue-Sources.dc.html": {
+      "h": 940,
+      "page": "queue-ideas",
+      "title": "2 · Sources (idea)",
+      "w": 390,
+      "x": 470,
+      "y": 0
     },
     "Queue-Tags.dc.html": {
       "h": 844,
@@ -1130,6 +1282,14 @@
       "w": 390,
       "x": 4230,
       "y": 300
+    },
+    "Queue-TimeFit.dc.html": {
+      "h": 844,
+      "page": "queue-ideas",
+      "title": "5 · What Fits (idea)",
+      "w": 390,
+      "x": 1880,
+      "y": 0
     },
     "Queue.dc.html": {
       "h": 844,
@@ -1162,6 +1322,22 @@
       "w": 1290,
       "x": 0,
       "y": 7784
+    },
+    "Reader-CaughtUp.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Reader · caught up on a work in progress (proposed)",
+      "w": 390,
+      "x": 4700,
+      "y": 7080
+    },
+    "Reader-ChapterEnd.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Reader · end of a chapter (proposed)",
+      "w": 390,
+      "x": 4230,
+      "y": 7080
     },
     "Reader-Contents.dc.html": {
       "h": 844,
@@ -1273,6 +1449,22 @@
       "title": "Search · AO3 filters",
       "w": 390,
       "x": 470,
+      "y": 2300
+    },
+    "Search-Results-Queue.dc.html": {
+      "h": 1500,
+      "page": "iphone",
+      "title": "Search › results · swipe to queue (proposed)",
+      "w": 390,
+      "x": 4230,
+      "y": 2300
+    },
+    "Search-Results-Select.dc.html": {
+      "h": 1500,
+      "page": "iphone",
+      "title": "Search › results · select, add to queue (proposed)",
+      "w": 390,
+      "x": 4700,
       "y": 2300
     },
     "Search-Results.dc.html": {
@@ -1541,6 +1733,14 @@
       "x": 0,
       "y": 0
     },
+    "Symbols-Layouts.dc.html": {
+      "h": 1680,
+      "page": "iphone",
+      "title": "Work symbols in lists · row or grid (compare)",
+      "w": 390,
+      "x": 3760,
+      "y": 2300
+    },
     "Symbols.dc.html": {
       "h": 84,
       "page": "system",
@@ -1588,14 +1788,6 @@
       "w": 358,
       "x": 1360,
       "y": 164
-    },
-    "TabRail.dc.html": {
-      "h": 312,
-      "page": "system",
-      "title": "Tab rail, Duo cover (component) · earlier, replaced by Duo side controls",
-      "w": 64,
-      "x": 1360,
-      "y": 1248
     },
     "Text-Editor.dc.html": {
       "h": 880,
@@ -2198,7 +2390,7 @@
       "y": 14470
     },
     "Themes-Queue-Manage.dc.html": {
-      "h": 1000,
+      "h": 1064,
       "page": "themes-all",
       "title": "Dark · OLED · Sepia — Queue · swipe and drag",
       "w": 1250,
@@ -2331,6 +2523,22 @@
       "title": "Dark · OLED · Sepia — Search · AO3 filters",
       "w": 1250,
       "x": 1390,
+      "y": 2300
+    },
+    "Themes-Search-Results-Queue.dc.html": {
+      "h": 1500,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Search › results · swipe to queue (proposed)",
+      "w": 1250,
+      "x": 11120,
+      "y": 2300
+    },
+    "Themes-Search-Results-Select.dc.html": {
+      "h": 1500,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Search › results · select, add to queue (proposed)",
+      "w": 1250,
+      "x": 12510,
       "y": 2300
     },
     "Themes-Search-Results.dc.html": {
@@ -2669,6 +2877,22 @@
       "x": 6110,
       "y": 300
     },
+    "WorkDetail-Proposed-Reading.dc.html": {
+      "h": 2320,
+      "page": "iphone",
+      "title": "Work Detail · proposed · in progress",
+      "w": 390,
+      "x": 3760,
+      "y": 4580
+    },
+    "WorkDetail-Proposed.dc.html": {
+      "h": 2180,
+      "page": "iphone",
+      "title": "Work Detail · proposed · not started (deciding)",
+      "w": 390,
+      "x": 3290,
+      "y": 4580
+    },
     "WorkRow.dc.html": {
       "h": 112,
       "page": "system",
@@ -2708,6 +2932,14 @@
       "w": 390,
       "x": 0,
       "y": 3200
+    },
+    "Writing-Tab-Rule.dc.html": {
+      "h": 640,
+      "page": "structure",
+      "title": "Writing is a tab only for people who write (decided 2026-11-12)",
+      "w": 1290,
+      "x": 0,
+      "y": 10260
     },
     "Writing.dc.html": {
       "h": 1950,
@@ -2769,9 +3001,73 @@
     "rowSubSettings",
     "rowSubReadAloud",
     "rowQualityScreens",
-    "qualityWhere"
+    "qualityWhere",
+    "note-1fdm3w",
+    "note-epuowo",
+    "note-9l0mt7",
+    "note-tn2kha",
+    "note-ifp5r9",
+    "note-4fa9oh",
+    "note-kfbcg8",
+    "rowGenCovers",
+    "rowQueueIdeas",
+    "whyQueueIdeas"
   ],
   "notes": {
+    "note-1fdm3w": {
+      "kind": "title1",
+      "maxW": 5560,
+      "text": "Account, writing, collections",
+      "w": 240,
+      "x": -377,
+      "y": 17665
+    },
+    "note-4fa9oh": {
+      "kind": "title1",
+      "maxW": 2740,
+      "text": "Works, comments, authors",
+      "w": 240,
+      "x": -377,
+      "y": 11836
+    },
+    "note-9l0mt7": {
+      "kind": "title1",
+      "maxW": 4620,
+      "text": "Home & Library",
+      "w": 240,
+      "x": -377,
+      "y": 5195
+    },
+    "note-epuowo": {
+      "kind": "title1",
+      "maxW": 2740,
+      "text": "Search & Browse",
+      "w": 240,
+      "x": -377,
+      "y": 8530
+    },
+    "note-ifp5r9": {
+      "kind": "title1",
+      "maxW": 4150,
+      "text": "Settings, onboarding, support",
+      "w": 240,
+      "x": -377,
+      "y": 20449
+    },
+    "note-kfbcg8": {
+      "text": "What changes on every iPhone\n\n• Floating glass tab bar; Search gets its own button (Tab role .search)\n• Large titles and grouped sections in system type and spacing\n• Glass toolbar groups on Work Detail and the Reader\n• Read Aloud lives in a bottom accessory, like Music's mini player\n• The four symbols (Rating, Category, Warnings, Status) on every work, same order everywhere\n• Density kept: words, chapters, kudos and hits stay visible",
+      "w": 380,
+      "x": 4761,
+      "y": 5630
+    },
+    "note-tn2kha": {
+      "kind": "title1",
+      "maxW": 4150,
+      "text": "Reader & Read Aloud",
+      "w": 240,
+      "x": -377,
+      "y": 15461
+    },
     "qualityWhere": {
       "fill": "gray",
       "page": "quality",
@@ -2815,6 +3111,15 @@
       "w": 240,
       "x": 0,
       "y": 2000
+    },
+    "rowGenCovers": {
+      "kind": "title1",
+      "maxW": 2936,
+      "page": "duo",
+      "text": "Generated covers",
+      "w": 240,
+      "x": 0,
+      "y": 4347
     },
     "rowHome": {
       "kind": "title1",
@@ -3001,11 +3306,30 @@
       "w": 380,
       "x": 5138,
       "y": 0
+    },
+    "rowQueueIdeas": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "queue-ideas",
+      "text": "Queues · further ideas",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "whyQueueIdeas": {
+      "page": "queue-ideas",
+      "text": "How queues could grow\n\n• 1 Add from Links: paste a Safari tab group’s links; works join the queue, listings become sources\n• 2 Sources: several searches, authors, series and tags per queue, each with a count of new works\n• 3 Sort New: works added in bulk wait in New until you keep or drop them\n• 4 Four states: New, In line, Waiting (WIPs you are caught up on), Finished\n• 5 What Fits: say how long you have; it picks across all queues\n• 6 Smart Queue: fills itself from the library by rules\n\nIdeas only. 1 and 2 fetch from AO3 and are not yet checked against the networking policy.",
+      "w": 380,
+      "x": 2820,
+      "y": 0
     }
   },
   "order": [
-    "Direction.dc.html",
-    "Direction-Mix.dc.html",
+    "WorkDetail-Proposed.dc.html",
+    "WorkDetail-Proposed-Reading.dc.html",
+    "Motion.dc.html",
+    "Cover-Test-Shelf.dc.html",
+    "Cover-Spec.dc.html",
     "IA-Map.dc.html",
     "Flow-Find.dc.html",
     "Flow-Resume.dc.html",
@@ -3043,8 +3367,6 @@
     "Coverage.dc.html",
     "Rules.dc.html",
     "ResumeCard.dc.html",
-    "TabRail.dc.html",
-    "DuoSidebar.dc.html",
     "Android.dc.html",
     "Themes.dc.html",
     "AX5.dc.html",
@@ -3275,9 +3597,6 @@
     "Themes-Insights-Taste.dc.html",
     "Themes-Library-Edit.dc.html",
     "Themes-Search-Sort.dc.html",
-    "Skin-Dark.dc.html",
-    "Skin-OLED.dc.html",
-    "Skin-Sepia.dc.html",
     "Quality-Results.dc.html",
     "Quality-WIPs.dc.html",
     "Quality-Response.dc.html",
@@ -3345,7 +3664,38 @@
     "Search-Sort.dc.html",
     "Accent-Custom.dc.html",
     "Search-Results.dc.html",
-    "Themes-Search-Results.dc.html"
+    "Search-Results-Queue.dc.html",
+    "Search-Results-Select.dc.html",
+    "Themes-Search-Results.dc.html",
+    "Themes-Search-Results-Queue.dc.html",
+    "Themes-Search-Results-Select.dc.html",
+    "Direction.dc.html",
+    "Direction-Mix.dc.html",
+    "Skin-Dark.dc.html",
+    "Skin-OLED.dc.html",
+    "Skin-Sepia.dc.html",
+    "HomeSections.dc.html",
+    "ChapterBars.dc.html",
+    "Chapter-Bars-Cases.dc.html",
+    "Duo-Open-Library-Root.dc.html",
+    "Duo-Open-Writing.dc.html",
+    "Duo-Portrait-Library-Root.dc.html",
+    "Duo-Portrait-Writing.dc.html",
+    "Writing-Tab-Rule.dc.html",
+    "Android-Foldable.dc.html",
+    "Reader-ChapterEnd.dc.html",
+    "Reader-CaughtUp.dc.html",
+    "Link-Landing.dc.html",
+    "Link-Landing-Restricted.dc.html",
+    "Flow-Link.dc.html",
+    "CoverArt.dc.html",
+    "Symbols-Layouts.dc.html",
+    "Queue-Import.dc.html",
+    "Queue-Sources.dc.html",
+    "Queue-Sort.dc.html",
+    "Queue-Sections.dc.html",
+    "Queue-TimeFit.dc.html",
+    "Queue-Smart.dc.html"
   ],
   "pages": [
     {
@@ -3399,6 +3749,10 @@
     {
       "id": "quality",
       "name": "Reader Response"
+    },
+    {
+      "id": "queue-ideas",
+      "name": "Queues · ideas"
     }
   ],
   "title": "Kudos for iPhone Duo"

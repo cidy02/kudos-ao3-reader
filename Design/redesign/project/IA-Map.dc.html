@@ -15,7 +15,7 @@ body{margin:0}
 <div style="width: 1290px; height: 1100px; box-sizing: border-box; padding: 32px 40px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 20px">
   <header style="display: flex; flex-direction: column; gap: 6px">
     <h1 style="margin: 0; font-size: 32px; font-weight: 700">Where things live</h1>
-    <p style="margin: 0; font-size: 15px; line-height: 21px; color: #3A3A3C; max-width: 1000px">Four tabs and global Search: Home to read, Library to organise, Writing to post, Browse to find. Account leaves the tab bar for a sheet behind the profile button on Home. Things on AO3 say so, nothing appears twice under one name, and every feature keeps a home.</p>
+    <p style="margin: 0; font-size: 15px; line-height: 21px; color: #3A3A3C; max-width: 1000px">Home to read, Library to organise, Browse to find, and global Search; Writing to post joins as a tab once the account has a work or draft (decided 12 Nov). Account leaves the tab bar for a sheet behind the profile button on Home. Things on AO3 say so, nothing appears twice under one name, and every feature keeps a home.</p>
   </header>
   <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; flex: 1">
     <sc-for list="{{columns}}" as="c" hint-placeholder-count="2">
@@ -71,7 +71,7 @@ class Component extends DCLogic {
       ] },
       { title: 'Proposed', tabs: [
         { name: 'Home', job: 'what to read now', d: D.home, items: [moved('Continue Reading: hero + Also Reading'), moved('Subscriptions: new chapters and new works'), moved('Queues: each one\'s next work, Start'), same('Pinned collections'), moved('This week → Insights'), moved('Profile button → Account sheet')] },
-        { name: 'Library', job: 'where you organise', d: D.library, items: [moved('Shelf tiles: Want to Read, Reading Now, Finished, Downloaded, Favourites, Queues'), moved('Edit Shelves'), moved('All Works (header)'), same('Collections'), moved('On AO3: Marked for Later, Bookmarks, Subscriptions, AO3 History'), moved('Insights, Recently Deleted (••• menu)')] },
+        { name: 'Library', job: 'where you organise', d: D.library, items: [moved('Cover shelves (Favourites, Collections, Downloaded), then shelf tiles: Want to Read, Reading Now, Finished, Queues, History, Imported'), moved('Edit Shelves'), moved('All Works (header)'), same('Collections'), moved('On AO3: Marked for Later, Bookmarks, Subscriptions, AO3 History'), moved('Insights, Recently Deleted (••• menu)')] },
         { name: 'Writing', job: 'what you post (new tab)', d: D.writing, items: [moved('Draft you were on, Continue'), moved('This week: kudos, hits, comments'), moved('New Comments'), same('Works'), same('Drafts'), same('Series'), moved('Collections & Challenges'), moved('Posting as (pseud)')] },
         { name: 'Browse', job: 'AO3 by fandom', d: D.browse, items: [same('Categories'), same('Fandoms'), same('Fandom works'), same('AO3 website')] },
         { name: 'Account sheet', job: 'from the profile button, not a tab', d: D.account, items: [same('Profile'), same('Inbox'), same('AO3 Preferences'), moved('Open AO3 (was More on AO3)'), moved('Kudos Settings'), same('Log Out'), gone('Account tab'), gone('Shortcuts grid')] }

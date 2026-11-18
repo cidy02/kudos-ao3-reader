@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Work symbols in lists</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; box-sizing: border-box; padding: 24px 0 28px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 22px">
+  <header style="padding: 0 16px; display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700">Work symbols in lists</h1>
+    <p style="margin: 0; font-size: 14px; line-height: 20px; color: #3A3A3C">The same two works, five ways. The first is the new default; the reader can switch to the grid in Settings › Library › Work lists. The last is how every list looked until 13 November.</p>
+  </header>
+  <sc-for list="{{variants}}" as="v" hint-placeholder-count="5">
+    <section aria-label="{{v.title}}" style="display: flex; flex-direction: column; gap: 4px">
+      <div style="padding: 0 16px; display: flex; align-items: baseline; gap: 8px">
+        <h2 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 700">{{v.title}}</h2>
+        <sc-if value="{{v.isDefault}}" hint-placeholder-val="{{false}}"><span style="padding: 0 7px; border-radius: 9px; background: rgba(130,16,25,0.1); color: #821019; font-size: 11px; line-height: 18px; font-weight: 700">Default</span></sc-if>
+      </div>
+      <p style="margin: 0; padding: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">{{v.note}}</p>
+      <div style="border-top: 0.5px solid #D1D1D6">
+        <dc-import name="WorkRow" work="{{a}}" fandom-top="{{true}}" divider="{{true}}" symbols="{{v.symbols}}" symbols-backing="{{v.backing}}" hint-size="100%,110px"></dc-import>
+        <dc-import name="WorkRow" work="{{b}}" fandom-top="{{true}}" divider="{{true}}" symbols="{{v.symbols}}" symbols-backing="{{v.backing}}" hint-size="100%,110px"></dc-import>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1680}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      a: { title: 'Whatever Remains', author: 'deductive_reasoning', fandom: 'Sherlock Holmes', rating: 'E', category: 'MM', warnings: 'present', warningCount: 2, status: 'complete', words: '61,000', chapters: '14/14', kudos: '7,402', hits: '120k' },
+      b: { title: 'The Baker Street Irregular', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', words: '9,140', chapters: '1/1', kudos: '2,045', hits: '19.8k' },
+      variants: [
+        { title: 'Row under the title, light plate', note: 'The four symbols as one line under the title, above the author; the title gets the full width.', symbols: 'row', backing: 'fill', isDefault: true },
+        { title: 'Row under the title, bare', note: 'The same line without the plate.', symbols: 'row', backing: 'none', isDefault: false },
+        { title: '2×2 grid, bare', note: 'The grid setting: the square beside the title, no plate.', symbols: 'grid', backing: 'none', isDefault: false },
+        { title: '2×2 grid, hairline outline', note: 'If the bare grid feels loose: a hairline instead of a fill.', symbols: 'grid', backing: 'outline', isDefault: false },
+        { title: '2×2 grid, filled plate', note: 'Every list until 13 November.', symbols: 'grid', backing: 'fill', isDefault: false }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

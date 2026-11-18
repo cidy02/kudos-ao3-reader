@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Writing tab rule</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#821019}a:hover{color:#6E0000}
+</style>
+</helmet>
+<div style="width: 1290px; height: 640px; box-sizing: border-box; padding: 34px 40px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 22px">
+  <header style="display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 26px; font-weight: 700">Writing is a tab only for people who write</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 21px; color: #3A3A3C; max-width: 1040px">Decided 2026-11-12. Revises 27 Oct, when Writing took Account’s slot for everyone. Most AO3 readers never post, so readers get Home, Library, Browse and Search; the Writing tab appears with the first work or draft.</p>
+  </header>
+  <div style="display: flex; align-items: flex-start; gap: 36px">
+    <div style="width: 390px; flex-shrink: 0; display: flex; flex-direction: column; gap: 18px">
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+        <div style="padding: 16px; border-radius: 22px; background: #F2F2F7"><dc-import name="TabBar" selected="home" writing="{{false}}" accent="#821019" hint-size="358px,62px"></dc-import></div>
+        <figcaption style="font-size: 13px; line-height: 18px"><b>1 · Reader, or signed out.</b> Three tabs and Search. No empty tab, nothing greyed out.</figcaption>
+      </figure>
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+        <div style="padding: 16px; border-radius: 22px; background: #F2F2F7">
+          <a href="Work-Editor.dc.html" style="height: 52px; padding: 0 14px; border-radius: 14px; background: #FFFFFF; color: #000000; text-decoration: none; display: flex; align-items: center; gap: 12px; font-size: 17px">
+            <span aria-hidden="true" style="width: 29px; height: 29px; border-radius: 7px; background: #821019; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 3.9a2.1 2.1 0 0 1 3 0l.7.7a2.1 2.1 0 0 1 0 3L9.4 18.3l-4.6 1.5c-.6.2-1.2-.4-1-1l1.5-4.6z"></path></svg></span>
+            <span style="flex: 1">Start Writing</span>
+            <svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+          </a>
+        </div>
+        <figcaption style="font-size: 13px; line-height: 18px"><b>2 · First draft.</b> While the tab is hidden, the Account sheet carries this row under On AO3. It opens the work editor; saving the draft adds the tab.</figcaption>
+      </figure>
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+        <div style="padding: 16px; border-radius: 22px; background: #F2F2F7"><dc-import name="TabBar" selected="writing" accent="#821019" hint-size="358px,62px"></dc-import></div>
+        <figcaption style="font-size: 13px; line-height: 18px"><b>3 · Author.</b> Four tabs and Search, as drawn on every iPhone board (saltwindow has six works).</figcaption>
+      </figure>
+    </div>
+    <figure style="margin: 0; width: 96px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 8px">
+      <div style="padding: 0 16px; border-radius: 22px; background: #F2F2F7"><dc-import name="DuoSideBar" height="372" status="{{false}}" tabs="home" writing="{{false}}" profile="Duo-Open-Account.dc.html" actions="{{none}}" accent="#821019" hint-size="64px,372px"></dc-import></div>
+      <figcaption style="font-size: 13px; line-height: 18px; text-align: center">iPhone Duo: the same rule in the side controls</figcaption>
+    </figure>
+    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+      <section style="display: flex; flex-direction: column; gap: 6px">
+        <h2 style="margin: 0; font-size: 17px; font-weight: 700">The rule</h2>
+        <div style="border-top: 0.5px solid #D1D1D6">
+          <sc-for list="{{rule}}" as="m" hint-placeholder-count="6">
+            <div style="display: flex; gap: 10px; padding: 7px 0; border-bottom: 0.5px solid #E5E5EA; font-size: 13px; line-height: 18px">
+              <span style="width: 120px; flex-shrink: 0; font-weight: 600">{{m.what}}</span>
+              <span style="flex: 1; color: #3A3A3C">{{m.where}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+      <div style="display: flex; gap: 18px">
+        <section style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0; font-size: 15px; font-weight: 700; color: #2F7A36">Gains</h2>
+          <sc-for list="{{gains}}" as="g" hint-placeholder-count="2"><p style="margin: 0; font-size: 13px; line-height: 18px">{{g}}</p></sc-for>
+        </section>
+        <section style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0; font-size: 15px; font-weight: 700; color: #A35200">Costs</h2>
+          <sc-for list="{{costs}}" as="c" hint-placeholder-count="2"><p style="margin: 0; font-size: 13px; line-height: 18px">{{c}}</p></sc-for>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1290,"height":640}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      none: [],
+      rule: [
+        ['Shown when', 'The AO3 account has at least one work, series or draft, or Kudos holds a local draft.'],
+        ['Checked', 'At launch, at log in and log out, and when the first draft is saved. Never removed while the app is open, so a tab cannot vanish under your thumb.'],
+        ['Removed', 'At the next launch after the last work and draft are gone, or at log out.'],
+        ['Signed out', 'Three tabs. The Account sheet offers Log In; Start Writing shows after logging in.'],
+        ['Inbox', 'Unchanged: the Account sheet, with its count on the profile button. Readers get comment replies there too.'],
+        ['Components', 'TabBar and DuoSideBar take writing={false}. Android: four or five destinations in the navigation bar.']
+      ].map(([what, where]) => ({ what, where })),
+      gains: [
+        'Readers get wider tab targets and no tab that opens on an empty page.',
+        'Authors lose nothing: the tab, its badge and Posting as … stay exactly as drawn.'
+      ],
+      costs: [
+        'The tab bar changes once, the day you first write. You caused it, and it does not change back mid-session.',
+        'Start Writing is two taps away for a first-time author (profile button, then the row).'
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

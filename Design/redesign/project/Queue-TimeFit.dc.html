@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Queues: what fits the time you have</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between; z-index: 2">
+    <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+  </div>
+  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 14px">
+    <header style="display: flex; flex-direction: column; gap: 2px">
+      <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">What Fits</h1>
+      <p style="margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">From your 3 queues · offline works first</p>
+    </header>
+    <div role="group" aria-label="Time you have" style="display: flex; gap: 8px">
+      <sc-for list="{{times}}" as="t" hint-placeholder-count="4">
+        <button aria-pressed="{{t.on}}" style="flex: 1; height: 36px; border: none; border-radius: 18px; background: {{t.bg}}; color: {{t.fg}}; font-family: inherit; font-size: 15px; font-weight: 600">{{t.label}}</button>
+      </sc-for>
+    </div>
+
+    <section aria-label="Finish in this sitting" style="display: flex; flex-direction: column; gap: 2px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Finish in this sitting</h2>
+      <div style="margin: 0 -16px">
+        <sc-for list="{{finish}}" as="w" hint-placeholder-count="1">
+          <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" accent="#821019" hint-size="100%,108px"></dc-import>
+        </sc-for>
+      </div>
+    </section>
+    <section aria-label="Start and finish" style="display: flex; flex-direction: column; gap: 2px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Start and finish</h2>
+      <div style="margin: 0 -16px">
+        <sc-for list="{{start}}" as="w" hint-placeholder-count="3">
+          <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" accent="#821019" hint-size="100%,100px"></dc-import>
+        </sc-for>
+      </div>
+    </section>
+  </main>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, #FFFFFF00, #FFFFFFF0 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; bottom: 28px">
+    <dc-import name="TabBar" selected="library" accent="#821019" hint-size="358px,62px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Idea: queues already know how long each work takes to read. Say how long you have and this picks across
+    // all queues: what you can finish now, then what you can start and finish, shortest first.
+    const finish = [
+      { title: 'Small Gods of the Kitchen', author: 'hearthwitch', fandom: 'Original Work', rating: 'G', category: 'Gen', warnings: 'none', status: 'wip', words: '14,900', chapters: '4/?', kudos: '455', progress: 66, progressLabel: 'Ch 3 · 66%', updated: '19 min left · Summer Reading' }
+    ];
+    const start = [
+      { title: 'Five Orange Pips and a Kettle', author: 'mrshudsonsays', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', words: '2,100', chapters: '1/1', kudos: '1,010', updated: '8 min · For the Train' },
+      { title: 'What the Lamp Saw', author: 'quietharbor', fandom: 'To the Lighthouse', rating: 'G', category: 'Gen', warnings: 'none', status: 'wip', words: '5,060', chapters: '2/5', kudos: '312', updated: '19 min · Summer Reading' },
+      { title: 'Five Times Elizabeth Laughed', author: 'quietharbor', fandom: 'Pride and Prejudice', rating: 'G', category: 'Multi', warnings: 'none', status: 'complete', words: '6,700', chapters: '1/1', kudos: '880', updated: '25 min · Summer Reading' }
+    ];
+    return {
+      times: ['15 min', '30 min', '1 h', '2 h +'].map((label, i) => ({ label, on: i === 1 ? 'true' : 'false', bg: i === 1 ? '#821019' : '#EFEFF4', fg: i === 1 ? '#FFFFFF' : '#000000' })),
+      finish: finish.map((w, i) => ({ ...w, divider: i < finish.length - 1 })),
+      start: start.map((w, i) => ({ ...w, divider: i < start.length - 1 }))
+    };
+  }
+}
+</script>
+</body>
+</html>

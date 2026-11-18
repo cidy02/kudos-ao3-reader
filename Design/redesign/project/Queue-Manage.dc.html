@@ -13,7 +13,7 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 1000px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 1064px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between; z-index: 2">
     <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
@@ -50,6 +50,13 @@ button{cursor:pointer}
       </div>
     </div>
 
+    <button aria-label="Find more works: Holmes casefic under 20k, 3 new on AO3" style="height: 48px; padding: 0 10px 0 12px; border: none; border-radius: 12px; background: #EFEFF4; font-family: inherit; color: #000000; display: flex; align-items: center; gap: 8px; text-align: left">
+      <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6C6C70" stroke-width="2.2" stroke-linecap="round" style="flex-shrink: 0"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-size: 15px; line-height: 19px; font-weight: 600">Find More</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Holmes casefic under 20k</span></span>
+      <span style="flex-shrink: 0; padding: 1px 7px; border-radius: 9px; background: #821019; color: #FFFFFF; font-size: 11px; line-height: 16px; font-weight: 700">3 new</span>
+      <svg aria-hidden="true" width="8" height="13" viewBox="0 0 8 14" fill="none" stroke="#8E8E93" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+    </button>
+
     <dc-import name="ResumeCard" variant="next" work="{{next}}" accent="#821019" hint-size="358px,250px"></dc-import>
 
     <section aria-label="In line" style="display: flex; flex-direction: column; gap: 2px">
@@ -85,7 +92,7 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":1000}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":1064}}'>
 class Component extends DCLogic {
   renderVals() {
     const accent = this.props.accent ?? '#821019';

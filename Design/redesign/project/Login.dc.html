@@ -22,6 +22,13 @@ button{cursor:pointer}
       <span style="width: 40px"></span>
     </div>
     <div style="padding: 8px 16px 0; display: flex; flex-direction: column; gap: 14px">
+      <sc-if value="{{isRestricted}}" hint-placeholder-val="{{false}}">
+        <div style="padding: 12px 14px; border-radius: 16px; background: #FFFFFF; display: flex; flex-direction: column; gap: 6px">
+          <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; font-weight: 600; color: #A35200"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 10V7.5a4 4 0 0 1 8 0V10h1.5A1.5 1.5 0 0 1 19 11.500V19a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19v-7.500A1.5 1.5 0 0 1 6.5 10zm2 0h4V7.5a2 2 0 0 0-4 0z"></path></svg>Restricted work</span>
+          <p style="margin: 0; font-size: 15px; line-height: 20px">The link you opened is to a work its author shows only to logged-in AO3 users. Log in and it opens here.</p>
+          <span style="font-size: 13px; line-height: 18px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">archiveofourown.org/works/48211907</span>
+        </div>
+      </sc-if>
       <div style="padding: 12px 14px; border-radius: 16px; background: #FFFFFF; display: flex; gap: 10px; align-items: flex-start">
         <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2F8F3A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><rect x="5" y="10.5" width="14" height="10" rx="2.5"></rect><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"></path></svg>
         <p style="margin: 0; font-size: 14px; line-height: 19px; color: #3A3A3C">This is AO3's own sign-in page. Your password goes straight to AO3; Kudos keeps only the session, in this device's Keychain.</p>
@@ -43,10 +50,11 @@ button{cursor:pointer}
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"context":{"editor":"enum","options":["none","restricted"],"default":"none"},"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
-    return { accent: this.props.accent ?? '#821019' };
+    // context="restricted": the sheet opened because a link led to a work only logged-in users can see.
+    return { accent: this.props.accent ?? '#821019', isRestricted: this.props.context === 'restricted' };
   }
 }
 </script>

@@ -14,10 +14,10 @@ body{margin:0}
 </helmet>
 <div aria-hidden="true" style="position: relative; isolation: isolate; width: {{width}}px; height: {{height}}px; flex-shrink: 0">
   <sc-for list="{{backs}}" as="c" hint-placeholder-count="2">
-    <span style="position: absolute; left: {{c.left}}px; top: {{c.top}}px; width: {{c.w}}px; height: {{c.h}}px; z-index: {{c.z}}; border-radius: {{radius}}px; background: {{c.bg}}; box-shadow: -2px 0 6px rgba(0,0,0,0.18); filter: {{c.filter}}; transform: rotate({{c.rot}}deg); transform-origin: {{c.origin}}"></span>
+    <span style="position: absolute; left: {{c.left}}px; top: {{c.top}}px; width: {{c.w}}px; height: {{c.h}}px; z-index: {{c.z}}; border-radius: {{radius}}px; overflow: hidden; box-shadow: -2px 0 6px rgba(0,0,0,0.18); filter: {{c.filter}}; transform: rotate({{c.rot}}deg); transform-origin: {{c.origin}}"><dc-import name="CoverArt" work="{{c.work}}" width="{{c.w}}" height="{{c.h}}" radius="{{radius}}" hint-size="{{c.hint}}"></dc-import></span>
   </sc-for>
   <span style="position: absolute; left: {{frontLeft}}px; top: {{frontTop}}px; width: {{cw}}px; height: {{frontH}}px; z-index: 5; border-radius: {{radius}}px; background: {{front}}; box-shadow: 0 4px 12px rgba(0,0,0,0.22); overflow: hidden">
-    <span style="position: absolute; left: {{ghostIn}}px; bottom: {{ghostBottom}}px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: {{ghostSize}}px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.15)">{{initial}}</span>
+    <span style="position: absolute; left: 0; top: 0"><dc-import name="CoverArt" work="{{frontWork}}" collection="{{frontCollection}}" width="{{cw}}" height="{{frontH}}" radius="{{radius}}" hint-size="{{frontHint}}"></dc-import></span>
     <sc-if value="{{hasRibbon}}" hint-placeholder-val="{{false}}">
       <span style="position: absolute; right: {{ribRight}}px; top: 0; width: {{ribW}}px; height: {{ribH}}px; background: rgba(0,0,0,0.24); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%); display: flex; justify-content: center; padding-top: {{ribPad}}px; box-sizing: border-box">
         <sc-if value="{{hasIcon}}" hint-placeholder-val="{{false}}"><svg width="{{ribIcon}}" height="{{ribIcon}}" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.92)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="{{kindD}}"></path></svg></sc-if>
@@ -26,7 +26,7 @@ body{margin:0}
   </span>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"tiles":{"editor":null},"colour":{"editor":"color","default":"#9C2F6B"},"initial":{"editor":"text","default":"A"},"kind":{"editor":"enum","options":["collection","queue","none"],"default":"collection"},"width":{"editor":"int","default":150,"min":32,"max":260},"height":{"editor":"int","default":170,"min":32,"max":260},"$preview":{"width":150,"height":170}}'>
+<script type="text/x-dc" data-dc-script data-props='{"tiles":{"editor":null},"colour":{"editor":"color","default":"#9C2F6B"},"initial":{"editor":"text","default":"A"},"collectionName":{"editor":null},"kind":{"editor":"enum","options":["collection","queue","none"],"default":"collection"},"width":{"editor":"int","default":150,"min":32,"max":260},"height":{"editor":"int","default":170,"min":32,"max":260},"$preview":{"width":150,"height":170}}'>
 class Component extends DCLogic {
   renderVals() {
     // A collection: its own card in its own colour, the covers of the works inside fanned
@@ -43,7 +43,12 @@ class Component extends DCLogic {
       const c = [0, 2, 4].map((i) => Math.round(parseInt(x.slice(i, i + 2), 16) * k));
       return 'rgb(' + c.join(',') + ')';
     };
-    const front = colour ? 'linear-gradient(155deg, ' + shade(colour, 0.62) + ', ' + colour + ')' : tiles.shift();
+    // Tiles are works (or, from older boards, a work's old cover colour); each is drawn by CoverArt.
+    const asWork = (t, i) => (typeof t === 'string' ? { title: 'stack ' + i + ' ' + t, cover: t } : t);
+    const frontWork = colour ? null : asWork(tiles.shift(), 0);
+    // The front card is the collection's or queue's own cover: its colour, a motif from its name, no ring
+    const frontCollection = colour ? { name: this.props.collectionName ?? (this.props.initial ?? '') + ' ' + (this.props.kind ?? 'collection'), colour } : null;
+    const front = colour ? 'linear-gradient(155deg, ' + shade(colour, 0.62) + ', ' + colour + ')' : 'transparent';
     const backs = tiles.slice(0, 2);
     const kind = this.props.kind ?? (colour ? 'collection' : 'none');
     const isQueue = kind === 'queue';
@@ -67,13 +72,9 @@ class Component extends DCLogic {
     const frontTop = peek * backs.length, frontH = H - frontTop;
     const frontLeft = isQueue ? Math.round((W - cw) / 2) : 0;
     return {
-      width: W, height: H, cw, frontTop, frontH, frontLeft,
+      width: W, height: H, cw, frontTop, frontH, frontLeft, frontHint: cw + 'px,' + (H - frontTop) + 'px',
       radius: Math.max(4, Math.round(cw * 0.09)),
-      front,
-      initial: colour ? (this.props.initial ?? '') : '',
-      ghostSize: Math.round(cw * 1.05),
-      ghostIn: -Math.round(cw * 0.06),
-      ghostBottom: -Math.round(cw * 0.27),
+      front, frontWork: frontWork || {}, frontCollection,
       hasRibbon: big && kind !== 'none',
       ribW, ribH: Math.round(ribW * 1.45), ribRight: Math.round(cw * 0.09), ribPad: Math.round(ribW * 0.2), ribIcon: Math.round(ribW * 0.6),
       // Queue: numbered list (an order). Collection: a plain ribbon, no glyph (owner, 2026-10-28).
@@ -86,10 +87,10 @@ class Component extends DCLogic {
         if (isQueue) {
           // Straight, centred over the front card, each one a peek higher and a step narrower.
           const qw = Math.round(cw * (1 - i * 0.1)), qh = H - peek * backs.length;
-          return { bg, w: qw, h: qh, left: frontLeft + Math.round((cw - qw) / 2), top: peek * (backs.length - i), z: 5 - i, rot: 0, origin: '50% 0%', filter: 'brightness(' + (1 - i * 0.12) + ')' };
+          return { work: asWork(bg, i), hint: qw + 'px,' + qh + 'px', w: qw, h: qh, left: frontLeft + Math.round((cw - qw) / 2), top: peek * (backs.length - i), z: 5 - i, rot: 0, origin: '50% 0%', filter: 'brightness(' + (1 - i * 0.12) + ')' };
         }
         const top = H - h - Math.round(w * Math.sin(rot * Math.PI / 180));
-        return { bg, w, h, left: Math.round(cw - w + i * dx), top, z: 5 - i, rot, origin: '0% 100%', filter: 'brightness(' + (1 - i * 0.1) + ')' };
+        return { work: asWork(bg, i), hint: w + 'px,' + h + 'px', w, h, left: Math.round(cw - w + i * dx), top, z: 5 - i, rot, origin: '0% 100%', filter: 'brightness(' + (1 - i * 0.1) + ')' };
       })
     };
   }

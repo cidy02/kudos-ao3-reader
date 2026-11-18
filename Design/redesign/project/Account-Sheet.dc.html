@@ -14,20 +14,25 @@ button{cursor:pointer}
 a{color:inherit;text-decoration:none}
 </style>
 </helmet>
-<div style="width: 390px; height: 1260px; position: relative; overflow: hidden; background: #000000; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: {{rootW}}; height: {{rootH}}; position: relative; overflow: hidden; background: {{rootBg}}; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <sc-if value="{{isSheet}}" hint-placeholder-val="{{true}}">
   <div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 390px; height: 1260px; transform: translateY(10px) scale(0.92); transform-origin: 50% 0; border-radius: 38px; overflow: hidden; pointer-events: none">
     <dc-import name="Home-Launchpad" hint-size="390px,844px"></dc-import>
     <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.22)"></div>
   </div>
+  </sc-if>
 
-  <section role="dialog" aria-label="Account" style="position: absolute; left: 0; right: 0; top: 62px; bottom: 0; border-radius: 38px 38px 0 0; background: #F2F2F7; box-shadow: 0 -8px 30px rgba(0,0,0,0.18); overflow: hidden">
-    <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 7px auto 0"></div>
-    <header style="display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 10px">
+  <section role="dialog" aria-label="Account" style="position: {{dlgPos}}; left: 0; right: 0; top: {{dlgTop}}; bottom: 0; border-radius: {{dlgRadius}}; background: #F2F2F7; box-shadow: {{dlgShadow}}; overflow: hidden">
+    <sc-if value="{{isSheet}}" hint-placeholder-val="{{true}}"><div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 7px auto 0"></div></sc-if>
+    <header style="display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding: {{headPad}}">
       <span aria-hidden="true" style="width: 44px"></span>
       <h2 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">Account</h2>
+      <sc-if value="{{isInspector}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="width: 44px"></span></sc-if>
+      <sc-if value="{{hasDone}}" hint-placeholder-val="{{true}}">
       <button aria-label="Done" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.8); box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06)">
         <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
       </button>
+      </sc-if>
     </header>
 
     <sc-if value="{{signedIn}}" hint-placeholder-val="{{true}}"><div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 300px; background: linear-gradient(to bottom, rgba(35,80,107,0.20), rgba(35,80,107,0.07) 60%, rgba(35,80,107,0)); pointer-events: none"></div></sc-if>
@@ -58,7 +63,7 @@ a{color:inherit;text-decoration:none}
           <section aria-label="Your latest" style="display: flex; flex-direction: column; gap: 8px">
             <h3 style="margin: 4px 4px 0; font-size: 20px; line-height: 25px; font-weight: 700">Your Latest</h3>
             <a href="Writing-Chapters.dc.html" style="position: relative; overflow: hidden; border-radius: 22px; padding: 16px; display: flex; flex-direction: column; gap: 10px; color: #FFFFFF; text-decoration: none; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))">
-              <span aria-hidden="true" style="position: absolute; right: -6px; top: -26px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 170px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.15)">W</span>
+              <span aria-hidden="true" style="position: absolute; left: 0; bottom: 0; display: flex"><dc-import name="CoverArt" work="{{latestWork}}" width="{{latestW}}" height="200" radius="0" ink="0.4" hint-size="100%,155px"></dc-import></span>
               <span role="button" aria-label="Open What the Tide Keeps" style="position: absolute; right: 14px; top: 14px; z-index: 1; width: 40px; height: 40px; border-radius: 20px; background: #FFFFFF; color: #821019; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.2)"><svg aria-hidden="true" width="9" height="15" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></span>
               <span style="position: relative; display: flex; align-items: center; gap: 12px">
                 <span style="flex-shrink: 0; padding: 7px; border-radius: 15px; background: rgba(0,0,0,0.22); box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.12); display: flex">
@@ -140,7 +145,7 @@ a{color:inherit;text-decoration:none}
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"signedIn":{"editor":"boolean","default":true},"$preview":{"width":390,"height":1260}}'>
+<script type="text/x-dc" data-dc-script data-props='{"presentation":{"editor":"enum","options":["sheet","inspector","form"],"default":"sheet"},"signedIn":{"editor":"boolean","default":true},"$preview":{"width":390,"height":1260}}'>
 class Component extends DCLogic {
   renderVals() {
     const signedIn = this.props.signedIn ?? true;
@@ -170,7 +175,19 @@ class Component extends DCLogic {
       hasTitle: true,
       rows: g.rows.map((r, i) => ({ ...r, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
     }));
+    // presentation: "sheet" is the iPhone sheet over Home. "inspector" (iPhone Duo, landscape) and
+    // "form" (iPhone Duo, portrait form sheet) draw only the panel; the Duo board supplies the
+    // frame, and in the inspector Close sits in the side controls, so there is no Done button.
+    const pres = this.props.presentation ?? 'sheet';
+    const isSheet = pres === 'sheet';
     return {
+      // The latest-work card is that work's cover, enlarged and faded behind the words (no background letter, owner 2026-11-13).
+      latestWork: { title: 'What the Tide Keeps', author: 'saltwindow', fandom: 'Original Work', status: 'wip' },
+      latestW: isSheet ? 358 : pres === 'inspector' ? 364 : 509,
+      isSheet, isInspector: pres === 'inspector', hasDone: pres !== 'inspector',
+      rootW: isSheet ? '390px' : '100%', rootH: isSheet ? '1260px' : 'auto', rootBg: isSheet ? '#000000' : 'transparent',
+      dlgPos: isSheet ? 'absolute' : 'relative', dlgTop: isSheet ? '62px' : '0', dlgRadius: isSheet ? '38px 38px 0 0' : '0', dlgShadow: isSheet ? '0 -8px 30px rgba(0,0,0,0.18)' : 'none',
+      headPad: isSheet ? '6px 16px 10px' : '14px 16px 10px',
       signedIn, signedOut: !signedIn, groups,
       counts: [['6', 'Works', 'My-Works.dc.html'], ['1', 'Series', 'Writing-Series.dc.html'], ['128', 'Bookmarks', 'AO3-Lists.dc.html'], ['27', 'Subscriptions', 'Subscriptions.dc.html']].map(([n, label, href], i) => ({ n, label, href, sep: i ? '0.5px solid #E5E5EA' : 'none' })),
       inbox: [

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Flow: arriving from an AO3 link</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1290px; height: 660px; box-sizing: border-box; padding: 26px 34px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 18px">
+  <header style="display: flex; align-items: baseline; gap: 14px">
+    <h1 style="margin: 0; font-size: 26px; font-weight: 700">Flow · arriving from an AO3 link</h1>
+    <p style="margin: 0; font-size: 15px; color: #3A3A3C">Proposed 2026-11-12. Recs travel as links; this is where one lands.</p>
+  </header>
+  <div style="display: flex; align-items: flex-start; gap: 22px">
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; width: 225px">
+      <div style="width: 225px; height: 487px; overflow: hidden; border-radius: 30px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5769); transform-origin: 0 0"><dc-import name="Link-Landing" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>1</b> Share an AO3 page to Kudos, or paste its link into Search. The work opens as a sheet over what you were doing.</figcaption>
+    </figure>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; width: 225px">
+      <div style="width: 225px; height: 487px; overflow: hidden; border-radius: 30px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5769); transform-origin: 0 0"><dc-import name="iPhone-Reader" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>2</b> Read opens the reader, as on any Work Detail, and the work joins Reading Now. Close returns to where you were.</figcaption>
+    </figure>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; width: 225px">
+      <div style="width: 225px; height: 487px; overflow: hidden; border-radius: 30px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5769); transform-origin: 0 0"><dc-import name="Link-Landing-Restricted" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>3</b> Logged out, and the author limits the work to AO3 users: the app’s Log In sheet opens, with the reason on top.</figcaption>
+    </figure>
+    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+      <section style="display: flex; flex-direction: column; gap: 6px">
+        <h2 style="margin: 0; font-size: 17px; font-weight: 700">Where each link goes</h2>
+        <div style="border-top: 0.5px solid #D1D1D6">
+          <sc-for list="{{routes}}" as="m" hint-placeholder-count="4">
+            <div style="display: flex; gap: 10px; padding: 6px 0; border-bottom: 0.5px solid #E5E5EA; font-size: 13px; line-height: 18px">
+              <span style="width: 150px; flex-shrink: 0; font-weight: 600">{{m.what}}</span>
+              <span style="flex: 1; color: #3A3A3C">{{m.where}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+      <section style="display: flex; flex-direction: column; gap: 6px">
+        <h2 style="margin: 0; font-size: 17px; font-weight: 700">How a link reaches Kudos</h2>
+        <div style="border-top: 0.5px solid #D1D1D6">
+          <sc-for list="{{entries}}" as="m" hint-placeholder-count="4">
+            <div style="display: flex; gap: 10px; padding: 6px 0; border-bottom: 0.5px solid #E5E5EA; font-size: 13px; line-height: 18px">
+              <span style="width: 150px; flex-shrink: 0; font-weight: 600">{{m.what}}</span>
+              <span style="flex: 1; color: #3A3A3C">{{m.where}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70">To build: a route to a work by its AO3 id (there is none today), AO3 link parsing, and a Share extension target. Today the app only accepts files (Open in Kudos for EPUBs).</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1290,"height":660}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Entry points are the ones iOS allows for a site the app does not own: the share sheet and a
+    // pasted link. A tap on an AO3 link elsewhere cannot open Kudos, because Universal Links need
+    // the website to list the app.
+    return { routes: [
+        ['A work', 'Its Work Detail, as a sheet. Already in your library: the same page with your progress and Resume.'],
+        ['A chapter', 'The same page; Read opens at that chapter.'],
+        ['Series, author, tag, collection', 'Their Kudos screens: Series, Author profile, Fandom works, Collection.'],
+        ['Anything else on AO3', 'AO3 in the in-app browser.'],
+        ['Not found, or AO3 is down', 'The Errors and offline states, with the link kept so Retry works.']
+      ].map(([what, where]) => ({ what, where })),
+      entries: [
+        ['Share sheet', 'Safari, Discord, Tumblr and others: Share, then Kudos. Needs a Share extension.'],
+        ['Pasted link', 'Paste an AO3 link into Search and it goes straight to the page.'],
+        ['A tap on a link', 'Still opens Safari on iPhone: iOS hands links to an app only when the website lists that app, and AO3 lists none. Android can take AO3 links once the reader turns on “Open supported links” for Kudos.']
+      ].map(([what, where]) => ({ what, where })) };
+  }
+}
+</script>
+</body>
+</html>

@@ -27,7 +27,7 @@ body{margin:0}
   <sc-if value="{{isShownWide}}" hint-placeholder-val="{{false}}">
     <div style="padding: 12px 16px; display: flex; flex-direction: column; gap: 4px">
       <div style="display: flex; gap: 12px; align-items: center">
-        <dc-import name="Symbols" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.warningCount}}" size="24" hint-size="63px,63px"></dc-import>
+        <sc-if value="{{gridMode}}" hint-placeholder-val="{{false}}"><dc-import name="Symbols" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.warningCount}}" size="24" backed="{{symBack}}" hint-size="{{gridHint}}"></dc-import></sc-if>
         <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
           <sc-if value="{{ledger}}" hint-placeholder-val="{{true}}">
             <span style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: {{fandomColor}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.fandom}}</span>
@@ -38,6 +38,7 @@ body{margin:0}
               <span style="flex-shrink: 0; margin-top: 2px; padding: 1px 7px; border-radius: 9px; background: {{accent}}; color: #FFFFFF; font-size: 11px; line-height: 16px; font-weight: 700">{{w.badge}}</span>
             </sc-if>
           </div>
+          <sc-if value="{{rowMode}}" hint-placeholder-val="{{true}}"><span style="margin: 2px 0 1px; display: flex"><dc-import name="Symbols" variant="strip" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.warningCount}}" size="18" backed="{{symBack}}" hint-size="{{rowHint}}"></dc-import></span></sc-if>
           <span style="font-size: 13px; line-height: 18px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{byline}}</span>
         </div>
       </div>
@@ -68,10 +69,10 @@ body{margin:0}
     <div style="display: flex; gap: 12px; padding: 12px 16px">
       <sc-if value="{{selecting}}" hint-placeholder-val="{{false}}">
         <span aria-hidden="true" style="width: 24px; height: 24px; flex-shrink: 0; align-self: center; border-radius: 12px; box-sizing: border-box; border: {{checkBorder}}; background: {{checkBg}}; display: flex; align-items: center; justify-content: center">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{checkStroke}}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
         </span>
       </sc-if>
-      <dc-import name="Symbols" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.warningCount}}" size="24" hint-size="63px,63px"></dc-import>
+      <sc-if value="{{gridMode}}" hint-placeholder-val="{{false}}"><dc-import name="Symbols" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.warningCount}}" size="24" backed="{{symBack}}" hint-size="{{gridHint}}"></dc-import></sc-if>
       <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
         <sc-if value="{{fandomTop}}" hint-placeholder-val="{{false}}">
           <span style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: {{fandomColor}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.fandom}}</span>
@@ -82,6 +83,7 @@ body{margin:0}
             <span style="flex-shrink: 0; margin-top: 2px; padding: 1px 7px; border-radius: 9px; background: {{accent}}; color: #FFFFFF; font-size: 11px; line-height: 16px; font-weight: 700">{{w.badge}}</span>
           </sc-if>
         </div>
+        <sc-if value="{{rowMode}}" hint-placeholder-val="{{true}}"><span style="margin: 2px 0 1px; display: flex"><dc-import name="Symbols" variant="strip" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.warningCount}}" size="18" backed="{{symBack}}" hint-size="{{rowHint}}"></dc-import></span></sc-if>
         <span style="font-size: 13px; line-height: 18px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{byline}}</span>
         <sc-if value="{{hasTagLine}}" hint-placeholder-val="{{false}}">
           <span style="margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px">
@@ -136,7 +138,7 @@ body{margin:0}
   </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"work":{"editor":null},"selecting":{"editor":"boolean","default":false},"selected":{"editor":"boolean","default":false},"showSummary":{"editor":"boolean","default":false},"divider":{"editor":"boolean","default":false},"ledger":{"editor":"boolean","default":false},"fandomTop":{"editor":"boolean","default":false},"wide":{"editor":"boolean","default":false},"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":112}}'>
+<script type="text/x-dc" data-dc-script data-props='{"work":{"editor":null},"selecting":{"editor":"boolean","default":false},"selected":{"editor":"boolean","default":false},"showSummary":{"editor":"boolean","default":false},"divider":{"editor":"boolean","default":false},"ledger":{"editor":"boolean","default":false},"fandomTop":{"editor":"boolean","default":true},"wide":{"editor":"boolean","default":false},"symbols":{"editor":"enum","options":["row","grid"],"default":"row"},"symbolsBacking":{"editor":"enum","options":["auto","none","fill","outline"],"default":"auto"},"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":112}}'>
 class Component extends DCLogic {
   renderVals() {
     const on = (v) => v === true || v === 'true';
@@ -151,8 +153,8 @@ class Component extends DCLogic {
     const hex = accent.replace('#', '');
     const tint = 'rgba(' + parseInt(hex.slice(0, 2), 16) + ',' + parseInt(hex.slice(2, 4), 16) + ',' + parseInt(hex.slice(4, 6), 16) + ',0.08)';
     const ledger = on(this.props.ledger);
-    // The fandom as a label over the title: ledger rows always, other lists when they ask.
-    const fandomTop = ledger || on(this.props.fandomTop);
+    // The fandom as a label over the title, in every list (owner 2026-11-13); fandom-top="{{false}}" opts a list out.
+    const fandomTop = ledger || !(this.props.fandomTop === false || this.props.fandomTop === 'false');
     const parts = [];
     if (ledger && w.language) parts.push(w.language);
     if (w.words) parts.push(w.words + ' words');
@@ -179,6 +181,11 @@ class Component extends DCLogic {
     // and figures run the full width underneath, so no empty column runs down the card.
     // Expandable rows open to the full summary, every tag and extra detail lines.
     const wide = on(this.props.wide);
+    // The four symbols: a row under the title (default, owner 2026-11-13) or the 2×2 grid beside it.
+    // The reader picks in Settings › Library › Work lists. The row sits on a light plate, the grid bare.
+    const gridMode = this.props.symbols === 'grid';
+    const sb = this.props.symbolsBacking ?? 'auto';
+    const symBack = sb === 'auto' ? (gridMode ? 'none' : 'fill') : sb;
     const expandable = !!w.expandable;
     const open = expandable && (this.state.open ?? !!w.expanded);
     const allTags = w.tagLineAll || null;
@@ -244,11 +251,16 @@ class Component extends DCLogic {
       progressLabel: w.progressLabel || (hasProgress ? w.progress + '%' : ''),
       selecting,
       checkBg: selected ? accent : 'transparent',
+      // No tick on an unticked row: a white one shows on the dark skins.
+      checkStroke: selected ? '#FFFFFF' : 'transparent',
       checkBorder: selected ? 'none' : '1.5px solid #C7C7CC',
       rowBg: selecting && selected ? tint : 'transparent',
       showSummary: (on(this.props.showSummary) || ledger) && !!w.summary,
       divider: on(this.props.divider),
-      dividerInset: selecting ? 125 : (wide ? 16 : 89)
+      gridMode, rowMode: !gridMode, symBack,
+      gridHint: symBack === 'none' ? '52px,52px' : '63px,63px',
+      rowHint: symBack === 'none' ? '78px,18px' : '88px,28px',
+      dividerInset: selecting ? (gridMode ? 125 : 52) : (wide || !gridMode ? 16 : 89)
     };
   }
 }
