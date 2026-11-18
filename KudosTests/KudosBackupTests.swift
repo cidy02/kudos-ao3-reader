@@ -1,6 +1,7 @@
 import CoreText
 import Foundation
 import SwiftData
+import os
 import Testing
 @testable import Kudos
 
@@ -243,6 +244,46 @@ struct KudosBackupTests {
         let storedPinTime = try #require(GeneratedCoverRecipe.pinnedAt(in: restored.coverRecipeJSON, now: twoDaysLater))
         #expect(storedPinTime <= ceiling)
         #expect(restored.generatedCoverRecipe.salt == 1)
+    }
+
+    @Test func reconciledPinReachesFolderSyncOnlyAfterTheRestoreSaves() throws {
+        let id = UUID()
+        let context = try coverContext()
+        let local = SavedWork(id: id, title: "Shared", author: "Author")
+        local.wordCount = 1_000
+        context.insert(local)
+        local.pinCover(salt: 1)
+        try context.save()
+        let pinBefore = local.coverRecipeJSON
+        let incoming = SavedWork(id: id, title: "Shared", author: "Author")
+        incoming.wordCount = 92_000 // another length tier, so the restore reconciles the pin
+        incoming.isComplete = true
+        incoming.markModified(Date().addingTimeInterval(60))
+
+        let posts = OSAllocatedUnfairLock(initialState: 0)
+        let observer = NotificationCenter.default.addObserver(
+            forName: .kudosSyncRelevantSettingChanged, object: nil, queue: nil) { _ in posts.withLock { $0 += 1 } }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        // The work merges (and its pin reconciles) before the fonts are checked, so this restore
+        // fails after the pin changed and rolls it back.
+        let defaults = try testDefaults()
+        let base = try KudosBackupService.makeContents(
+            works: [incoming], bookmarks: [], fonts: [CustomFont(name: "Bad", fileName: "bad.txt")],
+            readingQueues: [], defaults: defaults)
+        let failing = KudosBackupContents(manifest: base.manifest, fontFiles: ["bad.txt": Data(repeating: 0x41, count: 16)])
+        #expect(throws: KudosBackupError.self) {
+            _ = try KudosBackupService.restore(failing, into: context, defaults: defaults)
+        }
+        #expect(local.coverRecipeJSON == pinBefore)
+        #expect(posts.withLock { $0 } == 0)
+        #expect(FolderSyncService.snapshot(defaults: defaults).isDirty == false)
+
+        let summary = try KudosBackupService.restore(coverContents(incoming), into: context, defaults: defaults)
+        #expect(summary.reconciledCoverPins == 1)
+        #expect(local.coverRecipeJSON != pinBefore)
+        #expect(posts.withLock { $0 } == 1)
+        #expect(FolderSyncService.snapshot(defaults: defaults).isDirty)
     }
 
     @Test func futureUndecodablePinPassesThroughRestoreAndActions() throws {
@@ -538,7 +579,8 @@ struct KudosBackupTests {
         let restoredBookmarks = try context.fetch(FetchDescriptor<Bookmark>())
         let restoredTags = try context.fetch(FetchDescriptor<Kudos.Tag>())
 
-        #expect(summary == .init(works: 1, bookmarks: 1, fonts: 0))
+        // The local pin's tier follows the restored word count, so the restore reconciles it once.
+        #expect(summary == .init(works: 1, bookmarks: 1, fonts: 0, reconciledCoverPins: 1))
         #expect(restoredWorks.count == 1)
         #expect(restored.title == "Restored Work")
         #expect(restored.author == "Writer")

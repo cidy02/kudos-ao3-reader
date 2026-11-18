@@ -2059,6 +2059,8 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     /// recovered half, and it is the whole point of merging a backup after a
     /// download has gone missing.
     var recoveredMissingEPUBs: Int = 0
+    /// Cover pins whose tier or ring the restore brought up to date; announced to sync only after the save.
+    var reconciledCoverPins: Int = 0
     /// Imported originals written back — the documents converted works were
     /// made from, which backups did not carry at all until now.
     var restoredOriginals: Int = 0
@@ -2315,6 +2317,10 @@ enum KudosBackupService {
                 contents, into: context, defaults: defaults, mode: mode, journal: journal
             )
             journal.discard()
+            if summary.reconciledCoverPins > 0 {
+                FolderSyncService.markDirty(defaults: defaults)
+                NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+            }
             return summary
         } catch {
             journal.restoreDisplaced()
@@ -2442,6 +2448,7 @@ enum KudosBackupService {
         var skippedInvalidEPUBs = 0
         var worksMissingPromisedEPUB = 0
         var recoveredMissingEPUBs = 0
+        var reconciledCoverPins = 0
 
         // Phase 1: unsigned incoming tombstones still drop.
         // Phase 2: adopt only if the signature verifies over the incoming
@@ -2624,13 +2631,15 @@ enum KudosBackupService {
                     localModifiedAt: work.lastModifiedAt,
                     incomingModifiedAt: archived.lastModifiedAt ?? archived.dateAdded
                 )
-            apply(
+            if apply(
                 archived,
                 to: work,
                 isNewRecord: isNewRecord,
                 mode: mode,
                 adoptsArchiveClock: createdNewWork
-            )
+            ) {
+                reconciledCoverPins += 1
+            }
             restoredWorksByArchivedID[archived.id] = work
             workIndex.index(work)
 
@@ -3678,6 +3687,7 @@ enum KudosBackupService {
             removedCollectionMemberships: removedCollectionMemberships,
             worksMissingPromisedEPUB: worksMissingPromisedEPUB,
             recoveredMissingEPUBs: recoveredMissingEPUBs,
+            reconciledCoverPins: reconciledCoverPins,
             restoredOriginals: restoredOriginals,
             suppressedAnnotations: suppressedAnnotations,
             removedWorks: removedWorks,
@@ -4709,13 +4719,15 @@ enum KudosBackupService {
         return (true, now.addingTimeInterval(PreservedWorkService.recoveryWindow))
     }
 
+    /// Returns whether the work's cover pin was reconciled (see `restore`).
+    @discardableResult
     private static func apply(
         _ archived: KudosBackupWork,
         to work: SavedWork,
         isNewRecord: Bool,
         mode: BackupImportMode,
         adoptsArchiveClock: Bool = false
-    ) {
+    ) -> Bool {
         let incomingModifiedAt = archived.lastModifiedAt ?? archived.dateAdded
         // A freshly-created placeholder's lastModifiedAt is "now" (restore time), which is
         // always at least as new as any real archived snapshot — so incomingWins alone would
@@ -4845,7 +4857,7 @@ enum KudosBackupService {
            ) {
             work.coverRecipeJSON = GeneratedCoverRecipe.clampingFuturePinIfSupported(coverRecipeJSON)
         }
-        work.reconcileCoverMetadata()
+        let coverPinReconciled = work.reconcileCoverMetadata(notifySync: false)
         work.workTagsFetched = work.workTagsFetched || archived.workTagsFetched
         work.ao3Unavailable = work.ao3Unavailable || archived.ao3Unavailable
         work.isQueuedForLater = work.isQueuedForLater || archived.isQueuedForLater
@@ -4903,6 +4915,7 @@ enum KudosBackupService {
         work.lastModifiedAt = adoptsArchiveClock
             ? incomingModifiedAt
             : max(work.lastModifiedAt, incomingModifiedAt)
+        return coverPinReconciled
     }
 
     private static func shouldApplyIncomingCover(localJSON: String?, incomingJSON: String) -> Bool {

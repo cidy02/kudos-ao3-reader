@@ -41,6 +41,15 @@ nonisolated struct GeneratedCoverRecipe: Codable, Equatable, Sendable {
         return KudosBackupContents.clampedArchiveDate(Date(timeIntervalSince1970: time), now: now)
     }
 
+    /// The stored form of a pin. Sorted keys, so one recipe always encodes to the same string: `JSONEncoder`'s
+    /// key order is not fixed, and restore breaks ties between pins by comparing these strings.
+    static func encodedPin(_ recipe: GeneratedCoverRecipe) -> String? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        guard let data = try? encoder.encode(recipe) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
     /// Rewrites `pinnedAt` on a decodable renderer-1 recipe and leaves every other byte alone.
     /// Undecodable JSON and newer renderers pass through; those are not this build's to edit.
     static func clampingFuturePinIfSupported(_ json: String, now: Date = Date()) -> String {
@@ -52,9 +61,7 @@ nonisolated struct GeneratedCoverRecipe: Codable, Equatable, Sendable {
         if let replaced = replacingPinnedAt(in: json, with: ceiling) { return replaced }
         var clamped = recipe
         clamped.pinnedAt = ceiling
-        guard let data = try? JSONEncoder().encode(clamped),
-              let text = String(data: data, encoding: .utf8) else { return json }
-        return text
+        return encodedPin(clamped) ?? json
     }
 
     static func isAutomaticPin(in json: String?) -> Bool {
@@ -336,8 +343,7 @@ extension SavedWork {
             // `ceiling.nextUp` is still above the skew limit. Never persist that.
             recipe.pinnedAt = min(candidate, ceiling)
         }
-        guard let data = try? JSONEncoder().encode(recipe),
-              let json = String(data: data, encoding: .utf8) else { return }
+        guard let json = GeneratedCoverRecipe.encodedPin(recipe) else { return }
         coverRecipeJSON = json
         FolderSyncService.markDirty()
         NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
@@ -377,18 +383,23 @@ extension SavedWork {
         refreshCoverIfNeeded()
     }
 
+    /// Returns whether the pin changed. A restore passes `notifySync: false` and announces the change
+    /// itself after its save, so a restore that rolls back never leaves Folder Sync dirty.
     @MainActor
-    func reconcileCoverMetadata() {
-        guard let coverRecipeJSON, let pinned = GeneratedCoverRecipe.supportedPin(in: coverRecipeJSON) else { return }
+    @discardableResult
+    func reconcileCoverMetadata(notifySync: Bool = true) -> Bool {
+        guard let coverRecipeJSON, let pinned = GeneratedCoverRecipe.supportedPin(in: coverRecipeJSON) else { return false }
         let nextTier = coverTier
         let nextRing = pinned.closedRing || isComplete
-        guard pinned.tier != nextTier || pinned.closedRing != nextRing else { return }
+        guard pinned.tier != nextTier || pinned.closedRing != nextRing else { return false }
         let updated = pinned.updating(tier: nextTier, closedRing: nextRing)
-        guard let data = try? JSONEncoder().encode(updated),
-              let json = String(data: data, encoding: .utf8) else { return }
+        guard let json = GeneratedCoverRecipe.encodedPin(updated) else { return false }
         self.coverRecipeJSON = json
-        FolderSyncService.markDirty()
-        NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+        if notifySync {
+            FolderSyncService.markDirty()
+            NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+        }
+        return true
     }
 
     @MainActor

@@ -82,6 +82,16 @@ struct GeneratedCoverRecipeTests {
         #expect(!GeneratedCoverRecipe.isAutomaticPin(in: auto.coverRecipeJSON))
     }
 
+    @Test @MainActor func onePinAlwaysEncodesToTheSameString() throws {
+        let work = SavedWork(title: "Stable", author: "Writer")
+        work.pinCover(salt: 3)
+        let json = try #require(work.coverRecipeJSON)
+        let recipe = try #require(GeneratedCoverRecipe.supportedPin(in: json))
+        let encodings = Set((0..<20).compactMap { _ in GeneratedCoverRecipe.encodedPin(recipe) })
+        #expect(encodings.count == 1)
+        #expect(encodings.first == work.coverRecipeJSON)
+    }
+
     @Test @MainActor func pinCoverNotifiesFolderSyncObserverOnlyWhenRecipeChanges() {
         let notifications = OSAllocatedUnfairLock(initialState: 0)
         let token = NotificationCenter.default.addObserver(
