@@ -2,8 +2,11 @@ import SwiftUI
 
 extension ReaderTheme {
     /// Mixes against `cardBackdrop` — the app's page, not the reader's ground.
-    /// A named accent uses its one Dark/OLED step on both of those themes. A custom
-    /// colour, and any legacy hex that is not a named fill, still mixes toward white.
+    /// A named accent uses its one Dark/OLED step on both of those themes, and
+    /// its `sepiaInkHex` step on Sepia (which keeps the fill itself where it
+    /// already clears 4.5:1 on Sepia's surfaces). A custom colour, and any legacy
+    /// hex that is not a named fill, still mixes toward white on Dark/OLED and
+    /// stays unchanged on Light and Sepia.
     ///
     /// **Android parity is currently broken here.** Both platforms used to mix against
     /// Dark #0B0B0D; `4ab92874` unified iOS's two dark page colours onto #16161B
@@ -21,7 +24,13 @@ extension ReaderTheme {
                 return step
             }
             return tint.readable(on: cardBackdrop)
-        case .light, .sepia:
+        case .sepia:
+            if let named = AppAccent.named(hex: tint.hexString),
+               let step = Color(hex: named.sepiaInkHex) {
+                return step
+            }
+            return tint
+        case .light:
             return tint
         }
     }

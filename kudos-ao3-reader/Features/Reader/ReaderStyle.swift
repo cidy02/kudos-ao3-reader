@@ -142,11 +142,6 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Accent/tint for controls, links, and selection.
-    var appTint: Color? {
-        self == .sepia ? Color(red: 0.604, green: 0.404, blue: 0.196) : nil
-    }
-
     /// Hairline separators and borders that read on the warm surfaces.
     var appSeparator: Color? {
         self == .sepia ? Color(red: 0.357, green: 0.275, blue: 0.212).opacity(0.18) : nil
