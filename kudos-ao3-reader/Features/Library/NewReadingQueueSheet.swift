@@ -286,19 +286,37 @@ struct NewReadingQueueSheet: View {
     }
 
     /// Placeholder until a name is typed. Create stays disabled while it is empty.
-    /// The colour follows `ReadingQueue.displayHue`: the swatch, or a hue of the name.
     private var previewName: String {
         trimmedName.isEmpty ? "New Queue" : trimmedName
-    }
-
-    private var previewHue: Double {
-        hue ?? CoverArt.hue(for: trimmedName.isEmpty ? "Reading Queue" : trimmedName)
     }
 
     /// Works the sheet will add, in the order they were picked.
     private var seedWorks: [SavedWork] {
         let byID = Dictionary(libraryWorks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return options.seedWorkIDs.compactMap { byID[$0] }
+    }
+
+    static func coverIdentity(for editingQueue: ReadingQueue?, options: NewQueueOptions) -> UUID {
+        editingQueue?.id ?? options.draftID
+    }
+
+    static func previewCoverFace(
+        name: String,
+        identity: UUID,
+        hue: Double?,
+        pickedHex: String?,
+        width: CGFloat = 88,
+        height: CGFloat = 120
+    ) -> CoverStackNameFace {
+        CoverStackNameFace(
+            kind: .queue,
+            name: name,
+            identity: identity,
+            hue: hue,
+            pickedHex: pickedHex,
+            coverWidth: width,
+            coverHeight: height
+        )
     }
 
     private var coverPreview: some View {
@@ -308,17 +326,22 @@ struct NewReadingQueueSheet: View {
             .filter { !gate.isConcealed($0, enabled: hideMature) }
             .prefix(CoverStackLayout.maxBacks)
         let footer = ReadingQueueFacts.cardFooter(states: coverWorks.map(\.readingState))
+        let identity = Self.coverIdentity(for: editingQueue, options: options)
         return VStack(spacing: 8) {
             StackedWorkCover(
                 kind: .queue,
-                name: previewName,
-                // The queue's id seeds its motif, as on its page; a new queue has none yet.
-                identity: editingQueue?.id,
-                hue: previewHue,
-                pickedHex: options.colorHex,
-                backs: Array(backs),
-                size: CGSize(width: 88, height: 120)
-            )
+                size: CGSize(width: 88, height: 120),
+                backs: Array(backs)
+            ) { layout in
+                Self.previewCoverFace(
+                    name: previewName,
+                    identity: identity,
+                    hue: hue,
+                    pickedHex: options.colorHex,
+                    width: layout.front.width,
+                    height: layout.front.height
+                )
+            }
             Text(previewName)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
@@ -567,16 +590,21 @@ struct EditReadingQueueSheet: View {
         _hue = State(initialValue: queue.hue)
     }
 
+    static func editOptions(for queue: ReadingQueue) -> NewQueueOptions {
+        NewQueueOptions(
+            keepsWorksOffline: KeepOffline.queueKeeps(queue.keepsWorksOffline),
+            tagNames: queue.tags.map(\.name).sorted(),
+            colorHex: queue.colorHex,
+            searchIDs: queue.searchLinks.compactMap { $0.search?.id },
+            draftID: queue.id
+        )
+    }
+
     var body: some View {
         NewReadingQueueSheet(
             name: $name,
             hue: $hue,
-            editing: NewQueueOptions(
-                keepsWorksOffline: KeepOffline.queueKeeps(queue.keepsWorksOffline),
-                tagNames: queue.tags.map(\.name).sorted(),
-                colorHex: queue.colorHex,
-                searchIDs: queue.searchLinks.compactMap { $0.search?.id }
-            ),
+            editing: Self.editOptions(for: queue),
             queue: queue,
             onSave: { options in
                 let offlineTurnedOn = ReadingQueueService.updateQueue(
@@ -632,4 +660,7 @@ nonisolated struct NewQueueOptions: Equatable, Sendable {
     /// that does not exist yet.
     var seedWorkIDs: [UUID] = []
     var searchIDs: [UUID] = []
+    /// Stable draft identity made when New Queue opens so its preview cover
+    /// matches the created queue; Edit Queue passes the existing queue's id.
+    var draftID = UUID()
 }

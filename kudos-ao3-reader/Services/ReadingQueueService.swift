@@ -161,9 +161,13 @@ enum ReadingQueueService {
     /// as joining the new queue. Moving would make creating a queue quietly empty
     /// another one, which is not what "start from" says.
     ///
+    /// `id` lets New Queue hand over the draft id its preview cover already used;
+    /// `nil` mints a fresh `UUID`.
+    ///
     /// `keepsWorksOffline` is written as a real choice because the sheet asked:
     /// `nil` on the model means "never asked", and this reader was.
     static func createQueue(
+        id: UUID? = nil,
         named rawName: String,
         hue: Double? = nil,
         colorHex: String? = nil,
@@ -182,6 +186,7 @@ enum ReadingQueueService {
         defer { context.autosaveEnabled = previousAutosave }
 
         let queue = ReadingQueue(
+            id: id ?? UUID(),
             name: trimmed.isEmpty ? "Reading Queue" : trimmed,
             kind: .custom,
             sortOrder: nextQueueSortOrder(in: context)

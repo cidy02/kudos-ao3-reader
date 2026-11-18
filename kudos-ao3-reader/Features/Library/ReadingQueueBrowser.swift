@@ -1048,6 +1048,7 @@ extension ReadingQueueBrowserView {
         let trimmed = newQueueName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         let queue = ReadingQueueService.createQueue(
+            id: options.draftID,
             named: trimmed,
             hue: newQueueHue,
             colorHex: options.colorHex,

@@ -1132,3 +1132,133 @@ struct ReadingQueueTests {
         #expect(ReadingQueueService.orderedWorks(in: queue).map(\.title) == ["Later", "Second", "First"])
     }
 }
+
+extension ReadingQueueTests {
+    @Test func newQueuePreviewCoverMatchesCreatedQueueIdentityAndRecipe() throws {
+        let context = try makeContext()
+        var options = NewQueueOptions()
+        let draftID = options.draftID
+        options.seed = .savedForLater
+        options.tagNames = ["Fluff"]
+        options.keepsWorksOffline = false
+        #expect(options.draftID == draftID)
+
+        let previewIdentity = NewReadingQueueSheet.coverIdentity(for: nil, options: options)
+        #expect(previewIdentity == draftID)
+        let previewFace = NewReadingQueueSheet.previewCoverFace(
+            name: "Night Reads",
+            identity: previewIdentity,
+            hue: nil,
+            pickedHex: options.colorHex
+        )
+
+        let created = ReadingQueueService.createQueue(
+            id: options.draftID,
+            named: "Night Reads",
+            hue: nil,
+            colorHex: options.colorHex,
+            keepsWorksOffline: options.keepsWorksOffline,
+            seededFrom: options.seed,
+            tagNames: options.tagNames,
+            seedWorkIDs: options.seedWorkIDs,
+            in: context
+        )
+
+        #expect(created.id == draftID)
+        #expect(previewFace.identity == created.id)
+        #expect(previewFace.hue == created.hue)
+        #expect(previewFace.pickedHex == created.colorHex)
+        #expect(previewFace.name == created.displayName)
+
+        let editOptions = EditReadingQueueSheet.editOptions(for: created)
+        let editIdentity = NewReadingQueueSheet.coverIdentity(for: created, options: editOptions)
+        let editFace = NewReadingQueueSheet.previewCoverFace(
+            name: created.displayName,
+            identity: editIdentity,
+            hue: created.hue,
+            pickedHex: editOptions.colorHex
+        )
+        #expect(editIdentity == created.id)
+        #expect(editFace.identity == previewFace.identity)
+        #expect(editFace.hue == previewFace.hue)
+        #expect(editFace.pickedHex == previewFace.pickedHex)
+
+        let previewRecipe = GeneratedCoverRecipe(
+            collection: previewFace.name,
+            identity: previewFace.identity?.uuidString,
+            hue: GeneratedCoverRecipe.collectionHue(for: try #require(previewFace.identity)),
+            graphite: false
+        )
+        let createdRecipe = GeneratedCoverRecipe(
+            collection: created.displayName,
+            identity: created.id.uuidString,
+            hue: GeneratedCoverRecipe.collectionHue(for: created.id),
+            graphite: false
+        )
+        #expect(previewRecipe == createdRecipe)
+
+        let unseeded = ReadingQueueService.createQueue(named: "Night Reads", in: context)
+        #expect(unseeded.id != draftID)
+        let unseededRecipe = GeneratedCoverRecipe(
+            collection: unseeded.displayName,
+            identity: unseeded.id.uuidString,
+            hue: GeneratedCoverRecipe.collectionHue(for: unseeded.id),
+            graphite: false
+        )
+        #expect(unseededRecipe.author != previewRecipe.author)
+        #expect(unseededRecipe != previewRecipe)
+    }
+
+    @Test func newQueuePreviewCoverMatchesCreatedTintedQueueRecipe() throws {
+        let context = try makeContext()
+        var tintedOptions = NewQueueOptions()
+        tintedOptions.colorHex = "#808080"
+        let tintedHue = 0.3
+        let tintedIdentity = NewReadingQueueSheet.coverIdentity(for: nil, options: tintedOptions)
+        let tintedFace = NewReadingQueueSheet.previewCoverFace(
+            name: "Graphite Reads",
+            identity: tintedIdentity,
+            hue: tintedHue,
+            pickedHex: tintedOptions.colorHex
+        )
+        let tintedQueue = ReadingQueueService.createQueue(
+            id: tintedOptions.draftID,
+            named: "Graphite Reads",
+            hue: tintedHue,
+            colorHex: tintedOptions.colorHex,
+            in: context
+        )
+        let tintedSwatch = GeneratedCoverRecipe.collectionSwatch(
+            tintedFace.pickedHex,
+            fallback: Int(tintedHue * 360)
+        )
+        let createdSwatch = GeneratedCoverRecipe.collectionSwatch(
+            tintedQueue.colorHex,
+            fallback: Int((tintedQueue.hue ?? 0) * 360)
+        )
+        #expect(tintedFace.identity == tintedQueue.id)
+        #expect(
+            GeneratedCoverRecipe(
+                collection: tintedFace.name,
+                identity: tintedFace.identity?.uuidString,
+                hue: tintedSwatch.hue,
+                graphite: tintedSwatch.chroma == 0.012
+            ) == GeneratedCoverRecipe(
+                collection: tintedQueue.displayName,
+                identity: tintedQueue.id.uuidString,
+                hue: createdSwatch.hue,
+                graphite: createdSwatch.chroma == 0.012
+            )
+        )
+    }
+
+    @Test func secondNewQueueSheetGetsDifferentDraftID() {
+        let first = NewQueueOptions()
+        let second = NewQueueOptions()
+        #expect(first.draftID != second.draftID)
+        #expect(
+            NewReadingQueueSheet.coverIdentity(for: nil, options: first)
+                != NewReadingQueueSheet.coverIdentity(for: nil, options: second)
+        )
+    }
+}

@@ -888,6 +888,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         let trimmed = newQueueName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         _ = ReadingQueueService.createQueue(
+            id: options.draftID,
             named: trimmed,
             hue: newQueueHue,
             colorHex: options.colorHex,
