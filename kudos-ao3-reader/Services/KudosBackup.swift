@@ -960,6 +960,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     /// (`createdAt`, `isDeleted`), and a decoder that has never heard of it is
     /// unaffected.
     let epubDigest: String?
+    /// Omitted for older/Android records; absence never clears a local pin.
+    let coverRecipeJSON: String?
 
     @MainActor
     init(work: SavedWork) {
@@ -1044,6 +1046,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         legacyReaderProgress = .some(work.legacyReaderProgress)
         hiddenFromHistoryAt = .some(work.hiddenFromHistoryAt)
         epubDigest = work.epubDigest.isEmpty ? nil : work.epubDigest
+        coverRecipeJSON = work.coverRecipeJSON
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1117,6 +1120,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case legacyReaderProgress
         case hiddenFromHistoryAt
         case epubDigest
+        case coverRecipeJSON
     }
 
     init(from decoder: Decoder) throws {
@@ -1211,6 +1215,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         hiddenFromHistoryAt = container.contains(.hiddenFromHistoryAt)
             ? .some(try container.decode(Date?.self, forKey: .hiddenFromHistoryAt)) : nil
         epubDigest = try container.decodeIfPresent(String.self, forKey: .epubDigest)
+        coverRecipeJSON = try container.decodeIfPresent(String.self, forKey: .coverRecipeJSON)
     }
 }
 
@@ -1766,6 +1771,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     /// that never chose cannot reset one that did through folder sync. Apply writes only a
     /// value this build knows. Additive — no manifest version bump.
     var workSymbolPlacement: String?
+    /// Nil means an older backup has no opinion about the local preference.
+    var useEmbeddedCoverArt: Bool?
 
     init(
         readerFontID: String,
@@ -1790,7 +1797,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         autoPreserveSmallSeriesOnSaveForLater: Bool,
         autoPreserveSeriesWorkThreshold: Int,
         libraryPageArrangement: LibraryPageArrangement? = nil,
-        workSymbolPlacement: String? = nil
+        workSymbolPlacement: String? = nil,
+        useEmbeddedCoverArt: Bool? = nil
     ) {
         self.readerFontID = readerFontID
         self.readerMode = readerMode
@@ -1815,6 +1823,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         self.autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
         self.libraryPageArrangement = libraryPageArrangement
         self.workSymbolPlacement = workSymbolPlacement
+        self.useEmbeddedCoverArt = useEmbeddedCoverArt
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1841,6 +1850,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         case autoPreserveSeriesWorkThreshold
         case libraryPageArrangement
         case workSymbolPlacement
+        case useEmbeddedCoverArt
     }
 
     init(from decoder: Decoder) throws {
@@ -1892,7 +1902,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             workSymbolPlacement: (try? container.decodeIfPresent(
                 String.self,
                 forKey: .workSymbolPlacement
-            )) ?? nil
+            )) ?? nil,
+            useEmbeddedCoverArt: (try? container.decodeIfPresent(Bool.self, forKey: .useEmbeddedCoverArt)) ?? nil
         )
     }
 
@@ -1949,7 +1960,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             )),
             libraryPageArrangement: LibraryPageArrangement.stored(in: defaults),
             // Only a stored choice, like `accentColorHex`.
-            workSymbolPlacement: defaults.string(forKey: WorkSymbolPlacement.storageKey)
+            workSymbolPlacement: defaults.string(forKey: WorkSymbolPlacement.storageKey),
+            useEmbeddedCoverArt: defaults.object(forKey: "useEmbeddedCoverArt") == nil
+                ? nil : defaults.bool(forKey: "useEmbeddedCoverArt")
         )
     }
 
@@ -2021,6 +2034,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         if let workSymbolPlacement, WorkSymbolPlacement(rawValue: workSymbolPlacement) != nil {
             defaults.set(workSymbolPlacement, forKey: WorkSymbolPlacement.storageKey)
         }
+        if let useEmbeddedCoverArt { defaults.set(useEmbeddedCoverArt, forKey: "useEmbeddedCoverArt") }
     }
 
     private static func bool(
@@ -2066,6 +2080,8 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     /// recovered half, and it is the whole point of merging a backup after a
     /// download has gone missing.
     var recoveredMissingEPUBs: Int = 0
+    /// Cover pins whose tier or ring the restore brought up to date; announced to sync only after the save.
+    var reconciledCoverPins: Int = 0
     /// Imported originals written back — the documents converted works were
     /// made from, which backups did not carry at all until now.
     var restoredOriginals: Int = 0
@@ -2322,6 +2338,10 @@ enum KudosBackupService {
                 contents, into: context, defaults: defaults, mode: mode, journal: journal
             )
             journal.discard()
+            if summary.reconciledCoverPins > 0 {
+                FolderSyncService.markDirty(defaults: defaults)
+                NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+            }
             return summary
         } catch {
             journal.restoreDisplaced()
@@ -2449,6 +2469,7 @@ enum KudosBackupService {
         var skippedInvalidEPUBs = 0
         var worksMissingPromisedEPUB = 0
         var recoveredMissingEPUBs = 0
+        var reconciledCoverPins = 0
 
         // Phase 1: unsigned incoming tombstones still drop.
         // Phase 2: adopt only if the signature verifies over the incoming
@@ -2631,13 +2652,15 @@ enum KudosBackupService {
                     localModifiedAt: work.lastModifiedAt,
                     incomingModifiedAt: archived.lastModifiedAt ?? archived.dateAdded
                 )
-            apply(
+            if apply(
                 archived,
                 to: work,
                 isNewRecord: isNewRecord,
                 mode: mode,
                 adoptsArchiveClock: createdNewWork
-            )
+            ) {
+                reconciledCoverPins += 1
+            }
             restoredWorksByArchivedID[archived.id] = work
             workIndex.index(work)
 
@@ -3730,6 +3753,7 @@ enum KudosBackupService {
             removedCollectionMemberships: removedCollectionMemberships,
             worksMissingPromisedEPUB: worksMissingPromisedEPUB,
             recoveredMissingEPUBs: recoveredMissingEPUBs,
+            reconciledCoverPins: reconciledCoverPins,
             restoredOriginals: restoredOriginals,
             suppressedAnnotations: suppressedAnnotations,
             removedWorks: removedWorks,
@@ -4761,13 +4785,15 @@ enum KudosBackupService {
         return (true, now.addingTimeInterval(PreservedWorkService.recoveryWindow))
     }
 
+    /// Returns whether the work's cover pin was reconciled (see `restore`).
+    @discardableResult
     private static func apply(
         _ archived: KudosBackupWork,
         to work: SavedWork,
         isNewRecord: Bool,
         mode: BackupImportMode,
         adoptsArchiveClock: Bool = false
-    ) {
+    ) -> Bool {
         let incomingModifiedAt = archived.lastModifiedAt ?? archived.dateAdded
         // A freshly-created placeholder's lastModifiedAt is "now" (restore time), which is
         // always at least as new as any real archived snapshot — so incomingWins alone would
@@ -4890,6 +4916,14 @@ enum KudosBackupService {
         work.workCharacters = TagMerge.merged(work.workCharacters, archived.workCharacters)
         work.workRelationships = TagMerge.merged(work.workRelationships, archived.workRelationships)
         work.workFreeforms = TagMerge.merged(work.workFreeforms, archived.workFreeforms)
+        if let coverRecipeJSON = archived.coverRecipeJSON,
+           mode == .replaceLibrary || shouldApplyIncomingCover(
+               localJSON: work.coverRecipeJSON,
+               incomingJSON: coverRecipeJSON
+           ) {
+            work.coverRecipeJSON = GeneratedCoverRecipe.clampingFuturePinIfSupported(coverRecipeJSON)
+        }
+        let coverPinReconciled = work.reconcileCoverMetadata(notifySync: false)
         work.workTagsFetched = work.workTagsFetched || archived.workTagsFetched
         work.ao3Unavailable = work.ao3Unavailable || archived.ao3Unavailable
         work.isQueuedForLater = work.isQueuedForLater || archived.isQueuedForLater
@@ -4947,6 +4981,24 @@ enum KudosBackupService {
         work.lastModifiedAt = adoptsArchiveClock
             ? incomingModifiedAt
             : max(work.lastModifiedAt, incomingModifiedAt)
+        return coverPinReconciled
+    }
+
+    private static func shouldApplyIncomingCover(localJSON: String?, incomingJSON: String) -> Bool {
+        guard let localJSON else { return true }
+        let now = Date()
+        let localTime = GeneratedCoverRecipe.pinnedAt(in: localJSON, now: now)
+        let incomingTime = GeneratedCoverRecipe.pinnedAt(in: incomingJSON, now: now)
+        let epoch = Date(timeIntervalSince1970: 0)
+        if localTime == epoch, incomingTime == epoch,
+           let local = GeneratedCoverRecipe.supportedPin(in: localJSON),
+           let incoming = GeneratedCoverRecipe.supportedPin(in: incomingJSON) {
+            let localRank = (local.fandom.isEmpty ? 0 : 1, local.closedRing ? 1 : 0, local.tier)
+            let incomingRank = (incoming.fandom.isEmpty ? 0 : 1, incoming.closedRing ? 1 : 0, incoming.tier)
+            if incomingRank != localRank { return incomingRank > localRank }
+            return incomingJSON > localJSON
+        }
+        return SyncMerge.shouldApplyIncoming(localModifiedAt: localTime, incomingModifiedAt: incomingTime)
     }
 
     private static func mergedText(current: String, incoming: String, incomingWins: Bool) -> String {

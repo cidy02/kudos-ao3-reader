@@ -141,6 +141,8 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// is intentionally omitted from `.kudosbackup`; restoring an older backup
     /// safely leaves the author text visible but non-tappable until AO3 refreshes it.
     var authorIdentitiesJSON: String = ""
+    /// A plain optional JSON column avoids SwiftData composite migration faults.
+    var coverRecipeJSON: String?
     var summary: String = ""
     var sourceURL: String = ""
     var dateAdded: Date = Date()

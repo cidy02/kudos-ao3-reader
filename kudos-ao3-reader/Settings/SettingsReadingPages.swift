@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 #if os(iOS)
 import UIKit
 #elseif os(macOS)
@@ -12,12 +13,16 @@ import AppKit
 /// App-wide theme, accent colour, and text size. The reader's own theme picker
 /// stays in the reader's sheet. Sepia keeps its warm brown for controls.
 struct SettingsAppearancePage: View {
+    @Environment(\.modelContext) private var modelContext
     @Environment(ThemeManager.self) private var themeManager
     @State private var showCustomize = false
     @State private var showCustomWarning = false
     @State private var customPick: Task<Void, Never>?
+    @State private var updateCoversTask: Task<Void, Never>?
+    @State private var updateCoversStatus: String?
     @State private var pickerBridge = AccentColorPickerBridge()
     @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
+    @AppStorage("useEmbeddedCoverArt") private var useEmbeddedCoverArt = true
 
     /// Bindings into the central ThemeManager (an @Observable in the environment).
     private var appThemeBinding: Binding<ReaderTheme> {
@@ -97,6 +102,50 @@ struct SettingsAppearancePage: View {
                 NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
             }
 
+            Section {
+                Toggle("Use art from the work when there is some", isOn: $useEmbeddedCoverArt)
+                    .accentFill()
+                Button("Update Covers") {
+                    guard updateCoversTask == nil else { return }
+                    updateCoversStatus = "Updating covers…"
+                    updateCoversTask = Task { @MainActor in
+                        defer { updateCoversTask = nil }
+                        guard let works = try? modelContext.fetch(FetchDescriptor<SavedWork>()) else {
+                            updateCoversStatus = nil
+                            return
+                        }
+                        var updatedCount = 0
+                        var processed = 0
+                        for work in works {
+                            if Task.isCancelled { break }
+                            guard work.modelContext != nil, !work.isPendingDeletion else { continue }
+                            let oldJSON = work.coverRecipeJSON
+                            work.pinCover()
+                            if work.coverRecipeJSON != oldJSON { updatedCount += 1 }
+                            processed += 1
+                            if processed.isMultiple(of: 50) { await Task.yield() }
+                        }
+                        if updatedCount > 0 { modelContext.saveBestEffort(reason: "Updating covers failed") }
+                        if Task.isCancelled {
+                            updateCoversStatus = "Stopped updating covers."
+                        } else if updatedCount == 0 {
+                            updateCoversStatus = "All covers are up to date."
+                        } else {
+                            let noun = updatedCount == 1 ? "cover" : "covers"
+                            updateCoversStatus = "Updated \(updatedCount) \(noun)."
+                        }
+                    }
+                }
+                .disabled(updateCoversTask != nil)
+            } header: {
+                Text("Covers")
+            } footer: {
+                if let updateCoversStatus { Text(updateCoversStatus) }
+            }
+            .onChange(of: useEmbeddedCoverArt) { _, _ in
+                NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+            }
+
             #if os(iOS)
             Section {
                 Button {
@@ -140,6 +189,7 @@ struct SettingsAppearancePage: View {
         }
         .onDisappear {
             customPick?.cancel()
+            updateCoversTask?.cancel()
             pickerBridge.close()
         }
         #if DEBUG

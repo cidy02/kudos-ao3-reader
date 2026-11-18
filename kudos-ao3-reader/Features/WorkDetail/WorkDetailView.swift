@@ -630,6 +630,19 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                         #endif
                     }
 
+                    if let work = localWork {
+                        Section("Cover") {
+                            Button("Shuffle Cover", systemImage: "shuffle") {
+                                work.pinCover(salt: work.generatedCoverRecipe.salt + 1)
+                                context.saveBestEffort(reason: "Saving shuffled cover failed")
+                            }
+                            Button("Reset Cover", systemImage: "arrow.counterclockwise") {
+                                work.pinCover(salt: 0)
+                                context.saveBestEffort(reason: "Resetting cover failed")
+                            }
+                        }
+                    }
+
                     if let id = ao3WorkID {
                         AO3WorkActionsMenu(
                             workID: id, actions: workActions,

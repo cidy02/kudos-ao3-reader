@@ -1,12 +1,159 @@
 import Foundation
 import CoreGraphics
 import ImageIO
+import os
 import Testing
 import UniformTypeIdentifiers
 @testable import Kudos
 
 @Suite("Generated cover recipe")
 struct GeneratedCoverRecipeTests {
+    @Test @MainActor func pinnedCoverChangesOnlyForItsTriggers() {
+        let work = SavedWork(title: "Original", author: "First")
+        work.workFandoms = ["Original Work"]
+        work.workTags = ["Angst"]
+        work.wordCount = 9_999
+        work.pinCover(salt: 0)
+        let original = work.generatedCoverRecipe
+        #expect(original.rendererVersion == 1)
+        #expect(original.salt == 0)
+
+        work.author = "Renamed"
+        work.workTags = ["Fluff"]
+        work.workFandoms = ["Other"]
+        work.wordCount = 9_998
+        #expect(work.generatedCoverRecipe == original)
+        work.wordCount = 10_000
+        #expect(work.generatedCoverRecipe == original)
+        work.refreshCoverIfNeeded()
+        let longer = work.generatedCoverRecipe
+        #expect(longer.tier == 1)
+        #expect(longer.author == "Renamed")
+        work.isComplete = true
+        #expect(!work.generatedCoverRecipe.closedRing)
+        work.refreshCoverIfNeeded()
+        #expect(work.generatedCoverRecipe.closedRing)
+
+        work.pinCover(salt: work.generatedCoverRecipe.salt + 1)
+        #expect(work.generatedCoverRecipe.salt == 1)
+        #expect(work.generatedCoverRecipe.shapeSeed != longer.shapeSeed)
+        work.pinCover(salt: 0)
+        #expect(work.generatedCoverRecipe.salt == 0)
+        work.author = "Updated again"
+        #expect(work.generatedCoverRecipe.author == "Renamed")
+        work.pinCover(salt: work.generatedCoverRecipe.salt)
+        #expect(work.generatedCoverRecipe.author == "Updated again")
+    }
+
+    @Test @MainActor func readingCoverNeverWritesThePinOrWorkClock() {
+        let work = SavedWork(title: "Read only cover", author: "Writer")
+        work.wordCount = 9_999
+        work.pinCover(salt: 0)
+        let pin = work.coverRecipeJSON
+        let workClock = work.lastModifiedAt
+        work.pinCover(salt: 0) // Update Covers leaves an unchanged pin alone.
+        #expect(work.coverRecipeJSON == pin)
+        work.wordCount = 10_000
+        work.isComplete = true
+
+        #expect(work.generatedCoverRecipe.tier == 0)
+        #expect(!work.generatedCoverRecipe.closedRing)
+        #expect(work.coverRecipeJSON == pin)
+        #expect(work.lastModifiedAt == workClock)
+
+        work.refreshCoverIfNeeded()
+        #expect(work.generatedCoverRecipe.tier == 1)
+        #expect(work.generatedCoverRecipe.closedRing)
+        #expect(work.lastModifiedAt == workClock)
+    }
+
+    @Test @MainActor func automaticPinCarriesEpochZeroWhileReaderActionsStampNow() {
+        let auto = SavedWork(title: "Auto", author: "Writer")
+        auto.pinCover(salt: 0, automatic: true)
+        #expect(GeneratedCoverRecipe.pinnedAt(in: auto.coverRecipeJSON) == Date(timeIntervalSince1970: 0))
+        #expect(GeneratedCoverRecipe.isAutomaticPin(in: auto.coverRecipeJSON))
+
+        auto.pinCover(salt: 1)
+        #expect((GeneratedCoverRecipe.pinnedAt(in: auto.coverRecipeJSON)?.timeIntervalSince1970 ?? 0) > 0)
+        #expect(!GeneratedCoverRecipe.isAutomaticPin(in: auto.coverRecipeJSON))
+
+        auto.pinCover(salt: 0) // Reader Reset Cover must not drop back to epoch 0.
+        #expect((GeneratedCoverRecipe.pinnedAt(in: auto.coverRecipeJSON)?.timeIntervalSince1970 ?? 0) > 0)
+        #expect(!GeneratedCoverRecipe.isAutomaticPin(in: auto.coverRecipeJSON))
+    }
+
+    @Test @MainActor func onePinAlwaysEncodesToTheSameString() throws {
+        let work = SavedWork(title: "Stable", author: "Writer")
+        work.pinCover(salt: 3)
+        let json = try #require(work.coverRecipeJSON)
+        let recipe = try #require(GeneratedCoverRecipe.supportedPin(in: json))
+        let encodings = Set((0..<20).compactMap { _ in GeneratedCoverRecipe.encodedPin(recipe) })
+        #expect(encodings.count == 1)
+        #expect(encodings.first == work.coverRecipeJSON)
+    }
+
+    @Test @MainActor func pinCoverNotifiesFolderSyncObserverOnlyWhenRecipeChanges() {
+        let notifications = OSAllocatedUnfairLock(initialState: 0)
+        let token = NotificationCenter.default.addObserver(
+            forName: .kudosSyncRelevantSettingChanged,
+            object: nil,
+            queue: nil
+        ) { _ in notifications.withLock { $0 += 1 } }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        let work = SavedWork(title: "Sync Signal", author: "Writer")
+        work.pinCover(salt: 0)
+        #expect(notifications.withLock { $0 } == 1)
+
+        work.pinCover(salt: 0) // Unchanged — must not re-notify FolderSyncObserver.
+        #expect(notifications.withLock { $0 } == 1)
+
+        work.pinCover(salt: 1)
+        #expect(notifications.withLock { $0 } == 2)
+    }
+
+    @Test @MainActor func futureSkewedAndMaxFinitePinnedAtAreClampedWithoutBreakingPinCover() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let ceiling = now.addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew)
+        let year3000 = #"{"pinnedAt":32503680000}"#
+        #expect(GeneratedCoverRecipe.pinnedAt(in: year3000, now: now) == ceiling)
+
+        let work = SavedWork(title: "Skewed", author: "Writer")
+        work.pinCover(salt: 0)
+        let pinJSON = try #require(work.coverRecipeJSON)
+        var obj = try #require(
+            JSONSerialization.jsonObject(with: Data(pinJSON.utf8)) as? [String: Any]
+        )
+        obj["pinnedAt"] = Double.greatestFiniteMagnitude
+        let rawMax = try #require(String(data: JSONSerialization.data(withJSONObject: obj), encoding: .utf8))
+        work.coverRecipeJSON = rawMax
+
+        #expect(GeneratedCoverRecipe.pinnedAt(in: work.coverRecipeJSON, now: now) == ceiling)
+
+        // Previously `Double.greatestFiniteMagnitude.nextUp == .infinity` broke JSONEncoder on Shuffle/Reset.
+        work.pinCover(salt: 1)
+        let shuffledCeiling = Date().addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew)
+        #expect(work.generatedCoverRecipe.salt == 1)
+        let repinnedAt = try #require(GeneratedCoverRecipe.pinnedAt(in: work.coverRecipeJSON))
+        #expect(repinnedAt <= shuffledCeiling)
+    }
+
+    @Test @MainActor func unknownRecipeFieldsAreNeverReencodedByCoverActions() throws {
+        let work = SavedWork(title: "Future fields", author: "Writer")
+        work.pinCover(salt: 0)
+        let json = try #require(work.coverRecipeJSON)
+        var object = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        object["futureField"] = ["value": 42]
+        let raw = try #require(String(data: JSONSerialization.data(withJSONObject: object), encoding: .utf8))
+        work.coverRecipeJSON = raw
+
+        work.pinCover(salt: 1)
+        work.pinCover(salt: 0)
+        work.refreshCoverIfNeeded()
+        #expect(work.coverRecipeJSON == raw)
+        #expect(work.generatedCoverRecipe.rendererVersion == 1)
+    }
+
     @Test func fandomLabelUsesTheBareFandomName() {
         let doctor = GeneratedCoverRecipe(id: 1, title: "Sodium Lights", author: "a", fandoms: ["Doctor Who (2005)"])
         let frozen = GeneratedCoverRecipe(id: 2, title: "Winter Garden", author: "b", fandoms: ["Frozen (Disney Movies)"])

@@ -58,6 +58,7 @@ func importEPUB(
             throw error
         }
         existing.markModified()
+        existing.ensureCoverPinnedOrRefreshed()
         WorkSearchIndex.reindex(existing)
         try? context.save()
         if revived {
@@ -109,6 +110,7 @@ func importEPUB(
     }
 
     context.insert(work)
+    work.pinCover(salt: 0, automatic: true)
     WorkSearchIndex.reindex(work)
     try? context.save()
     Log.library.info("Imported work “\(title)”")
@@ -260,17 +262,21 @@ func importUserEPUB(
         if revivedFromRecentlyDeleted {
             PreservedWorkService.restore(duplicate, in: context)
         }
+        let hadEmptyFandoms = duplicate.workFandoms.isEmpty
+        let hadZeroWords = duplicate.wordCount == 0
         applyUserImportMetadata(inspection, to: duplicate, fillOnly: true)
         if duplicate.downloadedAt == nil { duplicate.downloadedAt = downloadedAt }
         if !duplicate.hasEPUB {
             try copyImportedEPUB(from: url, into: duplicate)
             duplicate.hasEPUB = true
+            pinOrRefreshDuplicateCover(duplicate, hadEmptyFandoms: hadEmptyFandoms, hadZeroWords: hadZeroWords)
             duplicate.markModified()
             WorkSearchIndex.reindex(duplicate)
             try? context.save()
             Task { await WorkAvailability.verify(duplicate, in: context) }
             return .restored(duplicate)
         }
+        pinOrRefreshDuplicateCover(duplicate, hadEmptyFandoms: hadEmptyFandoms, hadZeroWords: hadZeroWords)
         duplicate.markModified()
         WorkSearchIndex.reindex(duplicate)
         try? context.save()
@@ -293,12 +299,22 @@ func importUserEPUB(
     try copyImportedEPUB(from: url, into: work)
 
     context.insert(work)
+    work.pinCover(salt: 0, automatic: work.workFandoms.isEmpty || work.wordCount == 0)
     WorkSearchIndex.reindex(work)
     try? context.save()
     Log.library.info("Imported user EPUB “\(work.title)”")
 
     Task { await WorkAvailability.verify(work, in: context) }
     return .imported(work)
+}
+
+@MainActor
+private func pinOrRefreshDuplicateCover(_ work: SavedWork, hadEmptyFandoms: Bool, hadZeroWords: Bool) {
+    if work.coverRecipeJSON == nil {
+        work.pinCover(salt: 0, automatic: true)
+    } else {
+        work.refreshCoverAfterMetadataUpdate(hadEmptyFandoms: hadEmptyFandoms, hadZeroWords: hadZeroWords)
+    }
 }
 
 /// Re-reads the EPUB already stored for `work` and applies its metadata.
@@ -320,7 +336,10 @@ func applyStoredEPUBMetadata(to work: SavedWork, in context: ModelContext, fillO
         try? UserEPUBInspection.inspect(url)
     }.value
     guard let inspection, work.modelContext != nil else { return }
+    let hadEmptyFandoms = work.workFandoms.isEmpty
+    let hadZeroWords = work.wordCount == 0
     applyUserImportMetadata(inspection, to: work, fillOnly: fillOnly)
+    pinOrRefreshDuplicateCover(work, hadEmptyFandoms: hadEmptyFandoms, hadZeroWords: hadZeroWords)
     work.markModified()
     WorkSearchIndex.reindex(work)
     context.saveBestEffort(reason: "Saving re-read EPUB metadata failed")

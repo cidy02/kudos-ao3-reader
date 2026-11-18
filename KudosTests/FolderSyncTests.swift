@@ -721,6 +721,46 @@ struct FolderSyncTests {
         #expect(FolderSyncService.snapshot(defaults: defaults).isDirty == false)
     }
 
+    @Test func shuffleDuringSyncNowKeepsDirtyFlagSetForFollowUpUpload() async throws {
+        let container = try container()
+        let context = container.mainContext
+        let defaults = try testDefaults()
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        defer { FolderSyncService.disconnect(defaults: defaults) }
+        defer { FolderSyncService.beforeSyncUpWriteForTesting = nil }
+
+        let work = SavedWork(title: "Concurrent Shuffle", author: "Writer")
+        work.pinCover(salt: 0, automatic: true)
+        context.insert(work)
+        try context.save()
+
+        try FolderSyncService.connect(to: folder, defaults: defaults)
+        FolderSyncService.markDirty(defaults: defaults)
+
+        var sawClearedDirtyBeforeWrite = false
+        FolderSyncService.beforeSyncUpWriteForTesting = {
+            FolderSyncService.beforeSyncUpWriteForTesting = nil
+            sawClearedDirtyBeforeWrite = !FolderSyncService.snapshot(defaults: defaults).isDirty
+            work.pinCover(salt: 1)
+            FolderSyncService.markDirty(defaults: defaults)
+        }
+
+        _ = try await FolderSyncService.syncNow(in: context, defaults: defaults)
+        #expect(sawClearedDirtyBeforeWrite)
+        #expect(FolderSyncService.snapshot(defaults: defaults).isDirty)
+
+        // The second sync publishes the shuffled cover and clears the dirty flag cleanly.
+        _ = try await FolderSyncService.syncNow(in: context, defaults: defaults)
+        #expect(FolderSyncService.snapshot(defaults: defaults).isDirty == false)
+        let manifestURL = folder
+            .appendingPathComponent(FolderSyncService.syncDirectoryName, isDirectory: true)
+            .appendingPathComponent(FolderSyncService.manifestFileName)
+        let manifest = try KudosBackupContents.decodeManifest(try Data(contentsOf: manifestURL))
+        let syncedRecipe = try #require(manifest.works.first?.coverRecipeJSON)
+        #expect(GeneratedCoverRecipe.supportedPin(in: syncedRecipe)?.salt == 1)
+    }
+
     @Test func foldConflictContentsMergesAllInputs() throws {
         let defaults = try testDefaults()
         let first = try backupContents(title: "Conflict A", ao3WorkID: 3001)
