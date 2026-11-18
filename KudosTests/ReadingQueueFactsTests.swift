@@ -155,6 +155,44 @@ struct ReadingQueueFactsTests {
         #expect(counts[.unread] == ReadingQueueFacts.progress(of: works.map(\.readingState)).unread)
     }
 
+    @Test func minutesLeftAndHeaderDetailShareTheSameTimeRule() throws {
+        let context = try makeContext()
+
+        let finished = work(in: context, title: "Finished")
+        finished.wordCount = 20_000
+        finished.isFinished = true
+
+        let inProgress = work(in: context, title: "In Progress")
+        inProgress.wordCount = 10_000 // 50 min at 200 wpm
+        inProgress.readiumLocator = #"{"href":"c1.xhtml","locations":{"totalProgression":0.5}}"#
+
+        let unreadMultiChapter = work(in: context, title: "Unread Multi")
+        unreadMultiChapter.wordCount = 7_000 // 35 min at 200 wpm
+        unreadMultiChapter.chapters = "5/10" // must stay 100% unread before reading starts
+
+        let noWords = work(in: context, title: "No Words")
+        noWords.wordCount = 0
+
+        #expect(ReadingQueueFacts.unreadShare(for: finished) == 0)
+        #expect(ReadingQueueFacts.minutesLeft(for: finished) == 0)
+        #expect(ReadingQueueFacts.unreadShare(for: inProgress) == 0.5)
+        #expect(ReadingQueueFacts.minutesLeft(for: inProgress) == 25)
+        #expect(ReadingQueueFacts.unreadShare(for: unreadMultiChapter) == 1)
+        #expect(ReadingQueueFacts.minutesLeft(for: unreadMultiChapter) == 35)
+        #expect(ReadingQueueFacts.minutesLeft(for: noWords) == nil)
+
+        // Queue header totals the exact minutes left across works (0 + 25 + 35 = 60 min -> "about 1 h")
+        let queueWorks = [finished, inProgress, unreadMultiChapter]
+        #expect(ReadingQueueFacts.remainingMinutes(for: queueWorks) == 60)
+        #expect(ReadingQueueFacts.headerDetail(for: queueWorks, offlineCount: 3)
+            == "3 works · about 1 h · all offline")
+
+        // An unfinished work missing its word count withholds the header's estimate
+        #expect(ReadingQueueFacts.remainingMinutes(for: queueWorks + [noWords]) == nil)
+        #expect(ReadingQueueFacts.headerDetail(for: queueWorks + [noWords], offlineCount: 3)
+            == "4 works · 3 offline")
+    }
+
     @Test func createQueueTagsReuseAnExistingTagIgnoringCase() throws {
         let context = try makeContext()
         let existing = Kudos.Tag(name: "Rereads")

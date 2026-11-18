@@ -7,11 +7,32 @@ import SwiftUI
 enum ReadingQueueFacts {
     /// The design's queue rows estimate silent reading at 200 words per minute
     /// and round to five minutes so the line stays useful rather than precise.
+    static let wordsPerMinute: Double = 200
+
     static func rowDetail(workCount: Int, totalWordCount: Int, offlineCount: Int) -> String {
+        rowDetail(
+            workCount: workCount,
+            timeEstimate: readingTimeEstimate(wordCount: totalWordCount),
+            offlineCount: offlineCount
+        )
+    }
+
+    /// Computes the queue header detail line using each work's remaining reading
+    /// time so the queue header and What Fits read the same time-left rule.
+    static func headerDetail(for works: [SavedWork], offlineCount: Int) -> String {
+        let timeEstimate = remainingMinutes(for: works).flatMap { readingTimeEstimate(minutes: $0) }
+        return rowDetail(
+            workCount: works.count,
+            timeEstimate: timeEstimate,
+            offlineCount: offlineCount
+        )
+    }
+
+    private static func rowDetail(workCount: Int, timeEstimate: String?, offlineCount: Int) -> String {
         guard workCount > 0 else { return "No works yet" }
         var parts = ["\(workCount) work\(workCount == 1 ? "" : "s")"]
-        if let estimate = readingTimeEstimate(wordCount: totalWordCount) {
-            parts.append(estimate)
+        if let timeEstimate {
+            parts.append(timeEstimate)
         }
         let offline = min(max(offlineCount, 0), workCount)
         if offline == workCount {
@@ -41,9 +62,46 @@ enum ReadingQueueFacts {
         )
     }
 
-    static func readingTimeEstimate(wordCount: Int) -> String? {
+    /// Unrounded reading time in minutes at `wordsPerMinute` (200 wpm), or nil
+    /// when `wordCount <= 0` so works without word counts are never guessed.
+    static func estimatedMinutes(wordCount: Int) -> Double? {
         guard wordCount > 0 else { return nil }
-        let rawMinutes = Double(wordCount) / 200
+        return Double(wordCount) / wordsPerMinute
+    }
+
+    /// Unread share of a work (`0` when finished, `1` before reading starts,
+    /// `1 - clampedProgress` once reading has started).
+    static func unreadShare(for work: SavedWork) -> Double {
+        if work.isFinished { return 0 }
+        guard work.hasStartedReading else { return 1 }
+        let progress = min(max(work.readingProgress ?? 0, 0), 1)
+        return max(0, 1 - progress)
+    }
+
+    /// Remaining reading minutes for a single work using `estimatedMinutes` and
+    /// `unreadShare`, or nil when `wordCount <= 0`.
+    static func minutesLeft(for work: SavedWork) -> Double? {
+        guard let total = estimatedMinutes(wordCount: work.wordCount) else { return nil }
+        return total * unreadShare(for: work)
+    }
+
+    /// Total remaining minutes across a queue's works; withholds the estimate
+    /// (`nil`) if any unfinished work lacks a word count or nothing remains.
+    static func remainingMinutes(for works: [SavedWork]) -> Double? {
+        guard !works.isEmpty,
+              works.allSatisfy({ $0.isFinished || $0.wordCount > 0 })
+        else { return nil }
+        let total = works.reduce(0.0) { $0 + (minutesLeft(for: $1) ?? 0) }
+        return total > 0 ? total : nil
+    }
+
+    static func readingTimeEstimate(wordCount: Int) -> String? {
+        guard let rawMinutes = estimatedMinutes(wordCount: wordCount) else { return nil }
+        return readingTimeEstimate(minutes: rawMinutes)
+    }
+
+    static func readingTimeEstimate(minutes rawMinutes: Double) -> String? {
+        guard rawMinutes > 0 else { return nil }
         let minutes = max(5, Int((rawMinutes / 5).rounded()) * 5)
         let hours = minutes / 60
         let remainder = minutes % 60
@@ -253,14 +311,12 @@ struct QueuePageHeader<FilterRail: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        let totalWords = works.reduce(0) { $0 + max(0, $1.wordCount) }
         let progress = ReadingQueueFacts.progress(of: works.map(\.readingState))
         let fills = works.map {
             ReadingQueueFacts.segmentFill(state: $0.readingState, progress: $0.readingProgress)
         }
-        let detailLine = ReadingQueueFacts.rowDetail(
-            workCount: works.count,
-            totalWordCount: totalWords,
+        let detailLine = ReadingQueueFacts.headerDetail(
+            for: works,
             offlineCount: preservedIDs.count
         )
 

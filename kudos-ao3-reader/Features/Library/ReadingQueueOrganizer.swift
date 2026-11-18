@@ -239,6 +239,10 @@ struct AllReadingQueuesGridView: View {
                     .pageBodyRow(top: 12, gutter: SubjectMetrics.gutter)
                 statStrip
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+                if !isSelecting, !isReordering {
+                    whatFitsRow
+                        .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+                }
             }
 
             // A persisted filter whose tag is gone still needs the rail's All chip,
@@ -445,6 +449,38 @@ struct AllReadingQueuesGridView: View {
             ],
             palette: organizerPalette
         )
+    }
+
+    private var whatFitsRow: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "clock")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.accentInk)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("What Fits")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("See what you can finish across your queues")
+                    .font(.caption)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondaryInk)
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .subjectPanel()
+        .contentShape(Rectangle())
+        .accessibilityHidden(true)
+        .subjectRowNavigation(accessibilityLabel: "What Fits, see what you can finish across your queues") {
+            WhatFitsView()
+        }
     }
 
     /// Edit and Delete for a custom queue, wherever its row is drawn —
