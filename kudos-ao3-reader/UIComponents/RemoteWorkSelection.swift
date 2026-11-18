@@ -271,6 +271,9 @@ final class RemoteWorkSelectionController {
     fileprivate var showingAddToCollection = false
     fileprivate var batchActionError: String?
     var sourceQueueID: UUID?
+    /// Search/browse origin recorded on memberships added through swipe quick-add,
+    /// select-mode Add to Queue, Save for Later, and remote context menus.
+    var origin: ReadingQueueMembershipOrigin?
     var toastTarget: ToastTarget?
     var changeTarget: ToastTarget?
     private var toastDismissTask: Task<Void, Never>?
@@ -385,7 +388,13 @@ final class RemoteWorkSelectionController {
                 return
             }
 
-            let membership = ReadingQueueService.add(work, to: queue, in: context)
+            let membership = ReadingQueueService.add(
+                work,
+                to: queue,
+                state: .inLine,
+                origin: origin ?? ReadingQueueMembershipOrigin(kind: .manual),
+                in: context
+            )
             try context.save()
             defaults.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
             present(ToastTarget(
@@ -481,7 +490,11 @@ final class RemoteWorkSelectionController {
         guard !isProcessingBatch else { return }
         isProcessingBatch = true
         defer { isProcessingBatch = false }
-        batchActionError = await bulkSaveForLaterRemote(selected, in: context)
+        batchActionError = await bulkSaveForLaterRemote(
+            selected,
+            origin: origin ?? ReadingQueueMembershipOrigin(kind: .manual),
+            in: context
+        )
     }
 
     fileprivate func bulkAddToCollection(_ selected: [AO3WorkSummary], in context: ModelContext) async {
@@ -727,10 +740,17 @@ extension View {
         @Bindable var controller = controller
         return self
             .sheet(isPresented: $controller.showingAddToQueue) {
-                AddToQueueView(works: controller.resolvedQueueWorks)
+                AddToQueueView(
+                    works: controller.resolvedQueueWorks,
+                    origin: controller.origin ?? ReadingQueueMembershipOrigin(kind: .manual)
+                )
             }
             .sheet(item: $controller.changeTarget) { target in
-                AddToQueueView(work: target.work, movingFrom: target.queue)
+                AddToQueueView(
+                    work: target.work,
+                    movingFrom: target.queue,
+                    origin: controller.origin
+                )
             }
             .sheet(isPresented: $controller.showingAddToCollection) {
                 AddToCollectionView(works: controller.resolvedCollectionWorks)
@@ -761,5 +781,18 @@ extension View {
             }
             // A tick per row ticked, but not for the clear when selection mode ends.
             .sensoryFeedback(.selection, trigger: controller.selection.count) { _, _ in controller.isSelecting }
+    }
+}
+
+private struct QueueMembershipOriginKey: EnvironmentKey {
+    static let defaultValue: ReadingQueueMembershipOrigin? = nil
+}
+
+extension EnvironmentValues {
+    /// Active Search / Browse origin carried down into remote card context menus
+    /// so single "Save for Later" and "Add to Queue…" remember which search supplied them.
+    var queueMembershipOrigin: ReadingQueueMembershipOrigin? {
+        get { self[QueueMembershipOriginKey.self] }
+        set { self[QueueMembershipOriginKey.self] = newValue }
     }
 }

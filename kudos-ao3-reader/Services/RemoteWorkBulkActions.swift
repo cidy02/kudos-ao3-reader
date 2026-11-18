@@ -57,11 +57,20 @@ func resolveSelectedRemoteWorks(
 /// Save for Later goes straight through the service (it downloads/creates the local
 /// work itself), not via `resolveSelectedRemoteWorks`.
 @MainActor
-func bulkSaveForLaterRemote(_ selected: [AO3WorkSummary], in context: ModelContext) async -> String? {
+func bulkSaveForLaterRemote(
+    _ selected: [AO3WorkSummary],
+    origin: ReadingQueueMembershipOrigin? = nil,
+    in context: ModelContext
+) async -> String? {
     var failureCount = 0
     for summary in selected {
         do {
-            _ = try await ReadingQueueService.addToSavedForLater(summary, in: context)
+            _ = try await ReadingQueueService.addToSavedForLater(
+                summary,
+                state: .new,
+                origin: origin,
+                in: context
+            )
         } catch is CancellationError {
             return nil
         } catch {

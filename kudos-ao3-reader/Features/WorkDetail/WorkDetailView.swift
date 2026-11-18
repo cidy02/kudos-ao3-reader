@@ -256,7 +256,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         #endif
         .sheet(isPresented: $showingAddToQueue) {
             if let work = localWork {
-                AddToQueueView(work: work)
+                AddToQueueView(work: work, origin: ReadingQueueMembershipOrigin(kind: .manual))
                 #if os(iOS)
                     .modifier(ScopeSurfaceAccent())
                 #endif
@@ -1098,7 +1098,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         if let work = localWork {
             Task {
                 working = true
-                _ = await ReadingQueueService.addToSavedForLater(work, in: context)
+                _ = await ReadingQueueService.addToSavedForLater(
+                    work,
+                    state: .inLine,
+                    origin: ReadingQueueMembershipOrigin(kind: .manual),
+                    in: context
+                )
                 working = false
                 queueNotice = "Added to Want to Read."
                 maybeOfferSeriesPreservation(for: work)
@@ -1111,7 +1116,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             working = true
             loadError = nil
             do {
-                let work = try await ReadingQueueService.addToSavedForLater(summary, in: context)
+                let work = try await ReadingQueueService.addToSavedForLater(
+                    summary,
+                    state: .inLine,
+                    origin: ReadingQueueMembershipOrigin(kind: .manual),
+                    in: context
+                )
                 localWork = work
                 working = false
                 queueNotice = "Added to Want to Read."
@@ -1245,6 +1255,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             let result: ReadingQueueService.SeriesPreservationResult = if let summaries {
                 await ReadingQueueService.preserveSeries(
                     summaries,
+                    state: .new,
+                    origin: ReadingQueueMembershipOrigin(kind: .manual),
                     in: context,
                     progress: {
                         seriesPreservationProgress = $0
@@ -1254,6 +1266,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             } else {
                 await ReadingQueueService.preserveSeries(
                     anchoredAt: work,
+                    state: .new,
+                    origin: ReadingQueueMembershipOrigin(kind: .manual),
                     in: context,
                     progress: {
                         seriesPreservationProgress = $0

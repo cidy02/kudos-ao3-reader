@@ -376,6 +376,12 @@ struct FandomWorksView: View {
             .remoteWorkSelectionChrome(bulkSelection, showsBottomAccessory: showPagination) {
                 paginationBar.padding(.horizontal, SubjectMetrics.gutter)
             }
+            .environment(\.queueMembershipOrigin, bulkSelection.origin)
+            .onAppear {
+                if bulkSelection.origin == nil {
+                    bulkSelection.origin = ReadingQueueMembershipOrigin(kind: .search, searchID: nil, label: fandom)
+                }
+            }
             .task { await load(page: 1) }
             .task { await rankTop100.refreshAvailability() }
             .onChange(of: savedWorks.map(\.id), initial: true) { _, _ in
@@ -1006,6 +1012,16 @@ struct TagWorksView: View {
             }
             .remoteWorkSelectionChrome(bulkSelection, showsBottomAccessory: showPagination) {
                 paginationBar.padding(.horizontal, SubjectMetrics.gutter)
+            }
+            .environment(\.queueMembershipOrigin, bulkSelection.origin)
+            .onAppear {
+                if bulkSelection.origin == nil {
+                    bulkSelection.origin = ReadingQueueMembershipOrigin(
+                        kind: .search,
+                        searchID: nil,
+                        label: request.title
+                    )
+                }
             }
             .task { await load(page: 1) }
             .task { await rankTop100.refreshAvailability() }

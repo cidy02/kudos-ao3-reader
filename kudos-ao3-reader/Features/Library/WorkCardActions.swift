@@ -426,18 +426,33 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                             NavigationLink(value: LocalWorkDestination.reader(work)) {
                                 Label("Read", systemImage: "book")
                             }
-                            Button(action: queueMenu.moveToTop) {
-                                Label("To Top", systemImage: "arrow.up.to.line")
+                            if let sortIntoLine = queueMenu.sortIntoLine {
+                                Button(action: sortIntoLine) {
+                                    Label("Sort into line", systemImage: "text.insert")
+                                }
+                                .accessibilityLabel("Sort into line")
                             }
-                            .accessibilityLabel("Move to Top")
-                            Button(action: queueMenu.moveToBottom) {
-                                Label("To Bottom", systemImage: "arrow.down.to.line")
+                            if let moveToTop = queueMenu.moveToTop {
+                                Button(action: moveToTop) {
+                                    Label("To Top", systemImage: "arrow.up.to.line")
+                                }
+                                .accessibilityLabel("Move to Top")
                             }
-                            .accessibilityLabel("Move to Bottom")
+                            if let moveToBottom = queueMenu.moveToBottom {
+                                Button(action: moveToBottom) {
+                                    Label("To Bottom", systemImage: "arrow.down.to.line")
+                                }
+                                .accessibilityLabel("Move to Bottom")
+                            }
                             if let shareURL = queueMenu.shareURL {
                                 ShareLink(item: shareURL) {
                                     Label("Share", systemImage: "square.and.arrow.up")
                                 }
+                            }
+                        }
+                        if let sortIntoLine = queueMenu.sortIntoLine {
+                            Button(action: sortIntoLine) {
+                                Label("Sort into line", systemImage: "text.insert")
                             }
                         }
                     } else {
@@ -567,7 +582,7 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
             // since `role: .destructive` overrides ambient tint.
             .tint(Color.primary)
             .sheet(isPresented: $showingAddToQueue) {
-                AddToQueueView(work: work)
+                AddToQueueView(work: work, origin: ReadingQueueMembershipOrigin(kind: .manual))
             }
             .sheet(isPresented: $showingAddToCollection) {
                 AddToCollectionView(work: work)
@@ -655,6 +670,7 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
 
     @Environment(\.modelContext) private var context
     @Environment(\.accentFill) private var accentFill
+    @Environment(\.queueMembershipOrigin) private var queueOrigin
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     // A soft-deleted (pending Recently Deleted) work must not match here — the
     // remote card should offer a fresh "Save" rather than "Delete" for a work
@@ -842,7 +858,12 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
             // LocalWorkContextMenuModifier. Delete keeps its system red regardless.
             .tint(Color.primary)
             .navigationDestination(item: $readerWork) { BookReaderView(work: $0) }
-            .sheet(item: $queueWork) { AddToQueueView(work: $0) }
+            .sheet(item: $queueWork) {
+                AddToQueueView(
+                    work: $0,
+                    origin: queueOrigin ?? ReadingQueueMembershipOrigin(kind: .manual)
+                )
+            }
             .sheet(item: $collectionWork) { AddToCollectionView(work: $0) }
             .commentsSheet(
                 isPresented: $showingComments,
@@ -918,7 +939,12 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                     in: context
                 )
             } else {
-                _ = await ReadingQueueService.addToSavedForLater(saved, in: context)
+                _ = await ReadingQueueService.addToSavedForLater(
+                    saved,
+                    state: .inLine,
+                    origin: queueOrigin ?? ReadingQueueMembershipOrigin(kind: .manual),
+                    in: context
+                )
             }
         }
     }
@@ -1002,7 +1028,8 @@ struct ScopedRemoval {
 /// Leading actions on a queue row's menu. Share is omitted when `shareURL` is
 /// nil — there is nothing to hand on — the same rule as the reader's fan.
 struct QueueItemMenuActions {
-    var moveToTop: () -> Void
-    var moveToBottom: () -> Void
+    var sortIntoLine: (() -> Void)?
+    var moveToTop: (() -> Void)?
+    var moveToBottom: (() -> Void)?
     var shareURL: URL?
 }

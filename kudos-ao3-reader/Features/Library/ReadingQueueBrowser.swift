@@ -18,6 +18,9 @@ struct ReadingQueueBrowserView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accentInk) private var accentInk
+    @Environment(\.accentFill) private var accentFill
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Environment(PrivacyGate.self) private var gate
@@ -73,6 +76,8 @@ struct ReadingQueueBrowserView: View {
     @State private var pendingCompactOrder: [UUID]?
     @State private var isSelecting = false
     @State private var selection = Set<UUID>()
+    /// `Finished` starts collapsed on queue load and queue switch (`T-528`).
+    @State private var isFinishedExpanded = false
     /// Start and Read Aloud on the Up next Resume card push the reader.
     @State private var readerDestination: LocalWorkDestination?
 
@@ -100,16 +105,49 @@ struct ReadingQueueBrowserView: View {
         return orderedQueues.first { $0.id == targetID } ?? orderedQueues.first
     }
 
+    private var orderedMemberships: [ReadingQueueMembership] {
+        selectedQueue.map(ReadingQueueService.orderedMemberships(in:)) ?? []
+    }
+
     private var works: [SavedWork] {
-        selectedQueue.map(ReadingQueueService.orderedWorks(in:)) ?? []
+        orderedMemberships.compactMap(\.work)
     }
 
     /// Hide mode drops Mature/Explicit works here, as every other works list
     /// does — the row wrappers only blur, they never remove.
+    private var visibleMemberships: [ReadingQueueMembership] {
+        let shown = orderedMemberships.filter { membership in
+            guard let work = membership.work else { return false }
+            return !gate.isHidden(work, enabled: hideMature, mode: matureMode)
+        }
+        guard quickFilter != .all || filters.hasActiveFilters else { return shown }
+        let shownWorks = shown.compactMap(\.work)
+        let quick = quickFilter.apply(to: shownWorks, preservedIDs: Set(preservedWorks.map(\.id)))
+        let filtered = filters.hasActiveFilters ? filters.apply(to: quick) : quick
+        let allowedIDs = Set(filtered.map(\.id))
+        return shown.filter { membership in
+            membership.work.map { allowedIDs.contains($0.id) } ?? false
+        }
+    }
+
     private var visibleWorks: [SavedWork] {
-        let shown = works.filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
-        let quick = quickFilter.apply(to: shown, preservedIDs: Set(preservedWorks.map(\.id)))
-        return filters.hasActiveFilters ? filters.apply(to: quick) : quick
+        visibleMemberships.compactMap(\.work)
+    }
+
+    private var wholePartition: ReadingQueueSectionPartition {
+        ReadingQueueFacts.partition(memberships: orderedMemberships)
+    }
+
+    private var visiblePartition: ReadingQueueSectionPartition {
+        ReadingQueueFacts.partition(memberships: visibleMemberships)
+    }
+
+    private var reorderedInLineWorks: [SavedWork] {
+        wholePartition.inLineAll.map(\.work)
+    }
+
+    private var trailingReorderIDs: [UUID] {
+        (wholePartition.new + wholePartition.waiting + wholePartition.finished).map(\.work.id)
     }
 
     /// Reorder needs the whole queue in order, so any narrowing blocks it.
@@ -136,14 +174,15 @@ struct ReadingQueueBrowserView: View {
         )
     }
 
-    /// While reordering, filters step aside — move/drag need index-stable unfiltered order.
+    /// While reordering, filters step aside — move/drag operate on `In line` only
+    /// (`T-528`: New sorts into line via action; Waiting and Finished are derived).
     private var displayedWorks: [SavedWork] {
-        isReordering ? works : visibleWorks
+        (isReordering && !isSelecting) ? reorderedInLineWorks : visibleWorks
     }
 
-    private var compactDisplayedWorks: [SavedWork] {
-        guard let pendingCompactOrder else { return displayedWorks }
-        let byID = Dictionary(works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    private var compactInLineWorks: [SavedWork] {
+        guard let pendingCompactOrder else { return reorderedInLineWorks }
+        let byID = Dictionary(reorderedInLineWorks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return pendingCompactOrder.compactMap { byID[$0] }
     }
 
@@ -215,18 +254,20 @@ struct ReadingQueueBrowserView: View {
     /// face too: `ReadingQueueFacts.upNext`, the first work not yet finished.
     /// Both use `visibleWorks` (filters applied) rather than `displayedWorks`,
     /// since that split only ever renders while `!isReordering`.
-    private var upNextSplit: (upNext: SavedWork?, inLine: [SavedWork]) {
-        ReadingQueueFacts.upNext(in: visibleWorks)
+    private var upNextEntry: ReadingQueueSectionEntry? {
+        visiblePartition.upNext
     }
 
-    private var upNextWork: SavedWork? { upNextSplit.upNext }
+    private var upNextWork: SavedWork? { upNextEntry?.work }
 
-    private var inLineWorks: [SavedWork] { upNextSplit.inLine }
+    private var inLineEntries: [ReadingQueueSectionEntry] {
+        visiblePartition.inLineRest
+    }
 
-    /// 1h's numbered In line rows: the work's place in the whole queue, so a
-    /// filter narrows the list without renumbering it.
+    /// 1h's numbered In line rows: the work's place within `In line`, so filtering
+    /// narrows the list without renumbering it.
     private func queuePosition(of work: SavedWork) -> Int? {
-        works.firstIndex { $0.id == work.id }.map { $0 + 1 }
+        wholePartition.inLineAll.firstIndex { $0.id == work.id }.map { $0 + 1 }
     }
 
     /// The Resume card's next variant. Start opens the reader. A tap on the
@@ -583,43 +624,123 @@ extension ReadingQueueBrowserView {
 
     private var detailedList: some View {
         List {
-            if isReordering || isSelecting {
-                // Flat and unsectioned: `.onMove` only reorders within the
-                // `ForEach` it is attached to, so a drag that should be able to
-                // promote any work into "Up next" needs one `ForEach` over the
-                // whole queue, not two split across sections. 1bg: selecting keeps
-                // each row's position number and the live handle.
-                if isSelecting { subjectHeaderSection }
-                ForEach(displayedWorks) { work in
-                    ledgerRow(work, position: queuePosition(of: work))
-                        .environment(\.ledgerPositionNumber, queuePosition(of: work))
+            if isReordering && !isSelecting {
+                // Reorder operates over `In line` as a single flat `ForEach` so
+                // `.onMove` promotes any item into Up next cleanly.
+                if !wholePartition.new.isEmpty {
+                    newSectionHeader(wholePartition.new)
+                        .bareListRow()
+                    ForEach(wholePartition.new) { entry in
+                        ledgerRow(entry, position: nil)
+                    }
                 }
-                .onMove(perform: moveAction)
+                if !wholePartition.inLineAll.isEmpty {
+                    queueSectionHeader("In line")
+                        .bareListRow()
+                    ForEach(wholePartition.inLineAll) { entry in
+                        ledgerRow(entry, position: queuePosition(of: entry.work))
+                            .environment(\.ledgerPositionNumber, queuePosition(of: entry.work))
+                    }
+                    .onMove(perform: moveAction)
+                }
+                if !wholePartition.waiting.isEmpty {
+                    waitingSectionHeader()
+                        .bareListRow()
+                    ForEach(wholePartition.waiting) { entry in
+                        ledgerRow(entry, position: nil)
+                    }
+                }
+                if !wholePartition.finished.isEmpty {
+                    finishedSectionHeader(count: wholePartition.finished.count)
+                        .bareListRow()
+                    if isFinishedExpanded {
+                        ForEach(wholePartition.finished) { entry in
+                            ledgerRow(entry, position: nil)
+                        }
+                    }
+                }
+            } else if isSelecting {
+                subjectHeaderSection
+                if !visiblePartition.new.isEmpty {
+                    newSectionHeader(visiblePartition.new)
+                        .bareListRow()
+                    ForEach(visiblePartition.new) { entry in
+                        ledgerRow(entry, position: nil)
+                    }
+                }
+                if !visiblePartition.inLineAll.isEmpty {
+                    queueSectionHeader("In line")
+                        .bareListRow()
+                    ForEach(visiblePartition.inLineAll) { entry in
+                        ledgerRow(entry, position: queuePosition(of: entry.work))
+                            .environment(\.ledgerPositionNumber, queuePosition(of: entry.work))
+                    }
+                    .onMove(perform: moveAction)
+                }
+                if !visiblePartition.waiting.isEmpty {
+                    waitingSectionHeader()
+                        .bareListRow()
+                    ForEach(visiblePartition.waiting) { entry in
+                        ledgerRow(entry, position: nil)
+                    }
+                }
+                if !visiblePartition.finished.isEmpty {
+                    finishedSectionHeader(count: visiblePartition.finished.count)
+                        .bareListRow()
+                    if isFinishedExpanded {
+                        ForEach(visiblePartition.finished) { entry in
+                            ledgerRow(entry, position: nil)
+                        }
+                    }
+                }
             } else {
                 subjectHeaderSection
-                if let upNextWork {
+                if !visiblePartition.new.isEmpty {
+                    newSectionHeader(visiblePartition.new)
+                        .bareListRow()
+                    ForEach(visiblePartition.new) { entry in
+                        ledgerRow(entry, position: nil)
+                    }
+                }
+                if let upNextEntry {
                     // No card-row padding on the header: it sits on its card, as on the board.
                     queueSectionHeader("Up next")
                         .bareListRow(verticalPadding: 0, interCardSpacing: 0)
-                    upNextLinked(upNextWork)
+                    upNextLinked(upNextEntry)
                         .bareListRow()
-                        .padding(.bottom, inLineWorks.isEmpty ? 16 : 8)
+                        .padding(.bottom, inLineEntries.isEmpty ? 16 : 8)
                         .swipeActions(edge: .trailing) {
                             if !isSelecting {
                                 Button(role: .destructive) {
-                                    pendingRemoval = upNextWork
+                                    pendingRemoval = upNextEntry.work
                                 } label: {
                                     Label("Remove", systemImage: "minus.circle")
                                 }
                             }
                         }
                 }
-                if !inLineWorks.isEmpty {
+                if !inLineEntries.isEmpty {
                     queueSectionHeader("In line")
                         .bareListRow()
-                    ForEach(inLineWorks) { work in
-                        ledgerRow(work, position: queuePosition(of: work))
-                            .environment(\.ledgerPositionNumber, queuePosition(of: work))
+                    ForEach(inLineEntries) { entry in
+                        ledgerRow(entry, position: queuePosition(of: entry.work))
+                            .environment(\.ledgerPositionNumber, queuePosition(of: entry.work))
+                    }
+                }
+                if !visiblePartition.waiting.isEmpty {
+                    waitingSectionHeader()
+                        .bareListRow()
+                    ForEach(visiblePartition.waiting) { entry in
+                        ledgerRow(entry, position: nil)
+                    }
+                }
+                if !visiblePartition.finished.isEmpty {
+                    finishedSectionHeader(count: visiblePartition.finished.count)
+                        .bareListRow()
+                    if isFinishedExpanded {
+                        ForEach(visiblePartition.finished) { entry in
+                            ledgerRow(entry, position: nil)
+                        }
                     }
                 }
             }
@@ -678,6 +799,113 @@ extension ReadingQueueBrowserView {
             .accessibilityAddTraits(.isHeader)
     }
 
+    private func newSectionHeader(_ entries: [ReadingQueueSectionEntry]) -> some View {
+        let subtitle = entries.count == 1 ? "1 work · not sorted yet" : "\(entries.count) works · not sorted yet"
+        let canSort = !isSelecting && !isReordering && selectedQueue != nil
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("New")
+                            .font(.title3.bold())
+                            .foregroundStyle(.primary)
+                            .accessibilityAddTraits(.isHeader)
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondaryInk)
+                    }
+                    if canSort {
+                        sortAllIntoLineButton(entries)
+                    }
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("New")
+                            .font(.title3.bold())
+                            .foregroundStyle(.primary)
+                            .accessibilityAddTraits(.isHeader)
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondaryInk)
+                    }
+                    Spacer(minLength: 8)
+                    if canSort {
+                        sortAllIntoLineButton(entries)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, SubjectMetrics.gutter)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
+    }
+
+    private func sortAllIntoLineButton(_ entries: [ReadingQueueSectionEntry]) -> some View {
+        Button {
+            guard let queue = selectedQueue else { return }
+            Haptics.selection()
+            ReadingQueueService.sortIntoLine(entries.map(\.membership), in: queue, context: context)
+        } label: {
+            Label("Sort into line", systemImage: "text.insert")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(accentInk)
+        }
+        .buttonStyle(.plain)
+        .minimumHitTarget()
+    }
+
+    private func waitingSectionHeader() -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Waiting")
+                .font(.title3.bold())
+                .foregroundStyle(.primary)
+                .accessibilityAddTraits(.isHeader)
+            if let subtitle = ReadingQueueSectionKind.waiting.subtitle {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, SubjectMetrics.gutter)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
+    }
+
+    private func finishedSectionHeader(count: Int) -> some View {
+        let countText = count == 1 ? "1 work" : "\(count) works"
+        return Button {
+            Haptics.selection()
+            isFinishedExpanded.toggle()
+        } label: {
+            HStack(spacing: 8) {
+                Text("Finished")
+                    .font(.title3.bold())
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                Text(countText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondaryInk)
+                Image(systemName: isFinishedExpanded ? "chevron.down" : "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondaryInk)
+            }
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, SubjectMetrics.gutter)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityLabel("Finished, \(countText)")
+        .accessibilityValue(isFinishedExpanded ? "Expanded" : "Collapsed")
+        .accessibilityHint(isFinishedExpanded ? "Double-tap to collapse." : "Double-tap to expand.")
+    }
+
     private var selectionStatusRow: some View {
         QueueSelectionStatusRow(
             queueName: selectedQueue?.displayName ?? "Queue",
@@ -717,22 +945,62 @@ extension ReadingQueueBrowserView {
                         .padding(.bottom, 8)
                 }
                 if isReordering || isSelecting {
-                    Text("Works")
-                        .font(.title3.bold())
-                        .padding(.horizontal, SubjectMetrics.gutter)
-                        .padding(.top, Self.ruleTop)
-                    coverGrid(compactDisplayedWorks)
-                        .padding(.top, Self.afterRule)
-                } else {
-                    if let upNextWork {
-                        queueSectionHeader("Up next")
+                    if !wholePartition.new.isEmpty {
+                        newSectionHeader(wholePartition.new)
                             .padding(.top, Self.ruleTop)
-                        upNextCompact(upNextWork)
+                        coverGrid(wholePartition.new, allowReorder: false)
+                            .padding(.top, Self.afterRule)
                     }
-                    if !inLineWorks.isEmpty {
+                    if !compactInLineEntries.isEmpty {
                         queueSectionHeader("In line")
                             .padding(.top, Self.ruleTop)
-                        coverGrid(inLineWorks).padding(.top, Self.afterRule)
+                        coverGrid(compactInLineEntries, allowReorder: true)
+                            .padding(.top, Self.afterRule)
+                    }
+                    if !wholePartition.waiting.isEmpty {
+                        waitingSectionHeader()
+                            .padding(.top, Self.ruleTop)
+                        coverGrid(wholePartition.waiting, allowReorder: false)
+                            .padding(.top, Self.afterRule)
+                    }
+                    if !wholePartition.finished.isEmpty {
+                        finishedSectionHeader(count: wholePartition.finished.count)
+                            .padding(.top, Self.ruleTop)
+                        if isFinishedExpanded {
+                            coverGrid(wholePartition.finished, allowReorder: false)
+                                .padding(.top, Self.afterRule)
+                        }
+                    }
+                } else {
+                    if !visiblePartition.new.isEmpty {
+                        newSectionHeader(visiblePartition.new)
+                            .padding(.top, Self.ruleTop)
+                        coverGrid(visiblePartition.new, allowReorder: false)
+                            .padding(.top, Self.afterRule)
+                    }
+                    if let upNextEntry {
+                        queueSectionHeader("Up next")
+                            .padding(.top, Self.ruleTop)
+                        upNextCompact(upNextEntry)
+                    }
+                    if !inLineEntries.isEmpty {
+                        queueSectionHeader("In line")
+                            .padding(.top, Self.ruleTop)
+                        coverGrid(inLineEntries, allowReorder: false).padding(.top, Self.afterRule)
+                    }
+                    if !visiblePartition.waiting.isEmpty {
+                        waitingSectionHeader()
+                            .padding(.top, Self.ruleTop)
+                        coverGrid(visiblePartition.waiting, allowReorder: false)
+                            .padding(.top, Self.afterRule)
+                    }
+                    if !visiblePartition.finished.isEmpty {
+                        finishedSectionHeader(count: visiblePartition.finished.count)
+                            .padding(.top, Self.ruleTop)
+                        if isFinishedExpanded {
+                            coverGrid(visiblePartition.finished, allowReorder: false)
+                                .padding(.top, Self.afterRule)
+                        }
                     }
                 }
             }
@@ -749,10 +1017,18 @@ extension ReadingQueueBrowserView {
     /// adds the rest of `afterRule`.
     private static let listRuleBottom: CGFloat = afterRule - halfCardGap
 
-    private func coverGrid(_ gridWorks: [SavedWork]) -> some View {
+    private var compactInLineEntries: [ReadingQueueSectionEntry] {
+        let byID = Dictionary(
+            wholePartition.inLineAll.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return compactInLineWorks.compactMap { byID[$0.id] }
+    }
+
+    private func coverGrid(_ entries: [ReadingQueueSectionEntry], allowReorder: Bool) -> some View {
         CarouselCardGrid {
-            ForEach(gridWorks) { work in
-                compactCard(work)
+            ForEach(entries) { entry in
+                compactCard(entry, allowReorder: allowReorder)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -760,8 +1036,9 @@ extension ReadingQueueBrowserView {
     }
 
     @ViewBuilder
-    private func compactCard(_ work: SavedWork) -> some View {
-        if isSelecting || isReordering, let queue = selectedQueue {
+    private func compactCard(_ entry: ReadingQueueSectionEntry, allowReorder: Bool) -> some View {
+        let work = entry.work
+        if isSelecting || (isReordering && allowReorder), let queue = selectedQueue {
             // 1bg: while selecting, the handle stays live beside the selection
             // bubble, which owns the top-trailing corner.
             ZStack(alignment: isSelecting ? .topLeading : .topTrailing) {
@@ -779,24 +1056,25 @@ extension ReadingQueueBrowserView {
                     }
                 }
                 .opacity(draggedWorkID == work.id ? 0.4 : 1)
-                if isDragLive {
+                if allowReorder && isDragLive {
                     dragHandle(for: work)
                 }
             }
             .onDrop(of: [.text], delegate: WorkReorderDropDelegate(
                 target: work,
-                works: works,
+                works: reorderedInLineWorks,
+                trailingIDs: trailingReorderIDs,
                 draggedWorkID: $draggedWorkID,
                 pendingOrder: $pendingCompactOrder,
                 queue: queue,
                 context: context
             ))
             .accessibilityActions {
-                if isDragLive {
+                if allowReorder && isDragLive {
                     Button("Move Up") { moveWork(work, toIndex: currentIndex(of: work) - 1) }
                     Button("Move Down") { moveWork(work, toIndex: currentIndex(of: work) + 1) }
                     Button("Move to Top") { moveWork(work, toIndex: 0) }
-                    Button("Move to Bottom") { moveWork(work, toIndex: works.count - 1) }
+                    Button("Move to Bottom") { moveWork(work, toIndex: reorderedInLineWorks.count - 1) }
                 }
             }
         } else {
@@ -807,8 +1085,13 @@ extension ReadingQueueBrowserView {
             .localWorkContextMenu(
                 work: work,
                 scopedRemoval: ScopedRemoval(title: "Remove from Queue") { pendingRemoval = work },
-                queueMenu: queueMenu(for: work)
+                queueMenu: queueMenu(for: entry)
             )
+            .accessibilityAction(named: "Sort into line") {
+                guard entry.section == .new, let queue = selectedQueue else { return }
+                Haptics.selection()
+                ReadingQueueService.sortIntoLine(entry.membership, in: queue, context: context)
+            }
         }
     }
 
@@ -875,7 +1158,7 @@ extension ReadingQueueBrowserView {
                                 systemImage: "arrow.up.arrow.down"
                             )
                         }
-                        .disabled(isNarrowed || hidesMatureWorks)
+                        .disabled(isNarrowed || hidesMatureWorks || reorderedInLineWorks.count < 2)
                         ListGridMenuPicker(arrangement: $arrangement)
                         Divider()
                         Picker("Filter", selection: $quickFilter) {
@@ -907,7 +1190,15 @@ extension ReadingQueueBrowserView {
                 destinationName: queue.displayName,
                 scopeName: "queue",
                 candidates: { ReadingQueueService.appendCandidates(from: $0, notIn: queue) },
-                onAdd: { ReadingQueueService.append($0, to: queue, in: context) }
+                onAdd: {
+                    ReadingQueueService.append(
+                        $0,
+                        to: queue,
+                        state: .new,
+                        origin: ReadingQueueMembershipOrigin(kind: .manual),
+                        in: context
+                    )
+                }
             )
         }
     }
@@ -1037,6 +1328,7 @@ extension ReadingQueueBrowserView {
         // Leaving mid-select/reorder on another queue would leave dangling state.
         exitSelectMode()
         setReordering(false)
+        isFinishedExpanded = false
         filters = LibraryFilters()
         quickFilter = .all
         selectedQueueID = queue.id
@@ -1141,7 +1433,14 @@ extension ReadingQueueBrowserView {
     }
 
     private func toggleSelectAll() {
-        selection = allSelected ? [] : Set(displayedWorks.map(\.id))
+        if allSelected {
+            selection = []
+        } else {
+            if !visiblePartition.finished.isEmpty {
+                isFinishedExpanded = true
+            }
+            selection = Set(displayedWorks.map(\.id))
+        }
     }
 
     private func toggleSelection(_ work: SavedWork) {

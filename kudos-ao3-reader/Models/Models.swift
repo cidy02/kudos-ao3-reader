@@ -252,6 +252,20 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         case stopped, onHold, stacking, finished, caughtUp, reading, savedForLater
     }
 
+    /// Canonical WIP caught-up check shared by `insightsReadingStatus` and the
+    /// queue's derived **Waiting** section: not complete, not manually finished,
+    /// started, every posted chapter reached (`>= 99%` of its final spine or `100%`
+    /// whole-book progress), and no newer chapter posted since `knownChapterCount`.
+    var isCaughtUpOnWIP: Bool {
+        !isComplete
+            && !isFinished
+            && hasStartedReading
+            && postedChapterCount > 0
+            && lastSpineIndex + 1 >= postedChapterCount
+            && (lastScrollFraction >= 0.99 || publicationProgress == 1)
+            && !hasUpdate
+    }
+
     var insightsReadingStatus: InsightsReadingStatus {
         switch ExplicitReadingStatus(rawValue: readingStatusRaw) {
         case .stopped: return .stopped
@@ -260,9 +274,7 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         case .reading, .none: break
         }
         if isFinished { return .finished }
-        if !isComplete && hasStartedReading && postedChapterCount > 0
-            && lastSpineIndex + 1 >= postedChapterCount
-            && (lastScrollFraction >= 0.99 || publicationProgress == 1) && !hasUpdate {
+        if isCaughtUpOnWIP {
             return .caughtUp
         }
         if readingStatusRaw == ExplicitReadingStatus.reading.rawValue || hasStartedReading {
@@ -1048,6 +1060,62 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     }
 }
 
+/// Stored state of a membership inside a queue (`new` = recently added, not yet
+/// sorted into the reader's order; `inLine` = placed in order). `Waiting` and
+/// `Finished` are derived from `SavedWork` and never stored.
+nonisolated enum ReadingQueueMembershipState: String, CaseIterable, Codable, Sendable {
+    case new
+    case inLine
+}
+
+/// How a work entered a reading queue (`T-528` / `T-536` Insights D8).
+nonisolated enum ReadingQueueMembershipOriginKind: String, CaseIterable, Codable, Sendable {
+    case search
+    case link
+    case source
+    case manual
+}
+
+/// Non-persistent value describing why a work was added to a queue; backed on
+/// `ReadingQueueMembership` by plain optional/defaulted primitive fields (never a
+/// composite SwiftData attribute).
+nonisolated struct ReadingQueueMembershipOrigin: Equatable, Hashable, Codable, Sendable {
+    var kind: ReadingQueueMembershipOriginKind
+    var searchID: UUID?
+    var label: String?
+
+    init(kind: ReadingQueueMembershipOriginKind, searchID: UUID? = nil, label: String? = nil) {
+        self.kind = kind
+        self.searchID = searchID
+        let trimmed = label?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.label = (trimmed?.isEmpty == false) ? trimmed : nil
+    }
+
+    /// Display line for queue rows (`"From <label>"`) when a label was recorded.
+    var displayLine: String? {
+        guard let label, !label.isEmpty else { return nil }
+        return "From \(label)"
+    }
+
+    /// Reconstructs an origin from persisted/transport raw fields (`ReadingQueueMembership`
+    /// and `KudosBackupReadingQueueMembership` share this normalization).
+    static func normalized(kindRaw: String?, searchID: UUID?, label: String?) -> ReadingQueueMembershipOrigin? {
+        let trimmed = label?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanLabel = (trimmed?.isEmpty == false) ? trimmed : nil
+        if let kind = kindRaw.flatMap(ReadingQueueMembershipOriginKind.init(rawValue:)) {
+            return ReadingQueueMembershipOrigin(kind: kind, searchID: searchID, label: cleanLabel)
+        }
+        if searchID != nil || cleanLabel != nil {
+            return ReadingQueueMembershipOrigin(
+                kind: searchID != nil ? .search : .manual,
+                searchID: searchID,
+                label: cleanLabel
+            )
+        }
+        return nil
+    }
+}
+
 /// Join record between a work and a reading queue. Duplicate queue/work pairs are
 /// prevented in `ReadingQueueService` rather than with a fragile unique attribute.
 @Model final class ReadingQueueMembership {
@@ -1058,6 +1126,12 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var isPendingDeletion: Bool = false
     var sortOrderInQueue: Int = 0
     var note: String = ""
+    /// `"new"` or `"inLine"`; default `"inLine"` so existing queues keep their order.
+    var stateRaw: String = ReadingQueueMembershipState.inLine.rawValue
+    /// Origin fields kept per membership (not on `SavedWork`) for queue rows and Insights.
+    var originKindRaw: String?
+    var originSearchID: UUID?
+    var originLabel: String?
     var syncStatusRaw: String = SyncRecordStatus.localOnly.rawValue
     var lastSyncAttemptAt: Date?
     var lastSyncError: String = ""
@@ -1071,7 +1145,9 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         work: SavedWork,
         queuedAt: Date = Date(),
         sortOrderInQueue: Int = 0,
-        note: String = ""
+        note: String = "",
+        state: ReadingQueueMembershipState = .inLine,
+        origin: ReadingQueueMembershipOrigin? = nil
     ) {
         self.id = id
         self.queue = queue
@@ -1080,6 +1156,39 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         lastModifiedAt = queuedAt
         self.sortOrderInQueue = sortOrderInQueue
         self.note = note
+        stateRaw = state.rawValue
+        originKindRaw = origin?.kind.rawValue
+        originSearchID = origin?.searchID
+        originLabel = origin?.label
+    }
+
+    var state: ReadingQueueMembershipState {
+        get { ReadingQueueMembershipState(rawValue: stateRaw) ?? .inLine }
+        set { stateRaw = newValue.rawValue }
+    }
+
+    var originKind: ReadingQueueMembershipOriginKind? {
+        get { originKindRaw.flatMap(ReadingQueueMembershipOriginKind.init(rawValue:)) }
+        set { originKindRaw = newValue?.rawValue }
+    }
+
+    var origin: ReadingQueueMembershipOrigin? {
+        get {
+            ReadingQueueMembershipOrigin.normalized(
+                kindRaw: originKindRaw,
+                searchID: originSearchID,
+                label: originLabel
+            )
+        }
+        set {
+            originKindRaw = newValue?.kind.rawValue
+            originSearchID = newValue?.searchID
+            originLabel = newValue?.label
+        }
+    }
+
+    var originDisplayLine: String? {
+        origin?.displayLine
     }
 
     var syncStatus: SyncRecordStatus {

@@ -1547,6 +1547,9 @@ struct ReadiumReaderView: View {
                 FolderSyncService.markDirty()
             }
             guard work.isComplete, !work.isFinished else {
+                if !work.isComplete, work.knownChapterCount == 0, work.postedChapterCount > 0 {
+                    work.knownChapterCount = work.postedChapterCount
+                }
                 try? context.save()
                 return
             }

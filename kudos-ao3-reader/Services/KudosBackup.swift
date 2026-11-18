@@ -1747,6 +1747,12 @@ nonisolated struct KudosBackupReadingQueueMembership: Codable, Equatable {
     let lastModifiedAt: Date?
     let sortOrderInQueue: Int
     let note: String
+    /// Omitted when `.inLine` so existing archives stay byte-identical; unknown or
+    /// missing values restore as `.inLine`.
+    let stateRaw: String?
+    let originKindRaw: String?
+    let originSearchID: UUID?
+    let originLabel: String?
 
     @MainActor
     init?(membership: ReadingQueueMembership) {
@@ -1760,6 +1766,24 @@ nonisolated struct KudosBackupReadingQueueMembership: Codable, Equatable {
         lastModifiedAt = membership.lastModifiedAt
         sortOrderInQueue = membership.sortOrderInQueue
         note = membership.note
+        let state = membership.state
+        stateRaw = state == .inLine ? nil : state.rawValue
+        let origin = membership.origin
+        originKindRaw = origin?.kind.rawValue
+        originSearchID = origin?.searchID
+        originLabel = origin?.label
+    }
+
+    var restoredState: ReadingQueueMembershipState {
+        stateRaw.flatMap(ReadingQueueMembershipState.init(rawValue:)) ?? .inLine
+    }
+
+    var restoredOrigin: ReadingQueueMembershipOrigin? {
+        ReadingQueueMembershipOrigin.normalized(
+            kindRaw: originKindRaw,
+            searchID: originSearchID,
+            label: originLabel
+        )
     }
 }
 
@@ -3379,6 +3403,8 @@ enum KudosBackupService {
                 if membershipWins {
                     existing.sortOrderInQueue = archived.sortOrderInQueue
                     existing.note = archived.note
+                    existing.state = archived.restoredState
+                    existing.origin = archived.restoredOrigin
                     existing.lastModifiedAt = incomingModifiedAt
                     queue.lastMembershipChangedAt = max(queue.lastMembershipChangedAt, incomingModifiedAt)
                 }
@@ -3391,7 +3417,9 @@ enum KudosBackupService {
                 work: work,
                 queuedAt: archived.queuedAt,
                 sortOrderInQueue: archived.sortOrderInQueue,
-                note: archived.note
+                note: archived.note,
+                state: archived.restoredState,
+                origin: archived.restoredOrigin
             )
             membership.lastModifiedAt = archived.lastModifiedAt ?? archived.queuedAt
             context.insert(membership)

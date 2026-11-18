@@ -133,6 +133,7 @@ struct ReadingQueueDetailView: View {
 struct WorkReorderDropDelegate: DropDelegate {
     let target: SavedWork
     let works: [SavedWork]
+    var trailingIDs: [UUID] = []
     @Binding var draggedWorkID: UUID?
     @Binding var pendingOrder: [UUID]?
     let queue: ReadingQueue
@@ -159,7 +160,7 @@ struct WorkReorderDropDelegate: DropDelegate {
         // disk for a drag that moved nothing. `works` is unmutated during the gesture
         // (the whole point of deferring the write), so it's still the pre-drag order.
         if let pendingOrder, pendingOrder != works.map(\.id) {
-            ReadingQueueService.reorder(pendingOrder, in: queue, context: context)
+            ReadingQueueService.reorder(pendingOrder + trailingIDs, in: queue, context: context)
         }
         pendingOrder = nil
         draggedWorkID = nil
@@ -356,15 +357,25 @@ struct ReadingQueueStorageView: View {
 
 struct AddToQueueView: View {
     let works: [SavedWork]
+    private let entryState: ReadingQueueMembershipState
+    private let origin: ReadingQueueMembershipOrigin?
     @State private var sourceQueue: ReadingQueue?
 
-    init(work: SavedWork, movingFrom: ReadingQueue? = nil) {
+    init(
+        work: SavedWork,
+        movingFrom: ReadingQueue? = nil,
+        origin: ReadingQueueMembershipOrigin? = nil
+    ) {
         works = [work]
+        entryState = .inLine
+        self.origin = origin
         _sourceQueue = State(initialValue: movingFrom)
     }
 
-    init(works: [SavedWork]) {
+    init(works: [SavedWork], origin: ReadingQueueMembershipOrigin? = nil) {
         self.works = works
+        entryState = .new
+        self.origin = origin
         _sourceQueue = State(initialValue: nil)
     }
 
@@ -570,6 +581,8 @@ struct AddToQueueView: View {
                 await ReadingQueueService.preserveSeries(
                     summaries,
                     to: queues,
+                    state: .new,
+                    origin: origin ?? ReadingQueueMembershipOrigin(kind: .manual),
                     in: context,
                     progress: { seriesResult = $0 }
                 )
@@ -577,6 +590,8 @@ struct AddToQueueView: View {
                 await ReadingQueueService.preserveSeries(
                     anchoredAt: soloWork,
                     to: queues,
+                    state: .new,
+                    origin: origin ?? ReadingQueueMembershipOrigin(kind: .manual),
                     in: context,
                     progress: { seriesResult = $0 }
                 )
@@ -606,10 +621,17 @@ struct AddToQueueView: View {
             return
         }
         let nonMembers = works.filter { work in !work.queueMemberships.contains { $0.queue?.id == queue.id } }
+        let resolvedOrigin = origin ?? ReadingQueueMembershipOrigin(kind: .manual)
         workingQueueIDs.insert(queue.id)
         Task {
             for work in nonMembers {
-                _ = await ReadingQueueService.addAndPreserve(work, to: queue, in: context)
+                _ = await ReadingQueueService.addAndPreserve(
+                    work,
+                    to: queue,
+                    state: entryState,
+                    origin: resolvedOrigin,
+                    in: context
+                )
             }
             UserDefaults.standard.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
             workingQueueIDs.remove(queue.id)
@@ -618,7 +640,14 @@ struct AddToQueueView: View {
 
     private func move(to queue: ReadingQueue, from source: ReadingQueue) {
         if source.id != queue.id {
-            ReadingQueueService.move(works, from: source, to: queue, in: context)
+            ReadingQueueService.move(
+                works,
+                from: source,
+                to: queue,
+                state: entryState,
+                origin: origin,
+                in: context
+            )
             if KeepOffline.queueKeeps(queue.keepsWorksOffline) {
                 downloadQueue.enqueue(KeepOffline.downloadItems(for: works).map { item in
                     var item = item
@@ -654,10 +683,17 @@ struct AddToQueueView: View {
             move(to: queue, from: sourceQueue)
             return
         }
+        let resolvedOrigin = origin ?? ReadingQueueMembershipOrigin(kind: .manual)
         workingQueueIDs.insert(queue.id)
         Task {
             for work in works {
-                _ = await ReadingQueueService.addAndPreserve(work, to: queue, in: context)
+                _ = await ReadingQueueService.addAndPreserve(
+                    work,
+                    to: queue,
+                    state: entryState,
+                    origin: resolvedOrigin,
+                    in: context
+                )
             }
             UserDefaults.standard.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
             workingQueueIDs.remove(queue.id)
