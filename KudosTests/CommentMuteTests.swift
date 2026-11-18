@@ -1,5 +1,4 @@
 import Foundation
-import SwiftUI
 import Testing
 @testable import Kudos
 
@@ -39,30 +38,7 @@ struct CommentMuteTests {
         )
     }
 
-    /// Walks a `CommentMenuItems` SwiftUI view tree to confirm the Mute label
-    /// is actually rendered (or absent) rather than testing the model predicate alone.
-    private static func renderedMenuContains(_ needle: String, in view: CommentMenuItems) -> Bool {
-        var queue: [Any] = [view.body]
-        while !queue.isEmpty {
-            let current = queue.removeFirst()
-            if let text = current as? String, text.contains(needle) {
-                return true
-            }
-            if let localized = current as? LocalizedStringKey,
-               String(describing: localized).contains(needle) {
-                return true
-            }
-            let mirror = Mirror(reflecting: current)
-            if mirror.displayStyle == .optional {
-                if let child = mirror.children.first { queue.append(child.value) }
-                continue
-            }
-            queue += mirror.children.map(\.value)
-        }
-        return false
-    }
-
-    @Test func muteItemIsAbsentWhenSignedOut() {
+    @Test func muteItemIsAbsentWhenSignedOutOrUnwired() {
         let comment = Self.makeComment(author: "Avery Writes")
         #expect(comment.muteTargetRoute(isLoggedIn: false, currentUsername: nil) == nil)
         #expect(comment.muteTargetRoute(isLoggedIn: false, currentUsername: "Reader") == nil)
@@ -78,7 +54,16 @@ struct CommentMuteTests {
             showsReply: false,
             handlers: handlers
         )
-        #expect(!Self.renderedMenuContains("Mute Avery Writes", in: signedOutMenu))
+        #expect(signedOutMenu.muteItem == nil)
+
+        let unwiredMenu = CommentMenuItems(
+            comment: comment,
+            isLoggedIn: true,
+            currentUsername: "Reader",
+            showsReply: true,
+            handlers: .noop
+        )
+        #expect(unwiredMenu.muteItem == nil)
     }
 
     @Test func muteItemIsAbsentForAnonymousAndGuestCommenters() {
@@ -122,7 +107,7 @@ struct CommentMuteTests {
                 showsReply: true,
                 handlers: handlers
             )
-            #expect(!Self.renderedMenuContains("Mute \(comment.author)", in: menu))
+            #expect(menu.muteItem == nil)
         }
     }
 
@@ -156,7 +141,7 @@ struct CommentMuteTests {
                 showsReply: true,
                 handlers: handlers
             )
-            #expect(!Self.renderedMenuContains("Mute \(comment.author)", in: menu))
+            #expect(menu.muteItem == nil)
         }
     }
 
@@ -182,7 +167,13 @@ struct CommentMuteTests {
             showsReply: true,
             handlers: handlers
         )
-        #expect(Self.renderedMenuContains("Mute Avery Writes", in: menu))
+        #expect(
+            menu.muteItem == CommentMenuItems.MuteDescriptor(
+                title: "Mute Avery Writes",
+                systemImage: "speaker.slash",
+                target: route
+            )
+        )
     }
 
     @Test func muteItemTargetsSameConfirmRouteAsOtwarchiveAndProfile() throws {
@@ -211,7 +202,13 @@ struct CommentMuteTests {
             showsReply: true,
             handlers: handlers
         )
-        #expect(Self.renderedMenuContains("Mute Avery Writes", in: menu))
+        #expect(
+            menu.muteItem == CommentMenuItems.MuteDescriptor(
+                title: "Mute Avery Writes",
+                systemImage: "speaker.slash",
+                target: route
+            )
+        )
     }
 
     @Test func commentMuteFlowReachesSubmitSuccessWithoutReloadingProfileHeader() async throws {

@@ -1532,11 +1532,31 @@ private struct CommentPostRow: View {
 }
 
 struct CommentMenuItems: View {
+    struct MuteDescriptor: Equatable {
+        let title: String
+        let systemImage: String
+        let target: AO3AuthorRoute
+    }
+
     let comment: AO3Comment
     let isLoggedIn: Bool
     let currentUsername: String?
     let showsReply: Bool
     let handlers: CommentThreadHandlers
+
+    var muteItem: MuteDescriptor? {
+        guard handlers.onMute != nil,
+              let target = comment.muteTargetRoute(
+                  isLoggedIn: isLoggedIn,
+                  currentUsername: currentUsername
+              )
+        else { return nil }
+        return MuteDescriptor(
+            title: "Mute \(comment.author)",
+            systemImage: "speaker.slash",
+            target: target
+        )
+    }
 
     var body: some View {
         MenuTopRow {
@@ -1577,13 +1597,9 @@ struct CommentMenuItems: View {
                 Label("Go to Chapter \(chapter)", systemImage: "book")
             }
         }
-        if let onMute = handlers.onMute,
-           let muteTarget = comment.muteTargetRoute(
-               isLoggedIn: isLoggedIn,
-               currentUsername: currentUsername
-           ) {
-            Button { onMute(muteTarget) } label: {
-                Label("Mute \(comment.author)", systemImage: "speaker.slash")
+        if let onMute = handlers.onMute, let item = muteItem {
+            Button { onMute(item.target) } label: {
+                Label(item.title, systemImage: item.systemImage)
             }
         }
         if comment.editPath != nil {
