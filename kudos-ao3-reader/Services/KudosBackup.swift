@@ -1902,6 +1902,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     var workSymbolPlacement: String?
     /// Nil means an older backup has no opinion about the local preference.
     var useEmbeddedCoverArt: Bool?
+    /// Settings › Library's weekly saved-series check (T-519b). Nil = an older backup has no opinion.
+    var checksSavedSeriesWeekly: Bool?
     /// Settings › Listening's pinned voice id (`ReaderSpeechPreferences.voiceIDKey`).
     /// Nil when absent or nothing is stored so exports with no pinned voice omit it.
     var readerSpeechVoiceID: String?
@@ -1935,6 +1937,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         libraryPageArrangement: LibraryPageArrangement? = nil,
         workSymbolPlacement: String? = nil,
         useEmbeddedCoverArt: Bool? = nil,
+        checksSavedSeriesWeekly: Bool? = nil,
         readerSpeechVoiceID: String? = nil,
         readerSpeechVoiceName: String? = nil,
         lastAddedReadingQueueID: String? = nil
@@ -1963,6 +1966,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         self.libraryPageArrangement = libraryPageArrangement
         self.workSymbolPlacement = workSymbolPlacement
         self.useEmbeddedCoverArt = useEmbeddedCoverArt
+        self.checksSavedSeriesWeekly = checksSavedSeriesWeekly
         self.readerSpeechVoiceID = readerSpeechVoiceID
         self.readerSpeechVoiceName = readerSpeechVoiceName
         self.lastAddedReadingQueueID = lastAddedReadingQueueID
@@ -1993,6 +1997,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         case libraryPageArrangement
         case workSymbolPlacement
         case useEmbeddedCoverArt
+        case checksSavedSeriesWeekly
         case readerSpeechVoiceID
         case readerSpeechVoiceName
         case lastAddedReadingQueueID
@@ -2049,6 +2054,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
                 forKey: .workSymbolPlacement
             )) ?? nil,
             useEmbeddedCoverArt: (try? container.decodeIfPresent(Bool.self, forKey: .useEmbeddedCoverArt)) ?? nil,
+            checksSavedSeriesWeekly: (try? container.decodeIfPresent(Bool.self, forKey: .checksSavedSeriesWeekly)) ?? nil,
             readerSpeechVoiceID: (try? container.decodeIfPresent(
                 String.self,
                 forKey: .readerSpeechVoiceID
@@ -2124,6 +2130,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             workSymbolPlacement: defaults.string(forKey: WorkSymbolPlacement.storageKey),
             useEmbeddedCoverArt: defaults.object(forKey: "useEmbeddedCoverArt") == nil
                 ? nil : defaults.bool(forKey: "useEmbeddedCoverArt"),
+            checksSavedSeriesWeekly: defaults.object(forKey: "checksSavedSeriesWeekly") == nil ? nil : defaults.bool(forKey: "checksSavedSeriesWeekly"),
             readerSpeechVoiceID: capturedVoiceID,
             readerSpeechVoiceName: capturedVoiceName,
             lastAddedReadingQueueID: defaults.string(forKey: "lastAddedReadingQueueID")
@@ -2199,6 +2206,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             defaults.set(workSymbolPlacement, forKey: WorkSymbolPlacement.storageKey)
         }
         if let useEmbeddedCoverArt { defaults.set(useEmbeddedCoverArt, forKey: "useEmbeddedCoverArt") }
+        if let checksSavedSeriesWeekly { defaults.set(checksSavedSeriesWeekly, forKey: "checksSavedSeriesWeekly") }
         // Apply the display name only together with its voice id; an archive
         // with a name alone must never label a different local voice id.
         if let voiceID = Self.trimmedNonEmpty(readerSpeechVoiceID) {

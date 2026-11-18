@@ -449,7 +449,9 @@ struct AO3SeriesDetailView: View {
            let parsed = AO3ParsedSeries.parse(
                html: html, ao3SeriesID: series.id, pageWorkIDs: ids, isWholeList: isWholeList
            ) {
-            SavedSeriesStore.upsert(parsed, in: context)
+            let saved = SavedSeriesStore.upsert(parsed, in: context)
+            if auth.isLoggedIn { saved?.isSubscribed = subscribeModel.isSubscribed }
+            SavedSeriesWeeklyCheck.recordView(seriesID: series.id, in: context)
         } else if isWholeList, let saved = SavedSeriesStore.series(for: series.id, in: context),
                   saved.partCount == ids.count {
             saved.partWorkIDs = SavedSeries.normalizedPartWorkIDs(ids)

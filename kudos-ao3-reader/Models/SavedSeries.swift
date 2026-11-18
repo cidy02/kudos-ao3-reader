@@ -104,6 +104,11 @@ final class SavedSeries {
     var partWorkIDs: [Int] = []
     var checkedAt: Date = Date()
     var lastModifiedAt: Date = Date()
+    /// How often the reader opened this series or one of its works (T-519b: most viewed is checked first).
+    var viewCount: Int = 0
+    var lastViewedAt: Date?
+    /// The series page's Subscribe button said "Unsubscribe" the last time the reader opened it.
+    var isSubscribed: Bool = false
 
     init(
         id: UUID = UUID(),

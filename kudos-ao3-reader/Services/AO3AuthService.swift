@@ -247,11 +247,13 @@ nonisolated enum AO3AutomatedFeature: CaseIterable, Sendable {
     case rankTop100
     case queueSourceCounts
     case followedTagFeeds
+    case savedSeriesChecks
 
     var token: String {
         switch self {
         case .rankTop100: "feature=rank-top-100"
         case .queueSourceCounts: "feature=queue-source-counts"
+        case .savedSeriesChecks: "feature=saved-series-checks"
         case .followedTagFeeds: "feature=followed-tag-feeds"
         }
     }

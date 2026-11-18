@@ -193,6 +193,10 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         .onAppear {
             if appearedAt == nil {
                 appearedAt = Date()
+                SavedSeriesWeeklyCheck.recordView(
+                    seriesID: localWork?.ao3SeriesID ?? ReadingQueueService.ao3SeriesID(from: displaySeriesURL),
+                    in: context
+                )
                 dismissIfAuthorBylineConflict()
                 #if DEBUG
                 if DebugLaunchRoute.pageRoute?.hasPrefix("mycopy:") == true { showingMyCopy = true }
