@@ -95,8 +95,10 @@ struct UpdateMarker: View {
     let text: String
     var isConfirmed = true
     var spokenLabel: String?
+    var wraps = false
 
     @Environment(\.accentInk) private var accentInk
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         HStack(spacing: 6) {
@@ -104,12 +106,13 @@ struct UpdateMarker: View {
                 .font(.footnote.weight(.medium))
                 .monospacedDigit()
                 .foregroundStyle(.primary)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
             Circle()
                 .fill(isConfirmed ? accentInk : Color.clear)
                 .overlay(Circle().strokeBorder(isConfirmed ? Color.clear : Color.secondary, lineWidth: 1.5))
                 .frame(width: 8, height: 8)
         }
-        .fixedSize()
+        .fixedSize(horizontal: !wraps, vertical: true)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spokenLabel ?? text)
     }

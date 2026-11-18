@@ -104,6 +104,9 @@ enum ReadingQueueService {
         let queues = (try? context.fetch(descriptor)) ?? []
         let savedQueues = queues.filter { $0.kind == .savedForLater }
         if let primary = savedQueues.first {
+            if primary.isPendingDeletion {
+                PreservedWorkService.restore(primary, in: context)
+            }
             primary.name = savedForLaterName
             primary.kind = .savedForLater
             primary.sortOrder = min(primary.sortOrder, -1000)
@@ -425,6 +428,16 @@ enum ReadingQueueService {
         normalize(work)
         context.saveBestEffort(reason: "Saving queue membership failed")
         return membership
+    }
+
+    static func move(
+        _ works: [SavedWork], from source: ReadingQueue, to destination: ReadingQueue, in context: ModelContext
+    ) {
+        guard source.id != destination.id else { return }
+        for work in works {
+            add(work, to: destination, in: context)
+            removeFromQueueAndDeleteIfQueueOnly(work, from: source, in: context)
+        }
     }
 
     /// 1h's library picker offers these: real Library works (queue-only

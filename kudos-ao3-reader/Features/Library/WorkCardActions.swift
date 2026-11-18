@@ -651,8 +651,10 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
 
 private struct RemoteWorkContextMenuModifier: ViewModifier {
     let work: AO3WorkSummary
+    var quickQueue: (() -> Void)?
 
     @Environment(\.modelContext) private var context
+    @Environment(\.accentFill) private var accentFill
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     // A soft-deleted (pending Recently Deleted) work must not match here — the
     // remote card should offer a fresh "Save" rather than "Delete" for a work
@@ -684,8 +686,15 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
             // Remove Download, which un-keeps a work.
             .swipeActions(
                 edge: .leading,
-                allowsFullSwipe: existingLocalWork.map { WorkDownload.action(for: $0) != .removeDownload } ?? true
+                allowsFullSwipe: quickQueue != nil
+                    || (existingLocalWork.map { WorkDownload.action(for: $0) != .removeDownload } ?? true)
             ) {
+                if let quickQueue {
+                    Button(action: quickQueue) {
+                        Label("Add to Queue", systemImage: "list.bullet.rectangle")
+                    }
+                    .tint(accentFill)
+                }
                 // A work already here, even as a copy fetched only to read, takes
                 // the shared control: Download keeps it, Remove Download un-keeps it.
                 if let existingLocalWork, WorkDownload.action(for: existingLocalWork) != nil {
@@ -732,7 +741,7 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                 }
 
                 Button(action: addToQueue) {
-                    Label("Add to Queue", systemImage: "list.bullet.rectangle")
+                    Label("Choose Queue", systemImage: "list.bullet.rectangle")
                 }
                 .tint(.orange)
                 .disabled(working)
@@ -804,7 +813,7 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                 }
 
                 Button {
-                    addToQueue()
+                    if let quickQueue { quickQueue() } else { addToQueue() }
                 } label: {
                     Label("Add to Queue", systemImage: "list.bullet.rectangle")
                 }
@@ -978,8 +987,8 @@ extension View {
         ))
     }
 
-    func remoteWorkContextMenu(work: AO3WorkSummary) -> some View {
-        modifier(RemoteWorkContextMenuModifier(work: work))
+    func remoteWorkContextMenu(work: AO3WorkSummary, quickQueue: (() -> Void)? = nil) -> some View {
+        modifier(RemoteWorkContextMenuModifier(work: work, quickQueue: quickQueue))
     }
 }
 

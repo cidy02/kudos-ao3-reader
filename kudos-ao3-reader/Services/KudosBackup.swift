@@ -1854,6 +1854,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     /// Settings › Listening's picked voice display name (`ReaderSpeechPreferences.voiceNameKey`).
     /// Applied only alongside `readerSpeechVoiceID` so one device's label never lands on another's id.
     var readerSpeechVoiceName: String?
+    var lastAddedReadingQueueID: String?
 
     init(
         readerFontID: String,
@@ -1881,7 +1882,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         workSymbolPlacement: String? = nil,
         useEmbeddedCoverArt: Bool? = nil,
         readerSpeechVoiceID: String? = nil,
-        readerSpeechVoiceName: String? = nil
+        readerSpeechVoiceName: String? = nil,
+        lastAddedReadingQueueID: String? = nil
     ) {
         self.readerFontID = readerFontID
         self.readerMode = readerMode
@@ -1909,6 +1911,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         self.useEmbeddedCoverArt = useEmbeddedCoverArt
         self.readerSpeechVoiceID = readerSpeechVoiceID
         self.readerSpeechVoiceName = readerSpeechVoiceName
+        self.lastAddedReadingQueueID = lastAddedReadingQueueID
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1938,6 +1941,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         case useEmbeddedCoverArt
         case readerSpeechVoiceID
         case readerSpeechVoiceName
+        case lastAddedReadingQueueID
     }
 
     init(from decoder: Decoder) throws {
@@ -1998,6 +2002,10 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             readerSpeechVoiceName: (try? container.decodeIfPresent(
                 String.self,
                 forKey: .readerSpeechVoiceName
+            )) ?? nil,
+            lastAddedReadingQueueID: (try? container.decodeIfPresent(
+                String.self,
+                forKey: .lastAddedReadingQueueID
             )) ?? nil
         )
     }
@@ -2063,7 +2071,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             useEmbeddedCoverArt: defaults.object(forKey: "useEmbeddedCoverArt") == nil
                 ? nil : defaults.bool(forKey: "useEmbeddedCoverArt"),
             readerSpeechVoiceID: capturedVoiceID,
-            readerSpeechVoiceName: capturedVoiceName
+            readerSpeechVoiceName: capturedVoiceName,
+            lastAddedReadingQueueID: defaults.string(forKey: "lastAddedReadingQueueID")
         )
     }
 
@@ -2146,6 +2155,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             } else if localVoiceID != voiceID {
                 defaults.removeObject(forKey: ReaderSpeechPreferences.voiceNameKey)
             }
+        }
+        if let lastAddedReadingQueueID, UUID(uuidString: lastAddedReadingQueueID) != nil {
+            defaults.set(lastAddedReadingQueueID, forKey: "lastAddedReadingQueueID")
         }
     }
 

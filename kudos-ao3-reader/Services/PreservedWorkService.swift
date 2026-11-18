@@ -111,14 +111,25 @@ enum PreservedWorkService {
 
     /// Moves a work to Recently Deleted. The EPUB stays on disk for the whole
     /// recovery window so restoring is instant — freeing it is `hardDelete`'s job.
-    static func softDelete(_ work: SavedWork, in context: ModelContext) {
+    /// Pass prior deletion dates when undoing an accidental revival so the work
+    /// keeps its remaining recovery window, including legacy missing dates.
+    static func softDelete(
+        _ work: SavedWork,
+        priorDates: (deletedAt: Date?, scheduledAt: Date?)? = nil,
+        in context: ModelContext
+    ) {
         let now = Date()
         #if os(iOS)
         NotificationCenter.default.post(name: .kudosWorkEPUBWillChange, object: work.id)
         #endif
         work.isPendingDeletion = true
-        work.deletedAt = now
-        work.permanentDeletionScheduledAt = now.addingTimeInterval(recoveryWindow)
+        if let priorDates {
+            work.deletedAt = priorDates.deletedAt
+            work.permanentDeletionScheduledAt = priorDates.scheduledAt
+        } else {
+            work.deletedAt = now
+            work.permanentDeletionScheduledAt = now.addingTimeInterval(recoveryWindow)
+        }
         work.markModified(now)
         SyncTombstones.recordDeletion(of: work, in: context)
         context.saveBestEffort(reason: "Saving soft-deleted work failed")

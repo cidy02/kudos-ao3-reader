@@ -630,6 +630,10 @@ struct ReaderView: View {
                 // until the reader actually moves.
                 progressBridge.seed(spine: currentIndex, fraction: work.lastScrollFraction)
             }
+            if work.modelContext != nil, !work.isPendingDeletion {
+                work.markProgressModified(Date())
+                try? modelContext.save()
+            }
             Log.epub.info("Opened EPUB: \(parsed.chapters.count) chapters")
         } catch {
             document = nil
