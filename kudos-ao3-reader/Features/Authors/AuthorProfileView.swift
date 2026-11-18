@@ -712,8 +712,9 @@ private extension AuthorProfileView {
                 if let pseud = model.route.pseud {
                     LabeledContent("Selected Pseud", value: pseud).cardRow()
                 }
-                if !about.joinedDate.isEmpty {
-                    LabeledContent("Joined", value: about.joinedDate).cardRow()
+                let joined = about.displayJoinedDate()
+                if !joined.isEmpty {
+                    LabeledContent("Joined", value: joined).cardRow()
                 }
                 if let userID = about.userID {
                     LabeledContent("User ID", value: userID.formatted()).cardRow()

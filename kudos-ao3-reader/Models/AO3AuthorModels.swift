@@ -521,6 +521,15 @@ nonisolated struct AO3AuthorAbout: Hashable {
     var joinedDate: String = ""
     var userID: Int?
     var actions: [AO3AuthorWebAction] = []
+
+    /// AO3's `I joined on:` calendar date formatted through `WorkStat.displayDate`
+    /// in GMT (POSIX `yyyy-MM-dd`, no time-zone day shift), or empty when absent.
+    /// Unparseable values are returned verbatim.
+    func displayJoinedDate(locale: Locale = .autoupdatingCurrent) -> String {
+        let trimmed = joinedDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        return WorkStat.displayDate(trimmed, locale: locale)
+    }
 }
 
 nonisolated struct AO3SeriesSummary: Identifiable, Hashable {
