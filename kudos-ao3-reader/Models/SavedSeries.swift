@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import SwiftSoup
 
 /// Value-type snapshot of a `SavedSeries` row for background insights and view calculations.
 nonisolated struct SavedSeriesSnapshot: Equatable, Sendable {
@@ -60,6 +61,31 @@ nonisolated struct AO3ParsedSeries: Equatable, Sendable {
         self.wordCount = max(0, wordCount)
         self.partWorkIDs = SavedSeries.normalizedPartWorkIDs(partWorkIDs)
         self.hasCompleteWorkList = hasCompleteWorkList
+    }
+
+    /// The header of `/series/<id>` (otwarchive `app/views/series/show.html.erb`): `h2.heading`, then
+    /// `dl.series.meta` whose `dl.stats` holds `dd.words`, `dd.works` and an unclassed
+    /// `<dt>Complete:</dt><dd>Yes|No</dd>`. `pageWorkIDs` are the works listed on this page, in series order.
+    static func parse(
+        html: String,
+        ao3SeriesID: Int,
+        pageWorkIDs: [Int],
+        isWholeList: Bool
+    ) -> AO3ParsedSeries? {
+        guard ao3SeriesID > 0, let doc = try? SwiftSoup.parse(html),
+              let meta = try? doc.select("dl.series.meta").first() else { return nil }
+        let labels = (try? meta.select("dl.stats dt").array()) ?? []
+        let completeText = labels.first { ((try? $0.text()) ?? "").hasPrefix("Complete") }
+            .flatMap { try? $0.nextElementSibling()?.text() }
+        return AO3ParsedSeries(
+            ao3SeriesID: ao3SeriesID,
+            title: (try? doc.select("h2.heading").first()?.text()) ?? "",
+            partCount: AO3Client.statInt("works", in: meta) ?? 0,
+            isComplete: completeText?.trimmingCharacters(in: .whitespaces) == "Yes",
+            wordCount: AO3Client.statInt("words", in: meta) ?? 0,
+            partWorkIDs: pageWorkIDs,
+            hasCompleteWorkList: isWholeList
+        )
     }
 }
 
@@ -136,38 +162,15 @@ enum SavedSeriesStore {
         in context: ModelContext,
         now: Date = Date()
     ) -> SavedSeries? {
-        upsert(
-            ao3SeriesID: parsed.ao3SeriesID,
-            title: parsed.title,
-            partCount: parsed.partCount,
-            isComplete: parsed.isComplete,
-            wordCount: parsed.wordCount,
-            partWorkIDs: parsed.partWorkIDs,
-            hasCompleteWorkList: parsed.hasCompleteWorkList,
-            in: context,
-            now: now
-        )
-    }
-
-    @discardableResult
-    static func upsert(
-        ao3SeriesID: Int,
-        title: String,
-        partCount: Int,
-        isComplete: Bool,
-        wordCount: Int,
-        partWorkIDs: [Int],
-        hasCompleteWorkList: Bool,
-        in context: ModelContext,
-        now: Date = Date()
-    ) -> SavedSeries? {
+        let ao3SeriesID = parsed.ao3SeriesID, isComplete = parsed.isComplete
+        let hasCompleteWorkList = parsed.hasCompleteWorkList
         guard ao3SeriesID > 0 else { return nil }
 
         let targetID = ao3SeriesID
-        let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let clampedPartCount = max(0, partCount)
-        let clampedWordCount = max(0, wordCount)
-        let normalizedWorkIDs = SavedSeries.normalizedPartWorkIDs(partWorkIDs)
+        let normalizedTitle = parsed.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clampedPartCount = parsed.partCount
+        let clampedWordCount = parsed.wordCount
+        let normalizedWorkIDs = parsed.partWorkIDs
 
         let descriptor = FetchDescriptor<SavedSeries>(
             predicate: #Predicate<SavedSeries> { $0.ao3SeriesID == targetID }
@@ -224,8 +227,4 @@ enum SavedSeriesStore {
         return rows.map(\.snapshot)
     }
 
-    static func delete(_ savedSeries: SavedSeries, in context: ModelContext) {
-        SyncTombstones.recordDeletion(of: savedSeries, in: context)
-        context.delete(savedSeries)
-    }
 }

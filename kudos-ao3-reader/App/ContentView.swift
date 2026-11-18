@@ -757,6 +757,6 @@ private struct WebKitPrewarmView: View {
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
             SavedSearch.self, QueueSavedSearchLink.self, ReadingAnnotation.self,
             ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self,
-            FollowedTag.self, TagAlias.self
+            FollowedTag.self, TagAlias.self, SavedSeries.self
         ], inMemory: true)
 }

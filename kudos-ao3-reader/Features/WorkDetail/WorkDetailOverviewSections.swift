@@ -26,11 +26,15 @@ enum WorkDetailDisclosure {
         return parts.isEmpty ? "No AO3 tags" : parts.joined(separator: " · ")
     }
 
-    /// The series' size and length are not known here: the device holds only the
-    /// works downloaded from it, so a count or word total would understate a
-    /// longer series. The series card says "Part N" for the same reason.
-    static func seriesDigest(title: String, position: Int) -> String {
-        position > 0 ? "\(title) · part \(position)" : title
+    /// The series' size comes only from AO3's own count, saved when the reader opened the series page
+    /// (T-519): the works downloaded here would understate a longer series. Without it, "Part N" alone.
+    static func seriesDigest(title: String, position: Int, partCount: Int? = nil) -> String {
+        position > 0 ? "\(title) · \(seriesPartLabel(position: position, partCount: partCount).lowercased())" : title
+    }
+
+    static func seriesPartLabel(position: Int, partCount: Int?) -> String {
+        if let partCount, partCount >= position { return "Part \(position) of \(partCount)" }
+        return "Part \(position)"
     }
 }
 
@@ -309,7 +313,8 @@ extension WorkDetailView {
                 WorkDetailDisclosureHeader(
                     title: "Series",
                     digest: WorkDetailDisclosure.seriesDigest(
-                        title: displaySeriesTitle, position: displaySeriesPosition
+                        title: displaySeriesTitle, position: displaySeriesPosition,
+                        partCount: displaySeriesPartCount
                     ),
                     isExpanded: $seriesExpanded
                 )
@@ -384,7 +389,9 @@ extension WorkDetailView {
             VStack(alignment: .leading, spacing: 0) {
                 Text(displaySeriesTitle).font(.body)
                 if displaySeriesPosition > 0 {
-                    Text("Part \(displaySeriesPosition)")
+                    Text(WorkDetailDisclosure.seriesPartLabel(
+                        position: displaySeriesPosition, partCount: displaySeriesPartCount
+                    ))
                         .font(.footnote)
                         .foregroundStyle(.secondaryInk)
                 }
