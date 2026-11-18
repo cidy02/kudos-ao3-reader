@@ -904,6 +904,13 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         localWork?.seriesPosition ?? remote?.seriesPosition ?? 0
     }
 
+    /// AO3's part count for this work's series, once the reader has opened the series page (T-519).
+    var displaySeriesPartCount: Int? {
+        guard let id = localWork?.ao3SeriesID ?? ReadingQueueService.ao3SeriesID(from: displaySeriesURL),
+              let saved = SavedSeriesStore.series(for: id, in: context) else { return nil }
+        return saved.snapshot.effectivePartCount
+    }
+
     var displaySeriesURL: String {
         if let url = localWork?.seriesURL, !url.isEmpty { return url }
         return remote?.seriesURL ?? ""

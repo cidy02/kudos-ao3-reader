@@ -440,6 +440,23 @@ struct AO3SeriesDetailView: View {
         }
     }
 
+    /// Keeps what this page says about the series (T-519): the header from page 1, and the whole part list once
+    /// every page is loaded. No request of its own: it reads the page the reader just opened.
+    private func recordSavedSeries(pageOneHTML: String?) {
+        let ids = works.map(\.id)
+        let isWholeList = currentPage >= totalPages
+        if let html = pageOneHTML,
+           let parsed = AO3ParsedSeries.parse(
+               html: html, ao3SeriesID: series.id, pageWorkIDs: ids, isWholeList: isWholeList
+           ) {
+            SavedSeriesStore.upsert(parsed, in: context)
+        } else if isWholeList, let saved = SavedSeriesStore.series(for: series.id, in: context),
+                  saved.partCount == ids.count {
+            saved.partWorkIDs = SavedSeries.normalizedPartWorkIDs(ids)
+            saved.lastModifiedAt = Date()
+        }
+    }
+
     private func load(
         page: Int,
         replace: Bool,
@@ -494,6 +511,7 @@ struct AO3SeriesDetailView: View {
             if page == 1 {
                 subscribeModel.syncFromSeriesPage(html: cached.html, isLoggedIn: auth.isLoggedIn)
             }
+            if !cached.isStale { recordSavedSeries(pageOneHTML: page == 1 ? cached.html : nil) }
             isShowingStaleCache = replace
                 ? cached.isStale
                 : isShowingStaleCache || cached.isStale
