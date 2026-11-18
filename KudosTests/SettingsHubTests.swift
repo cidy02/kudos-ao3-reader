@@ -274,46 +274,128 @@ struct SettingsHubTests {
         let source = try #require(UserDefaults(suiteName: sourceSuite))
         defer { source.removePersistentDomain(forName: sourceSuite) }
 
-        // Unset -> omitted from exported JSON.
+        // Unset -> both id and name omitted from exported JSON.
         let unsetCaptured = KudosBackupSettings.capture(defaults: source)
+        #expect(unsetCaptured.readerSpeechVoiceID == nil)
         #expect(unsetCaptured.readerSpeechVoiceName == nil)
         let unsetJSON = try #require(
             JSONSerialization.jsonObject(with: JSONEncoder().encode(unsetCaptured)) as? [String: Any]
         )
+        #expect(unsetJSON["readerSpeechVoiceID"] == nil)
         #expect(unsetJSON["readerSpeechVoiceName"] == nil)
 
-        // Empty string -> also omitted from exported JSON.
+        // Empty strings -> also omitted from exported JSON.
+        source.set("", forKey: ReaderSpeechPreferences.voiceIDKey)
         source.set("", forKey: ReaderSpeechPreferences.voiceNameKey)
         let emptyCaptured = KudosBackupSettings.capture(defaults: source)
+        #expect(emptyCaptured.readerSpeechVoiceID == nil)
         #expect(emptyCaptured.readerSpeechVoiceName == nil)
         let emptyJSON = try #require(
             JSONSerialization.jsonObject(with: JSONEncoder().encode(emptyCaptured)) as? [String: Any]
         )
+        #expect(emptyJSON["readerSpeechVoiceID"] == nil)
         #expect(emptyJSON["readerSpeechVoiceName"] == nil)
 
-        // Stored voice name -> travels through JSON and restores to destination.
+        // Stored voice id + name -> travel together through JSON and restore onto destination.
+        source.set("af_bella", forKey: ReaderSpeechPreferences.voiceIDKey)
         source.set("Bella", forKey: ReaderSpeechPreferences.voiceNameKey)
         let setCaptured = KudosBackupSettings.capture(defaults: source)
+        #expect(setCaptured.readerSpeechVoiceID == "af_bella")
         #expect(setCaptured.readerSpeechVoiceName == "Bella")
         let encoded = try JSONEncoder().encode(setCaptured)
         let setJSON = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        #expect(setJSON["readerSpeechVoiceID"] as? String == "af_bella")
         #expect(setJSON["readerSpeechVoiceName"] as? String == "Bella")
 
         let decoded = try JSONDecoder().decode(KudosBackupSettings.self, from: encoded)
+        #expect(decoded.readerSpeechVoiceID == "af_bella")
         #expect(decoded.readerSpeechVoiceName == "Bella")
 
         let destinationSuite = "SettingsHubTests.dest.\(UUID().uuidString)"
         let destination = try #require(UserDefaults(suiteName: destinationSuite))
         defer { destination.removePersistentDomain(forName: destinationSuite) }
         decoded.apply(to: destination)
+        #expect(destination.string(forKey: ReaderSpeechPreferences.voiceIDKey) == "af_bella")
         #expect(destination.string(forKey: ReaderSpeechPreferences.voiceNameKey) == "Bella")
 
-        // Absent key in incoming backup leaves existing local value intact.
+        // Pin Samantha locally; an archive carrying Bella's name WITHOUT an id
+        // must never overwrite Samantha's name onto Samantha's id.
+        destination.set("com.apple.voice.compact.en-US.Samantha", forKey: ReaderSpeechPreferences.voiceIDKey)
+        destination.set("Samantha", forKey: ReaderSpeechPreferences.voiceNameKey)
+        var nameWithoutID = unsetCaptured
+        nameWithoutID.readerSpeechVoiceName = "Bella"
+        let decodedNameWithoutID = try JSONDecoder().decode(
+            KudosBackupSettings.self,
+            from: JSONEncoder().encode(nameWithoutID)
+        )
+        decodedNameWithoutID.apply(to: destination)
+        #expect(
+            destination.string(forKey: ReaderSpeechPreferences.voiceIDKey)
+                == "com.apple.voice.compact.en-US.Samantha"
+        )
+        #expect(destination.string(forKey: ReaderSpeechPreferences.voiceNameKey) == "Samantha")
+
+        // Absent id + name in an older archive leaves both local values intact.
         let unsetDecoded = try JSONDecoder().decode(
             KudosBackupSettings.self,
             from: JSONEncoder().encode(unsetCaptured)
         )
         unsetDecoded.apply(to: destination)
-        #expect(destination.string(forKey: ReaderSpeechPreferences.voiceNameKey) == "Bella")
+        #expect(
+            destination.string(forKey: ReaderSpeechPreferences.voiceIDKey)
+                == "com.apple.voice.compact.en-US.Samantha"
+        )
+        #expect(destination.string(forKey: ReaderSpeechPreferences.voiceNameKey) == "Samantha")
+
+        // An archive carrying a different voice id WITHOUT a name clears the stale
+        // local name instead of leaving Samantha's label on Bella's id.
+        var idWithoutName = unsetCaptured
+        idWithoutName.readerSpeechVoiceID = "af_bella"
+        let decodedIDWithoutName = try JSONDecoder().decode(
+            KudosBackupSettings.self,
+            from: JSONEncoder().encode(idWithoutName)
+        )
+        decodedIDWithoutName.apply(to: destination)
+        #expect(destination.string(forKey: ReaderSpeechPreferences.voiceIDKey) == "af_bella")
+        #expect(destination.string(forKey: ReaderSpeechPreferences.voiceNameKey) == nil)
+    }
+
+    @Test func voiceNameReconciliationClearsMissingVoiceAndPreservesOnFailedLoad() {
+        let kokoroCatalog = [
+            (identifier: "af_heart", name: "Heart"),
+            (identifier: "af_bella", name: "Bella")
+        ]
+        // Pinned voice present in loaded catalog -> keeps/updates display name.
+        #expect(
+            ReaderSpeechPreferences.reconciledVoiceName(
+                voiceID: "af_bella",
+                currentVoiceName: "Old Bella",
+                catalogEntries: kokoroCatalog
+            ) == "Bella"
+        )
+        // Pinned Apple voice missing after switching to Kokoro -> clears stale name so hub says Automatic.
+        #expect(
+            ReaderSpeechPreferences.reconciledVoiceName(
+                voiceID: "com.apple.voice.compact.en-US.Samantha",
+                currentVoiceName: "Samantha",
+                catalogEntries: kokoroCatalog
+            ) == ""
+        )
+        // Catalog failed to load (empty list) -> never clears the stored name.
+        #expect(
+            ReaderSpeechPreferences.reconciledVoiceName(
+                voiceID: "com.apple.voice.compact.en-US.Samantha",
+                currentVoiceName: "Samantha",
+                catalogEntries: []
+            ) == "Samantha"
+        )
+        // No voice id pinned -> always clears.
+        #expect(
+            ReaderSpeechPreferences.reconciledVoiceName(
+                voiceID: "",
+                currentVoiceName: "Samantha",
+                catalogEntries: kokoroCatalog
+            ) == ""
+        )
     }
 }

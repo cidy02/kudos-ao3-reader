@@ -58,25 +58,82 @@ struct CommentAvatarTests {
         }
     }
 
-    @Test func spreadOfNamesProducesVariedTintsNotJustAppAccent() {
+    @Test func tintIsSoftPerNameAndNotSubjectPaletteOrAppAccent() {
         for theme in ReaderTheme.allCases {
             let backgrounds = Set(Self.sampleNames.map {
                 CommentAvatar.tintPalette(forName: $0, theme: theme).background.hexString
             })
             #expect(backgrounds.count > 10)
 
-            let appRed = ThemeManager.appTint(for: theme).hexString
-            let foregrounds = Set(Self.sampleNames.map {
-                CommentAvatar.tintPalette(forName: $0, theme: theme).foreground.hexString
-            })
-            #expect(foregrounds != [appRed])
+            let appTint = ThemeManager.appTint(for: theme)
+            let appInk = theme.accentInk(for: appTint)
+            for name in Self.sampleNames {
+                let palette = CommentAvatar.tintPalette(forName: name, theme: theme)
+                let subject = theme.subjectPalette(hue: CoverArt.hue(for: name))
+
+                // Soft translucent wash, never solid SubjectPalette.accent.
+                let bgRGBA = Self.rgba(palette.background, for: theme)
+                #expect(bgRGBA.alpha < 0.3, "\(name) on \(theme) should stay soft")
+                #expect(palette.background != subject.accent)
+                #expect(palette.background != appTint)
+
+                // Same-hue readable initial, never SubjectPalette's labelOnAccent/accentOnFill
+                // or the app accent.
+                #expect(palette.foreground != subject.labelOnAccent)
+                #expect(palette.foreground != subject.accentOnFill)
+                #expect(palette.foreground != appTint)
+                #expect(palette.foreground != appInk)
+            }
         }
     }
 
+    @Test func inboxPreviewRowUsesSharedCommentAvatar() {
+        let item = AO3InboxItem(
+            id: 1,
+            commenterName: "Alice",
+            isGuest: false,
+            subjectTitle: "Work",
+            excerpt: "Great chapter",
+            postedAgo: "1d",
+            isUnread: false,
+            isReplied: false,
+            canReply: false
+        )
+        let row = AccountInboxPreviewRow(item: item) {}
+        var queue: [Any] = [row.body]
+        var foundCommentAvatar = false
+        while !queue.isEmpty {
+            let current = queue.removeFirst()
+            if current is CommentAvatar {
+                foundCommentAvatar = true
+                break
+            }
+            let mirror = Mirror(reflecting: current)
+            if mirror.displayStyle == .optional {
+                if let child = mirror.children.first { queue.append(child.value) }
+                continue
+            }
+            queue += mirror.children.map(\.value)
+        }
+        #expect(foundCommentAvatar)
+    }
+
     @Test func initialClearsMinimumContrastOnAllFourThemesAndBackgrounds() throws {
+        // Test both the realistic commenter names and a spread covering every 10°
+        // slice of the hue wheel (including yellow/cyan/green and deep blue).
+        var namesToCheck = Self.sampleNames
+        var seenBuckets = Set<Int>()
+        for code in 0..<2000 where seenBuckets.count < 36 {
+            let candidate = "user_\(code)"
+            let bucket = Int((CoverArt.hue(for: candidate) * 36).rounded(.down)) % 36
+            if seenBuckets.insert(bucket).inserted {
+                namesToCheck.append(candidate)
+            }
+        }
+
         for theme in ReaderTheme.allCases {
             let grounds = Self.themeGrounds(for: theme)
-            for name in Self.sampleNames {
+            for name in namesToCheck {
                 let palette = CommentAvatar.tintPalette(forName: name, theme: theme)
                 for (groundName, ground) in grounds {
                     let composited = try Self.composite(

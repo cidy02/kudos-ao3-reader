@@ -47,6 +47,21 @@ nonisolated enum ReaderSpeechPreferences {
         }
         return "\(engineLabel) · \(trimmedName)"
     }
+
+    /// Reconciles the stored voice display name against a loaded catalog.
+    /// Clears the name when no voice id is pinned, or when a non-empty catalog
+    /// no longer contains the pinned id (so the hub falls back to "Automatic").
+    /// Leaves a pinned name alone when the catalog is empty (failed to load).
+    static func reconciledVoiceName(
+        voiceID: String,
+        currentVoiceName: String,
+        catalogEntries: [(identifier: String, name: String)]
+    ) -> String {
+        let trimmedID = voiceID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedID.isEmpty else { return "" }
+        guard !catalogEntries.isEmpty else { return currentVoiceName }
+        return catalogEntries.first(where: { $0.identifier == trimmedID })?.name ?? ""
+    }
 }
 
 #if os(iOS)
@@ -55,6 +70,17 @@ import ReadiumNavigator
 import ReadiumShared
 
 extension ReaderSpeechPreferences {
+    static func reconciledVoiceName(
+        voiceID: String,
+        currentVoiceName: String,
+        voices: [TTSVoice]
+    ) -> String {
+        reconciledVoiceName(
+            voiceID: voiceID,
+            currentVoiceName: currentVoiceName,
+            catalogEntries: voices.map { ($0.identifier, $0.name) }
+        )
+    }
 
     /// Multiplier on `AVSpeechUtteranceDefaultSpeechRate`. 1.0 = system default.
     static let rateRange: ClosedRange<Double> = 0.5 ... 1.5

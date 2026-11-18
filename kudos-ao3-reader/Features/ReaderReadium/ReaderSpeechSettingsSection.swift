@@ -719,29 +719,27 @@ struct ReaderSpeechSettingsSection: View {
         switch effectiveEngineKind {
         case .kokoro:
             if KokoroAnePlayback.supportsCoreML() {
-                guard KokoroAneAvailability.isUsableForPlayback else {
+                if KokoroAneAvailability.isUsableForPlayback {
+                    if coreMLKokoroService == nil {
+                        coreMLKokoroService = CoreMLKokoroTTSService()
+                    }
+                    voices = coreMLKokoroService?.availableVoices ?? []
+                } else {
                     voices = []
-                    return
                 }
-                if coreMLKokoroService == nil {
-                    coreMLKokoroService = CoreMLKokoroTTSService()
+            } else if let runtimeConfiguration = effectiveKokoroRuntimeConfiguration {
+                if cachedKokoroRuntimeConfiguration != runtimeConfiguration {
+                    kokoroService = SherpaKokoroTTSService(
+                        modelDirectory: downloadManager.modelDirectory(for: runtimeConfiguration.modelPack),
+                        modelPack: runtimeConfiguration.modelPack,
+                        executionProvider: runtimeConfiguration.executionProvider
+                    )
+                    cachedKokoroRuntimeConfiguration = runtimeConfiguration
                 }
-                voices = coreMLKokoroService?.availableVoices ?? []
-                return
-            }
-            guard let runtimeConfiguration = effectiveKokoroRuntimeConfiguration else {
+                voices = kokoroService?.availableVoices ?? []
+            } else {
                 voices = []
-                return
             }
-            if cachedKokoroRuntimeConfiguration != runtimeConfiguration {
-                kokoroService = SherpaKokoroTTSService(
-                    modelDirectory: downloadManager.modelDirectory(for: runtimeConfiguration.modelPack),
-                    modelPack: runtimeConfiguration.modelPack,
-                    executionProvider: runtimeConfiguration.executionProvider
-                )
-                cachedKokoroRuntimeConfiguration = runtimeConfiguration
-            }
-            voices = kokoroService?.availableVoices ?? []
         case .system:
             kokoroService = nil
             coreMLKokoroService = nil
@@ -752,11 +750,13 @@ struct ReaderSpeechSettingsSection: View {
     }
 
     private func syncStoredVoiceName() {
-        if voiceID.isEmpty {
-            if !voiceName.isEmpty { voiceName = "" }
-        } else if let matched = voices.first(where: { $0.identifier == voiceID }),
-                  voiceName != matched.name {
-            voiceName = matched.name
+        let updated = ReaderSpeechPreferences.reconciledVoiceName(
+            voiceID: voiceID,
+            currentVoiceName: voiceName,
+            voices: voices
+        )
+        if voiceName != updated {
+            voiceName = updated
         }
     }
 
