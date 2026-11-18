@@ -16,7 +16,7 @@ struct LibraryEditShelvesSheet: View {
                 Section {
                     if arrangement.sections.isEmpty {
                         Text("Nothing is on the page. Add a shelf below.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     ForEach(arrangement.sections) { section in
@@ -31,7 +31,7 @@ struct LibraryEditShelvesSheet: View {
                 Section {
                     if arrangement.buttons.isEmpty {
                         Text("Every shelf is on the page.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     ForEach(arrangement.buttons) { shelf in
@@ -51,13 +51,13 @@ struct LibraryEditShelvesSheet: View {
                                 .fixedSize(horizontal: false, vertical: true)
                             Text("Always in the Library header")
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer(minLength: 8)
                         Text(allWorksCount.compactCount)
                             .font(.body.monospacedDigit())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("All Works, \(allWorksCount). Always in the Library header")
@@ -198,7 +198,7 @@ struct LibraryEditShelvesSheet: View {
     private func countLabel(_ count: Int) -> some View {
         Text(count.compactCount)
             .font(.body.monospacedDigit())
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .accessibilityLabel("\(count)")
     }
 

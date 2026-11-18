@@ -323,7 +323,7 @@ struct ActiveFiltersBlock: View {
 
                     Text("\(items.count) \(items.count == 1 ? "filter" : "filters")")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
 
                     Spacer()
 
@@ -449,7 +449,7 @@ struct FilterLengthSection: View {
                 HStack(spacing: 8) {
                     Text("Words")
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                     TextField("", text: FilterRangeSlider.digitsOnly($wordsFrom), prompt: Text("from"))
                         .multilineTextAlignment(.trailing)
                         .accessibilityLabel("Word count from")
@@ -465,7 +465,7 @@ struct FilterLengthSection: View {
                 HStack(spacing: 8) {
                     Text("to")
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                     TextField("", text: FilterRangeSlider.digitsOnly($wordsTo), prompt: Text("to"))
                         .multilineTextAlignment(.trailing)
                         .accessibilityLabel("Word count to")
@@ -559,7 +559,7 @@ struct FilterResultsBar: View {
                         .background(isDark ? Color(white: 0.22) : Color.white)
                         // The readable accent ink (the fill red is ~1.2:1 on Dark's grey);
                         // disabled, plain secondary text the system does not dim further.
-                        .foregroundStyle(isSaveDisabled ? AnyShapeStyle(.secondary) : AnyShapeStyle(theme.accentInk))
+                        .foregroundStyle(isSaveDisabled ? AnyShapeStyle(.secondaryInk) : AnyShapeStyle(theme.accentInk))
                         .clipShape(Capsule())
                         .overlay(
                             Capsule()

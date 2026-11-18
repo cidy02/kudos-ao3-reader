@@ -133,9 +133,13 @@ struct WorkDetailBoard19Tests {
 
     @Test func statsCardPrintsShortDatesAndAddsTheYearWhenNotCurrent() {
         let now = Date(timeIntervalSince1970: 1_730_000_000) // Oct 2024
-        #expect(WorkDetailStats.shortDate("2024-03-03", now: now) == "Mar 3")
-        #expect(WorkDetailStats.shortDate("21 Oct 2023", now: now) == "Oct 21, 2023")
-        #expect(WorkDetailStats.shortDate("garbled", now: now) == "garbled")
+        let us = Locale(identifier: "en_US")
+        let gb = Locale(identifier: "en_GB")
+        #expect(WorkDetailStats.shortDate("2024-03-03", now: now, locale: us) == "Mar 3")
+        #expect(WorkDetailStats.shortDate("2024-03-03", now: now, locale: gb) == "3 Mar")
+        #expect(WorkDetailStats.shortDate("21 Oct 2023", now: now, locale: us) == "Oct 21, 2023")
+        #expect(WorkDetailStats.shortDate("21 Oct 2023", now: now, locale: gb) == "21 Oct 2023")
+        #expect(WorkDetailStats.shortDate("garbled", now: now, locale: us) == "garbled")
     }
 
     // MARK: My copy rows

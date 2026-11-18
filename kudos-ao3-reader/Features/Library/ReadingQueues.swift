@@ -51,7 +51,7 @@ struct ReadingQueueCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Text(detailLine(works: queued))
                     .font(.system(size: detailSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                 if !queued.isEmpty {
                     QueueProgressStrip(
@@ -76,7 +76,8 @@ struct ReadingQueueCard: View {
         StackedWorkCover(
             kind: .queue,
             name: queue.displayName,
-            hue: queue.displayHue,
+            identity: queue.id,
+            hue: queue.hue,
             pickedHex: queue.colorHex,
             backs: worksBehind(in: works),
             size: CGSize(width: 72, height: 72)
@@ -211,7 +212,7 @@ struct ReadingQueueStorageView: View {
                 Section {
                     if preservedWorks.isEmpty {
                         Text("None of your queued works is downloaded on this device.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     } else {
                         ForEach(preservedWorks) { work in
                             preservedWorkRow(work)
@@ -308,13 +309,13 @@ struct ReadingQueueStorageView: View {
                 }
                 Text(byteString(fileSize(for: work.fileURL)))
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             Spacer(minLength: 8)
             if work.isQueueOnlyWork {
                 Text("Queue")
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(.quaternary, in: Capsule())
@@ -427,12 +428,12 @@ struct AddToQueueView: View {
                                 HStack {
                                     ProgressView().accentFill()
                                     Text("Checking series size…")
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(.secondaryInk)
                                 }
                             } else if let seriesPrompt {
                                 Text(seriesPrompt.message)
                                     .font(.footnote)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.secondaryInk)
                             }
 
                             Button {
@@ -457,7 +458,7 @@ struct AddToQueueView: View {
                             if let seriesResult {
                                 Text(seriesCompletionText(seriesResult))
                                     .font(.footnote)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.secondaryInk)
                             }
                         }
                     } header: {

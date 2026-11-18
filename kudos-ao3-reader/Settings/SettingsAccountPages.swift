@@ -147,7 +147,7 @@ struct SettingsPrivacyPage: View {
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                Text(detail).font(.footnote).foregroundStyle(.secondary).monospacedDigit()
+                Text(detail).font(.footnote).foregroundStyle(.secondaryInk).monospacedDigit()
             }
         }
     }

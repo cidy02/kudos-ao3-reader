@@ -85,6 +85,19 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
     }
 }
 
+/// Counts for Home's "Reading Now" shelf below the Resume hero card (`T-551`).
+/// `readingNow[0]` is rendered above the header as the Resume hero, so only the
+/// remaining works (`max(0, total - 1)`) belong under "Reading Now", with at
+/// most `carouselLimit` (3) cards shown before "+N more".
+enum HomeReadingNowCount {
+    static let carouselLimit = 3
+
+    static func shelfCounts(total: Int) -> (sectionCount: Int, visibleCount: Int) {
+        let underHeader = max(0, total - 1)
+        return (sectionCount: underHeader, visibleCount: min(underHeader, carouselLimit))
+    }
+}
+
 /// The count beside Home's Subscriptions header. Home loads only page 1, and AO3
 /// pages subscriptions `ITEMS_PER_PAGE` (25) at a time, so the number of cards is
 /// the reader's total only when that page was the whole list. The page's own

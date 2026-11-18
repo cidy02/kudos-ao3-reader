@@ -144,6 +144,11 @@ enum PersistenceMigrationService {
         // libraries that have anything to hash. It also caps each pass, so a
         // large library needs several launches to finish, which a one-shot
         // migration cannot give it.
+        do {
+            try await ReadingSessionSnapshotBackfill(modelContainer: context.container).run(defaults: defaults)
+        } catch {
+            // Retry on the next launch; never mark an incomplete pass done.
+        }
         await backfillEPUBDigests(in: context)
         let current = PersistenceStatusStore.snapshot(defaults: defaults).migrationState
         guard current != .completed else { return current }
@@ -682,5 +687,39 @@ nonisolated enum SyncMerge {
               let incoming = SavedWork.totalProgression(in: locator)
         else { return false }
         return abs(incoming - local) >= ReadiumProgressPersistence.minProgressionDelta
+    }
+}
+
+/// SwiftData work stays on a model actor, off the launch/UI actor. A completion
+/// flag is written only after the whole pass saves, so an interrupted pass retries.
+@ModelActor
+actor ReadingSessionSnapshotBackfill {
+    func run(defaults: UserDefaults = .standard) async throws {
+        let key = "readingSessionMetadataSnapshotBackfilled"
+        guard !defaults.bool(forKey: key) else { return }
+        guard await MainActor.run(body: { PersistenceOperationGate.begin(.migration) }) else { return }
+        do {
+            let works = try modelContext.fetch(FetchDescriptor<SavedWork>())
+            let byID = Dictionary(works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            var offset = 0
+            while true {
+                var descriptor = FetchDescriptor<ReadingSession>(sortBy: [SortDescriptor(\.id)])
+                descriptor.fetchLimit = 100
+                descriptor.fetchOffset = offset
+                let sessions = try modelContext.fetch(descriptor)
+                guard !sessions.isEmpty else { break }
+                for session in sessions where !session.hasMetadataSnapshot {
+                    guard let work = byID[session.workID] else { continue }
+                    session.snapshot(from: work)
+                }
+                try modelContext.save()
+                offset += sessions.count
+            }
+            defaults.set(true, forKey: key)
+        } catch {
+            await MainActor.run { PersistenceOperationGate.end(.migration) }
+            throw error
+        }
+        await MainActor.run { PersistenceOperationGate.end(.migration) }
     }
 }

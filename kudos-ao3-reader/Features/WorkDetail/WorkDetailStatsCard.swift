@@ -67,18 +67,24 @@ enum WorkDetailStats {
         ]
     }
 
-    /// The board's short date: "Mar 3", with the year added when it is not the
-    /// current one. An unparseable string prints as AO3 wrote it.
-    static func shortDate(_ raw: String, now: Date = Date()) -> String {
+    /// The board's short date: "Mar 3", with the year added through `WorkStat.displayDate`
+    /// when it is not the current one. An unparseable string prints as AO3 wrote it.
+    static func shortDate(
+        _ raw: String,
+        now: Date = Date(),
+        locale: Locale = .autoupdatingCurrent
+    ) -> String {
         guard let date = WorkStat.date(from: raw) else { return raw }
         var utc = Calendar(identifier: .gregorian)
         utc.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
-        let sameYear = utc.component(.year, from: date) == utc.component(.year, from: now)
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = utc.timeZone
-        formatter.dateFormat = sameYear ? "MMM d" : "MMM d, yyyy"
-        return formatter.string(from: date)
+        if utc.component(.year, from: date) == utc.component(.year, from: now) {
+            return date.formatted(
+                Date.FormatStyle(locale: locale, calendar: utc, timeZone: utc.timeZone)
+                    .month(.abbreviated)
+                    .day()
+            )
+        }
+        return WorkStat.displayDate(raw, locale: locale)
     }
 
     private static func dateCell(_ label: String, _ raw: String) -> Cell {
@@ -153,7 +159,7 @@ struct WorkDetailStatsCard: View {
             Text(cell.label.uppercased())
                 .font(.caption2.weight(.semibold))
                 .tracking(0.4)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             HStack(spacing: 3) {

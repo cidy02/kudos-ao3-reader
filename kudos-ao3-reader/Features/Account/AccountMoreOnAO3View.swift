@@ -295,7 +295,7 @@ struct AccountMoreOnAO3View: View {
     private func footnote(_ text: String) -> some View {
         Text(text)
             .font(.system(size: footnoteSize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
     }

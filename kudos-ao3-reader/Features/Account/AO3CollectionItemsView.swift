@@ -177,7 +177,7 @@ struct AO3CollectionItemsView: View {
                     Text("\(pendingCount) staged")
                         .font(.system(size: stagedCountSize, weight: .medium))
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel(
                             "\(pendingCount) staged change\(pendingCount == 1 ? "" : "s")"
@@ -344,7 +344,7 @@ struct AO3CollectionItemsView: View {
     private var emptyCard: some View {
         Text("Nothing in this tab.")
             .font(.system(size: bodySize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
@@ -369,7 +369,7 @@ struct AO3CollectionItemsView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Text(message)
                 .font(.system(size: failureBodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
@@ -612,7 +612,7 @@ struct AO3CollectionItemCard: View {
             if !item.role.isEmpty {
                 Text(item.role)
                     .font(.system(size: roleSize, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(1)
                     .fixedSize()
             }
@@ -745,7 +745,7 @@ struct AO3CollectionItemCard: View {
             } else {
                 Text(isOn ? "On" : "Off")
                     .font(.system(size: actionSize, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -755,7 +755,7 @@ struct AO3CollectionItemCard: View {
     private func settingsLabel(_ label: String) -> some View {
         Text(label)
             .font(.system(size: settingsLabelSize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -771,7 +771,7 @@ struct AO3CollectionItemCard: View {
     private var removalNotice: some View {
         Text("This work will leave the collection when you submit your changes. It stays on AO3.")
             .font(.system(size: actionSize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -783,7 +783,7 @@ struct AO3CollectionItemCard: View {
             if !item.creatorByline.isEmpty {
                 Text(item.creatorByline)
                     .font(.system(size: captionSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
             actionRow
@@ -808,7 +808,7 @@ struct AO3CollectionItemCard: View {
             if !item.itemDateText.isEmpty {
                 Text(item.itemDateText)
                     .font(.system(size: captionSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .monospacedDigit()
                     .fixedSize(horizontal: false, vertical: true)
             }

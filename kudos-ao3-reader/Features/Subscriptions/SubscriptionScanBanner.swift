@@ -33,7 +33,7 @@ struct SubscriptionScanBanner: View {
             if let detailNote {
                 Text(detailNote)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
 

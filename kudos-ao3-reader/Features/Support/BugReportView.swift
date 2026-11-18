@@ -37,7 +37,7 @@ struct BugReportView: View {
                                 + "prefilled GitHub issue you can review and post. Nothing is "
                                 + "sent automatically.")
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                                 .multilineTextAlignment(.center)
                         }
                         .frame(maxWidth: .infinity)
@@ -63,7 +63,7 @@ struct BugReportView: View {
                         Text("Only these app and system details are sent with your report. Nothing "
                             + "personal is included, and never your AO3 account.")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
 
                     Section {

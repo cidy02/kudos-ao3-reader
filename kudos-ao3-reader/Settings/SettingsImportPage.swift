@@ -168,7 +168,7 @@ struct EPUBImportSettingsSection: View {
                 HStack(spacing: 12) {
                     ProgressView().accentFill()
                     Text(progressText ?? "Importing…")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
         } footer: {

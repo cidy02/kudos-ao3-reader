@@ -31,7 +31,7 @@ struct InsightsOptionsSheet: View {
                             Text("Discreet Mode")
                         } icon: {
                             Image(systemName: "eye.slash")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                     }
                     .tint(theme.effectiveTint)
@@ -41,7 +41,7 @@ struct InsightsOptionsSheet: View {
                             Text("Hide Reading Time")
                         } icon: {
                             Image(systemName: "clock")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                     }
                     .tint(theme.effectiveTint)
@@ -93,7 +93,7 @@ struct InsightsOptionsSheet: View {
                                     .foregroundStyle(.primary)
                             } icon: {
                                 Image(systemName: "info.circle")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.secondaryInk)
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
@@ -248,7 +248,7 @@ struct HowInsightsAreCountedSheet: View {
                 ForEach(paragraphs, id: \.self) { paragraph in
                     Text(paragraph)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

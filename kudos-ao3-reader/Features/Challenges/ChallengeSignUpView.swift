@@ -301,7 +301,7 @@ extension ChallengeSignUpView {
                         .foregroundStyle(.primary)
                     Text("Any relationship matches, not only the ones chosen")
                         .font(.system(size: captionSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -576,7 +576,7 @@ extension ChallengeSignUpView {
                 .accentFill()
             Text("Loading sign-up…")
                 .font(.system(size: loadingSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 24)
@@ -588,7 +588,7 @@ extension ChallengeSignUpView {
                 .font(.system(size: stateTitleSize, weight: .semibold))
             Text(message)
                 .font(.system(size: failureBodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .multilineTextAlignment(.center)
             Button("Try Again") {
                 Task { await loadSignUp() }

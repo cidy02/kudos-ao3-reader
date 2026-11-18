@@ -35,7 +35,7 @@ extension ReadingQueueBrowserView {
                 Spacer()
                 Text("\(workCount)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 if isSelected {
                     Image(systemName: "checkmark")
                         .foregroundStyle(.tint)
@@ -57,7 +57,7 @@ extension ReadingQueueBrowserView {
         } else {
             Image(systemName: WorkActionLabels.savedForLaterSymbol)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         }
     }
 }

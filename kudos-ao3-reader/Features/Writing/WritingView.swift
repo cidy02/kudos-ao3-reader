@@ -183,7 +183,7 @@ struct WritingView: View {
         Section {
             if let draft = latestDraft {
                 // The link sits behind the hero so List adds no chevron beside the card.
-                WritingDraftHero(work: draft)
+                WritingDraftHero(work: draft, accountName: auth.username ?? draft.authorText)
                     .subjectRowNavigation(accessibilityLabel: "Continue draft, \(draft.title)") {
                         WritingWorkDestination(workID: draft.id) { draftsReload += 1 }
                     }
@@ -194,7 +194,7 @@ struct WritingView: View {
                     .cardRow()
             } else if let draftsError {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(draftsError).font(.footnote).foregroundStyle(.secondary)
+                    Text(draftsError).font(.footnote).foregroundStyle(.secondaryInk)
                     Button("Try Again") { draftsReload += 1 }
                 }
                 .cardRow()
@@ -218,13 +218,13 @@ struct WritingView: View {
                 ProgressView("Loading comments…").frame(maxWidth: .infinity, alignment: .leading)
                     .cardRow()
             case let .failed(message):
-                Text(message).font(.footnote).foregroundStyle(.secondary)
+                Text(message).font(.footnote).foregroundStyle(.secondaryInk)
                     .cardRow()
             case .loaded, .paginationFailed:
                 if newComments.isEmpty {
                     Text("No unread comments in your AO3 Inbox.")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .cardRow()
                 } else {
                     ForEach(newComments.prefix(3)) { item in
@@ -257,7 +257,7 @@ struct WritingView: View {
                 } else {
                     Text("Your posted works will appear here.")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .cardRow()
                 }
             } else {
@@ -526,14 +526,14 @@ private extension WritingView {
                     .cardRow()
             } else if let statsError {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(statsError).font(.footnote).foregroundStyle(.secondary)
+                    Text(statsError).font(.footnote).foregroundStyle(.secondaryInk)
                     Button("Try Again") { statsReload += 1 }
                 }
                 .cardRow()
             } else {
                 Text("AO3 has no posted-work statistics yet.")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .cardRow()
             }
         } header: {
@@ -577,6 +577,7 @@ private extension WritingView {
 
 private struct WritingDraftHero: View {
     let work: AO3WorkSummary
+    let accountName: String
 
     @Environment(ThemeManager.self) private var theme
 
@@ -615,9 +616,10 @@ private struct WritingDraftHero: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .foregroundStyle(.white)
         .background(
-            WorkIdentityCardBackground(
-                art: CoverArt.workArt(fandoms: work.fandoms, title: work.title),
-                title: work.title
+            WorkCoverCardBackground(
+                recipe: GeneratedCoverRecipe(id: nil, title: work.title, author: accountName,
+                                             fandoms: work.fandoms, tags: work.tags, words: work.words,
+                                             complete: false)
             )
         )
         .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
@@ -665,7 +667,7 @@ private struct WritingCommentPreviewRow: View {
                     Text(item.subjectTitle).font(.footnote.weight(.medium)).lineLimit(1)
                 }
                 if !item.excerpt.isEmpty {
-                    Text(item.excerpt).font(.footnote).foregroundStyle(.secondary).lineLimit(2)
+                    Text(item.excerpt).font(.footnote).foregroundStyle(.secondaryInk).lineLimit(2)
                 }
             }
         }
@@ -683,7 +685,7 @@ private struct WritingPseudMenu: View {
         HStack(spacing: 4) {
             Text("Posting as")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Menu {
                 Button {
                     setPseud(nil)
@@ -710,7 +712,7 @@ private struct WritingPseudMenu: View {
                         .foregroundStyle(.primary)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
             .buttonStyle(.plain)

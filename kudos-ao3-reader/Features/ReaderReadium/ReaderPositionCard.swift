@@ -134,7 +134,7 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
 
                 Text(workLine)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .multilineTextAlignment(.center)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
@@ -157,7 +157,7 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
         if page < 1 || pageCount < 1 {
             Text("Page …")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .monospacedDigit()
         } else if dynamicTypeSize.isAccessibilitySize {
             // One string, so it wraps between words. The digit keeps its tint; it gives up
@@ -190,20 +190,20 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
     private var chapterTimeLabel: some View {
         if let minutes = chapterRemainingMinutes, dynamicTypeSize.isAccessibilitySize {
             (Text(ReaderTimeEstimate.durationLabel(minutes: minutes))
-                .foregroundStyle(scrubValuesEmphasized ? ink : Color.secondary)
-                + Text(" left in chapter").foregroundStyle(.secondary))
+                .foregroundStyle(scrubValuesEmphasized ? AnyShapeStyle(ink) : AnyShapeStyle(.secondaryInk))
+                + Text(" left in chapter").foregroundStyle(.secondaryInk))
                 .font(.footnote)
                 .monospacedDigit()
                 .fixedSize(horizontal: false, vertical: true)
         } else if let minutes = chapterRemainingMinutes {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 Text(ReaderTimeEstimate.durationLabel(minutes: minutes))
-                    .foregroundStyle(scrubValuesEmphasized ? ink : Color.secondary)
+                    .foregroundStyle(scrubValuesEmphasized ? AnyShapeStyle(ink) : AnyShapeStyle(.secondaryInk))
                     .contentTransition(.numericText())
                     .animation(.default, value: minutes)
                     .animation(.easeInOut(duration: 0.15), value: scrubValuesEmphasized)
                 Text(" left in chapter")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             .font(.footnote)
             .monospacedDigit()

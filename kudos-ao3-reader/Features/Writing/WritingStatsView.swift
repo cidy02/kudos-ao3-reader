@@ -133,7 +133,7 @@ struct WritingStatsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(errorMessage)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                     Button("Try Again") { reloadToken += 1 }
                 }
                 .cardRow()
@@ -223,7 +223,7 @@ struct WritingStatsTotalsPanel: View {
                             .monospacedDigit()
                         Text(figure.label)
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -239,7 +239,7 @@ struct WritingStatsTotalsPanel: View {
                                 .monospacedDigit()
                             Text(figure.label)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -307,7 +307,7 @@ private struct WritingStatsWorkRow: View {
                             .foregroundStyle(.primary)
                         Text(work.fandoms.joined(separator: " · "))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     Spacer(minLength: 8)
                     if let kudos = work.kudos {
@@ -318,7 +318,7 @@ private struct WritingStatsWorkRow: View {
                                 .foregroundStyle(.accentInk)
                             Text("Kudos")
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                     }
                 }
@@ -338,7 +338,7 @@ private struct WritingStatsWorkRow: View {
                                 .foregroundStyle(.primary)
                             Text(metric.label)
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                     }
                 }

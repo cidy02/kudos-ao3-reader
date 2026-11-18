@@ -41,6 +41,22 @@ struct ReaderThemeTests {
         #expect(ReaderTheme.light.appElevatedBackground == nil)
     }
 
+    @Test func sepiaSecondaryInkClearsFourPointFiveToOneOnSepiaSurfaces() throws {
+        let ink = try #require(ReaderTheme.sepia.appSecondaryInk)
+        let base = try #require(ReaderTheme.sepia.appBaseBackground)
+        let elevated = try #require(ReaderTheme.sepia.appElevatedBackground)
+
+        #expect(ink.contrastRatio(on: base) >= 4.5)
+        #expect(ink.contrastRatio(on: elevated) >= 4.5)
+        #expect(ink.contrastRatio(on: ReaderTheme.sepia.backgroundColor) >= 4.5)
+        #expect(ink.contrastRatio(on: ReaderTheme.sepia.cardBackdrop) >= 4.5)
+        #expect(ink.contrastRatio(on: ReaderTheme.sepia.cardSurface) >= 4.5)
+
+        for theme in [ReaderTheme.light, .dark, .oled] {
+            #expect(theme.appSecondaryInk == nil)
+        }
+    }
+
     /// Include and exclude must stay distinct even when the app accent is red —
     /// they resolve through success vs error, not `.tint`.
     @Test func includeColorDiffersFromExcludeColorOnEveryTheme() {

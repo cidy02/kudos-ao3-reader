@@ -41,7 +41,7 @@ struct LibraryFilterCollisionCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Text(collisionDetail)
                     .font(.system(size: detailSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
 

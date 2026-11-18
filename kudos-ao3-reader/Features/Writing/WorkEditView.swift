@@ -67,7 +67,7 @@ struct WorkEditView: View {
                 // recovery copy after 1.5 seconds idle or 20 seconds of typing.
                 Text("Saved as you type · recovery copy on this device")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .pageBodyRow(top: 12, gutter: gutter)
                 if form.isDraft {
                     footnote("This draft isn't public yet. Options that apply only after posting "
@@ -246,7 +246,7 @@ struct WorkEditView: View {
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .accessibilityAddTraits(.isHeader)
             .padding(.horizontal, 14)
             .pageBodyRow(top: 18, gutter: gutter)
@@ -281,13 +281,13 @@ struct WorkEditView: View {
                 HStack(spacing: 6) {
                     if dynamicTypeSize.isAccessibilitySize {
                         Text(currentTitle)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .lineLimit(3)
                         Spacer(minLength: 0)
                     } else {
                         Spacer(minLength: 0)
                         Text(currentTitle)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .lineLimit(2)
                             .multilineTextAlignment(.trailing)
                     }
@@ -351,7 +351,7 @@ struct WorkEditView: View {
                     fieldLabel(title, isRequired: isRequired)
                         .foregroundStyle(.primary)
                     Text(value)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .lineLimit(3)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -361,7 +361,7 @@ struct WorkEditView: View {
                     .layoutPriority(1)
                 Spacer(minLength: 0)
                 Text(value)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(2)
                     .multilineTextAlignment(.trailing)
             }
@@ -925,7 +925,7 @@ extension WorkEditView {
         SubjectFormRow(label: "Chapters Posted", arrangement: .control) {
             HStack(spacing: 6) {
                 Text("\(form.chaptersPosted ?? 1) of")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 TextField("?", text: $form.chapterTotal)
                     .multilineTextAlignment(.trailing)
                     .frame(maxWidth: 64)

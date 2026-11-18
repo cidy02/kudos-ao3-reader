@@ -203,7 +203,7 @@ private struct BulkNameListEditor: View {
             Text("Enter the collection name exactly as it appears on AO3. If AO3 doesn't "
                 + "recognize it, you will see that when you save.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .bareListRow()
         }
         .cardList()

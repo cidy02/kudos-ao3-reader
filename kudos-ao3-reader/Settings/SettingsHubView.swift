@@ -133,7 +133,7 @@ struct SettingsHubRow: View {
                     if !value.isEmpty {
                         Text(value)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                 }
             }
@@ -153,7 +153,7 @@ struct SettingsHubRow: View {
                 if !value.isEmpty {
                     Text(value)
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .lineLimit(1)
                 }
             }

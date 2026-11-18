@@ -121,7 +121,7 @@ struct DebugShotRouteTests {
         defaults.set(true, forKey: "KudosDemoLibrary")
         defaults.set("shot:readerend", forKey: "KudosDebugRoute")
 
-        let schema = Schema([SavedWork.self, ReadingQueue.self, WorkCollection.self, Tag.self])
+        let schema = Schema([SavedWork.self, ReadingQueue.self, SavedSearch.self, QueueSavedSearchLink.self, WorkCollection.self, Tag.self])
         let container = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)

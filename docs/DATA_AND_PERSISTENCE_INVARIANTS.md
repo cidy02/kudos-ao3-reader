@@ -52,6 +52,7 @@ Rules that protect user data. Breaking any of these is a regression even if test
 
 ## Queues / collections / library behavior
 
+- Queue Find More links are `QueueSavedSearchLink` rows: deleting a saved search or queue removes the join, never the other endpoint. The queue's optional `searchSourcesModifiedAt` records an intentional source-list edit, including clearing the list. Backup v8 carries optional `searchSources` / `searchSourcesModifiedAt` on queues, optional `lastOpenedAt` on saved searches, and optional `lastCheckedAt` / `newResultCount` on each link. Unrecorded values omit their keys; missing keys on import retain stored values. Replace Library restores the snapshot's `searchSourcesModifiedAt`, `lastCheckedAt`, and `lastOpenedAt` when those keys are present; merge/reconcile still keep the newer stamp. Counts and `lastOpenedAt` call `FolderSyncService.markDirty()`.
 - Removing a work from a queue is non-destructive; queue-only works auto-soft-delete (not hard) when leaving their last queue unsaved/unfavorited.
 - Soft-deleted works keep memberships/collection links (restore re-joins) but are **filtered at render time** everywhere (`isPendingDeletion` exclusions in every list `@Query` + relationship-derived listings).
 - Queue-preserved EPUBs (`epubPreservationStatus`) are protected from history-clearing paths.
@@ -70,3 +71,9 @@ Rules that protect user data. Breaking any of these is a regression even if test
 - Folder sync ships all EPUB blobs both directions (full-package model); metadata+sidecar redesign is planned, own branch.
 - Orphaned EPUB files (file exists, no record) are not swept.
 - All list surfaces `@Query` the full table; fine to low thousands.
+
+## Insights data snapshots and status (T-534)
+
+- Each `ReadingSession` stores the work's categorized tags, rating, warnings, categories, creator display names, language, completion, series identity/position and publication year at the visit. Verified creator names include anonymous and orphaned bylines; without verified identities, the snapshot uses the stored comma-separated `SavedWork.author` names. Publication year uses the UTC calendar day. A one-time gated model-actor pass fills older empty rows in batches only while the work still exists; deleted works stay unknown. Snapshot fields take precedence over live work metadata in facts.
+- `SavedWork.readingStatusRaw` is empty for derived status. The Insights partition uses Stopped → On Hold → Stacking → Finished → Caught Up → Reading → Saved for Later, assigning exactly one status per work. Caught Up means every posted chapter is read, irrespective of the planned total. Only an explicit action marks a work stopped. Entering Stacking records `stackBaselineChapterCount`; the update checker resumes Reading once at least `stackThreshold` chapters have been posted since that baseline, including when it is zero.
+- Backup v8 adds optional keys for every field above. `metadataSnapshotRecorded` and `statusWasRecorded` distinguish recorded defaults from unrecorded rows. A recorded snapshot exports every field, including empty lists, zero, false and null; a recorded status exports every status field, including derived/empty, default threshold and cleared dates. Rows with no record export no new keys, preserving Android re-exports. Missing keys in older or Android payloads leave an existing row unchanged; do not raise the manifest version for additive fields.

@@ -97,8 +97,7 @@ struct WorkCoverCard: View {
     var footer: String?
     var progress: Double?
     var metadataStyle: WorkCoverMetadataStyle = .standard
-    /// A hidden mature work must not draw its initial: the letter stays
-    /// recognisable under the 6 pt blur.
+    /// A hidden mature work must show only the ground under the 6 pt blur.
     var showsInitial: Bool = true
     var isMatureObscured: Bool = false
     var showsMatureRevealCapsule: Bool = true
@@ -113,10 +112,9 @@ struct WorkCoverCard: View {
 
     var body: some View {
         WorkSummaryCardSurface(
-            art: CoverArt.workArt(fandoms: work.workFandoms, title: work.title),
-            title: work.title,
-            author: work.author,
-            fandom: primaryFandom,
+            recipe: work.generatedCoverRecipe,
+            epubURL: work.hasEPUB ? work.fileURL : nil,
+            epubWorkID: work.id,
             showsInitial: showsInitial,
             isMatureObscured: isMatureObscured,
             showsMatureRevealCapsule: showsMatureRevealCapsule
@@ -169,11 +167,6 @@ struct WorkCoverCard: View {
             announcesToVoiceOver: true,
             arrangement: .strip
         )
-    }
-
-    private var primaryFandom: String? {
-        work.workFandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .map(FandomDisplayName.bareTitle)
     }
 
     private var progressValue: Double? {
@@ -271,8 +264,7 @@ struct AO3WorkCoverCard: View {
     let work: AO3WorkSummary
     /// Draws `AO3ProvenanceBadge`. Only where remote and local cards share a row.
     var showsProvenanceBadge = false
-    /// A hidden mature work must not draw its initial: the letter stays
-    /// recognisable under the 6 pt blur.
+    /// A hidden mature work must show only the ground under the 6 pt blur.
     var showsInitial: Bool = true
     var isMatureObscured: Bool = false
     var showsMatureRevealCapsule: Bool = true
@@ -294,10 +286,7 @@ struct AO3WorkCoverCard: View {
     /// card's "+N new" slot), and there is no preservation state to report.
     var body: some View {
         let surface = WorkSummaryCardSurface(
-            art: CoverArt.workArt(fandoms: work.fandoms, title: work.title),
-            title: work.title,
-            author: work.authorText,
-            fandom: primaryFandom,
+            recipe: work.generatedCoverRecipe,
             showsInitial: showsInitial,
             isMatureObscured: isMatureObscured,
             showsMatureRevealCapsule: showsMatureRevealCapsule
@@ -343,20 +332,13 @@ struct AO3WorkCoverCard: View {
         )
     }
 
-    /// The fandom the kicker prints — it replaces the `books.vertical` metadata
-    /// row this card used to carry, so no fact left the card with it.
-    private var primaryFandom: String? {
-        work.fandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .map(FandomDisplayName.bareTitle)
-    }
-
     /// Words, chapters and the updated date all stay. The previous card printed
     /// the date as its own badge; dropping it once words exist hid an AO3 field.
     private var remoteMeta: String? {
         var parts: [String] = []
         if let words = work.words { parts.append("\(words.compactCount) words") }
         if !work.chapters.isEmpty { parts.append(work.chapters) }
-        if !work.dateUpdated.isEmpty { parts.append(work.dateUpdated) }
+        if !work.dateUpdated.isEmpty { parts.append(WorkStat.displayDate(work.dateUpdated)) }
         let text = parts.joined(separator: " · ")
         return text.isEmpty ? nil : text
     }
@@ -439,10 +421,9 @@ struct WorkSelectionBubble: View {
 }
 
 private struct WorkSummaryCardSurface<Content: View>: View {
-    let art: CoverArt.WorkArt
-    let title: String
-    let author: String
-    let fandom: String?
+    let recipe: GeneratedCoverRecipe
+    var epubURL: URL?
+    var epubWorkID: UUID?
     var showsInitial: Bool = true
     var isMatureObscured: Bool = false
     var showsMatureRevealCapsule: Bool = true
@@ -458,14 +439,10 @@ private struct WorkSummaryCardSurface<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            GeneratedWorkCoverArt(
-                art: art,
-                title: title,
-                author: author,
-                fandom: fandom,
-                width: cardSize.width,
-                showsInitial: showsInitial
-            )
+            GeneratedCoverView(recipe: recipe, width: cardSize.width,
+                               epubURL: showsInitial ? epubURL : nil,
+                               epubWorkID: showsInitial ? epubWorkID : nil,
+                               showsWords: showsInitial, showsArt: showsInitial)
             .frame(width: cardSize.width, height: cardSize.width * 1.42)
             .blur(radius: isMatureObscured ? 6 : 0)
             .overlay {
@@ -490,120 +467,6 @@ private struct WorkSummaryCardSurface<Content: View>: View {
             .contentShape(
                 RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
             )
-    }
-}
-
-private struct GeneratedWorkCoverArt: View {
-    let art: CoverArt.WorkArt
-    let title: String
-    let author: String
-    let fandom: String?
-    let width: CGFloat
-    var showsInitial: Bool = true
-
-    @Environment(ThemeManager.self) private var themeManager
-
-    private var scale: CGFloat { width / CarouselCardMetrics.width }
-
-    var body: some View {
-        ZStack {
-            CoverArt.workGradient(for: art)
-            if showsInitial { initial }
-            layout
-                .padding(width * 0.1)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
-        )
-        .shadow(
-            color: themeManager.appTheme.carouselCardShadow.color,
-            radius: themeManager.appTheme.carouselCardShadow.radius,
-            x: 0,
-            y: themeManager.appTheme.carouselCardShadow.y
-        )
-        .environment(\.colorScheme, .dark)
-    }
-
-    private var initial: some View {
-        Text(title.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "")
-            .font(.system(size: width * 1.05, weight: .semibold, design: .serif))
-            .foregroundStyle(Color.white.opacity(0.15))
-            .fixedSize()
-            .offset(initialOffset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: initialAlignment)
-            .accessibilityHidden(true)
-    }
-
-    private var initialAlignment: Alignment {
-        art.layout == 0 ? .topTrailing : art.layout == 1 ? .bottomTrailing : .bottomLeading
-    }
-
-    private var initialOffset: CGSize {
-        switch art.layout {
-        case 0: CGSize(width: width * 0.07, height: -width * 0.17)
-        case 1: CGSize(width: width * 0.07, height: width * 0.29)
-        default: CGSize(width: -width * 0.07, height: width * 0.29)
-        }
-    }
-
-    @ViewBuilder
-    private var layout: some View {
-        switch art.layout {
-        case 0:
-            VStack(alignment: .leading, spacing: 4 * scale) {
-                fandomLabel
-                Spacer(minLength: 0)
-                titleLabel
-                authorLabel
-            }
-        case 1:
-            VStack(alignment: .leading, spacing: 4 * scale) {
-                titleLabel
-                authorLabel
-                Spacer(minLength: 0)
-                fandomLabel
-            }
-        default:
-            VStack(alignment: .leading, spacing: 4 * scale) {
-                fandomLabel
-                titleLabel.multilineTextAlignment(.trailing)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.top, 6 * scale)
-                authorLabel.frame(maxWidth: .infinity, alignment: .trailing)
-                Spacer(minLength: 0)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var fandomLabel: some View {
-        if let fandom, !fandom.isEmpty {
-            Text(fandom.uppercased())
-                .font(.system(size: max(8, width * 0.075), weight: .semibold))
-                .tracking(0.8 * scale)
-                .foregroundStyle(Color.white.opacity(0.88))
-                .lineLimit(2)
-        }
-    }
-
-    private var titleLabel: some View {
-        Text(title)
-            .font(.system(size: max(13, width * 0.135), weight: .semibold, design: .serif))
-            .foregroundStyle(.white)
-            .lineLimit(4)
-            .minimumScaleFactor(0.78)
-    }
-
-    @ViewBuilder
-    private var authorLabel: some View {
-        if !author.isEmpty {
-            Text(author)
-                .font(.system(size: max(10, width * 0.092)).italic())
-                .foregroundStyle(Color.white.opacity(0.88))
-                .lineLimit(2)
-        }
     }
 }
 

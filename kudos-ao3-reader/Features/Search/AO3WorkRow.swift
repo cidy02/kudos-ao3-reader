@@ -159,10 +159,11 @@ struct AO3WorkRow: View {
             }
             ledgerFacts
             if let bookmark, !bookmark.date.isEmpty {
-                Text(bookmark.date)
+                let dateText = WorkStat.displayDate(bookmark.date)
+                Text(dateText)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("Bookmarked \(bookmark.date)")
+                    .foregroundStyle(.secondaryInk)
+                    .accessibilityLabel("Bookmarked \(dateText)")
             }
         }
     }
@@ -209,7 +210,7 @@ struct AO3WorkRow: View {
                 if showsSummary, !work.summary.isEmpty {
                     Text(work.summary)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize ? nil : 3)
                         .multilineTextAlignment(.leading)
                         .animation(nil, value: expanded)
@@ -297,7 +298,7 @@ struct AO3WorkRow: View {
                 if showsSummary, !work.summary.isEmpty {
                     Text(work.summary)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize
                             ? nil
                             : (presentation == .fandomTop ? 3 : 2))
@@ -414,7 +415,7 @@ struct AO3WorkRow: View {
                             Text(fandom).multilineTextAlignment(.leading)
                         }
                         .buttonStyle(.borderless)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                     }
                     if hiddenFandomCount > 0 {
                         Text("+\(hiddenFandomCount) other\(hiddenFandomCount == 1 ? "" : "s")")
@@ -518,7 +519,7 @@ struct AO3WorkRow: View {
     private func seriesLabel(position: String, title: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 3) {
             Text("Part \(position) of")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Text(title)
                 .foregroundStyle(themeManager.accentInk)
         }
@@ -694,7 +695,7 @@ struct AO3WorkRow: View {
         if presentation == .fandomTop {
             button
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
                 .accessibilityLabel(expanded ? "Show less" : "Show more")
@@ -787,7 +788,7 @@ struct AO3WorkRow: View {
     private func inlineTagLabel(_ label: String) -> some View {
         Text(label)
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .padding(.top, 1)
             .accessibilityAddTraits(.isHeader)
     }

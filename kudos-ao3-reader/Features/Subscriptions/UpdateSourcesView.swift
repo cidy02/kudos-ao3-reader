@@ -19,7 +19,7 @@ struct UpdateSourcesView: View {
                         Text("Where updates come from")
                             .font(.title2.bold())
                         Text(sourceSummary)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.vertical, 4)
@@ -141,12 +141,12 @@ private struct UpdateSourceCard: View {
             HStack(spacing: 10) {
                 Text("\(rank)")
                     .font(.caption.bold())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 5)
                     .background(.quaternary, in: Capsule())
                 Image(systemName: systemImage)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .accessibilityHidden(true)
                 Text(title)
                     .font(.headline)
@@ -159,13 +159,13 @@ private struct UpdateSourceCard: View {
 
             Text("Cost: \(cost)")
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let detail {
                 Text(detail)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -213,7 +213,7 @@ struct MailConnectionView: View {
 
                     Section {
                         Text("Other providers cannot be verified yet.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     } footer: {
                         Text("Kudos connects read-only to imap.gmail.com and verifies Gmail's mail signature.")
                     }

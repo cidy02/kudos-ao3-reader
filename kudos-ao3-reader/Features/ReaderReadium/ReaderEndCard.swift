@@ -77,7 +77,7 @@ struct ReaderEndCard: View {
             ) {
                 Text(subtitle)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .multilineTextAlignment(.center)
             }
         }
@@ -174,7 +174,7 @@ struct ReaderEndCard: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Up next in \(upNext.queueName)")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
 
             // One row at every size so the card stays compact at accessibility sizes.
             HStack(spacing: 10) {
@@ -201,7 +201,7 @@ struct ReaderEndCard: View {
                     if !meta.isEmpty {
                         Text(meta)
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .lineLimit(1)
                     }
                 }

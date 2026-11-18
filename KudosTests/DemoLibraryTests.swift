@@ -17,7 +17,7 @@ struct DemoLibraryTests {
         }
         defaults.set(true, forKey: "KudosDemoLibrary")
 
-        let schema = Schema([SavedWork.self, ReadingQueue.self, WorkCollection.self, Tag.self, ReadingSession.self])
+        let schema = Schema([SavedWork.self, ReadingQueue.self, SavedSearch.self, QueueSavedSearchLink.self, WorkCollection.self, Tag.self, ReadingSession.self])
         let container = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)

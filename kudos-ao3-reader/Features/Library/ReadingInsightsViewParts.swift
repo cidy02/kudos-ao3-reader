@@ -17,7 +17,7 @@ struct WordsReadHeroCard: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Words read")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
 
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(insights.totalWordsRead.formatted())
@@ -35,14 +35,14 @@ struct WordsReadHeroCard: View {
                         Text("\(pct)% vs \(previousPeriodName)")
                             .font(.system(size: 14, weight: .medium))
                     }
-                    .foregroundStyle(delta >= 0 ? Color.green : Color.secondary)
+                    .foregroundStyle(delta >= 0 ? AnyShapeStyle(Color.green) : AnyShapeStyle(.secondaryInk))
                 }
             }
 
             if let novelStr = ReadingInsights.novelsWorthLabel(words: insights.totalWordsRead) {
                 Text(novelStr)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
 
             Divider()
@@ -57,7 +57,7 @@ struct WordsReadHeroCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Time reading")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                     Text(hideReadingTime ? "—" : ReadingInsights.durationLabel(insights.totalSeconds))
                         .font(.title3.bold())
                         .monospacedDigit()
@@ -67,7 +67,7 @@ struct WordsReadHeroCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Finished")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                     Text(insights.finishedWorksCount.formatted())
                         .font(.title3.bold())
                         .monospacedDigit()
@@ -77,7 +77,7 @@ struct WordsReadHeroCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Reading days")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                     Text("\(insights.readingDaysCount) of \(totalDaysElapsed)")
                         .font(.title3.bold())
                         .monospacedDigit()
@@ -120,7 +120,7 @@ struct WordsPerDayCard: View {
                 Spacer()
                 Text("avg \(avgWordsK)")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
 
             // Bar chart container
@@ -140,7 +140,7 @@ struct WordsPerDayCard: View {
                                 if day.isMax && day.words > 0 {
                                     Text(formatK(day.words))
                                         .font(.system(size: 10, weight: .semibold))
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(.secondaryInk)
                                         .lineLimit(1)
                                         .minimumScaleFactor(0.7)
                                 } else {
@@ -162,20 +162,20 @@ struct WordsPerDayCard: View {
                     if let first = days.first {
                         Text("Day \(first.dayNumber)")
                             .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     Spacer()
                     if days.count >= 15 {
                         let mid = days[days.count / 2]
                         Text("\(mid.dayNumber)")
                             .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     Spacer()
                     if let last = days.last {
                         Text("\(last.dayNumber)")
                             .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                 }
                 .padding(.top, 2)
@@ -211,7 +211,7 @@ struct WhereTheWordsWentCard: View {
                 Spacer()
                 Text("\(fandoms.count) \(fandoms.count == 1 ? "fandom" : "fandoms")")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
 
             // Stacked bar
@@ -253,7 +253,7 @@ struct WhereTheWordsWentCard: View {
                         Text("\(formatK(f.words)) · \(f.worksCount) \(f.worksCount == 1 ? "work" : "works")")
                             .font(.footnote)
                             .monospacedDigit()
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
 
                         Text("\(Int((f.share * 100).rounded()))%")
                             .font(.subheadline.weight(.semibold))
@@ -352,7 +352,7 @@ struct RecordsGridCard: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Text(value)
                 .font(.system(size: 20, weight: .bold))
                 .monospacedDigit()
@@ -393,7 +393,7 @@ struct LengthOfWhatYouReadCard: View {
                 Spacer()
                 Text("\(mix.totalWorks) works")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
 
             // Stacked bar
@@ -441,7 +441,7 @@ struct LengthOfWhatYouReadCard: View {
                     .frame(width: 8, height: 8)
                 Text(label)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(1)
             }
             Text("\(count)")
@@ -489,7 +489,7 @@ struct FinishedInPeriodSection: View {
                                         let displayName = discreetMode ? "Fandom" : fandom
                                         Text(displayName)
                                             .font(.caption2)
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(.secondaryInk)
                                     }
                                 }
 
@@ -501,7 +501,7 @@ struct FinishedInPeriodSection: View {
                                 let wordStr = work.wordCount > 0 ? "\(work.wordCount.formatted()) words" : ""
                                 Text(wordStr)
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.secondaryInk)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -563,7 +563,7 @@ struct YourUsualFicCard: View {
                 Spacer()
                 Text("from \(taste.totalWorksCount) works")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
 
             Text(taste.usualFicSummary)
@@ -666,7 +666,7 @@ struct TasteFandomsCard: View {
 
                             Text("\(f.worksCount) \(f.worksCount == 1 ? "work" : "works")")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
 
                             Text(formatK(f.words))
                                 .font(.subheadline.weight(.semibold))
@@ -754,7 +754,7 @@ struct TasteRelationshipsCard: View {
                                     .frame(width: 6, height: 6)
                                 Text("\(rel.isRomantic ? "Romantic" : "Platonic") · \(discreetMode ? "Fandom" : rel.fandom) · \(rel.worksCount) \(rel.worksCount == 1 ? "work" : "works")")
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.secondaryInk)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -797,7 +797,7 @@ struct TasteRelationshipsCard: View {
 
                                 Text(ship.label)
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.secondaryInk)
                                     .frame(width: 100, alignment: .trailing)
                             }
                         }
@@ -849,7 +849,7 @@ struct TasteCharactersCard: View {
                         Text("\(char.count)")
                             .font(.caption2)
                             .monospacedDigit()
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     .padding(.horizontal, 11)
                     .padding(.vertical, 7)
@@ -936,7 +936,7 @@ struct TasteTagsCard: View {
                             HStack {
                                 Text("\(pair.tagA) + \(pair.tagB)")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.secondaryInk)
                                     .lineLimit(1)
                                 Spacer()
                                 Text("\(pair.worksCount) works")
@@ -1035,7 +1035,7 @@ struct TasteWhenPostedCard: View {
                 Spacer()
                 Text("median \(medianYear.map(String.init) ?? "—")")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
 
             // Year histogram
@@ -1062,7 +1062,7 @@ struct TasteWhenPostedCard: View {
                 Text("2026")
             }
             .font(.system(size: 11))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
         }
         .padding(16)
         .background(theme.appTheme.cardSurface)
@@ -1085,7 +1085,7 @@ struct TasteCrossoversLanguagesGrid: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Crossovers")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 Text("\(crossoverCount) of \(totalWorks)")
                     .font(.title3.weight(.bold))
                 Text(crossoverCount > 0 ? "works with 2+ fandoms" : "none")
@@ -1104,7 +1104,7 @@ struct TasteCrossoversLanguagesGrid: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Languages")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 Text("\(languages.count)")
                     .font(.title3.weight(.bold))
                 let langStr = languages.prefix(2).map { "\($0.label) \($0.count)" }.joined(separator: " · ")
@@ -1146,7 +1146,7 @@ struct HabitsTimeOfDayCard: View {
                 Spacer()
                 Text("24-hour reading pattern")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
 
             // 24-hour bar chart
@@ -1175,12 +1175,12 @@ struct HabitsTimeOfDayCard: View {
                     Text("24:00")
                 }
                 .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             }
 
             Text("Late night, 1:00–5:00: \(ReadingInsights.durationLabel(lateNightDuration)) (\(lateNightSharePercent)%)")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         }
         .padding(16)
         .background(theme.appTheme.cardSurface)
@@ -1209,7 +1209,7 @@ struct HabitsCalendarCard: View {
                 let readingDays = days.filter { $0.words > 0 }.count
                 Text("\(readingDays) of \(days.count)")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
 
             // Weekday initials
@@ -1233,7 +1233,7 @@ struct HabitsCalendarCard: View {
                         Text("\(day.dayNumber)")
                             .font(.system(size: 10, weight: .medium))
                             .monospacedDigit()
-                            .foregroundStyle(day.words > 10_000 ? ThemeManager.label(on: theme.accentInk) : Color.secondary)
+                            .foregroundStyle(day.words > 10_000 ? AnyShapeStyle(ThemeManager.label(on: theme.accentInk)) : AnyShapeStyle(.secondaryInk))
                             .padding(4)
                     }
                 }
@@ -1243,7 +1243,7 @@ struct HabitsCalendarCard: View {
             HStack {
                 Text("Longest streak \(longestStreak) days")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
 
                 Spacer()
 
@@ -1305,7 +1305,7 @@ struct HabitsSittingsCard: View {
                 let total = sittings.reduce(0) { $0 + $1.count }
                 Text("\(total) this month")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
 
             // Duration distribution bars
@@ -1315,13 +1315,13 @@ struct HabitsSittingsCard: View {
                     VStack(spacing: 2) {
                         Text("\(sit.count)")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(sit.count > 0 ? Color.primary : Color.secondary)
+                            .foregroundStyle(sit.count > 0 ? AnyShapeStyle(Color.primary) : AnyShapeStyle(.secondaryInk))
                         RoundedRectangle(cornerRadius: 3)
                             .fill(sit.count > 0 ? theme.accentInk : Color.primary.opacity(0.08))
                             .frame(height: height)
                         Text(sit.label)
                             .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .lineLimit(1)
                     }
                     .frame(maxWidth: .infinity)
@@ -1349,7 +1349,7 @@ struct HabitsSittingsCard: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Text(value)
                 .font(.subheadline.weight(.semibold))
                 .monospacedDigit()
@@ -1391,15 +1391,15 @@ struct HabitsSavedToFinishedCard: View {
             HStack {
                 Text("Saved")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 Spacer()
                 Text("Opened")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 Spacer()
                 Text("Finished")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
 
             HStack(spacing: 12) {
@@ -1409,7 +1409,7 @@ struct HabitsSavedToFinishedCard: View {
                             .font(.headline)
                         Text("saved to opened, median")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -1420,7 +1420,7 @@ struct HabitsSavedToFinishedCard: View {
                             .font(.headline)
                         Text("opened to finished, median")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -1452,7 +1452,7 @@ struct HabitsRereadsCard: View {
                 if rereads.isEmpty {
                     Text("Works you complete multiple times will appear here as rereads.")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .padding(16)
                 } else {
                     ForEach(Array(rereads.prefix(3).enumerated()), id: \.element.id) { index, work in
@@ -1468,7 +1468,7 @@ struct HabitsRereadsCard: View {
                                     .lineLimit(1)
                                 Text("\(discreetMode ? "Fandom" : work.fandom) · \(work.totalWordsAcrossReads.formatted()) words across reads")
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.secondaryInk)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -1505,7 +1505,7 @@ struct HabitsFandomTimelineCard: View {
             if lanes.isEmpty {
                 Text("Monthly activity by fandom will appear here as you log reading sessions.")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             } else {
                 VStack(spacing: 8) {
                     ForEach(Array(lanes.enumerated()), id: \.element.id) { index, lane in
@@ -1564,7 +1564,7 @@ struct HabitsStoppedCard: View {
                 Spacer()
                 Text("\(stoppedCount) in all")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
 
             if let medianProgress {
@@ -1573,7 +1573,7 @@ struct HabitsStoppedCard: View {
                         .font(.title2.weight(.bold))
                     Text("of the way in, typically")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
 
@@ -1616,12 +1616,13 @@ struct LibraryUnreadCard: View {
     let addedWords: Int
     let readWords: Int
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.secondaryInk) private var secondaryInk
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Unread in your library")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(formatWords(unreadWords))
@@ -1629,13 +1630,13 @@ struct LibraryUnreadCard: View {
                     .monospacedDigit()
                 Text("words · \(unreadCount) works")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
 
             if let m = monthsToClear, m > 0 {
                 Text("About \(m) month\(m == 1 ? "" : "s") at your recent pace")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
 
             Divider()
@@ -1644,7 +1645,7 @@ struct LibraryUnreadCard: View {
             // Added vs Read
             VStack(spacing: 6) {
                 let maxW = max(1, max(addedWords, readWords))
-                barRow(label: "Added", words: addedWords, color: Color.secondary, maxVal: maxW)
+                barRow(label: "Added", words: addedWords, color: secondaryInk ?? Color.secondary, maxVal: maxW)
                 barRow(label: "Read", words: readWords, color: theme.accentInk, maxVal: maxW)
             }
         }
@@ -1661,7 +1662,7 @@ struct LibraryUnreadCard: View {
         HStack(spacing: 8) {
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .frame(width: 48, alignment: .leading)
 
             GeometryReader { proxy in
@@ -1697,6 +1698,7 @@ struct LibraryUnreadCard: View {
 struct LibraryWhereEverythingStandsCard: View {
     let partition: ReadingStatusPartition
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.secondaryInk) private var secondaryInk
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1712,7 +1714,7 @@ struct LibraryWhereEverythingStandsCard: View {
                 Divider().overlay(theme.appTheme.cardBorder)
                 statusRow(icon: "square.stack.3d.up.fill", color: Color(red: 0.37, green: 0.36, blue: 0.90), label: "Letting Chapters Stack", detail: "back when 3 more are posted", count: partition.stackingCount)
                 Divider().overlay(theme.appTheme.cardBorder)
-                statusRow(icon: "pause.circle.fill", color: Color.secondary, label: "On Hold", count: partition.onHoldCount)
+                statusRow(icon: "pause.circle.fill", color: secondaryInk ?? Color.secondary, label: "On Hold", count: partition.onHoldCount)
                 Divider().overlay(theme.appTheme.cardBorder)
                 statusRow(icon: "bookmark.fill", color: Color(red: 0.69, green: 0.49, blue: 0.07), label: "Saved for Later", count: partition.savedForLaterCount)
                 Divider().overlay(theme.appTheme.cardBorder)
@@ -1745,7 +1747,7 @@ struct LibraryWhereEverythingStandsCard: View {
                 if let detail {
                     Text(detail)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1753,7 +1755,7 @@ struct LibraryWhereEverythingStandsCard: View {
             Text("\(count)")
                 .font(.subheadline)
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
 
             Image(systemName: "chevron.right")
                 .font(.system(size: 13, weight: .semibold))
@@ -1779,7 +1781,7 @@ struct LibraryStillReadingCard: View {
                         .frame(width: 8, height: 8)
                     Text("\(discreetMode ? "Fandom" : candidate.fandom) · untouched for \(candidate.daysUntouched / 7) weeks")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
 
                 Text("Still reading \(discreetMode ? "this work" : candidate.title)?")
@@ -1787,7 +1789,7 @@ struct LibraryStillReadingCard: View {
 
                 Text(candidate.chapterProgress)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
 
             HStack(spacing: 8) {
@@ -1844,7 +1846,7 @@ struct LibraryWIPFreshnessCard: View {
                 Spacer()
                 Text("\(freshness.total) saved")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
 
             // Freshness bar
@@ -1889,7 +1891,7 @@ struct LibraryWIPFreshnessCard: View {
         VStack(alignment: .leading, spacing: 1) {
             Text(label)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Text("\(count)")
                 .font(.subheadline.weight(.semibold))
             Text(detail)
@@ -1910,7 +1912,7 @@ struct LibraryNoLongerOnAO3Card: View {
         HStack(spacing: 12) {
             Image(systemName: "archivebox.fill")
                 .font(.system(size: 18))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .frame(width: 36, height: 36)
                 .background(Color.primary.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 9))
@@ -1920,7 +1922,7 @@ struct LibraryNoLongerOnAO3Card: View {
                     .font(.subheadline.weight(.semibold))
                 Text("\(count) works · \(formatWords(words)) words · \(lastCopies) kept as your last copy")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -2037,7 +2039,7 @@ struct LibraryPreservedStatsCard: View {
                         Spacer()
                         Text("\(f.count) \(f.count == 1 ? "work" : "works")")
                             .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                 }
             }
@@ -2055,7 +2057,7 @@ struct LibraryPreservedStatsCard: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Text(value)
                 .font(.subheadline.weight(.semibold))
                 .monospacedDigit()

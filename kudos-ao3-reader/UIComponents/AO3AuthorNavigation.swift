@@ -143,7 +143,7 @@ struct AO3AuthorBylineView: View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             if includesBy {
                 Text("by ")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             if dynamicTypeSize.isAccessibilitySize, tokens.count > 1 {
                 // At the accessibility sizes they do not: side by side, each in its own
@@ -165,7 +165,7 @@ struct AO3AuthorBylineView: View {
             }
         }
         .font(font)
-        .lineLimit(compact ? 1 : 2)
+        .lineLimit(compact ? 1 : (dynamicTypeSize.isAccessibilitySize ? nil : 2))
         // Compact (comment bylines) hugs the name so sibling Author/Guest chips
         // aren't pushed to zero width. Full-width remains for work-row bylines.
         .frame(
@@ -201,7 +201,7 @@ struct AO3AuthorBylineView: View {
                 // this Text's baseline and reproduces the exact "dropped it below
                 // 'by'" regression noted above (1) — the frame must stay top-aligned
                 // so the enlarged hit box only grows downward, off the baseline.
-                Text(text)
+                Text(shownName(text))
                     .fontWeight(emphasized ? .semibold : .regular)
                     .foregroundStyle(tinted ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                     .frame(
@@ -227,11 +227,18 @@ struct AO3AuthorBylineView: View {
                         }
                     }
             } else {
-                Text(text)
+                Text(shownName(text))
                     .fontWeight(emphasized ? .semibold : .regular)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
         }
+    }
+
+    /// Break opportunities in the drawn name only. The token used for the
+    /// route and the VoiceOver label stays the original string.
+    private func shownName(_ text: String) -> String {
+        guard dynamicTypeSize.isAccessibilitySize, !compact else { return text }
+        return AccessibilitySoftBreak.opportunities(in: text)
     }
 
     private var tokens: [AO3AuthorBylineToken] {

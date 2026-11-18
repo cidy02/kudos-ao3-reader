@@ -257,6 +257,25 @@ enum ReadingQueueService {
         for name in options.tagNames {
             queue.addTag(named: name, in: context)
         }
+        var sourcesChanged = false
+        for link in queue.searchLinks where link.search.map({ !options.searchIDs.contains($0.id) }) ?? true {
+            context.delete(link)
+            changed = true
+            sourcesChanged = true
+        }
+        let linkedIDs = Set(queue.searchLinks.compactMap { $0.search?.id })
+        if let searches = try? context.fetch(FetchDescriptor<SavedSearch>()) {
+            for search in searches where options.searchIDs.contains(search.id) && !linkedIDs.contains(search.id) {
+                if search.lastOpenedAt == nil {
+                    search.lastOpenedAt = Date()
+                    FolderSyncService.markDirty()
+                }
+                context.insert(QueueSavedSearchLink(queue: queue, search: search))
+                changed = true
+                sourcesChanged = true
+            }
+        }
+        if sourcesChanged { queue.searchSourcesModifiedAt = Date() }
         if changed { queue.markModified() }
         context.saveBestEffort(reason: "Saving queue changes failed")
         return options.keepsWorksOffline && !wasKept

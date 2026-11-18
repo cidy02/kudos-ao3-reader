@@ -216,7 +216,7 @@ struct AnnotationNotePreservationTests {
     private func schema() -> Schema {
         Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self,
             SyncTombstone.self, ReadingAnnotation.self
         ])
     }

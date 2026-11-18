@@ -118,7 +118,7 @@ struct LibraryCatalogueListView: View {
             Section {
                 Text(LibraryPageArrangement.workCountPhrase(items.count) + " · newest first")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -154,7 +154,7 @@ struct LibraryCatalogueListView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(LibraryPageArrangement.workCountPhrase(items.count) + " · newest first")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
