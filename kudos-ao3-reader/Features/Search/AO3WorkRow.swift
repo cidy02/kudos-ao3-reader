@@ -39,6 +39,7 @@ struct AO3WorkRow: View {
     var rankedContext: RankedWork? = nil
     /// Search-only local state shown beside the title, such as "In Library".
     var badgeTitle: String? = nil
+    var quickQueue: (() -> Void)?
     /// Detailed surfaces. Off hides the summary paragraph only; tags, the stat
     /// line and the bookmark note stay. A ledger row still shows its summary.
     var showsSummary = true
@@ -114,7 +115,7 @@ struct AO3WorkRow: View {
             if isSelecting || !showsContextMenu {
                 presentedCard
             } else {
-                presentedCard.remoteWorkContextMenu(work: work)
+                presentedCard.remoteWorkContextMenu(work: work, quickQueue: quickQueue)
             }
         }
         // Follow the global expand/collapse-all toggle (also applies on first
@@ -627,7 +628,7 @@ struct AO3WorkRow: View {
         readingState: SavedWork.ReadingState,
         chapterLabel: String?,
         isWantToRead: Bool,
-        queueCount: Int,
+        queueNames: [String],
         isInLibrary: Bool
     ) -> String? {
         if readingState == .finished { return "Finished" }
@@ -635,8 +636,9 @@ struct AO3WorkRow: View {
             let chapter = chapterLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
             return chapter.flatMap { $0.isEmpty ? nil : "Reading · \($0)" } ?? "Reading"
         }
+        if queueNames.count == 1 { return "In \(queueNames[0])" }
+        if queueNames.count > 1 { return "In \(queueNames.count) queues" }
         if isWantToRead { return "Want to Read" }
-        if queueCount > 0 { return "In a queue" }
         return isInLibrary ? "In Library" : nil
     }
 
@@ -647,7 +649,7 @@ struct AO3WorkRow: View {
             readingState: work.readingState,
             chapterLabel: chapter,
             isWantToRead: work.isOnSavedForLaterShelf,
-            queueCount: work.activeQueueMemberships.count,
+            queueNames: work.activeQueueMemberships.compactMap { $0.queue?.displayName },
             isInLibrary: !work.isQueueOnlyWork
         )
     }
@@ -836,7 +838,7 @@ extension AO3WorkRow {
                         }
                         if isExpandable || badgeTitle != nil {
                             HStack(spacing: 5) {
-                                if let badgeTitle { UpdateMarker(text: badgeTitle) }
+                                if let badgeTitle { UpdateMarker(text: badgeTitle, wraps: true) }
                                 if isExpandable && showsExpandButton {
                                     Spacer(minLength: 0)
                                     expandButton
@@ -849,7 +851,7 @@ extension AO3WorkRow {
                         fandomLabel
                         crossoverMark
                         Spacer(minLength: 0)
-                        if let badgeTitle { UpdateMarker(text: badgeTitle) }
+                        if let badgeTitle { UpdateMarker(text: badgeTitle, wraps: true) }
                         if isExpandable && showsExpandButton {
                             expandButton
                         }

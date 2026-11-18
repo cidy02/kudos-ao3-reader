@@ -483,6 +483,9 @@ struct AllReadingQueuesGridView: View {
 
         let isSelected = selection.contains(queue.id)
         let content = HStack(spacing: 12) {
+            if isSelecting {
+                WorkLeadingSelectionCheck(isSelected: isSelected)
+            }
             peekTile(queue, works: works)
 
             // 1i's row: dot · name · count, the per-work strip, then the tags
@@ -523,9 +526,6 @@ struct AllReadingQueuesGridView: View {
 
             Spacer(minLength: 0)
 
-            if isSelecting {
-                WorkSelectionBubble(isSelected: isSelected)
-            }
         }
         .contentShape(Rectangle())
         let summary = "\(works.count) work\(works.count == 1 ? "" : "s"), "

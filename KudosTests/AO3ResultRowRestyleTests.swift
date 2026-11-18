@@ -37,13 +37,14 @@ struct AO3ResultRowRestyleTests {
 
     @Test func localStatusUsesTheMostSpecificKnownState() {
         let text = AO3WorkRow.statusText
-        #expect(text(.finished, "Ch 7", true, 2, true) == "Finished")
-        #expect(text(.inProgress, "Ch 7", true, 2, true) == "Reading · Ch 7")
-        #expect(text(.inProgress, nil, false, 0, true) == "Reading")
-        #expect(text(.unread, nil, true, 2, true) == "Want to Read")
-        #expect(text(.unread, nil, false, 2, false) == "In a queue")
-        #expect(text(.unread, nil, false, 0, true) == "In Library")
-        #expect(text(.freedHistory, nil, false, 0, false) == nil)
+        #expect(text(.finished, "Ch 7", true, ["A", "B"], true) == "Finished")
+        #expect(text(.inProgress, "Ch 7", true, ["A", "B"], true) == "Reading · Ch 7")
+        #expect(text(.inProgress, nil, false, [], true) == "Reading")
+        #expect(text(.unread, nil, true, ["Mystery Night"], true) == "In Mystery Night")
+        #expect(text(.unread, nil, false, ["A", "B"], false) == "In 2 queues")
+        #expect(text(.unread, nil, true, [], true) == "Want to Read")
+        #expect(text(.unread, nil, false, [], true) == "In Library")
+        #expect(text(.freedHistory, nil, false, [], false) == nil)
     }
 
     @Test func labelledStatsCellsMatchTheBoardOrderAndFormatting() {

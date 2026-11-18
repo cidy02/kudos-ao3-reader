@@ -19,7 +19,7 @@ enum WorkTags {
         // deleted (or, in tests, its whole container torn down) by the time this runs —
         // and touching any attribute of an invalidated model is a SwiftData assertion
         // crash. Same liveness guard PersistenceMigrationService uses.
-        guard work.modelContext != nil,
+        guard work.modelContext != nil, !work.isPendingDeletion,
               let id = work.ao3WorkID ?? ao3WorkID(from: work.sourceURL) else { return }
         work.ao3WorkID = id
         // Fetch when never fetched, when fetched before categorized tags existed, or
@@ -38,7 +38,7 @@ enum WorkTags {
             let metadata = try await (fetchMetadata ?? { try await AO3Client.shared.workMetadata(workID: $0) })(id)
             let groups = metadata.tagGroups
             // Re-check after the network await — the work can be deleted mid-fetch.
-            guard work.modelContext != nil else { return }
+            guard work.modelContext != nil, !work.isPendingDeletion else { return }
             guard !groups.isEmpty else { return } // locked/empty page — keep EPUB tags, retry later
             let hadEmptyFandoms = work.workFandoms.isEmpty
             let hadZeroWords = work.wordCount == 0
@@ -80,7 +80,7 @@ enum WorkTags {
         } catch AO3Error.notFound {
             // 404 — the work has been deleted from AO3. Stop re-fetching it and keep
             // whatever tags it already has (EPUB-derived or a prior AO3 fetch).
-            guard work.modelContext != nil else { return }
+            guard work.modelContext != nil, !work.isPendingDeletion else { return }
             work.markModified()
             WorkAvailability.record(.deleted, on: work, in: context)
         } catch is CancellationError where work.modelContext != nil {
