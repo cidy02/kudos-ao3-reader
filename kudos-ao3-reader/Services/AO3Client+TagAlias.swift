@@ -71,17 +71,20 @@ extension AO3Client {
         // Synonyms appear in blurbs verbatim as authored while the page URL holds
         // the canonical merger, so matching both names handles every case.
         var blurbVotes: [TagAliasKind: Int] = [:]
+        let containsTarget: ([String]) -> Bool = { list in
+            list.contains { targets.contains($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        }
         for work in works {
-            if work.fandoms.contains(where: { targets.contains($0.trimmingCharacters(in: .whitespacesAndNewlines)) }) {
+            if containsTarget(work.fandoms) {
                 blurbVotes[.fandom, default: 0] += 1
             }
-            if work.relationships.contains(where: { targets.contains($0.trimmingCharacters(in: .whitespacesAndNewlines)) }) {
+            if containsTarget(work.relationships) {
                 blurbVotes[.relationship, default: 0] += 1
             }
-            if work.characters.contains(where: { targets.contains($0.trimmingCharacters(in: .whitespacesAndNewlines)) }) {
+            if containsTarget(work.characters) {
                 blurbVotes[.character, default: 0] += 1
             }
-            if work.tags.contains(where: { targets.contains($0.trimmingCharacters(in: .whitespacesAndNewlines)) }) {
+            if containsTarget(work.tags) {
                 blurbVotes[.freeform, default: 0] += 1
             }
         }
