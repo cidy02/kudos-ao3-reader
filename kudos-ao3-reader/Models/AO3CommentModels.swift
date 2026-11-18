@@ -232,7 +232,9 @@ nonisolated struct AO3Comment: Identifiable, Equatable, Sendable {
     /// Target account for "Mute <name>" in the comment menu.
     ///
     /// Visible only for signed-in readers on another registered, non-orphan,
-    /// non-anonymous, non-guest commenter's live comment.
+    /// non-anonymous, non-guest commenter's live comment. Only `editPath` and
+    /// username identity mark the reader's own comment — a work's creator gets
+    /// `deletePath` on other people's comments too.
     func muteTargetRoute(isLoggedIn: Bool, currentUsername: String?) -> AO3AuthorRoute? {
         guard isLoggedIn,
               !isDeleted,
@@ -240,7 +242,6 @@ nonisolated struct AO3Comment: Identifiable, Equatable, Sendable {
               !isGuest,
               !isAnonymousCreator,
               editPath == nil,
-              deletePath == nil,
               let current = currentUsername?.trimmingCharacters(in: .whitespacesAndNewlines),
               !current.isEmpty,
               let route = profileRoute,

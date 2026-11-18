@@ -135,9 +135,33 @@ struct AO3AuthorProfileParserTests {
         #expect(header.subscriptionForm?.isSubscribed == false)
         #expect(header.actions.contains { $0.kind == .mute })
         #expect(header.actions.contains { $0.kind == .block })
+        let muteAction = try #require(header.actions.first { $0.kind == .mute })
+        #expect(muteAction.url.path == "/users/me/muted/users/confirm_mute")
+        let muteComponents = try #require(URLComponents(url: muteAction.url, resolvingAgainstBaseURL: false))
+        #expect(muteComponents.queryItems == [URLQueryItem(name: "muted_id", value: "Avery_Archive")])
         #expect(!header.actions.contains {
             $0.kind == .pseuds && $0.url.path.contains("/pseuds/Avery")
         })
+    }
+
+    @Test func parsesMuteConfirmFormFromOtwarchiveShape() throws {
+        let route = try #require(AO3AuthorRoute(username: "Avery_Archive"))
+        let referer = route.confirmMuteURL(by: "me")
+        let mute = try AO3Client.parseAuthorModerationForm(
+            try fixture("ao3_author_confirm_mute"),
+            referer: referer,
+            webKind: .mute,
+            targetUsername: "Avery_Archive"
+        )
+        #expect(mute.kind == .mute)
+        #expect(mute.title == "Mute Avery_Archive")
+        #expect(mute.submitLabel == "Yes, Mute User")
+        #expect(mute.cancelLabel == "Cancel")
+        #expect(mute.csrfToken == "moderation-csrf-token")
+        #expect(mute.actionURL.path == "/users/me/muted/users")
+        #expect(!mute.kind.isUndo)
+        #expect(mute.kind.successMessage == "Muted.")
+        #expect(mute.message.contains("hides their works, series, bookmarks, and comments"))
     }
 
     @Test func parsesBlockAndUnmuteConfirmFormsFromAO3Pages() throws {

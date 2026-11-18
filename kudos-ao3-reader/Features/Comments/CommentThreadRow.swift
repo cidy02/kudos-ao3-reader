@@ -1521,6 +1521,24 @@ private struct CommentPostRow: View {
 
     @ViewBuilder
     private func commentMenuItems(showsReply: Bool) -> some View {
+        CommentMenuItems(
+            comment: comment,
+            isLoggedIn: auth.isLoggedIn,
+            currentUsername: auth.username,
+            showsReply: showsReply,
+            handlers: handlers
+        )
+    }
+}
+
+struct CommentMenuItems: View {
+    let comment: AO3Comment
+    let isLoggedIn: Bool
+    let currentUsername: String?
+    let showsReply: Bool
+    let handlers: CommentThreadHandlers
+
+    var body: some View {
         MenuTopRow {
             if showsReply {
                 Button { handlers.onReply(comment) } label: {
@@ -1561,8 +1579,8 @@ private struct CommentPostRow: View {
         }
         if let onMute = handlers.onMute,
            let muteTarget = comment.muteTargetRoute(
-               isLoggedIn: auth.isLoggedIn,
-               currentUsername: auth.username
+               isLoggedIn: isLoggedIn,
+               currentUsername: currentUsername
            ) {
             Button { onMute(muteTarget) } label: {
                 Label("Mute \(comment.author)", systemImage: "speaker.slash")

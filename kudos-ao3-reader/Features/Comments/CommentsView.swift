@@ -1484,6 +1484,14 @@ struct CommentsView: View {
         actionBanner = "Link copied."
     }
 
+    static func muteAction(for target: AO3AuthorRoute, by currentUsername: String) -> AO3AuthorWebAction {
+        AO3AuthorWebAction(
+            label: "Mute",
+            url: target.confirmMuteURL(by: currentUsername),
+            kind: .mute
+        )
+    }
+
     private func beginMute(_ target: AO3AuthorRoute) {
         guard auth.isLoggedIn,
               let currentUsername = auth.username?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1491,11 +1499,7 @@ struct CommentsView: View {
               moderationModel?.isPerformingModeration != true else { return }
         let model = AO3AuthorProfileModel(route: target, reloadsHeaderAfterModeration: false)
         moderationModel = model
-        let action = AO3AuthorWebAction(
-            label: "Mute",
-            url: target.confirmMuteURL(by: currentUsername),
-            kind: .mute
-        )
+        let action = Self.muteAction(for: target, by: currentUsername)
         moderationTask?.cancel()
         moderationTask = Task { await model.beginModeration(action: action, auth: auth) }
     }
