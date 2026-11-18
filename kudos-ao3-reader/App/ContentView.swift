@@ -22,6 +22,7 @@ struct ContentView: View {
     @AppStorage("hideMatureContent") private var hideMature = true
     #endif
     @State private var subscriptionScan = SubscriptionScanService.shared
+    @State private var followedTagUpdates = FollowedTagUpdateStore.shared
     #if os(iOS)
     @State private var mailSubscriptionDriver = MailSubscriptionDriver()
     #endif
@@ -136,6 +137,7 @@ struct ContentView: View {
             .environment(inboxModel)
             .environment(downloadQueue)
             .environment(subscriptionScan)
+            .environment(followedTagUpdates)
             #if os(iOS)
             .environment(speech)
             .environment(mailSubscriptionDriver)
@@ -754,6 +756,7 @@ private struct WebKitPrewarmView: View {
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
             SavedSearch.self, QueueSavedSearchLink.self, ReadingAnnotation.self,
-            ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self
+            ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self,
+            FollowedTag.self
         ], inMemory: true)
 }

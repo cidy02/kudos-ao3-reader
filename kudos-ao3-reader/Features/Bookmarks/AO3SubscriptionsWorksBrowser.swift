@@ -204,9 +204,9 @@ struct AO3SubscriptionsWorksBrowser: View {
     let totalPages: Int
     let isLoading: Bool
     @Binding var filter: AO3SubscriptionsFilter
-    /// Works is this screen's page. The other scopes swap in their own list.
-    /// The parent owns it: its toolbar acts on Works only.
-    @Binding var scope: AO3SubscriptionsScope
+    /// Works is this screen's page. Series/Authors swap in `AO3NamedSubscriptionsList`,
+    /// and Tags stays local (`FollowedTagsListView`).
+    @Binding var tab: AO3SubscriptionsTab
     let onPage: (Int) -> Void
     var onRefresh: (() async -> Void)? = nil
     let onUnsubscribe: (CanonicalWork) -> Void
@@ -225,10 +225,17 @@ struct AO3SubscriptionsWorksBrowser: View {
     }
 
     var body: some View {
-        if scope == .works {
+        switch tab {
+        case .ao3(.works):
             worksBody
-        } else {
-            AO3NamedSubscriptionsList(scope: $scope, palette: palette, kicker: kicker)
+        case let .ao3(scope):
+            AO3NamedSubscriptionsList(tab: $tab, scope: scope, palette: palette, kicker: kicker)
+        case .tags:
+            FollowedTagsListView(
+                palette: palette,
+                showsStandaloneHeader: false,
+                topRail: AnyView(AO3SubscriptionsScopeRail(selection: $tab, palette: palette))
+            )
         }
     }
 
@@ -239,7 +246,7 @@ struct AO3SubscriptionsWorksBrowser: View {
                     .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-                AO3SubscriptionsScopeRail(selection: $scope, palette: palette)
+                AO3SubscriptionsScopeRail(selection: $tab, palette: palette)
                     .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 8, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)

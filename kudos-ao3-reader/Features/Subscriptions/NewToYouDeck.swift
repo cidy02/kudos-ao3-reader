@@ -28,7 +28,7 @@ struct NewToYouCard: Equatable, Identifiable, Sendable {
         case let .series(name):
             guard !name.isEmpty else { return nil }
             return "New in \(name)"
-        case .work, .unknown:
+        case .work, .tag, .unknown:
             return nil
         }
     }
