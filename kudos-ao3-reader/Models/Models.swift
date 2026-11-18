@@ -66,6 +66,8 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     case fandomReadWatermark
     /// A locally followed tag removed via Unfollow or replace-mode.
     case followedTag
+    /// A learned canonical tag alias removed via delete or replace-mode.
+    case tagAlias
 }
 
 /// Durable marker for an explicit local deletion. Future cloud merge code must treat

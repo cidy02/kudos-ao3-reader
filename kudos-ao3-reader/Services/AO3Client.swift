@@ -313,8 +313,12 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// `AO3Client+Comments`) fetch through the same coalesced/retried/paced GET
     /// pipeline instead of growing a second one.
     func getHTML(_ url: URL) async throws -> String {
-        let data = try await fetchData(from: url)
-        return Self.htmlString(from: data)
+        try await fetchHTMLWithURL(from: url).html
+    }
+
+    private func fetchHTMLWithURL(from url: URL) async throws -> (html: String, finalURL: URL?) {
+        let (data, finalURL) = try await fetchDataWithURL(from: url)
+        return (Self.htmlString(from: data), finalURL)
     }
 
     /// Fetches an AO3-hosted image through the same paced, coalesced GET pipeline
@@ -332,13 +336,13 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     /// Coalesces concurrent identical GETs so two callers requesting the same page
     /// at once share one network round-trip (politeness: no duplicate requests).
-    private let coalescer = RequestCoalescer<URL, Data>()
+    private let coalescer = RequestCoalescer<URL, (Data, URL?)>()
 
     /// Same, for authenticated GETs. Keyed by URL *and* Cookie header so a mid-flight
     /// account switch can never hand one session's response to another. The value
-    /// carries the response URL's path instead of the URLResponse (not Sendable) for
-    /// the login-redirect check.
-    private let authCoalescer = RequestCoalescer<String, (Data, String?)>()
+    /// carries the final response URL instead of `URLResponse` (not Sendable) for
+    /// both the login-redirect check and passive tag-alias learning.
+    private let authCoalescer = RequestCoalescer<String, (Data, URL?)>()
 
     /// Fetches a URL's body, validating the HTTP status and retrying transient
     /// failures with backoff (see `withRetry`). Concurrent requests for the same URL
@@ -348,6 +352,10 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// hostile `imageData`/`getHTML` URL cannot become an app-origin beacon
     /// to an arbitrary host.
     private func fetchData(from url: URL) async throws -> Data {
+        try await fetchDataWithURL(from: url).data
+    }
+
+    private func fetchDataWithURL(from url: URL) async throws -> (data: Data, finalURL: URL?) {
         try Self.rejectIfUntrusted(url)
         return try await coalescer.shared(url) { [self] in
             try await performFetch(from: url)
@@ -361,7 +369,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         }
     }
 
-    private func performFetch(from url: URL) async throws -> Data {
+    private func performFetch(from url: URL) async throws -> (Data, URL?) {
         // An address says what is being read or searched for, and whose account it is: never
         // public text in the log (audit A21).
         Log.network.debug("GET \(url.absoluteString, privacy: .private)")
@@ -373,7 +381,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             // regardless of whether the status throws.
             defer { Self.purgeSessionCookie(from: session.configuration.httpCookieStorage, url: url) }
             try checkStatus(response) { data }
-            return data
+            return (data, response.url)
         }
     }
 
@@ -680,14 +688,20 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         guard let url = Self.fandomWorksURL(fandom: fandom, filters: filters, page: page) else {
             throw AO3Error.network("Bad fandom URL.")
         }
-        let html: String
+        let result: (html: String, finalURL: URL?)
         if var request {
             request.url = url
-            html = try await authenticatedPageHTML(for: request)
+            result = try await authenticatedPageHTMLWithURL(for: request)
         } else {
-            html = try await getHTML(url)
+            result = try await fetchHTMLWithURL(from: url)
         }
-        return try Self.parseSearchPage(html, page: page)
+        return try Self.parseSearchPage(
+            result.html,
+            page: page,
+            requestedURL: url,
+            finalURL: result.finalURL,
+            hintKind: .fandom
+        )
     }
 
     /// The `/works/search` URL for a filter set. Pure and static so every
@@ -1039,6 +1053,14 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     private func authenticatedHTML(
         for request: URLRequest, retryTransientFailures: Bool = true
     ) async throws -> String {
+        try await authenticatedHTMLWithURL(
+            for: request, retryTransientFailures: retryTransientFailures
+        ).html
+    }
+
+    private func authenticatedHTMLWithURL(
+        for request: URLRequest, retryTransientFailures: Bool = true
+    ) async throws -> (html: String, finalURL: URL?) {
         var request = request
         // The session cookies are attached explicitly by the auth service; don't let
         // URLSession's shared cookie storage add a second, possibly stale, set.
@@ -1051,15 +1073,15 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         ) + "|retry=\(retryTransientFailures)"
         // Capture a let so the coalescer closure does not close over the mutable `var request`.
         let fetchRequest = request
-        let (data, responsePath) = try await authCoalescer.shared(key) { [self] in
+        let (data, responseURL) = try await authCoalescer.shared(key) { [self] in
             try await performAuthenticatedFetch(
                 for: fetchRequest, retryTransientFailures: retryTransientFailures
             )
         }
-        if Self.isLoginRedirect(path: responsePath) {
+        if Self.isLoginRedirect(path: responseURL?.path) {
             throw AO3Error.authenticationRequired
         }
-        return Self.htmlString(from: data)
+        return (Self.htmlString(from: data), responseURL)
     }
 
     /// Whether AO3 bounced an authenticated request to its login page — the
@@ -1079,7 +1101,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     private func performAuthenticatedFetch(
         for request: URLRequest, retryTransientFailures: Bool = true
-    ) async throws -> (Data, String?) {
+    ) async throws -> (Data, URL?) {
         try await withRetry(maxRetries: retryTransientFailures ? 2 : 0) {
             try await pace()
             let (data, response) = try await session.data(for: request, delegate: redirectCookieRelay)
@@ -1088,7 +1110,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             // status — same reasoning as `purgeSessionCookie` on the anonymous path.
             defer { evictFromSharedCache(request, responseURL: response.url) }
             try checkStatus(response) { data }
-            return (data, response.url?.path)
+            return (data, response.url)
         }
     }
 
@@ -1126,6 +1148,12 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// token (a polite GET — retried/coalesced like other reads).
     func authenticatedPageHTML(for request: URLRequest) async throws -> String {
         try await authenticatedHTML(for: request)
+    }
+
+    private func authenticatedPageHTMLWithURL(
+        for request: URLRequest
+    ) async throws -> (html: String, finalURL: URL?) {
+        try await authenticatedHTMLWithURL(for: request)
     }
 
     /// Header `writeRequest` uses to remember which auth service and generation
@@ -1385,7 +1413,13 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// An authenticated reading-list / search-style page (work blurbs + pagination),
     /// e.g. the Marked-for-Later list.
     func worksPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
-        try await Self.parseSearchPage(authenticatedHTML(for: request), page: page)
+        let result = try await authenticatedHTMLWithURL(for: request)
+        return try Self.parseSearchPage(
+            result.html,
+            page: page,
+            requestedURL: request.url,
+            finalURL: result.finalURL
+        )
     }
 
     /// `/users/:id/readings`, in both its forms — History and, with
@@ -1431,7 +1465,13 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         if page > 1 { items.append(URLQueryItem(name: "page", value: String(page))) }
         components?.queryItems = items
         let resolved = components?.url ?? url
-        return try await Self.parseSearchPage(getHTML(resolved), page: page)
+        let result = try await fetchHTMLWithURL(from: resolved)
+        return try Self.parseSearchPage(
+            result.html,
+            page: page,
+            requestedURL: resolved,
+            finalURL: result.finalURL
+        )
     }
 
     /// The same arbitrary listing URL, but asking AO3 to apply the filter panel's
@@ -1449,14 +1489,19 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         at url: URL, filters: AO3SearchFilters, page: Int, request: URLRequest? = nil
     ) async throws -> AO3SearchPage {
         let resolved = Self.filteredWorksURL(url, filters: filters, page: page)
-        let html: String
+        let result: (html: String, finalURL: URL?)
         if var request {
             request.url = resolved
-            html = try await authenticatedPageHTML(for: request)
+            result = try await authenticatedPageHTMLWithURL(for: request)
         } else {
-            html = try await getHTML(resolved)
+            result = try await fetchHTMLWithURL(from: resolved)
         }
-        return try Self.parseSearchPage(html, page: page)
+        return try Self.parseSearchPage(
+            result.html,
+            page: page,
+            requestedURL: resolved,
+            finalURL: result.finalURL
+        )
     }
 
     /// The URL for the call above, split out so the merge is testable without a
@@ -2046,8 +2091,21 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     /// Parses a works-search results page (works list + pagination). `static` and
     /// internal so it can be unit-tested against fixture HTML without a network call.
-    static func parseSearchPage(_ html: String, page: Int) throws -> AO3SearchPage {
-        try parseWorksList(html, page: page, blurbSelector: "li.work.blurb")
+    static func parseSearchPage(
+        _ html: String,
+        page: Int,
+        requestedURL: URL? = nil,
+        finalURL: URL? = nil,
+        hintKind: TagAliasKind? = nil
+    ) throws -> AO3SearchPage {
+        try parseWorksList(
+            html,
+            page: page,
+            blurbSelector: "li.work.blurb",
+            requestedURL: requestedURL,
+            finalURL: finalURL,
+            hintKind: hintKind
+        )
     }
 
     /// Parses a user's AO3 bookmarks page. Bookmark blurbs are `li.bookmark.blurb`
@@ -2136,7 +2194,13 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// those parses zero works and is not broken — checked against live AO3,
     /// which will happily serve 20 such blurbs on one page.
     private static func parseWorksList(
-        _ html: String, page: Int, blurbSelector: String, requireParseableBlurbs: Bool = true
+        _ html: String,
+        page: Int,
+        blurbSelector: String,
+        requireParseableBlurbs: Bool = true,
+        requestedURL: URL? = nil,
+        finalURL: URL? = nil,
+        hintKind: TagAliasKind? = nil
     ) throws -> AO3SearchPage {
         let doc = try SwiftSoup.parse(html)
         let blurbs = try doc.select(blurbSelector).array()
@@ -2153,13 +2217,28 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             throw AO3Error.parse
         }
         let totalPages = try Self.paginationTotal(in: doc, currentPage: page)
+        let facets = Self.parseFacets(in: doc)
+        let learnedAlias: LearnedTagAlias? = if let requestedURL, let finalURL {
+            Self.learnedTagAlias(
+                requestedURL: requestedURL,
+                finalURL: finalURL,
+                in: doc,
+                facets: facets,
+                works: works,
+                hintKind: hintKind
+            )
+        } else {
+            nil
+        }
         return AO3SearchPage(
             works: works,
             currentPage: page,
             totalPages: totalPages,
             summary: try? Self.resultSummary(in: doc),
-            facets: Self.parseFacets(in: doc),
-            feedTagID: AO3FandomUnion.feedTagID(in: doc)
+            facets: facets,
+            feedTagID: AO3FandomUnion.feedTagID(in: doc),
+            finalURL: finalURL,
+            learnedTagAlias: learnedAlias
         )
     }
 

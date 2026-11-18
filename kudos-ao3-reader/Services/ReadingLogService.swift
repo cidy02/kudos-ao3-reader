@@ -373,7 +373,8 @@ enum ReadingLogService {
     static func facts(
         from sessions: [ReadingSession],
         works: [SavedWork],
-        history: [ReadingSession]? = nil
+        history: [ReadingSession]? = nil,
+        aliases: TagAliasResolver = .empty
     ) -> [ReadingSessionFacts] {
         let worksByID = Dictionary(
             works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
@@ -381,14 +382,15 @@ enum ReadingLogService {
         let read = wordsRead(sessions: history ?? sessions)
         return sessions.map { session in
             let work = worksByID[session.workID]
+            let rawFandom = session.fandoms.first(where: { !$0.isEmpty })
+                ?? work?.workFandoms.first(where: { !$0.isEmpty }) ?? ""
             return ReadingSessionFacts(
                 workID: session.workID,
                 startedAt: session.startedAt,
                 durationSeconds: session.durationSeconds,
                 wordCount: session.wordCount,
                 didFinish: session.didFinish,
-                fandom: session.fandoms.first(where: { !$0.isEmpty })
-                    ?? work?.workFandoms.first(where: { !$0.isEmpty }) ?? "",
+                fandom: aliases.resolve(rawFandom, kind: .fandom),
                 wordsRead: read[session.id] ?? 0,
                 sessionID: session.id,
                 title: session.workTitle.isEmpty ? work?.title ?? "" : session.workTitle,
@@ -455,41 +457,54 @@ enum ReadingLogService {
         previousPeriod: DateInterval?,
         works: [SavedWork],
         calendar: Calendar = .current,
-        context: ModelContext
+        context: ModelContext,
+        aliases: TagAliasResolver? = nil
     ) -> ReadingInsights {
+        let resolvedAliases = aliases ?? TagAliasStore.resolver(in: context)
         let history = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
         let current = facts(
-            from: history.filter { period.contains($0.startedAt) }, works: works, history: history
+            from: history.filter { period.contains($0.startedAt) },
+            works: works,
+            history: history,
+            aliases: resolvedAliases
         )
         let previous = previousPeriod.map { interval in
             facts(
-                from: history.filter { interval.contains($0.startedAt) }, works: works,
-                history: history
+                from: history.filter { interval.contains($0.startedAt) },
+                works: works,
+                history: history,
+                aliases: resolvedAliases
             )
         } ?? []
         return ReadingInsights.make(
             facts: current, previousPeriodFacts: previous,
             dayRange: ReadingInsights.chartDays(for: period, calendar: calendar),
-            calendar: calendar
+            calendar: calendar,
+            aliases: resolvedAliases
         )
     }
 
     /// Tag counts on works that have at least one session. Each tag is counted
     /// once per work, keyed by the work UUID (two works with the same title
-    /// do not collapse).
+    /// do not collapse), resolving learned `TagAlias` names at query time.
     static func tagCounts(
         from sessions: [ReadingSession],
-        works: [SavedWork]
+        works: [SavedWork],
+        aliases: TagAliasResolver = .empty
     ) -> [(tag: String, count: Int)] {
         let workIDs = Set(sessions.map(\.workID))
         let worksByID = Dictionary(works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var counts: [String: Int] = [:]
         for workID in workIDs {
             guard let work = worksByID[workID] else { continue }
-            var tags = work.workTags
-            if tags.isEmpty {
-                tags = work.workFandoms + work.workCharacters
-                    + work.workRelationships + work.workFreeforms
+            let tags: [String]
+            if !work.workTags.isEmpty {
+                tags = aliases.resolvedUnique(work.workTags, kind: .freeform)
+            } else {
+                tags = aliases.resolvedUnique(work.workFandoms, kind: .fandom)
+                    + aliases.resolvedUnique(work.workCharacters, kind: .character)
+                    + aliases.resolvedUnique(work.workRelationships, kind: .relationship)
+                    + aliases.resolvedUnique(work.workFreeforms, kind: .freeform)
             }
             for tag in Set(tags) where !tag.isEmpty {
                 counts[tag, default: 0] += 1

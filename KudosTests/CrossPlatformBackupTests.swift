@@ -676,7 +676,7 @@ struct CrossPlatformBackupTests {
             ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self,
             QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self, ReadingSession.self, ReadingFavorite.self,
-            FandomReadWatermark.self, FollowedTag.self
+            FandomReadWatermark.self, FollowedTag.self, TagAlias.self
         ])
     }
 

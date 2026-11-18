@@ -623,6 +623,9 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
     /// Locally followed tags. Optional and omitted (`nil`) when empty so manifests
     /// match older iOS/Android golden archives verbatim.
     let followedTags: [KudosBackupFollowedTag]?
+    /// Canonical tag aliases learned passively from AO3 redirects. Optional and
+    /// omitted (`nil`) when empty so manifests match older iOS/Android golden archives.
+    let tagAliases: [KudosBackupTagAlias]?
     let settings: KudosBackupSettings
     /// Read-aloud pronunciation corrections. Hand-made, unreconstructible, and
     /// small, so they travel with the reader rather than being stranded on one
@@ -654,6 +657,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         readingFavorites: [KudosBackupReadingFavorite] = [],
         fandomReadWatermarks: [KudosBackupFandomReadWatermark] = [],
         followedTags: [KudosBackupFollowedTag]? = nil,
+        tagAliases: [KudosBackupTagAlias]? = nil,
         settings: KudosBackupSettings,
         pronunciations: KudosBackupPronunciations = .empty,
         tombstones: [KudosBackupTombstone] = []
@@ -672,6 +676,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         self.readingFavorites = readingFavorites
         self.fandomReadWatermarks = fandomReadWatermarks
         self.followedTags = followedTags.flatMap { $0.isEmpty ? nil : $0 }
+        self.tagAliases = tagAliases.flatMap { $0.isEmpty ? nil : $0 }
         self.pronunciations = pronunciations
         self.settings = settings
         self.tombstones = tombstones
@@ -692,6 +697,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         case readingFavorites
         case fandomReadWatermarks
         case followedTags
+        case tagAliases
         case settings
         case pronunciations
         case tombstones
@@ -739,6 +745,10 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         followedTags = try container.decodeIfPresent(
             [KudosBackupFollowedTag].self,
             forKey: .followedTags
+        )
+        tagAliases = try container.decodeIfPresent(
+            [KudosBackupTagAlias].self,
+            forKey: .tagAliases
         )
         settings = try container.decode(KudosBackupSettings.self, forKey: .settings)
         pronunciations = try container.decodeIfPresent(
@@ -1604,6 +1614,50 @@ nonisolated struct KudosBackupFollowedTag: Codable, Equatable {
     }
 }
 
+/// Codable backup entry for a learned AO3 canonical tag alias (`TagAlias`).
+nonisolated struct KudosBackupTagAlias: Codable, Equatable {
+    let id: UUID
+    let name: String
+    let canonicalName: String
+    let kindRaw: String
+    let parentFandoms: [String]?
+    let learnedAt: Date
+    let lastModifiedAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, canonicalName, kindRaw, parentFandoms, learnedAt, lastModifiedAt
+    }
+
+    @MainActor
+    init(alias: TagAlias) {
+        id = alias.id
+        name = alias.name
+        canonicalName = alias.canonicalName
+        kindRaw = alias.kindRaw
+        let parents = LearnedTagAlias.normalizedParentFandoms(alias.parentFandoms)
+        parentFandoms = parents.isEmpty ? nil : parents
+        learnedAt = alias.learnedAt
+        lastModifiedAt = alias.lastModifiedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = (try container.decodeIfPresent(String.self, forKey: .name) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        canonicalName = (try container.decodeIfPresent(String.self, forKey: .canonicalName) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        kindRaw = try container.decodeIfPresent(String.self, forKey: .kindRaw)
+            ?? TagAliasKind.freeform.rawValue
+        let decodedParents = try container.decodeIfPresent([String].self, forKey: .parentFandoms)
+            .map(LearnedTagAlias.normalizedParentFandoms)
+        parentFandoms = decodedParents?.isEmpty == true ? nil : decodedParents
+        learnedAt = try container.decodeIfPresent(Date.self, forKey: .learnedAt) ?? Date()
+        lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt)
+            ?? learnedAt
+    }
+}
+
 /// Matches Android `BackupCollection` (`backup/BackupManifest.kt`):
 /// `id`, `name`, `dateAdded`, `workIDs`, optional `description`/`sortOrder`
 /// (`String?` / `Int?`), plus the Apple sync tombstone fields.
@@ -2367,6 +2421,7 @@ enum KudosBackupService {
         readingFavorites: [ReadingFavorite] = [],
         fandomReadWatermarks: [FandomReadWatermark] = [],
         followedTags: [FollowedTag] = [],
+        tagAliases: [TagAlias] = [],
         tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupContents {
@@ -2417,6 +2472,7 @@ enum KudosBackupService {
             readingFavorites: readingFavorites.map(KudosBackupReadingFavorite.init),
             fandomReadWatermarks: fandomReadWatermarks.map(KudosBackupFandomReadWatermark.init),
             followedTags: followedTags.map(KudosBackupFollowedTag.init),
+            tagAliases: tagAliases.map(KudosBackupTagAlias.init),
             settings: .capture(defaults: defaults),
             pronunciations: .capture(),
             tombstones: tombstones.map(KudosBackupTombstone.init)
@@ -3534,6 +3590,9 @@ enum KudosBackupService {
         restoreFollowedTags(
             contents: contents, context: context, tombstones: tombstones, mode: mode
         )
+        restoreTagAliases(
+            contents: contents, context: context, tombstones: tombstones, mode: mode
+        )
 
         let existingBookmarks = try context.fetch(FetchDescriptor<Bookmark>())
         var bookmarksByURL = Dictionary(
@@ -4368,6 +4427,115 @@ enum KudosBackupService {
         local.lastModifiedAt = archived.lastModifiedAt
     }
 
+    /// Restores learned canonical tag aliases when `manifest.tagAliases` is present.
+    ///
+    /// Older iOS backups and Android archives omit `tagAliases` (`nil`), in which case
+    /// existing local aliases are left completely untouched.
+    private static func restoreTagAliases(
+        contents: KudosBackupContents,
+        context: ModelContext,
+        tombstones: TombstoneIndex,
+        mode: BackupImportMode
+    ) {
+        let archivedAliases = contents.manifest.tagAliases
+        if archivedAliases == nil, !tombstones.hasTagAliasTombstones {
+            return
+        }
+
+        let existing = (try? context.fetch(FetchDescriptor<TagAlias>())) ?? []
+        var suppressedLocalIDs: Set<UUID> = []
+        if mode != .replaceLibrary {
+            for alias in existing {
+                if case .suppressStaleData = tombstones.tagAliasResolution(
+                    id: alias.id,
+                    incomingModifiedAt: alias.lastModifiedAt
+                ) {
+                    suppressedLocalIDs.insert(alias.id)
+                    context.delete(alias)
+                }
+            }
+        }
+
+        // Legacy/Android archives omit `tagAliases` (`nil`); after applying any
+        // explicit deletions above, leave surviving local aliases untouched.
+        guard let archivedAliases else { return }
+
+        let survivors = existing.filter { !suppressedLocalIDs.contains($0.id) }
+        var byID = Dictionary(survivors.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var byNaturalKey = Dictionary(
+            survivors.map { (TagAlias.normalizedKey(name: $0.name, kind: $0.kind), $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var resolvedLocalIDs: Set<UUID> = []
+
+        for archived in archivedAliases {
+            let name = archived.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let canonicalName = archived.canonicalName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, !canonicalName.isEmpty, name != canonicalName else { continue }
+            let kind = TagAliasKind(rawValue: archived.kindRaw) ?? .freeform
+            let naturalKey = TagAlias.normalizedKey(name: name, kind: kind)
+            let incomingParents = LearnedTagAlias.normalizedParentFandoms(archived.parentFandoms ?? [])
+
+            if mode != .replaceLibrary {
+                switch tombstones.tagAliasResolution(
+                    id: archived.id,
+                    incomingModifiedAt: archived.lastModifiedAt
+                ) {
+                case .suppressStaleData:
+                    continue
+                case .reviveNewerData, .preserveAmbiguous, .noTombstone:
+                    break
+                }
+            }
+
+            if let local = byID[archived.id] ?? byNaturalKey[naturalKey] {
+                resolvedLocalIDs.insert(local.id)
+                if mode == .merge, byID[archived.id] != nil { continue }
+                if mode != .replaceLibrary {
+                    guard SyncMerge.shouldApplyIncoming(
+                        localModifiedAt: local.lastModifiedAt,
+                        incomingModifiedAt: archived.lastModifiedAt
+                    ) else { continue }
+                }
+                local.name = name
+                local.canonicalName = canonicalName
+                local.kind = kind
+                if mode == .replaceLibrary {
+                    local.parentFandoms = incomingParents
+                } else if !incomingParents.isEmpty {
+                    local.parentFandoms = LearnedTagAlias.normalizedParentFandoms(
+                        local.parentFandoms + incomingParents
+                    )
+                }
+                local.learnedAt = archived.learnedAt
+                local.lastModifiedAt = archived.lastModifiedAt
+                byID[local.id] = local
+                byNaturalKey[naturalKey] = local
+            } else {
+                let alias = TagAlias(
+                    id: archived.id,
+                    name: name,
+                    canonicalName: canonicalName,
+                    kind: kind,
+                    parentFandoms: incomingParents,
+                    learnedAt: archived.learnedAt,
+                    lastModifiedAt: archived.lastModifiedAt
+                )
+                context.insert(alias)
+                byID[alias.id] = alias
+                byNaturalKey[naturalKey] = alias
+                resolvedLocalIDs.insert(alias.id)
+            }
+        }
+
+        if mode == .replaceLibrary {
+            for alias in existing where !resolvedLocalIDs.contains(alias.id) {
+                SyncTombstones.recordDeletion(of: alias, in: context)
+                context.delete(alias)
+            }
+        }
+    }
+
     /// Prevents backup import from resurrecting a record the user explicitly deleted on
     /// this device. A work tombstone only suppresses recreation when it is at least as
     /// new as the archived snapshot — an archived work with a strictly newer modification
@@ -4675,6 +4843,7 @@ enum KudosBackupService {
         private var readingFavoriteTombstonesByID: [UUID: SyncTombstone] = [:]
         private var fandomReadWatermarkTombstonesByID: [UUID: SyncTombstone] = [:]
         private var followedTagTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var tagAliasTombstonesByID: [UUID: SyncTombstone] = [:]
 
         init(_ tombstones: [SyncTombstone]) {
             for tombstone in tombstones {
@@ -4712,6 +4881,8 @@ enum KudosBackupService {
                     indexNewest(tombstone, byFandomReadWatermarkID: tombstone.recordID)
                 case .followedTag:
                     indexNewest(tombstone, byFollowedTagID: tombstone.recordID)
+                case .tagAlias:
+                    indexNewest(tombstone, byTagAliasID: tombstone.recordID)
                 }
             }
         }
@@ -4829,6 +5000,16 @@ enum KudosBackupService {
             followedTagTombstonesByID[id] = tombstone
         }
 
+        private mutating func indexNewest(
+            _ tombstone: SyncTombstone, byTagAliasID id: UUID
+        ) {
+            if let existing = tagAliasTombstonesByID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            tagAliasTombstonesByID[id] = tombstone
+        }
+
         /// Whether importing this archived work would resurrect an explicit local delete.
         func suppressesResurrection(of archived: KudosBackupWork) -> Bool {
             let tombstone: SyncTombstone? = if let archivedAO3WorkID = archived.ao3WorkID ?? WorkTags.ao3WorkID(from: archived.sourceURL),
@@ -4913,6 +5094,19 @@ enum KudosBackupService {
             SyncMerge.tombstoneResolution(
                 incomingModifiedAt: incomingModifiedAt,
                 tombstoneDeletedAt: followedTagTombstonesByID[id]?.lastModifiedAt
+            )
+        }
+
+        var hasTagAliasTombstones: Bool {
+            !tagAliasTombstonesByID.isEmpty
+        }
+
+        func tagAliasResolution(
+            id: UUID, incomingModifiedAt: Date?
+        ) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: tagAliasTombstonesByID[id]?.lastModifiedAt
             )
         }
 
