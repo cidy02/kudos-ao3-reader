@@ -368,7 +368,9 @@ struct FandomWorksView: View {
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
-            .remoteWorkSelectionChrome(bulkSelection)
+            .remoteWorkSelectionChrome(bulkSelection, showsBottomAccessory: showPagination) {
+                paginationBar.padding(.horizontal, SubjectMetrics.gutter)
+            }
             .task { await load(page: 1) }
             .task { await rankTop100.refreshAvailability() }
             .onChange(of: savedWorks.map(\.id), initial: true) { _, _ in
@@ -385,10 +387,6 @@ struct FandomWorksView: View {
                 rankTop100.cancel()
                 rankTop100Pages = [:]
                 showsRankedResults = false
-            }
-            // A floating pill above the tab bar on every platform: a child's tabViewBottomAccessory drew nothing on Lane E.
-            .safeAreaInset(edge: .bottom) {
-                if showPagination { paginationBar.padding(.horizontal, SubjectMetrics.gutter) }
             }
     }
 
@@ -949,7 +947,9 @@ struct TagWorksView: View {
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
-            .remoteWorkSelectionChrome(bulkSelection)
+            .remoteWorkSelectionChrome(bulkSelection, showsBottomAccessory: showPagination) {
+                paginationBar.padding(.horizontal, SubjectMetrics.gutter)
+            }
             .task { await load(page: 1) }
             .task { await rankTop100.refreshAvailability() }
             .onChange(of: savedWorks.map(\.id), initial: true) { _, _ in
@@ -966,10 +966,6 @@ struct TagWorksView: View {
                 rankTop100.cancel()
                 rankTop100Pages = [:]
                 showsRankedResults = false
-            }
-            // A floating pill above the tab bar on every platform: a child's tabViewBottomAccessory drew nothing on Lane E.
-            .safeAreaInset(edge: .bottom) {
-                if showPagination { paginationBar.padding(.horizontal, SubjectMetrics.gutter) }
             }
     }
 

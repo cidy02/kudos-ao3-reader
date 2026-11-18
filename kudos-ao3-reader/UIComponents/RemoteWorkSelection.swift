@@ -682,6 +682,30 @@ struct SelectableAO3WorkRow: View {
     }
 }
 
+/// Bottom chrome shared by remote-work lists: keeps an ephemeral queue toast
+/// stacked above any persistent bottom bar (such as the results page pill)
+/// inside one safe-area inset so neither can draw over the other.
+struct RemoteWorkBottomInset<Accessory: View>: View {
+    let controller: RemoteWorkSelectionController
+    let showsAccessory: Bool
+    @ViewBuilder let accessory: () -> Accessory
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if let target = controller.toastTarget {
+                QueueAddedToast(queue: target.queue, change: {
+                    controller.changeQueue()
+                }, undo: { controller.undo() })
+                .padding(.horizontal, 16)
+            }
+            if showsAccessory {
+                accessory()
+            }
+        }
+        .padding(.bottom, showsAccessory ? 0 : 8)
+    }
+}
+
 extension View {
     /// Host-side plumbing for a `RemoteWorkSelectionController`: the Add to
     /// Queue/Collection sheets, the batch failure alert, and cancelling the
@@ -690,6 +714,16 @@ extension View {
     /// Unstructured batch tasks outlive the view unless explicitly cancelled;
     /// the bulk loops bail out cleanly on CancellationError.
     func remoteWorkSelectionChrome(_ controller: RemoteWorkSelectionController) -> some View {
+        remoteWorkSelectionChrome(controller, showsBottomAccessory: false) { EmptyView() }
+    }
+
+    /// Host-side plumbing plus a persistent bottom accessory (such as a page
+    /// switcher pill) sharing the bottom safe-area inset beneath any queue toast.
+    func remoteWorkSelectionChrome<BottomAccessory: View>(
+        _ controller: RemoteWorkSelectionController,
+        showsBottomAccessory: Bool = true,
+        @ViewBuilder bottomAccessory: @escaping () -> BottomAccessory
+    ) -> some View {
         @Bindable var controller = controller
         return self
             .sheet(isPresented: $controller.showingAddToQueue) {
@@ -717,12 +751,12 @@ extension View {
             #endif
             .onDisappear { controller.batchTask?.cancel() }
             .safeAreaInset(edge: .bottom) {
-                if let target = controller.toastTarget {
-                    QueueAddedToast(queue: target.queue, change: {
-                        controller.changeQueue()
-                    }, undo: { controller.undo() })
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
+                if controller.toastTarget != nil || showsBottomAccessory {
+                    RemoteWorkBottomInset(
+                        controller: controller,
+                        showsAccessory: showsBottomAccessory,
+                        accessory: bottomAccessory
+                    )
                 }
             }
             // A tick per row ticked, but not for the clear when selection mode ends.

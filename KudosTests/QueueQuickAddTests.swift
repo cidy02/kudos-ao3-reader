@@ -1073,6 +1073,140 @@ struct QueueQuickAddTests {
         #expect(ax5Actions.height >= max(94, largeActions.height * 2.2))
         #expect(ax5Toast.height >= ax5Actions.height + 44)
     }
+
+    @Test func bottomInsetStacksToastAbovePagerAtLargeAndAX5() throws {
+        let context = try context()
+        let queue = ReadingQueue(name: "Want to Read", kind: .savedForLater)
+        context.insert(queue)
+        let settings = try defaults()
+        let emptyController = RemoteWorkSelectionController()
+        let toastController = RemoteWorkSelectionController()
+        toastController.quickAdd(summary(530), in: context, defaults: settings) { _, _, _ in }
+
+        let theme = ThemeManager()
+        let width: CGFloat = 390
+        for size in [DynamicTypeSize.large, DynamicTypeSize.accessibility5] {
+            let pillOnly = UIHostingController(
+                rootView: RemoteWorkBottomInset(controller: emptyController, showsAccessory: true) {
+                    SearchPaginationBar(currentPage: 1, totalPages: 3) { _ in }
+                        .padding(.horizontal, SubjectMetrics.gutter)
+                }
+                .environment(theme)
+                .environment(\.dynamicTypeSize, size)
+            ).sizeThatFits(in: CGSize(width: width, height: 1200))
+
+            let toastOnly = UIHostingController(
+                rootView: RemoteWorkBottomInset(controller: toastController, showsAccessory: false) {
+                    EmptyView()
+                }
+                .environment(theme)
+                .environment(\.dynamicTypeSize, size)
+            ).sizeThatFits(in: CGSize(width: width, height: 1200))
+
+            let stacked = UIHostingController(
+                rootView: RemoteWorkBottomInset(controller: toastController, showsAccessory: true) {
+                    SearchPaginationBar(currentPage: 1, totalPages: 3) { _ in }
+                        .padding(.horizontal, SubjectMetrics.gutter)
+                }
+                .environment(theme)
+                .environment(\.dynamicTypeSize, size)
+            ).sizeThatFits(in: CGSize(width: width, height: 1200))
+
+            // `toastOnly` includes its own 8pt bottom pad; `stacked` removes that pad and puts 8pt between them.
+            #expect(pillOnly.height >= 44)
+            #expect(toastOnly.height >= 44)
+            #expect(stacked.height >= toastOnly.height + pillOnly.height - 1)
+        }
+    }
+
+    @Test func navigationStackSelectionChromeKeepsPagerAnchoredAndExpandsSafeAreaForToast() async throws {
+        let context = try context()
+        let queue = ReadingQueue(name: "Want to Read", kind: .savedForLater)
+        context.insert(queue)
+        let settings = try defaults()
+        let theme = ThemeManager()
+
+        for (size, isSelecting) in [
+            (DynamicTypeSize.large, false),
+            (DynamicTypeSize.accessibility5, false),
+            (DynamicTypeSize.accessibility5, true)
+        ] {
+            let controller = RemoteWorkSelectionController()
+            controller.isSelecting = isSelecting
+            var safeContentFrame: CGRect = .zero
+            var pillFrame: CGRect = .zero
+
+            let root = NavigationStack {
+                ZStack {
+                    List { Text("Result") }
+                    Color.clear
+                        .allowsHitTesting(false)
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+                            safeContentFrame = frame
+                        }
+                }
+                .remoteWorkSelectionChrome(controller, showsBottomAccessory: true) {
+                    SearchPaginationBar(currentPage: 1, totalPages: 3) { _ in }
+                        .padding(.horizontal, SubjectMetrics.gutter)
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+                            pillFrame = frame
+                        }
+                }
+            }
+            .environment(theme)
+            .environment(\.dynamicTypeSize, size)
+
+            let host = UIHostingController(rootView: root)
+            let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+            let previousKeyWindow = scene?.windows.first(where: \.isKeyWindow)
+            let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow()
+            window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            defer {
+                window.isHidden = true
+                previousKeyWindow?.makeKey()
+            }
+
+            for _ in 0..<4 {
+                host.view.layoutIfNeeded()
+                try await Task.sleep(for: .milliseconds(30))
+            }
+
+            let initialSafeMaxY = safeContentFrame.maxY
+            let initialPillFrame = pillFrame
+            #expect(initialPillFrame.height >= 44)
+            #expect(initialPillFrame.maxY <= window.bounds.height)
+            #expect(initialSafeMaxY > 0)
+            #expect(initialSafeMaxY <= initialPillFrame.minY + 1)
+
+            let toastHeight = UIHostingController(
+                rootView: QueueAddedToast(queue: queue, change: {}, undo: {})
+                    .padding(.horizontal, 16)
+                    .environment(theme)
+                    .environment(\.dynamicTypeSize, size)
+            ).sizeThatFits(in: CGSize(width: window.bounds.width, height: 1200)).height
+
+            // Swipe triggers while not selecting; select mode can still be entered while the toast is up.
+            controller.isSelecting = false
+            controller.quickAdd(
+                summary(531 + (size == .accessibility5 ? 10 : 0) + (isSelecting ? 1 : 0)),
+                in: context, defaults: settings
+            ) { _, _, _ in }
+            controller.isSelecting = isSelecting
+
+            for _ in 0..<5 {
+                host.view.layoutIfNeeded()
+                try await Task.sleep(for: .milliseconds(30))
+            }
+
+            #expect(controller.toastTarget != nil)
+            #expect(pillFrame.height >= 44)
+            #expect(abs(pillFrame.minY - initialPillFrame.minY) <= 2)
+            #expect(safeContentFrame.maxY <= initialSafeMaxY - toastHeight + 1)
+            #expect(safeContentFrame.maxY <= pillFrame.minY - toastHeight + 1)
+        }
+    }
     #endif
 
     @Test func downloadPolicySkipsUndoneAndListOnlyWorks() throws {

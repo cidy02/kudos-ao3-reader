@@ -352,7 +352,11 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         .presentationDetents([.medium, .large])
                         .presentationDragIndicator(.visible)
                 }
-                .remoteWorkSelectionChrome(bulkSelection)
+                // Shares the inner bottom inset with the queue toast inside NavigationStack so
+                // neither draws over the other (a stack-outer inset never reduced the inner safe area).
+                .remoteWorkSelectionChrome(bulkSelection, showsBottomAccessory: showPagination) {
+                    paginationBar.padding(.horizontal, SubjectMetrics.gutter)
+                }
                 .onChange(of: router.selection) { _, selection in
                     if selection != .search { rankTop100.cancel() }
                 }
@@ -367,10 +371,6 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 .onChange(of: savedWorks.map(\.id), initial: true) { _, _ in
                     libraryIndex = WorkIdentityIndex(savedWorks)
                 }
-        }
-        // A floating pill above the tab bar on every platform: a child's tabViewBottomAccessory drew nothing on Lane E.
-        .safeAreaInset(edge: .bottom) {
-            if showPagination { paginationBar.padding(.horizontal, SubjectMetrics.gutter) }
         }
     }
 
