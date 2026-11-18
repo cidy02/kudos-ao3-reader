@@ -81,11 +81,12 @@ struct WhatFitsView: View {
         .subjectOwnHeadingChrome(title: "What Fits")
         .toolbar {
             if showsMatureMenu {
-                ActionToolbar(items: [
-                    AnyView(WorkListMoreMenu {
+                ToolbarItem(placement: .primaryAction) {
+                    WorkListMoreMenu {
                         MatureRevealToggle()
-                    })
-                ])
+                    }
+                    .labelStyle(.iconOnly)
+                }
             }
         }
     }
@@ -168,7 +169,7 @@ struct WhatFitsView: View {
             ? Text("")
             : Text(" · Needs download")
                 .foregroundStyle(.secondaryInk)
-        return (timeText + queueText + downloadText)
+        return Text("\(timeText)\(queueText)\(downloadText)")
             .font(.footnote)
             .monospacedDigit()
             .fixedSize(horizontal: false, vertical: true)
@@ -227,6 +228,42 @@ struct WhatFitsView: View {
                     .prominentLabel()
                 }
             }
+        }
+    }
+}
+
+/// Entry row at the top of the Queues organizer (`AllReadingQueuesGridView`)
+/// pushing `WhatFitsView`.
+struct WhatFitsOrganizerRow: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "clock")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.accentInk)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("What Fits")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("See what you can finish across your queues")
+                    .font(.caption)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondaryInk)
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .subjectPanel()
+        .contentShape(Rectangle())
+        .accessibilityHidden(true)
+        .subjectRowNavigation(accessibilityLabel: "What Fits, see what you can finish across your queues") {
+            WhatFitsView()
         }
     }
 }
