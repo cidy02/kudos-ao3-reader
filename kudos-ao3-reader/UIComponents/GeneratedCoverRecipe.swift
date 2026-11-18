@@ -124,7 +124,7 @@ nonisolated struct GeneratedCoverRecipe: Codable, Equatable, Sendable {
         "Case Fic": "orderly", "Mystery": "orderly", "Politics": "orderly", "Character Study": "orderly",
         "Fantasy": "celestial", "Magic": "celestial", "Science Fiction": "celestial"
     ]
-    private static let subtitlePattern = try! NSRegularExpression(pattern: #"^(.*\S)\s+(\(.*\)|\[.*\])$"#)
+    private static let subtitlePattern = try? NSRegularExpression(pattern: #"^(.*\S)\s+(\(.*\)|\[.*\])$"#)
     // Approximate posting dates of well-known works and round-number IDs, supplied
     // by the orchestrator from memory on 2026-11-14 while AO3 was down; not verified
     // against AO3. A year of error shifts the 16-year, 0.14-lightness ramp by <0.01.
@@ -262,7 +262,7 @@ nonisolated struct GeneratedCoverRecipe: Codable, Equatable, Sendable {
 
     private static func splitTitle(_ text: String) -> (String, String) {
         if let range = text.range(of: "; or, ") { return (String(text[..<range.lowerBound]), String(text[range.upperBound...])) }
-        if let match = subtitlePattern.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+        if let match = subtitlePattern?.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
            let main = Range(match.range(at: 1), in: text),
            let subtitle = Range(match.range(at: 2), in: text) {
             return (String(text[main]), String(text[subtitle]))
