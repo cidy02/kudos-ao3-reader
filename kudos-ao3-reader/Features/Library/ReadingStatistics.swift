@@ -31,7 +31,8 @@ struct ReadingStatistics {
     init(
         works: [SavedWork],
         now: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        aliases: TagAliasResolver = .empty
     ) {
         var started: [SavedWork] = []
         for work in works where Self.hasStarted(work) {
@@ -56,7 +57,7 @@ struct ReadingStatistics {
             ?? startOfToday
         openedLast7Days = Self.countOpened(works, since: sevenDayStart, through: now)
         openedLast30Days = Self.countOpened(works, since: thirtyDayStart, through: now)
-        topFandoms = Self.fandomCounts(in: started)
+        topFandoms = Self.fandomCounts(in: started, aliases: aliases)
     }
 
     /// Finished counts as started even when the progress fields were reset. Defers
@@ -78,13 +79,13 @@ struct ReadingStatistics {
         }
     }
 
-    private static func fandomCounts(in works: [SavedWork]) -> [FandomCount] {
+    private static func fandomCounts(
+        in works: [SavedWork],
+        aliases: TagAliasResolver = .empty
+    ) -> [FandomCount] {
         var counts: [String: Int] = [:]
         for work in works {
-            let uniqueFandoms = Set(work.workFandoms.compactMap { raw -> String? in
-                let fandom = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                return fandom.isEmpty ? nil : fandom
-            })
+            let uniqueFandoms = aliases.resolvedUnique(work.workFandoms, kind: .fandom)
             for fandom in uniqueFandoms {
                 counts[fandom, default: 0] += 1
             }

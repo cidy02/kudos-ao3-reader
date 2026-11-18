@@ -491,6 +491,7 @@ enum FolderSyncService {
             readingFavorites: (try? context.fetch(FetchDescriptor<ReadingFavorite>())) ?? [],
             fandomReadWatermarks: (try? context.fetch(FetchDescriptor<FandomReadWatermark>())) ?? [],
             followedTags: (try? context.fetch(FetchDescriptor<FollowedTag>())) ?? [],
+            tagAliases: (try? context.fetch(FetchDescriptor<TagAlias>())) ?? [],
             tombstones: context.fetch(FetchDescriptor<SyncTombstone>()),
             defaults: defaults
         )

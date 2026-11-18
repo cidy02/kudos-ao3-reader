@@ -122,6 +122,7 @@ struct FandomWorksView: View {
     /// The other half of the fandom-row zoom — set by BrowseView on the stack.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
 
+    @Environment(\.modelContext) private var modelContext
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
@@ -593,6 +594,9 @@ struct FandomWorksView: View {
                 }
             }
             guard token == loadToken else { return }
+            if let learnedAlias = result.learnedTagAlias {
+                TagAliasStore.upsert(learnedAlias, in: modelContext)
+            }
             let newWorks = ranking.noting(result.works)
             results = newWorks
             showsRankedResults = false
@@ -799,6 +803,7 @@ struct TagWorksView: View {
     @AppStorage("hideMatureContent") private var hideMature = true
     let request: AO3TagWorksRequest
 
+    @Environment(\.modelContext) private var modelContext
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
@@ -1258,6 +1263,9 @@ struct TagWorksView: View {
                 )
             }
             guard token == loadToken else { return }
+            if let learnedAlias = result.learnedTagAlias {
+                TagAliasStore.upsert(learnedAlias, in: modelContext)
+            }
             let newWorks = ranking.noting(result.works)
             results = newWorks
             showsRankedResults = false

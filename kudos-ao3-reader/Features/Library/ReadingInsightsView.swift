@@ -578,18 +578,26 @@ struct ReadingInsightsView: View {
               let previousInterval = calendar.dateInterval(of: component, for: earlierDate)
         else { return }
 
+        let tagAliases = TagAliasStore.resolver(in: context)
+
         let figures = ReadingLogService.insights(
             for: currentInterval,
             previousPeriod: previousInterval,
             works: effectiveWorks,
             calendar: calendar,
-            context: context
+            context: context,
+            aliases: tagAliases
         )
 
         insights = figures
 
         let allHistory = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
-        let allFacts = ReadingLogService.facts(from: allHistory, works: effectiveWorks, history: allHistory)
+        let allFacts = ReadingLogService.facts(
+            from: allHistory,
+            works: effectiveWorks,
+            history: allHistory,
+            aliases: tagAliases
+        )
         let periodFacts = allFacts.filter { currentInterval.contains($0.startedAt) }
 
         let readWorkIDs = Set(periodFacts.map(\.workID))
@@ -599,14 +607,16 @@ struct ReadingInsightsView: View {
         // rather than all-time rankings under the period title.
         tasteInsights = worksInPeriod.isEmpty ? nil : ReadingTasteInsights.make(
             works: worksInPeriod,
-            facts: periodFacts
+            facts: periodFacts,
+            aliases: tagAliases
         )
 
         habitsInsights = ReadingHabitsInsights.make(
             works: effectiveWorks,
             facts: periodFacts,
             allFacts: allFacts,
-            calendar: calendar
+            calendar: calendar,
+            aliases: tagAliases
         )
 
         libraryInsights = ReadingLibraryInsights.make(
@@ -614,10 +624,16 @@ struct ReadingInsightsView: View {
             facts: periodFacts,
             periodInterval: currentInterval,
             periodMonths: range == .year ? 12 : 1,
-            calendar: calendar
+            calendar: calendar,
+            aliases: tagAliases
         )
 
-        libraryStats = ReadingStatistics(works: effectiveWorks, now: Date(), calendar: calendar)
+        libraryStats = ReadingStatistics(
+            works: effectiveWorks,
+            now: Date(),
+            calendar: calendar,
+            aliases: tagAliases
+        )
 
         finishedWorksInPeriod = effectiveWorks.filter { w in
             w.isFinished && periodFacts.contains { $0.workID == w.id && $0.didFinish }
