@@ -244,7 +244,9 @@ struct AO3AuthorProfileParserTests {
         let runs = about.bio.blocks.flatMap(\.runs)
 
         #expect(about.profileTitle == "Avery's Archive Profile")
-        #expect(about.joinedDate == "12 March 2014")
+        #expect(about.joinedDate == "2014-03-12")
+        #expect(about.displayJoinedDate(locale: Locale(identifier: "en_US")) == "Mar 12, 2014")
+        #expect(about.displayJoinedDate(locale: Locale(identifier: "en_GB")) == "12 Mar 2014")
         #expect(about.userID == 4242)
         #expect(about.pseuds.map(\.name) == ["Avery Writes", "NightShift"])
         #expect(about.bio.blocks.count == 4)
@@ -256,6 +258,35 @@ struct AO3AuthorProfileParserTests {
                 == "https://example.com/reading-order"
         })
         #expect(runs.contains { $0.text.contains("Unsafe links") && $0.link == nil })
+    }
+
+    @Test func joinedDateFallsBackToRawTextAndNeverShiftsAcrossFarTimeZones() throws {
+        let route = try #require(AO3AuthorRoute(username: "Avery_Archive"))
+        let unparseableHTML = """
+        <div id="main" class="user home profile">
+          <dl class="meta"><dt>I joined on:</dt><dd>Spring 2014</dd></dl>
+        </div>
+        """
+        let unparseableAbout = try AO3Client.parseAuthorAbout(unparseableHTML, route: route)
+        let us = Locale(identifier: "en_US")
+        #expect(unparseableAbout.joinedDate == "Spring 2014")
+        #expect(unparseableAbout.displayJoinedDate(locale: us) == "Spring 2014")
+        #expect(AO3AuthorAbout(joinedDate: "2014-02-30").displayJoinedDate(locale: us) == "2014-02-30")
+        #expect(AO3AuthorAbout(joinedDate: "   ").displayJoinedDate(locale: us).isEmpty)
+
+        // Parsing produces UTC midnight; far UTC-10 and UTC+14 locale tags and near-midnight
+        // instants in GMT must keep the calendar day intact.
+        let midnightUTC = try #require(WorkStat.date(from: "2014-03-12"))
+        #expect(midnightUTC == Date(timeIntervalSince1970: 1_394_582_400))
+        let lateNightUTC = midnightUTC.addingTimeInterval(23 * 3600 + 59 * 60 + 59)
+        #expect(WorkStat.displayDate(midnightUTC, locale: us, timeZone: .gmt) == "Mar 12, 2014")
+        #expect(WorkStat.displayDate(lateNightUTC, locale: us, timeZone: .gmt) == "Mar 12, 2014")
+
+        for zoneLocale in [Locale(identifier: "en_US@tz=ushnl"), Locale(identifier: "en_US@tz=cxiki")] {
+            #expect(AO3AuthorAbout(joinedDate: "2014-03-12").displayJoinedDate(locale: zoneLocale) == "Mar 12, 2014")
+            #expect(AO3AuthorAbout(joinedDate: "2014-01-01").displayJoinedDate(locale: zoneLocale) == "Jan 1, 2014")
+            #expect(AO3AuthorAbout(joinedDate: "2014-12-31").displayJoinedDate(locale: zoneLocale) == "Dec 31, 2014")
+        }
     }
 
     @Test func parsesWorksCoauthorsAnonymousOrphanAndPagination() throws {

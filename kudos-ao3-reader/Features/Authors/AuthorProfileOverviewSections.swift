@@ -83,15 +83,28 @@ struct AuthorProfileOverviewHeader: View {
     }
 
     private func identitySubtitle(_ header: AO3AuthorHeader) -> String? {
+        Self.identitySubtitle(
+            about: model.about,
+            pseudCount: header.pseuds.count,
+            route: model.route
+        )
+    }
+
+    static func identitySubtitle(
+        about: AO3AuthorAbout?,
+        pseudCount: Int,
+        route: AO3AuthorRoute,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String? {
         var parts: [String] = []
-        if let joined = model.about?.joinedDate, !joined.isEmpty {
+        if let joined = about?.displayJoinedDate(locale: locale), !joined.isEmpty {
             parts.append("Joined \(joined)")
         }
-        if header.pseuds.count > 1 {
-            parts.append("\(header.pseuds.count) pseuds")
+        if pseudCount > 1 {
+            parts.append("\(pseudCount) pseuds")
         }
-        if model.route.pseud != nil {
-            parts.append("Pseud of \(model.route.username)")
+        if route.pseud != nil {
+            parts.append("Pseud of \(route.username)")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
