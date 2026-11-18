@@ -32,7 +32,9 @@ struct QueueQuickAddTests {
     private func context() throws -> ModelContext {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self,
+            ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self
         ])
         return ModelContext(try ModelContainer(
             for: schema,
@@ -415,31 +417,356 @@ struct QueueQuickAddTests {
         #expect(try Data(contentsOf: saved.fileURL) == Data("bytes 525".utf8))
     }
 
-    @Test func undoSkipsResoftDeleteWhenModifiedAfterTheToast() throws {
+    @Test func undoLeavesRevivedWorkLiveWhenReaderAnnotationOrSyncTouchesIt() throws {
+        ReadingLogService.resetOpenSessionsForTests()
+        defer { ReadingLogService.resetOpenSessionsForTests() }
+
         let context = try context()
         let queue = ReadingQueue(name: "List")
         context.insert(queue)
-        let work = SavedWork(
-            title: "Synced", author: "Writer", sourceURL: summary(526).workURL.absoluteString
-        )
-        work.ao3WorkID = 526
-        context.insert(work)
-        let epub = Data("synced copy".utf8)
-        try epub.write(to: work.fileURL)
-        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+        let settings = try defaults()
+        let controller = RemoteWorkSelectionController()
+        controller.sourceQueueID = queue.id
         let deletedAt = Date(timeIntervalSinceNow: -15 * 86_400)
+        let scheduledAt = Date(timeIntervalSinceNow: 30 * 86_400)
+
+        func makePendingWork(_ id: Int) throws -> SavedWork {
+            let work = SavedWork(
+                title: "Work \(id)", author: "Writer", sourceURL: summary(id).workURL.absoluteString
+            )
+            work.ao3WorkID = id
+            work.hasEPUB = false
+            context.insert(work)
+            PreservedWorkService.softDelete(work, priorDates: (deletedAt, scheduledAt), in: context)
+            return work
+        }
+
+        // Open reader session (macOS/iOS reader open while Undo is tapped in another window).
+        let openSessionWork = try makePendingWork(526)
+        controller.quickAdd(summary(526), in: context, defaults: settings) { _, _, _ in }
+        ReadingLogService.startSession(for: openSessionWork, defaults: settings)
+        controller.undo()
+        #expect(!openSessionWork.isPendingDeletion)
+        ReadingLogService.resetOpenSessionsForTests()
+
+        // Reader open progress stamp (matching iOS noteOpened / macOS ReaderView.load) after quick close (<15s).
+        let openStampedWork = try makePendingWork(529)
+        controller.quickAdd(summary(529), in: context, defaults: settings) { _, _, _ in }
+        ReadingLogService.startSession(for: openStampedWork, defaults: settings)
+        openStampedWork.markProgressModified(Date())
+        ReadingLogService.endSession(for: openStampedWork, now: Date().addingTimeInterval(2))
+        controller.undo()
+        #expect(!openStampedWork.isPendingDeletion)
+
+        // Debounced Readium locator update (does not move lastModifiedAt).
+        let debouncedWork = try makePendingWork(530)
+        controller.quickAdd(summary(530), in: context, defaults: settings) { _, _, _ in }
+        debouncedWork.applyDebouncedReadiumLocator(
+            #"{"href":"ch1.xhtml","locations":{"totalProgression":0.25}}"#
+        )
+        controller.undo()
+        #expect(!debouncedWork.isPendingDeletion)
+
+        // Annotations: added, edited, and deleted during toast keep live; untouched preexisting returns to RD.
+        let addedAnnotationWork = try makePendingWork(531)
+        controller.quickAdd(summary(531), in: context, defaults: settings) { _, _, _ in }
+        let addedMark = ReadingAnnotation(
+            work: addedAnnotationWork, kind: .highlight,
+            locatorString: #"{"href":"ch1.xhtml"}"#, selectedText: "line", note: "note"
+        )
+        context.insert(addedMark)
+        try context.save()
+        controller.undo()
+        #expect(!addedAnnotationWork.isPendingDeletion)
+
+        let editedAnnotationWork = SavedWork(
+            title: "Edited Note", author: "Writer", sourceURL: summary(532).workURL.absoluteString
+        )
+        editedAnnotationWork.ao3WorkID = 532
+        editedAnnotationWork.hasEPUB = false
+        context.insert(editedAnnotationWork)
+        let preexistingMark = ReadingAnnotation(
+            work: editedAnnotationWork, kind: .highlight,
+            locatorString: #"{"href":"ch1.xhtml"}"#, selectedText: "line", note: "before"
+        )
+        context.insert(preexistingMark)
+        PreservedWorkService.softDelete(
+            editedAnnotationWork, priorDates: (deletedAt, scheduledAt), in: context
+        )
+        controller.quickAdd(summary(532), in: context, defaults: settings) { _, _, _ in }
+        preexistingMark.note = "after"
+        preexistingMark.markModified()
+        controller.undo()
+        #expect(!editedAnnotationWork.isPendingDeletion)
+
+        let deletedAnnotationWork = SavedWork(
+            title: "Deleted Note", author: "Writer", sourceURL: summary(533).workURL.absoluteString
+        )
+        deletedAnnotationWork.ao3WorkID = 533
+        deletedAnnotationWork.hasEPUB = false
+        context.insert(deletedAnnotationWork)
+        let markToDelete = ReadingAnnotation(
+            work: deletedAnnotationWork, kind: .bookmark, locatorString: #"{"href":"ch1.xhtml"}"#
+        )
+        context.insert(markToDelete)
+        PreservedWorkService.softDelete(
+            deletedAnnotationWork, priorDates: (deletedAt, scheduledAt), in: context
+        )
+        controller.quickAdd(summary(533), in: context, defaults: settings) { _, _, _ in }
+        SyncTombstones.recordDeletion(of: markToDelete, in: context, reason: "annotationDeleted")
+        context.delete(markToDelete)
+        controller.undo()
+        #expect(!deletedAnnotationWork.isPendingDeletion)
+
+        let untouchedAnnotationWork = SavedWork(
+            title: "Untouched Note", author: "Writer", sourceURL: summary(534).workURL.absoluteString
+        )
+        untouchedAnnotationWork.ao3WorkID = 534
+        untouchedAnnotationWork.hasEPUB = false
+        context.insert(untouchedAnnotationWork)
+        let keptMark = ReadingAnnotation(
+            work: untouchedAnnotationWork, kind: .bookmark, locatorString: #"{"href":"ch1.xhtml"}"#
+        )
+        context.insert(keptMark)
+        PreservedWorkService.softDelete(
+            untouchedAnnotationWork, priorDates: (deletedAt, scheduledAt), in: context
+        )
+        controller.quickAdd(summary(534), in: context, defaults: settings) { _, _, _ in }
+        controller.undo()
+        #expect(untouchedAnnotationWork.isPendingDeletion)
+
+        // User tag and reading-status changes keep work live.
+        let taggedWork = try makePendingWork(540)
+        controller.quickAdd(summary(540), in: context, defaults: settings) { _, _, _ in }
+        let userTag = Tag(name: "Comfort")
+        context.insert(userTag)
+        taggedWork.tags.append(userTag)
+        controller.undo()
+        #expect(!taggedWork.isPendingDeletion)
+
+        let statusWork = try makePendingWork(541)
+        controller.quickAdd(summary(541), in: context, defaults: settings) { _, _, _ in }
+        statusWork.setReadingStatus(.onHold)
+        controller.undo()
+        #expect(!statusWork.isPendingDeletion)
+
+        // Older-clock SyncMerge.applyProgress keeps work live.
+        let progressSyncedWork = try makePendingWork(535)
+        controller.quickAdd(summary(535), in: context, defaults: settings) { _, _, _ in }
+        let olderClock = Date(timeIntervalSinceNow: -3600)
+        SyncMerge.applyProgress(
+            SyncMerge.ProgressSnapshot(
+                lastSpineIndex: 1,
+                lastScrollFraction: 0.5,
+                readiumLocator: #"{"href":"ch2.xhtml","locations":{"totalProgression":0.5}}"#,
+                lastReadDate: olderClock,
+                modifiedAt: olderClock,
+                legacyReaderProgress: nil
+            ),
+            to: progressSyncedWork
+        )
+        controller.undo()
+        #expect(!progressSyncedWork.isPendingDeletion)
+
+        // Older-clock replaceLibrary restore carrying an edit keeps work live.
+        let replacedWork = try makePendingWork(536)
+        let donorContext = try self.context()
+        let donorWork = SavedWork(
+            id: replacedWork.id, title: replacedWork.title,
+            author: replacedWork.author, sourceURL: replacedWork.sourceURL
+        )
+        donorWork.ao3WorkID = 536
+        donorWork.hasEPUB = false
+        donorWork.isFinished = true
+        donorWork.lastModifiedAt = olderClock
+        donorContext.insert(donorWork)
+        try donorContext.save()
+        let archive = try KudosBackupService.makeContents(
+            works: [donorWork], bookmarks: [], fonts: [], readingQueues: [], defaults: try defaults()
+        )
+        controller.quickAdd(summary(536), in: context, defaults: settings) { _, _, _ in }
+        _ = try KudosBackupService.restore(
+            archive, into: context, defaults: try defaults(), mode: .replaceLibrary
+        )
+        controller.undo()
+        #expect(!replacedWork.isPendingDeletion)
+        #expect(replacedWork.isFinished)
+    }
+
+    @Test func undoResoftDeletesRevivedWorkAfterQueuedDownloadAndAvailabilityVerification() async throws {
+        let context = try context()
+        let queue = ReadingQueue(name: "Offline")
+        context.insert(queue)
+        let work = SavedWork(
+            title: "Revived Download", author: "Writer", sourceURL: summary(537).workURL.absoluteString
+        )
+        work.ao3WorkID = 537
+        work.hasEPUB = false
+        work.workTagsFetched = false
+        context.insert(work)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+        let deletedAt = Date(timeIntervalSinceNow: -14 * 86_400)
         let scheduledAt = Date(timeIntervalSinceNow: 30 * 86_400)
         PreservedWorkService.softDelete(work, priorDates: (deletedAt, scheduledAt), in: context)
 
+        let downloadQueue = DownloadQueue(
+            downloadEPUB: { _, _ in try self.copySampleEPUB() },
+            verifyAvailability: { saved, _ in
+                // Availability/tag verification updates lastModifiedAt after importEPUB.
+                saved.workTagsFetched = true
+                saved.lastAvailabilityCheck = Date()
+                saved.markModified(Date().addingTimeInterval(60))
+            }
+        )
+
         let controller = RemoteWorkSelectionController()
         controller.sourceQueueID = queue.id
-        controller.quickAdd(summary(526), in: context, defaults: try defaults()) { _, _, _ in }
-        work.lastModifiedAt = Date().addingTimeInterval(120)
-        try context.save()
+        controller.quickAdd(summary(537), in: context, defaults: try defaults()) { saved, chosen, ctx in
+            guard KeepOffline.queueKeeps(chosen.keepsWorksOffline) else { return }
+            downloadQueue.enqueue(
+                KeepOffline.downloadItems(for: [saved]).map { item in
+                    var item = item
+                    item.requiresOfflineQueue = true
+                    return item
+                },
+                into: ctx
+            )
+        }
+        await waitUntilFinished(downloadQueue)
+        #expect(work.hasEPUB)
+        #expect(work.epubPreservationStatus == .preserved)
+        #expect(work.workTagsFetched)
+
+        controller.undo()
+        #expect(work.isPendingDeletion)
+        #expect(work.deletedAt == deletedAt)
+        #expect(work.permanentDeletionScheduledAt == scheduledAt)
+        #expect(work.activeQueueMemberships.isEmpty)
+        #expect(work.hasEPUB)
+        #expect(FileManager.default.fileExists(atPath: work.fileURL.path))
+    }
+
+    @Test func undoLeavesRevivedWorkLiveWhenDownloadRacesWithUserTouch() async throws {
+        let context = try context()
+        let queue = ReadingQueue(name: "Offline")
+        context.insert(queue)
+        let work = SavedWork(
+            title: "Raced Download", author: "Writer", sourceURL: summary(538).workURL.absoluteString
+        )
+        work.ao3WorkID = 538
+        work.hasEPUB = false
+        context.insert(work)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+        let deletedAt = Date(timeIntervalSinceNow: -14 * 86_400)
+        let scheduledAt = Date(timeIntervalSinceNow: 30 * 86_400)
+        PreservedWorkService.softDelete(work, priorDates: (deletedAt, scheduledAt), in: context)
+
+        var started: CheckedContinuation<Void, Never>?
+        var finishDownload: CheckedContinuation<URL, Error>?
+        let downloadQueue = DownloadQueue(
+            downloadEPUB: { _, _ in
+                try await withCheckedThrowingContinuation { continuation in
+                    finishDownload = continuation
+                    started?.resume()
+                    started = nil
+                }
+            },
+            verifyAvailability: { _, _ in }
+        )
+
+        let controller = RemoteWorkSelectionController()
+        controller.sourceQueueID = queue.id
+        let settings = try defaults()
+        await withCheckedContinuation { continuation in
+            started = continuation
+            controller.quickAdd(summary(538), in: context, defaults: settings) { saved, _, ctx in
+                downloadQueue.enqueue(
+                    KeepOffline.downloadItems(for: [saved]).map { item in
+                        var item = item
+                        item.requiresOfflineQueue = true
+                        return item
+                    },
+                    into: ctx
+                )
+            }
+        }
+
+        // Outside user write happens while downloadEPUB is suspended, before importEPUB stamps work.
+        WorkLifecycle.markFinished(work, in: context)
+        finishDownload?.resume(with: Result { try copySampleEPUB() })
+        finishDownload = nil
+        await waitUntilFinished(downloadQueue)
+
         controller.undo()
         #expect(!work.isPendingDeletion)
-        #expect(work.deletedAt == nil)
-        #expect(try Data(contentsOf: work.fileURL) == epub)
+        #expect(work.isFinished)
+        #expect(work.activeQueueMemberships.isEmpty)
+        #expect(work.hasEPUB)
+    }
+
+    @Test func changeQueueAndMultipleControllersDoNotLeakOrCollide() async throws {
+        let context = try context()
+        let first = ReadingQueue(name: "First")
+        let second = ReadingQueue(name: "Second")
+        context.insert(first)
+        context.insert(second)
+        let settings = try defaults()
+        let deletedAt = Date(timeIntervalSinceNow: -12 * 86_400)
+        let scheduledAt = Date(timeIntervalSinceNow: 30 * 86_400)
+
+        let work = SavedWork(
+            title: "Shared Work", author: "Writer", sourceURL: summary(539).workURL.absoluteString
+        )
+        work.ao3WorkID = 539
+        work.hasEPUB = false
+        context.insert(work)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+        PreservedWorkService.softDelete(work, priorDates: (deletedAt, scheduledAt), in: context)
+
+        let controllerA = RemoteWorkSelectionController()
+        controllerA.sourceQueueID = first.id
+        let controllerB = RemoteWorkSelectionController()
+        controllerB.sourceQueueID = second.id
+
+        // Controller A revives via swipe, opens Change sheet, dismisses it, then work is re-deleted.
+        controllerA.quickAdd(summary(539), in: context, defaults: settings) { _, _, _ in }
+        controllerA.changeQueue()
+        #expect(controllerA.toastTarget == nil)
+        controllerA.changeTarget = nil
+        ReadingQueueService.removeFromQueue(work, from: first, in: context)
+        PreservedWorkService.softDelete(work, priorDates: (deletedAt, scheduledAt), in: context)
+
+        // Controller B revives while downloading; A revives another path without colliding.
+        let downloadQueue = DownloadQueue(
+            downloadEPUB: { _, _ in try self.copySampleEPUB() },
+            verifyAvailability: { saved, _ in saved.markModified(Date().addingTimeInterval(30)) }
+        )
+        controllerB.quickAdd(summary(539), in: context, defaults: settings) { saved, _, ctx in
+            downloadQueue.enqueue(
+                KeepOffline.downloadItems(for: [saved]).map { item in
+                    var item = item
+                    item.requiresOfflineQueue = true
+                    return item
+                },
+                into: ctx
+            )
+        }
+        await waitUntilFinished(downloadQueue)
+        controllerB.undo()
+        #expect(work.isPendingDeletion)
+
+        // A revives work into first; B adds live work into second. Undoing B leaves work in first;
+        // undoing A then returns work to Recently Deleted.
+        controllerA.quickAdd(summary(539), in: context, defaults: settings) { _, _, _ in }
+        controllerB.quickAdd(summary(539), in: context, defaults: settings) { _, _, _ in }
+        #expect(controllerB.toastTarget?.priorWorkState == .existing)
+        controllerB.undo()
+        #expect(!work.isPendingDeletion)
+        #expect(work.activeQueueMemberships.map { $0.queue?.id } == [first.id])
+        controllerA.undo()
+        #expect(work.isPendingDeletion)
+        #expect(work.deletedAt == deletedAt)
+        #expect(work.permanentDeletionScheduledAt == scheduledAt)
     }
 
     @Test func secondSwipeKeepsRevivedDates() throws {
@@ -475,6 +802,31 @@ struct QueueQuickAddTests {
         #expect(!work.isPendingDeletion)
         #expect(work.activeQueueMemberships.map { $0.queue?.id } == [first.id])
         #expect(try Data(contentsOf: work.fileURL) == epub)
+
+        // When the first swipe's membership is removed (or was preexisting), Undoing the second
+        // swipe uses the carried baseline to restore the original dates—unless touched in between.
+        ReadingQueueService.removeFromQueue(work, from: first, in: context)
+        PreservedWorkService.softDelete(work, priorDates: (deletedAt, scheduledAt), in: context)
+        ReadingQueueService.add(work, to: first, in: context)
+        PreservedWorkService.softDelete(work, priorDates: (deletedAt, scheduledAt), in: context)
+
+        controller.sourceQueueID = first.id
+        controller.quickAdd(summary(527), in: context, defaults: settings) { _, _, _ in }
+        controller.sourceQueueID = second.id
+        controller.quickAdd(summary(527), in: context, defaults: settings) { _, _, _ in }
+        controller.undo()
+        #expect(work.isPendingDeletion)
+        #expect(work.deletedAt == deletedAt)
+        #expect(work.permanentDeletionScheduledAt == scheduledAt)
+
+        // Touching between swipe 1 and swipe 2 is still caught by the carried baseline.
+        controller.sourceQueueID = first.id
+        controller.quickAdd(summary(527), in: context, defaults: settings) { _, _, _ in }
+        work.applyDebouncedReadiumLocator(#"{"href":"ch1.xhtml","locations":{"totalProgression":0.1}}"#)
+        controller.sourceQueueID = second.id
+        controller.quickAdd(summary(527), in: context, defaults: settings) { _, _, _ in }
+        controller.undo()
+        #expect(!work.isPendingDeletion)
     }
 
     @Test func undoFloorKeepsPassedDeletionDateAtLeastSevenDaysOut() throws {

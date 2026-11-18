@@ -1,31 +1,231 @@
 import SwiftData
 import SwiftUI
 
-/// Work ids whose in-flight queue download is allowed to move `lastModifiedAt`
-/// during a revived-swipe toast. `importEPUB` notes the stamp; Undo still
-/// re-soft-deletes when that stamp is the latest write. Anything else that
-/// moves the date (sync, restore, an edit) is not this swipe's import.
-enum RevivedSwipeImport {
-    private static var armed: Set<UUID> = []
-    private static var importedModifiedAt: [UUID: Date] = [:]
-
-    static func arm(_ id: UUID) {
-        armed.insert(id)
+/// Snapshot of a revived work's state taken right before `quickAdd` restores it.
+/// Undo re-soft-deletes only when the work still matches this baseline (ignoring
+/// swipe/download metadata enrichment and the single membership the swipe added).
+struct RevivedWorkBaseline: Equatable {
+    struct MembershipSnapshot: Equatable {
+        let sortOrderInQueue: Int
+        let note: String
     }
 
-    static func disarm(_ id: UUID) {
-        armed.remove(id)
-        importedModifiedAt[id] = nil
+    struct ReadingStatusSnapshot: Equatable {
+        let readingStatusRaw: String
+        let statusChangedAt: Date?
+        let stoppedAt: Date?
+        let stopReasonRaw: String
+        let stopTag: String
+        let stopNote: String
+        let stackThreshold: Int
+        let stackBaselineChapterCount: Int
+        let statusWasRecorded: Bool
+
+        init(work: SavedWork) {
+            readingStatusRaw = work.readingStatusRaw
+            statusChangedAt = work.statusChangedAt
+            stoppedAt = work.stoppedAt
+            stopReasonRaw = work.stopReasonRaw
+            stopTag = work.stopTag
+            stopNote = work.stopNote
+            stackThreshold = work.stackThreshold
+            stackBaselineChapterCount = work.stackBaselineChapterCount
+            statusWasRecorded = work.statusWasRecorded
+        }
     }
 
-    static func noteIfArmed(_ work: SavedWork) {
-        guard armed.contains(work.id) else { return }
-        importedModifiedAt[work.id] = work.lastModifiedAt
+    struct ProgressSnapshot: Equatable {
+        let lastReadDate: Date?
+        let progressModifiedAt: Date?
+        let lastSpineIndex: Int
+        let lastScrollFraction: Double
+        let readiumLocator: String
+        let legacyReaderProgress: Double?
+
+        init(work: SavedWork) {
+            lastReadDate = work.lastReadDate
+            progressModifiedAt = work.progressModifiedAt
+            lastSpineIndex = work.lastSpineIndex
+            lastScrollFraction = work.lastScrollFraction
+            readiumLocator = work.readiumLocator
+            legacyReaderProgress = work.legacyReaderProgress
+        }
     }
 
-    static func lastWriteWasOwnImport(_ work: SavedWork, armedAt: Date) -> Bool {
-        guard work.lastModifiedAt > armedAt else { return false }
-        return importedModifiedAt[work.id] == work.lastModifiedAt
+    struct AnnotationSnapshot: Equatable {
+        let lastModifiedAt: Date
+        let note: String
+        let colorRaw: String
+        let locatorString: String
+        let selectedText: String
+        let kindRaw: String
+        let isPendingDeletion: Bool
+
+        init(annotation: ReadingAnnotation) {
+            lastModifiedAt = annotation.lastModifiedAt
+            note = annotation.note
+            colorRaw = annotation.colorRaw
+            locatorString = annotation.locatorString
+            selectedText = annotation.selectedText
+            kindRaw = annotation.kindRaw
+            isPendingDeletion = annotation.isPendingDeletion
+        }
+    }
+
+    struct SessionSnapshot: Equatable {
+        let lastModifiedAt: Date
+        let endedAt: Date
+        let durationSeconds: Double
+        let activeSeconds: Double?
+        let didFinish: Bool
+
+        init(session: ReadingSession) {
+            lastModifiedAt = session.lastModifiedAt
+            endedAt = session.endedAt
+            durationSeconds = session.durationSeconds
+            activeSeconds = session.activeSeconds
+            didFinish = session.didFinish
+        }
+    }
+
+    let preexistingMembershipIDs: Set<UUID>
+    let preexistingActiveMembershipIDs: Set<UUID>
+    let preexistingMemberships: [UUID: MembershipSnapshot]
+    let isSaved: Bool
+    let isFavorite: Bool
+    let isFinished: Bool
+    let hasGivenKudos: Bool
+    let keepInProgressOverride: Bool
+    let hiddenFromHistoryAt: Date?
+    let downloadedAt: Date?
+    let title: String
+    let author: String
+    let summary: String
+    let collectionIDs: Set<UUID>
+    let activeCollectionIDs: Set<UUID>
+    let userTagNames: Set<String>
+    let readingStatus: ReadingStatusSnapshot
+    let progress: ProgressSnapshot
+    let annotations: [UUID: AnnotationSnapshot]
+    let sessions: [UUID: SessionSnapshot]
+
+    @MainActor
+    static func capture(_ work: SavedWork, in context: ModelContext) -> Self {
+        let memberships = Dictionary(
+            work.queueMemberships.map {
+                ($0.id, MembershipSnapshot(sortOrderInQueue: $0.sortOrderInQueue, note: $0.note))
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return Self(
+            preexistingMembershipIDs: Set(work.queueMemberships.map(\.id)),
+            preexistingActiveMembershipIDs: Set(work.activeQueueMemberships.map(\.id)),
+            preexistingMemberships: memberships,
+            isSaved: work.isSaved,
+            isFavorite: work.isFavorite,
+            isFinished: work.isFinished,
+            hasGivenKudos: work.hasGivenKudos,
+            keepInProgressOverride: work.keepInProgressOverride,
+            hiddenFromHistoryAt: work.hiddenFromHistoryAt,
+            downloadedAt: work.downloadedAt,
+            title: work.title,
+            author: work.author,
+            summary: work.summary,
+            collectionIDs: Set(work.collections.map(\.id)),
+            activeCollectionIDs: Set(work.activeCollections.map(\.id)),
+            userTagNames: Set(work.tags.map(\.name)),
+            readingStatus: ReadingStatusSnapshot(work: work),
+            progress: ProgressSnapshot(work: work),
+            annotations: annotationSnapshots(for: work.id, in: context),
+            sessions: sessionSnapshots(for: work.id, in: context)
+        )
+    }
+
+    @MainActor
+    func hasChanges(on work: SavedWork, in context: ModelContext) -> Bool {
+        hasMembershipOrContainerChanges(on: work)
+            || hasUserStateChanges(on: work)
+            || hasProgressOrSessionChanges(on: work, in: context)
+            || Self.annotationSnapshots(for: work.id, in: context) != annotations
+    }
+
+    @MainActor
+    private func hasMembershipOrContainerChanges(on work: SavedWork) -> Bool {
+        if Set(work.queueMemberships.map(\.id)) != preexistingMembershipIDs { return true }
+        if !Set(work.activeQueueMemberships.map(\.id)).isSubset(of: preexistingActiveMembershipIDs) {
+            return true
+        }
+        let currentMemberships = Dictionary(
+            work.queueMemberships.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        for (id, snapshot) in preexistingMemberships {
+            guard let membership = currentMemberships[id],
+                  membership.sortOrderInQueue == snapshot.sortOrderInQueue,
+                  membership.note == snapshot.note else { return true }
+        }
+        if Set(work.collections.map(\.id)) != collectionIDs { return true }
+        if !Set(work.activeCollections.map(\.id)).isSubset(of: activeCollectionIDs) { return true }
+        return Set(work.tags.map(\.name)) != userTagNames
+    }
+
+    @MainActor
+    private func hasUserStateChanges(on work: SavedWork) -> Bool {
+        if work.isSaved != isSaved
+            || work.isFavorite != isFavorite
+            || work.isFinished != isFinished
+            || work.hasGivenKudos != hasGivenKudos
+            || work.keepInProgressOverride != keepInProgressOverride
+            || work.hiddenFromHistoryAt != hiddenFromHistoryAt {
+            return true
+        }
+        if ReadingStatusSnapshot(work: work) != readingStatus { return true }
+        if (!title.isEmpty && work.title != title)
+            || (!author.isEmpty && work.author != author)
+            || (!summary.isEmpty && work.summary != summary) {
+            return true
+        }
+        if let downloadedAt {
+            if work.downloadedAt != downloadedAt { return true }
+        } else if work.downloadedAt != nil, !work.hasEPUB {
+            // `importEPUB` sets `downloadedAt` only alongside `hasEPUB = true`;
+            // a date appearing without an EPUB came from a user edit or sync.
+            return true
+        }
+        return false
+    }
+
+    @MainActor
+    private func hasProgressOrSessionChanges(on work: SavedWork, in context: ModelContext) -> Bool {
+        if ProgressSnapshot(work: work) != progress { return true }
+        if ReadingLogService.hasOpenSession(for: work.id) { return true }
+        return Self.sessionSnapshots(for: work.id, in: context) != sessions
+    }
+
+    @MainActor
+    private static func annotationSnapshots(
+        for workID: UUID,
+        in context: ModelContext
+    ) -> [UUID: AnnotationSnapshot] {
+        let marks = (try? context.fetch(FetchDescriptor<ReadingAnnotation>()))?
+            .filter { $0.work?.id == workID } ?? []
+        return Dictionary(
+            marks.map { ($0.id, AnnotationSnapshot(annotation: $0)) },
+            uniquingKeysWith: { first, _ in first }
+        )
+    }
+
+    @MainActor
+    private static func sessionSnapshots(
+        for workID: UUID,
+        in context: ModelContext
+    ) -> [UUID: SessionSnapshot] {
+        let descriptor = FetchDescriptor<ReadingSession>(predicate: #Predicate { $0.workID == workID })
+        let rows = (try? context.fetch(descriptor)) ?? []
+        return Dictionary(
+            rows.map { ($0.id, SessionSnapshot(session: $0)) },
+            uniquingKeysWith: { first, _ in first }
+        )
     }
 }
 
@@ -55,16 +255,10 @@ final class RemoteWorkSelectionController {
         let queue: ReadingQueue
         let membershipID: UUID
         let priorWorkState: PriorWorkState
-        /// Memberships that already existed before this swipe. A queue attached
-        /// while the toast is up is not in the set, so Undo leaves the work live.
-        let preexistingMembershipIDs: Set<UUID>
-        let wasSaved: Bool
-        let wasFavorite: Bool
-        let collectionIDs: Set<UUID>
-        /// `lastModifiedAt` when this toast was armed. A later toast for the same
-        /// revived work keeps the earlier stamp when something other than this
-        /// swipe's add or its own import moved the work.
-        let armedModifiedAt: Date
+        /// Pre-swipe state for a `.revived` work. Undo re-soft-deletes only when
+        /// the work still matches this baseline (ignoring the swipe's own add and
+        /// metadata/EPUB enrichment), else leaves it live.
+        let revivedBaseline: RevivedWorkBaseline?
         let context: ModelContext
     }
     var isSelecting = false
@@ -92,10 +286,6 @@ final class RemoteWorkSelectionController {
         guard let target = toastTarget else { return }
         toastDismissTask?.cancel()
         toastTarget = nil
-        let ownImportIsLastWrite = RevivedSwipeImport.lastWriteWasOwnImport(
-            target.work, armedAt: target.armedModifiedAt
-        )
-        RevivedSwipeImport.disarm(target.work.id)
         guard target.work.modelContext != nil,
               target.work.queueMemberships.contains(where: { $0.id == target.membershipID }) else { return }
         switch target.priorWorkState {
@@ -104,10 +294,7 @@ final class RemoteWorkSelectionController {
                 target.work, from: target.queue, in: target.context
             )
         case let .revived(deletedAt, scheduledAt):
-            undoRevived(
-                target, deletedAt: deletedAt, scheduledAt: scheduledAt,
-                ownImportIsLastWrite: ownImportIsLastWrite
-            )
+            undoRevived(target, deletedAt: deletedAt, scheduledAt: scheduledAt)
         case .existing:
             ReadingQueueService.removeFromQueue(target.work, from: target.queue, in: target.context)
         }
@@ -124,29 +311,20 @@ final class RemoteWorkSelectionController {
     private func undoRevived(
         _ target: ToastTarget,
         deletedAt: Date?,
-        scheduledAt: Date?,
-        ownImportIsLastWrite: Bool
+        scheduledAt: Date?
     ) {
-        let moved = target.work.lastModifiedAt > target.armedModifiedAt
-        let swipeAddedMembership = !target.preexistingMembershipIDs.contains(target.membershipID)
+        guard let baseline = target.revivedBaseline else { return }
+        let swipeAddedMembership = !baseline.preexistingMembershipIDs.contains(target.membershipID)
         if swipeAddedMembership {
             ReadingQueueService.removeFromQueue(target.work, from: target.queue, in: target.context)
         }
-        if gainedWant(target) || (moved && !ownImportIsLastWrite) { return }
-        let remaining = Set(target.work.activeQueueMemberships.map(\.id))
-        guard remaining.isSubset(of: target.preexistingMembershipIDs),
+        guard !baseline.hasChanges(on: target.work, in: target.context),
               !target.work.isPendingDeletion else { return }
         PreservedWorkService.softDelete(
             target.work,
             priorDates: (deletedAt, Self.revivedUndoSchedule(scheduledAt)),
             in: target.context
         )
-    }
-
-    private func gainedWant(_ target: ToastTarget) -> Bool {
-        if target.work.isSaved && !target.wasSaved { return true }
-        if target.work.isFavorite && !target.wasFavorite { return true }
-        return target.work.collections.contains { !target.collectionIDs.contains($0.id) }
     }
 
     static func currentQueue(in queues: [ReadingQueue], sourceID: UUID?, storedID: String?) -> ReadingQueue? {
@@ -171,63 +349,48 @@ final class RemoteWorkSelectionController {
         ) ?? ReadingQueueService.ensureSavedForLaterQueue(in: context)
         do {
             let existingWork = ReadingQueueService.existingWork(for: summary, in: context)
-            let freshPrior: PriorWorkState = existingWork.map {
-                $0.isPendingDeletion
-                    ? .revived(deletedAt: $0.deletedAt, scheduledAt: $0.permanentDeletionScheduledAt)
-                    : .existing
-            } ?? .inserted
-            // Sampled before `ensureLocalMetadata`, which always `markModified`s.
-            // A later swipe must not treat that write, or its own `add`, as sync.
-            let modifiedBeforeSwipe = existingWork?.lastModifiedAt
-            let ownImportBeforeSwipe: Bool = {
-                guard let existingWork,
-                      let carried = inFlightToast(for: existingWork),
-                      isRevived(carried.priorWorkState) else { return false }
-                return RevivedSwipeImport.lastWriteWasOwnImport(
-                    existingWork, armedAt: carried.armedModifiedAt
+            let carriedRevival = existingWork.flatMap { inFlightToast(for: $0) }.flatMap { toast -> ToastTarget? in
+                guard isRevived(toast.priorWorkState) else { return nil }
+                return toast
+            }
+            let prior: PriorWorkState
+            let baseline: RevivedWorkBaseline?
+            if let carriedRevival {
+                prior = carriedRevival.priorWorkState
+                baseline = carriedRevival.revivedBaseline
+            } else if let existingWork, existingWork.isPendingDeletion {
+                prior = .revived(
+                    deletedAt: existingWork.deletedAt,
+                    scheduledAt: existingWork.permanentDeletionScheduledAt
                 )
-            }()
+                baseline = RevivedWorkBaseline.capture(existingWork, in: context)
+            } else if existingWork != nil {
+                prior = .existing
+                baseline = nil
+            } else {
+                prior = .inserted
+                baseline = nil
+            }
             let work = try ReadingQueueService.ensureLocalMetadata(for: summary, in: context)
             if let membership = work.queueMemberships.first(where: { $0.queue?.id == queue.id }) {
-                if inFlightToast(for: work) != nil || !isRevived(freshPrior) {
+                if inFlightToast(for: work) != nil || !isRevived(prior) {
                     AccessibilityNotification.Announcement("Already in \(queue.displayName)").post()
                     return
                 }
                 defaults.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
-                present(toast(
-                    work: work, queue: queue, membershipID: membership.id, prior: freshPrior,
-                    preexistingMembershipIDs: Set(work.queueMemberships.map(\.id)),
-                    wasSaved: work.isSaved, wasFavorite: work.isFavorite,
-                    collectionIDs: Set(work.collections.map(\.id)),
-                    armedModifiedAt: work.lastModifiedAt, context: context
+                present(ToastTarget(
+                    work: work, queue: queue, membershipID: membership.id,
+                    priorWorkState: prior, revivedBaseline: baseline, context: context
                 ), enqueueDownload: false, enqueue: enqueue)
                 return
             }
 
-            let carriedRevival = inFlightToast(for: work).flatMap { toast -> ToastTarget? in
-                guard isRevived(toast.priorWorkState) else { return nil }
-                return toast
-            }
-            let prior = carriedRevival?.priorWorkState ?? freshPrior
-            let preexisting = carriedRevival?.preexistingMembershipIDs
-                ?? Set(work.queueMemberships.map(\.id))
-            let wasSaved = carriedRevival?.wasSaved ?? work.isSaved
-            let wasFavorite = carriedRevival?.wasFavorite ?? work.isFavorite
-            let collectionIDs = carriedRevival?.collectionIDs ?? Set(work.collections.map(\.id))
             let membership = ReadingQueueService.add(work, to: queue, in: context)
             try context.save()
             defaults.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
-            let armedModifiedAt: Date
-            if let carriedRevival, let modifiedBeforeSwipe,
-               modifiedBeforeSwipe > carriedRevival.armedModifiedAt, !ownImportBeforeSwipe {
-                armedModifiedAt = carriedRevival.armedModifiedAt
-            } else {
-                armedModifiedAt = work.lastModifiedAt
-            }
-            present(toast(
-                work: work, queue: queue, membershipID: membership.id, prior: prior,
-                preexistingMembershipIDs: preexisting, wasSaved: wasSaved, wasFavorite: wasFavorite,
-                collectionIDs: collectionIDs, armedModifiedAt: armedModifiedAt, context: context
+            present(ToastTarget(
+                work: work, queue: queue, membershipID: membership.id,
+                priorWorkState: prior, revivedBaseline: baseline, context: context
             ), enqueueDownload: true, enqueue: enqueue)
         } catch {
             context.rollback()
@@ -246,45 +409,20 @@ final class RemoteWorkSelectionController {
         return nil
     }
 
-    private func toast(
-        work: SavedWork,
-        queue: ReadingQueue,
-        membershipID: UUID,
-        prior: PriorWorkState,
-        preexistingMembershipIDs: Set<UUID>,
-        wasSaved: Bool,
-        wasFavorite: Bool,
-        collectionIDs: Set<UUID>,
-        armedModifiedAt: Date,
-        context: ModelContext
-    ) -> ToastTarget {
-        ToastTarget(
-            work: work, queue: queue, membershipID: membershipID, priorWorkState: prior,
-            preexistingMembershipIDs: preexistingMembershipIDs, wasSaved: wasSaved,
-            wasFavorite: wasFavorite, collectionIDs: collectionIDs,
-            armedModifiedAt: armedModifiedAt, context: context
-        )
-    }
-
     private func present(
         _ target: ToastTarget,
         enqueueDownload: Bool,
         enqueue: (SavedWork, ReadingQueue, ModelContext) -> Void
     ) {
-        if let previous = toastTarget, previous.work.id != target.work.id {
-            RevivedSwipeImport.disarm(previous.work.id)
-        }
         toastTarget = target
         toastDismissTask?.cancel()
         toastDismissTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled, toastTarget?.id == target.id else { return }
-            RevivedSwipeImport.disarm(target.work.id)
             toastTarget = nil
         }
         AccessibilityNotification.Announcement("Added to \(target.queue.displayName)").post()
         if enqueueDownload {
-            RevivedSwipeImport.arm(target.work.id)
             enqueue(target.work, target.queue, target.context)
         }
     }
