@@ -160,6 +160,11 @@ struct WhatFitsTests {
         for work in [offlineLong, needsDownloadShort, missingOnDisk, offlineShort] {
             ReadingQueueService.add(work, to: queue, in: context)
         }
+        // `ReadingQueueService.add` calls `normalize(work)`, which clears `hasEPUB`
+        // when no real EPUB sits in `Storage.worksDirectory`; restore the stub flags afterwards.
+        offlineLong.hasEPUB = true
+        offlineShort.hasEPUB = true
+        missingOnDisk.hasEPUB = true
 
         let plan = WhatFitsPlanner.plan(
             queues: [queue],
