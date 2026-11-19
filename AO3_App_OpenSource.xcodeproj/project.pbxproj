@@ -786,8 +786,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/cidy02/swift-toolkit.git";
 			requirement = {
-				kind = branch;
-				branch = "kudos/page-transitions";
+				kind = revision;
+				revision = 2d0f9a903a4c9201e6dfbc4292662875b8ddc5e2;
 			};
 		};
 		000000000000000700000000 /* XCRemoteSwiftPackageReference "sherpa-onnx" */ = {

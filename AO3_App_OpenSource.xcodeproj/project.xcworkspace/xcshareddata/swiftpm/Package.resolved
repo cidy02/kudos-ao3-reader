@@ -1,5 +1,5 @@
 {
-  "originHash" : "031c771a55c632a08d4a1877e963b47c90e723da9c6e880b3162269f9b9e083a",
+  "originHash" : "e9dafac113dccbafa2035711c4ee2a3bf698c43a355e35a4290bef948a27e7d4",
   "pins" : [
     {
       "identity" : "bitbytedata",
@@ -87,7 +87,6 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/cidy02/swift-toolkit.git",
       "state" : {
-        "branch" : "kudos/page-transitions",
         "revision" : "2d0f9a903a4c9201e6dfbc4292662875b8ddc5e2"
       }
     },
