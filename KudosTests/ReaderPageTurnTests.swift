@@ -96,7 +96,7 @@ struct ReaderPageTurnTests {
         roundTripped.apply(to: destination)
         #expect(destination.string(forKey: ReaderPageTurnStyle.storageKey) == "none")
 
-        // Curl is a known case, hidden in the picker, and must survive a backup.
+        // Curl is a picker case and must survive a backup.
         source.set(ReaderPageTurnStyle.curl.rawValue, forKey: ReaderPageTurnStyle.storageKey)
         KudosBackupSettings.capture(defaults: source).apply(to: destination)
         #expect(destination.string(forKey: ReaderPageTurnStyle.storageKey) == "curl")
