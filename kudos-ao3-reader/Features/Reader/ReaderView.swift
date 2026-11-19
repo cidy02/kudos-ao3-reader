@@ -596,7 +596,13 @@ struct ReaderView: View {
     /// an ongoing read isn't deleted out from under the user. The EPUB itself is
     /// freed on `.onDisappear` (if unprotected), not while the page is on screen.
     private func autoFinishIfComplete() {
-        guard work.isComplete, !work.isFinished else { return }
+        guard work.isComplete, !work.isFinished else {
+            if !work.isComplete, work.knownChapterCount == 0, work.postedChapterCount > 0 {
+                work.knownChapterCount = work.postedChapterCount
+                try? modelContext.save()
+            }
+            return
+        }
         work.isFinished = true
         try? modelContext.save()
     }

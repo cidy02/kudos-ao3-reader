@@ -343,7 +343,10 @@ struct AO3SeriesDetailView: View {
                 }
             }
             let result = await ReadingQueueService.preserveSeries(
-                summaries, in: context,
+                summaries,
+                state: .new,
+                origin: ReadingQueueMembershipOrigin(kind: .manual),
+                in: context,
                 progress: { preserveStatus = "Preserving series \($0.completed) of \($0.total)…" }
             )
             let parts = result.summaryParts(verb: "preserved")

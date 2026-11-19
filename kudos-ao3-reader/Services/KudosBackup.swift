@@ -1801,6 +1801,14 @@ nonisolated struct KudosBackupReadingQueueMembership: Codable, Equatable {
     let lastModifiedAt: Date?
     let sortOrderInQueue: Int
     let note: String
+    /// Omitted when unrecorded `.inLine` so existing archives stay byte-identical;
+    /// `stateWasRecorded == true` lets `.reconcile` distinguish an explicit sort
+    /// into `.inLine` from Android / older-iOS manifests stripping unknown keys.
+    let stateRaw: String?
+    let stateWasRecorded: Bool?
+    let originKindRaw: String?
+    let originSearchID: UUID?
+    let originLabel: String?
 
     @MainActor
     init?(membership: ReadingQueueMembership) {
@@ -1814,6 +1822,25 @@ nonisolated struct KudosBackupReadingQueueMembership: Codable, Equatable {
         lastModifiedAt = membership.lastModifiedAt
         sortOrderInQueue = membership.sortOrderInQueue
         note = membership.note
+        let recorded = membership.stateWasRecorded || membership.state != .inLine
+        stateRaw = recorded ? membership.state.rawValue : nil
+        stateWasRecorded = recorded ? true : nil
+        let origin = membership.origin
+        originKindRaw = origin?.kind.rawValue
+        originSearchID = origin?.searchID
+        originLabel = origin?.label
+    }
+
+    var restoredState: ReadingQueueMembershipState {
+        stateRaw.flatMap(ReadingQueueMembershipState.init(rawValue:)) ?? .inLine
+    }
+
+    var restoredOrigin: ReadingQueueMembershipOrigin? {
+        ReadingQueueMembershipOrigin.normalized(
+            kindRaw: originKindRaw,
+            searchID: originSearchID,
+            label: originLabel
+        )
     }
 }
 
@@ -3435,6 +3462,16 @@ enum KudosBackupService {
                 if membershipWins {
                     existing.sortOrderInQueue = archived.sortOrderInQueue
                     existing.note = archived.note
+                    if mode == .replaceLibrary || archived.stateRaw != nil || archived.stateWasRecorded == true {
+                        let recorded = archived.stateWasRecorded ?? (archived.stateRaw != nil)
+                        existing.state = archived.restoredState
+                        existing.stateWasRecorded = recorded
+                    }
+                    if mode == .replaceLibrary {
+                        existing.origin = archived.restoredOrigin
+                    } else if let incomingOrigin = archived.restoredOrigin {
+                        existing.origin = incomingOrigin
+                    }
                     existing.lastModifiedAt = incomingModifiedAt
                     queue.lastMembershipChangedAt = max(queue.lastMembershipChangedAt, incomingModifiedAt)
                 }
@@ -3447,7 +3484,10 @@ enum KudosBackupService {
                 work: work,
                 queuedAt: archived.queuedAt,
                 sortOrderInQueue: archived.sortOrderInQueue,
-                note: archived.note
+                note: archived.note,
+                state: archived.restoredState,
+                stateWasRecorded: archived.stateWasRecorded ?? (archived.stateRaw != nil),
+                origin: archived.restoredOrigin
             )
             membership.lastModifiedAt = archived.lastModifiedAt ?? archived.queuedAt
             context.insert(membership)

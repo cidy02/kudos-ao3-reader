@@ -290,7 +290,12 @@ struct SettingsReadingQueuesPage: View {
             }
 
             savedWorkMigrationProgress = "Updating \(index + 1) of \(candidates.count)…"
-            _ = await ReadingQueueService.addToSavedForLater(work, in: context)
+            _ = await ReadingQueueService.addToSavedForLater(
+                work,
+                state: .new,
+                origin: ReadingQueueMembershipOrigin(kind: .manual),
+                in: context
+            )
             if work.isInSavedForLaterQueue { added += 1 }
             if !work.hasEPUB || work.epubPreservationStatus == .failed
                 || work.epubPreservationStatus == .missingFile {

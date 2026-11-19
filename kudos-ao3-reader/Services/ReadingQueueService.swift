@@ -143,16 +143,24 @@ enum ReadingQueueService {
     /// The queue's works in display order (explicit sort order, then most
     /// recently queued), excluding soft-deleted works. The single ordering
     /// projection shared by the queue screen and Work Details' queue rows.
-    static func orderedWorks(in queue: ReadingQueue) -> [SavedWork] {
+    /// Ordered active memberships for a queue (`T-528`), keeping tie-breaks
+    /// identical to `orderedWorks(in:)`.
+    static func orderedMemberships(in queue: ReadingQueue) -> [ReadingQueueMembership] {
         queue.memberships
+            .filter { membership in
+                !membership.isPendingDeletion
+                    && !(membership.work?.isPendingDeletion ?? true)
+            }
             .sorted {
                 if $0.sortOrderInQueue != $1.sortOrderInQueue {
                     return $0.sortOrderInQueue < $1.sortOrderInQueue
                 }
                 return $0.queuedAt > $1.queuedAt
             }
-            .compactMap(\.work)
-            .filter { !$0.isPendingDeletion }
+    }
+
+    static func orderedWorks(in queue: ReadingQueue) -> [SavedWork] {
+        orderedMemberships(in: queue).compactMap(\.work)
     }
 
     /// `hue` is 1j's colour swatch: `nil` leaves the queue taking its colour from
@@ -216,7 +224,13 @@ enum ReadingQueueService {
             let picked = seedWorkIDs.compactMap { byID[$0] }.filter {
                 !$0.isPendingDeletion && !$0.isQueueOnlyWork
             }
-            append(picked, to: queue, in: context)
+            append(
+                picked,
+                to: queue,
+                state: .new,
+                origin: ReadingQueueMembershipOrigin(kind: .manual),
+                in: context
+            )
         }
         guard previousAutosave else { return queue }
         context.autosaveEnabled = previousAutosave
@@ -330,9 +344,15 @@ enum ReadingQueueService {
     /// relationship array's unordered fetch, and copied works sitting in
     /// Recently Deleted that the queue screen hides.
     private static func seedFromSavedForLater(into queue: ReadingQueue, in context: ModelContext) {
-        let works = orderedWorks(in: ensureSavedForLaterQueue(in: context))
-        for work in works {
-            _ = add(work, to: queue, in: context)
+        for sourceMembership in orderedMemberships(in: ensureSavedForLaterQueue(in: context)) {
+            guard let work = sourceMembership.work else { continue }
+            _ = add(
+                work,
+                to: queue,
+                state: sourceMembership.state,
+                origin: sourceMembership.origin,
+                in: context
+            )
         }
     }
 
@@ -405,8 +425,13 @@ enum ReadingQueueService {
     static func add(
         _ work: SavedWork,
         to queue: ReadingQueue,
+        state: ReadingQueueMembershipState = .inLine,
+        origin: ReadingQueueMembershipOrigin? = nil,
         in context: ModelContext
     ) -> ReadingQueueMembership {
+        if work.knownChapterCount == 0, work.postedChapterCount > 0 {
+            work.knownChapterCount = work.postedChapterCount
+        }
         if let existing = work.queueMemberships.first(where: { $0.queue?.id == queue.id }) {
             normalize(work)
             return existing
@@ -415,7 +440,9 @@ enum ReadingQueueService {
         let membership = ReadingQueueMembership(
             queue: queue,
             work: work,
-            sortOrderInQueue: nextMembershipSortOrder(in: queue)
+            sortOrderInQueue: nextMembershipSortOrder(in: queue),
+            state: state,
+            origin: origin
         )
         context.insert(membership)
         queue.memberships.append(membership)
@@ -430,12 +457,53 @@ enum ReadingQueueService {
         return membership
     }
 
+    /// Moves one or more `New` memberships into `In line` at the end of the
+    /// reader's order (`T-528`), bumping sync timestamps so the change replicates.
+    static func sortIntoLine(
+        _ memberships: [ReadingQueueMembership],
+        in queue: ReadingQueue,
+        context: ModelContext
+    ) {
+        let candidates = memberships.filter {
+            $0.queue?.id == queue.id && !$0.isPendingDeletion && $0.state != .inLine
+        }
+        guard !candidates.isEmpty else { return }
+        let now = Date()
+        var nextOrder = nextMembershipSortOrder(in: queue)
+        for membership in candidates {
+            membership.state = .inLine
+            membership.stateWasRecorded = true
+            membership.sortOrderInQueue = nextOrder
+            nextOrder += 1
+            membership.markModified(now)
+        }
+        queue.markMembershipChanged(now)
+        FolderSyncService.markDirty()
+        context.saveBestEffort(reason: "Sorting queue items into line failed")
+    }
+
+    static func sortIntoLine(
+        _ membership: ReadingQueueMembership,
+        in queue: ReadingQueue,
+        context: ModelContext
+    ) {
+        sortIntoLine([membership], in: queue, context: context)
+    }
+
     static func move(
-        _ works: [SavedWork], from source: ReadingQueue, to destination: ReadingQueue, in context: ModelContext
+        _ works: [SavedWork],
+        from source: ReadingQueue,
+        to destination: ReadingQueue,
+        state: ReadingQueueMembershipState? = nil,
+        origin: ReadingQueueMembershipOrigin? = nil,
+        in context: ModelContext
     ) {
         guard source.id != destination.id else { return }
         for work in works {
-            add(work, to: destination, in: context)
+            let sourceMembership = work.queueMemberships.first { $0.queue?.id == source.id }
+            let resolvedState = state ?? sourceMembership?.state ?? .inLine
+            let resolvedOrigin = origin ?? sourceMembership?.origin
+            add(work, to: destination, state: resolvedState, origin: resolvedOrigin, in: context)
             removeFromQueueAndDeleteIfQueueOnly(work, from: source, in: context)
         }
     }
@@ -455,9 +523,15 @@ enum ReadingQueueService {
     /// `addAndPreserve`: picking from the Library is a membership change and
     /// must not fetch from AO3. A work whose copy is missing is left `.queued`
     /// for the queue's own offline rules to handle.
-    static func append(_ works: [SavedWork], to queue: ReadingQueue, in context: ModelContext) {
+    static func append(
+        _ works: [SavedWork],
+        to queue: ReadingQueue,
+        state: ReadingQueueMembershipState = .new,
+        origin: ReadingQueueMembershipOrigin? = nil,
+        in context: ModelContext
+    ) {
         for work in works {
-            add(work, to: queue, in: context)
+            _ = add(work, to: queue, state: state, origin: origin, in: context)
         }
     }
 
@@ -465,9 +539,11 @@ enum ReadingQueueService {
     static func addAndPreserve(
         _ work: SavedWork,
         to queue: ReadingQueue,
+        state: ReadingQueueMembershipState = .inLine,
+        origin: ReadingQueueMembershipOrigin? = nil,
         in context: ModelContext
     ) async -> ReadingQueueMembership {
-        let membership = add(work, to: queue, in: context)
+        let membership = add(work, to: queue, state: state, origin: origin, in: context)
         // T-276: a queue with Keep downloaded off is just a list; nothing is fetched.
         guard KeepOffline.queueKeeps(queue.keepsWorksOffline) else { return membership }
         do {
@@ -482,23 +558,36 @@ enum ReadingQueueService {
     /// Save for Later on, or off — the one toggle every row and menu shares.
     /// Taking a work off removes a queue-only record with it, as the queue does.
     @MainActor
-    static func toggleSavedForLater(_ work: SavedWork, in context: ModelContext) {
+    static func toggleSavedForLater(
+        _ work: SavedWork,
+        origin: ReadingQueueMembershipOrigin = ReadingQueueMembershipOrigin(kind: .manual),
+        in context: ModelContext
+    ) {
         if work.isInSavedForLaterQueue {
             removeFromQueueAndDeleteIfQueueOnly(work, from: ensureSavedForLaterQueue(in: context), in: context)
         } else {
             // Discard membership: Task must not inherit a non-Sendable PersistentModel result.
-            Task { @MainActor in _ = await addToSavedForLater(work, in: context) }
+            Task { @MainActor in
+                _ = await addToSavedForLater(work, state: .inLine, origin: origin, in: context)
+            }
         }
     }
 
     @discardableResult
-    static func addToSavedForLater(_ work: SavedWork, in context: ModelContext) async -> ReadingQueueMembership {
+    static func addToSavedForLater(
+        _ work: SavedWork,
+        state: ReadingQueueMembershipState = .inLine,
+        origin: ReadingQueueMembershipOrigin? = nil,
+        in context: ModelContext
+    ) async -> ReadingQueueMembership {
         let queue = ensureSavedForLaterQueue(in: context)
-        return await addAndPreserve(work, to: queue, in: context)
+        return await addAndPreserve(work, to: queue, state: state, origin: origin, in: context)
     }
 
     static func addToSavedForLater(
         _ summary: AO3WorkSummary,
+        state: ReadingQueueMembershipState = .inLine,
+        origin: ReadingQueueMembershipOrigin? = nil,
         in context: ModelContext,
         downloadEPUB: ((Int) async throws -> URL)? = nil
     ) async throws -> SavedWork {
@@ -529,7 +618,7 @@ enum ReadingQueueService {
         applyRemoteMetadata(summary, to: saved)
         if createdNewWork { saved.isSaved = false }
         let queue = ensureSavedForLaterQueue(in: context)
-        _ = add(saved, to: queue, in: context)
+        _ = add(saved, to: queue, state: state, origin: origin, in: context)
         try context.save()
         try await preserve(saved, in: context, downloadEPUB: downloadEPUB)
         return saved
@@ -625,6 +714,8 @@ enum ReadingQueueService {
     static func preserveSeries(
         anchoredAt anchor: SavedWork,
         to queues: [ReadingQueue]? = nil,
+        state: ReadingQueueMembershipState = .new,
+        origin: ReadingQueueMembershipOrigin? = nil,
         in context: ModelContext,
         pauseNanos: UInt64 = preservationRequestPauseNanos,
         progress: ((SeriesPreservationResult) -> Void)? = nil
@@ -638,6 +729,8 @@ enum ReadingQueueService {
             return await preserveSeries(
                 summaries,
                 to: queues,
+                state: state,
+                origin: origin,
                 in: context,
                 pauseNanos: pauseNanos,
                 progress: progress
@@ -657,6 +750,8 @@ enum ReadingQueueService {
     static func preserveSeries(
         _ summaries: [AO3WorkSummary],
         to queues: [ReadingQueue]? = nil,
+        state: ReadingQueueMembershipState = .new,
+        origin: ReadingQueueMembershipOrigin? = nil,
         in context: ModelContext,
         preserveWork: SeriesWorkPreserver? = nil,
         pauseNanos: UInt64 = preservationRequestPauseNanos,
@@ -695,7 +790,7 @@ enum ReadingQueueService {
                 }
                 if existing.epubPreservationStatus == .preserved {
                     for queue in targetQueues {
-                        _ = add(existing, to: queue, in: context)
+                        _ = add(existing, to: queue, state: state, origin: origin, in: context)
                     }
                     result.alreadyPreserved += 1
                     progress?(result)
@@ -711,7 +806,17 @@ enum ReadingQueueService {
 
             do {
                 try Task.checkCancellation()
-                let saved = try await (preserveWork ?? addAndPreserveSummary)(summary, targetQueues, context)
+                let saved: SavedWork = if let preserveWork {
+                    try await preserveWork(summary, targetQueues, context)
+                } else {
+                    try await addAndPreserveSummary(
+                        summary,
+                        to: targetQueues,
+                        state: state,
+                        origin: origin,
+                        in: context
+                    )
+                }
                 if saved.ao3Unavailable {
                     result.unavailable += 1
                 } else if saved.epubPreservationStatus == .preserved {
@@ -749,6 +854,8 @@ enum ReadingQueueService {
     private static func addAndPreserveSummary(
         _ summary: AO3WorkSummary,
         to queues: [ReadingQueue],
+        state: ReadingQueueMembershipState = .new,
+        origin: ReadingQueueMembershipOrigin? = nil,
         in context: ModelContext
     ) async throws -> SavedWork {
         let saved: SavedWork
@@ -779,7 +886,7 @@ enum ReadingQueueService {
         applyRemoteMetadata(summary, to: saved)
         if createdNewWork { saved.isSaved = false }
         for queue in queues {
-            _ = add(saved, to: queue, in: context)
+            _ = add(saved, to: queue, state: state, origin: origin, in: context)
         }
         try context.save()
         try await preserve(saved, in: context)

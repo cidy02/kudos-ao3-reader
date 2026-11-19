@@ -69,9 +69,18 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// token is stale (superseded by a newer search, or by returning to Browse
     /// before it finished) discards its result instead of re-showing results.
     @State private var loadToken = 0
+    struct ActiveSavedSearch: Equatable {
+        let id: UUID
+        let name: String
+        let filters: AO3SearchFilters
+    }
+
     /// A saved search whose page 1 has not loaded yet: Try Again and pull to refresh still
     /// record its open when they succeed, so its "new" badge clears (T-526 third review).
     @State private var pendingSavedSearchOpen: (id: UUID, filters: AO3SearchFilters)?
+    /// The saved search currently displayed in results (when launched from Saved Searches
+    /// or a Queue's "Find more" action) so queue adds stamp `originSearchID` + `originLabel`.
+    @State private var activeSavedSearch: ActiveSavedSearch?
     /// The in-flight search, so a superseded one is actually cancelled rather
     /// than left to finish and have its result thrown away. Without this the
     /// pacer serializes the doomed request's start slot ahead of the one the
@@ -366,6 +375,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 .remoteWorkSelectionChrome(bulkSelection, showsBottomAccessory: showPagination) {
                     paginationBar.padding(.horizontal, SubjectMetrics.gutter)
                 }
+                .environment(\.queueMembershipOrigin, bulkSelection.origin)
                 .onChange(of: router.selection) { _, selection in
                     if selection != .search {
                         rankTop100.cancel()
@@ -1168,6 +1178,44 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         return subject == AO3SearchFilters.searchResultsFallback ? "Saved Search" : subject
     }
 
+    /// Computes the membership origin for the search results currently on screen.
+    static func queueOrigin(
+        filters: AO3SearchFilters,
+        activeSavedSearch: ActiveSavedSearch?,
+        savedSearches: [SavedSearch]
+    ) -> ReadingQueueMembershipOrigin? {
+        if let activeSavedSearch, activeSavedSearch.filters == filters {
+            return ReadingQueueMembershipOrigin(
+                kind: .search,
+                searchID: activeSavedSearch.id,
+                label: activeSavedSearch.name
+            )
+        }
+        if let matching = savedSearches.first(where: { $0.filters == filters }) {
+            return ReadingQueueMembershipOrigin(
+                kind: .search,
+                searchID: matching.id,
+                label: matching.name
+            )
+        }
+        guard filters.isSearchable else { return nil }
+        let subject = filters.searchSubject
+        let label: String = if subject.text != AO3SearchFilters.searchResultsFallback {
+            subject.field == nil ? "“\(subject.text)”" : subject.text
+        } else {
+            filters.summaryLabels().first?.text ?? "Search"
+        }
+        return ReadingQueueMembershipOrigin(kind: .search, searchID: nil, label: label)
+    }
+
+    private func refreshBulkSelectionOrigin(for activeFilters: AO3SearchFilters) {
+        bulkSelection.origin = Self.queueOrigin(
+            filters: activeFilters,
+            activeSavedSearch: activeSavedSearch,
+            savedSearches: savedSearches
+        )
+    }
+
     /// Persists the current filter set under the entered name.
     private func commitSavedSearch() {
         let name = saveName.trimmingCharacters(in: .whitespaces)
@@ -1175,6 +1223,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         let search = SavedSearch(name: name, filters: filters)
         search.lastOpenedAt = Date()
         context.insert(search)
+        activeSavedSearch = ActiveSavedSearch(id: search.id, name: search.name, filters: search.filters)
+        refreshBulkSelectionOrigin(for: filters)
         FolderSyncService.markDirty()
         try? context.save()
         saveName = ""
@@ -1193,8 +1243,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     private func runSaved(_ saved: SavedSearch, cachedPage: AO3SearchPage? = nil) {
         filterHistory.removeAll()
         isLibraryExpanded = false
+        activeSavedSearch = ActiveSavedSearch(id: saved.id, name: saved.name, filters: saved.filters)
         filters = saved.filters
         router.panel = .none
+        refreshBulkSelectionOrigin(for: saved.filters)
         if QueueSourceChecks.recordsOpenImmediately(hasCachedPage: cachedPage != nil),
            let cachedPage {
             recordSavedSearchOpen(saved)
@@ -1308,6 +1360,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     )
                 }
                 phase = .loaded
+                refreshBulkSelectionOrigin(for: current)
                 if let savedSearchID,
                    QueueSourceChecks.shouldRecordOpen(
                     page: page, loadToken: token, expectedToken: loadToken

@@ -67,6 +67,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) var auth
     @Environment(DownloadQueue.self) private var downloadQueue
+    @Environment(\.queueMembershipOrigin) private var queueOrigin
     @Query(sort: \Tag.name) var allTags: [Tag]
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var allWorks: [SavedWork]
 
@@ -256,7 +257,10 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         #endif
         .sheet(isPresented: $showingAddToQueue) {
             if let work = localWork {
-                AddToQueueView(work: work)
+                AddToQueueView(
+                    work: work,
+                    origin: queueOrigin ?? ReadingQueueMembershipOrigin(kind: .manual)
+                )
                 #if os(iOS)
                     .modifier(ScopeSurfaceAccent())
                 #endif
@@ -1102,10 +1106,16 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         queueNotice = nil
         loadError = nil
 
+        let resolvedOrigin = queueOrigin ?? ReadingQueueMembershipOrigin(kind: .manual)
         if let work = localWork {
             Task {
                 working = true
-                _ = await ReadingQueueService.addToSavedForLater(work, in: context)
+                _ = await ReadingQueueService.addToSavedForLater(
+                    work,
+                    state: .inLine,
+                    origin: resolvedOrigin,
+                    in: context
+                )
                 working = false
                 queueNotice = "Added to Want to Read."
                 maybeOfferSeriesPreservation(for: work)
@@ -1118,7 +1128,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             working = true
             loadError = nil
             do {
-                let work = try await ReadingQueueService.addToSavedForLater(summary, in: context)
+                let work = try await ReadingQueueService.addToSavedForLater(
+                    summary,
+                    state: .inLine,
+                    origin: resolvedOrigin,
+                    in: context
+                )
                 localWork = work
                 working = false
                 queueNotice = "Added to Want to Read."
@@ -1248,10 +1263,13 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         preservingSeries = true
         queueNotice = "Preserving series…"
         seriesPreservationProgress = nil
+        let resolvedOrigin = queueOrigin ?? ReadingQueueMembershipOrigin(kind: .manual)
         seriesPreservationTask = Task { @MainActor in
             let result: ReadingQueueService.SeriesPreservationResult = if let summaries {
                 await ReadingQueueService.preserveSeries(
                     summaries,
+                    state: .new,
+                    origin: resolvedOrigin,
                     in: context,
                     progress: {
                         seriesPreservationProgress = $0
@@ -1261,6 +1279,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             } else {
                 await ReadingQueueService.preserveSeries(
                     anchoredAt: work,
+                    state: .new,
+                    origin: resolvedOrigin,
                     in: context,
                     progress: {
                         seriesPreservationProgress = $0

@@ -129,7 +129,7 @@ struct WorkBulkActionBar: View {
         }
         .accessibilityLabel("Done")
         .sheet(isPresented: $showingAddToQueue) {
-            AddToQueueView(works: selectedWorks)
+            AddToQueueView(works: selectedWorks, origin: ReadingQueueMembershipOrigin(kind: .manual))
         }
         .sheet(isPresented: $showingAddToCollection) {
             AddToCollectionView(works: selectedWorks)
@@ -182,7 +182,12 @@ struct WorkBulkActionBar: View {
                 guard !work.isInSavedForLaterQueue else { continue }
                 // Discard membership: Task must not inherit a non-Sendable PersistentModel result.
                 Task { @MainActor in
-                    _ = await ReadingQueueService.addToSavedForLater(work, in: context)
+                    _ = await ReadingQueueService.addToSavedForLater(
+                        work,
+                        state: .new,
+                        origin: ReadingQueueMembershipOrigin(kind: .manual),
+                        in: context
+                    )
                 }
             } else {
                 guard work.isInSavedForLaterQueue else { continue }
