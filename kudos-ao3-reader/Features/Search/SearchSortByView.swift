@@ -109,7 +109,7 @@ struct SearchSortByView: View {
             .accentFill()
             .disabled(!isRanked)
             Toggle(isOn: ranking.setsAsideUnusual) {
-                titled("Set Aside Unusual Stats", "More kudos than hits, or thousands of kudos and almost no bookmarks")
+                titled("Set Aside Unusual Stats", ReaderResponseCopy.unusualStatsSubtitle)
             }
             .accentFill()
             .disabled(!isRanked)

@@ -268,6 +268,16 @@ struct FandomWorksView: View {
                     let partition = ranking.partitioned(results)
                     // Once per render: each call re-parses every date on the page.
                     let dividerID = dividerAfterWorkID
+                    if let line = ReaderResponseCopy.rankedWorksLine(
+                        loaded: results.count,
+                        rank: ranking.settings.rank,
+                        seenBeforeLine: partition.seenBeforeLine
+                    ) {
+                        Section {
+                            RankedWorksCaption(text: line)
+                                .bareListRow()
+                        }
+                    }
                     Section {
                         ForEach(partition.ranked) { entry in
                             SelectableAO3WorkRow(
@@ -910,6 +920,16 @@ struct TagWorksView: View {
                         }
                     }
                     let partition = ranking.partitioned(results)
+                    if let line = ReaderResponseCopy.rankedWorksLine(
+                        loaded: results.count,
+                        rank: ranking.settings.rank,
+                        seenBeforeLine: partition.seenBeforeLine
+                    ) {
+                        Section {
+                            RankedWorksCaption(text: line)
+                                .bareListRow()
+                        }
+                    }
                     Section {
                         ForEach(partition.ranked) { entry in
                             SelectableAO3WorkRow(
