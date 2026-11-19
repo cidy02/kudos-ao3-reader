@@ -31,6 +31,9 @@ struct SmartQueuePersistenceTests {
         let work = SavedWork(title: title, author: "Author")
         work.wordCount = words
         work.isComplete = true
+        // A queued-but-unsaved work is queue-only and is not part of the library
+        // a smart queue reads.
+        work.isSaved = true
         return work
     }
 
@@ -94,7 +97,7 @@ struct SmartQueuePersistenceTests {
     @Test func backupRoundTripKeepsKindAndRulesAndAnOlderArchiveDoesNotClearThem() throws {
         let source = try context()
         let json = rulesJSON()
-        let queue = ReadingQueueService.createQueue(named: "Short and finished", smartRulesJSON: json, in: context)
+        let queue = ReadingQueueService.createQueue(named: "Short and finished", smartRulesJSON: json, in: source)
         let story = work("Story", words: 4_000)
         source.insert(story)
         let plain = ReadingQueue(name: "Plain")
@@ -159,7 +162,7 @@ struct SmartQueuePersistenceTests {
         )
         let target = try context()
         _ = try KudosBackupService.restore(contents, into: target, defaults: try defaults(), mode: .replaceLibrary)
-        let restored = try #require(try target.fetch(FetchDescriptor<ReadingQueue>()).first)
+        let restored = try #require(try target.fetch(FetchDescriptor<ReadingQueue>()).first { $0.id == queue.id })
         #expect(restored.kindRaw == "futureKind")
         #expect(restored.smartRulesJSON == queue.smartRulesJSON)
         #expect(restored.kind == .custom)

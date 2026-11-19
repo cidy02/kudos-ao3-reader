@@ -255,7 +255,8 @@ struct ReadingQueueSettingsView: View {
             SubjectFormRow(
                 label: "Order",
                 value: queue.kind == .smart
-                    ? (SmartQueueRules.decode(queue.smartRulesJSON)?.sort.title ?? SmartQueueDocument.Sort.shortestFirst.title)
+                    ? (SmartQueueRules.decode(queue.smartRulesJSON)?.sort.title
+                        ?? SmartQueueDocument.Sort.shortestFirst.title)
                     : "Manual"
             )
             SubjectRowSeparator()

@@ -26,7 +26,10 @@ struct SmartQueueWorksPage<FilterRail: View>: View {
                 ContentUnavailableView {
                     Label(queue.displayName, systemImage: "line.3.horizontal.decrease.circle")
                 } description: {
-                    Text("This queue fills itself from your library. A work appears when it matches, and leaves when it stops.")
+                    Text(
+                        "This queue fills itself from your library. "
+                            + "A work appears when it matches, and leaves when it stops."
+                    )
                 } actions: {
                     Button("Edit Rules", action: onEditRules)
                         .accessibilityLabel("Edit Rules")

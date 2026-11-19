@@ -124,7 +124,7 @@ struct SmartQueueRulesTests {
         #expect(document([length, status], match: .all, sort: .title).matching(works).map(\.title) == ["Short done"])
         #expect(
             document([length, status], match: .any, sort: .title).matching(works).map(\.title)
-                == ["Long done", "Short WIP", "Short done"]
+                == ["Long done", "Short done", "Short WIP"]
         )
     }
 
@@ -154,7 +154,7 @@ struct SmartQueueRulesTests {
         #expect(doc.matching([story]).isEmpty)
     }
 
-    @Test func partialJSONUsesDefaultsAndUnknownKindDoesNotDecode() {
+    @Test func partialJSONUsesDefaultsAndUnknownKindDoesNotDecode() throws {
         let partial = try #require(SmartQueueRules.decode("{}"))
         #expect(partial == SmartQueueDocument(match: .all, rules: [], sort: .shortestFirst, limit: nil))
         #expect(SmartQueueRules.decode(nil) == nil)
