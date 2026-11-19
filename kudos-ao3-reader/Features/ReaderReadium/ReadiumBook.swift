@@ -1231,7 +1231,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
                     // reader has turned to; reporting it flickers the page digit
                     // and, on a cancelled peek at the last page, can mark the
                     // work finished. Readium sets the flag for the whole gesture.
-                    if (document.documentElement.dataset.readiumTransitioning === '1') return;
+                    if (document.documentElement.dataset.readiumTransitioning === '1') {
+                        if (pending) { clearTimeout(pending); pending = null; }
+                        return;
+                    }
                     if (Date.now() > allowUntil) return;
                     // Keep arm alive while the page-turn animation is scrolling so
                     // the settle sample after finger-up still posts.
@@ -1255,6 +1258,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
                     if (pending) clearTimeout(pending);
                     pending = setTimeout(function() {
                         pending = null;
+                        if (document.documentElement.dataset.readiumTransitioning === '1') return;
                         if (Date.now() > allowUntil) return;
                         var m = measure();
                         if (!m) return;

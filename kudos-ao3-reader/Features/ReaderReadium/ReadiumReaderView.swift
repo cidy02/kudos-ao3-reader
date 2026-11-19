@@ -2236,6 +2236,15 @@ private struct ReaderFoldProbe: View {
         .background { HingeStatusRefresh(tick: $hingeTick) }
     }
 
+    /// `-ReadiumCurlDebug YES`. The navigator reads the same process arguments.
+    private static let curlDebugLogging: Bool = {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: "-ReadiumCurlDebug"), index + 1 < args.count else {
+            return false
+        }
+        return args[index + 1] == "YES"
+    }()
+
     private func publish(_ regions: AdaptiveContentRegions) {
         let book = regions.isBookPose
         let table = regions.isTabletopPose
@@ -2244,7 +2253,10 @@ private struct ReaderFoldProbe: View {
             loggedPose = pose
             let width = Int(regions.safeBounds.width.rounded())
             let height = Int(regions.safeBounds.height.rounded())
-            Log.epub.info("fold-pose book=\(book, privacy: .public) tabletop=\(table, privacy: .public) panes=\(regions.panes.count, privacy: .public) reservations=\(regions.activeReservations.count, privacy: .public) size=\(width, privacy: .public)x\(height, privacy: .public)")
+            // Same switch as the navigator's curl lines: `-ReadiumCurlDebug YES`.
+            if Self.curlDebugLogging {
+                Log.epub.info("fold-pose book=\(book, privacy: .public) tabletop=\(table, privacy: .public) panes=\(regions.panes.count, privacy: .public) reservations=\(regions.activeReservations.count, privacy: .public) size=\(width, privacy: .public)x\(height, privacy: .public)")
+            }
         }
         bookPose = book
         tabletopPose = table
