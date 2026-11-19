@@ -112,6 +112,10 @@ struct QueueSortNewView: View {
                     }
                     .padding(.horizontal, SubjectMetrics.gutter)
                     .padding(.vertical, 12)
+                    // Pin the column to the screen's width: at AX sizes the row's
+                    // ideal width is wider than the screen, and a ScrollView
+                    // would let it run off both edges (seen at AX5, 2026-11-19).
+                    .containerRelativeFrame(.horizontal)
                 }
             } else {
                 VStack(spacing: 0) {
@@ -123,6 +127,7 @@ struct QueueSortNewView: View {
                             .padding(.horizontal, SubjectMetrics.gutter)
                             .padding(.top, 20)
                             .padding(.bottom, 16)
+                            .containerRelativeFrame(.horizontal)
                     }
                     .scrollBounceBehavior(.basedOnSize)
                 }
