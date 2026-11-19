@@ -85,7 +85,7 @@ struct ReadiumReaderTests {
             readingMode: .paged, twoPageSpread: false
         )
 
-        #expect(spread.columnCount == .auto)
+        #expect(spread.columnCount == .two)
         #expect(single.columnCount == .one)
         #expect(spread.spread == nil)
         #expect(single.spread == nil)
@@ -119,10 +119,46 @@ struct ReadiumReaderTests {
         ) == nil)
         #expect(ReadiumReaderStyleMapper.columnCount(
             readingMode: .paged, twoPageSpread: true, bookPose: false, tabletopPose: false
-        ) == .auto)
+        ) == .two)
         #expect(ReadiumReaderStyleMapper.columnCount(
             readingMode: .paged, twoPageSpread: false, bookPose: false, tabletopPose: false
         ) == .one)
+    }
+
+    /// T-561g. `twoPageSpread` is the setting on a wide layout (the view
+    /// passes `twoPageEnabled && wideLayoutAvailable`), so a narrow layout is
+    /// the same input as the setting off. `.two`, not `.auto`: ReadiumCSS only
+    /// splits `.auto` at 960 pt, and the Duo's flat-open screen is 951 pt.
+    @Test(arguments: [false, true], [false, true])
+    func twoPageSettingMapsToAColumnCount(settingOn: Bool, wide: Bool) {
+        for accessibilityText in [false, true] {
+            let spread = settingOn && wide
+            let flat = ReadiumReaderStyleMapper.columnCount(
+                readingMode: .paged, twoPageSpread: spread, bookPose: false,
+                tabletopPose: false, accessibilityText: accessibilityText
+            )
+            let book = ReadiumReaderStyleMapper.columnCount(
+                readingMode: .paged, twoPageSpread: spread, bookPose: true,
+                tabletopPose: false, accessibilityText: accessibilityText
+            )
+            // On and wide is two pages, except at accessibility text sizes.
+            #expect(flat == (spread && !accessibilityText ? .two : .one))
+            // Book pose keeps two whatever the setting, size class or text size.
+            #expect(book == .two)
+        }
+    }
+
+    @Test func accessibilityTextReachesThePreferences() {
+        let ax = ReadiumReaderStyleMapper.preferences(
+            style: ReaderTextStyle(), theme: .light, fontFamily: nil,
+            readingMode: .paged, twoPageSpread: true, accessibilityText: true
+        )
+        let axBook = ReadiumReaderStyleMapper.preferences(
+            style: ReaderTextStyle(), theme: .light, fontFamily: nil,
+            readingMode: .paged, twoPageSpread: true, bookPose: true, accessibilityText: true
+        )
+        #expect(ax.columnCount == .one)
+        #expect(axBook.columnCount == .two)
     }
 
     @Test func theFoldProbeDoesNotWriteTheStoredTwoPageSetting() throws {

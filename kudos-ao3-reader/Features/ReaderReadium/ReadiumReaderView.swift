@@ -107,6 +107,7 @@ struct ReadiumReaderView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.readerPanelSuppressed) private var readerPanelSuppressed
 
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
@@ -1677,7 +1678,8 @@ extension ReadiumReaderView {
             textHex: readerPageColors.textHex,
             pageTurn: pageTurn,
             bookPose: bookPose,
-            tabletopPose: tabletopPose
+            tabletopPose: tabletopPose,
+            accessibilityText: dynamicTypeSize.isAccessibilitySize
         )
     }
 
@@ -1701,7 +1703,8 @@ extension ReadiumReaderView {
     /// Re-submit preferences whenever any mapped setting changes (instant updates).
     private var preferencesToken: String {
         "\(readingMode.rawValue)|\(pageTurn.rawValue)|\(readerTheme.rawValue)|\(readerPageColors.backgroundHex)|\(fontID)|"
-            + "\(twoPageEnabled)|\(wideLayoutAvailable)|\(bookPose)|\(tabletopPose)|\(textStyle.token)"
+            + "\(twoPageEnabled)|\(wideLayoutAvailable)|\(bookPose)|\(tabletopPose)|"
+            + "\(dynamicTypeSize.isAccessibilitySize)|\(textStyle.token)"
     }
 
     /// Font declarations are fixed when Readium builds its navigator. Recreate it

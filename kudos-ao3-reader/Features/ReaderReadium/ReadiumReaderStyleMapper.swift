@@ -20,7 +20,8 @@ enum ReadiumReaderStyleMapper {
         textHex: String? = nil,
         pageTurn: ReaderPageTurnStyle = .slide,
         bookPose: Bool = false,
-        tabletopPose: Bool = false
+        tabletopPose: Bool = false,
+        accessibilityText: Bool = false
     ) -> EPUBPreferences {
         EPUBPreferences(
             backgroundColor: ReadiumNavigator.Color(hex: backgroundHex ?? theme.backgroundHex),
@@ -34,7 +35,8 @@ enum ReadiumReaderStyleMapper {
                 readingMode: readingMode,
                 twoPageSpread: twoPageSpread,
                 bookPose: bookPose,
-                tabletopPose: tabletopPose
+                tabletopPose: tabletopPose,
+                accessibilityText: accessibilityText
             ),
             fontFamily: fontFamily,
             // Legacy CSS emits the selected point size as px. Readium expects a
@@ -67,18 +69,24 @@ enum ReadiumReaderStyleMapper {
     }
 
     /// Book pose forces two columns. Tabletop forces one, even when the stored
-    /// two-page setting is on. Flat and cover follow that setting, and only
-    /// when the layout is already wide (`twoPageSpread`). Scroll never sets a count.
+    /// two-page setting is on. Otherwise the setting decides (`twoPageSpread`
+    /// is that setting on a wide layout): on is `.two`, off is `.one`. `.two`
+    /// rather than `.auto`, because ReadiumCSS only splits `.auto` at 960 pt and
+    /// the Duo's flat-open screen (951 pt) and portrait iPads are narrower.
+    /// Accessibility text sizes keep one column: two columns of AX text leave a
+    /// few words a line. Book pose keeps its two (the columns clear the hinge).
+    /// Scroll never sets a count.
     static func columnCount(
         readingMode: ReadingMode,
         twoPageSpread: Bool,
         bookPose: Bool,
-        tabletopPose: Bool
+        tabletopPose: Bool,
+        accessibilityText: Bool = false
     ) -> ColumnCount? {
         guard readingMode != .scroll else { return nil }
         if bookPose { return .two }
         if tabletopPose { return .one }
-        return twoPageSpread ? .auto : .one
+        return twoPageSpread && !accessibilityText ? .two : .one
     }
 
     static var readingSystemProperties: CSSRSProperties {
