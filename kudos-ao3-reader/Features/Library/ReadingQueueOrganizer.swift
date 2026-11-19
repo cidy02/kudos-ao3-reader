@@ -78,7 +78,9 @@ struct AllReadingQueuesGridView: View {
         result.reserveCapacity(readingQueues.count)
         for queue in readingQueues {
             if let smartSnapshot {
-                result[queue.id] = ReadingQueueService.orderedWorks(in: queue, snapshot: smartSnapshot)
+                result[queue.id] = ReadingQueueService.orderedWorks(in: queue, snapshot: smartSnapshot) {
+                    !gate.isHidden($0, enabled: hideMature, mode: matureMode)
+                }
             } else {
                 result[queue.id] = ReadingQueueService.orderedMemberships(in: queue).compactMap(\.work)
             }

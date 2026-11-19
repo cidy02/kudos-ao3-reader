@@ -6,6 +6,8 @@ import SwiftUI
 struct SmartQueueWorksPage<FilterRail: View>: View {
     let queue: ReadingQueue
     let works: [SavedWork]
+    /// What the header counts: the visible list before quick filters.
+    let headerWorks: [SavedWork]
     let visibleWorks: [SavedWork]
     let preservedIDs: Set<UUID>
     let palette: SubjectPalette
@@ -77,7 +79,7 @@ struct SmartQueueWorksPage<FilterRail: View>: View {
             Section {
                 QueuePageHeader(
                     queue: queue,
-                    works: works,
+                    works: headerWorks,
                     preservedIDs: preservedIDs,
                     palette: palette,
                     onAddTag: onAddTag,
@@ -117,7 +119,7 @@ struct SmartQueueWorksPage<FilterRail: View>: View {
             VStack(alignment: .leading, spacing: 0) {
                 QueuePageHeader(
                     queue: queue,
-                    works: works,
+                    works: headerWorks,
                     preservedIDs: preservedIDs,
                     palette: palette,
                     onAddTag: onAddTag,

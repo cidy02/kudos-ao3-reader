@@ -718,7 +718,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         }
                         HomeQueueRow(
                             queue: queue,
-                            precomputedSmartWorks: queue.kind == .smart ? smartSnapshot?.matching(queue) : nil,
+                            precomputedSmartWorks: queue.kind == .smart ? smartSnapshot?.matching(queue, where: passesPrivacy) : nil,
                             onOpenQueue: { path.append(AllReadingQueuesDestination(initialQueueID: queue.id)) },
                             onStartWork: { path.append(LocalWorkDestination.reader($0)) }
                         )

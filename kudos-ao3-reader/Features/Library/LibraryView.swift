@@ -839,7 +839,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
                     ReadingQueueCard(
                         queue: queue,
-                        precomputedSmartWorks: queue.kind == .smart ? smartSnapshot?.matching(queue) : nil
+                        precomputedSmartWorks: queue.kind == .smart ? smartSnapshot?.matching(queue, where: passesPrivacy) : nil
                     )
                 }
                 .buttonStyle(.plain)
@@ -890,7 +890,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                         NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
                             LibraryQueueLedgerRow(
                                 queue: queue,
-                                precomputedSmartWorks: queue.kind == .smart ? smartSnapshot?.matching(queue) : nil
+                                precomputedSmartWorks: queue.kind == .smart ? smartSnapshot?.matching(queue, where: passesPrivacy) : nil
                             )
                         }
                         .buttonStyle(.plain)

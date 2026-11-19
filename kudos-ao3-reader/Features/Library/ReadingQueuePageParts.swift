@@ -309,6 +309,8 @@ struct QueuePageHeader<FilterRail: View>: View {
     @ViewBuilder var filterRail: () -> FilterRail
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
 
     var body: some View {
         let progress = ReadingQueueFacts.progress(of: works.map(\.readingState))
@@ -427,7 +429,8 @@ struct QueuePageHeader<FilterRail: View>: View {
             identity: queue.id,
             hue: queue.hue,
             pickedHex: queue.colorHex,
-            backs: Array(works.prefix(CoverStackLayout.maxBacks)),
+            // StackedWorkCover's rule: a concealed work's fandom colour stays out.
+            backs: Array(works.filter { !gate.isConcealed($0, enabled: hideMature) }.prefix(CoverStackLayout.maxBacks)),
             size: CGSize(width: 96, height: 96)
         )
         .accessibilityHidden(true)

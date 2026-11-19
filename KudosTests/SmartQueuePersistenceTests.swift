@@ -584,6 +584,36 @@ extension PersistenceGateSuites.SmartQueuePersistenceTests {
         #expect(sharedEntry.queueNames.count == 2)
     }
 
+    /// Review 2: Hide Mature runs before a smart queue's limit in What Fits, as on
+    /// the queue page, so hidden matches cannot crowd out the visible ones.
+    @Test func whatFitsAppliesHideMatureBeforeTheSmartLimit() throws {
+        let context = try context()
+        let hiddenA = work("A Mature", words: 1_000)
+        let hiddenB = work("B Mature", words: 1_000)
+        hiddenA.rating = "Explicit"
+        hiddenB.rating = "Explicit"
+        let visible = work("C Visible", words: 1_000)
+        visible.rating = "General Audiences"
+        [hiddenA, hiddenB, visible].forEach(context.insert)
+        let rule = SmartQueueDocument.Rule(
+            id: UUID(), kind: .length, lengthComparison: .under, words: 5_000
+        )
+        let rules = SmartQueueRules.encode(
+            SmartQueueDocument(match: .all, rules: [rule], sort: .title, limit: 2)
+        )
+        let queue = ReadingQueueService.createQueue(named: "Two Short", smartRulesJSON: rules, in: context)
+        try context.save()
+
+        let plan = WhatFitsPlanner.plan(
+            queues: [queue],
+            bucket: .fifteenMinutes,
+            isVisible: { $0.rating != "Explicit" },
+            fileExists: { _ in true }
+        )
+        #expect(plan.allEntries.map(\.work.title) == ["C Visible"])
+        #expect(plan.hasHiddenMatureFits)
+    }
+
     @Test func browserOrderedQueuesSortsMixedKindsDeterministically() throws {
         let saved = ReadingQueue(name: "Saved for Later", kind: .savedForLater, sortOrder: 99)
         let smartZero = ReadingQueue(name: "Smart 0", kind: .smart, sortOrder: 0)

@@ -206,12 +206,15 @@ enum ReadingQueueService {
         return orderedMemberships(in: queue).compactMap(\.work)
     }
 
+    /// `include` (smart queues only) runs before the rules' limit, so works the
+    /// reader cannot see do not use up the limit; pass the Hide Mature check.
     static func orderedWorks(
         in queue: ReadingQueue,
-        snapshot: SmartLibrarySnapshot
+        snapshot: SmartLibrarySnapshot,
+        where include: ((SavedWork) -> Bool)? = nil
     ) -> [SavedWork] {
         if queue.kind == .smart {
-            return snapshot.matching(queue)
+            return snapshot.matching(queue, where: include)
         }
         return orderedMemberships(in: queue).compactMap(\.work)
     }

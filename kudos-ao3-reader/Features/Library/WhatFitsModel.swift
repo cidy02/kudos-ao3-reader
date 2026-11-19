@@ -162,7 +162,8 @@ enum WhatFitsPlanner {
         let candidates = deduplicatedCandidates(
             in: activeQueues,
             libraryWorks: libraryWorks,
-            tagAliases: tagAliases
+            tagAliases: tagAliases,
+            isVisible: isVisible
         )
 
         var hasAnyVisibleWorks = false
@@ -261,7 +262,8 @@ enum WhatFitsPlanner {
     private static func deduplicatedCandidates(
         in queues: [ReadingQueue],
         libraryWorks: [SavedWork]?,
-        tagAliases: TagAliasResolver?
+        tagAliases: TagAliasResolver?,
+        isVisible: (SavedWork) -> Bool
     ) -> [Candidate] {
         var orderedIDs: [UUID] = []
         var workByID: [UUID: SavedWork] = [:]
@@ -286,7 +288,14 @@ enum WhatFitsPlanner {
         for queue in queues {
             // `orderedWorks` is the membership list for a manual queue and the
             // computed matches for a smart one. A work is still counted once.
-            let queueWorks: [SavedWork] = if let smartSnapshot {
+            // A smart queue's limit counts visible works first (Hide Mature runs
+            // before the limit); its hidden matches follow so the planner can
+            // still say that mature works would fit.
+            let queueWorks: [SavedWork] = if let smartSnapshot, queue.kind == .smart {
+                withoutActuallyEscaping(isVisible) { visible in
+                    ReadingQueueService.orderedWorks(in: queue, snapshot: smartSnapshot, where: visible)
+                } + smartSnapshot.matching(queue).filter { !isVisible($0) }
+            } else if let smartSnapshot {
                 ReadingQueueService.orderedWorks(in: queue, snapshot: smartSnapshot)
             } else {
                 ReadingQueueService.orderedMemberships(in: queue).compactMap(\.work)

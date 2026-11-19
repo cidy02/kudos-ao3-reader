@@ -151,13 +151,12 @@ struct ReadingQueueBrowserView: View {
         }
     }
 
-    private func resolvedSmartVisible(
-        unfilteredVisible: [SavedWork],
-        allMatched: [SavedWork]
-    ) -> [SavedWork] {
+    private func resolvedSmartVisible(unfilteredVisible: [SavedWork]) -> [SavedWork] {
         guard quickFilter != .all || filters.hasActiveFilters else { return unfilteredVisible }
+        // From the visible list: a downloaded visible work that hidden matches
+        // pushed past the unfiltered limit is still offline.
         let preservedIDs = Set(
-            allMatched
+            unfilteredVisible
                 .filter { $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path) }
                 .map(\.id)
         )
@@ -544,19 +543,17 @@ struct ReadingQueueBrowserView: View {
             allMatched: currentWorks,
             snapshot: snapshot
         )
-        let smartVisible = resolvedSmartVisible(
-            unfilteredVisible: smartUnfilteredVisible,
-            allMatched: currentWorks
-        )
+        let smartVisible = resolvedSmartVisible(unfilteredVisible: smartUnfilteredVisible)
         Group {
             if horizontalSizeClass == .regular {
                 regularLayout(
                     snapshot: snapshot,
                     works: currentWorks,
-                    smartVisible: smartVisible
+                    smartVisible: smartVisible,
+                    smartHeader: smartUnfilteredVisible
                 )
             } else {
-                compactLayout(works: currentWorks, smartVisible: smartVisible)
+                compactLayout(works: currentWorks, smartVisible: smartVisible, smartHeader: smartUnfilteredVisible)
             }
         }
         .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
@@ -686,8 +683,8 @@ struct ReadingQueueBrowserView: View {
 
     /// The tab bar shows, as on the queue list; the select bulk bar takes the
     /// bottom only while selecting.
-    private func compactLayout(works: [SavedWork], smartVisible: [SavedWork]) -> some View {
-        pageContent(works: works, smartVisible: smartVisible)
+    private func compactLayout(works: [SavedWork], smartVisible: [SavedWork], smartHeader: [SavedWork]) -> some View {
+        pageContent(works: works, smartVisible: smartVisible, smartHeader: smartHeader)
             #if os(iOS)
             .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
             #endif
@@ -698,7 +695,8 @@ struct ReadingQueueBrowserView: View {
     private func regularLayout(
         snapshot: ReadingQueueService.SmartLibrarySnapshot?,
         works: [SavedWork],
-        smartVisible: [SavedWork]
+        smartVisible: [SavedWork],
+        smartHeader: [SavedWork]
     ) -> some View {
         HStack(spacing: 0) {
             List {
@@ -724,7 +722,7 @@ struct ReadingQueueBrowserView: View {
 
             // `pageContent`'s own heading names the selected queue, so the split
             // view does not add a separate title row above it.
-            pageContent(works: works, smartVisible: smartVisible)
+            pageContent(works: works, smartVisible: smartVisible, smartHeader: smartHeader)
         }
         #if os(iOS)
         // No phone-style tab bar here to begin with; hidden for the sidebar.
@@ -742,16 +740,21 @@ extension ReadingQueueBrowserView {
     // MARK: - Active queue content
 
     @ViewBuilder
-    private func pageContent(works: [SavedWork], smartVisible: [SavedWork]) -> some View {
+    /// `smartHeader` is the queue's visible list before quick filters (Hide Mature
+    /// applied before the limit), so the header never counts, times or shows
+    /// covers of works the reader cannot see. `works` still tells an empty
+    /// queue from an all-hidden one.
+    private func pageContent(works: [SavedWork], smartVisible: [SavedWork], smartHeader: [SavedWork]) -> some View {
         if let selectedQueue, selectedQueue.kind == .smart {
             let smartPreservedIDs = Set(
-                works
+                smartHeader
                     .filter { $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path) }
                     .map(\.id)
             )
             SmartQueueWorksPage(
                 queue: selectedQueue,
                 works: works,
+                headerWorks: smartHeader,
                 visibleWorks: smartVisible,
                 preservedIDs: smartPreservedIDs,
                 palette: subjectPalette,
