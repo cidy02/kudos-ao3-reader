@@ -98,7 +98,6 @@ extension ReadingQueueFacts {
             return .waiting
         }
         let returnedFromWaiting = membershipState == .new
-            && !work.isComplete
             && work.hasStartedReading
             && work.hasUpdate
             && work.knownChapterCount > 0
@@ -113,6 +112,15 @@ extension ReadingQueueFacts {
     /// chapter count has grown past `knownChapterCount`.
     static func hasNewChapter(for work: SavedWork) -> Bool {
         !work.isFinished && work.hasUpdate
+    }
+
+    /// Section-aware `"Up next"` split for queue cards and Home's queue hero:
+    /// picks the lead unfinished work from `In line`, ignoring `.new` and `Waiting`.
+    static func upNext(
+        inMemberships memberships: [ReadingQueueMembership]
+    ) -> (upNext: SavedWork?, inLine: [SavedWork]) {
+        let split = partition(memberships: memberships)
+        return (upNext: split.upNext?.work, inLine: split.inLineRest.map(\.work))
     }
 
     /// Partitions a queue's ordered memberships into New, In line (with the lead

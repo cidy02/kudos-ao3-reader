@@ -472,6 +472,7 @@ enum ReadingQueueService {
         var nextOrder = nextMembershipSortOrder(in: queue)
         for membership in candidates {
             membership.state = .inLine
+            membership.stateWasRecorded = true
             membership.sortOrderInQueue = nextOrder
             nextOrder += 1
             membership.markModified(now)
@@ -557,13 +558,17 @@ enum ReadingQueueService {
     /// Save for Later on, or off — the one toggle every row and menu shares.
     /// Taking a work off removes a queue-only record with it, as the queue does.
     @MainActor
-    static func toggleSavedForLater(_ work: SavedWork, in context: ModelContext) {
+    static func toggleSavedForLater(
+        _ work: SavedWork,
+        origin: ReadingQueueMembershipOrigin = ReadingQueueMembershipOrigin(kind: .manual),
+        in context: ModelContext
+    ) {
         if work.isInSavedForLaterQueue {
             removeFromQueueAndDeleteIfQueueOnly(work, from: ensureSavedForLaterQueue(in: context), in: context)
         } else {
             // Discard membership: Task must not inherit a non-Sendable PersistentModel result.
             Task { @MainActor in
-                _ = await addToSavedForLater(work, state: .inLine, in: context)
+                _ = await addToSavedForLater(work, state: .inLine, origin: origin, in: context)
             }
         }
     }

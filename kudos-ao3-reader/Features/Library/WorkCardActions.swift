@@ -450,11 +450,6 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                                 }
                             }
                         }
-                        if let sortIntoLine = queueMenu.sortIntoLine {
-                            Button(action: sortIntoLine) {
-                                Label("Sort into line", systemImage: "text.insert")
-                            }
-                        }
                     } else {
                         // Board 20: a work menu leads with its icon row.
                         MenuTopRow {

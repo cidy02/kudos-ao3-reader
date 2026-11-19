@@ -1128,6 +1128,9 @@ nonisolated struct ReadingQueueMembershipOrigin: Equatable, Hashable, Codable, S
     var note: String = ""
     /// `"new"` or `"inLine"`; default `"inLine"` so existing queues keep their order.
     var stateRaw: String = ReadingQueueMembershipState.inLine.rawValue
+    /// Mirrors `SavedWork.statusWasRecorded` (`KudosBackup.swift`): distinguishes an
+    /// explicit `.new` -> `.inLine` sort from an older/Android manifest stripping keys.
+    var stateWasRecorded: Bool = false
     /// Origin fields kept per membership (not on `SavedWork`) for queue rows and Insights.
     var originKindRaw: String?
     var originSearchID: UUID?
@@ -1147,6 +1150,7 @@ nonisolated struct ReadingQueueMembershipOrigin: Equatable, Hashable, Codable, S
         sortOrderInQueue: Int = 0,
         note: String = "",
         state: ReadingQueueMembershipState = .inLine,
+        stateWasRecorded: Bool = false,
         origin: ReadingQueueMembershipOrigin? = nil
     ) {
         self.id = id
@@ -1157,6 +1161,7 @@ nonisolated struct ReadingQueueMembershipOrigin: Equatable, Hashable, Codable, S
         self.sortOrderInQueue = sortOrderInQueue
         self.note = note
         stateRaw = state.rawValue
+        self.stateWasRecorded = stateWasRecorded || state != .inLine
         originKindRaw = origin?.kind.rawValue
         originSearchID = origin?.searchID
         originLabel = origin?.label
@@ -1164,7 +1169,10 @@ nonisolated struct ReadingQueueMembershipOrigin: Equatable, Hashable, Codable, S
 
     var state: ReadingQueueMembershipState {
         get { ReadingQueueMembershipState(rawValue: stateRaw) ?? .inLine }
-        set { stateRaw = newValue.rawValue }
+        set {
+            stateRaw = newValue.rawValue
+            stateWasRecorded = true
+        }
     }
 
     var originKind: ReadingQueueMembershipOriginKind? {

@@ -1200,8 +1200,11 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         }
         guard filters.isSearchable else { return nil }
         let subject = filters.searchSubject
-        guard subject.text != AO3SearchFilters.searchResultsFallback else { return nil }
-        let label = subject.field == nil ? "“\(subject.text)”" : subject.text
+        let label: String = if subject.text != AO3SearchFilters.searchResultsFallback {
+            subject.field == nil ? "“\(subject.text)”" : subject.text
+        } else {
+            filters.summaryLabels().first?.text ?? "Search"
+        }
         return ReadingQueueMembershipOrigin(kind: .search, searchID: nil, label: label)
     }
 

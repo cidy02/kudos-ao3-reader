@@ -34,16 +34,21 @@ struct ReadingQueueCard: View {
     // Memberships of a soft-deleted work survive (so restoring it re-joins its
     // queues), but the work itself belongs to Recently Deleted, not this card —
     // orderedWorks already excludes it.
+    private var memberships: [ReadingQueueMembership] {
+        ReadingQueueService.orderedMemberships(in: queue)
+    }
+
     private var works: [SavedWork] {
-        ReadingQueueService.orderedWorks(in: queue)
+        memberships.compactMap(\.work)
     }
 
     var body: some View {
-        let queued = works
+        let orderedMemberships = memberships
+        let queued = orderedMemberships.compactMap(\.work)
         let progress = ReadingQueueFacts.progress(of: queued.map(\.readingState))
         let palette = themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
         HStack(spacing: 12) {
-            deck(works: queued)
+            deck(memberships: orderedMemberships)
             VStack(alignment: .leading, spacing: 3) {
                 Text(queue.displayName)
                     .font(.system(size: titleSize, weight: .semibold))
@@ -72,14 +77,14 @@ struct ReadingQueueCard: View {
 
     /// Board 00: a fixed 72pt queue stack beside the row's text. The front is
     /// the queue's own identity; the next visible works wait behind it.
-    private func deck(works: [SavedWork]) -> some View {
+    private func deck(memberships: [ReadingQueueMembership]) -> some View {
         StackedWorkCover(
             kind: .queue,
             name: queue.displayName,
             identity: queue.id,
             hue: queue.hue,
             pickedHex: queue.colorHex,
-            backs: worksBehind(in: works),
+            backs: worksBehind(in: memberships),
             size: CGSize(width: 72, height: 72)
         )
         .accessibilityHidden(true)
@@ -91,9 +96,12 @@ struct ReadingQueueCard: View {
 
     /// Blur and Hide both conceal a work's generated art; the count and progress
     /// remain aggregate facts and reveal no title, fandom or cover colour.
-    private func worksBehind(in queued: [SavedWork]) -> [SavedWork] {
-        let visible = queued.filter { !gate.isConcealed($0, enabled: hideMature) }
-        let split = ReadingQueueFacts.upNext(in: visible)
+    private func worksBehind(in memberships: [ReadingQueueMembership]) -> [SavedWork] {
+        let visible = memberships.filter { membership in
+            guard let work = membership.work else { return false }
+            return !gate.isConcealed(work, enabled: hideMature)
+        }
+        let split = ReadingQueueFacts.upNext(inMemberships: visible)
         var ordered = split.inLine
         if let upNext = split.upNext { ordered.insert(upNext, at: 0) }
         return Array(ordered.prefix(CoverStackLayout.maxBacks))
@@ -357,8 +365,8 @@ struct ReadingQueueStorageView: View {
 
 struct AddToQueueView: View {
     let works: [SavedWork]
-    private let entryState: ReadingQueueMembershipState
-    private let origin: ReadingQueueMembershipOrigin?
+    let entryState: ReadingQueueMembershipState
+    let origin: ReadingQueueMembershipOrigin?
     @State private var sourceQueue: ReadingQueue?
 
     init(

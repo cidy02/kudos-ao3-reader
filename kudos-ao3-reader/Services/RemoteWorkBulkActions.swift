@@ -60,7 +60,8 @@ func resolveSelectedRemoteWorks(
 func bulkSaveForLaterRemote(
     _ selected: [AO3WorkSummary],
     origin: ReadingQueueMembershipOrigin? = nil,
-    in context: ModelContext
+    in context: ModelContext,
+    downloadEPUB: ((Int) async throws -> URL)? = nil
 ) async -> String? {
     var failureCount = 0
     for summary in selected {
@@ -69,7 +70,8 @@ func bulkSaveForLaterRemote(
                 summary,
                 state: .new,
                 origin: origin,
-                in: context
+                in: context,
+                downloadEPUB: downloadEPUB
             )
         } catch is CancellationError {
             return nil

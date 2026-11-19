@@ -1394,23 +1394,41 @@ private struct HomeQueueRow: View {
     /// The up-next work's measured chapters, so its "Ch N" matches its bars elsewhere.
     @State private var upNextLengths: ChapterLengths?
 
-    private var queuedWorks: [SavedWork] {
-        ReadingQueueService.orderedWorks(in: queue)
+    private var queuedMemberships: [ReadingQueueMembership] {
+        ReadingQueueService.orderedMemberships(in: queue)
     }
 
-    private var visibleQueuedWorks: [SavedWork] {
-        queuedWorks.filter { !gate.isConcealed($0, enabled: hideMature) }
+    private var queuedWorks: [SavedWork] {
+        queuedMemberships.compactMap(\.work)
+    }
+
+    private var visibleQueuedMemberships: [ReadingQueueMembership] {
+        queuedMemberships.filter { membership in
+            guard let work = membership.work else { return false }
+            return !gate.isConcealed(work, enabled: hideMature)
+        }
     }
 
     private var upNextWork: SavedWork? {
-        ReadingQueueFacts.upNext(in: visibleQueuedWorks).upNext
+        ReadingQueueFacts.upNext(inMemberships: visibleQueuedMemberships).upNext
     }
 
     private var worksBehind: [SavedWork] {
-        let split = ReadingQueueFacts.upNext(in: visibleQueuedWorks)
+        let split = ReadingQueueFacts.upNext(inMemberships: visibleQueuedMemberships)
         var ordered = split.inLine
         if let upNext = split.upNext { ordered.insert(upNext, at: 0) }
         return Array(ordered.prefix(CoverStackLayout.maxBacks))
+    }
+
+    private var emptyUpNextLabel: String {
+        if queuedWorks.isEmpty { return "Empty queue" }
+        if visibleQueuedMemberships.isEmpty { return "Works hidden" }
+        let partition = ReadingQueueFacts.partition(memberships: visibleQueuedMemberships)
+        if !partition.new.isEmpty {
+            return partition.new.count == 1 ? "1 new to sort" : "\(partition.new.count) new to sort"
+        }
+        if !partition.waiting.isEmpty { return "Waiting for new chapters" }
+        return "All finished"
     }
 
     private var leftCount: Int {
@@ -1565,7 +1583,7 @@ private struct HomeQueueRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 } else {
-                    Text(queuedWorks.isEmpty ? "Empty queue" : "Works hidden")
+                    Text(emptyUpNextLabel)
                         .font(.body.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }

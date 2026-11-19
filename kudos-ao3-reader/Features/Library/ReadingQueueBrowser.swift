@@ -413,11 +413,13 @@ struct ReadingQueueBrowserView: View {
                 }
             }
         }
-        .accessibilityAction(named: "Sort into line") {
-            guard !isSelecting, entry.section == .new, let queue = selectedQueue else { return }
+        .modifier(SortIntoLineAccessibilityModifier(
+            enabled: !isSelecting && !isReordering && entry.section == .new
+        ) {
+            guard let queue = selectedQueue else { return }
             Haptics.selection()
             ReadingQueueService.sortIntoLine(entry.membership, in: queue, context: context)
-        }
+        })
         .cardRow(
             isSelected: isSelecting && selection.contains(work.id),
             leadingNumber: position,
@@ -1034,7 +1036,7 @@ extension ReadingQueueBrowserView {
                         .padding(.top, 12)
                         .padding(.bottom, 8)
                 }
-                if isReordering || isSelecting {
+                if isReordering {
                     if !wholePartition.new.isEmpty {
                         newSectionHeader(wholePartition.new)
                             .padding(.top, Self.ruleTop)
@@ -1128,28 +1130,26 @@ extension ReadingQueueBrowserView {
     @ViewBuilder
     private func compactCard(_ entry: ReadingQueueSectionEntry, allowReorder: Bool) -> some View {
         let work = entry.work
-        if isSelecting || (isReordering && allowReorder), let queue = selectedQueue {
-            // 1bg: while selecting, the handle stays live beside the selection
-            // bubble, which owns the top-trailing corner.
-            ZStack(alignment: isSelecting ? .topLeading : .topTrailing) {
-                Group {
-                    if isSelecting {
-                        SensitiveWorkCoverCard(
-                            work: work,
-                            isSelecting: true,
-                            isSelected: selection.contains(work.id),
-                            onToggleSelection: { toggleSelection(work) }
-                        )
-                    } else {
-                        SensitiveWorkCoverCard(work: work)
-                            .allowsHitTesting(false)
+        let isBlurred = gate.isBlurred(work, enabled: hideMature, mode: matureMode)
+        let hasAnnotation = !isBlurred && (entry.hasNewChapter || entry.originDisplayLine != nil)
+        if isReordering, allowReorder, let queue = selectedQueue {
+            VStack(alignment: .leading, spacing: 4) {
+                ZStack(alignment: .topTrailing) {
+                    SensitiveWorkCoverCard(work: work)
+                        .allowsHitTesting(false)
+                        .opacity(draggedWorkID == work.id ? 0.4 : 1)
+                    if isDragLive {
+                        dragHandle(for: work)
                     }
                 }
-                .opacity(draggedWorkID == work.id ? 0.4 : 1)
-                if allowReorder && isDragLive {
-                    dragHandle(for: work)
+                if hasAnnotation {
+                    queueAnnotationLine(
+                        hasNewChapter: entry.hasNewChapter,
+                        originLine: entry.originDisplayLine
+                    )
                 }
             }
+            .frame(maxHeight: .infinity, alignment: .top)
             .onDrop(of: [.text], delegate: WorkReorderDropDelegate(
                 target: work,
                 works: reorderedInLineWorks,
@@ -1160,16 +1160,37 @@ extension ReadingQueueBrowserView {
                 context: context
             ))
             .accessibilityActions {
-                if allowReorder && isDragLive {
+                if isDragLive {
                     Button("Move Up") { moveWork(work, toIndex: currentIndex(of: work) - 1) }
                     Button("Move Down") { moveWork(work, toIndex: currentIndex(of: work) + 1) }
                     Button("Move to Top") { moveWork(work, toIndex: 0) }
                     Button("Move to Bottom") { moveWork(work, toIndex: reorderedInLineWorks.count - 1) }
                 }
             }
+        } else if isReordering {
+            VStack(alignment: .leading, spacing: 4) {
+                SensitiveWorkCoverCard(work: work)
+                    .allowsHitTesting(false)
+                if hasAnnotation {
+                    queueAnnotationLine(
+                        hasNewChapter: entry.hasNewChapter,
+                        originLine: entry.originDisplayLine
+                    )
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
         } else {
             NavigationLink(value: LocalWorkDestination.reader(work)) {
-                SensitiveWorkCoverCard(work: work)
+                VStack(alignment: .leading, spacing: 4) {
+                    SensitiveWorkCoverCard(work: work)
+                    if hasAnnotation {
+                        queueAnnotationLine(
+                            hasNewChapter: entry.hasNewChapter,
+                            originLine: entry.originDisplayLine
+                        )
+                    }
+                }
+                .frame(maxHeight: .infinity, alignment: .top)
             }
             .buttonStyle(.plain)
             .localWorkContextMenu(
@@ -1177,11 +1198,11 @@ extension ReadingQueueBrowserView {
                 scopedRemoval: ScopedRemoval(title: "Remove from Queue") { pendingRemoval = work },
                 queueMenu: queueMenu(for: entry)
             )
-            .accessibilityAction(named: "Sort into line") {
-                guard entry.section == .new, let queue = selectedQueue else { return }
+            .modifier(SortIntoLineAccessibilityModifier(enabled: entry.section == .new) {
+                guard let queue = selectedQueue else { return }
                 Haptics.selection()
                 ReadingQueueService.sortIntoLine(entry.membership, in: queue, context: context)
-            }
+            })
         }
     }
 
@@ -1582,4 +1603,18 @@ func queueWorkFileSize(_ url: URL) -> Int64 {
 
 func queueByteCountString(_ bytes: Int64) -> String {
     LocalStorageFootprint.formatted(bytes: bytes)
+}
+
+private struct SortIntoLineAccessibilityModifier: ViewModifier {
+    let enabled: Bool
+    let action: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if enabled {
+            content.accessibilityAction(named: "Sort into line", action)
+        } else {
+            content
+        }
+    }
 }
