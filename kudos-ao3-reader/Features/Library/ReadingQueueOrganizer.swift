@@ -35,6 +35,9 @@ struct AllReadingQueuesGridView: View {
     @Environment(PrivacyGate.self) private var gate
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
     private var readingQueues: [ReadingQueue]
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion })
+    private var libraryWorks: [SavedWork]
+    @Query private var tagAliases: [TagAlias]
 
     @State private var showingNewQueue = false
     @State private var newQueueHue: Double?
@@ -63,21 +66,33 @@ struct AllReadingQueuesGridView: View {
     ///
     @State private var searchText = ""
 
+    /// Resolves every queue's works once per render using a single library snapshot.
+    private func resolveWorksByQueueID() -> [UUID: [SavedWork]] {
+        let smartSnapshot = readingQueues.contains { $0.kind == .smart }
+            ? ReadingQueueService.SmartLibrarySnapshot(
+                works: libraryWorks,
+                aliases: TagAliasResolver(models: tagAliases)
+            )
+            : nil
+        var result: [UUID: [SavedWork]] = [:]
+        result.reserveCapacity(readingQueues.count)
+        for queue in readingQueues {
+            if let smartSnapshot {
+                result[queue.id] = ReadingQueueService.orderedWorks(in: queue, snapshot: smartSnapshot)
+            } else {
+                result[queue.id] = ReadingQueueService.orderedMemberships(in: queue).compactMap(\.work)
+            }
+        }
+        return result
+    }
+
     /// List queues and smart queues. The name predates smart queues.
-    private var customQueues: [ReadingQueue] {
+    private func filteredCustomQueues(worksByQueueID: [UUID: [SavedWork]]) -> [ReadingQueue] {
         readingQueues
             .filter(\.isUserQueue)
             .sorted { $0.sortOrder < $1.sortOrder }
             .filter(matchesTagFilter)
-            .filter(matchesSearch)
-    }
-
-    /// What the section header counts. `readingQueues.count` is the total, and
-    /// under a search or a tag filter that put "2" above a single row — the same
-    /// wrong-count defect this sweep keeps finding. With nothing filtering, this
-    /// is the total anyway.
-    private var visibleQueueCount: Int {
-        customQueues.count + (savedForLaterQueue == nil ? 0 : 1)
+            .filter { matchesSearch($0, works: worksByQueueID[$0.id]) }
     }
 
     private var isSearching: Bool {
@@ -85,9 +100,13 @@ struct AllReadingQueuesGridView: View {
     }
 
     /// Every queue on screen, once each — Pinned repeats queues from All queues.
-    private var visibleQueues: [ReadingQueue] {
+    private func visibleQueues(
+        pinned: [ReadingQueue],
+        savedForLater: ReadingQueue?,
+        custom: [ReadingQueue]
+    ) -> [ReadingQueue] {
         var seen = Set<UUID>()
-        return (pinnedQueues + [savedForLaterQueue].compactMap(\.self) + customQueues)
+        return (pinned + [savedForLater].compactMap(\.self) + custom)
             .filter { seen.insert($0.id).inserted }
     }
 
@@ -95,8 +114,8 @@ struct AllReadingQueuesGridView: View {
         readingQueues.filter { selection.contains($0.id) }
     }
 
-    private var allSelected: Bool {
-        let ids = Set(visibleQueues.map(\.id))
+    private func allSelected(in visible: [ReadingQueue]) -> Bool {
+        let ids = Set(visible.map(\.id))
         return !ids.isEmpty && ids.isSubset(of: selection)
     }
 
@@ -107,12 +126,12 @@ struct AllReadingQueuesGridView: View {
     ///
     /// Saved for Later can be pinned like any other: the tree shows it in the
     /// Pinned section.
-    private var pinnedQueues: [ReadingQueue] {
+    private func filteredPinnedQueues(worksByQueueID: [UUID: [SavedWork]]) -> [ReadingQueue] {
         readingQueues
             .filter(\.isPinned)
             .sorted { $0.sortOrder < $1.sortOrder }
             .filter(matchesTagFilter)
-            .filter(matchesSearch)
+            .filter { matchesSearch($0, works: worksByQueueID[$0.id]) }
     }
 
     /// 1i's rail: All, then one chip per tag actually in use, then Untagged.
@@ -129,8 +148,8 @@ struct AllReadingQueuesGridView: View {
     /// Only loaded memberships are searched, which is honest here — they are
     /// local SwiftData relationships, not a paged remote list, so there is no
     /// "rest of the results" being silently skipped.
-    private func matchesSearch(_ queue: ReadingQueue) -> Bool {
-        QueueOrganizerSelection.matchesSearch(queue, term: searchText) {
+    private func matchesSearch(_ queue: ReadingQueue, works: [SavedWork]?) -> Bool {
+        QueueOrganizerSelection.matchesSearch(queue, term: searchText, works: works) {
             !gate.isHidden($0, enabled: hideMature, mode: matureMode)
         }
     }
@@ -209,8 +228,10 @@ struct AllReadingQueuesGridView: View {
     }
 
     /// Saved for Later, when the search and the tag filter both let it through.
-    private var savedForLaterQueue: ReadingQueue? {
-        readingQueues.first { $0.kind == .savedForLater && matchesTagFilter($0) && matchesSearch($0) }
+    private func filteredSavedForLaterQueue(worksByQueueID: [UUID: [SavedWork]]) -> ReadingQueue? {
+        readingQueues.first {
+            $0.kind == .savedForLater && matchesTagFilter($0) && matchesSearch($0, works: worksByQueueID[$0.id])
+        }
     }
 
     /// Every queue's own hue tints its row; the page itself has no single
@@ -220,25 +241,19 @@ struct AllReadingQueuesGridView: View {
         themeManager.scopePalette
     }
 
-    private var allWorks: [SavedWork] {
-        readingQueues.flatMap(ReadingQueueService.orderedWorks(in:))
-    }
-
-    private var allPreservedWorks: [SavedWork] {
-        allWorks.filter { $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path) }
-    }
-
-    private var allPreservedByteCount: Int64 {
-        allPreservedWorks.reduce(0) { $0 + queueWorkFileSize($1.fileURL) }
-    }
-
     var body: some View {
+        let worksByQueueID = resolveWorksByQueueID()
+        let pinned = filteredPinnedQueues(worksByQueueID: worksByQueueID)
+        let custom = filteredCustomQueues(worksByQueueID: worksByQueueID)
+        let savedForLater = filteredSavedForLaterQueue(worksByQueueID: worksByQueueID)
+        let visible = visibleQueues(pinned: pinned, savedForLater: savedForLater, custom: custom)
+        let visibleCount = custom.count + (savedForLater == nil ? 0 : 1)
         List {
             Section {
                 // 1i's tree puts the search above the signal strip, in the content.
                 queueSearchField
                     .pageBodyRow(top: 12, gutter: SubjectMetrics.gutter)
-                statStrip
+                statStrip(worksByQueueID: worksByQueueID)
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
                 if !isSelecting, !isReordering {
                     WhatFitsOrganizerRow()
@@ -254,12 +269,12 @@ struct AllReadingQueuesGridView: View {
                 }
             }
 
-            if !pinnedQueues.isEmpty {
+            if !pinned.isEmpty {
                 Section {
-                    SectionRuleHeader(title: "Pinned", count: pinnedQueues.count)
+                    SectionRuleHeader(title: "Pinned", count: pinned.count)
                         .pageBodyRow(top: 18, gutter: 0)
-                    ForEach(pinnedQueues) { queue in
-                        organizerRow(queue, isReorderable: false)
+                    ForEach(pinned) { queue in
+                        organizerRow(queue, works: worksByQueueID[queue.id] ?? [], isReorderable: false)
                             .organizerCard(queue)
                             .swipeActions(edge: .trailing) { queueSwipes(queue) }
                             .modifier(QueueCardMenu(queue: queue, isEnabled: !isSelecting && !isReordering))
@@ -268,16 +283,16 @@ struct AllReadingQueuesGridView: View {
             }
 
             Section {
-                SectionRuleHeader(title: "All Queues", count: visibleQueueCount)
+                SectionRuleHeader(title: "All Queues", count: visibleCount)
                     .pageBodyRow(top: 18, gutter: 0)
 
-                if let savedForLaterQueue {
-                    organizerRow(savedForLaterQueue, isReorderable: false)
-                        .organizerCard(savedForLaterQueue)
+                if let savedForLater {
+                    organizerRow(savedForLater, works: worksByQueueID[savedForLater.id] ?? [], isReorderable: false)
+                        .organizerCard(savedForLater)
                 }
 
-                ForEach(customQueues) { queue in
-                    organizerRow(queue, isReorderable: true)
+                ForEach(custom) { queue in
+                    organizerRow(queue, works: worksByQueueID[queue.id] ?? [], isReorderable: true)
                         .organizerCard(queue)
                         .swipeActions(edge: .trailing) { queueSwipes(queue) }
                         .modifier(QueueCardMenu(queue: queue, isEnabled: !isSelecting && !isReordering))
@@ -286,7 +301,7 @@ struct AllReadingQueuesGridView: View {
 
                 // A search or tag filter that leaves nothing says so, with the
                 // way back, rather than an empty "All queues 0".
-                if visibleQueues.isEmpty, isSearching || !tagFilter.isEmpty {
+                if visible.isEmpty, isSearching || !tagFilter.isEmpty {
                     ContentUnavailableView {
                         Label("No matching queues", systemImage: "line.3.horizontal.decrease.circle")
                     } description: {
@@ -305,7 +320,7 @@ struct AllReadingQueuesGridView: View {
         .cardList()
         .navigationTitle(isSelecting ? "\(selection.count) selected" : "Reading Queues")
         .subjectScreenWash(palette: organizerPalette, role: .content)
-        .toolbar { toolbarContent }
+        .toolbar { toolbarContent(visibleQueues: visible) }
         #if os(iOS)
         .environment(
             \.editMode,
@@ -360,11 +375,12 @@ struct AllReadingQueuesGridView: View {
     }
 
     @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
+    private func toolbarContent(visibleQueues: [ReadingQueue]) -> some ToolbarContent {
         if isSelecting {
+            let isAllSelected = allSelected(in: visibleQueues)
             ToolbarItem(placement: .confirmationAction) {
-                SelectAllButton(allSelected: allSelected) {
-                    selection = allSelected ? [] : Set(visibleQueues.map(\.id))
+                SelectAllButton(allSelected: isAllSelected) {
+                    selection = isAllSelected ? [] : Set(visibleQueues.map(\.id))
                 }
             }
             #if os(iOS)
@@ -440,13 +456,16 @@ struct AllReadingQueuesGridView: View {
         .accessibilityLabel("Done")
     }
 
-    private var statStrip: some View {
-        SubjectStatStrip(
+    private func statStrip(worksByQueueID: [UUID: [SavedWork]]) -> some View {
+        let works = readingQueues.flatMap { worksByQueueID[$0.id] ?? [] }
+        let preserved = works.filter { $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path) }
+        let bytes = preserved.reduce(Int64(0)) { $0 + queueWorkFileSize($1.fileURL) }
+        return SubjectStatStrip(
             cells: [
                 .init(value: readingQueues.count.compactCount, label: "Queues"),
-                .init(value: allWorks.count.compactCount, label: "Works"),
-                .init(value: allPreservedWorks.count.compactCount, label: "Offline"),
-                .init(value: queueByteCountString(allPreservedByteCount), label: "Storage")
+                .init(value: works.count.compactCount, label: "Works"),
+                .init(value: preserved.count.compactCount, label: "Offline"),
+                .init(value: queueByteCountString(bytes), label: "Storage")
             ],
             palette: organizerPalette
         )
@@ -472,8 +491,7 @@ struct AllReadingQueuesGridView: View {
     }
 
     @ViewBuilder
-    private func organizerRow(_ queue: ReadingQueue, isReorderable: Bool) -> some View {
-        let works = ReadingQueueService.orderedWorks(in: queue)
+    private func organizerRow(_ queue: ReadingQueue, works: [SavedWork], isReorderable: Bool) -> some View {
         let preserved = works.filter { $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path) }
         let byteCount = preserved.reduce(Int64(0)) { $0 + queueWorkFileSize($1.fileURL) }
         let storageLine = preserved.isEmpty
@@ -586,7 +604,10 @@ struct AllReadingQueuesGridView: View {
     }
 
     private func moveCustomQueues(from source: IndexSet, to destination: Int) {
-        var ids = customQueues.map(\.id)
+        var ids = readingQueues
+            .filter(\.isUserQueue)
+            .sorted { $0.sortOrder < $1.sortOrder }
+            .map(\.id)
         ids.move(fromOffsets: source, toOffset: destination)
         reorderCustomQueues(ids, context: context)
     }
@@ -646,7 +667,10 @@ enum QueueOrganizerSelection {
     /// author. A work Hide mode hides does not answer, here as in Search: typing
     /// its title used to find the queue it is in.
     static func matchesSearch(
-        _ queue: ReadingQueue, term rawTerm: String, mayAnswer: (SavedWork) -> Bool
+        _ queue: ReadingQueue,
+        term rawTerm: String,
+        works: [SavedWork]? = nil,
+        mayAnswer: (SavedWork) -> Bool
     ) -> Bool {
         let term = rawTerm.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return true }
@@ -654,7 +678,8 @@ enum QueueOrganizerSelection {
         if queue.tags.contains(where: { $0.name.localizedCaseInsensitiveContains(term) }) {
             return true
         }
-        return ReadingQueueService.orderedWorks(in: queue).contains { work in
+        let resolvedWorks = works ?? ReadingQueueService.orderedWorks(in: queue)
+        return resolvedWorks.contains { work in
             guard mayAnswer(work) else { return false }
             return work.title.localizedCaseInsensitiveContains(term)
                 || work.author.localizedCaseInsensitiveContains(term)

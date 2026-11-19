@@ -13,6 +13,9 @@ struct WhatFitsView: View {
 
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
     private var readingQueues: [ReadingQueue]
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion })
+    private var libraryWorks: [SavedWork]
+    @Query private var tagAliases: [TagAlias]
 
     @State private var selectedBucket: WhatFitsBucket = .defaultSelection
 
@@ -22,11 +25,13 @@ struct WhatFitsView: View {
         WhatFitsPlanner.plan(
             queues: readingQueues,
             bucket: selectedBucket,
-            isVisible: { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
+            isVisible: { !gate.isHidden($0, enabled: hideMature, mode: matureMode) },
+            libraryWorks: libraryWorks,
+            tagAliases: TagAliasResolver(models: tagAliases)
         )
     }
 
-    private var showsMatureMenu: Bool {
+    private func showsMatureMenu(for plan: WhatFitsPlan) -> Bool {
         guard hideMature else { return false }
         return plan.hasHiddenMatureFits || plan.allEntries.contains { $0.work.isAdult }
     }
@@ -80,7 +85,7 @@ struct WhatFitsView: View {
         .subjectScreenWash(palette: themeManager.scopePalette, role: .content)
         .subjectOwnHeadingChrome(title: "What Fits")
         .toolbar {
-            if showsMatureMenu {
+            if showsMatureMenu(for: currentPlan) {
                 ToolbarItem(placement: .primaryAction) {
                     WorkListMoreMenu {
                         MatureRevealToggle()

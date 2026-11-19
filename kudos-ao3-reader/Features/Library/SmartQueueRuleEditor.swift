@@ -5,15 +5,16 @@ import SwiftUI
 struct SmartQueueRuleEditor: View {
     @Binding var rule: SmartQueueDocument.Rule
     let fandoms: [String]
+    var aliases: TagAliasResolver = .empty
     let onDelete: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(ThemeManager.self) private var theme
     @State private var wordsText = ""
 
     var body: some View {
         List {
-            Group {
             switch rule.kind {
             case .length:
                 lengthControls
@@ -39,14 +40,16 @@ struct SmartQueueRuleEditor: View {
                 fandomControls
             }
             Section {
-                Button("Delete Rule", role: .destructive) {
+                SubjectFormRow(label: "Delete Rule", isDestructive: true, action: {
                     onDelete()
                     dismiss()
+                }) {
+                    EmptyView()
                 }
                 .accessibilityLabel("Delete Rule")
+                .subjectPanel()
+                .pageBodyRow(top: 12, gutter: SubjectMetrics.gutter)
             }
-            }
-            .appThemedRows()
         }
         .cardList()
         .appThemedScroll()
@@ -58,34 +61,40 @@ struct SmartQueueRuleEditor: View {
         .screenTint(theme.scopePalette)
         .onAppear {
             if rule.kind == .length {
-                wordsText = String(rule.words ?? 20_000)
+                wordsText = rule.words.map(String.init) ?? ""
             }
         }
     }
 
     private var lengthControls: some View {
         Section {
-            SubjectFormRow(label: "Comparison", arrangement: .control) {
-                SubjectSegmentedControl(
-                    options: SmartQueueDocument.Rule.LengthComparison.allCases,
-                    title: \.title,
-                    selection: lengthComparison
-                )
+            VStack(spacing: 0) {
+                SubjectFormRow(label: "Comparison", arrangement: .control) {
+                    SubjectSegmentedControl(
+                        options: SmartQueueDocument.Rule.LengthComparison.allCases,
+                        title: \.title,
+                        selection: lengthComparison
+                    )
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Comparison")
+                SubjectRowSeparator()
+                SubjectFormRow(label: "Words", arrangement: .control) {
+                    TextField("Words", text: $wordsText)
+                        #if os(iOS)
+                        .keyboardType(.numberPad)
+                        #endif
+                        .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
+                        .accessibilityLabel("Words")
+                        .onChange(of: wordsText) { _, newValue in
+                            let digits = String(newValue.filter { $0.isASCII && $0.isNumber }.prefix(18))
+                            if digits != newValue { wordsText = digits }
+                            rule.words = Int(digits)
+                        }
+                }
             }
-            .accessibilityLabel("Comparison")
-            SubjectFormRow(label: "Words", arrangement: .control) {
-                TextField("Words", text: $wordsText)
-                    #if os(iOS)
-                    .keyboardType(.numberPad)
-                    #endif
-                    .multilineTextAlignment(.trailing)
-                    .accessibilityLabel("Words")
-                    .onChange(of: wordsText) { _, newValue in
-                        let digits = newValue.filter(\.isNumber)
-                        if digits != newValue { wordsText = digits }
-                        rule.words = Int(digits)
-                    }
-            }
+            .subjectPanel()
+            .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
         }
     }
 
@@ -100,26 +109,28 @@ struct SmartQueueRuleEditor: View {
         Section {
             SubjectFormRow(label: "Fandom", arrangement: .control) {
                 TextField("Fandom", text: fandomText)
+                    .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
                     .accessibilityLabel("Fandom")
             }
+            .subjectPanel()
+            .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
             if !fandoms.isEmpty {
-                ForEach(fandoms, id: \.self) { name in
-                    Button {
-                        rule.fandom = name
-                    } label: {
-                        HStack {
-                            Text(name)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(spacing: 0) {
+                    ForEach(Array(fandoms.enumerated()), id: \.element) { index, name in
+                        if index > 0 { SubjectRowSeparator() }
+                        SubjectFormRow(label: name, action: { rule.fandom = name }) {
                             if fandomMatches(name) {
                                 Image(systemName: "checkmark")
                                     .foregroundStyle(.tint)
                                     .accessibilityHidden(true)
                             }
                         }
+                        .accessibilityLabel(name)
+                        .accessibilityAddTraits(fandomMatches(name) ? .isSelected : [])
                     }
-                    .accessibilityLabel(name)
-                    .accessibilityAddTraits(fandomMatches(name) ? .isSelected : [])
                 }
+                .subjectPanel()
+                .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
             }
         }
     }
@@ -132,8 +143,9 @@ struct SmartQueueRuleEditor: View {
     }
 
     private func fandomMatches(_ name: String) -> Bool {
-        (rule.fandom ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            .caseInsensitiveCompare(name) == .orderedSame
+        let wanted = aliases.resolve(rule.fandom ?? "", kind: .fandom)
+        guard !wanted.isEmpty else { return false }
+        return aliases.resolve(name, kind: .fandom).caseInsensitiveCompare(wanted) == .orderedSame
     }
 
     private func optionList<Option: Hashable>(
@@ -143,23 +155,22 @@ struct SmartQueueRuleEditor: View {
         isSelected: @escaping (Option) -> Bool
     ) -> some View {
         Section {
-            ForEach(options, id: \.self) { option in
-                Button {
-                    pick(option)
-                } label: {
-                    HStack {
-                        Text(title(option))
-                            .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(spacing: 0) {
+                ForEach(Array(options.enumerated()), id: \.element) { index, option in
+                    if index > 0 { SubjectRowSeparator() }
+                    SubjectFormRow(label: title(option), action: { pick(option) }) {
                         if isSelected(option) {
                             Image(systemName: "checkmark")
                                 .foregroundStyle(.tint)
                                 .accessibilityHidden(true)
                         }
                     }
+                    .accessibilityLabel(title(option))
+                    .accessibilityAddTraits(isSelected(option) ? .isSelected : [])
                 }
-                .accessibilityLabel(title(option))
-                .accessibilityAddTraits(isSelected(option) ? .isSelected : [])
             }
+            .subjectPanel()
+            .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
         }
     }
 }

@@ -159,9 +159,59 @@ enum ReadingQueueService {
             }
     }
 
+    /// Pre-fetched library slice for evaluating one or more smart queues without
+    /// repeating `FetchDescriptor<SavedWork>()` or `TagAliasStore.resolver(in:)`.
+    @MainActor
+    struct SmartLibrarySnapshot {
+        let eligible: [SavedWork]
+        let facts: [SmartQueueWorkFacts]
+        let byID: [UUID: SavedWork]
+        let aliases: TagAliasResolver
+
+        init(works: [SavedWork], aliases: TagAliasResolver = .empty) {
+            let filtered = works.filter { !$0.isPendingDeletion && !$0.isQueueOnlyWork }
+            eligible = filtered
+            facts = filtered.map(SmartQueueWorkFacts.init(work:))
+            byID = Dictionary(filtered.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            self.aliases = aliases
+        }
+
+        init(in context: ModelContext) {
+            let library = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
+            self.init(works: library, aliases: TagAliasStore.resolver(in: context))
+        }
+
+        /// Evaluates `queue`'s rules against this snapshot. `include`, when given,
+        /// runs before `document.limit` so hidden works cannot consume limit slots.
+        func matching(
+            _ queue: ReadingQueue,
+            where include: ((SavedWork) -> Bool)? = nil
+        ) -> [SavedWork] {
+            guard queue.kind == .smart,
+                  let document = SmartQueueRules.decode(queue.smartRulesJSON)
+            else { return [] }
+            let candidateFacts: [SmartQueueWorkFacts] = if let include {
+                zip(eligible, facts).compactMap { work, fact in include(work) ? fact : nil }
+            } else {
+                facts
+            }
+            return document.matching(candidateFacts, aliases: aliases).compactMap { byID[$0.id] }
+        }
+    }
+
     static func orderedWorks(in queue: ReadingQueue) -> [SavedWork] {
         if queue.kind == .smart {
             return smartWorks(in: queue)
+        }
+        return orderedMemberships(in: queue).compactMap(\.work)
+    }
+
+    static func orderedWorks(
+        in queue: ReadingQueue,
+        snapshot: SmartLibrarySnapshot
+    ) -> [SavedWork] {
+        if queue.kind == .smart {
+            return snapshot.matching(queue)
         }
         return orderedMemberships(in: queue).compactMap(\.work)
     }
@@ -170,16 +220,8 @@ enum ReadingQueueService {
     /// A missing context, a nil document, or JSON this build cannot read
     /// matches nothing and does not rewrite `smartRulesJSON`.
     static func smartWorks(in queue: ReadingQueue) -> [SavedWork] {
-        guard queue.kind == .smart,
-              let context = queue.modelContext,
-              let document = SmartQueueRules.decode(queue.smartRulesJSON)
-        else { return [] }
-        let library = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
-        let eligible = library.filter { !$0.isPendingDeletion && !$0.isQueueOnlyWork }
-        let facts = eligible.map(SmartQueueWorkFacts.init(work:))
-        let orderedIDs = document.matching(facts).map(\.id)
-        let byID = Dictionary(eligible.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        return orderedIDs.compactMap { byID[$0] }
+        guard queue.kind == .smart, let context = queue.modelContext else { return [] }
+        return SmartLibrarySnapshot(in: context).matching(queue)
     }
 
     /// `hue` is 1j's colour swatch: `nil` leaves the queue taking its colour from
@@ -314,29 +356,38 @@ enum ReadingQueueService {
         for name in options.tagNames {
             queue.addTag(named: name, in: context)
         }
-        var sourcesChanged = false
-        for link in queue.searchLinks where link.search.map({ !options.searchIDs.contains($0.id) }) ?? true {
-            context.delete(link)
+        if queue.kind != .smart, syncSearchLinks(for: queue, searchIDs: options.searchIDs, in: context) {
             changed = true
+        }
+        if changed { queue.markModified() }
+        context.saveBestEffort(reason: "Saving queue changes failed")
+        if queue.kind == .smart { return false }
+        return options.keepsWorksOffline && !wasKept
+    }
+
+    private static func syncSearchLinks(
+        for queue: ReadingQueue,
+        searchIDs: [UUID],
+        in context: ModelContext
+    ) -> Bool {
+        var sourcesChanged = false
+        for link in queue.searchLinks where link.search.map({ !searchIDs.contains($0.id) }) ?? true {
+            context.delete(link)
             sourcesChanged = true
         }
         let linkedIDs = Set(queue.searchLinks.compactMap { $0.search?.id })
         if let searches = try? context.fetch(FetchDescriptor<SavedSearch>()) {
-            for search in searches where options.searchIDs.contains(search.id) && !linkedIDs.contains(search.id) {
+            for search in searches where searchIDs.contains(search.id) && !linkedIDs.contains(search.id) {
                 if search.lastOpenedAt == nil {
                     search.lastOpenedAt = Date()
                     FolderSyncService.markDirty()
                 }
                 context.insert(QueueSavedSearchLink(queue: queue, search: search))
-                changed = true
                 sourcesChanged = true
             }
         }
         if sourcesChanged { queue.searchSourcesModifiedAt = Date() }
-        if changed { queue.markModified() }
-        context.saveBestEffort(reason: "Saving queue changes failed")
-        if queue.kind == .smart { return false }
-        return options.keepsWorksOffline && !wasKept
+        return sourcesChanged
     }
 
     /// Keep works offline turned on: fetches the works still missing their
@@ -497,33 +548,22 @@ enum ReadingQueueService {
         return membership
     }
 
-    /// A smart queue has no memberships. Building one still assigns the
-    /// inverses, so detach it and delete it when that assignment inserted it.
+    /// A smart queue has no memberships. Returning a detached value with nil
+    /// endpoints avoids mutating managed inverses or dirtying `ModelContext`.
     private static func refusedSmartMembership(
         _ work: SavedWork,
         queue: ReadingQueue,
         state: ReadingQueueMembershipState,
         origin: ReadingQueueMembershipOrigin?,
-        in context: ModelContext
+        in _: ModelContext
     ) -> ReadingQueueMembership {
-        if let existing = work.queueMemberships.first(where: { $0.queue?.id == queue.id }) {
-            return existing
-        }
-        let membership = ReadingQueueMembership(
-            queue: queue,
-            work: work,
+        ReadingQueueMembership(
+            queue: nil,
+            work: nil,
             sortOrderInQueue: 0,
             state: state,
             origin: origin
         )
-        queue.memberships.removeAll { $0.id == membership.id }
-        work.queueMemberships.removeAll { $0.id == membership.id }
-        membership.queue = nil
-        membership.work = nil
-        if membership.modelContext != nil {
-            context.delete(membership)
-        }
-        return membership
     }
 
     /// Moves one or more `New` memberships into `In line` at the end of the
@@ -533,6 +573,7 @@ enum ReadingQueueService {
         in queue: ReadingQueue,
         context: ModelContext
     ) {
+        guard queue.kind != .smart else { return }
         let candidates = memberships.filter {
             $0.queue?.id == queue.id && !$0.isPendingDeletion && $0.state != .inLine
         }
@@ -568,9 +609,8 @@ enum ReadingQueueService {
         in context: ModelContext
     ) {
         guard source.id != destination.id else { return }
-        // Moving onto a smart queue would drop the work from the source and
-        // then refuse the add, so the work would vanish from both.
-        guard destination.kind != .smart else { return }
+        // Moving onto or off a smart queue cannot write or remove memberships.
+        guard source.kind != .smart, destination.kind != .smart else { return }
         for work in works {
             let sourceMembership = work.queueMemberships.first { $0.queue?.id == source.id }
             let resolvedState = state ?? sourceMembership?.state ?? .inLine
@@ -584,7 +624,8 @@ enum ReadingQueueService {
     /// preservation records excluded, as `CollectionWorkPicker.candidates` does)
     /// not already in `queue`.
     static func appendCandidates(from works: [SavedWork], notIn queue: ReadingQueue) -> [SavedWork] {
-        works.filter { work in
+        guard queue.kind != .smart else { return [] }
+        return works.filter { work in
             !work.isQueueOnlyWork
                 && !work.queueMemberships.contains { $0.queue?.id == queue.id }
         }
@@ -832,7 +873,7 @@ enum ReadingQueueService {
         progress: ((SeriesPreservationResult) -> Void)? = nil
     ) async -> SeriesPreservationResult {
         var result = SeriesPreservationResult(total: summaries.count)
-        let targetQueues = queues ?? [ensureSavedForLaterQueue(in: context)]
+        let targetQueues = (queues ?? [ensureSavedForLaterQueue(in: context)]).filter { $0.kind != .smart }
         progress?(result)
 
         for summary in summaries {
@@ -840,6 +881,12 @@ enum ReadingQueueService {
                 result.cancelled += max(0, result.total - result.completed)
                 progress?(result)
                 break
+            }
+
+            if targetQueues.isEmpty {
+                result.skipped += 1
+                progress?(result)
+                continue
             }
 
             if let existing = existingWork(for: summary, in: context) {
@@ -870,12 +917,6 @@ enum ReadingQueueService {
                     progress?(result)
                     continue
                 }
-            }
-
-            if targetQueues.isEmpty {
-                result.skipped += 1
-                progress?(result)
-                continue
             }
 
             do {
@@ -968,6 +1009,7 @@ enum ReadingQueueService {
     }
 
     static func removeFromQueue(_ work: SavedWork, from queue: ReadingQueue, in context: ModelContext) {
+        guard queue.kind != .smart else { return }
         let matches = work.queueMemberships.filter { $0.queue?.id == queue.id }
         for membership in matches {
             SyncTombstones.recordDeletion(of: membership, in: context)
@@ -1241,6 +1283,7 @@ enum ReadingQueueService {
     /// `sortOrderInQueue` is rewritten to its index, so the same ordering survives
     /// relaunch, backup/restore, and sync exactly like the existing sort already does.
     static func reorder(_ workIDs: [UUID], in queue: ReadingQueue, context: ModelContext) {
+        guard queue.kind != .smart else { return }
         let membershipsByWorkID = Dictionary(
             queue.memberships.compactMap { membership in
                 membership.work.map { ($0.id, membership) }

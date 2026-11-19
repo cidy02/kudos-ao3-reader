@@ -20,12 +20,15 @@ nonisolated struct SmartQueueDocument: Codable, Equatable, Sendable, Hashable {
 
     /// `nil` and any limit of 0 or less mean no cap. An empty rule list matches
     /// nothing: "all of no rules" must not mean the whole library.
-    func matching(_ works: [SmartQueueWorkFacts]) -> [SmartQueueWorkFacts] {
+    func matching(
+        _ works: [SmartQueueWorkFacts],
+        aliases: TagAliasResolver = .empty
+    ) -> [SmartQueueWorkFacts] {
         guard !rules.isEmpty else { return [] }
         let hits = works.filter { work in
             switch match {
-            case .all: rules.allSatisfy { $0.matches(work) }
-            case .any: rules.contains { $0.matches(work) }
+            case .all: rules.allSatisfy { $0.matches(work, aliases: aliases) }
+            case .any: rules.contains { $0.matches(work, aliases: aliases) }
             }
         }
         let ordered = Self.ordered(hits, by: sort)
@@ -155,13 +158,14 @@ nonisolated struct SmartQueueDocument: Codable, Equatable, Sendable, Hashable {
         var summary: String {
             switch kind {
             case .length:
-                let count = (words ?? 0).formatted()
+                guard let words, words >= 0 else { return "Choose a word count" }
+                let count = words.formatted()
                 switch lengthComparison ?? .under {
                 case .under: return "Under \(count) words"
                 case .atLeast: return "At least \(count) words"
                 }
             case .readingStatus:
-                return (readingStatus ?? .reading).title
+                return readingStatus?.title ?? "Choose a status"
             case .progress:
                 return (progress ?? .notStarted).title
             case .completion:
@@ -172,14 +176,17 @@ nonisolated struct SmartQueueDocument: Codable, Equatable, Sendable, Hashable {
             }
         }
 
-        func matches(_ work: SmartQueueWorkFacts) -> Bool {
+        func matches(
+            _ work: SmartQueueWorkFacts,
+            aliases: TagAliasResolver = .empty
+        ) -> Bool {
             switch kind {
             case .length:
-                guard let words else { return false }
+                // 0 is "word count unknown", not a length match in either direction.
+                guard let words, words >= 0, work.wordCount > 0 else { return false }
                 switch lengthComparison ?? .under {
                 case .under:
-                    // 0 is "word count unknown", not a short work.
-                    return work.wordCount > 0 && work.wordCount < words
+                    return work.wordCount < words
                 case .atLeast:
                     return work.wordCount >= words
                 }
@@ -198,10 +205,10 @@ nonisolated struct SmartQueueDocument: Codable, Equatable, Sendable, Hashable {
                 case .wip: return !work.isComplete
                 }
             case .fandom:
-                let wanted = (fandom ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                let wanted = aliases.resolve(fandom ?? "", kind: .fandom)
                 guard !wanted.isEmpty else { return false }
                 return work.fandoms.contains {
-                    $0.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare(wanted) == .orderedSame
+                    aliases.resolve($0, kind: .fandom).caseInsensitiveCompare(wanted) == .orderedSame
                 }
             }
         }

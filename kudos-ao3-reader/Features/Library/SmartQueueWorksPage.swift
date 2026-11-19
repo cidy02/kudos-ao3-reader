@@ -18,6 +18,9 @@ struct SmartQueueWorksPage<FilterRail: View>: View {
 
     @Environment(\.modelContext) private var context
     @Environment(AO3AuthService.self) private var auth
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @State private var refreshTask: Task<Void, Never>?
 
     var body: some View {
@@ -46,22 +49,31 @@ struct SmartQueueWorksPage<FilterRail: View>: View {
             await task.value
         }
         .cancelRefreshOnTabChange($refreshTask)
-        .overlay {
-            if visibleWorks.isEmpty, !works.isEmpty {
-                ContentUnavailableView {
-                    Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
-                } description: {
-                    Text("Your filters don't match any works in this queue.")
-                } actions: {
-                    Button("Clear Filters", action: onClearFilters)
-                }
+    }
+
+    @ViewBuilder
+    private var emptyVisibleState: some View {
+        if isNarrowed {
+            ContentUnavailableView {
+                Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
+            } description: {
+                Text("Your filters don't match any works in this queue.")
+            } actions: {
+                Button("Clear Filters", action: onClearFilters)
+            }
+        } else {
+            ContentUnavailableView {
+                Label("Mature works are hidden", systemImage: "eye.slash")
+            } description: {
+                Text("Hide Mature is hiding the works in this queue.")
+            } actions: {
+                MatureRevealToggle()
             }
         }
     }
 
     private var smartList: some View {
         List {
-            Group {
             Section {
                 QueuePageHeader(
                     queue: queue,
@@ -74,14 +86,27 @@ struct SmartQueueWorksPage<FilterRail: View>: View {
                 )
                 .bareListRow()
                 .padding(.horizontal, SubjectMetrics.gutter)
+                .padding(.top, 16)
+                .padding(.bottom, 8)
             }
             Section {
-                ForEach(visibleWorks) { work in
-                    SensitiveWorkRow(work: work)
+                if visibleWorks.isEmpty {
+                    emptyVisibleState
+                        .bareListRow()
+                } else {
+                    ForEach(visibleWorks) { work in
+                        SensitiveWorkRow(
+                            work: work,
+                            openMode: .reader,
+                            presentation: .ledger,
+                            showsFavoriteStar: true,
+                            showsFullLedgerStats: true,
+                            showsSummary: false
+                        )
+                        .cardRow(isSelected: false, chrome: .plain)
+                    }
                 }
             }
-            }
-            .appThemedRows()
         }
         .cardList()
         .environment(\.defaultMinListRowHeight, 0)
@@ -100,15 +125,23 @@ struct SmartQueueWorksPage<FilterRail: View>: View {
                     filterRail: filterRail
                 )
                 .padding(.horizontal, SubjectMetrics.gutter)
-                .padding(.top, 12)
-                if !isNarrowed || !visibleWorks.isEmpty {
+                .padding(.top, 16)
+                .padding(.bottom, 8)
+                if visibleWorks.isEmpty {
+                    emptyVisibleState
+                        .padding(.top, 16)
+                } else {
                     CarouselCardGrid {
                         ForEach(visibleWorks) { work in
-                            NavigationLink(value: LocalWorkDestination.reader(work)) {
+                            if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
                                 SensitiveWorkCoverCard(work: work)
+                            } else {
+                                NavigationLink(value: LocalWorkDestination.reader(work)) {
+                                    SensitiveWorkCoverCard(work: work)
+                                }
+                                .buttonStyle(.plain)
+                                .localWorkContextMenu(work: work)
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(work.title)
                         }
                     }
                     .padding(.horizontal, 16)

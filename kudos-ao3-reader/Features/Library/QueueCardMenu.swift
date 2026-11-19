@@ -25,7 +25,7 @@ struct QueueCardMenu: ViewModifier {
                     Button {
                         showingEdit = true
                     } label: {
-                        Label("Edit Queue", systemImage: "pencil")
+                        Label(queue.kind == .smart ? "Edit Rules" : "Edit Queue", systemImage: "pencil")
                     }
                     Button {
                         QueueOrganizerSelection.setPinned([queue], !queue.isPinned, in: context)

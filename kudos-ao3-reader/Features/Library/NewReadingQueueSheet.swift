@@ -66,6 +66,7 @@ struct NewReadingQueueSheet: View {
     @Query(sort: \SavedSearch.name) private var savedSearches: [SavedSearch]
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.title)
     private var libraryWorks: [SavedWork]
+    @Query private var tagAliases: [TagAlias]
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
@@ -74,6 +75,8 @@ struct NewReadingQueueSheet: View {
     /// Create only. Editing never converts a list into a smart queue.
     @State private var queueStyle = NewQueueDraftKind.list
     @State private var smartDocument = SmartQueueDocument.starter
+    @State private var editingRule: SmartQueueRuleEditTarget?
+    @State private var deletedRuleFallback: SmartQueueDocument.Rule?
     /// Set when the stored JSON does not decode. Save keeps that string.
     @State private var rulesUnreadable = false
     @State private var preservedRulesJSON: String?
@@ -225,6 +228,19 @@ struct NewReadingQueueSheet: View {
                     }
                 }
                 .environment(\.customColorWellSession, colorWellSession)
+                .navigationDestination(item: $editingRule) { target in
+                    let aliases = tagAliasResolver
+                    SmartQueueRuleEditor(
+                        rule: ruleBinding(for: target),
+                        fandoms: fandomChoices(aliases: aliases),
+                        aliases: aliases,
+                        onDelete: {
+                            deletedRuleFallback = smartDocument.rules.first { $0.id == target.id }
+                                ?? target.fallback
+                            smartDocument.rules.removeAll { $0.id == target.id }
+                        }
+                    )
+                }
         }
         // Controls use the app tint; the queue hue belongs to its cover and wash.
         .screenTint(theme.scopePalette)
@@ -499,9 +515,10 @@ struct NewReadingQueueSheet: View {
                     selection: draftKind
                 )
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Kind")
             .subjectPanel()
             .pageBodyRow(top: 8, gutter: gutter)
-            .accessibilityLabel("Kind")
         }
     }
 
@@ -540,15 +557,13 @@ struct NewReadingQueueSheet: View {
                         selection: $smartDocument.match
                     )
                 }
+                .accessibilityElement(children: .contain)
                 .accessibilityLabel("Match")
-                ForEach($smartDocument.rules) { $rule in
+                ForEach(smartDocument.rules) { rule in
                     SubjectRowSeparator()
-                    NavigationLink {
-                        SmartQueueRuleEditor(
-                            rule: $rule,
-                            fandoms: fandomChoices,
-                            onDelete: { smartDocument.rules.removeAll { $0.id == rule.id } }
-                        )
+                    Button {
+                        deletedRuleFallback = nil
+                        editingRule = SmartQueueRuleEditTarget(id: rule.id, fallback: rule)
                     } label: {
                         SubjectFormRow(label: rule.kind.rowLabel, value: rule.summary, showsDisclosure: true)
                     }
@@ -574,6 +589,20 @@ struct NewReadingQueueSheet: View {
             .subjectPanel()
             .pageBodyRow(top: 8, gutter: gutter)
         }
+    }
+
+    private func ruleBinding(for target: SmartQueueRuleEditTarget) -> Binding<SmartQueueDocument.Rule> {
+        Binding(
+            get: {
+                smartDocument.rules.first { $0.id == target.id }
+                    ?? deletedRuleFallback
+                    ?? target.fallback
+            },
+            set: { updated in
+                guard let index = smartDocument.rules.firstIndex(where: { $0.id == target.id }) else { return }
+                smartDocument.rules[index] = updated
+            }
+        )
     }
 
     private var smartOrderSection: some View {
@@ -612,6 +641,7 @@ struct NewReadingQueueSheet: View {
             groupLabel("Preview")
             VStack(alignment: .leading, spacing: 4) {
                 SubjectFormRow(label: "Matches now", value: copy.count)
+                    .accessibilityElement(children: .combine)
                     .accessibilityLabel("Matches now, \(copy.count)")
                 if !copy.detail.isEmpty {
                     Text(copy.detail)
@@ -632,28 +662,35 @@ struct NewReadingQueueSheet: View {
         return limit == 1 ? "1 work" : "\(limit.formatted()) works"
     }
 
-    private var fandomChoices: [String] {
+    private var tagAliasResolver: TagAliasResolver {
+        TagAliasResolver(models: tagAliases)
+    }
+
+    /// Excludes concealed mature works so Blur/Hide never leak fandoms, and
+    /// unifies learned T-518 aliases under their canonical AO3 name.
+    private func fandomChoices(aliases: TagAliasResolver) -> [String] {
         var seen = Set<String>()
         var names: [String] = []
-        for work in libraryWorks where !work.isQueueOnlyWork {
+        for work in libraryWorks where !work.isQueueOnlyWork && !gate.isConcealed(work, enabled: hideMature) {
             for fandom in work.workFandoms {
-                let trimmed = fandom.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty, seen.insert(trimmed.lowercased()).inserted else { continue }
-                names.append(trimmed)
+                let resolved = aliases.resolve(fandom, kind: .fandom)
+                guard !resolved.isEmpty, seen.insert(resolved.lowercased()).inserted else { continue }
+                names.append(resolved)
             }
         }
         return names.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
-    /// The same hide gate as the queue page, so "Matches now" is that page's count.
+    /// Applies Hide Mature before `limit`, matching the smart queue page so
+    /// hidden works never consume limit slots and shrink "Matches now".
     private var smartPreviewWorks: [SavedWork] {
-        let eligible = libraryWorks.filter { !$0.isQueueOnlyWork }
-        let facts = eligible.map(SmartQueueWorkFacts.init(work:))
-        let ordered = smartDocument.matching(facts)
-        let byID = Dictionary(eligible.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        return ordered.compactMap { byID[$0.id] }.filter {
-            !gate.isHidden($0, enabled: hideMature, mode: matureMode)
+        let eligible = libraryWorks.filter {
+            !$0.isQueueOnlyWork && !gate.isHidden($0, enabled: hideMature, mode: matureMode)
         }
+        let facts = eligible.map(SmartQueueWorkFacts.init(work:))
+        let ordered = smartDocument.matching(facts, aliases: tagAliasResolver)
+        let byID = Dictionary(eligible.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return ordered.compactMap { byID[$0.id] }
     }
 
     private func smartPreviewCopy(_ works: [SavedWork]) -> (count: String, detail: String) {
@@ -934,4 +971,11 @@ enum NewQueueDraftKind: String, CaseIterable, Hashable, Identifiable {
         case .smart: "Smart"
         }
     }
+}
+
+/// Pushed editor target for `.navigationDestination(item:)`, carrying a
+/// fallback snapshot so deleting the rule mid-pop cannot subscript out of bounds.
+private struct SmartQueueRuleEditTarget: Hashable {
+    let id: UUID
+    let fallback: SmartQueueDocument.Rule
 }

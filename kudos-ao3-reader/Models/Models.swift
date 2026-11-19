@@ -568,7 +568,10 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// queue in Recently Deleted still counts, so restoring it finds its works
     /// as they were. A queue switched off is a plain list and holds nothing.
     var isKeptOffline: Bool {
-        queueMemberships.contains { KeepOffline.queueKeeps($0.queue?.keepsWorksOffline) }
+        queueMemberships.contains { membership in
+            guard let queue = membership.queue, queue.kind != .smart else { return false }
+            return KeepOffline.queueKeeps(queue.keepsWorksOffline)
+        }
             || collections.contains { KeepOffline.collectionKeeps($0.keepsWorksOffline) }
     }
 
@@ -581,7 +584,7 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// beside it, so the projection lives here rather than at each call site.
     var activeQueueMemberships: [ReadingQueueMembership] {
         queueMemberships.filter { membership in
-            guard let queue = membership.queue else { return false }
+            guard let queue = membership.queue, queue.kind != .smart else { return false }
             return !membership.isPendingDeletion && !queue.isPendingDeletion
         }
     }
@@ -1158,8 +1161,8 @@ nonisolated struct ReadingQueueMembershipOrigin: Equatable, Hashable, Codable, S
 
     init(
         id: UUID = UUID(),
-        queue: ReadingQueue,
-        work: SavedWork,
+        queue: ReadingQueue?,
+        work: SavedWork?,
         queuedAt: Date = Date(),
         sortOrderInQueue: Int = 0,
         note: String = "",

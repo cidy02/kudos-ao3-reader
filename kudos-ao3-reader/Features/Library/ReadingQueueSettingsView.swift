@@ -35,6 +35,9 @@ struct ReadingQueueSettingsView: View {
     @Environment(ThemeManager.self) private var themeManager
     /// The shared vocabulary "Manage all tags" counts.
     @Query private var allTags: [Tag]
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion })
+    private var libraryWorks: [SavedWork]
+    @Query private var tagAliases: [TagAlias]
     @State private var showingTags = false
     #if DEBUG
     @State private var debugManageTags = false
@@ -47,25 +50,27 @@ struct ReadingQueueSettingsView: View {
         themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
     }
 
-    private var works: [SavedWork] {
-        ReadingQueueService.orderedWorks(in: queue)
+    private func resolveWorks() -> [SavedWork] {
+        if queue.kind == .smart {
+            let snapshot = ReadingQueueService.SmartLibrarySnapshot(
+                works: libraryWorks,
+                aliases: TagAliasResolver(models: tagAliases)
+            )
+            return snapshot.matching(queue)
+        }
+        return ReadingQueueService.orderedMemberships(in: queue).compactMap(\.work)
     }
 
-    private var preservedWorks: [SavedWork] {
-        works.filter { $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path) }
-    }
-
-    private var preservedByteCount: Int64 {
-        preservedWorks.reduce(0) { $0 + queueWorkFileSize($1.fileURL) }
-    }
-
-    private var subtitle: String {
-        let count = works.count
-        let base = "\(count) work\(count == 1 ? "" : "s")"
-        guard count > 0 else { return base }
-        let offline = preservedWorks.count == count
+    private func subtitle(
+        workCount: Int,
+        preservedCount: Int,
+        preservedByteCount: Int64
+    ) -> String {
+        let base = "\(workCount) work\(workCount == 1 ? "" : "s")"
+        guard workCount > 0 else { return base }
+        let offline = preservedCount == workCount
             ? "all kept offline"
-            : "\(preservedWorks.count) kept offline"
+            : "\(preservedCount) kept offline"
         return "\(base) · \(offline) · \(queueByteCountString(preservedByteCount))"
     }
 
@@ -118,16 +123,25 @@ struct ReadingQueueSettingsView: View {
     }
 
     var body: some View {
+        let currentWorks = resolveWorks()
+        let currentPreserved = currentWorks.filter {
+            $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path)
+        }
+        let currentBytes = currentPreserved.reduce(Int64(0)) { $0 + queueWorkFileSize($1.fileURL) }
         List {
             Section {
-                SubjectPageFact(subtitle)
+                SubjectPageFact(subtitle(
+                    workCount: currentWorks.count,
+                    preservedCount: currentPreserved.count,
+                    preservedByteCount: currentBytes
+                ))
                     .pageBodyRow(top: 12, gutter: 0)
-                if !works.isEmpty {
-                    let progress = ReadingQueueFacts.progress(of: works.map(\.readingState))
+                if !currentWorks.isEmpty {
+                    let progress = ReadingQueueFacts.progress(of: currentWorks.map(\.readingState))
                     // 1h.3 repeats the queue page's strip and its legend.
                     VStack(alignment: .leading, spacing: 7) {
                         QueueProgressStrip(progress: progress, palette: palette)
-                        Text(ReadingQueueFacts.legend(progress, offlineCount: preservedWorks.count))
+                        Text(ReadingQueueFacts.legend(progress, offlineCount: currentPreserved.count))
                             .font(.system(size: legendSize))
                             .foregroundStyle(.secondaryInk)
                     }
@@ -152,7 +166,7 @@ struct ReadingQueueSettingsView: View {
             Section {
                 SubjectFieldLabel(text: "Details", style: .formGroup)
                     .pageBodyRow(top: 22, gutter: SubjectMetrics.gutter)
-                detailsPanel
+                detailsPanel(works: currentWorks)
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
                 Text(
                     queue.kind == .smart
@@ -194,7 +208,7 @@ struct ReadingQueueSettingsView: View {
 
     /// 1h.3/1h.4's single Details card. The header and legend already report
     /// the preserved count, so it is not repeated as another row here.
-    private var detailsPanel: some View {
+    private func detailsPanel(works: [SavedWork]) -> some View {
         VStack(spacing: 0) {
             Menu {
                 ForEach(SubjectHueSwatches.all) { swatch in
@@ -255,8 +269,7 @@ struct ReadingQueueSettingsView: View {
             SubjectFormRow(
                 label: "Order",
                 value: queue.kind == .smart
-                    ? (SmartQueueRules.decode(queue.smartRulesJSON)?.sort.title
-                        ?? SmartQueueDocument.Sort.shortestFirst.title)
+                    ? (SmartQueueRules.decode(queue.smartRulesJSON)?.sort.title ?? "By rules")
                     : "Manual"
             )
             SubjectRowSeparator()

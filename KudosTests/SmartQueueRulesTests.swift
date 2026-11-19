@@ -52,7 +52,7 @@ struct SmartQueueRulesTests {
         #expect(matched.map(\.title) == ["Short"])
     }
 
-    @Test func lengthAtLeastIncludesTheBoundary() {
+    @Test func lengthAtLeastIncludesTheBoundaryAndSkipsUnknown() {
         var rule = SmartQueueDocument.Rule.Kind.length.makeDefault()
         rule.lengthComparison = .atLeast
         rule.words = 20_000
@@ -62,6 +62,24 @@ struct SmartQueueRulesTests {
         let unknown = work("Unknown", words: 0)
         let matched = document([rule], sort: .title).matching([unknown, below, edge])
         #expect(matched.map(\.title) == ["Edge"])
+
+        rule.words = 0
+        #expect(rule.summary == "At least 0 words")
+        let oneWord = work("One", words: 1)
+        let zeroMatched = document([rule], sort: .title).matching([unknown, oneWord])
+        #expect(zeroMatched.map(\.title) == ["One"])
+
+        rule.words = nil
+        #expect(rule.summary == "Choose a word count")
+        #expect(document([rule], sort: .title).matching([unknown, oneWord, edge]).isEmpty)
+        rule.lengthComparison = .under
+        #expect(rule.summary == "Choose a word count")
+        #expect(document([rule], sort: .title).matching([unknown, oneWord, edge]).isEmpty)
+
+        var missingStatus = SmartQueueDocument.Rule.Kind.readingStatus.makeDefault()
+        missingStatus.readingStatus = nil
+        #expect(missingStatus.summary == "Choose a status")
+        #expect(document([missingStatus]).matching([work("Any", status: .reading)]).isEmpty)
     }
 
     @Test func readingStatusMatchesOnlyThatStatus() {
@@ -103,7 +121,7 @@ struct SmartQueueRulesTests {
         #expect(titles(.wip) == ["WIP"])
     }
 
-    @Test func fandomIsTrimmedEquality() {
+    @Test func fandomIsTrimmedEqualityAndResolvesLearnedAliases() {
         var rule = SmartQueueDocument.Rule.Kind.fandom.makeDefault()
         #expect(rule.summary == "Choose a fandom")
         #expect(document([rule]).matching([work("A", fandoms: ["Harry Potter"])]).isEmpty)
@@ -111,6 +129,31 @@ struct SmartQueueRulesTests {
         let hit = work("Hit", fandoms: ["Other", "Harry Potter"])
         let miss = work("Miss", fandoms: ["Harry"])
         #expect(document([rule]).matching([miss, hit]).map(\.title) == ["Hit"])
+
+        let aliases = TagAliasResolver(entries: [
+            TagAliasResolver.Entry(
+                name: "HP",
+                canonicalName: "Harry Potter - J. K. Rowling",
+                kind: .fandom
+            )
+        ])
+        let canonicalWork = work("Canonical", fandoms: ["Harry Potter - J. K. Rowling"])
+        let synonymWork = work("Synonym", fandoms: ["HP"])
+        let unrelatedWork = work("Other", fandoms: ["Lockwood"])
+
+        rule.fandom = "Harry Potter - J. K. Rowling"
+        #expect(
+            document([rule], sort: .title)
+                .matching([unrelatedWork, synonymWork, canonicalWork], aliases: aliases)
+                .map(\.title) == ["Canonical", "Synonym"]
+        )
+
+        rule.fandom = "HP"
+        #expect(
+            document([rule], sort: .title)
+                .matching([unrelatedWork, synonymWork, canonicalWork], aliases: aliases)
+                .map(\.title) == ["Canonical", "Synonym"]
+        )
     }
 
     @Test func allRequiresEveryRuleAndAnyRequiresOne() {
@@ -172,7 +215,15 @@ struct SmartQueueRulesTests {
         work.wordCount = 100
         work.workFandoms = ["Lockwood"]
         work.isComplete = false
+        work.chapters = "3/?"
+        work.knownChapterCount = 3
         #expect(SmartQueueWorkFacts(work: work).readingStatus == .notStarted)
+        work.lastSpineIndex = 1
+        work.lastScrollFraction = 0.2
+        #expect(SmartQueueWorkFacts(work: work).readingStatus == .reading)
+        work.lastSpineIndex = 2
+        work.lastScrollFraction = 1.0
+        #expect(SmartQueueWorkFacts(work: work).readingStatus == .caughtUp)
         work.isFinished = true
         #expect(SmartQueueWorkFacts(work: work).readingStatus == .finished)
         work.isFinished = false
