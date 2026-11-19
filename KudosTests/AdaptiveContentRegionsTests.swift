@@ -195,6 +195,42 @@ struct AdaptiveContentRegionsTests {
             reservations: [.init(frame: CGRect(x: 0, y: 800, width: 951, height: 40))]
         )
         #expect(!outside.isTabletopPose)
+
+        let crease = AdaptiveContentRegions(
+            bounds: bounds,
+            reservations: [.init(frame: CGRect(x: 0, y: 334, width: 951, height: 0))]
+        )
+        #expect(crease.isTabletopPose)
+        #expect(!crease.isBookPose)
+    }
+
+    @Test func occlusionDoesNotDecideBookOrTabletopPose() {
+        let inner = CGRect(x: 0, y: 0, width: 951, height: 669)
+        let fold = CGRect(x: 445, y: 0, width: 60, height: 669)
+        let camera = CGRect(x: 400, y: 0, width: 150, height: 37)
+        let book = AdaptiveContentRegions(
+            bounds: inner,
+            reservations: [
+                .init(frame: fold, kind: .division),
+                .init(frame: camera, kind: .occlusion),
+            ]
+        )
+        #expect(book.isBookPose)
+        #expect(!book.isTabletopPose)
+
+        let flatCamera = AdaptiveContentRegions(
+            bounds: inner,
+            reservations: [.init(frame: camera, kind: .occlusion)]
+        )
+        #expect(!flatCamera.isBookPose)
+        #expect(!flatCamera.isTabletopPose)
+
+        let island = AdaptiveContentRegions(
+            bounds: CGRect(x: 0, y: 0, width: 900, height: 600),
+            reservations: [.init(frame: CGRect(x: 11, y: 270, width: 37, height: 126), kind: .occlusion)]
+        )
+        #expect(!island.isBookPose)
+        #expect(!island.isTabletopPose)
     }
 
     @Test func bookHeroStaysInTheLogicalLeadingPaneEvenAtAX5() throws {

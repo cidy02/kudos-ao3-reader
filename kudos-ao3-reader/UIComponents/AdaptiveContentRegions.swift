@@ -3,13 +3,24 @@ import SwiftUI
 /// All rectangles are local to the consuming viewport. SDK frames already
 /// include interaction margins; expanding them again would waste usable space.
 nonisolated struct AdaptiveContentRegions: Equatable {
+    enum Kind: Equatable {
+        case division
+        case occlusion
+    }
+
     struct Reservation: Equatable {
         var frame: CGRect
         var isActive: Bool = true
+        /// Occlusion (camera, home bar) still splits layout panes. Pose is
+        /// decided from divisions only.
+        var kind: Kind = .division
     }
 
     let safeBounds: CGRect
     let activeReservations: [CGRect]
+    /// Active divisions, kept apart from occlusions so pose does not see a
+    /// camera cutout as a fold.
+    let divisionFrames: [CGRect]
     let panes: [CGRect]
 
     init(bounds: CGRect, safeAreaInsets: EdgeInsets = EdgeInsets(), reservations: [Reservation] = []) {
@@ -20,7 +31,9 @@ nonisolated struct AdaptiveContentRegions: Equatable {
             height: max(0, bounds.height - safeAreaInsets.top - safeAreaInsets.bottom)
         )
         safeBounds = safe
-        activeReservations = reservations.filter(\.isActive).map(\.frame)
+        let active = reservations.filter(\.isActive)
+        activeReservations = active.map(\.frame)
+        divisionFrames = active.filter { $0.kind == .division }.map(\.frame)
         panes = activeReservations.reduce([safe]) { regions, exclusion in
             regions.flatMap { Self.subtract(exclusion, from: $0) }
         }.filter { $0.width > 0 && $0.height > 0 }.sorted { $0.minX < $1.minX }
@@ -58,9 +71,18 @@ nonisolated struct AdaptiveContentRegions: Equatable {
         return safeBounds
     }
 
+    /// Panes from divisions only. Occlusions still cut `panes` for layout, and
+    /// must not flip book pose into tabletop or a flat screen into book pose.
+    private var divisionPanes: [CGRect] {
+        divisionFrames.reduce([safeBounds]) { regions, exclusion in
+            regions.flatMap { Self.subtract(exclusion, from: $0) }
+        }.filter { $0.width > 0 && $0.height > 0 }
+    }
+
     /// Side-by-side panes from an active vertical division. Book pose.
     /// A horizontal fold does not qualify: tabletop keeps one reading pane.
     var isBookPose: Bool {
+        let panes = divisionPanes
         guard panes.count >= 2, safeBounds.height > 0 else { return false }
         return panes.allSatisfy {
             abs($0.minY - safeBounds.minY) < 0.5 && abs($0.height - safeBounds.height) < 0.5
@@ -69,13 +91,17 @@ nonisolated struct AdaptiveContentRegions: Equatable {
 
     /// An active horizontal division. Not a book split, and not a place for
     /// a two-page spread: the reading pane is the one on the active side.
+    /// A zero-height crease still counts. `CGRect.intersects` is false for an
+    /// empty rect, so the test is the y range, not `height > 0`.
     var isTabletopPose: Bool {
         guard !isBookPose else { return false }
-        return activeReservations.contains { reservation in
-            reservation.width > reservation.height
-                && reservation.height > 0
-                && reservation.width > 1
-                && reservation.intersects(safeBounds)
+        return divisionFrames.contains { frame in
+            frame.width > frame.height
+                && frame.width > 1
+                && frame.maxY > safeBounds.minY
+                && frame.minY < safeBounds.maxY
+                && frame.maxX > safeBounds.minX
+                && frame.minX < safeBounds.maxX
         }
     }
 
@@ -195,9 +221,11 @@ extension AdaptiveContentRegions {
     @MainActor init(viewport proxy: GeometryProxy) {
         var reservations: [AdaptiveContentRegions.Reservation] = []
         if #available(iOS 27.1, *) {
-            reservations = (proxy.reservedRegions(kind: .division, layoutDirectionBehavior: .fixed)
-                + proxy.reservedRegions(kind: .occlusion, layoutDirectionBehavior: .fixed))
-                .map { .init(frame: $0.frame, isActive: $0.isActive) }
+            let divisions = proxy.reservedRegions(kind: .division, layoutDirectionBehavior: .fixed)
+                .map { Reservation(frame: $0.frame, isActive: $0.isActive, kind: .division) }
+            let occlusions = proxy.reservedRegions(kind: .occlusion, layoutDirectionBehavior: .fixed)
+                .map { Reservation(frame: $0.frame, isActive: $0.isActive, kind: .occlusion) }
+            reservations = divisions + occlusions
         }
         // The consuming host participates in normal safe-area layout, like T-447's
         // viewport: its proposal already excludes navigation/tab chrome.

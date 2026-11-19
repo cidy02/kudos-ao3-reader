@@ -1602,8 +1602,15 @@ struct ReadiumReaderView: View {
             fontFamilyDeclarations: fontFamilyDeclarations,
             readiumCSSRSProperties: ReadiumReaderStyleMapper.readingSystemProperties
         )
+        // Pose can publish while `open` is suspended and `book.navigator` is
+        // still nil. That submit is a no-op, and the navigator is then built
+        // from the preferences captured above. Re-submit if they moved.
+        let tokenAtOpen = preferencesToken
         await book.open(fileURL: work.fileURL, initialLocator: initialLocator,
                         fallbackSpineIndex: fallbackSpineIndex, config: config)
+        if preferencesToken != tokenAtOpen {
+            applyReaderPreferences()
+        }
         #if DEBUG
         if DebugLaunchRoute.takeSheet("readerend") {
             book.goToPublicationEndForDebug()
