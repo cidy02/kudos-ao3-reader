@@ -63,9 +63,10 @@ struct AllReadingQueuesGridView: View {
     ///
     @State private var searchText = ""
 
+    /// List queues and smart queues. The name predates smart queues.
     private var customQueues: [ReadingQueue] {
         readingQueues
-            .filter { $0.kind == .custom }
+            .filter(\.isUserQueue)
             .sorted { $0.sortOrder < $1.sortOrder }
             .filter(matchesTagFilter)
             .filter(matchesSearch)
@@ -389,7 +390,7 @@ struct AllReadingQueuesGridView: View {
                     } label: {
                         Label("Select", systemImage: "checklist")
                     }
-                    if readingQueues.count(where: { $0.kind == .custom }) > 1 {
+                    if readingQueues.count(where: \.isUserQueue) > 1 {
                         Button {
                             isReordering = true
                         } label: {
@@ -455,7 +456,7 @@ struct AllReadingQueuesGridView: View {
     /// Pinned and All queues show the same queue. Saved for Later has neither.
     @ViewBuilder
     private func queueSwipes(_ queue: ReadingQueue) -> some View {
-        if !isSelecting, queue.kind == .custom {
+        if !isSelecting, queue.isUserQueue {
             Button(role: .destructive) {
                 pendingDelete = [queue]
             } label: {
@@ -481,7 +482,7 @@ struct AllReadingQueuesGridView: View {
         // 1i: "count, tags and offline size on every row".
         let tagNames = queue.tags.map(\.name).sorted()
         let tagLine = tagNames.joined(separator: " · ")
-        let palette = queue.kind == .custom
+        let palette = queue.isUserQueue
             ? themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
             : organizerPalette
 
@@ -496,7 +497,7 @@ struct AllReadingQueuesGridView: View {
             // as chips with the storage line after them.
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 7) {
-                    if queue.kind == .custom {
+                    if queue.isUserQueue {
                         Circle()
                             .fill(palette.accent)
                             .frame(width: 10, height: 10)
@@ -603,6 +604,7 @@ struct AllReadingQueuesGridView: View {
             seededFrom: options.seed,
             tagNames: options.tagNames,
             seedWorkIDs: options.seedWorkIDs,
+            smartRulesJSON: options.isSmart ? options.smartRulesJSON : nil,
             in: context
         )
         // `createQueue` saved best-effort; this asks whether that stuck (a no-op when it
@@ -652,8 +654,8 @@ enum QueueOrganizerSelection {
         if queue.tags.contains(where: { $0.name.localizedCaseInsensitiveContains(term) }) {
             return true
         }
-        return queue.memberships.contains { membership in
-            guard !membership.isPendingDeletion, let work = membership.work, mayAnswer(work) else { return false }
+        return ReadingQueueService.orderedWorks(in: queue).contains { work in
+            guard mayAnswer(work) else { return false }
             return work.title.localizedCaseInsensitiveContains(term)
                 || work.author.localizedCaseInsensitiveContains(term)
         }
@@ -662,7 +664,7 @@ enum QueueOrganizerSelection {
     /// Saved for Later can't be deleted — no row offers it — so a bulk Delete
     /// takes the custom queues in the selection and nothing else.
     static func deletable(_ queues: [ReadingQueue]) -> [ReadingQueue] {
-        queues.filter { $0.kind == .custom }
+        queues.filter(\.isUserQueue)
     }
 
     /// Pin, unless every selected queue already is — then Unpin. The same
@@ -745,8 +747,8 @@ private extension View {
     /// 11pt top and bottom, 8pt apart). Saved for Later has no colour.
     func organizerCard(_ queue: ReadingQueue) -> some View {
         cardRow(
-            tintHue: queue.kind == .custom ? queue.displayHue : nil,
-            tintHex: queue.kind == .custom ? queue.colorHex : nil,
+            tintHue: queue.isUserQueue ? queue.displayHue : nil,
+            tintHex: queue.isUserQueue ? queue.colorHex : nil,
             verticalPadding: 11,
             interCardSpacing: 8
         )

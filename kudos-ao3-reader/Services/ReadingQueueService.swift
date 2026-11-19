@@ -160,7 +160,26 @@ enum ReadingQueueService {
     }
 
     static func orderedWorks(in queue: ReadingQueue) -> [SavedWork] {
-        orderedMemberships(in: queue).compactMap(\.work)
+        if queue.kind == .smart {
+            return smartWorks(in: queue)
+        }
+        return orderedMemberships(in: queue).compactMap(\.work)
+    }
+
+    /// Library works that match the queue's rules, in the document's order.
+    /// A missing context, a nil document, or JSON this build cannot read
+    /// matches nothing and does not rewrite `smartRulesJSON`.
+    static func smartWorks(in queue: ReadingQueue) -> [SavedWork] {
+        guard queue.kind == .smart,
+              let context = queue.modelContext,
+              let document = SmartQueueRules.decode(queue.smartRulesJSON)
+        else { return [] }
+        let library = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
+        let eligible = library.filter { !$0.isPendingDeletion && !$0.isQueueOnlyWork }
+        let facts = eligible.map(SmartQueueWorkFacts.init(work:))
+        let orderedIDs = document.matching(facts).map(\.id)
+        let byID = Dictionary(eligible.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return orderedIDs.compactMap { byID[$0] }
     }
 
     /// `hue` is 1j's colour swatch: `nil` leaves the queue taking its colour from
@@ -186,6 +205,7 @@ enum ReadingQueueService {
         seededFrom seed: NewQueueSeed = .empty,
         tagNames: [String] = [],
         seedWorkIDs: [UUID] = [],
+        smartRulesJSON: String? = nil,
         in context: ModelContext
     ) -> ReadingQueue {
         let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -196,15 +216,19 @@ enum ReadingQueueService {
         context.autosaveEnabled = false
         defer { context.autosaveEnabled = previousAutosave }
 
+        let isSmart = smartRulesJSON != nil
         let queue = ReadingQueue(
             id: id ?? UUID(),
             name: trimmed.isEmpty ? "Reading Queue" : trimmed,
-            kind: .custom,
+            kind: isSmart ? .smart : .custom,
             sortOrder: nextQueueSortOrder(in: context)
         )
         queue.hue = hue
         queue.colorHex = colorHex
-        queue.keepsWorksOffline = keepsWorksOffline
+        // A smart queue is a list of matches. `nil` would mean "never asked",
+        // and a never-asked queue keeps its works (`KeepOffline.queueKeeps`).
+        queue.keepsWorksOffline = isSmart ? false : keepsWorksOffline
+        queue.smartRulesJSON = smartRulesJSON
         context.insert(queue)
         // 1j's tags, through the same lookup-before-create `QueueTagSheet` uses.
         // Its fetch sees pending inserts, so a tag made for an earlier name is
@@ -212,13 +236,14 @@ enum ReadingQueueService {
         for name in tagNames {
             queue.addTag(named: name, in: context)
         }
-        if seed == .savedForLater {
+        // Smart queues have no members to seed. The rules decide the list.
+        if !isSmart, seed == .savedForLater {
             seedFromSavedForLater(into: queue, in: context)
         }
         // Works picked in the sheet, after a Saved for Later copy. `append`
         // skips anyone already in the queue, and a queue-only record is not a
         // library work the picker is allowed to add.
-        if !seedWorkIDs.isEmpty {
+        if !isSmart, !seedWorkIDs.isEmpty {
             let library = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
             let byID = Dictionary(library.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             let picked = seedWorkIDs.compactMap { byID[$0] }.filter {
@@ -268,7 +293,17 @@ enum ReadingQueueService {
             changed = true
         }
         let wasKept = KeepOffline.queueKeeps(queue.keepsWorksOffline)
-        if options.keepsWorksOffline != wasKept {
+        if queue.kind == .smart {
+            // Keep-offline does not apply. A stored `nil` would start keeping.
+            if queue.keepsWorksOffline != false {
+                queue.keepsWorksOffline = false
+                changed = true
+            }
+            if let json = options.smartRulesJSON, json != queue.smartRulesJSON {
+                queue.smartRulesJSON = json
+                changed = true
+            }
+        } else if options.keepsWorksOffline != wasKept {
             queue.keepsWorksOffline = options.keepsWorksOffline
             changed = true
         }
@@ -300,6 +335,7 @@ enum ReadingQueueService {
         if sourcesChanged { queue.searchSourcesModifiedAt = Date() }
         if changed { queue.markModified() }
         context.saveBestEffort(reason: "Saving queue changes failed")
+        if queue.kind == .smart { return false }
         return options.keepsWorksOffline && !wasKept
     }
 
@@ -307,6 +343,7 @@ enum ReadingQueueService {
     /// EPUB, one at a time through the paced client. Only that tap starts it:
     /// nothing polls.
     static func preserveMissingWorks(in queue: ReadingQueue, context: ModelContext) {
+        guard queue.kind != .smart else { return }
         let missing = orderedWorks(in: queue).filter { !$0.hasEPUB && !$0.isPendingDeletion }
         guard !missing.isEmpty else { return }
         Task {
@@ -429,6 +466,9 @@ enum ReadingQueueService {
         origin: ReadingQueueMembershipOrigin? = nil,
         in context: ModelContext
     ) -> ReadingQueueMembership {
+        if queue.kind == .smart {
+            return refusedSmartMembership(work, queue: queue, state: state, origin: origin, in: context)
+        }
         if work.knownChapterCount == 0, work.postedChapterCount > 0 {
             work.knownChapterCount = work.postedChapterCount
         }
@@ -454,6 +494,35 @@ enum ReadingQueueService {
         work.isQueuedForLater = true
         normalize(work)
         context.saveBestEffort(reason: "Saving queue membership failed")
+        return membership
+    }
+
+    /// A smart queue has no memberships. Building one still assigns the
+    /// inverses, so detach it and delete it when that assignment inserted it.
+    private static func refusedSmartMembership(
+        _ work: SavedWork,
+        queue: ReadingQueue,
+        state: ReadingQueueMembershipState,
+        origin: ReadingQueueMembershipOrigin?,
+        in context: ModelContext
+    ) -> ReadingQueueMembership {
+        if let existing = work.queueMemberships.first(where: { $0.queue?.id == queue.id }) {
+            return existing
+        }
+        let membership = ReadingQueueMembership(
+            queue: queue,
+            work: work,
+            sortOrderInQueue: 0,
+            state: state,
+            origin: origin
+        )
+        queue.memberships.removeAll { $0.id == membership.id }
+        work.queueMemberships.removeAll { $0.id == membership.id }
+        membership.queue = nil
+        membership.work = nil
+        if membership.modelContext != nil {
+            context.delete(membership)
+        }
         return membership
     }
 
@@ -499,6 +568,9 @@ enum ReadingQueueService {
         in context: ModelContext
     ) {
         guard source.id != destination.id else { return }
+        // Moving onto a smart queue would drop the work from the source and
+        // then refuse the add, so the work would vanish from both.
+        guard destination.kind != .smart else { return }
         for work in works {
             let sourceMembership = work.queueMemberships.first { $0.queue?.id == source.id }
             let resolvedState = state ?? sourceMembership?.state ?? .inLine
@@ -544,6 +616,8 @@ enum ReadingQueueService {
         in context: ModelContext
     ) async -> ReadingQueueMembership {
         let membership = add(work, to: queue, state: state, origin: origin, in: context)
+        // A smart queue never downloads. `add` already refused the membership.
+        guard queue.kind != .smart else { return membership }
         // T-276: a queue with Keep downloaded off is just a list; nothing is fetched.
         guard KeepOffline.queueKeeps(queue.keepsWorksOffline) else { return membership }
         do {

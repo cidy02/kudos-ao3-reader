@@ -244,7 +244,8 @@ enum WhatFitsPlanner {
         queues
             .filter { !$0.isPendingDeletion }
             .sorted { lhs, rhs in
-                if lhs.kind != rhs.kind { return lhs.kind == .custom }
+                // User queues (list and smart) before Saved for Later, then sort order.
+                if lhs.isUserQueue != rhs.isUserQueue { return lhs.isUserQueue }
                 if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
                 return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
             }
@@ -256,16 +257,9 @@ enum WhatFitsPlanner {
         var queueNamesByID: [UUID: [String]] = [:]
 
         for queue in queues {
-            let memberships = queue.memberships
-                .filter { !$0.isPendingDeletion }
-                .sorted {
-                    if $0.sortOrderInQueue != $1.sortOrderInQueue {
-                        return $0.sortOrderInQueue < $1.sortOrderInQueue
-                    }
-                    return $0.queuedAt > $1.queuedAt
-                }
-            for membership in memberships {
-                guard let work = membership.work, !work.isPendingDeletion else { continue }
+            // `orderedWorks` is the membership list for a manual queue and the
+            // computed matches for a smart one. A work is still counted once.
+            for work in ReadingQueueService.orderedWorks(in: queue) where !work.isPendingDeletion {
                 if workByID[work.id] == nil {
                     orderedIDs.append(work.id)
                     workByID[work.id] = work

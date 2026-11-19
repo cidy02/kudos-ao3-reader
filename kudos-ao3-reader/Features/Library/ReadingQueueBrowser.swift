@@ -110,7 +110,11 @@ struct ReadingQueueBrowserView: View {
     }
 
     private var works: [SavedWork] {
-        orderedMemberships.compactMap(\.work)
+        guard let selectedQueue else { return [] }
+        if selectedQueue.kind == .smart {
+            return ReadingQueueService.orderedWorks(in: selectedQueue)
+        }
+        return orderedMemberships.compactMap(\.work)
     }
 
     /// Hide mode drops Mature/Explicit works here, as every other works list
@@ -131,7 +135,13 @@ struct ReadingQueueBrowserView: View {
     }
 
     private var visibleWorks: [SavedWork] {
-        visibleMemberships.compactMap(\.work)
+        if selectedQueue?.kind == .smart {
+            let shown = works.filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
+            guard quickFilter != .all || filters.hasActiveFilters else { return shown }
+            let quick = quickFilter.apply(to: shown, preservedIDs: Set(preservedWorks.map(\.id)))
+            return filters.hasActiveFilters ? filters.apply(to: quick) : quick
+        }
+        return visibleMemberships.compactMap(\.work)
     }
 
     private var wholePartition: ReadingQueueSectionPartition {
@@ -663,7 +673,28 @@ extension ReadingQueueBrowserView {
 
     @ViewBuilder
     private var pageContent: some View {
-        if let selectedQueue, works.isEmpty {
+        if let selectedQueue, selectedQueue.kind == .smart {
+            SmartQueueWorksPage(
+                queue: selectedQueue,
+                works: works,
+                visibleWorks: visibleWorks,
+                preservedIDs: Set(preservedWorks.map(\.id)),
+                palette: subjectPalette,
+                arrangement: arrangement,
+                isNarrowed: quickFilter != .all || filters.hasActiveFilters,
+                onClearFilters: {
+                    filters = LibraryFilters()
+                    quickFilter = .all
+                },
+                onEditRules: { showingEdit = true },
+                onAddTag: { showingQueueTags = true },
+                filterRail: {
+                    if filters.hasActiveFilters || quickFilter != .all {
+                        filterChipRail
+                    }
+                }
+            )
+        } else if let selectedQueue, works.isEmpty {
             ContentUnavailableView {
                 Label(
                     selectedQueue.displayName,
@@ -1220,7 +1251,9 @@ extension ReadingQueueBrowserView {
 
     @ToolbarContentBuilder
     private var manageToolbar: some ToolbarContent {
-        if !works.isEmpty {
+        if selectedQueue?.kind == .smart {
+            smartManageToolbar
+        } else if !works.isEmpty {
             if isReordering {
                 // The word, as the organizer ends its reorder (pass2-13).
                 ToolbarItem(placement: .confirmationAction) {
@@ -1294,6 +1327,44 @@ extension ReadingQueueBrowserView {
 
     }
 
+    @ToolbarContentBuilder
+    private var smartManageToolbar: some ToolbarContent {
+        if works.isEmpty {
+            ToolbarItem(placement: .primaryAction) {
+                WorkListMoreMenu { queueMenuItems }
+                    .labelStyle(.iconOnly)
+            }
+        } else {
+            ToolbarItem(placement: .primaryAction) {
+                FilterButton(
+                    filtersActive: filters.hasActiveFilters,
+                    showingFilters: $showingFilters,
+                    filterHelp: "Filter the works in this queue",
+                    onClearFilters: { filters = LibraryFilters() }
+                )
+                .labelStyle(.iconOnly)
+            }
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+            ToolbarItem(placement: .primaryAction) {
+                WorkListMoreMenu {
+                    if hideMature {
+                        MatureRevealToggle()
+                    }
+                    ListGridMenuPicker(arrangement: $arrangement)
+                    Divider()
+                    Picker("Filter", selection: $quickFilter) {
+                        ForEach(QueueQuickFilter.allCases) { filter in
+                            Text(filter.title).tag(filter)
+                        }
+                    }
+                    Divider()
+                    queueMenuItems
+                }
+                .labelStyle(.iconOnly)
+            }
+        }
+    }
+
     @ViewBuilder
     private var addWorksSheet: some View {
         if let queue = selectedQueue {
@@ -1344,11 +1415,11 @@ extension ReadingQueueBrowserView {
         } label: {
             Label("Queue Details", systemImage: "info.circle")
         }
-        if let queue = selectedQueue, queue.kind == .custom {
+        if let queue = selectedQueue, queue.isUserQueue {
             Button {
                 showingEdit = true
             } label: {
-                Label("Edit Queue", systemImage: "pencil")
+                Label(queue.kind == .smart ? "Edit Rules" : "Edit Queue", systemImage: "pencil")
             }
             Button(role: .destructive) {
                 confirmDelete = true
@@ -1365,6 +1436,13 @@ extension ReadingQueueBrowserView {
         guard let selectedQueueID,
               let selectedQueue = orderedQueues.first(where: { $0.id == selectedQueueID })
         else { return }
+        guard selectedQueue.kind != .smart else {
+            // A smart queue has no Find More sources. Checking them would hit AO3.
+            sourceCheckTask?.cancel()
+            sourceCheckTask = nil
+            sourceCheckQueueID = nil
+            return
+        }
         guard !ReadingQueueService.orderedWorks(in: selectedQueue).isEmpty else {
             // An empty queue shows no Find More: stop the previous queue's pass too (third review).
             sourceCheckTask?.cancel()
@@ -1459,6 +1537,7 @@ extension ReadingQueueBrowserView {
             seededFrom: options.seed,
             tagNames: options.tagNames,
             seedWorkIDs: options.seedWorkIDs,
+            smartRulesJSON: options.isSmart ? options.smartRulesJSON : nil,
             in: context
         )
         // As Home's and the organizer's: unsaved, the half-made queue is dropped and the

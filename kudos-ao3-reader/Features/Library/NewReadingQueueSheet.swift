@@ -68,8 +68,15 @@ struct NewReadingQueueSheet: View {
     private var libraryWorks: [SavedWork]
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     @State private var options = NewQueueOptions()
+    /// Create only. Editing never converts a list into a smart queue.
+    @State private var queueStyle = NewQueueDraftKind.list
+    @State private var smartDocument = SmartQueueDocument.starter
+    /// Set when the stored JSON does not decode. Save keeps that string.
+    @State private var rulesUnreadable = false
+    @State private var preservedRulesJSON: String?
     @State private var showingNewTag = false
     @State private var newTagName = ""
     /// Read once when the sheet appears rather than in `body`: the sheet is
@@ -101,6 +108,12 @@ struct NewReadingQueueSheet: View {
     var body: some View {
         NavigationStack {
             List {
+                if !isEditing {
+                    kindSection
+                }
+                if showsSmartEditor {
+                    smartEditorContent
+                } else {
                 if isEditing {
                     Section {
                         groupLabel("Queue")
@@ -115,7 +128,7 @@ struct NewReadingQueueSheet: View {
 
                 Section {
                     groupLabel("Name")
-                    namePanel.pageBodyRow(top: 8, gutter: gutter)
+                    namePanel().pageBodyRow(top: 8, gutter: gutter)
                 }
 
                 Section {
@@ -176,16 +189,17 @@ struct NewReadingQueueSheet: View {
                         footnote("Chosen from your library. They are added when you create the queue.")
                     }
                 }
+                }
             }
             .cardList()
             // Rows at their own padding, not the List minimum (L3-FORM-1).
             .environment(\.defaultMinListRowHeight, 0)
-            .navigationTitle(isEditing ? "Edit Queue" : "New Queue")
+            .navigationTitle(sheetTitle)
             #if !os(macOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
                 .wrappingInlineTitle(
-                    isEditing ? "Edit Queue" : "New Queue",
+                    sheetTitle,
                     isActive: dynamicTypeSize.isAccessibilitySize
                 )
                 .subjectScreenWash(palette: palette)
@@ -202,9 +216,9 @@ struct NewReadingQueueSheet: View {
                         .labelStyle(.iconOnly)
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(isEditing ? "Save" : "Create") {
+                        Button(confirmTitle) {
                             colorWellSession.flush()
-                            if !onCreate(options) { saveFailed = true }
+                            if !onCreate(submittedOptions) { saveFailed = true }
                         }
                         .sheetConfirmStyle()
                         .disabled(trimmedName.isEmpty)
@@ -425,6 +439,234 @@ struct NewReadingQueueSheet: View {
         if !options.tagNames.contains(name) { options.tagNames.append(name) }
     }
 
+    private var showsSmartEditor: Bool {
+        if isEditing { return editingQueue?.kind == .smart }
+        return queueStyle == .smart
+    }
+
+    private var sheetTitle: String {
+        if showsSmartEditor { return "Smart Queue" }
+        return isEditing ? "Edit Queue" : "New Queue"
+    }
+
+    private var confirmTitle: String {
+        showsSmartEditor || isEditing ? "Save" : "Create"
+    }
+
+    private var submittedOptions: NewQueueOptions {
+        guard showsSmartEditor else { return options }
+        var submitted = options
+        submitted.isSmart = true
+        submitted.keepsWorksOffline = false
+        submitted.seed = .empty
+        submitted.seedWorkIDs = []
+        if let queue = editingQueue {
+            submitted.tagNames = queue.tags.map(\.name).sorted()
+            submitted.searchIDs = queue.searchLinks.compactMap { $0.search?.id }
+            submitted.colorHex = queue.colorHex
+        } else {
+            submitted.tagNames = []
+            submitted.searchIDs = []
+            submitted.colorHex = nil
+        }
+        if rulesUnreadable {
+            submitted.smartRulesJSON = preservedRulesJSON
+        } else {
+            submitted.smartRulesJSON = SmartQueueRules.encode(smartDocument)
+        }
+        return submitted
+    }
+
+    private var draftKind: Binding<NewQueueDraftKind> {
+        Binding(
+            get: { queueStyle },
+            set: { newValue in
+                queueStyle = newValue
+                if newValue == .smart {
+                    hue = nil
+                    options.colorHex = nil
+                }
+            }
+        )
+    }
+
+    private var kindSection: some View {
+        Section {
+            SubjectFormRow(label: "Kind", arrangement: .control) {
+                SubjectSegmentedControl(
+                    options: NewQueueDraftKind.allCases,
+                    title: \.title,
+                    selection: draftKind
+                )
+            }
+            .subjectPanel()
+            .pageBodyRow(top: 8, gutter: gutter)
+            .accessibilityLabel("Kind")
+        }
+    }
+
+    @ViewBuilder
+    private var smartEditorContent: some View {
+        Section {
+            groupLabel("Name")
+            namePanel(placeholder: "Short and finished").pageBodyRow(top: 8, gutter: gutter)
+        }
+        if rulesUnreadable {
+            Section {
+                Text("These rules were saved by a newer version of Kudos and can't be edited here.")
+                    .font(.system(size: footnoteSize))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .pageBodyRow(top: 8, gutter: gutter)
+            }
+        } else {
+            smartMatchSection
+            smartOrderSection
+            smartPreviewSection
+        }
+        Section {
+            footnote(Self.smartFootnote)
+        }
+    }
+
+    private var smartMatchSection: some View {
+        Section {
+            groupLabel("Works in my library that match")
+            VStack(spacing: 0) {
+                SubjectFormRow(label: "Match", arrangement: .control) {
+                    SubjectSegmentedControl(
+                        options: SmartQueueDocument.Match.allCases,
+                        title: \.title,
+                        selection: $smartDocument.match
+                    )
+                }
+                .accessibilityLabel("Match")
+                ForEach($smartDocument.rules) { $rule in
+                    SubjectRowSeparator()
+                    NavigationLink {
+                        SmartQueueRuleEditor(
+                            rule: $rule,
+                            fandoms: fandomChoices,
+                            onDelete: { smartDocument.rules.removeAll { $0.id == rule.id } }
+                        )
+                    } label: {
+                        SubjectFormRow(label: rule.kind.rowLabel, value: rule.summary, showsDisclosure: true)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(rule.kind.rowLabel), \(rule.summary)")
+                }
+                SubjectRowSeparator()
+                Menu {
+                    ForEach(SmartQueueDocument.Rule.Kind.addOrder, id: \.self) { kind in
+                        Button(kind.rowLabel) {
+                            smartDocument.rules.append(kind.makeDefault())
+                        }
+                    }
+                } label: {
+                    Text("Add Rule…")
+                        .font(.system(size: seedTitleSize))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                }
+                .accessibilityLabel("Add Rule")
+            }
+            .subjectPanel()
+            .pageBodyRow(top: 8, gutter: gutter)
+        }
+    }
+
+    private var smartOrderSection: some View {
+        Section {
+            groupLabel("Order")
+            VStack(spacing: 0) {
+                Menu {
+                    ForEach(SmartQueueDocument.Sort.allCases, id: \.self) { sort in
+                        Button(sort.title) { smartDocument.sort = sort }
+                    }
+                } label: {
+                    SubjectFormRow(label: "Sort", value: smartDocument.sort.title, showsDisclosure: true)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Sort, \(smartDocument.sort.title)")
+                SubjectRowSeparator()
+                Menu {
+                    ForEach(Array(SmartQueueDocument.limitChoices.enumerated()), id: \.offset) { _, choice in
+                        Button(limitTitle(choice)) { smartDocument.limit = choice }
+                    }
+                } label: {
+                    SubjectFormRow(label: "Limit", value: smartDocument.limitTitle, showsDisclosure: true)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Limit, \(smartDocument.limitTitle)")
+            }
+            .subjectPanel()
+            .pageBodyRow(top: 8, gutter: gutter)
+        }
+    }
+
+    private var smartPreviewSection: some View {
+        let matched = smartPreviewWorks
+        let copy = smartPreviewCopy(matched)
+        return Section {
+            groupLabel("Preview")
+            VStack(alignment: .leading, spacing: 4) {
+                SubjectFormRow(label: "Matches now", value: copy.count)
+                    .accessibilityLabel("Matches now, \(copy.count)")
+                if !copy.detail.isEmpty {
+                    Text(copy.detail)
+                        .font(.system(size: footnoteSize))
+                        .foregroundStyle(.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 10)
+                }
+            }
+            .subjectPanel()
+            .pageBodyRow(top: 8, gutter: gutter)
+        }
+    }
+
+    private func limitTitle(_ limit: Int?) -> String {
+        guard let limit, limit > 0 else { return "No limit" }
+        return limit == 1 ? "1 work" : "\(limit.formatted()) works"
+    }
+
+    private var fandomChoices: [String] {
+        var seen = Set<String>()
+        var names: [String] = []
+        for work in libraryWorks where !work.isQueueOnlyWork {
+            for fandom in work.workFandoms {
+                let trimmed = fandom.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty, seen.insert(trimmed.lowercased()).inserted else { continue }
+                names.append(trimmed)
+            }
+        }
+        return names.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    /// The same hide gate as the queue page, so "Matches now" is that page's count.
+    private var smartPreviewWorks: [SavedWork] {
+        let eligible = libraryWorks.filter { !$0.isQueueOnlyWork }
+        let facts = eligible.map(SmartQueueWorkFacts.init(work:))
+        let ordered = smartDocument.matching(facts)
+        let byID = Dictionary(eligible.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return ordered.compactMap { byID[$0.id] }.filter {
+            !gate.isHidden($0, enabled: hideMature, mode: matureMode)
+        }
+    }
+
+    private func smartPreviewCopy(_ works: [SavedWork]) -> (count: String, detail: String) {
+        let count = works.count == 1 ? "1 work" : "\(works.count.formatted()) works"
+        guard !works.isEmpty else { return (count, "") }
+        let facts = ReadingQueueFacts.planFacts(for: works)
+        let parts = facts.split(separator: " · ").map(String.init)
+        return (count, parts.dropFirst().joined(separator: " · "))
+    }
+
+    static let smartFootnote = "A smart queue updates itself as your library changes. "
+        + "A work leaves when it stops matching, for example when you finish it."
+
     private func groupLabel(_ text: String) -> some View {
         SubjectFieldLabel(text: text, style: .formGroup)
             .pageBodyRow(top: 18, gutter: gutter)
@@ -432,8 +674,8 @@ struct NewReadingQueueSheet: View {
 
     /// 1j draws the field alone under its label, full width — not a labelled row,
     /// which would say "Name" twice.
-    private var namePanel: some View {
-        TextField("Case fic pile", text: $name)
+    private func namePanel(placeholder: String = "Case fic pile") -> some View {
+        TextField(placeholder, text: $name)
             // The title doubles as the accessibility label, so without this
             // VoiceOver reads the example placeholder as if it were the name.
             .accessibilityLabel("Name")
@@ -446,7 +688,7 @@ struct NewReadingQueueSheet: View {
             .onSubmit {
                 guard !trimmedName.isEmpty else { return }
                 colorWellSession.flush()
-                if !onCreate(options) { saveFailed = true }
+                if !onCreate(submittedOptions) { saveFailed = true }
             }
             .padding(.horizontal, 13)
             .padding(.vertical, 11)
@@ -570,6 +812,13 @@ extension NewReadingQueueSheet {
         isEditing = true
         editingQueue = queue
         _options = State(initialValue: options)
+        guard queue.kind == .smart else { return }
+        if let json = queue.smartRulesJSON, let decoded = SmartQueueRules.decode(json) {
+            _smartDocument = State(initialValue: decoded)
+        } else if queue.smartRulesJSON != nil {
+            _rulesUnreadable = State(initialValue: true)
+            _preservedRulesJSON = State(initialValue: queue.smartRulesJSON)
+        }
     }
 }
 
@@ -592,11 +841,13 @@ struct EditReadingQueueSheet: View {
 
     static func editOptions(for queue: ReadingQueue) -> NewQueueOptions {
         NewQueueOptions(
-            keepsWorksOffline: KeepOffline.queueKeeps(queue.keepsWorksOffline),
+            keepsWorksOffline: queue.kind == .smart ? false : KeepOffline.queueKeeps(queue.keepsWorksOffline),
             tagNames: queue.tags.map(\.name).sorted(),
             colorHex: queue.colorHex,
             searchIDs: queue.searchLinks.compactMap { $0.search?.id },
-            draftID: queue.id
+            draftID: queue.id,
+            isSmart: queue.kind == .smart,
+            smartRulesJSON: queue.smartRulesJSON
         )
     }
 
@@ -663,4 +914,24 @@ nonisolated struct NewQueueOptions: Equatable, Sendable {
     /// Stable draft identity made when New Queue opens so its preview cover
     /// matches the created queue; Edit Queue passes the existing queue's id.
     var draftID = UUID()
+    /// Create chooses this. Edit never converts a list queue into a smart one.
+    var isSmart = false
+    /// Encoded `SmartQueueDocument`. `nil` on a list queue.
+    var smartRulesJSON: String?
+}
+
+/// Create-only choice on the New Queue sheet. The board draws the smart form;
+/// this is how that form is reached. Editing does not offer it.
+enum NewQueueDraftKind: String, CaseIterable, Hashable, Identifiable {
+    case list
+    case smart
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .list: "List"
+        case .smart: "Smart"
+        }
+    }
 }

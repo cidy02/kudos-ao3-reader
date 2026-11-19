@@ -39,12 +39,15 @@ struct ReadingQueueCard: View {
     }
 
     private var works: [SavedWork] {
-        memberships.compactMap(\.work)
+        if queue.kind == .smart {
+            return ReadingQueueService.orderedWorks(in: queue)
+        }
+        return memberships.compactMap(\.work)
     }
 
     var body: some View {
         let orderedMemberships = memberships
-        let queued = orderedMemberships.compactMap(\.work)
+        let queued = works
         let progress = ReadingQueueFacts.progress(of: queued.map(\.readingState))
         let palette = themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
         HStack(spacing: 12) {
@@ -97,6 +100,14 @@ struct ReadingQueueCard: View {
     /// Blur and Hide both conceal a work's generated art; the count and progress
     /// remain aggregate facts and reveal no title, fandom or cover colour.
     private func worksBehind(in memberships: [ReadingQueueMembership]) -> [SavedWork] {
+        if queue.kind == .smart {
+            let visible = works.filter { !gate.isConcealed($0, enabled: hideMature) }
+            guard let first = visible.first(where: { !$0.isFinished }) else {
+                return Array(visible.prefix(CoverStackLayout.maxBacks))
+            }
+            let rest = visible.filter { $0.id != first.id }
+            return Array(([first] + rest).prefix(CoverStackLayout.maxBacks))
+        }
         let visible = memberships.filter { membership in
             guard let work = membership.work else { return false }
             return !gate.isConcealed(work, enabled: hideMature)
@@ -532,7 +543,7 @@ struct AddToQueueView: View {
     }
 
     private var sortedQueues: [ReadingQueue] {
-        queues.sorted {
+        queues.filter { $0.kind != .smart }.sorted {
             if $0.kind != $1.kind { return $0.kind == .savedForLater }
             if $0.sortOrder != $1.sortOrder { return $0.sortOrder < $1.sortOrder }
             return $0.displayName < $1.displayName

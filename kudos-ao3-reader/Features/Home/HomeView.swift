@@ -683,7 +683,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
 
     private var readingQueuesSection: some View {
         let customQueues = readingQueues
-            .filter { $0.kind == .custom }
+            .filter(\.isUserQueue)
             .sorted { $0.sortOrder < $1.sortOrder }
         let visibleQueues = Array(customQueues.prefix(3))
 
@@ -986,6 +986,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             seededFrom: options.seed,
             tagNames: options.tagNames,
             seedWorkIDs: options.seedWorkIDs,
+            smartRulesJSON: options.isSmart ? options.smartRulesJSON : nil,
             in: context
         )
         // `createQueue` saved best-effort; this asks whether that stuck (a no-op when it
@@ -1399,7 +1400,10 @@ private struct HomeQueueRow: View {
     }
 
     private var queuedWorks: [SavedWork] {
-        queuedMemberships.compactMap(\.work)
+        if queue.kind == .smart {
+            return ReadingQueueService.orderedWorks(in: queue)
+        }
+        return queuedMemberships.compactMap(\.work)
     }
 
     private var visibleQueuedMemberships: [ReadingQueueMembership] {
@@ -1409,11 +1413,26 @@ private struct HomeQueueRow: View {
         }
     }
 
+    private var visibleQueuedWorks: [SavedWork] {
+        queuedWorks.filter { !gate.isConcealed($0, enabled: hideMature) }
+    }
+
     private var upNextWork: SavedWork? {
-        ReadingQueueFacts.upNext(inMemberships: visibleQueuedMemberships).upNext
+        if queue.kind == .smart {
+            return visibleQueuedWorks.first { !$0.isFinished }
+        }
+        return ReadingQueueFacts.upNext(inMemberships: visibleQueuedMemberships).upNext
     }
 
     private var worksBehind: [SavedWork] {
+        if queue.kind == .smart {
+            let visible = visibleQueuedWorks
+            guard let first = visible.first(where: { !$0.isFinished }) else {
+                return Array(visible.prefix(CoverStackLayout.maxBacks))
+            }
+            let rest = visible.filter { $0.id != first.id }
+            return Array(([first] + rest).prefix(CoverStackLayout.maxBacks))
+        }
         let split = ReadingQueueFacts.upNext(inMemberships: visibleQueuedMemberships)
         var ordered = split.inLine
         if let upNext = split.upNext { ordered.insert(upNext, at: 0) }
@@ -1421,6 +1440,11 @@ private struct HomeQueueRow: View {
     }
 
     private var emptyUpNextLabel: String {
+        if queue.kind == .smart {
+            if queuedWorks.isEmpty { return "No matches" }
+            if visibleQueuedWorks.isEmpty { return "Works hidden" }
+            return "All finished"
+        }
         if queuedWorks.isEmpty { return "Empty queue" }
         if visibleQueuedMemberships.isEmpty { return "Works hidden" }
         let partition = ReadingQueueFacts.partition(memberships: visibleQueuedMemberships)

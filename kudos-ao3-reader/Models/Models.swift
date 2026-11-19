@@ -32,6 +32,8 @@ nonisolated enum SyncRecordStatus: String, Codable, CaseIterable {
 nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
     case savedForLater
     case custom
+    /// Fills itself from the library. Members are computed, never stored.
+    case smart
 }
 
 nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
@@ -1003,6 +1005,11 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// note is stored as "" so clearing it travels through sync.
     var notes: String?
 
+    /// T-533: one JSON document (`SmartQueueDocument`) for a `.smart` queue.
+    /// Optional and additive, like `notes`. Absent on every older queue.
+    /// Not a composite attribute — see `docs/DATA_AND_PERSISTENCE_INVARIANTS.md`.
+    var smartRulesJSON: String?
+
     @Relationship(deleteRule: .cascade, inverse: \ReadingQueueMembership.queue)
     var memberships: [ReadingQueueMembership] = []
     @Relationship(deleteRule: .cascade, inverse: \QueueSavedSearchLink.queue)
@@ -1034,6 +1041,11 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         get { ReadingQueueKind(rawValue: kindRaw) ?? .custom }
         set { kindRaw = newValue.rawValue }
     }
+
+    /// Custom and smart queues. Saved for Later is the only system queue.
+    /// An unknown `kindRaw` still reads as `.custom`, so it stays in this set
+    /// and is shown as an ordinary empty queue.
+    var isUserQueue: Bool { kind != .savedForLater }
 
     var syncStatus: SyncRecordStatus {
         get { SyncRecordStatus(rawValue: syncStatusRaw) ?? .localOnly }

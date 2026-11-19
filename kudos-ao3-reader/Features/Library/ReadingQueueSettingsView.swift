@@ -155,8 +155,10 @@ struct ReadingQueueSettingsView: View {
                 detailsPanel
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
                 Text(
-                    "When this is off, the queue keeps only your list. It doesn't download or keep copies, "
-                        + "so it uses no extra storage."
+                    queue.kind == .smart
+                        ? NewReadingQueueSheet.smartFootnote
+                        : "When this is off, the queue keeps only your list. It doesn't download or keep copies, "
+                            + "so it uses no extra storage."
                 )
                     .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondaryInk)
@@ -231,24 +233,31 @@ struct ReadingQueueSettingsView: View {
                     onPick: setCustomColour
                 )
             }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Keep Works Offline", arrangement: .control) {
-                Toggle("Keep Works Offline", isOn: Binding(
-                    // nil is "never asked", and a never-asked queue keeps its
-                    // works downloaded as queues always did (`KeepOffline`).
-                    get: { KeepOffline.queueKeeps(queue.keepsWorksOffline) },
-                    set: { isOn in
-                        queue.keepsWorksOffline = isOn
-                        queue.markModified()
-                        context.saveBestEffort(reason: "Saving queue offline setting failed")
-                        if isOn { ReadingQueueService.preserveMissingWorks(in: queue, context: context) }
-                    }
-                ))
-                .labelsHidden()
-                .accentFill()
+            if queue.kind != .smart {
+                SubjectRowSeparator()
+                SubjectFormRow(label: "Keep Works Offline", arrangement: .control) {
+                    Toggle("Keep Works Offline", isOn: Binding(
+                        // nil is "never asked", and a never-asked queue keeps its
+                        // works downloaded as queues always did (`KeepOffline`).
+                        get: { KeepOffline.queueKeeps(queue.keepsWorksOffline) },
+                        set: { isOn in
+                            queue.keepsWorksOffline = isOn
+                            queue.markModified()
+                            context.saveBestEffort(reason: "Saving queue offline setting failed")
+                            if isOn { ReadingQueueService.preserveMissingWorks(in: queue, context: context) }
+                        }
+                    ))
+                    .labelsHidden()
+                    .accentFill()
+                }
             }
             SubjectRowSeparator()
-            SubjectFormRow(label: "Order", value: "Manual")
+            SubjectFormRow(
+                label: "Order",
+                value: queue.kind == .smart
+                    ? (SmartQueueRules.decode(queue.smartRulesJSON)?.sort.title ?? SmartQueueDocument.Sort.shortestFirst.title)
+                    : "Manual"
+            )
             SubjectRowSeparator()
             SubjectFormRow(
                 label: "Last Read",

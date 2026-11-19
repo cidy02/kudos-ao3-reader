@@ -19,7 +19,7 @@ struct QueueCardMenu: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if queue.kind == .custom, isEnabled {
+        if queue.isUserQueue, isEnabled {
             content
                 .contextMenu {
                     Button {

@@ -650,7 +650,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     private var shelfQueues: [ReadingQueue] {
         readingQueues
-            .filter { $0.kind == .custom }
+            .filter(\.isUserQueue)
             .sorted { lhs, rhs in
                 if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
                 return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending

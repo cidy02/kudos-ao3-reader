@@ -1757,6 +1757,10 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
     /// `hue`: an older archive or Android carries none, and `nil` there is "no
     /// description", never an instruction to clear one.
     let notes: String?
+    /// T-533 smart-queue rules. One JSON string, omitted when the queue has
+    /// none. An older archive or Android drops the key; import must not treat
+    /// that as "clear the rules". No manifest version bump.
+    let smartRulesJSON: String?
     let searchSources: [KudosBackupQueueSearchLink]?
     let searchSourcesModifiedAt: Date?
 
@@ -1778,6 +1782,7 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
         isPinned = queue.isPinned
         keepsWorksOffline = queue.keepsWorksOffline
         notes = queue.notes
+        smartRulesJSON = queue.smartRulesJSON
         let links = queue.searchLinks.filter { $0.search != nil }
         searchSources = queue.searchSourcesModifiedAt == nil && links.isEmpty
             ? nil : links.map(KudosBackupQueueSearchLink.init)
@@ -3261,6 +3266,11 @@ enum KudosBackupService {
                     dateCreated: archived.dateCreated,
                     dateUpdated: archived.dateUpdated
                 )
+                // `kind` collapses an unknown raw value to `.custom`. Keep the
+                // archived string so a later export still says what it said.
+                if kind != .savedForLater, !archived.kindRaw.isEmpty {
+                    queue.kindRaw = archived.kindRaw
+                }
                 context.insert(queue)
                 queuesByID[archived.id] = queue
             }
@@ -3289,7 +3299,12 @@ enum KudosBackupService {
                 queue.kind = .savedForLater
             } else if incomingWins || queue.name.isEmpty {
                 queue.name = archived.name
-                queue.kind = kind
+                // Write the archived string, not `kind`. `ReadingQueueKind(rawValue:)`
+                // maps anything it does not know — including a future kind — to
+                // `.custom`, and assigning that would erase it on the way back out.
+                if !archived.kindRaw.isEmpty {
+                    queue.kindRaw = archived.kindRaw
+                }
                 queue.sortOrder = archived.sortOrder
             }
             // Only ever fills a colour in, never clears one: an archive written
@@ -3322,6 +3337,13 @@ enum KudosBackupService {
             // The description fills in, and a winning archive's "" clears it.
             if let archivedNotes = archived.notes, incomingWins || queue.notes == nil {
                 queue.notes = archivedNotes
+            }
+            // Same as notes: a missing key is an older archive or Android, not
+            // a request to drop rules this device already stored. Replace
+            // included — the key's absence is not part of the snapshot.
+            if let archivedRules = archived.smartRulesJSON,
+               incomingWins || queue.smartRulesJSON == nil {
+                queue.smartRulesJSON = archivedRules
             }
             // Union-only under merge and reconcile, exactly like SavedWork's
             // user tags above: there is no per-tag tombstone, so absence from a
