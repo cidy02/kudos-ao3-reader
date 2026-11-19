@@ -788,6 +788,31 @@ extension SavedWork {
         wordUnitRaw = analysis.wordUnit.rawValue
     }
 
+    func applyLanguageMetadata(_ language: String) {
+        guard !language.isEmpty else { return }
+        self.language = language
+        if Self.wordUnit(forLanguage: language) == .characters {
+            wordUnitRaw = WordUnit.characters.rawValue
+        }
+    }
+
+    nonisolated static func validatedChapterWordCountsJSON(_ json: String?) -> String? {
+        guard let json, !json.isEmpty,
+              let data = json.data(using: .utf8),
+              let counts = try? JSONDecoder().decode([Int].self, from: data),
+              !counts.isEmpty,
+              counts.allSatisfy({ $0 >= 0 }),
+              let normalized = try? JSONEncoder().encode(counts),
+              let normalizedString = String(data: normalized, encoding: .utf8)
+        else { return nil }
+        return normalizedString
+    }
+
+    nonisolated static func validatedWordUnitRaw(_ raw: String?) -> String? {
+        guard let raw, let unit = WordUnit(rawValue: raw) else { return nil }
+        return unit.rawValue
+    }
+
     /// Maps a `SavedWork.language` string (EPUB `dc:language` code or AO3
     /// display language) to `.characters` for languages written without spaces
     /// (Chinese, Japanese, Thai) and `.words` otherwise.

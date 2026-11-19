@@ -47,12 +47,23 @@ nonisolated enum AO3EPUBChapterWordCounter {
             let xhtml = String(data: data, encoding: .utf8)
                 ?? String(data: data, encoding: .isoLatin1)
                 ?? ""
-            let proseHTML = chapterProseHTML(from: xhtml)
-            let breakdown = AO3WordCounter.measure(proseHTML)
+            let extraction = extractChapterProse(from: xhtml)
+            let breakdown = AO3WordCounter.measure(extraction.html)
+            if breakdown.total == 0 && extraction.removedApparatus {
+                // Spine item was purely non-chapter apparatus (e.g., an un-TOC'd
+                // preface/summary/afterword whose sections stripped down to 0).
+                continue
+            }
             counts.append(breakdown.total)
             totalTokens += breakdown.total
             totalScriptChars += breakdown.scriptCharacters
         }
+
+        // Unmarked front/back-matter spine items (title page, copyright, colophon)
+        // can also land in `.chapter` when the EPUB has no Preface/Afterword TOC
+        // labels; trim outer 0-word boundaries so chapter counts match chapter indexes.
+        while counts.first == 0 { counts.removeFirst() }
+        while counts.last == 0 { counts.removeLast() }
 
         let effectiveLanguage = language.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? document.metadata.language
@@ -91,7 +102,11 @@ nonisolated enum AO3EPUBChapterWordCounter {
     /// author/chapter/end notes, and Archive comment plugs from one chapter's
     /// XHTML, leaving only story prose.
     static func chapterProseHTML(from xhtml: String) -> String {
-        guard !xhtml.isEmpty else { return "" }
+        extractChapterProse(from: xhtml).html
+    }
+
+    private static func extractChapterProse(from xhtml: String) -> (html: String, removedApparatus: Bool) {
+        guard !xhtml.isEmpty else { return ("", false) }
 
         if let marked = extractAO3CommentContent(from: xhtml) {
             return cleanChapterFragment(marked)
@@ -117,8 +132,8 @@ nonisolated enum AO3EPUBChapterWordCounter {
     private static func cleanChapterFragment(
         _ html: String,
         stripLeadingHeading: Bool = false
-    ) -> String {
-        guard let doc = try? SwiftSoup.parse(html) else { return html }
+    ) -> (html: String, removedApparatus: Bool) {
+        guard let doc = try? SwiftSoup.parse(html) else { return (html, false) }
         let root: Element = doc.body() ?? doc
 
         // Remove known AO3 & converter non-prose blocks.
@@ -126,23 +141,32 @@ nonisolated enum AO3EPUBChapterWordCounter {
             "#preface", "#afterword", "[id^=endnotes]", "[id=endnotes]",
             "div.preface", "div.afterword", "div.meta", "div.endnote-link",
             "aside", ".notes", "div.notes", "div.end.notes", "#notes", ".summary",
-            "h2.heading", "h2.toc-heading", "p.byline", "h1.title",
+            "h2.heading", "h2.toc-heading", "p.byline", "h1.title", "h3.title", "p.title",
             "nav", "style", "script"
         ].joined(separator: ", ")
-        try? root.select(nonProseSelector).remove()
-
-        if stripLeadingHeading {
-            removeLeadingHeadingIfPresent(in: root)
+        var removedApparatus = false
+        if let matches = try? root.select(nonProseSelector), !matches.isEmpty() {
+            removedApparatus = true
+            try? matches.remove()
         }
 
-        removeCalibreFlattenedApparatus(in: root)
+        if stripLeadingHeading {
+            if removeLeadingHeadingIfPresent(in: root) {
+                removedApparatus = true
+            }
+        }
 
-        return (try? root.html()) ?? ""
+        if removeCalibreFlattenedApparatus(in: root) {
+            removedApparatus = true
+        }
+
+        return ((try? root.html()) ?? "", removedApparatus)
     }
 
-    /// Removes a leading `<h1>`/`<h2>` (used by Calibre-flattened chapters and
-    /// `EPUBBuilder`) and an optional immediate `"Chapter by ..."` byline `<p>`.
-    private static func removeLeadingHeadingIfPresent(in container: Element) {
+    /// Removes a leading `<h1>`/`<h2>`/`<h3>` (used by Calibre-flattened chapters,
+    /// HTML exports, and `EPUBBuilder`) and an optional immediate `"Chapter by ..."` byline `<p>`.
+    @discardableResult
+    private static func removeLeadingHeadingIfPresent(in container: Element) -> Bool {
         var current: Element = container
         while let first = current.children().first(),
               first.tagName().lowercased() == "div",
@@ -150,9 +174,9 @@ nonisolated enum AO3EPUBChapterWordCounter {
               first.ownText().trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             current = first
         }
-        guard let first = current.children().first() else { return }
+        guard let first = current.children().first() else { return false }
         let tag = first.tagName().lowercased()
-        guard tag == "h1" || tag == "h2" else { return }
+        guard tag == "h1" || tag == "h2" || tag == "h3" else { return false }
         let next = try? first.nextElementSibling()
         try? first.remove()
         if let next, next.tagName().lowercased() == "p" {
@@ -161,6 +185,7 @@ nonisolated enum AO3EPUBChapterWordCounter {
                 try? next.remove()
             }
         }
+        return true
     }
 
     private static let exactApparatusLabels: Set<String> = [
@@ -172,8 +197,10 @@ nonisolated enum AO3EPUBChapterWordCounter {
         "chapter summary", "chapter notes", "chapter end notes"
     ]
 
-    private static func removeCalibreFlattenedApparatus(in root: Element) {
-        guard let paragraphs = try? root.select("p").array() else { return }
+    @discardableResult
+    private static func removeCalibreFlattenedApparatus(in root: Element) -> Bool {
+        guard let paragraphs = try? root.select("p").array() else { return false }
+        var removed = false
         for paragraph in paragraphs {
             guard paragraph.parent() != nil else { continue }
             let rawText = ((try? paragraph.text()) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -187,18 +214,22 @@ nonisolated enum AO3EPUBChapterWordCounter {
                    next.tagName().lowercased() == "blockquote" {
                     try? next.remove()
                     try? paragraph.remove()
+                    removed = true
                     continue
                 }
                 if blockquoteRequiredLabels.contains(normalized) {
                     try? paragraph.remove()
+                    removed = true
                     continue
                 }
             }
 
             if isAO3BoilerplateParagraph(normalized) {
                 try? paragraph.remove()
+                removed = true
             }
         }
+        return removed
     }
 
     private static func isAO3BoilerplateParagraph(_ lower: String) -> Bool {

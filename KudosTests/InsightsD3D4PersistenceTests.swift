@@ -27,6 +27,14 @@ extension PersistenceGateSuites {
             return defaults
         }
 
+        private func sampleEPUB(title: String, body: String) throws -> Data {
+            try EPUBBuilder.archive(
+                metadata: EPUBBuilder.Metadata(title: title),
+                chapters: [EPUBBuilder.Chapter(title: "Chapter 1", bodyXHTML: body)],
+                modified: Date(timeIntervalSince1970: 0)
+            )
+        }
+
         @Test func backfillComputesChapterCountsFromLocalEPUBWithoutBumpingModifiedAt() async throws {
             let container = try makeContainer()
             let context = ModelContext(container)
@@ -73,7 +81,7 @@ extension PersistenceGateSuites {
             #expect(updated.syncStatus == .synced)
         }
 
-        @Test func d3BackupFieldsOmitWhenEmptyRoundTripWhenSetAndSurviveOldPayloads() throws {
+        @Test func d3BackupFieldsOmitWhenEmptyRoundTripValidValuesAndSurviveOldPayloads() throws {
             let container = try makeContainer()
             let source = ModelContext(container)
             let untouched = SavedWork(title: "Untouched", author: "A")
@@ -103,7 +111,6 @@ extension PersistenceGateSuites {
             #expect(archivedCounted["chapterWordCountsJSON"] as? String == "[1200,2300]")
             #expect(archivedCounted["wordUnitRaw"] as? String == "characters")
 
-            // Restore into a fresh context and verify round-trip.
             let destContainer = try makeContainer()
             let dest = ModelContext(destContainer)
             _ = try KudosBackupService.restore(contents, into: dest, defaults: try testDefaults())
@@ -113,12 +120,18 @@ extension PersistenceGateSuites {
             #expect(restoredCounted.chapterWordCounts == [1_200, 2_300])
             #expect(restoredCounted.wordUnitRaw == SavedWork.WordUnit.characters.rawValue)
 
-            // Simulate an older/Android archive missing D3 keys on merge: local stays intact.
+            // Older/Android payload without D3 keys keeps existing local values intact;
+            // malformed D3 values are rejected on merge.
             var modifiedRoot = root
             var modifiedWorks = archivedWorks
             for index in modifiedWorks.indices {
-                modifiedWorks[index].removeValue(forKey: "chapterWordCountsJSON")
-                modifiedWorks[index].removeValue(forKey: "wordUnitRaw")
+                if modifiedWorks[index]["id"] as? String == counted.id.uuidString {
+                    modifiedWorks[index].removeValue(forKey: "chapterWordCountsJSON")
+                    modifiedWorks[index].removeValue(forKey: "wordUnitRaw")
+                } else {
+                    modifiedWorks[index]["chapterWordCountsJSON"] = "[-5, 10]"
+                    modifiedWorks[index]["wordUnitRaw"] = "bogus"
+                }
             }
             modifiedRoot["works"] = modifiedWorks
             let legacyManifest = try KudosBackupContents.decodeManifest(
@@ -130,11 +143,72 @@ extension PersistenceGateSuites {
                 defaults: try testDefaults()
             )
 
-            let afterMerge = try #require(
+            let afterMergeCounted = try #require(
                 try dest.fetch(FetchDescriptor<SavedWork>()).first { $0.id == counted.id }
             )
-            #expect(afterMerge.chapterWordCounts == [1_200, 2_300])
-            #expect(afterMerge.wordUnitRaw == SavedWork.WordUnit.characters.rawValue)
+            #expect(afterMergeCounted.chapterWordCounts == [1_200, 2_300])
+            #expect(afterMergeCounted.wordUnitRaw == SavedWork.WordUnit.characters.rawValue)
+
+            let afterMergeUntouched = try #require(
+                try dest.fetch(FetchDescriptor<SavedWork>()).first { $0.id == untouched.id }
+            )
+            #expect(afterMergeUntouched.chapterWordCountsJSON.isEmpty)
+            #expect(afterMergeUntouched.wordUnitRaw.isEmpty)
+        }
+
+        @Test func backupReconcileWithNewerEPUBBytesPreservesArchivedD3Fields() throws {
+            let container = try makeContainer()
+            let target = ModelContext(container)
+            let workID = UUID()
+
+            let localWork = SavedWork(id: workID, title: "Updated Work", author: "Author")
+            localWork.hasEPUB = true
+            localWork.lastModifiedAt = Date(timeIntervalSince1970: 1_000)
+            localWork.chapterWordCounts = [100]
+            localWork.wordUnitRaw = SavedWork.WordUnit.words.rawValue
+            target.insert(localWork)
+
+            let initialEPUB = try sampleEPUB(title: "V1", body: "<p>Initial short text.</p>")
+            let epubDest = localWork.fileURL
+            try FileManager.default.createDirectory(
+                at: epubDest.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try initialEPUB.write(to: epubDest)
+            let initialDigest = Storage.fileDigest(at: epubDest) ?? ""
+            localWork.epubDigest = initialDigest
+            try target.save()
+            defer { try? FileManager.default.removeItem(at: epubDest) }
+
+            // Incoming newer archive carries updated EPUB bytes AND updated D3 counts.
+            let staging = ModelContext(try makeContainer())
+            let archivedWork = SavedWork(id: workID, title: "Updated Work", author: "Author")
+            archivedWork.hasEPUB = true
+            archivedWork.lastModifiedAt = Date(timeIntervalSince1970: 5_000)
+            archivedWork.chapterWordCounts = [200, 300]
+            archivedWork.wordUnitRaw = SavedWork.WordUnit.characters.rawValue
+            staging.insert(archivedWork)
+            try staging.save()
+
+            let newerEPUB = try sampleEPUB(title: "V2", body: "<p>Updated chapter prose with new bytes.</p>")
+            let manifest = try KudosBackupService.makeContents(
+                works: [archivedWork],
+                bookmarks: [],
+                fonts: [],
+                readingQueues: [],
+                defaults: try testDefaults()
+            ).manifest
+            let incoming = KudosBackupContents(manifest: manifest, epubFiles: [workID: newerEPUB])
+
+            _ = try KudosBackupService.restore(incoming, into: target, defaults: try testDefaults())
+
+            let updated = try #require(
+                try target.fetch(FetchDescriptor<SavedWork>()).first { $0.id == workID }
+            )
+            #expect(!initialDigest.isEmpty)
+            #expect(updated.epubDigest != initialDigest)
+            #expect(updated.chapterWordCounts == [200, 300])
+            #expect(updated.wordUnitRaw == SavedWork.WordUnit.characters.rawValue)
         }
     }
 }

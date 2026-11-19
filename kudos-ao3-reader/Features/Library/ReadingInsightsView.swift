@@ -579,11 +579,14 @@ struct ReadingInsightsView: View {
         else { return }
 
         let tagAliases = TagAliasStore.resolver(in: context)
+        let visibleWorks = effectiveWorks
+        let hiddenWorkIDs = Set(works.map(\.id)).subtracting(Set(visibleWorks.map(\.id)))
 
         let figures = ReadingLogService.insights(
             for: currentInterval,
             previousPeriod: previousInterval,
-            works: effectiveWorks,
+            works: visibleWorks,
+            hiddenWorkIDs: hiddenWorkIDs,
             calendar: calendar,
             context: context,
             aliases: tagAliases
@@ -591,17 +594,18 @@ struct ReadingInsightsView: View {
 
         insights = figures
 
-        let allHistory = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let rawHistory = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let allHistory = rawHistory.filter { !hiddenWorkIDs.contains($0.workID) }
         let allFacts = ReadingLogService.facts(
             from: allHistory,
-            works: effectiveWorks,
+            works: visibleWorks,
             history: allHistory,
             aliases: tagAliases
         )
         let periodFacts = allFacts.filter { currentInterval.contains($0.startedAt) }
 
         let readWorkIDs = Set(periodFacts.map(\.workID))
-        let worksInPeriod = effectiveWorks.filter { readWorkIDs.contains($0.id) }
+        let worksInPeriod = visibleWorks.filter { readWorkIDs.contains($0.id) }
 
         // An empty period has no taste; the Taste tab shows its empty state
         // rather than all-time rankings under the period title.

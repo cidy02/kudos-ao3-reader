@@ -217,7 +217,7 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         let previousWordFacts = comparablePrevious.filter { $0.wordUnit == .words }
         insights.totalWordsRead = wordFacts.reduce(0) { $0 + $1.wordsRead }
         insights.charactersRead = charFacts.reduce(0) { $0 + $1.wordsRead }
-        insights.previousPeriodWordsRead = comparablePrevious.isEmpty
+        insights.previousPeriodWordsRead = previousWordFacts.isEmpty
             ? nil
             : previousWordFacts.reduce(0) { $0 + $1.wordsRead }
         insights.fandomWordsShares = fandomWordsShares(from: facts, aliases: aliases)
@@ -703,7 +703,7 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
             }
         }
 
-        let totalWords = max(1, facts.reduce(0) { $0 + $1.wordsRead })
+        let totalWords = max(1, facts.filter { $0.wordUnit == .words }.reduce(0) { $0 + $1.wordsRead })
         let ranked = wordsMap.sorted { lhs, rhs in
             if lhs.value != rhs.value { return lhs.value > rhs.value }
             return lhs.key < rhs.key
@@ -956,7 +956,7 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
         let fandomShares = ReadingInsights.fandomWordsShares(from: facts, aliases: aliases)
 
         var relWords: [String: (fandom: String, works: Set<UUID>, words: Int)] = [:]
-        for fact in facts {
+        for fact in facts where fact.wordUnit == .words {
             let work = worksByID[fact.workID]
             let resolvedFandom = aliases.resolve(fact.fandom, kind: .fandom)
             for rel in aliases.resolvedUnique(work?.workRelationships ?? [], kind: .relationship) {
@@ -997,7 +997,7 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
         }.sorted { $0.count > $1.count }
 
         var tagWords: [String: (words: Int, count: Int)] = [:]
-        for fact in facts {
+        for fact in facts where fact.wordUnit == .words {
             let work = worksByID[fact.workID]
             for tag in aliases.resolvedUnique(work?.workTags ?? [], kind: .freeform) {
                 tagWords[tag, default: (words: 0, count: 0)].words += fact.wordsRead
@@ -1197,10 +1197,11 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
                 words: 0,
                 count: 0
             )
+            let addedWords = fact.wordUnit == .words ? fact.wordsRead : 0
             finishCountsByWork[fact.workID] = (
                 title: cur.title,
                 fandom: cur.fandom,
-                words: cur.words + fact.wordsRead,
+                words: cur.words + addedWords,
                 count: cur.count + 1
             )
         }
@@ -1219,7 +1220,8 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
             .map(\.name)
         let timelineLanes = topFandomNames.map { name -> FandomTimelineLane in
             var months = Array(repeating: 0, count: 12)
-            for fact in allFacts where aliases.resolve(fact.fandom, kind: .fandom) == name {
+            for fact in allFacts where fact.wordUnit == .words
+                && aliases.resolve(fact.fandom, kind: .fandom) == name {
                 let day = ReadingInsights.sittingTime(for: fact, calendar: calendar).day
                 let m = calendar.component(.month, from: day) - 1
                 if m >= 0 && m < 12 {
@@ -1348,11 +1350,12 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         aliases: TagAliasResolver = .empty
     ) -> ReadingLibraryInsights {
         let unread = works.filter { !$0.hasStartedReading && !$0.isFinished }
-        let unreadWords = unread.reduce(0) { $0 + max(0, $1.wordCount) }
-        let readWordsInPeriod = facts.reduce(0) { $0 + $1.wordsRead }
+        let unreadWords = unread.filter { $0.wordUnit == .words }.reduce(0) { $0 + max(0, $1.wordCount) }
+        let readWordsInPeriod = facts.filter { $0.wordUnit == .words }.reduce(0) { $0 + $1.wordsRead }
 
         let addedInPeriod = works.filter { periodInterval.contains($0.dateAdded) }
-        let addedWordsInPeriod = addedInPeriod.reduce(0) { $0 + max(0, $1.wordCount) }
+        let addedWordsInPeriod = addedInPeriod.filter { $0.wordUnit == .words }
+            .reduce(0) { $0 + max(0, $1.wordCount) }
 
         // Nil without reading in the period; the pace is per month, so a Year
         // period's words are divided by its 12 months first.
@@ -1381,7 +1384,7 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         let wip = ReadingInsights.wipFreshness(works: works, calendar: calendar)
 
         let goneWorks = works.filter { $0.preservationState == .preservedLastCopy || $0.preservationState == .goneWithNoCopy }
-        let goneWords = goneWorks.reduce(0) { $0 + max(0, $1.wordCount) }
+        let goneWords = goneWorks.filter { $0.wordUnit == .words }.reduce(0) { $0 + max(0, $1.wordCount) }
         let lastCopies = works.filter { $0.preservationState == .preservedLastCopy }.count
 
         let finished = works.filter(\.isFinished)

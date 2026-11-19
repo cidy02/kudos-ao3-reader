@@ -6,7 +6,7 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct InsightsD3D4Tests {
-    private func context() throws -> ModelContext {
+    private func makeContext() throws -> ModelContext {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
@@ -35,7 +35,8 @@ struct InsightsD3D4Tests {
     private func makeAO3FixtureEPUB(
         language: String = "en",
         chapter1Prose: String,
-        chapter2Prose: String
+        chapter2Prose: String,
+        includeTOCNavPoints: Bool = true
     ) throws -> URL {
         let containerXML = """
         <?xml version="1.0" encoding="UTF-8"?>
@@ -69,15 +70,20 @@ struct InsightsD3D4Tests {
           </spine>
         </package>
         """
+        let navMap = includeTOCNavPoints
+            ? """
+            <navPoint id="n1" playOrder="1"><navLabel><text>Preface</text></navLabel><content src="preface.xhtml"/></navPoint>
+            <navPoint id="n2" playOrder="2"><navLabel><text>Chapter 1</text></navLabel><content src="chapter1.xhtml"/></navPoint>
+            <navPoint id="n3" playOrder="3"><navLabel><text>Chapter 2</text></navLabel><content src="chapter2.xhtml"/></navPoint>
+            <navPoint id="n4" playOrder="4"><navLabel><text>Afterword</text></navLabel><content src="afterword.xhtml"/></navPoint>
+            """
+            : ""
         let ncx = """
         <?xml version="1.0" encoding="UTF-8"?>
         <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
           <docTitle><text>Test AO3 Work</text></docTitle>
           <navMap>
-            <navPoint id="n1" playOrder="1"><navLabel><text>Preface</text></navLabel><content src="preface.xhtml"/></navPoint>
-            <navPoint id="n2" playOrder="2"><navLabel><text>Chapter 1</text></navLabel><content src="chapter1.xhtml"/></navPoint>
-            <navPoint id="n3" playOrder="3"><navLabel><text>Chapter 2</text></navLabel><content src="chapter2.xhtml"/></navPoint>
-            <navPoint id="n4" playOrder="4"><navLabel><text>Afterword</text></navLabel><content src="afterword.xhtml"/></navPoint>
+            \(navMap)
           </navMap>
         </ncx>
         """
@@ -116,7 +122,8 @@ struct InsightsD3D4Tests {
           </div>
         </body></html>
         """
-        // Calibre-flattened chapter: class names rewritten and comments stripped.
+        // Calibre-flattened chapter with classes rewritten, comments stripped, and
+        // NO `id="endnotes2"` so `removeCalibreFlattenedApparatus` itself must strip end notes.
         let ch2 = """
         <html xmlns="http://www.w3.org/1999/xhtml"><body>
           <div id="chapters" class="calibre1">
@@ -130,7 +137,7 @@ struct InsightsD3D4Tests {
             <div class="calibre5">
               \(chapter2Prose)
             </div>
-            <div id="endnotes2" class="calibre6">
+            <div class="calibre6">
               <p class="calibre3">Chapter End Notes</p>
               <blockquote class="calibre4"><p>Flattened end notes excluded.</p></blockquote>
             </div>
@@ -157,111 +164,281 @@ struct InsightsD3D4Tests {
         ])
     }
 
-    // MARK: - D3: Chapter-only counting & unit classification
+    // MARK: - D3: Chapter-only counting, TOC-less EPUBs & unit isolation
 
     @Test func epubCounterExcludesPrefaceSummariesNotesAndAfterword() throws {
-        // Chapter 1: 9 words (story blockquote + hyphens/contractions match AO3WordCounter).
-        // Chapter 2 (Calibre-flattened): 6 words.
         let epub = try makeAO3FixtureEPUB(
             language: "en",
-            chapter1Prose: "<p>Real story one two three</p><blockquote><p>Story letter four</p></blockquote><p>six--seven didn't fold-away</p>",
+            chapter1Prose: "<p>Real story one two three</p><blockquote><p>Story letter four</p></blockquote>"
+                + "<p>six--seven didn't fold-away</p>",
             chapter2Prose: "<p>Alpha beta gamma delta epsilon zeta.</p>"
         )
         defer { try? FileManager.default.removeItem(at: epub) }
 
         let analysis = try AO3EPUBChapterWordCounter.analyze(epubURL: epub, language: "English")
         #expect(analysis.wordUnit == .words)
-        // "Real"(1) "story"(2) "one"(3) "two"(4) "three"(5) "Story"(6) "letter"(7) "four"(8)
-        // "six"(9) "seven"(10) "didn't"->"didnt"(11) "fold-away"->"foldaway"(12) = 12 words in Ch 1.
         #expect(analysis.chapterWordCounts == [12, 6])
     }
 
-    @Test func charactersUnitUsedForNoSpaceLanguagesAndKeptSeparateFromWords() throws {
-        // Japanese fixture ("吾輩は猫である" = 7 chars; "名前はまだ無い" = 7 chars)
+    @Test func epubCounterLackingTOCMarkersSkipsApparatusAndTrimsOuterZeroBoundaries() throws {
+        // Without TOC navPoints, ReaderSectionBuilder classifies preface/afterword as
+        // `.chapter`. Pure apparatus spine items stripped to 0 (and `<h3>` headings) must
+        // not leave leading/trailing zeros like `[0, 4, 6, 0]` that zero out `prefix(1)`.
+        let epub = try makeAO3FixtureEPUB(
+            language: "en",
+            chapter1Prose: "<h3>Heading Inside Prose</h3><p>Four prose words here.</p>",
+            chapter2Prose: "<p>One two three four five six.</p>",
+            includeTOCNavPoints: false
+        )
+        defer { try? FileManager.default.removeItem(at: epub) }
+
+        // Notice Ch 1 uses `<!--chapter content-->` only in the fixture; also test
+        // a pure DOM spine chapter lacking `<!--chapter content-->` with leading `<h3>`.
+        let plainContainer = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+          <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
+        </container>
+        """
+        let plainOPF = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <package xmlns="http://www.idpf.org/2007/opf" unique-identifier="b" version="2.0">
+          <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Plain</dc:title><dc:identifier id="b">p</dc:identifier></metadata>
+          <manifest>
+            <item id="p" href="preface.xhtml" media-type="application/xhtml+xml"/>
+            <item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/>
+            <item id="a" href="afterword.xhtml" media-type="application/xhtml+xml"/>
+          </manifest>
+          <spine><itemref idref="p"/><itemref idref="c1"/><itemref idref="a"/></spine>
+        </package>
+        """
+        let plainEPUB = try writeEPUB([
+            ("META-INF/container.xml", plainContainer),
+            ("OEBPS/content.opf", plainOPF),
+            ("OEBPS/preface.xhtml", "<html><body><div id=\"preface\"><p>Ignored preface</p></div></body></html>"),
+            ("OEBPS/c1.xhtml", "<html><body><h3>Chapter Title Heading</h3><p>Four prose words here.</p></body></html>"),
+            ("OEBPS/afterword.xhtml", "<html><body><div id=\"afterword\"><p>Ignored afterword</p></div></body></html>")
+        ])
+        defer { try? FileManager.default.removeItem(at: plainEPUB) }
+
+        let fromPlain = try AO3EPUBChapterWordCounter.analyze(epubURL: plainEPUB)
+        #expect(fromPlain.chapterWordCounts == [4])
+
+        let noTOCAO3 = try AO3EPUBChapterWordCounter.analyze(epubURL: epub, language: "English")
+        #expect(noTOCAO3.chapterWordCounts == [7, 6])
+    }
+
+    @Test func charactersUnitIsolatedAcrossOverviewSharesTasteHabitsLibraryTimelineAndAO3Refresh() throws {
+        // 1. EPUB detection & AO3 language refresh path (`applyLanguageMetadata`).
         let jaEPUB = try makeAO3FixtureEPUB(
             language: "ja",
             chapter1Prose: "<p>吾輩は猫である</p>",
             chapter2Prose: "<p>名前はまだ無い</p>"
         )
         defer { try? FileManager.default.removeItem(at: jaEPUB) }
+        let jaAnalysis = try AO3EPUBChapterWordCounter.analyze(epubURL: jaEPUB)
+        #expect(jaAnalysis.wordUnit == .characters)
+        #expect(jaAnalysis.chapterWordCounts == [7, 7])
 
-        let ja = try AO3EPUBChapterWordCounter.analyze(epubURL: jaEPUB)
-        #expect(ja.wordUnit == .characters)
-        #expect(ja.chapterWordCounts == [7, 7])
-
-        // No language tag on Chinese/Thai EPUB still detects script characters cleanly.
         let zhEPUB = try makeAO3FixtureEPUB(
             language: "",
             chapter1Prose: "<p>春风十里</p>",
             chapter2Prose: "<p>สวัสดี</p>"
         )
         defer { try? FileManager.default.removeItem(at: zhEPUB) }
-        let zh = try AO3EPUBChapterWordCounter.analyze(epubURL: zhEPUB)
-        #expect(zh.wordUnit == .characters)
-        #expect(zh.chapterWordCounts == [4, 6])
+        let zhAnalysis = try AO3EPUBChapterWordCounter.analyze(epubURL: zhEPUB)
+        #expect(zhAnalysis.wordUnit == .characters)
+        #expect(zhAnalysis.chapterWordCounts == [4, 6])
 
-        #expect(SavedWork.wordUnit(forLanguage: "中文-普通话 國語") == .characters)
-        #expect(SavedWork.wordUnit(forLanguage: "ไทย") == .characters)
-        #expect(SavedWork.wordUnit(forLanguage: "한국어") == .words)
-        #expect(SavedWork.wordUnit(forLanguage: "English") == .words)
+        let refreshedWork = SavedWork(title: "Unlabeled JP", author: "Author")
+        #expect(refreshedWork.wordUnit == .words)
+        refreshedWork.applyLanguageMetadata("日本語")
+        #expect(refreshedWork.wordUnitRaw == SavedWork.WordUnit.characters.rawValue)
+        #expect(refreshedWork.wordUnit == .characters)
 
-        // Insights never mix characters into totalWordsRead or wordsPerHour.
-        let english = SavedWork(title: "EN", author: "A")
+        // 2. Full Insights / Taste / Habits / Library / Timeline separation.
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let now = Date(timeIntervalSince1970: 1_710_000_000)
+        let prevMonthStart = try #require(calendar.date(byAdding: .month, value: -1, to: now))
+        let monthInterval = try #require(calendar.dateInterval(of: .month, for: now))
+
+        let english = SavedWork(title: "EN Fic", author: "A")
         english.language = "English"
         english.wordUnitRaw = SavedWork.WordUnit.words.rawValue
-        english.chapterWordCounts = [5_000, 5_000]
+        english.workFandoms = ["Star Wars"]
+        english.workRelationships = ["A/B"]
+        english.workTags = ["Angst"]
+        english.chapterWordCounts = [10_000]
         english.wordCount = 10_000
+        english.isFinished = true
+        english.dateAdded = now
 
-        let japanese = SavedWork(title: "JA", author: "B")
+        let japanese = SavedWork(title: "JA Fic", author: "B")
         japanese.language = "日本語"
         japanese.wordUnitRaw = SavedWork.WordUnit.characters.rawValue
-        japanese.chapterWordCounts = [12_000, 12_000]
-        japanese.wordCount = 24_000
+        japanese.workFandoms = ["Original Work"]
+        japanese.workRelationships = ["C/D"]
+        japanese.workTags = ["Fluff"]
+        japanese.chapterWordCounts = [20_000]
+        japanese.wordCount = 20_000
+        japanese.isFinished = true
+        japanese.dateAdded = now
 
-        let t0 = Date(timeIntervalSince1970: 1_700_000_000)
-        let enSession = ReadingSession(
+        let unreadJapanese = SavedWork(title: "JA Unread", author: "C")
+        unreadJapanese.language = "日本語"
+        unreadJapanese.wordUnitRaw = SavedWork.WordUnit.characters.rawValue
+        unreadJapanese.wordCount = 50_000
+        unreadJapanese.dateAdded = now
+
+        let hiddenJapanese = SavedWork(title: "Concealed JA", author: "D")
+        hiddenJapanese.language = "日本語"
+        hiddenJapanese.wordUnitRaw = SavedWork.WordUnit.characters.rawValue
+        hiddenJapanese.rating = "Explicit"
+        hiddenJapanese.chapterWordCounts = [15_000]
+        hiddenJapanese.wordCount = 15_000
+
+        let context = try makeContext()
+        context.insert(english)
+        context.insert(japanese)
+        context.insert(unreadJapanese)
+        context.insert(hiddenJapanese)
+
+        // Prior month had ONLY Japanese characters -> `previousPeriodWordsRead` must be `nil`.
+        let prevJA = ReadingSession(
+            workID: japanese.id,
+            startedAt: prevMonthStart,
+            endedAt: prevMonthStart.addingTimeInterval(3_600),
+            durationSeconds: 3_600,
+            startProgress: 0,
+            endingProgress: 1.0,
+            wordCount: 20_000,
+            didFinish: true
+        )
+        let curEN = ReadingSession(
             workID: english.id,
-            startedAt: t0,
-            endedAt: t0.addingTimeInterval(3_600),
+            startedAt: monthInterval.start.addingTimeInterval(3_600),
+            endedAt: monthInterval.start.addingTimeInterval(7_200),
             durationSeconds: 3_600,
             startProgress: 0,
             endingProgress: 1.0,
             wordCount: 10_000,
             didFinish: true
         )
-        let jaSession = ReadingSession(
+        let curJA1 = ReadingSession(
             workID: japanese.id,
-            startedAt: t0.addingTimeInterval(4_000),
-            endedAt: t0.addingTimeInterval(7_600),
+            startedAt: monthInterval.start.addingTimeInterval(10_800),
+            endedAt: monthInterval.start.addingTimeInterval(14_400),
             durationSeconds: 3_600,
             startProgress: 0,
             endingProgress: 1.0,
-            wordCount: 24_000,
+            wordCount: 20_000,
             didFinish: true
         )
+        let hiddenSession = ReadingSession(
+            workID: hiddenJapanese.id,
+            startedAt: monthInterval.start.addingTimeInterval(18_000),
+            endedAt: monthInterval.start.addingTimeInterval(19_800),
+            durationSeconds: 1_800,
+            startProgress: 0,
+            endingProgress: 1.0,
+            wordCount: 15_000,
+            didFinish: false
+        )
+        context.insert(prevJA)
+        context.insert(curEN)
+        context.insert(curJA1)
+        context.insert(hiddenSession)
+        try context.save()
 
-        let facts = ReadingLogService.facts(
-            from: [enSession, jaSession],
+        let previousInterval = try #require(calendar.dateInterval(of: .month, for: prevMonthStart))
+        let overview = ReadingLogService.insights(
+            for: monthInterval,
+            previousPeriod: previousInterval,
+            works: [english, japanese, unreadJapanese],
+            hiddenWorkIDs: [hiddenJapanese.id],
+            calendar: calendar,
+            context: context
+        )
+        #expect(overview.totalWordsRead == 10_000)
+        #expect(overview.charactersRead == 20_000)
+        #expect(overview.wordsPerHour == 10_000)
+        #expect(overview.charactersPerHour == 20_000)
+        #expect(overview.previousPeriodWordsRead == nil)
+        // English fandom share must be 1.0 (100%), not diluted to 10k / (10k + 20k).
+        #expect(overview.fandomWordsShares.first?.name == "Star Wars")
+        #expect(overview.fandomWordsShares.first?.share == 1.0)
+
+        let periodFacts = ReadingLogService.facts(
+            from: [curEN, curJA1],
+            works: [english, japanese],
+            history: [prevJA, curEN, curJA1]
+        )
+        let allFacts = ReadingLogService.facts(
+            from: [prevJA, curEN, curJA1],
             works: [english, japanese]
         )
-        let insights = ReadingInsights.make(facts: facts)
-        #expect(insights.totalWordsRead == 10_000)
-        #expect(insights.charactersRead == 24_000)
-        #expect(insights.wordsPerHour == 10_000)
-        #expect(insights.charactersPerHour == 24_000)
-        #expect(insights.dailyWords.reduce(0) { $0 + $1.words } == 10_000)
+        let taste = ReadingTasteInsights.make(works: [english, japanese], facts: periodFacts)
+        #expect(taste.relationships.map(\.name) == ["A/B"])
+        #expect(taste.tags.map(\.name) == ["Angst"])
+
+        let habits = ReadingHabitsInsights.make(
+            works: [english, japanese],
+            facts: periodFacts,
+            allFacts: allFacts,
+            calendar: calendar
+        )
+        // Japanese work finished twice -> reread entry exists, but word count excludes chars (0).
+        #expect(habits.rereads.first?.id == japanese.id)
+        #expect(habits.rereads.first?.finishCount == 2)
+        #expect(habits.rereads.first?.totalWordsAcrossReads == 0)
+
+        let library = ReadingLibraryInsights.make(
+            works: [english, japanese, unreadJapanese],
+            facts: periodFacts,
+            periodInterval: monthInterval,
+            calendar: calendar
+        )
+        #expect(library.unreadWords == 0)
+        #expect(library.unreadWorksCount == 1)
+        #expect(library.readWordsInPeriod == 10_000)
+        #expect(library.addedWordsInPeriod == 10_000)
+
+        let stats = ReadingStatistics(works: [english, japanese], now: now, calendar: calendar)
+        #expect(stats.wordsRead == 10_000)
+
+        let timeline = ReadingHistoryTimeline.make(
+            scope: .month,
+            containing: monthInterval.start,
+            facts: periodFacts,
+            calendar: calendar
+        )
+        #expect(timeline.wordsRead == 10_000)
+        #expect(timeline.charactersRead == 20_000)
     }
 
-    // MARK: - D3: 10% fallback & revised-chapter non-double-count
+    // MARK: - D3: 10% fallback & revised/shortened chapter handling
 
-    @Test func chapterCountsWithinTenPercentAreUsedElseFallBackToProgressTimesWords() {
+    @Test func chapterCountsValidateWithinTenPercentAndRejectCollapsedTOCsAndMismatchScaling() {
         let withinTolerance = SavedWork(title: "Close", author: "A")
-        withinTolerance.chapterWordCounts = [1_000, 2_000] // sum = 3_000
-        withinTolerance.wordCount = 3_150 // 5% off (<= 10%)
+        withinTolerance.chapterWordCounts = [1_000, 2_000]
+        withinTolerance.wordCount = 3_150
 
         let beyondTolerance = SavedWork(title: "Off", author: "A")
-        beyondTolerance.chapterWordCounts = [1_000, 1_000] // sum = 2_000
-        beyondTolerance.wordCount = 5_000 // 60% off (> 10%)
+        beyondTolerance.chapterWordCounts = [1_000, 1_000]
+        beyondTolerance.wordCount = 5_000
+
+        // Collapsed TOC: 1 entry [500] against AO3 "10/10" (50_000 words) must fall back to legacy.
+        let collapsedTOC = SavedWork(title: "Collapsed", author: "A")
+        collapsedTOC.chapterWordCounts = [500]
+        collapsedTOC.chapters = "10/10"
+        collapsedTOC.wordCount = 50_000
+
+        // Stale 2-ch EPUB after AO3 grew to 5 chapters / 25_000 words: never multiply s2 by 12.5x.
+        let staleWIP = SavedWork(title: "Stale WIP", author: "A")
+        staleWIP.chapterWordCounts = [1_000, 1_000]
+        staleWIP.chapters = "5/?"
+        staleWIP.wordCount = 25_000
 
         let t0 = Date(timeIntervalSince1970: 86_400)
         let s1 = ReadingSession(
@@ -282,75 +459,171 @@ struct InsightsD3D4Tests {
             endingProgress: 0.5,
             wordCount: 5_000
         )
-
-        let read = ReadingLogService.wordsRead(
-            sessions: [s1, s2],
-            works: [withinTolerance, beyondTolerance]
-        )
-        // Within 10%: uses chapterWordCounts (`1_000`, not 0.333 * 3_150 = 1_050).
-        #expect(read[s1.id] == 1_000)
-        // Beyond 10%: falls back to progress * wordCount (`2_500`, not 1_000).
-        #expect(read[s2.id] == 2_500)
-    }
-
-    @Test func revisedChapterAlreadyReadIsNotCountedAgain() {
-        let work = SavedWork(title: "Revised WIP", author: "A")
-        // Chapter 2 originally 1_000 words when user finished 2/2, then revised
-        // to 1_500 words and Chapter 3 (1_000 words) was posted.
-        work.chapterWordCounts = [1_000, 1_500, 1_000]
-        work.wordCount = 3_500
-        work.chapters = "3/?"
-
-        let s1CaughtUp = ReadingSession(
-            workID: work.id,
-            startedAt: Date(timeIntervalSince1970: 86_400),
-            endedAt: Date(timeIntervalSince1970: 90_000),
-            durationSeconds: 3_600,
+        let sCollapsed = ReadingSession(
+            workID: collapsedTOC.id,
+            startedAt: t0,
+            endedAt: t0.addingTimeInterval(600),
+            durationSeconds: 600,
             startProgress: 0,
-            endingProgress: 1.0,
+            endingProgress: 0.5,
+            wordCount: 50_000,
+            chapterCountAtVisit: 10
+        )
+        let sStaleFirst = ReadingSession(
+            workID: staleWIP.id,
+            startedAt: t0,
+            endedAt: t0.addingTimeInterval(600),
+            durationSeconds: 600,
+            startProgress: 0,
+            endingProgress: 0.5,
             wordCount: 2_000,
-            chapterCountAtVisit: 2,
-            didFinish: true
+            chapterCountAtVisit: 2
         )
-        let s2RereadRevisedCh2 = ReadingSession(
-            workID: work.id,
-            startedAt: Date(timeIntervalSince1970: 2 * 86_400),
-            endedAt: Date(timeIntervalSince1970: 2 * 86_400 + 600),
+        let sStaleRefreshed = ReadingSession(
+            workID: staleWIP.id,
+            startedAt: t0.addingTimeInterval(3_600),
+            endedAt: t0.addingTimeInterval(4_200),
             durationSeconds: 600,
-            startProgress: 1_000.0 / 3_500.0,
-            endingProgress: 2_500.0 / 3_500.0,
-            wordCount: 3_500,
-            chapterCountAtVisit: 3,
-            didFinish: false
-        )
-        let s3NewChapter3 = ReadingSession(
-            workID: work.id,
-            startedAt: Date(timeIntervalSince1970: 3 * 86_400),
-            endedAt: Date(timeIntervalSince1970: 3 * 86_400 + 600),
-            durationSeconds: 600,
-            startProgress: 2_500.0 / 3_500.0,
+            startProgress: 0.5,
             endingProgress: 1.0,
-            wordCount: 3_500,
-            chapterCountAtVisit: 3,
-            didFinish: true
+            wordCount: 25_000,
+            chapterCountAtVisit: 5
         )
 
         let read = ReadingLogService.wordsRead(
-            sessions: [s1CaughtUp, s2RereadRevisedCh2, s3NewChapter3],
-            works: [work]
+            sessions: [s1, s2, sCollapsed, sStaleFirst, sStaleRefreshed],
+            works: [withinTolerance, beyondTolerance, collapsedTOC, staleWIP]
         )
-        #expect(read[s1CaughtUp.id] == 2_000)
-        // Revised chapter 2 was already read in s1 -> 0 credited when revisiting.
-        #expect(read[s2RereadRevisedCh2.id] == 0)
-        // Only the unread Chapter 3 (1_000 words) is credited.
-        #expect(read[s3NewChapter3.id] == 1_000)
+        #expect(read[s1.id] == 1_000)
+        #expect(read[s2.id] == 2_500)
+        #expect(read[sCollapsed.id] == 25_000)
+        #expect(read[sStaleFirst.id] == 1_000)
+        #expect(read[sStaleRefreshed.id] == 1_000)
     }
 
-    // MARK: - D4: Mode split, detached Read Aloud, Pace without listening
+    @Test func revisedShortenedAndLegacyZeroChapterCountNeverDoubleCountOrSpill() {
+        // Case A: Revised Ch 2 (1000 -> 1500) + Ch 3 (1000).
+        let revised = SavedWork(title: "Revised", author: "A")
+        revised.chapterWordCounts = [1_000, 1_500, 1_000]
+        revised.wordCount = 3_500
+        revised.chapters = "3/?"
+        let r1 = ReadingSession(
+            workID: revised.id, startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 2_000), durationSeconds: 1_000,
+            startProgress: 0, endingProgress: 1.0, wordCount: 2_000,
+            chapterCountAtVisit: 2, didFinish: true
+        )
+        let r2 = ReadingSession(
+            workID: revised.id, startedAt: Date(timeIntervalSince1970: 3_000),
+            endedAt: Date(timeIntervalSince1970: 3_600), durationSeconds: 600,
+            startProgress: 1_000.0 / 3_500.0, endingProgress: 2_500.0 / 3_500.0,
+            wordCount: 3_500, chapterCountAtVisit: 3
+        )
+        let r3 = ReadingSession(
+            workID: revised.id, startedAt: Date(timeIntervalSince1970: 4_000),
+            endedAt: Date(timeIntervalSince1970: 4_600), durationSeconds: 600,
+            startProgress: 2_500.0 / 3_500.0, endingProgress: 1.0,
+            wordCount: 3_500, chapterCountAtVisit: 3, didFinish: true
+        )
 
-    @Test func modeSwitchMidSittingSplitsIntoSeparateRowsAndPreservesFinishOnce() throws {
+        // Case B: Shortened already-read Ch 2 after finish ([1000, 1500] -> [1000, 800]).
+        let shortenedAfterFinish = SavedWork(title: "Shortened Ch2", author: "A")
+        shortenedAfterFinish.chapterWordCounts = [1_000, 800]
+        shortenedAfterFinish.wordCount = 1_800
+        shortenedAfterFinish.chapters = "2/2"
+        let sf1 = ReadingSession(
+            workID: shortenedAfterFinish.id, startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 2_000), durationSeconds: 1_000,
+            startProgress: 0, endingProgress: 1.0, wordCount: 2_500,
+            chapterCountAtVisit: 2, didFinish: true
+        )
+        let sf2 = ReadingSession(
+            workID: shortenedAfterFinish.id, startedAt: Date(timeIntervalSince1970: 3_000),
+            endedAt: Date(timeIntervalSince1970: 3_600), durationSeconds: 600,
+            startProgress: 1_000.0 / 1_800.0, endingProgress: 1.0, wordCount: 1_800,
+            chapterCountAtVisit: 2
+        )
+
+        // Case C: Legacy session with `chapterCountAtVisit == 0` before Ch 3 posted.
+        let legacyZeroCh = SavedWork(title: "Zero Ch", author: "A")
+        legacyZeroCh.chapterWordCounts = [1_000, 1_000, 1_000]
+        legacyZeroCh.wordCount = 3_000
+        legacyZeroCh.chapters = "3/?"
+        let lz1 = ReadingSession(
+            workID: legacyZeroCh.id, startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 2_000), durationSeconds: 1_000,
+            startProgress: 0, endingProgress: 1.0, wordCount: 2_000,
+            chapterCountAtVisit: 0, didFinish: true
+        )
+        let lz2 = ReadingSession(
+            workID: legacyZeroCh.id, startedAt: Date(timeIntervalSince1970: 3_000),
+            endedAt: Date(timeIntervalSince1970: 3_600), durationSeconds: 600,
+            startProgress: 2_000.0 / 3_000.0, endingProgress: 1.0, wordCount: 3_000,
+            chapterCountAtVisit: 3
+        )
+
+        // Case D: Shortened Ch 1 ([1000, 1000] -> [500, 1000, 1000]) must not spill into Ch 2.
+        let shortenedEarly = SavedWork(title: "No Spill", author: "A")
+        shortenedEarly.chapterWordCounts = [500, 1_000, 1_000]
+        shortenedEarly.wordCount = 2_500
+        shortenedEarly.chapters = "3/?"
+        let se1 = ReadingSession(
+            workID: shortenedEarly.id, startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 1_600), durationSeconds: 600,
+            startProgress: 0, endingProgress: 0.5, wordCount: 2_000,
+            chapterCountAtVisit: 2
+        )
+        let se2 = ReadingSession(
+            workID: shortenedEarly.id, startedAt: Date(timeIntervalSince1970: 2_000),
+            endedAt: Date(timeIntervalSince1970: 3_200), durationSeconds: 1_200,
+            startProgress: 500.0 / 2_500.0, endingProgress: 1.0, wordCount: 2_500,
+            chapterCountAtVisit: 3
+        )
+
+        // Case E: Genuine full reread from 0.0 after a finished WIP gained Ch 3 still counts.
+        let fullReread = SavedWork(title: "Full Reread", author: "A")
+        fullReread.chapterWordCounts = [1_000, 1_000, 1_000]
+        fullReread.wordCount = 3_000
+        fullReread.chapters = "3/3"
+        let fr1 = ReadingSession(
+            workID: fullReread.id, startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 2_000), durationSeconds: 1_000,
+            startProgress: 0, endingProgress: 1.0, wordCount: 2_000,
+            chapterCountAtVisit: 2, didFinish: true
+        )
+        let fr2 = ReadingSession(
+            workID: fullReread.id, startedAt: Date(timeIntervalSince1970: 3_000),
+            endedAt: Date(timeIntervalSince1970: 4_800), durationSeconds: 1_800,
+            startProgress: 0.0, endingProgress: 1.0, wordCount: 3_000,
+            chapterCountAtVisit: 3, didFinish: true
+        )
+
+        let read = ReadingLogService.wordsRead(
+            sessions: [r1, r2, r3, sf1, sf2, lz1, lz2, se1, se2, fr1, fr2],
+            works: [revised, shortenedAfterFinish, legacyZeroCh, shortenedEarly, fullReread]
+        )
+        #expect(read[r1.id] == 2_000)
+        #expect(read[r2.id] == 0)
+        #expect(read[r3.id] == 1_000)
+
+        #expect(read[sf1.id] == 2_500)
+        #expect(read[sf2.id] == 0)
+
+        #expect(read[lz1.id] == 2_000)
+        #expect(read[lz2.id] == 1_000)
+
+        #expect(read[se1.id] == 1_000)
+        #expect(read[se2.id] == 2_000)
+
+        #expect(read[fr1.id] == 2_000)
+        #expect(read[fr2.id] == 3_000)
+    }
+
+    // MARK: - D4: Mode split, sub-15s guard, pause/finish preservation & speech wiring
+
+    @Test func modeSwitchMidSittingSplitsDropsSub15sKeepsPausedAndPreservesFinish() throws {
         ReadingLogService.resetOpenSessionsForTests()
-        let context = try context()
+        let context = try makeContext()
         let work = SavedWork(title: "Mixed Sitting", author: "A")
         work.wordCount = 10_000
         context.insert(work)
@@ -358,129 +631,175 @@ struct InsightsD3D4Tests {
 
         let t0 = Date(timeIntervalSince1970: 100_000)
         ReadingLogService.startSession(for: work, now: t0)
-        // Read silently for 60s -> reach 0.30.
-        ReadingLogService.noteActivity(for: work, now: t0.addingTimeInterval(60))
-        work.readiumLocator = #"{"locations":{"totalProgression":0.3}}"#
+        // Sub-15s pre-switch (5s) where finish flips: must NOT emit a <15s row and
+        // must carry `wasFinishedAtStart` so the following >=15s segment records `didFinish`.
+        ReadingLogService.noteActivity(for: work, now: t0.addingTimeInterval(5))
         work.isFinished = true
         ReadingLogService.setMode(
-            .listen, for: work, playbackRate: 1.25, now: t0.addingTimeInterval(60)
+            .listen, for: work, playbackRate: 1.25, now: t0.addingTimeInterval(5)
         )
-
-        // Listen for 90s -> reach 0.65.
-        ReadingLogService.noteActivity(for: work, now: t0.addingTimeInterval(150))
-        work.readiumLocator = #"{"locations":{"totalProgression":0.65}}"#
-        ReadingLogService.setMode(.read, for: work, now: t0.addingTimeInterval(150))
-
-        // Finish with 30s of reading -> end at 0.80.
-        ReadingLogService.noteActivity(for: work, now: t0.addingTimeInterval(180))
+        ReadingLogService.noteActivity(for: work, now: t0.addingTimeInterval(35))
+        work.readiumLocator = #"{"locations":{"totalProgression":0.4}}"#
+        ReadingLogService.setMode(.read, for: work, now: t0.addingTimeInterval(35))
+        ReadingLogService.noteActivity(for: work, now: t0.addingTimeInterval(65))
         work.readiumLocator = #"{"locations":{"totalProgression":0.8}}"#
-        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(180))
+        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(65))
 
         let rows = try context.fetch(
             FetchDescriptor<ReadingSession>(sortBy: [SortDescriptor(\.startedAt)])
         )
-        #expect(rows.count == 3)
-        #expect(rows[0].mode == .read)
-        #expect(rows[0].playbackRate == nil)
-        #expect(rows[0].durationSeconds == 60)
-        #expect(rows[0].endingProgress == 0.3)
+        #expect(rows.count == 2)
+        #expect(rows[0].mode == .listen)
+        #expect(rows[0].durationSeconds == 30)
         #expect(rows[0].didFinish)
-
-        #expect(rows[1].mode == .listen)
-        #expect(rows[1].playbackRate == 1.25)
-        #expect(rows[1].durationSeconds == 90)
-        #expect(rows[1].startProgress == 0.3)
-        #expect(rows[1].endingProgress == 0.65)
-        // Segment 1 already recorded the finish; subsequent split segments do not double-count.
+        #expect(rows[1].mode == .read)
+        #expect(rows[1].durationSeconds == 30)
+        #expect(rows[1].startProgress == 0.4)
         #expect(!rows[1].didFinish)
-
-        #expect(rows[2].mode == .read)
-        #expect(rows[2].playbackRate == nil)
-        #expect(rows[2].durationSeconds == 30)
-        #expect(rows[2].startProgress == 0.65)
-        #expect(rows[2].endingProgress == 0.8)
-        #expect(!rows[2].didFinish)
         #expect(ReadingLogService.finishCount(of: work.id, in: context) == 1)
+
+        // Switching mode while paused keeps the replacement segment paused.
+        let t1 = Date(timeIntervalSince1970: 200_000)
+        ReadingLogService.startSession(for: work, now: t1)
+        ReadingLogService.pauseSession(for: work, now: t1.addingTimeInterval(20))
+        ReadingLogService.setMode(.listen, for: work, playbackRate: 1.5, now: t1.addingTimeInterval(30))
+        ReadingLogService.endSession(for: work, now: t1.addingTimeInterval(90))
+        let allRows = try context.fetch(
+            FetchDescriptor<ReadingSession>(sortBy: [SortDescriptor(\.startedAt)])
+        )
+        // Paused `.listen` segment had 0 active seconds -> dropped, only the 20s `.read` row saved.
+        #expect(allRows.count == 3)
+        #expect(allRows.last?.mode == .read)
+        #expect(allRows.last?.durationSeconds == 20)
     }
 
-    @Test func detachedReadAloudKeepsListeningSessionOpenAndClosesOnStop() throws {
+    @Test func readSpeechControllerAutoAdvanceDetachedReopenBackgroundAndAudition() throws {
         ReadingLogService.resetOpenSessionsForTests()
-        let context = try context()
-        let work = SavedWork(title: "Detached Audio", author: "A")
-        work.wordCount = 8_000
+        let context = try makeContext()
+        let work = SavedWork(title: "Speech Wired", author: "A")
         context.insert(work)
         try context.save()
 
-        let t0 = Date(timeIntervalSince1970: 200_000)
-        ReadingLogService.startSession(for: work, now: t0)
-        // User enables Read Aloud right away and exits the reader 20s later.
-        ReadingLogService.setMode(.listen, for: work, playbackRate: 1.5, now: t0)
-        ReadingLogService.noteActivity(for: work, now: t0.addingTimeInterval(20))
-        ReadingLogService.handleReaderClose(
-            for: work,
-            detachListening: true,
-            isSpeechPlaying: true,
-            playbackRate: 1.5,
-            now: t0.addingTimeInterval(20)
+        var clock = Date(timeIntervalSince1970: 300_000)
+        let controller = ReaderSpeechController()
+        controller.onStatusTransition = { _, newStatus, isReaderOpen in
+            let state: ReadingLogService.DetachedSpeechState = switch newStatus {
+            case .playing: .playing
+            case .paused: .paused
+            case .stopped, .unavailable: .stopped
+            }
+            ReadingLogService.handleSpeechStatusChange(
+                state,
+                isReaderOpen: isReaderOpen,
+                isBackgrounded: false,
+                for: work,
+                playbackRate: 1.25,
+                now: clock
+            )
+        }
+
+        var canAdvanceChapter = true
+        controller.seedSessionForTests(
+            workID: work.id,
+            status: .playing,
+            isReaderOpen: true,
+            onSkipNext: { canAdvanceChapter }
         )
-        #expect(ReadingLogService.hasOpenSession(for: work.id))
+        ReadingLogService.handleReaderOpen(
+            for: work,
+            isSpeechPlaying: controller.status == .playing,
+            isSpeechStopped: false,
+            playbackRate: 1.25,
+            now: clock
+        )
+
+        // Chapter 1 finishes in 10s (<15s) and auto-advances to Chapter 2 -> MUST NOT
+        // flip status to `.stopped`, drop the <15s chapter, or split the sitting.
+        clock = clock.addingTimeInterval(10)
+        controller.handleEngineStatusChange(.stopped)
+        #expect(controller.status == .playing)
         #expect(ReadingLogService.openSessionMode(for: work.id) == .listen)
 
-        // Detached playback continues for 40s then pauses on mini player (20+40 = 60s).
-        ReadingLogService.noteActivity(for: work, now: t0.addingTimeInterval(60))
-        ReadingLogService.handleDetachedSpeech(
-            .paused, for: work, playbackRate: 1.5, now: t0.addingTimeInterval(60)
+        // Background pause while reader is still open must flush/pause synchronously.
+        clock = clock.addingTimeInterval(20)
+        ReadingLogService.handleSpeechStatusChange(
+            .paused, isReaderOpen: true, isBackgrounded: true, for: work,
+            playbackRate: 1.25, now: clock
         )
-        let afterPause = try context.fetch(FetchDescriptor<ReadingSession>())
-        #expect(afterPause.count == 1)
-        #expect(afterPause.first?.mode == .listen)
-        #expect(afterPause.first?.durationSeconds == 60)
+        let flushed = try context.fetch(FetchDescriptor<ReadingSession>())
+        #expect(flushed.count == 1)
+        #expect(flushed.first?.mode == .listen)
+        #expect(flushed.first?.durationSeconds == 30)
 
-        // Paused idle gap [60..120], then resumed [120..150] (30s) and stopped.
-        ReadingLogService.handleDetachedSpeech(
-            .playing, for: work, playbackRate: 1.5, now: t0.addingTimeInterval(120)
+        // Auditioning a sample while detached paused session exists must not end it.
+        controller.seedSessionForTests(
+            workID: work.id, status: .paused, isReaderOpen: false, isAuditioning: true
         )
-        ReadingLogService.noteActivity(for: work, now: t0.addingTimeInterval(150))
-        ReadingLogService.handleDetachedSpeech(
-            .stopped, for: work, playbackRate: 1.5, now: t0.addingTimeInterval(150)
-        )
-        #expect(!ReadingLogService.hasOpenSession(for: work.id))
+        controller.handleEngineStatusChange(.stopped)
+        #expect(ReadingLogService.hasOpenSession(for: work.id))
 
-        let finalRows = try context.fetch(FetchDescriptor<ReadingSession>())
-        #expect(finalRows.count == 1)
-        #expect(finalRows.first?.mode == .listen)
-        #expect(finalRows.first?.playbackRate == 1.5)
-        #expect(finalRows.first?.durationSeconds == 90)
-        #expect(finalRows.first?.activeSeconds == 90)
+        // Re-opening reader while detached Read Aloud is `.paused` must resume tracking.
+        clock = clock.addingTimeInterval(60)
+        ReadingLogService.handleReaderOpen(
+            for: work, isSpeechPlaying: false, isSpeechStopped: false,
+            playbackRate: 1.25, now: clock
+        )
+        clock = clock.addingTimeInterval(40)
+        ReadingLogService.noteActivity(for: work, now: clock)
+
+        // Last chapter ends (`onSkipNext` returns false) while open -> splits back to `.read`.
+        controller.seedSessionForTests(
+            workID: work.id, status: .playing, isReaderOpen: true, onSkipNext: { false }
+        )
+        canAdvanceChapter = false
+        controller.handleEngineStatusChange(.stopped)
+        #expect(controller.status == .stopped)
+        #expect(ReadingLogService.openSessionMode(for: work.id) == .read)
+
+        clock = clock.addingTimeInterval(25)
+        ReadingLogService.endSession(for: work, now: clock)
+        let finalRows = try context.fetch(
+            FetchDescriptor<ReadingSession>(sortBy: [SortDescriptor(\.startedAt)])
+        )
+        #expect(finalRows.count == 2)
+        #expect(finalRows[0].mode == .listen)
+        #expect(finalRows[0].durationSeconds == 70)
+        #expect(finalRows[1].mode == .read)
+        #expect(finalRows[1].durationSeconds == 25)
     }
 
-    @Test func paceExcludesListeningSittingsWhileKeepingListeningTimeInTotal() {
+    @Test func paceExcludesListeningUsingRealReadingSessionRows() {
+        let work = SavedWork(title: "Mixed Pace", author: "A")
+        work.wordCount = 20_000
         let t0 = Date(timeIntervalSince1970: 1_700_000_000)
-        let readFact = ReadingSessionFacts(
-            workID: UUID(),
+
+        let readRow = ReadingSession(
+            workID: work.id,
             startedAt: t0,
+            endedAt: t0.addingTimeInterval(1_800),
             durationSeconds: 1_800,
-            wordCount: 20_000,
-            didFinish: false,
-            wordsRead: 10_000,
-            mode: .read,
-            wordUnit: .words
+            startProgress: 0,
+            modeRaw: "read",
+            endingProgress: 0.5,
+            wordCount: 20_000
         )
-        let listenFact = ReadingSessionFacts(
-            workID: UUID(),
+        let listenRow = ReadingSession(
+            workID: work.id,
             startedAt: t0.addingTimeInterval(3_600),
+            endedAt: t0.addingTimeInterval(7_200),
             durationSeconds: 3_600,
+            startProgress: 0.5,
+            modeRaw: "listen",
+            endingProgress: 0.95,
             wordCount: 20_000,
-            didFinish: true,
-            wordsRead: 9_000,
-            mode: .listen,
-            wordUnit: .words
+            didFinish: false
         )
 
-        #expect(ReadingInsights.wordsPerHour(of: [readFact, listenFact]) == 20_000)
-        #expect(ReadingInsights.wordsPerHour(of: [listenFact]) == 0)
+        #expect(ReadingLogService.wordsPerHour(sessions: [readRow, listenRow], works: [work]) == 20_000)
+        #expect(ReadingLogService.wordsPerHour(sessions: [listenRow], works: [work]) == 0)
 
-        let insights = ReadingInsights.make(facts: [readFact, listenFact])
+        let facts = ReadingLogService.facts(from: [readRow, listenRow], works: [work])
+        let insights = ReadingInsights.make(facts: facts)
         #expect(insights.wordsPerHour == 20_000)
         #expect(insights.totalWordsRead == 19_000)
         #expect(insights.silentReadingSeconds == 1_800)
