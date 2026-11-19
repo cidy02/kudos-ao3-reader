@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 /// Time budgets offered on `Queue-TimeFit.dc.html`: `15 min`, `30 min`, `1 h`, `2 h +`.
 enum WhatFitsBucket: String, CaseIterable, Identifiable, Hashable {

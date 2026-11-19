@@ -249,6 +249,7 @@ struct SmartQueuePersistenceTests {
                 in: local
             )
             queue.dateUpdated = Date(timeIntervalSince1970: 1_000)
+            queue.lastMembershipChangedAt = Date(timeIntervalSince1970: 1_000)
             let story = work("Short Story", words: 4_000)
             local.insert(story)
             try local.save()
@@ -269,7 +270,8 @@ struct SmartQueuePersistenceTests {
             // `smartRulesJSON` absent, and a newer edit timestamp so `incomingWins` is true.
             exportedQueues[index]["kindRaw"] = ReadingQueueKind.custom.rawValue
             exportedQueues[index]["name"] = "Renamed on Old iOS"
-            exportedQueues[index]["dateUpdated"] = "2099-01-01T00:00:00.000Z"
+            exportedQueues[index]["dateUpdated"] = "2026-11-02T00:00:00.000Z"
+            exportedQueues[index]["lastMembershipChangedAt"] = "2026-11-02T00:00:00.000Z"
             exportedQueues[index].removeValue(forKey: "smartRulesJSON")
             root["readingQueues"] = exportedQueues
 
@@ -331,14 +333,15 @@ struct SmartQueuePersistenceTests {
             "searchID": savedSearch.id.uuidString,
             "newResultCount": 2
         ]]
-        exportedQueues[index]["searchSourcesModifiedAt"] = "2099-01-01T00:00:00.000Z"
+        exportedQueues[index]["searchSourcesModifiedAt"] = "2026-11-02T00:00:00.000Z"
+        exportedQueues[index]["dateUpdated"] = "2026-11-02T00:00:00.000Z"
         root["readingQueues"] = exportedQueues
         root["readingQueueMemberships"] = [[
             "id": UUID().uuidString,
             "queueID": smartQueue.id.uuidString,
             "workID": story.id.uuidString,
             "queuedAt": "2026-11-01T00:00:00.000Z",
-            "lastModifiedAt": "2099-01-01T00:00:00.000Z",
+            "lastModifiedAt": "2026-11-02T00:00:00.000Z",
             "sortOrderInQueue": 0,
             "note": ""
         ]]
@@ -371,6 +374,18 @@ struct SmartQueuePersistenceTests {
             #expect(!restoredWork.isKeptOffline)
             #expect(WorkDownload.keeper(of: restoredWork) == nil)
         }
+
+        // Also test reconciling against a pre-existing local smart queue.
+        let existingSummary = try KudosBackupService.restore(
+            KudosBackupContents(manifest: taintedManifest),
+            into: source,
+            defaults: try defaults(),
+            mode: .reconcile
+        )
+        #expect(existingSummary.skippedSmartQueueMemberships == 1)
+        #expect(smartQueue.keepsWorksOffline == false)
+        #expect(smartQueue.memberships.isEmpty)
+        #expect(smartQueue.searchLinks.isEmpty)
 
         // Newly created smart queue whose archive omits `keepsWorksOffline` still gets `false`.
         var omittedOfflineQueues = exportedQueues
