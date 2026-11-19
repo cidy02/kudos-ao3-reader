@@ -269,13 +269,15 @@ struct FandomWorksView: View {
                     // Once per render: each call re-parses every date on the page.
                     let dividerID = dividerAfterWorkID
                     if let line = ReaderResponseCopy.rankedWorksLine(
-                        loaded: results.count,
+                        loaded: partition.ranked.count,
                         rank: ranking.settings.rank,
                         seenBeforeLine: partition.seenBeforeLine
                     ) {
                         Section {
                             RankedWorksCaption(text: line)
-                                .bareListRow()
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
                         }
                     }
                     Section {
@@ -921,13 +923,15 @@ struct TagWorksView: View {
                     }
                     let partition = ranking.partitioned(results)
                     if let line = ReaderResponseCopy.rankedWorksLine(
-                        loaded: results.count,
+                        loaded: partition.ranked.count,
                         rank: ranking.settings.rank,
                         seenBeforeLine: partition.seenBeforeLine
                     ) {
                         Section {
                             RankedWorksCaption(text: line)
-                                .bareListRow()
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
                         }
                     }
                     Section {

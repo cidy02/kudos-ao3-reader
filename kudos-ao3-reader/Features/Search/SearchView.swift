@@ -492,13 +492,15 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     let partition = ranking.partitioned(results)
 
                     if let line = ReaderResponseCopy.rankedWorksLine(
-                        loaded: results.count,
+                        loaded: partition.ranked.count,
                         rank: ranking.settings.rank,
                         seenBeforeLine: partition.seenBeforeLine
                     ) {
                         Section {
                             RankedWorksCaption(text: line)
-                                .bareListRow()
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
                         }
                     }
 

@@ -143,6 +143,7 @@ struct RankedWorksCaption: View {
             .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, SubjectMetrics.gutter)
             .accessibilityLabel(text)
     }
 }
