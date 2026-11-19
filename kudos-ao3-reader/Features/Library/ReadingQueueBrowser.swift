@@ -701,7 +701,7 @@ struct ReadingQueueBrowserView: View {
         HStack(spacing: 0) {
             List {
                 ForEach(orderedQueues) { queue in
-                    queueRow(queue, snapshot: snapshot)
+                    queueRow(queue, snapshot: snapshot) { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
                 }
                 .appThemedRows()
                 Button {

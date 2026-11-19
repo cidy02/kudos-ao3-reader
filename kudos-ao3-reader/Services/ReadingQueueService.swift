@@ -199,9 +199,11 @@ enum ReadingQueueService {
         }
     }
 
-    static func orderedWorks(in queue: ReadingQueue) -> [SavedWork] {
+    /// `include` (smart queues only) runs before the rules' limit; pass the Hide
+    /// Mature check wherever the result is counted or acted on.
+    static func orderedWorks(in queue: ReadingQueue, where include: ((SavedWork) -> Bool)? = nil) -> [SavedWork] {
         if queue.kind == .smart {
-            return smartWorks(in: queue)
+            return smartWorks(in: queue, where: include)
         }
         return orderedMemberships(in: queue).compactMap(\.work)
     }
@@ -222,9 +224,9 @@ enum ReadingQueueService {
     /// Library works that match the queue's rules, in the document's order.
     /// A missing context, a nil document, or JSON this build cannot read
     /// matches nothing and does not rewrite `smartRulesJSON`.
-    static func smartWorks(in queue: ReadingQueue) -> [SavedWork] {
+    static func smartWorks(in queue: ReadingQueue, where include: ((SavedWork) -> Bool)? = nil) -> [SavedWork] {
         guard queue.kind == .smart, let context = queue.modelContext else { return [] }
-        return SmartLibrarySnapshot(in: context).matching(queue)
+        return SmartLibrarySnapshot(in: context).matching(queue, where: include)
     }
 
     /// `hue` is 1j's colour swatch: `nil` leaves the queue taking its colour from

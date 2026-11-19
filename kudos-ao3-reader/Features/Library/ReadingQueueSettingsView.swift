@@ -32,6 +32,9 @@ struct ReadingQueueSettingsView: View {
     var onShowOnlyTag: (Tag) -> Void = { _ in }
 
     @Environment(\.modelContext) private var context
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Environment(ThemeManager.self) private var themeManager
     /// The shared vocabulary "Manage all tags" counts.
     @Query private var allTags: [Tag]
@@ -56,7 +59,8 @@ struct ReadingQueueSettingsView: View {
                 works: libraryWorks,
                 aliases: TagAliasResolver(models: tagAliases)
             )
-            return snapshot.matching(queue)
+            // Hide Mature before the limit, as on the queue page: these facts describe what the reader sees.
+            return snapshot.matching(queue) { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
         }
         return ReadingQueueService.orderedMemberships(in: queue).compactMap(\.work)
     }

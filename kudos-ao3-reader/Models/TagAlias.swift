@@ -104,7 +104,8 @@ nonisolated struct TagAliasResolver: Equatable, Sendable {
 
         self.canonicalByKey = canonicalMap
         var folded: [LookupKey: String] = [:]
-        for (key, canonical) in canonicalMap {
+        // Sorted, so when several casings fold together the same one wins every launch.
+        for (key, canonical) in canonicalMap.sorted(by: { $0.key.name < $1.key.name }) {
             let lower = LookupKey(kind: key.kind, name: key.name.lowercased())
             if folded[lower] == nil { folded[lower] = canonical }
         }
