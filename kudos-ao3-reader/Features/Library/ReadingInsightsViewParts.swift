@@ -200,6 +200,7 @@ struct WordsPerDayCard: View {
 struct WhereTheWordsWentCard: View {
     let fandoms: [ReadingInsights.FandomWordsShare]
     let discreetMode: Bool
+    var discreetMasker: InsightsDiscreetMasker = .empty
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -243,7 +244,7 @@ struct WhereTheWordsWentCard: View {
                             .fill(fandomColor(for: f))
                             .frame(width: 10, height: 10)
 
-                        let displayName = discreetMode && !f.isRemainder ? "Fandom \(index + 1)" : f.name
+                        let displayName = discreetMode && !f.isRemainder ? discreetMasker.fandom(f.name) : f.name
                         Text(displayName)
                             .font(.subheadline)
                             .lineLimit(1)
@@ -455,6 +456,7 @@ struct LengthOfWhatYouReadCard: View {
 struct FinishedInPeriodSection: View {
     let works: [SavedWork]
     let discreetMode: Bool
+    var discreetMasker: InsightsDiscreetMasker = .empty
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -486,14 +488,14 @@ struct FinishedInPeriodSection: View {
                                         Circle()
                                             .fill(fandomColor(for: fandom))
                                             .frame(width: 8, height: 8)
-                                        let displayName = discreetMode ? "Fandom" : fandom
+                                        let displayName = discreetMode ? discreetMasker.fandom(fandom) : fandom
                                         Text(displayName)
                                             .font(.caption2)
                                             .foregroundStyle(.secondaryInk)
                                     }
                                 }
 
-                                Text(discreetMode ? "Work \(index + 1)" : work.title)
+                                Text(discreetMode ? discreetMasker.work(id: work.id, title: work.title) : work.title)
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(.primary)
                                     .lineLimit(1)
@@ -546,15 +548,48 @@ struct FinishedInPeriodSection: View {
     }
 }
 
-
 // MARK: - Taste Cards
 
 struct YourUsualFicCard: View {
     let taste: ReadingTasteInsights
     let discreetMode: Bool
+    var discreetMasker: InsightsDiscreetMasker = .empty
     @Environment(ThemeManager.self) private var theme
 
+    private var displayedChips: [String] {
+        guard discreetMode else { return taste.usualFicTags }
+        if !taste.usualChips.isEmpty {
+            return taste.usualChips.map { chip in
+                switch chip.kind {
+                case .metadata: return chip.text
+                case .tag: return discreetMasker.tag(chip.text)
+                case .ship: return discreetMasker.ship(chip.text)
+                }
+            }
+        }
+        return taste.usualFicTags.indices.map { index in
+            "Tag \(InsightsDiscreetMasker.letterCode(for: index))"
+        }
+    }
+
     var body: some View {
+        let status = discreetMode ? discreetMasker : InsightsDiscreetMasker.empty
+        let summaryText: String = {
+            if !discreetMode { return taste.usualFicSummary }
+            let workStatus = taste.usualStatus.isEmpty ? "complete" : taste.usualStatus
+            let rating = taste.usualRating.isEmpty ? "Teen" : taste.usualRating
+            let cat = taste.usualCategory.isEmpty ? "F/M" : taste.usualCategory
+            let topTag = taste.usualTopTag.map { status.tag($0) } ?? "Tag A"
+            let topFandom = taste.usualTopFandom.map { status.fandom($0) } ?? "Fandom A"
+            let topRel = taste.usualTopRelationship.map { status.ship($0) } ?? ""
+            let extraTags = taste.usualExtraTagNames.map { status.tag($0) }.joined(separator: " and ")
+            if !topRel.isEmpty && !extraTags.isEmpty {
+                return "A \(workStatus), \(rating)-rated \(cat) \(topTag) in \(topFandom), "
+                    + "50–150k words long, with \(topRel), \(extraTags)."
+            }
+            return "A \(workStatus), \(rating)-rated \(cat) \(topTag) in \(topFandom)."
+        }()
+
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Your Usual Fic")
@@ -566,15 +601,16 @@ struct YourUsualFicCard: View {
                     .foregroundStyle(.secondaryInk)
             }
 
-            Text(taste.usualFicSummary)
+            Text(summaryText)
                 .font(.system(.title3, design: .serif))
                 .lineSpacing(4)
                 .foregroundStyle(.primary)
 
-            if !taste.usualFicTags.isEmpty {
+            let chips = displayedChips
+            if !chips.isEmpty {
                 FlowLayout(spacing: 6) {
-                    ForEach(Array(taste.usualFicTags.enumerated()), id: \.offset) { index, tag in
-                        Text(discreetMode ? "Tag \(index + 1)" : tag)
+                    ForEach(chips.indices, id: \.self) { index in
+                        Text(chips[index])
                             .font(.caption2.weight(.medium))
                             .padding(.horizontal, 9)
                             .padding(.vertical, 4)
@@ -606,6 +642,7 @@ struct TasteFandomsCard: View {
     let rankByWorks: Bool
     let onToggleRank: () -> Void
     let discreetMode: Bool
+    var discreetMasker: InsightsDiscreetMasker = .empty
     @Environment(ThemeManager.self) private var theme
 
     private var sortedFandoms: [ReadingInsights.FandomWordsShare] {
@@ -657,7 +694,7 @@ struct TasteFandomsCard: View {
 
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .firstTextBaseline) {
-                            let name = discreetMode && !f.isRemainder ? "Fandom \(index + 1)" : f.name
+                            let name = discreetMode && !f.isRemainder ? discreetMasker.fandom(f.name) : f.name
                             Text(name)
                                 .font(.subheadline)
                                 .lineLimit(1)
@@ -716,6 +753,7 @@ struct TasteRelationshipsCard: View {
     let relationships: [RelationshipShare]
     let shipConcentrations: [ShipConcentration]
     let discreetMode: Bool
+    var discreetMasker: InsightsDiscreetMasker = .empty
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -743,7 +781,7 @@ struct TasteRelationshipsCard: View {
                             .clipShape(RoundedRectangle(cornerRadius: 8))
 
                         VStack(alignment: .leading, spacing: 2) {
-                            let name = discreetMode ? "Ship \(index + 1)" : rel.name
+                            let name = discreetMode ? discreetMasker.ship(rel.name) : rel.name
                             Text(name)
                                 .font(.subheadline)
                                 .lineLimit(1)
@@ -752,7 +790,8 @@ struct TasteRelationshipsCard: View {
                                 Circle()
                                     .fill(fandomColor(for: rel.fandom))
                                     .frame(width: 6, height: 6)
-                                Text("\(rel.isRomantic ? "Romantic" : "Platonic") · \(discreetMode ? "Fandom" : rel.fandom) · \(rel.worksCount) \(rel.worksCount == 1 ? "work" : "works")")
+                                let fandomLabel = discreetMode ? discreetMasker.fandom(rel.fandom) : rel.fandom
+                                Text("\(rel.isRomantic ? "Romantic" : "Platonic") · \(fandomLabel) · \(rel.worksCount) \(rel.worksCount == 1 ? "work" : "works")")
                                     .font(.caption2)
                                     .foregroundStyle(.secondaryInk)
                             }
@@ -778,7 +817,7 @@ struct TasteRelationshipsCard: View {
 
                         ForEach(shipConcentrations) { ship in
                             HStack(spacing: 8) {
-                                let displayName = discreetMode ? "Fandom" : ship.fandom
+                                let displayName = discreetMode ? discreetMasker.fandom(ship.fandom) : ship.fandom
                                 Text(displayName)
                                     .font(.caption)
                                     .lineLimit(1)
@@ -827,6 +866,7 @@ struct TasteRelationshipsCard: View {
 struct TasteCharactersCard: View {
     let characters: [ReadingTasteInsights.CharacterShare]
     let discreetMode: Bool
+    var discreetMasker: InsightsDiscreetMasker = .empty
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -837,12 +877,12 @@ struct TasteCharactersCard: View {
                 .padding(.horizontal, 4)
 
             FlowLayout(spacing: 8) {
-                ForEach(Array(characters.prefix(9).enumerated()), id: \.element.id) { index, char in
+                ForEach(Array(characters.prefix(9).enumerated()), id: \.element.id) { _, char in
                     HStack(spacing: 6) {
                         Circle()
                             .fill(fandomColor(for: char.fandom))
                             .frame(width: 7, height: 7)
-                        let displayName = discreetMode ? "Character \(index + 1)" : char.name
+                        let displayName = discreetMode ? discreetMasker.character(char.name) : char.name
                         Text(displayName)
                             .font(.footnote)
                             .foregroundStyle(.primary)
@@ -874,6 +914,7 @@ struct TasteTagsCard: View {
     let tags: [ReadingTasteInsights.TagShare]
     let oftenTogether: [TagPair]
     let discreetMode: Bool
+    var discreetMasker: InsightsDiscreetMasker = .empty
     @Environment(ThemeManager.self) private var theme
 
     private var maxWords: Int {
@@ -897,7 +938,7 @@ struct TasteTagsCard: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            let name = discreetMode ? "Tag \(index + 1)" : tag.name
+                            let name = discreetMode ? discreetMasker.tag(tag.name) : tag.name
                             Text(name)
                                 .font(.subheadline)
                                 .lineLimit(1)
@@ -934,7 +975,10 @@ struct TasteTagsCard: View {
 
                         ForEach(oftenTogether) { pair in
                             HStack {
-                                Text("\(pair.tagA) + \(pair.tagB)")
+                                let label = discreetMode
+                                    ? "\(discreetMasker.tag(pair.tagA)) + \(discreetMasker.tag(pair.tagB))"
+                                    : "\(pair.tagA) + \(pair.tagB)"
+                                Text(label)
                                     .font(.caption)
                                     .foregroundStyle(.secondaryInk)
                                     .lineLimit(1)
@@ -1131,6 +1175,7 @@ struct HabitsTimeOfDayCard: View {
     let hourly: [ReadingInsights.HourlyBucket]
     let lateNightDuration: Double
     let lateNightSharePercent: Int
+    var hideReadingTime: Bool = false
     @Environment(ThemeManager.self) private var theme
 
     private var maxSeconds: Double {
@@ -1178,7 +1223,8 @@ struct HabitsTimeOfDayCard: View {
                 .foregroundStyle(.secondaryInk)
             }
 
-            Text("Late night, 1:00–5:00: \(ReadingInsights.durationLabel(lateNightDuration)) (\(lateNightSharePercent)%)")
+            let durationText = hideReadingTime ? "—" : ReadingInsights.durationLabel(lateNightDuration)
+            Text("Late night, 1:00–5:00: \(durationText) (\(lateNightSharePercent)%)")
                 .font(.footnote)
                 .foregroundStyle(.secondaryInk)
         }
@@ -1289,6 +1335,7 @@ struct HabitsCalendarCard: View {
 struct HabitsSittingsCard: View {
     let sittings: [ReadingInsights.SittingBucket]
     let typicalSeconds: Double
+    var hideReadingTime: Bool = false
     @Environment(ThemeManager.self) private var theme
 
     private var maxCount: Int {
@@ -1333,7 +1380,7 @@ struct HabitsSittingsCard: View {
                 .overlay(theme.appTheme.cardBorder)
 
             HStack {
-                statColumn(label: "Typical sitting", value: ReadingInsights.durationLabel(typicalSeconds))
+                statColumn(label: "Typical sitting", value: hideReadingTime ? "—" : ReadingInsights.durationLabel(typicalSeconds))
             }
         }
         .padding(16)
@@ -1439,6 +1486,7 @@ struct HabitsSavedToFinishedCard: View {
 struct HabitsRereadsCard: View {
     let rereads: [ReadingHabitsInsights.RereadWork]
     let discreetMode: Bool
+    var discreetMasker: InsightsDiscreetMasker = .empty
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -1463,10 +1511,10 @@ struct HabitsRereadsCard: View {
 
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(discreetMode ? "Work \(index + 1)" : work.title)
+                                Text(discreetMode ? discreetMasker.work(id: work.id, title: work.title) : work.title)
                                     .font(.subheadline.weight(.semibold))
                                     .lineLimit(1)
-                                Text("\(discreetMode ? "Fandom" : work.fandom) · \(work.totalWordsAcrossReads.formatted()) words across reads")
+                                Text("\(discreetMode ? discreetMasker.fandom(work.fandom) : work.fandom) · \(work.totalWordsAcrossReads.formatted()) words across reads")
                                     .font(.caption2)
                                     .foregroundStyle(.secondaryInk)
                             }
@@ -1494,6 +1542,7 @@ struct HabitsRereadsCard: View {
 struct HabitsFandomTimelineCard: View {
     let lanes: [ReadingHabitsInsights.FandomTimelineLane]
     let discreetMode: Bool
+    var discreetMasker: InsightsDiscreetMasker = .empty
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -1508,9 +1557,9 @@ struct HabitsFandomTimelineCard: View {
                     .foregroundStyle(.secondaryInk)
             } else {
                 VStack(spacing: 8) {
-                    ForEach(Array(lanes.enumerated()), id: \.element.id) { index, lane in
+                    ForEach(Array(lanes.enumerated()), id: \.element.id) { _, lane in
                         HStack(spacing: 6) {
-                            Text(discreetMode ? "Fandom \(index + 1)" : lane.name)
+                            Text(discreetMode ? discreetMasker.fandom(lane.name) : lane.name)
                                 .font(.caption)
                                 .lineLimit(1)
                                 .frame(width: 90, alignment: .leading)
@@ -1553,6 +1602,7 @@ struct HabitsStoppedCard: View {
     let medianProgress: Double?
     let commonTags: [(name: String, count: Int)]
     let discreetMode: Bool
+    var discreetMasker: InsightsDiscreetMasker = .empty
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -1586,8 +1636,8 @@ struct HabitsStoppedCard: View {
                     .foregroundStyle(.primary)
 
                 FlowLayout(spacing: 6) {
-                    ForEach(Array(commonTags.enumerated()), id: \.offset) { index, tag in
-                        Text("\(discreetMode ? "Tag \(index + 1)" : tag.name) \(tag.count)")
+                    ForEach(Array(commonTags.enumerated()), id: \.offset) { _, tag in
+                        Text("\(discreetMode ? discreetMasker.tag(tag.name) : tag.name) \(tag.count)")
                             .font(.caption2)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
@@ -1769,8 +1819,18 @@ struct LibraryWhereEverythingStandsCard: View {
 struct LibraryStillReadingCard: View {
     let candidate: ReadingLibraryInsights.StillReadingCandidate
     let discreetMode: Bool
+    var discreetMasker: InsightsDiscreetMasker = .empty
     let onStillReading: () -> Void
     @Environment(ThemeManager.self) private var theme
+
+    private var untouchedDurationLabel: String {
+        let days = max(1, candidate.daysUntouched)
+        if days >= 14 || days % 7 == 0 {
+            let weeks = max(1, days / 7)
+            return "\(weeks) \(weeks == 1 ? "week" : "weeks")"
+        }
+        return "\(days) \(days == 1 ? "day" : "days")"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1779,12 +1839,16 @@ struct LibraryStillReadingCard: View {
                     Circle()
                         .fill(fandomColor(for: candidate.fandom))
                         .frame(width: 8, height: 8)
-                    Text("\(discreetMode ? "Fandom" : candidate.fandom) · untouched for \(candidate.daysUntouched / 7) weeks")
+                    let fandomLabel = discreetMode
+                        ? discreetMasker.fandom(candidate.fandom) : candidate.fandom
+                    Text("\(fandomLabel) · untouched for \(untouchedDurationLabel)")
                         .font(.caption)
                         .foregroundStyle(.secondaryInk)
                 }
 
-                Text("Still reading \(discreetMode ? "this work" : candidate.title)?")
+                let workLabel = discreetMode
+                    ? discreetMasker.work(id: candidate.id, title: candidate.title) : candidate.title
+                Text("Still reading \(workLabel)?")
                     .font(.subheadline.weight(.semibold))
 
                 Text(candidate.chapterProgress)
@@ -2003,6 +2067,7 @@ struct LibraryFeedbackCard: View {
 struct LibraryPreservedStatsCard: View {
     let stats: ReadingStatistics
     let discreetMode: Bool
+    var discreetMasker: InsightsDiscreetMasker = .empty
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -2033,7 +2098,7 @@ struct LibraryPreservedStatsCard: View {
                         Circle()
                             .fill(fandomColor(for: f.name))
                             .frame(width: 7, height: 7)
-                        Text(discreetMode ? "Fandom" : f.name)
+                        Text(discreetMode ? discreetMasker.fandom(f.name) : f.name)
                             .font(.caption)
                             .lineLimit(1)
                         Spacer()

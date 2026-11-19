@@ -1,130 +1,159 @@
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
+#if os(iOS)
+import UIKit
+#endif
 
 /// Artboard **07** / `Insights-Options.dc.html` — Insights Options sheet.
 ///
-/// Controls privacy, export, and reset.
-/// Settings are local-only and stored via `@AppStorage`.
+/// Controls privacy, counting rules, exclusions, export (CSV / JSON), and log reset.
 struct InsightsOptionsSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.modelContext) private var modelContext
     @Environment(ThemeManager.self) private var theme
 
-    @AppStorage("kudos.insights.discreetMode") private var discreetMode: Bool = false
-    @AppStorage("kudos.insights.hideReadingTime") private var hideReadingTime: Bool = false
+    @AppStorage(InsightsOptions.Keys.discreetMode) private var discreetMode: Bool = false
+    @AppStorage(InsightsOptions.Keys.hideReadingTime) private var hideReadingTime: Bool = false
+    @AppStorage(InsightsOptions.Keys.countRereads) private var countRereads: Bool = true
+    @AppStorage(InsightsOptions.Keys.countReadAloud) private var countReadAloud: Bool = true
+    @AppStorage(InsightsOptions.Keys.askAboutUntouched) private var askAboutUntouched: Bool = true
+    @AppStorage(InsightsOptions.Keys.untouchedDays)
+    private var untouchedDays: Int = InsightsOptions.defaultUntouchedDays
 
-    /// The same text the toolbar's ShareLink exports.
-    let exportText: String
+    let works: [SavedWork]
     let onShowHowCounted: () -> Void
-    /// Called after a reset so the page reloads from the emptied log.
-    let onReset: () -> Void
+    let onOptionsChanged: () -> Void
 
+    @State private var excludedFandoms: [String] = []
+    @State private var excludedTags: [String] = []
+    @State private var excludedWorkIDs: [String] = []
+
+    @State private var showingExportFormatDialog = false
+    @State private var exportedShareItem: InsightsShareItem?
+    @State private var exportFailure: String?
+    #if os(macOS)
+    @State private var macExportDocument: InsightsExportFileDocument?
+    @State private var macExportFormat: InsightsExportFormat = .csv
+    @State private var showingMacExporter = false
+    #endif
+
+    @State private var resetCounts = InsightsResetCounts(sessionCount: 0, workCount: 0)
     @State private var showingResetAlert = false
     @State private var resetFailure: String?
+
+    private static let untouchedDayPresets = [7, 14, 21, 28, 42, 56]
+
+    private var excludedCount: Int {
+        excludedFandoms.count + excludedTags.count + excludedWorkIDs.count
+    }
+
+    private var untouchedDurationText: String {
+        let days = InsightsOptions.clampUntouchedDays(untouchedDays)
+        if days % 7 == 0 {
+            let weeks = max(1, days / 7)
+            return "\(weeks) \(weeks == 1 ? "week" : "weeks")"
+        }
+        return "\(days) \(days == 1 ? "day" : "days")"
+    }
+
+    private var untouchedDayChoices: [Int] {
+        var choices = Self.untouchedDayPresets
+        let clamped = InsightsOptions.clampUntouchedDays(untouchedDays)
+        if !choices.contains(clamped) {
+            choices.append(clamped)
+            choices.sort()
+        }
+        return choices
+    }
 
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    Toggle(isOn: $discreetMode) {
-                        Label {
-                            Text("Discreet Mode")
-                        } icon: {
-                            Image(systemName: "eye.slash")
-                                .foregroundStyle(.secondaryInk)
-                        }
-                    }
-                    .tint(theme.effectiveTint)
-
-                    Toggle(isOn: $hideReadingTime) {
-                        Label {
-                            Text("Hide Reading Time")
-                        } icon: {
-                            Image(systemName: "clock")
-                                .foregroundStyle(.secondaryInk)
-                        }
-                    }
-                    .tint(theme.effectiveTint)
-                } header: {
-                    Text("Privacy")
-                } footer: {
-                    Text("Discreet Mode hides fandom, relationship, character and tag names here and in exports. Totals stay.")
-                }
-                .appThemedRows()
-
-                Section {
-                    ShareLink(
-                        item: exportText,
-                        subject: Text("Reading Insights Export"),
-                        message: Text("Export of Reading Insights from Kudos")
-                    ) {
-                        Label {
-                            Text("Export Reading History…")
-                                .foregroundStyle(theme.effectiveTint)
-                        } icon: {
-                            Image(systemName: "square.and.arrow.up")
-                                .foregroundStyle(theme.effectiveTint)
-                        }
-                    }
-
-                    Button(role: .destructive) {
-                        showingResetAlert = true
-                    } label: {
-                        Label {
-                            Text("Reset Insights…")
-                        } icon: {
-                            Image(systemName: "arrow.counterclockwise")
-                        }
-                    }
-                } header: {
-                    Text("Reading History")
-                } footer: {
-                    Text("Export shares this period’s totals (words, hours, works finished, reading days); no works are named. Reset deletes the reading log only; works, progress and statuses stay.")
-                }
-                .appThemedRows()
-
-                Section {
-                    Button {
-                        onShowHowCounted()
-                    } label: {
-                        HStack {
-                            Label {
-                                Text("How Reading Insights Are Counted")
-                                    .foregroundStyle(.primary)
-                            } icon: {
-                                Image(systemName: "info.circle")
-                                    .foregroundStyle(.secondaryInk)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-                .appThemedRows()
+                privacySection
+                whatCountsSection
+                readingHistorySection
+                howCountedSection
             }
             .appThemedScroll()
             .navigationTitle("Insights Options")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
+            .wrappingInlineTitle("Insights Options", isActive: dynamicTypeSize.isAccessibilitySize)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {
                         dismiss()
                     }
-                    .foregroundStyle(theme.effectiveTint)
+                    .foregroundStyle(theme.accentInk)
                 }
             }
-            .alert("Reset Insights?", isPresented: $showingResetAlert) {
+            .onAppear {
+                reloadStoredExclusions()
+            }
+            .onChange(of: discreetMode) { _, _ in notifyOptionChange() }
+            .onChange(of: hideReadingTime) { _, _ in notifyOptionChange() }
+            .onChange(of: countRereads) { _, _ in notifyOptionChange() }
+            .onChange(of: countReadAloud) { _, _ in notifyOptionChange() }
+            .onChange(of: askAboutUntouched) { _, _ in notifyOptionChange() }
+            .onChange(of: untouchedDays) { _, _ in notifyOptionChange() }
+            .confirmationDialog(
+                "Export Reading History",
+                isPresented: $showingExportFormatDialog,
+                titleVisibility: .visible
+            ) {
+                Button("Export as CSV") {
+                    exportHistory(format: .csv)
+                }
+                Button("Export as JSON") {
+                    exportHistory(format: .json)
+                }
                 Button("Cancel", role: .cancel) {}
-                Button("Reset Log", role: .destructive) {
-                    resetReadingLog()
+            } message: {
+                Text(
+                    "CSV saves one row per sitting and work status. "
+                        + "JSON saves sittings, statuses, reasons and notes."
+                )
+            }
+            .alert(
+                resetCounts.sessionCount == 0
+                    ? "No Reading Log Entries to Reset"
+                    : "Reset \(resetCounts.sessionCount) Reading \(resetCounts.sessionCount == 1 ? "Sitting" : "Sittings")?",
+                isPresented: $showingResetAlert
+            ) {
+                if resetCounts.sessionCount > 0 {
+                    Button("Cancel", role: .cancel) {}
+                    Button(
+                        "Reset \(resetCounts.sessionCount) \(resetCounts.sessionCount == 1 ? "Sitting" : "Sittings")",
+                        role: .destructive
+                    ) {
+                        resetReadingLog()
+                    }
+                } else {
+                    Button("OK", role: .cancel) {}
                 }
             } message: {
-                Text("This permanently deletes your local reading log. Your saved works, shelves and reading progress are kept, but Finished, History and reread counts come from this log and will start again from zero.")
+                if resetCounts.sessionCount == 0 {
+                    Text("Your local reading log has 0 sittings to delete. Saved works, progress and statuses stay.")
+                } else {
+                    Text(
+                        "This permanently deletes \(resetCounts.sessionCount) reading "
+                            + "\(resetCounts.sessionCount == 1 ? "sitting" : "sittings") across "
+                            + "\(resetCounts.workCount) \(resetCounts.workCount == 1 ? "work" : "works") "
+                            + "from your local reading log. Your saved works, shelves, reading progress "
+                            + "and statuses stay."
+                    )
+                }
+            }
+            .alert("Couldn’t Export Reading History", isPresented: Binding(
+                get: { exportFailure != nil },
+                set: { if !$0 { exportFailure = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(exportFailure ?? "")
             }
             .alert("Couldn’t Reset Insights", isPresented: Binding(
                 get: { resetFailure != nil },
@@ -134,19 +163,286 @@ struct InsightsOptionsSheet: View {
             } message: {
                 Text(resetFailure ?? "")
             }
+            #if os(iOS)
+            .sheet(item: $exportedShareItem) { item in
+                InsightsExportActivitySheet(url: item.url) {
+                    InsightsShareItem.cleanUp(item.url)
+                    exportedShareItem = nil
+                }
+            }
+            #else
+            .fileExporter(
+                isPresented: $showingMacExporter,
+                document: macExportDocument,
+                contentType: macExportFormat.contentType,
+                defaultFilename: "Kudos-Reading-History.\(macExportFormat.fileExtension)"
+            ) { result in
+                if case .failure(let error) = result {
+                    exportFailure = error.localizedDescription
+                }
+                macExportDocument = nil
+            }
+            #endif
+        }
+        #if os(iOS)
+        .modifier(ScopeSurfaceAccent())
+        #endif
+    }
+
+    private var privacySection: some View {
+        Section {
+            Toggle(isOn: $discreetMode) {
+                Label {
+                    Text("Discreet Mode")
+                } icon: {
+                    Image(systemName: "eye.slash")
+                        .foregroundStyle(.secondaryInk)
+                }
+            }
+            .accentFill()
+
+            Toggle(isOn: $hideReadingTime) {
+                Label {
+                    Text("Hide Reading Time")
+                } icon: {
+                    Image(systemName: "clock")
+                        .foregroundStyle(.secondaryInk)
+                }
+            }
+            .accentFill()
+        } header: {
+            Text("Privacy")
+        } footer: {
+            Text("Discreet Mode hides fandom, relationship, character and tag names here and in exports. Totals stay.")
+        }
+        .appThemedRows()
+    }
+
+    private var whatCountsSection: some View {
+        Section {
+            Toggle(isOn: $countRereads) {
+                Label {
+                    Text("Count Rereads in Totals")
+                } icon: {
+                    Image(systemName: "arrow.2.circlepath")
+                        .foregroundStyle(.secondaryInk)
+                }
+            }
+            .accentFill()
+
+            Toggle(isOn: $countReadAloud) {
+                Label {
+                    Text("Count Read Aloud as Reading")
+                } icon: {
+                    Image(systemName: "headphones")
+                        .foregroundStyle(.secondaryInk)
+                }
+            }
+            .accentFill()
+
+            Toggle(isOn: $askAboutUntouched) {
+                Label {
+                    Text("Ask About Untouched Works")
+                } icon: {
+                    Image(systemName: "questionmark.bubble")
+                        .foregroundStyle(.secondaryInk)
+                }
+            }
+            .accentFill()
+
+            if askAboutUntouched {
+                Picker(selection: $untouchedDays) {
+                    ForEach(untouchedDayChoices, id: \.self) { days in
+                        Text(labelForDays(days)).tag(days)
+                    }
+                } label: {
+                    Label {
+                        Text("Ask After")
+                    } icon: {
+                        Image(systemName: "calendar.badge.clock")
+                            .foregroundStyle(.secondaryInk)
+                    }
+                }
+                .accessibilityLabel("Ask after untouched period")
+            }
+
+            NavigationLink {
+                InsightsExclusionsView(
+                    works: works,
+                    excludedFandoms: $excludedFandoms,
+                    excludedTags: $excludedTags,
+                    excludedWorkIDs: $excludedWorkIDs,
+                    onChange: persistExclusions
+                )
+            } label: {
+                HStack(spacing: 8) {
+                    Label {
+                        Text("Left Out of Insights")
+                            .foregroundStyle(.primary)
+                    } icon: {
+                        Image(systemName: "minus.circle")
+                            .foregroundStyle(.secondaryInk)
+                    }
+                    Spacer()
+                    Text("\(excludedCount)")
+                        .font(.body)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondaryInk)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Left Out of Insights")
+            .accessibilityValue("\(excludedCount) excluded")
+        } header: {
+            Text("What Counts")
+        } footer: {
+            Text(
+                "Kudos asks after \(untouchedDurationText) without opening a work "
+                    + "you’re partway through. A work is only marked stopped when you say so."
+            )
+        }
+        .appThemedRows()
+    }
+
+    private var readingHistorySection: some View {
+        Section {
+            Button {
+                showingExportFormatDialog = true
+            } label: {
+                Label {
+                    Text("Export Reading History…")
+                        .foregroundStyle(theme.accentInk)
+                } icon: {
+                    Image(systemName: "square.and.arrow.up")
+                        .foregroundStyle(theme.accentInk)
+                }
+            }
+            .accessibilityHint("Choose CSV or JSON format to share")
+
+            Button(role: .destructive) {
+                resetCounts = InsightsExportService.resetCounts(in: modelContext)
+                showingResetAlert = true
+            } label: {
+                Label {
+                    Text("Reset Insights…")
+                } icon: {
+                    Image(systemName: "arrow.counterclockwise")
+                }
+            }
+            .accessibilityHint("Deletes your local reading log while keeping works, progress and statuses")
+        } header: {
+            Text("Reading History")
+        } footer: {
+            Text(
+                "Export saves sessions, statuses and reasons as CSV or JSON. "
+                    + "Reset deletes the reading log only; works, progress and statuses stay."
+            )
+        }
+        .appThemedRows()
+    }
+
+    private var howCountedSection: some View {
+        Section {
+            Button {
+                onShowHowCounted()
+            } label: {
+                HStack {
+                    Label {
+                        Text("How Reading Insights Are Counted")
+                            .foregroundStyle(.primary)
+                    } icon: {
+                        Image(systemName: "info.circle")
+                            .foregroundStyle(.secondaryInk)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(.isButton)
+        }
+        .appThemedRows()
+    }
+
+    private func labelForDays(_ days: Int) -> String {
+        if days % 7 == 0 {
+            let weeks = max(1, days / 7)
+            return "\(weeks) \(weeks == 1 ? "week" : "weeks")"
+        }
+        return "\(days) \(days == 1 ? "day" : "days")"
+    }
+
+    private func reloadStoredExclusions() {
+        let current = InsightsOptions.load()
+        excludedFandoms = current.excludedFandoms
+        excludedTags = current.excludedTags
+        excludedWorkIDs = current.excludedWorkIDs
+    }
+
+    private func persistExclusions() {
+        var current = InsightsOptions.load()
+        current.excludedFandoms = excludedFandoms
+        current.excludedTags = excludedTags
+        current.excludedWorkIDs = excludedWorkIDs
+        current.save(notifySync: true)
+        excludedFandoms = current.excludedFandoms
+        excludedTags = current.excludedTags
+        excludedWorkIDs = current.excludedWorkIDs
+        onOptionsChanged()
+    }
+
+    private func notifyOptionChange() {
+        NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+        onOptionsChanged()
+    }
+
+    private func exportHistory(format: InsightsExportFormat) {
+        let sessions = (try? modelContext.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let options = InsightsOptions.load()
+        let aliases = TagAliasStore.resolver(in: modelContext)
+        do {
+            #if os(iOS)
+            let url = try InsightsExportService.writeTemporaryExportFile(
+                format: format,
+                works: works,
+                sessions: sessions,
+                options: options,
+                aliases: aliases
+            )
+            exportedShareItem = InsightsShareItem(url: url)
+            #else
+            let data: Data
+            switch format {
+            case .csv:
+                data = Data(InsightsExportService.csvString(
+                    works: works,
+                    sessions: sessions,
+                    options: options,
+                    aliases: aliases
+                ).utf8)
+            case .json:
+                data = try InsightsExportService.jsonData(
+                    works: works,
+                    sessions: sessions,
+                    options: options,
+                    aliases: aliases
+                )
+            }
+            macExportFormat = format
+            macExportDocument = InsightsExportFileDocument(data: data, contentType: format.contentType)
+            showingMacExporter = true
+            #endif
+        } catch {
+            exportFailure = error.localizedDescription
         }
     }
 
     private func resetReadingLog() {
         do {
-            let sessions = try modelContext.fetch(FetchDescriptor<ReadingSession>())
-            for session in sessions {
-                SyncTombstones.recordDeletion(of: session, in: modelContext)
-                modelContext.delete(session)
-            }
-            try modelContext.save()
-            FolderSyncService.markDirty()
-            onReset()
+            try InsightsExportService.resetReadingLog(in: modelContext)
+            onOptionsChanged()
         } catch {
             modelContext.rollback()
             resetFailure = error.localizedDescription

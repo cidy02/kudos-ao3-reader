@@ -699,29 +699,132 @@ enum ReadingLogService {
     /// `period` is the window on screen; `previousPeriod` is what the delta is
     /// measured against. Both are fetched here rather than in the view so the
     /// screen cannot accidentally compare a month against a week.
+    /// Gathered and option-filtered Insights snapshot for a period.
+    struct InsightsGatherResult {
+        var insights: ReadingInsights
+        var taste: ReadingTasteInsights?
+        var habits: ReadingHabitsInsights
+        var library: ReadingLibraryInsights
+        var libraryStats: ReadingStatistics
+        var finishedWorksInPeriod: [SavedWork]
+        var filteredWorks: [SavedWork]
+        var filteredSessions: [ReadingSession]
+        var discreetMasker: InsightsDiscreetMasker
+    }
+
+    /// Gathers every Reading Insights figure through the single `options.filter` pass.
+    static func gatherInsights(
+        for period: DateInterval,
+        previousPeriod: DateInterval?,
+        works: [SavedWork],
+        periodMonths: Double = 1,
+        calendar: Calendar = .current,
+        context: ModelContext,
+        options: InsightsOptions = InsightsOptions(),
+        aliases: TagAliasResolver? = nil,
+        now: Date = Date()
+    ) -> InsightsGatherResult {
+        let resolvedAliases = aliases ?? TagAliasStore.resolver(in: context)
+        let rawHistory = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let filtered = options.filter(sessions: rawHistory, works: works, aliases: resolvedAliases)
+
+        let allFacts = facts(
+            from: filtered.sessions,
+            works: filtered.works,
+            history: filtered.sessions,
+            aliases: resolvedAliases
+        )
+        let periodFacts = allFacts.filter { period.contains($0.startedAt) }
+        let previousFacts = previousPeriod.map { interval in
+            allFacts.filter { interval.contains($0.startedAt) }
+        } ?? []
+
+        let figures = ReadingInsights.make(
+            facts: periodFacts,
+            previousPeriodFacts: previousFacts,
+            dayRange: ReadingInsights.chartDays(for: period, now: now, calendar: calendar),
+            calendar: calendar,
+            aliases: resolvedAliases
+        )
+        let readWorkIDs = Set(periodFacts.map(\.workID))
+        let worksInPeriod = filtered.works.filter { readWorkIDs.contains($0.id) }
+        let taste = worksInPeriod.isEmpty
+            ? nil
+            : ReadingTasteInsights.make(works: worksInPeriod, facts: periodFacts, aliases: resolvedAliases)
+        let habits = ReadingHabitsInsights.make(
+            works: filtered.works,
+            facts: periodFacts,
+            allFacts: allFacts,
+            calendar: calendar,
+            aliases: resolvedAliases
+        )
+        let library = ReadingLibraryInsights.make(
+            works: filtered.works,
+            facts: periodFacts,
+            periodInterval: period,
+            periodMonths: periodMonths,
+            calendar: calendar,
+            aliases: resolvedAliases,
+            askAboutUntouched: options.askAboutUntouched,
+            untouchedDays: options.clampedUntouchedDays,
+            now: now
+        )
+        let libraryStats = ReadingStatistics(
+            works: filtered.works,
+            now: now,
+            calendar: calendar,
+            aliases: resolvedAliases
+        )
+        let finishedWorksInPeriod = filtered.works.filter { w in
+            w.isFinished && periodFacts.contains { $0.workID == w.id && $0.didFinish }
+        }
+        let masker = InsightsDiscreetMasker.forScreen(
+            InsightsDiscreetMasker.ScreenSeed(
+                insights: figures,
+                taste: taste,
+                habits: habits,
+                library: library,
+                stats: libraryStats,
+                finishedWorks: finishedWorksInPeriod,
+                works: filtered.works,
+                sessions: filtered.sessions
+            ),
+            aliases: resolvedAliases
+        )
+        return InsightsGatherResult(
+            insights: figures,
+            taste: taste,
+            habits: habits,
+            library: library,
+            libraryStats: libraryStats,
+            finishedWorksInPeriod: finishedWorksInPeriod,
+            filteredWorks: filtered.works,
+            filteredSessions: filtered.sessions,
+            discreetMasker: masker
+        )
+    }
+
     static func insights(
         for period: DateInterval,
         previousPeriod: DateInterval?,
         works: [SavedWork],
         calendar: Calendar = .current,
         context: ModelContext,
-        aliases: TagAliasResolver? = nil
+        aliases: TagAliasResolver? = nil,
+        options: InsightsOptions = InsightsOptions()
     ) -> ReadingInsights {
         let resolvedAliases = aliases ?? TagAliasStore.resolver(in: context)
-        let history = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
-        let current = facts(
-            from: history.filter { period.contains($0.startedAt) },
-            works: works,
-            history: history,
+        let rawHistory = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let filtered = options.filter(sessions: rawHistory, works: works, aliases: resolvedAliases)
+        let allFacts = facts(
+            from: filtered.sessions,
+            works: filtered.works,
+            history: filtered.sessions,
             aliases: resolvedAliases
         )
+        let current = allFacts.filter { period.contains($0.startedAt) }
         let previous = previousPeriod.map { interval in
-            facts(
-                from: history.filter { interval.contains($0.startedAt) },
-                works: works,
-                history: history,
-                aliases: resolvedAliases
-            )
+            allFacts.filter { interval.contains($0.startedAt) }
         } ?? []
         return ReadingInsights.make(
             facts: current, previousPeriodFacts: previous,

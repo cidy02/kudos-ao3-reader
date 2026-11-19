@@ -36,9 +36,33 @@ struct ReadingInsightsView: View {
     @State private var showingOptionsSheet: Bool = false
     @State private var showingHowCountedSheet: Bool = false
     @State private var finishedWorksInPeriod: [SavedWork] = []
+    @State private var discreetMasker: InsightsDiscreetMasker = .empty
+    @State private var optionsRevision: Int = 0
+    @State private var exportedShareItem: InsightsShareItem?
+    @State private var exportFailure: String?
+    #if os(macOS)
+    @State private var macExportDocument: InsightsExportFileDocument?
+    @State private var macExportFormat: InsightsExportFormat = .csv
+    @State private var showingMacExporter = false
+    #endif
 
-    @AppStorage("kudos.insights.discreetMode") private var discreetMode: Bool = false
-    @AppStorage("kudos.insights.hideReadingTime") private var hideReadingTime: Bool = false
+    @AppStorage(InsightsOptions.Keys.discreetMode) private var discreetMode: Bool = false
+    @AppStorage(InsightsOptions.Keys.hideReadingTime) private var hideReadingTime: Bool = false
+    @AppStorage(InsightsOptions.Keys.countRereads) private var countRereads: Bool = true
+    @AppStorage(InsightsOptions.Keys.countReadAloud) private var countReadAloud: Bool = true
+    @AppStorage(InsightsOptions.Keys.askAboutUntouched) private var askAboutUntouched: Bool = true
+    @AppStorage(InsightsOptions.Keys.untouchedDays)
+    private var untouchedDays: Int = InsightsOptions.defaultUntouchedDays
+
+    private var reloadKey: String {
+        [
+            range.rawValue,
+            "\(referenceDate.timeIntervalSince1970)",
+            "\(hideMature)-\(gate.revealAll)-\(gate.revealedIDs.count)",
+            "\(countRereads)-\(countReadAloud)-\(askAboutUntouched)-\(untouchedDays)",
+            "\(optionsRevision)"
+        ].joined(separator: "|")
+    }
 
     enum Tab: String, CaseIterable, Identifiable {
         case overview
@@ -124,11 +148,19 @@ struct ReadingInsightsView: View {
                         Label("How Reading Insights Are Counted", systemImage: "info.circle")
                     }
 
-                    ShareLink(
-                        item: exportHistoryText(),
-                        subject: Text("Reading Insights Export"),
-                        message: Text("Export of Reading Insights from Kudos")
-                    ) {
+                    Menu {
+                        Button {
+                            exportReadingHistory(format: .csv)
+                        } label: {
+                            Label("Export as CSV", systemImage: "tablecells")
+                        }
+
+                        Button {
+                            exportReadingHistory(format: .json)
+                        } label: {
+                            Label("Export as JSON", systemImage: "curlybraces")
+                        }
+                    } label: {
                         Label("Export Reading History…", systemImage: "square.and.arrow.up")
                     }
                 } label: {
@@ -141,7 +173,11 @@ struct ReadingInsightsView: View {
                 .accessibilityLabel("More: options, export, how this is counted")
             }
         }
-        .task(id: "\(range.rawValue)-\(referenceDate.timeIntervalSince1970)-\(hideMature)-\(gate.revealAll)-\(gate.revealedIDs.count)") {
+        .task(id: reloadKey) {
+            reload()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .kudosSyncRelevantSettingChanged)) { _ in
+            optionsRevision += 1
             reload()
         }
         .refreshable {
@@ -149,17 +185,48 @@ struct ReadingInsightsView: View {
         }
         .sheet(isPresented: $showingOptionsSheet) {
             InsightsOptionsSheet(
-                exportText: exportHistoryText(),
+                works: effectiveWorks,
                 onShowHowCounted: {
                     showingOptionsSheet = false
                     showingHowCountedSheet = true
                 },
-                onReset: reload
+                onOptionsChanged: {
+                    optionsRevision += 1
+                    reload()
+                }
             )
         }
         .sheet(isPresented: $showingHowCountedSheet) {
             HowInsightsAreCountedSheet()
         }
+        .alert("Couldn’t Export Reading History", isPresented: Binding(
+            get: { exportFailure != nil },
+            set: { if !$0 { exportFailure = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(exportFailure ?? "")
+        }
+        #if os(iOS)
+        .sheet(item: $exportedShareItem) { item in
+            InsightsExportActivitySheet(url: item.url) {
+                InsightsShareItem.cleanUp(item.url)
+                exportedShareItem = nil
+            }
+        }
+        #else
+        .fileExporter(
+            isPresented: $showingMacExporter,
+            document: macExportDocument,
+            contentType: macExportFormat.contentType,
+            defaultFilename: "Kudos-Reading-History.\(macExportFormat.fileExtension)"
+        ) { result in
+            if case .failure(let error) = result {
+                exportFailure = error.localizedDescription
+            }
+            macExportDocument = nil
+        }
+        #endif
     }
 
     // MARK: - Header View (`InsightsTop`)
@@ -290,7 +357,8 @@ struct ReadingInsightsView: View {
 
         WhereTheWordsWentCard(
             fandoms: insights.fandomWordsShares,
-            discreetMode: discreetMode
+            discreetMode: discreetMode,
+            discreetMasker: discreetMasker
         )
 
         ReadingAndListeningCard(
@@ -311,7 +379,8 @@ struct ReadingInsightsView: View {
         if !finishedWorksInPeriod.isEmpty {
             FinishedInPeriodSection(
                 works: finishedWorksInPeriod,
-                discreetMode: discreetMode
+                discreetMode: discreetMode,
+                discreetMasker: discreetMasker
             )
         }
 
@@ -350,25 +419,28 @@ struct ReadingInsightsView: View {
     @ViewBuilder
     private var tasteContent: some View {
         if let taste = tasteInsights {
-            YourUsualFicCard(taste: taste, discreetMode: discreetMode)
+            YourUsualFicCard(taste: taste, discreetMode: discreetMode, discreetMasker: discreetMasker)
 
             TasteFandomsCard(
                 fandoms: taste.fandoms,
                 rankByWorks: rankTasteByWorks,
                 onToggleRank: { rankTasteByWorks.toggle() },
-                discreetMode: discreetMode
+                discreetMode: discreetMode,
+                discreetMasker: discreetMasker
             )
 
             TasteRelationshipsCard(
                 relationships: taste.relationships,
                 shipConcentrations: taste.shipConcentrations,
-                discreetMode: discreetMode
+                discreetMode: discreetMode,
+                discreetMasker: discreetMasker
             )
 
             if !taste.characters.isEmpty {
                 TasteCharactersCard(
                     characters: taste.characters,
-                    discreetMode: discreetMode
+                    discreetMode: discreetMode,
+                    discreetMasker: discreetMasker
                 )
             }
 
@@ -376,7 +448,8 @@ struct ReadingInsightsView: View {
                 TasteTagsCard(
                     tags: taste.tags,
                     oftenTogether: taste.oftenTogether,
-                    discreetMode: discreetMode
+                    discreetMode: discreetMode,
+                    discreetMasker: discreetMasker
                 )
             }
 
@@ -415,7 +488,8 @@ struct ReadingInsightsView: View {
             HabitsTimeOfDayCard(
                 hourly: habits.hourlyDuration,
                 lateNightDuration: habits.lateNightDuration,
-                lateNightSharePercent: habits.lateNightSharePercent
+                lateNightSharePercent: habits.lateNightSharePercent,
+                hideReadingTime: hideReadingTime
             )
 
             HabitsCalendarCard(
@@ -425,7 +499,8 @@ struct ReadingInsightsView: View {
 
             HabitsSittingsCard(
                 sittings: habits.sittingBuckets,
-                typicalSeconds: habits.typicalSittingSeconds
+                typicalSeconds: habits.typicalSittingSeconds,
+                hideReadingTime: hideReadingTime
             )
 
             if habits.savedToOpenedMedianDays != nil || habits.openedToFinishedMedianDays != nil {
@@ -435,10 +510,10 @@ struct ReadingInsightsView: View {
                 )
             }
 
-            HabitsRereadsCard(rereads: habits.rereads, discreetMode: discreetMode)
+            HabitsRereadsCard(rereads: habits.rereads, discreetMode: discreetMode, discreetMasker: discreetMasker)
 
             if !habits.fandomTimeline.isEmpty {
-                HabitsFandomTimelineCard(lanes: habits.fandomTimeline, discreetMode: discreetMode)
+                HabitsFandomTimelineCard(lanes: habits.fandomTimeline, discreetMode: discreetMode, discreetMasker: discreetMasker)
             }
 
             if habits.stoppedCount > 0 {
@@ -446,7 +521,8 @@ struct ReadingInsightsView: View {
                     stoppedCount: habits.stoppedCount,
                     medianProgress: habits.stoppedMedianProgress,
                     commonTags: habits.commonStopTags,
-                    discreetMode: discreetMode
+                    discreetMode: discreetMode,
+                    discreetMasker: discreetMasker
                 )
             }
         }
@@ -471,6 +547,7 @@ struct ReadingInsightsView: View {
                 LibraryStillReadingCard(
                     candidate: candidate,
                     discreetMode: discreetMode,
+                    discreetMasker: discreetMasker,
                     onStillReading: {
                         WorkLifecycle.keepInProgress(candidate.work, in: context)
                         reload()
@@ -492,7 +569,7 @@ struct ReadingInsightsView: View {
                 LibraryFeedbackCard(kudosLeftPercent: kudos, bookmarkedPercent: bookmarked)
             }
 
-            LibraryPreservedStatsCard(stats: stats, discreetMode: discreetMode)
+            LibraryPreservedStatsCard(stats: stats, discreetMode: discreetMode, discreetMasker: discreetMasker)
         }
     }
 
@@ -578,80 +655,67 @@ struct ReadingInsightsView: View {
               let previousInterval = calendar.dateInterval(of: component, for: earlierDate)
         else { return }
 
-        let tagAliases = TagAliasStore.resolver(in: context)
-
-        let figures = ReadingLogService.insights(
+        let periodMonths: Double = range == .year ? 12 : 1
+        let options = InsightsOptions.load()
+        let gathered = ReadingLogService.gatherInsights(
             for: currentInterval,
             previousPeriod: previousInterval,
             works: effectiveWorks,
+            periodMonths: periodMonths,
             calendar: calendar,
             context: context,
-            aliases: tagAliases
+            options: options
         )
-
-        insights = figures
-
-        let allHistory = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
-        let allFacts = ReadingLogService.facts(
-            from: allHistory,
-            works: effectiveWorks,
-            history: allHistory,
-            aliases: tagAliases
-        )
-        let periodFacts = allFacts.filter { currentInterval.contains($0.startedAt) }
-
-        let readWorkIDs = Set(periodFacts.map(\.workID))
-        let worksInPeriod = effectiveWorks.filter { readWorkIDs.contains($0.id) }
-
-        // An empty period has no taste; the Taste tab shows its empty state
-        // rather than all-time rankings under the period title.
-        tasteInsights = worksInPeriod.isEmpty ? nil : ReadingTasteInsights.make(
-            works: worksInPeriod,
-            facts: periodFacts,
-            aliases: tagAliases
-        )
-
-        habitsInsights = ReadingHabitsInsights.make(
-            works: effectiveWorks,
-            facts: periodFacts,
-            allFacts: allFacts,
-            calendar: calendar,
-            aliases: tagAliases
-        )
-
-        libraryInsights = ReadingLibraryInsights.make(
-            works: effectiveWorks,
-            facts: periodFacts,
-            periodInterval: currentInterval,
-            periodMonths: range == .year ? 12 : 1,
-            calendar: calendar,
-            aliases: tagAliases
-        )
-
-        libraryStats = ReadingStatistics(
-            works: effectiveWorks,
-            now: Date(),
-            calendar: calendar,
-            aliases: tagAliases
-        )
-
-        finishedWorksInPeriod = effectiveWorks.filter { w in
-            w.isFinished && periodFacts.contains { $0.workID == w.id && $0.didFinish }
-        }
+        insights = gathered.insights
+        tasteInsights = gathered.taste
+        habitsInsights = gathered.habits
+        libraryInsights = gathered.library
+        libraryStats = gathered.libraryStats
+        finishedWorksInPeriod = gathered.finishedWorksInPeriod
+        discreetMasker = gathered.discreetMasker
     }
 
     // MARK: - Actions
 
-    /// The period's aggregate lines; no work is named.
-    private func exportHistoryText() -> String {
-        """
-        Kudos Reading Insights Export
-        Period: \(periodTitle) (\(periodSubtitle))
-        Words read: \(insights.totalWordsRead)
-        Hours read: \(ReadingInsights.hoursLabel(insights.totalSeconds))
-        Works finished: \(insights.finishedWorksCount)
-        Reading days: \(insights.readingDaysCount)
-        """
+    private func exportReadingHistory(format: InsightsExportFormat) {
+        let sessions = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let options = InsightsOptions.load()
+        let aliases = TagAliasStore.resolver(in: context)
+        do {
+            #if os(iOS)
+            let url = try InsightsExportService.writeTemporaryExportFile(
+                format: format,
+                works: effectiveWorks,
+                sessions: sessions,
+                options: options,
+                aliases: aliases
+            )
+            exportedShareItem = InsightsShareItem(url: url)
+            #else
+            let data: Data
+            switch format {
+            case .csv:
+                data = Data(InsightsExportService.csvString(
+                    works: effectiveWorks,
+                    sessions: sessions,
+                    options: options,
+                    aliases: aliases
+                ).utf8)
+            case .json:
+                data = try InsightsExportService.jsonData(
+                    works: effectiveWorks,
+                    sessions: sessions,
+                    options: options,
+                    aliases: aliases
+                )
+            }
+            macExportFormat = format
+            macExportDocument = InsightsExportFileDocument(data: data, contentType: format.contentType)
+            showingMacExporter = true
+            #endif
+        } catch {
+            exportFailure = error.localizedDescription
+        }
     }
 
     // MARK: - Date Formatters

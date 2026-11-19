@@ -898,8 +898,27 @@ nonisolated struct ReadingStatusPartition: Equatable, Sendable {
 // MARK: - Taste Insights
 
 nonisolated struct ReadingTasteInsights: Equatable, Sendable {
+    nonisolated enum UsualChipKind: String, Equatable, Sendable {
+        case metadata
+        case tag
+        case ship
+    }
+
+    nonisolated struct UsualChip: Equatable, Sendable {
+        var text: String
+        var kind: UsualChipKind
+    }
+
     var usualFicSummary: String = ""
     var usualFicTags: [String] = []
+    var usualChips: [UsualChip] = []
+    var usualStatus: String = ""
+    var usualRating: String = ""
+    var usualCategory: String = ""
+    var usualTopTag: String? = nil
+    var usualTopFandom: String? = nil
+    var usualTopRelationship: String? = nil
+    var usualExtraTagNames: [String] = []
     var fandoms: [ReadingInsights.FandomWordsShare] = []
     var relationships: [RelationshipShare] = []
     var shipConcentrations: [ShipConcentration] = []
@@ -1088,13 +1107,34 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
             summary = "A \(statusStr), \(ratingStr)-rated \(catStr) \(topTagStr) in \(topFandomStr)."
         }
 
-        var usualChips: [String] = [statusStr.capitalized, ratingStr, catStr, topTagStr.capitalized]
-        if !topRel.isEmpty { usualChips.append(topRel) }
-        for t in tags.dropFirst().prefix(2) { usualChips.append(t.name) }
+        var usualChipStrings: [String] = [statusStr.capitalized, ratingStr, catStr, topTagStr.capitalized]
+        var structuredChips: [UsualChip] = [
+            UsualChip(text: statusStr.capitalized, kind: .metadata),
+            UsualChip(text: ratingStr, kind: .metadata),
+            UsualChip(text: catStr, kind: .metadata),
+            UsualChip(text: topTagStr.capitalized, kind: .tag)
+        ]
+        if !topRel.isEmpty {
+            usualChipStrings.append(topRel)
+            structuredChips.append(UsualChip(text: topRel, kind: .ship))
+        }
+        let extraTagValues = tags.dropFirst().prefix(2).map(\.name)
+        for t in extraTagValues {
+            usualChipStrings.append(t)
+            structuredChips.append(UsualChip(text: t, kind: .tag))
+        }
 
         return ReadingTasteInsights(
             usualFicSummary: summary,
-            usualFicTags: usualChips,
+            usualFicTags: usualChipStrings,
+            usualChips: structuredChips,
+            usualStatus: statusStr,
+            usualRating: ratingStr,
+            usualCategory: catStr,
+            usualTopTag: tags.first?.name,
+            usualTopFandom: fandomShares.first(where: { !$0.isRemainder })?.name,
+            usualTopRelationship: topRel.isEmpty ? nil : topRel,
+            usualExtraTagNames: extraTagValues,
             fandoms: fandomShares,
             relationships: relationships,
             shipConcentrations: shipConcentrations,
@@ -1345,7 +1385,10 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         periodInterval: DateInterval,
         periodMonths: Double = 1,
         calendar: Calendar = .current,
-        aliases: TagAliasResolver = .empty
+        aliases: TagAliasResolver = .empty,
+        askAboutUntouched: Bool = true,
+        untouchedDays: Int = InsightsOptions.defaultUntouchedDays,
+        now: Date = Date()
     ) -> ReadingLibraryInsights {
         let unread = works.filter { !$0.hasStartedReading && !$0.isFinished }
         let unreadWords = unread.reduce(0) { $0 + max(0, $1.wordCount) }
@@ -1360,13 +1403,22 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
             ? max(1, Int((Double(unreadWords) / (Double(readWordsInPeriod) / max(1, periodMonths))).rounded()))
             : nil
 
-        let statuses = ReadingInsights.partitionStatuses(works: works)
+        let statuses = ReadingInsights.partitionStatuses(works: works, now: now)
         // isAbandoned needs lastReadDate, so the untouched time is always real.
-        let candidateWork = works.first { ReadingLogService.isAbandoned(work: $0) && $0.lastReadDate != nil }
+        let untouchedThreshold = TimeInterval(InsightsOptions.clampUntouchedDays(untouchedDays)) * 86_400
+        let candidateWork: SavedWork? = askAboutUntouched
+            ? works.first {
+                ReadingLogService.isAbandoned(work: $0, now: now, threshold: untouchedThreshold)
+                    && $0.lastReadDate != nil
+                    && $0.insightsReadingStatus != .stopped
+                    && $0.insightsReadingStatus != .onHold
+                    && $0.insightsReadingStatus != .stacking
+            }
+            : nil
         let candidate: StillReadingCandidate? = candidateWork.map { w in
             let progress = w.readingProgress.map { Int(($0 * 100).rounded()) }
             let chapters = "Chapter \(w.lastSpineIndex + 1) of \(w.postedChapterCount > 0 ? w.postedChapterCount : 1)"
-            let days = w.lastReadDate.flatMap { calendar.dateComponents([.day], from: $0, to: Date()).day } ?? 0
+            let days = w.lastReadDate.flatMap { calendar.dateComponents([.day], from: $0, to: now).day } ?? 0
             return StillReadingCandidate(
                 id: w.id,
                 title: w.title,
@@ -1378,7 +1430,7 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
             )
         }
 
-        let wip = ReadingInsights.wipFreshness(works: works, calendar: calendar)
+        let wip = ReadingInsights.wipFreshness(works: works, now: now, calendar: calendar)
 
         let goneWorks = works.filter { $0.preservationState == .preservedLastCopy || $0.preservationState == .goneWithNoCopy }
         let goneWords = goneWorks.reduce(0) { $0 + max(0, $1.wordCount) }
