@@ -32,6 +32,8 @@ nonisolated enum SyncRecordStatus: String, Codable, CaseIterable {
 nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
     case savedForLater
     case custom
+    /// Fills itself from the library. Members are computed, never stored.
+    case smart
 }
 
 nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
@@ -566,7 +568,10 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// queue in Recently Deleted still counts, so restoring it finds its works
     /// as they were. A queue switched off is a plain list and holds nothing.
     var isKeptOffline: Bool {
-        queueMemberships.contains { KeepOffline.queueKeeps($0.queue?.keepsWorksOffline) }
+        queueMemberships.contains { membership in
+            guard let queue = membership.queue, queue.kind != .smart else { return false }
+            return KeepOffline.queueKeeps(queue.keepsWorksOffline)
+        }
             || collections.contains { KeepOffline.collectionKeeps($0.keepsWorksOffline) }
     }
 
@@ -579,7 +584,7 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// beside it, so the projection lives here rather than at each call site.
     var activeQueueMemberships: [ReadingQueueMembership] {
         queueMemberships.filter { membership in
-            guard let queue = membership.queue else { return false }
+            guard let queue = membership.queue, queue.kind != .smart else { return false }
             return !membership.isPendingDeletion && !queue.isPendingDeletion
         }
     }
@@ -1003,6 +1008,11 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// note is stored as "" so clearing it travels through sync.
     var notes: String?
 
+    /// T-533: one JSON document (`SmartQueueDocument`) for a `.smart` queue.
+    /// Optional and additive, like `notes`. Absent on every older queue.
+    /// Not a composite attribute — see `docs/DATA_AND_PERSISTENCE_INVARIANTS.md`.
+    var smartRulesJSON: String?
+
     @Relationship(deleteRule: .cascade, inverse: \ReadingQueueMembership.queue)
     var memberships: [ReadingQueueMembership] = []
     @Relationship(deleteRule: .cascade, inverse: \QueueSavedSearchLink.queue)
@@ -1034,6 +1044,11 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         get { ReadingQueueKind(rawValue: kindRaw) ?? .custom }
         set { kindRaw = newValue.rawValue }
     }
+
+    /// Custom and smart queues. Saved for Later is the only system queue.
+    /// An unknown `kindRaw` still reads as `.custom`, so it stays in this set
+    /// and is shown as an ordinary empty queue.
+    var isUserQueue: Bool { kind != .savedForLater }
 
     var syncStatus: SyncRecordStatus {
         get { SyncRecordStatus(rawValue: syncStatusRaw) ?? .localOnly }
@@ -1146,8 +1161,8 @@ nonisolated struct ReadingQueueMembershipOrigin: Equatable, Hashable, Codable, S
 
     init(
         id: UUID = UUID(),
-        queue: ReadingQueue,
-        work: SavedWork,
+        queue: ReadingQueue?,
+        work: SavedWork?,
         queuedAt: Date = Date(),
         sortOrderInQueue: Int = 0,
         note: String = "",

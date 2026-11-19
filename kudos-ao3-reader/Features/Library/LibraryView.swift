@@ -35,6 +35,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Query(filter: #Predicate<WorkCollection> { $0.isPendingDeletion }) private var deletedCollections: [WorkCollection]
     @Query(filter: #Predicate<ReadingQueue> { $0.isPendingDeletion }) private var deletedQueues: [ReadingQueue]
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }) private var readingQueues: [ReadingQueue]
+    @Query private var tagAliases: [TagAlias]
     /// `library.dashboard.layout` is left in UserDefaults and never read. Which
     /// shelves are sections, and carousel or list, is `pageArrangement`.
     @AppStorage(LibraryPageArrangement.storageKey) private var pageArrangement = LibraryPageArrangement.default
@@ -650,7 +651,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     private var shelfQueues: [ReadingQueue] {
         readingQueues
-            .filter { $0.kind == .custom }
+            .filter(\.isUserQueue)
             .sorted { lhs, rhs in
                 if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
                 return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
@@ -817,19 +818,29 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     }
 
     private var queuesCarousel: some View {
-        WorkCarouselSection(
+        let shownQueues = Array(shelfQueues.prefix(12))
+        let smartSnapshot = shownQueues.contains { $0.kind == .smart }
+            ? ReadingQueueService.SmartLibrarySnapshot(
+                works: works,
+                aliases: TagAliasResolver(models: tagAliases)
+            )
+            : nil
+        return WorkCarouselSection(
             title: LibraryShelfID.queues.title,
             hasItems: !shelfQueues.isEmpty,
             itemCount: shelfQueues.count,
             cardSpacing: ReadingQueueCard.spacing,
             cardWidth: ReadingQueueCard.width,
-            visibleCount: min(shelfQueues.count, 12),
+            visibleCount: shownQueues.count,
             actionTitle: "See All",
             onSeeAll: !shelfQueues.isEmpty ? { openShelf(.queues) } : nil
         ) {
-            ForEach(shelfQueues.prefix(12)) { queue in
+            ForEach(shownQueues) { queue in
                 NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
-                    ReadingQueueCard(queue: queue)
+                    ReadingQueueCard(
+                        queue: queue,
+                        precomputedSmartWorks: queue.kind == .smart ? smartSnapshot?.matching(queue, where: passesPrivacy) : nil
+                    )
                 }
                 .buttonStyle(.plain)
             }
@@ -848,7 +859,14 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     }
 
     private var queuesList: some View {
-        LibraryCollapsingShelf(
+        let shownQueues = Array(shelfQueues.prefix(12))
+        let smartSnapshot = shownQueues.contains { $0.kind == .smart }
+            ? ReadingQueueService.SmartLibrarySnapshot(
+                works: works,
+                aliases: TagAliasResolver(models: tagAliases)
+            )
+            : nil
+        return LibraryCollapsingShelf(
             title: LibraryShelfID.queues.title,
             count: shelfQueues.count,
             actionTitle: "See All",
@@ -868,9 +886,12 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .padding(.horizontal, 16)
             } else {
                 VStack(spacing: 8) {
-                    ForEach(shelfQueues.prefix(12)) { queue in
+                    ForEach(shownQueues) { queue in
                         NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
-                            LibraryQueueLedgerRow(queue: queue)
+                            LibraryQueueLedgerRow(
+                                queue: queue,
+                                precomputedSmartWorks: queue.kind == .smart ? smartSnapshot?.matching(queue, where: passesPrivacy) : nil
+                            )
                         }
                         .buttonStyle(.plain)
                     }

@@ -19,6 +19,7 @@ struct ReadingQueueCard: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(PrivacyGate.self) private var gate
     let queue: ReadingQueue
+    var precomputedSmartWorks: [SavedWork]?
 
     static let width: CGFloat = 300
     static let spacing: CGFloat = 16
@@ -26,8 +27,9 @@ struct ReadingQueueCard: View {
     @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 17
     @ScaledMetric(relativeTo: .footnote) private var detailSize: CGFloat = 13
 
-    init(queue: ReadingQueue) {
+    init(queue: ReadingQueue, precomputedSmartWorks: [SavedWork]? = nil) {
         self.queue = queue
+        self.precomputedSmartWorks = precomputedSmartWorks
     }
 
     // Ordered the same way the queue's own detail view is (sortOrderInQueue).
@@ -35,20 +37,20 @@ struct ReadingQueueCard: View {
     // queues), but the work itself belongs to Recently Deleted, not this card —
     // orderedWorks already excludes it.
     private var memberships: [ReadingQueueMembership] {
-        ReadingQueueService.orderedMemberships(in: queue)
-    }
-
-    private var works: [SavedWork] {
-        memberships.compactMap(\.work)
+        queue.kind == .smart ? [] : ReadingQueueService.orderedMemberships(in: queue)
     }
 
     var body: some View {
         let orderedMemberships = memberships
-        let queued = orderedMemberships.compactMap(\.work)
+        let queued: [SavedWork] = if queue.kind == .smart {
+            precomputedSmartWorks ?? ReadingQueueService.orderedWorks(in: queue)
+        } else {
+            orderedMemberships.compactMap(\.work)
+        }
         let progress = ReadingQueueFacts.progress(of: queued.map(\.readingState))
         let palette = themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
         HStack(spacing: 12) {
-            deck(memberships: orderedMemberships)
+            deck(memberships: orderedMemberships, works: queued)
             VStack(alignment: .leading, spacing: 3) {
                 Text(queue.displayName)
                     .font(.system(size: titleSize, weight: .semibold))
@@ -77,14 +79,14 @@ struct ReadingQueueCard: View {
 
     /// Board 00: a fixed 72pt queue stack beside the row's text. The front is
     /// the queue's own identity; the next visible works wait behind it.
-    private func deck(memberships: [ReadingQueueMembership]) -> some View {
+    private func deck(memberships: [ReadingQueueMembership], works: [SavedWork]) -> some View {
         StackedWorkCover(
             kind: .queue,
             name: queue.displayName,
             identity: queue.id,
             hue: queue.hue,
             pickedHex: queue.colorHex,
-            backs: worksBehind(in: memberships),
+            backs: worksBehind(in: memberships, works: works),
             size: CGSize(width: 72, height: 72)
         )
         .accessibilityHidden(true)
@@ -96,7 +98,18 @@ struct ReadingQueueCard: View {
 
     /// Blur and Hide both conceal a work's generated art; the count and progress
     /// remain aggregate facts and reveal no title, fandom or cover colour.
-    private func worksBehind(in memberships: [ReadingQueueMembership]) -> [SavedWork] {
+    private func worksBehind(
+        in memberships: [ReadingQueueMembership],
+        works: [SavedWork]
+    ) -> [SavedWork] {
+        if queue.kind == .smart {
+            let visible = works.filter { !gate.isConcealed($0, enabled: hideMature) }
+            guard let first = visible.first(where: { !$0.isFinished }) else {
+                return Array(visible.prefix(CoverStackLayout.maxBacks))
+            }
+            let rest = visible.filter { $0.id != first.id }
+            return Array(([first] + rest).prefix(CoverStackLayout.maxBacks))
+        }
         let visible = memberships.filter { membership in
             guard let work = membership.work else { return false }
             return !gate.isConcealed(work, enabled: hideMature)
@@ -532,7 +545,7 @@ struct AddToQueueView: View {
     }
 
     private var sortedQueues: [ReadingQueue] {
-        queues.sorted {
+        queues.filter { $0.kind != .smart }.sorted {
             if $0.kind != $1.kind { return $0.kind == .savedForLater }
             if $0.sortOrder != $1.sortOrder { return $0.sortOrder < $1.sortOrder }
             return $0.displayName < $1.displayName

@@ -24,8 +24,17 @@ extension ReadingQueueBrowserView {
 
     // MARK: - Sidebar rows
 
-    func queueRow(_ queue: ReadingQueue) -> some View {
-        let workCount = ReadingQueueService.orderedWorks(in: queue).count
+    func queueRow(
+        _ queue: ReadingQueue,
+        snapshot: ReadingQueueService.SmartLibrarySnapshot? = nil,
+        isVisible: ((SavedWork) -> Bool)? = nil
+    ) -> some View {
+        // A smart queue's badge counts what Hide Mature shows (the browser passes its check).
+        let workCount = if let snapshot {
+            ReadingQueueService.orderedWorks(in: queue, snapshot: snapshot, where: isVisible).count
+        } else {
+            ReadingQueueService.orderedWorks(in: queue, where: isVisible).count
+        }
         let isSelected = queue.id == selectedQueue?.id
         return Button { select(queue) } label: {
             HStack(spacing: 10) {

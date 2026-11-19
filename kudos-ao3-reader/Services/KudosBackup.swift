@@ -1757,6 +1757,10 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
     /// `hue`: an older archive or Android carries none, and `nil` there is "no
     /// description", never an instruction to clear one.
     let notes: String?
+    /// T-533 smart-queue rules. One JSON string, omitted when the queue has
+    /// none. An older archive or Android drops the key; import must not treat
+    /// that as "clear the rules". No manifest version bump.
+    let smartRulesJSON: String?
     let searchSources: [KudosBackupQueueSearchLink]?
     let searchSourcesModifiedAt: Date?
 
@@ -1776,12 +1780,16 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
         colorHex = queue.colorHex
         tagNames = queue.tags.map(\.name).sorted()
         isPinned = queue.isPinned
-        keepsWorksOffline = queue.keepsWorksOffline
+        keepsWorksOffline = queue.kind == .smart ? false : queue.keepsWorksOffline
         notes = queue.notes
-        let links = queue.searchLinks.filter { $0.search != nil }
-        searchSources = queue.searchSourcesModifiedAt == nil && links.isEmpty
+        // Rules travel only on a queue whose kind uses them, so a custom queue
+        // never carries rules that would read as a smart queue elsewhere.
+        smartRulesJSON = queue.kindRaw == ReadingQueueKind.custom.rawValue || queue.kind == .savedForLater
+            ? nil : queue.smartRulesJSON
+        let links = queue.kind == .smart ? [] : queue.searchLinks.filter { $0.search != nil }
+        searchSources = queue.kind == .smart || (queue.searchSourcesModifiedAt == nil && links.isEmpty)
             ? nil : links.map(KudosBackupQueueSearchLink.init)
-        searchSourcesModifiedAt = queue.searchSourcesModifiedAt
+        searchSourcesModifiedAt = queue.kind == .smart ? nil : queue.searchSourcesModifiedAt
     }
 
     func effectiveModifiedAt(memberships: [KudosBackupReadingQueueMembership]) -> Date? {
@@ -2306,6 +2314,8 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     let fonts: Int
     var suppressedQueues: Int = 0
     var suppressedQueueMemberships: Int = 0
+    /// Archived memberships targeting a `.smart` queue (computed from rules, never stored).
+    var skippedSmartQueueMemberships: Int = 0
     var revivedQueues: Int = 0
     var restoredRevivedQueueMemberships: Int = 0
     var ambiguousQueueConflicts: Int = 0
@@ -2499,7 +2509,9 @@ enum KudosBackupService {
             }
         }
 
-        let queueMemberships = readingQueues.flatMap(\.memberships)
+        let queueMemberships = readingQueues
+            .filter { $0.kind != .smart }
+            .flatMap(\.memberships)
             .compactMap(KudosBackupReadingQueueMembership.init)
         // Imported originals: the exact file a converted work was made from,
         // plus the record naming the converter that made it. `preserveOriginal`
@@ -3235,6 +3247,7 @@ enum KudosBackupService {
         var revivedQueueIDs: Set<UUID> = []
         var suppressedQueues = 0
         var suppressedQueueMemberships = 0
+        var skippedSmartQueueMemberships = 0
         var suppressedAnnotations = 0
         var revivedQueues = 0
         var restoredRevivedQueueMemberships = 0
@@ -3292,6 +3305,11 @@ enum KudosBackupService {
                     dateCreated: archived.dateCreated,
                     dateUpdated: archived.dateUpdated
                 )
+                // `kind` collapses an unknown raw value to `.custom`. Keep the
+                // archived string so a later export still says what it said.
+                if kind != .savedForLater, !archived.kindRaw.isEmpty {
+                    queue.kindRaw = archived.kindRaw
+                }
                 context.insert(queue)
                 queuesByID[archived.id] = queue
             }
@@ -3315,12 +3333,24 @@ enum KudosBackupService {
                     incomingModifiedAt: incomingModifiedAt
                 )
             }
-            if kind == .savedForLater {
+            // `queue.kind` too: an archive that reuses Saved for Later's id under
+            // another kind must not turn the built-in queue into that kind.
+            if kind == .savedForLater || queue.kind == .savedForLater {
                 queue.name = ReadingQueueService.savedForLaterName
                 queue.kind = .savedForLater
             } else if incomingWins || queue.name.isEmpty {
                 queue.name = archived.name
-                queue.kind = kind
+                // Write the archived string, not `kind`. `ReadingQueueKind(rawValue:)`
+                // maps anything it does not know — including a future kind — to
+                // `.custom`, and assigning that would erase it on the way back out.
+                // Older shipped iOS builds decode unknown kinds as `.custom`, so an
+                // archive's "custom" never downgrades a queue this device knows as
+                // another kind, with or without rules (no UI turns a queue custom).
+                if incomingWins, !archived.kindRaw.isEmpty,
+                   !(archived.kindRaw == ReadingQueueKind.custom.rawValue
+                     && queue.kindRaw != ReadingQueueKind.custom.rawValue) {
+                    queue.kindRaw = archived.kindRaw
+                }
                 queue.sortOrder = archived.sortOrder
             }
             // Only ever fills a colour in, never clears one: an archive written
@@ -3346,13 +3376,27 @@ enum KudosBackupService {
             }
             // `nil` here is "never asked", which is why it is optional: an older
             // archive cannot be read as the reader having chosen "no".
-            if let archivedOffline = archived.keepsWorksOffline,
-               incomingWins || queue.keepsWorksOffline == nil {
+            // Smart queues never keep works offline; leaving `nil` would read as
+            // "never asked" (`KeepOffline.queueKeeps(nil) == true`).
+            if queue.kind == .smart {
+                queue.keepsWorksOffline = false
+            } else if let archivedOffline = archived.keepsWorksOffline,
+                      incomingWins || queue.keepsWorksOffline == nil {
                 queue.keepsWorksOffline = archivedOffline
             }
             // The description fills in, and a winning archive's "" clears it.
             if let archivedNotes = archived.notes, incomingWins || queue.notes == nil {
                 queue.notes = archivedNotes
+            }
+            // Same as notes: a missing key is an older archive or Android, not
+            // a request to drop rules this device already stored. Replace
+            // included — the key's absence is not part of the snapshot.
+            // A custom queue (or one an older build downgraded) never stores
+            // rules: they would be re-exported and read as a smart queue.
+            if let archivedRules = archived.smartRulesJSON,
+               queue.kindRaw != ReadingQueueKind.custom.rawValue, queue.kind != .savedForLater,
+               incomingWins || queue.smartRulesJSON == nil {
+                queue.smartRulesJSON = archivedRules
             }
             // Union-only under merge and reconcile, exactly like SavedWork's
             // user tags above: there is no per-tag tombstone, so absence from a
@@ -3452,6 +3496,9 @@ enum KudosBackupService {
             let queue: ReadingQueue
             if let mapped = queueIDMap[archived.queueID] {
                 queue = mapped
+            } else if let existing = queuesByID[archived.queueID], existing.kind == .smart {
+                skippedSmartQueueMemberships += 1
+                continue
             } else {
                 // A malformed/older backup can contain a membership without the queue
                 // metadata. Preserve it in a clearly-restored custom queue instead of
@@ -3471,6 +3518,11 @@ enum KudosBackupService {
                 queueIDMap[archived.queueID] = restoredQueue
                 ambiguousQueueConflicts += 1
                 queue = restoredQueue
+            }
+            // Smart queues compute their works from rules; never attach stored memberships.
+            guard queue.kind != .smart else {
+                skippedSmartQueueMemberships += 1
+                continue
             }
             if let existing = work.queueMemberships.first(where: { $0.queue?.id == queue.id }) {
                 let incomingModifiedAt = archived.lastModifiedAt ?? archived.queuedAt
@@ -3536,7 +3588,17 @@ enum KudosBackupService {
         // The same second pass saved searches and reading sessions have, on the
         // membership's own clock: one changed after the removal survives.
         let membershipsAfterRestore = (try? context.fetch(FetchDescriptor<ReadingQueueMembership>())) ?? []
-        applyTombstonesToExisting(membershipsAfterRestore, in: context, mode: mode) {
+        var nonSmartMemberships: [ReadingQueueMembership] = []
+        for membership in membershipsAfterRestore {
+            if membership.queue?.kind == .smart {
+                membership.queue?.memberships.removeAll { $0.id == membership.id }
+                membership.work?.queueMemberships.removeAll { $0.id == membership.id }
+                context.delete(membership)
+            } else {
+                nonSmartMemberships.append(membership)
+            }
+        }
+        applyTombstonesToExisting(nonSmartMemberships, in: context, mode: mode) {
             tombstones.membershipResolution(id: $0.id, incomingModifiedAt: $0.lastModifiedAt)
         }
         ReadingQueueService.normalizeAllQueuedWorks(in: context)
@@ -3593,7 +3655,8 @@ enum KudosBackupService {
         for archived in contents.manifest.readingQueues {
             guard !suppressedQueueIDs.contains(archived.id),
                   let sources = archived.searchSources,
-                  let queue = queuesByID[archived.id]
+                  let queue = queuesByID[archived.id],
+                  queue.kind != .smart
             else { continue }
             let sourceStamp = archived.searchSourcesModifiedAt ?? archived.dateUpdated
             let applyMembership = mode == .replaceLibrary
@@ -4012,6 +4075,7 @@ enum KudosBackupService {
             fonts: restoredFonts,
             suppressedQueues: suppressedQueues,
             suppressedQueueMemberships: suppressedQueueMemberships,
+            skippedSmartQueueMemberships: skippedSmartQueueMemberships,
             revivedQueues: revivedQueues,
             restoredRevivedQueueMemberships: restoredRevivedQueueMemberships,
             ambiguousQueueConflicts: ambiguousQueueConflicts,

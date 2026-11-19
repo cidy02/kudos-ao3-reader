@@ -31,6 +31,9 @@ struct ReadingQueueBrowserView: View {
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
     private var allQueues: [ReadingQueue]
     @Query(sort: \Tag.name) private var allTags: [Tag]
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion })
+    private var libraryWorks: [SavedWork]
+    @Query private var tagAliases: [TagAlias]
 
     /// Persists the last-open queue across visits to this screen, independent of
     /// which queue a Library carousel tap pre-selected this time.
@@ -81,13 +84,18 @@ struct ReadingQueueBrowserView: View {
     /// Start and Read Aloud on the Up next Resume card push the reader.
     @State private var readerDestination: LocalWorkDestination?
 
-    /// Saved for Later first, then customs by `sortOrder`.
-    var orderedQueues: [ReadingQueue] {
-        allQueues.sorted {
-            if $0.kind != $1.kind { return $0.kind == .savedForLater }
+    /// Saved for Later first, then user queues (list and smart) by `sortOrder`.
+    static func orderedQueues(from queues: [ReadingQueue]) -> [ReadingQueue] {
+        queues.sorted {
+            if $0.isUserQueue != $1.isUserQueue { return !$0.isUserQueue }
             if $0.sortOrder != $1.sortOrder { return $0.sortOrder < $1.sortOrder }
             return $0.displayName < $1.displayName
         }
+    }
+
+    /// Saved for Later first, then user queues (list and smart) by `sortOrder`.
+    var orderedQueues: [ReadingQueue] {
+        Self.orderedQueues(from: allQueues)
     }
 
     /// Falls through to `initialQueueID` before `orderedQueues.first`: `selectedQueueID`
@@ -109,8 +117,55 @@ struct ReadingQueueBrowserView: View {
         selectedQueue.map(ReadingQueueService.orderedMemberships(in:)) ?? []
     }
 
+    private var needsSmartSnapshot: Bool {
+        selectedQueue?.kind == .smart
+            || (horizontalSizeClass == .regular && allQueues.contains { $0.kind == .smart })
+    }
+
+    private func makeSmartSnapshot() -> ReadingQueueService.SmartLibrarySnapshot? {
+        guard needsSmartSnapshot else { return nil }
+        return ReadingQueueService.SmartLibrarySnapshot(
+            works: libraryWorks,
+            aliases: TagAliasResolver(models: tagAliases)
+        )
+    }
+
+    private func resolvedWorks(snapshot: ReadingQueueService.SmartLibrarySnapshot?) -> [SavedWork] {
+        guard let selectedQueue else { return [] }
+        if selectedQueue.kind == .smart {
+            return snapshot?.matching(selectedQueue) ?? []
+        }
+        return orderedMemberships.compactMap(\.work)
+    }
+
+    /// Applies Hide Mature before `limit` on smart queues so hidden mature works
+    /// cannot consume limit slots and drop visible matches.
+    private func resolvedSmartUnfilteredVisible(
+        allMatched: [SavedWork],
+        snapshot: ReadingQueueService.SmartLibrarySnapshot?
+    ) -> [SavedWork] {
+        guard let selectedQueue, selectedQueue.kind == .smart else { return [] }
+        guard hideMature, matureMode == .hide, let snapshot else { return allMatched }
+        return snapshot.matching(selectedQueue) {
+            !gate.isHidden($0, enabled: hideMature, mode: matureMode)
+        }
+    }
+
+    private func resolvedSmartVisible(unfilteredVisible: [SavedWork]) -> [SavedWork] {
+        guard quickFilter != .all || filters.hasActiveFilters else { return unfilteredVisible }
+        // From the visible list: a downloaded visible work that hidden matches
+        // pushed past the unfiltered limit is still offline.
+        let preservedIDs = Set(
+            unfilteredVisible
+                .filter { $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path) }
+                .map(\.id)
+        )
+        let quick = quickFilter.apply(to: unfilteredVisible, preservedIDs: preservedIDs)
+        return filters.hasActiveFilters ? filters.apply(to: quick) : quick
+    }
+
     private var works: [SavedWork] {
-        orderedMemberships.compactMap(\.work)
+        resolvedWorks(snapshot: makeSmartSnapshot())
     }
 
     /// Hide mode drops Mature/Explicit works here, as every other works list
@@ -131,7 +186,13 @@ struct ReadingQueueBrowserView: View {
     }
 
     private var visibleWorks: [SavedWork] {
-        visibleMemberships.compactMap(\.work)
+        if selectedQueue?.kind == .smart {
+            let shown = works.filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
+            guard quickFilter != .all || filters.hasActiveFilters else { return shown }
+            let quick = quickFilter.apply(to: shown, preservedIDs: Set(preservedWorks.map(\.id)))
+            return filters.hasActiveFilters ? filters.apply(to: quick) : quick
+        }
+        return visibleMemberships.compactMap(\.work)
     }
 
     private var wholePartition: ReadingQueueSectionPartition {
@@ -467,27 +528,39 @@ struct ReadingQueueBrowserView: View {
         return selectedQueue?.displayName ?? "Reading Queues"
     }
 
-    private var queueOverrideInlineTitle: String? {
+    private func queueOverrideInlineTitle(worksEmpty: Bool) -> String? {
         if isSelecting { return "\(selectedWorks.count) selected" }
-        if isReordering || works.isEmpty { return queueInlineTitle }
+        if isReordering || worksEmpty { return queueInlineTitle }
         return nil
     }
 
     // MARK: - Body
 
     var body: some View {
+        let snapshot = makeSmartSnapshot()
+        let currentWorks = resolvedWorks(snapshot: snapshot)
+        let smartUnfilteredVisible = resolvedSmartUnfilteredVisible(
+            allMatched: currentWorks,
+            snapshot: snapshot
+        )
+        let smartVisible = resolvedSmartVisible(unfilteredVisible: smartUnfilteredVisible)
         Group {
             if horizontalSizeClass == .regular {
-                regularLayout
+                regularLayout(
+                    snapshot: snapshot,
+                    works: currentWorks,
+                    smartVisible: smartVisible,
+                    smartHeader: smartUnfilteredVisible
+                )
             } else {
-                compactLayout
+                compactLayout(works: currentWorks, smartVisible: smartVisible, smartHeader: smartUnfilteredVisible)
             }
         }
         .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
         .subjectOwnHeadingChrome(
             title: queueInlineTitle,
-            overrideInlineTitle: queueOverrideInlineTitle,
-            isActive: !works.isEmpty && !isReordering
+            overrideInlineTitle: queueOverrideInlineTitle(worksEmpty: currentWorks.isEmpty),
+            isActive: !currentWorks.isEmpty && !isReordering
         )
             .onAppear {
                 isPageVisible = true
@@ -501,7 +574,7 @@ struct ReadingQueueBrowserView: View {
                 #endif
             }
             .onChange(of: selectedQueue?.id) { _, _ in startSourceCheck() }
-            .onChange(of: works.count) { _, _ in startSourceCheck() }
+            .onChange(of: currentWorks.count) { _, _ in startSourceCheck() }
             .onChange(of: router.selection) { _, tab in
                 if tab != sourceOpeningTab {
                     sourceCheckTask?.cancel()
@@ -565,12 +638,12 @@ struct ReadingQueueBrowserView: View {
             .filterPanelPresentation(isPresented: $showingFilters) {
                 LibraryFilterPanel(
                     filters: $filters,
-                    works: works,
+                    works: selectedQueue?.kind == .smart ? smartUnfilteredVisible : currentWorks,
                     userTagNames: allTags.map(\.name)
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
-            .toolbar { manageToolbar }
+            .toolbar { manageToolbar(worksEmpty: currentWorks.isEmpty) }
             .sheet(isPresented: $showingEdit) {
                 if let selectedQueue {
                     EditReadingQueueSheet(queue: selectedQueue)
@@ -610,8 +683,8 @@ struct ReadingQueueBrowserView: View {
 
     /// The tab bar shows, as on the queue list; the select bulk bar takes the
     /// bottom only while selecting.
-    private var compactLayout: some View {
-        pageContent
+    private func compactLayout(works: [SavedWork], smartVisible: [SavedWork], smartHeader: [SavedWork]) -> some View {
+        pageContent(works: works, smartVisible: smartVisible, smartHeader: smartHeader)
             #if os(iOS)
             .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
             #endif
@@ -619,11 +692,16 @@ struct ReadingQueueBrowserView: View {
 
     // MARK: - Regular (iPad/Mac)
 
-    private var regularLayout: some View {
+    private func regularLayout(
+        snapshot: ReadingQueueService.SmartLibrarySnapshot?,
+        works: [SavedWork],
+        smartVisible: [SavedWork],
+        smartHeader: [SavedWork]
+    ) -> some View {
         HStack(spacing: 0) {
             List {
                 ForEach(orderedQueues) { queue in
-                    queueRow(queue)
+                    queueRow(queue, snapshot: snapshot) { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
                 }
                 .appThemedRows()
                 Button {
@@ -644,7 +722,7 @@ struct ReadingQueueBrowserView: View {
 
             // `pageContent`'s own heading names the selected queue, so the split
             // view does not add a separate title row above it.
-            pageContent
+            pageContent(works: works, smartVisible: smartVisible, smartHeader: smartHeader)
         }
         #if os(iOS)
         // No phone-style tab bar here to begin with; hidden for the sidebar.
@@ -662,8 +740,39 @@ extension ReadingQueueBrowserView {
     // MARK: - Active queue content
 
     @ViewBuilder
-    private var pageContent: some View {
-        if let selectedQueue, works.isEmpty {
+    /// `smartHeader` is the queue's visible list before quick filters (Hide Mature
+    /// applied before the limit), so the header never counts, times or shows
+    /// covers of works the reader cannot see. `works` still tells an empty
+    /// queue from an all-hidden one.
+    private func pageContent(works: [SavedWork], smartVisible: [SavedWork], smartHeader: [SavedWork]) -> some View {
+        if let selectedQueue, selectedQueue.kind == .smart {
+            let smartPreservedIDs = Set(
+                smartHeader
+                    .filter { $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path) }
+                    .map(\.id)
+            )
+            SmartQueueWorksPage(
+                queue: selectedQueue,
+                works: works,
+                headerWorks: smartHeader,
+                visibleWorks: smartVisible,
+                preservedIDs: smartPreservedIDs,
+                palette: subjectPalette,
+                arrangement: arrangement,
+                isNarrowed: quickFilter != .all || filters.hasActiveFilters,
+                onClearFilters: {
+                    filters = LibraryFilters()
+                    quickFilter = .all
+                },
+                onEditRules: { showingEdit = true },
+                onAddTag: { showingQueueTags = true },
+                filterRail: {
+                    if filters.hasActiveFilters || quickFilter != .all {
+                        filterChipRail
+                    }
+                }
+            )
+        } else if let selectedQueue, works.isEmpty {
             ContentUnavailableView {
                 Label(
                     selectedQueue.displayName,
@@ -1219,8 +1328,10 @@ extension ReadingQueueBrowserView {
     // MARK: - Toolbar (manage surface)
 
     @ToolbarContentBuilder
-    private var manageToolbar: some ToolbarContent {
-        if !works.isEmpty {
+    private func manageToolbar(worksEmpty: Bool) -> some ToolbarContent {
+        if selectedQueue?.kind == .smart {
+            smartManageToolbar(worksEmpty: worksEmpty)
+        } else if !worksEmpty {
             if isReordering {
                 // The word, as the organizer ends its reorder (pass2-13).
                 ToolbarItem(placement: .confirmationAction) {
@@ -1294,6 +1405,44 @@ extension ReadingQueueBrowserView {
 
     }
 
+    @ToolbarContentBuilder
+    private func smartManageToolbar(worksEmpty: Bool) -> some ToolbarContent {
+        if worksEmpty {
+            ToolbarItem(placement: .primaryAction) {
+                WorkListMoreMenu { queueMenuItems }
+                    .labelStyle(.iconOnly)
+            }
+        } else {
+            ToolbarItem(placement: .primaryAction) {
+                FilterButton(
+                    filtersActive: filters.hasActiveFilters,
+                    showingFilters: $showingFilters,
+                    filterHelp: "Filter the works in this queue",
+                    onClearFilters: { filters = LibraryFilters() }
+                )
+                .labelStyle(.iconOnly)
+            }
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+            ToolbarItem(placement: .primaryAction) {
+                WorkListMoreMenu {
+                    if hideMature {
+                        MatureRevealToggle()
+                    }
+                    ListGridMenuPicker(arrangement: $arrangement)
+                    Divider()
+                    Picker("Filter", selection: $quickFilter) {
+                        ForEach(QueueQuickFilter.allCases) { filter in
+                            Text(filter.title).tag(filter)
+                        }
+                    }
+                    Divider()
+                    queueMenuItems
+                }
+                .labelStyle(.iconOnly)
+            }
+        }
+    }
+
     @ViewBuilder
     private var addWorksSheet: some View {
         if let queue = selectedQueue {
@@ -1344,11 +1493,11 @@ extension ReadingQueueBrowserView {
         } label: {
             Label("Queue Details", systemImage: "info.circle")
         }
-        if let queue = selectedQueue, queue.kind == .custom {
+        if let queue = selectedQueue, queue.isUserQueue {
             Button {
                 showingEdit = true
             } label: {
-                Label("Edit Queue", systemImage: "pencil")
+                Label(queue.kind == .smart ? "Edit Rules" : "Edit Queue", systemImage: "pencil")
             }
             Button(role: .destructive) {
                 confirmDelete = true
@@ -1365,6 +1514,13 @@ extension ReadingQueueBrowserView {
         guard let selectedQueueID,
               let selectedQueue = orderedQueues.first(where: { $0.id == selectedQueueID })
         else { return }
+        guard selectedQueue.kind != .smart else {
+            // A smart queue has no Find More sources. Checking them would hit AO3.
+            sourceCheckTask?.cancel()
+            sourceCheckTask = nil
+            sourceCheckQueueID = nil
+            return
+        }
         guard !ReadingQueueService.orderedWorks(in: selectedQueue).isEmpty else {
             // An empty queue shows no Find More: stop the previous queue's pass too (third review).
             sourceCheckTask?.cancel()
@@ -1459,6 +1615,7 @@ extension ReadingQueueBrowserView {
             seededFrom: options.seed,
             tagNames: options.tagNames,
             seedWorkIDs: options.seedWorkIDs,
+            smartRulesJSON: options.isSmart ? options.smartRulesJSON : nil,
             in: context
         )
         // As Home's and the organizer's: unsaved, the half-made queue is dropped and the

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 /// Time budgets offered on `Queue-TimeFit.dc.html`: `15 min`, `30 min`, `1 h`, `2 h +`.
 enum WhatFitsBucket: String, CaseIterable, Identifiable, Hashable {
@@ -153,10 +154,17 @@ enum WhatFitsPlanner {
         queues: [ReadingQueue],
         bucket: WhatFitsBucket,
         isVisible: (SavedWork) -> Bool,
-        fileExists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
+        fileExists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) },
+        libraryWorks: [SavedWork]? = nil,
+        tagAliases: TagAliasResolver? = nil
     ) -> WhatFitsPlan {
         let activeQueues = orderedActiveQueues(from: queues)
-        let candidates = deduplicatedCandidates(in: activeQueues)
+        let candidates = deduplicatedCandidates(
+            in: activeQueues,
+            libraryWorks: libraryWorks,
+            tagAliases: tagAliases,
+            isVisible: isVisible
+        )
 
         var hasAnyVisibleWorks = false
         var hasAnyUnfinishedWorks = false
@@ -244,28 +252,55 @@ enum WhatFitsPlanner {
         queues
             .filter { !$0.isPendingDeletion }
             .sorted { lhs, rhs in
-                if lhs.kind != rhs.kind { return lhs.kind == .custom }
+                // User queues (list and smart) before Saved for Later, then sort order.
+                if lhs.isUserQueue != rhs.isUserQueue { return lhs.isUserQueue }
                 if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
                 return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
             }
     }
 
-    private static func deduplicatedCandidates(in queues: [ReadingQueue]) -> [Candidate] {
+    private static func deduplicatedCandidates(
+        in queues: [ReadingQueue],
+        libraryWorks: [SavedWork]?,
+        tagAliases: TagAliasResolver?,
+        isVisible: (SavedWork) -> Bool
+    ) -> [Candidate] {
         var orderedIDs: [UUID] = []
         var workByID: [UUID: SavedWork] = [:]
         var queueNamesByID: [UUID: [String]] = [:]
 
+        let hasSmartQueue = queues.contains { $0.kind == .smart }
+        let smartSnapshot: ReadingQueueService.SmartLibrarySnapshot? = if hasSmartQueue {
+            if let libraryWorks {
+                ReadingQueueService.SmartLibrarySnapshot(
+                    works: libraryWorks,
+                    aliases: tagAliases ?? .empty
+                )
+            } else if let context = queues.first(where: { $0.kind == .smart })?.modelContext {
+                ReadingQueueService.SmartLibrarySnapshot(in: context)
+            } else {
+                nil
+            }
+        } else {
+            nil
+        }
+
         for queue in queues {
-            let memberships = queue.memberships
-                .filter { !$0.isPendingDeletion }
-                .sorted {
-                    if $0.sortOrderInQueue != $1.sortOrderInQueue {
-                        return $0.sortOrderInQueue < $1.sortOrderInQueue
-                    }
-                    return $0.queuedAt > $1.queuedAt
-                }
-            for membership in memberships {
-                guard let work = membership.work, !work.isPendingDeletion else { continue }
+            // `orderedWorks` is the membership list for a manual queue and the
+            // computed matches for a smart one. A work is still counted once.
+            // A smart queue's limit counts visible works first (Hide Mature runs
+            // before the limit); its hidden matches follow so the planner can
+            // still say that mature works would fit.
+            let queueWorks: [SavedWork] = if let smartSnapshot, queue.kind == .smart {
+                withoutActuallyEscaping(isVisible) { visible in
+                    ReadingQueueService.orderedWorks(in: queue, snapshot: smartSnapshot, where: visible)
+                } + smartSnapshot.matching(queue).filter { !isVisible($0) }
+            } else if let smartSnapshot {
+                ReadingQueueService.orderedWorks(in: queue, snapshot: smartSnapshot)
+            } else {
+                ReadingQueueService.orderedMemberships(in: queue).compactMap(\.work)
+            }
+            for work in queueWorks where !work.isPendingDeletion {
                 if workByID[work.id] == nil {
                     orderedIDs.append(work.id)
                     workByID[work.id] = work

@@ -309,6 +309,8 @@ struct QueuePageHeader<FilterRail: View>: View {
     @ViewBuilder var filterRail: () -> FilterRail
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
 
     var body: some View {
         let progress = ReadingQueueFacts.progress(of: works.map(\.readingState))
@@ -323,43 +325,45 @@ struct QueuePageHeader<FilterRail: View>: View {
         VStack(alignment: .leading, spacing: 14) {
             headerTop(detailLine: detailLine)
 
-            ForEach(queue.searchLinks.filter { $0.search != nil }.sorted {
-                ($0.search?.name ?? "") < ($1.search?.name ?? "")
-            }) { link in
-                if let search = link.search {
-                    let count = QueueSourceChecks.displayedCount(
-                        link.newResultCount, filters: search.filters
-                    )
-                    let layout = dynamicTypeSize.isAccessibilitySize
-                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
-                        : AnyLayout(HStackLayout(alignment: .center, spacing: 10))
-                    Button { onFindMore(search) } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundStyle(.secondary)
-                            layout {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Find More").font(.subheadline.weight(.semibold))
-                                    Text(search.name).font(.caption).foregroundStyle(.secondary)
+            if queue.kind != .smart {
+                ForEach(queue.searchLinks.filter { $0.search != nil }.sorted {
+                    ($0.search?.name ?? "") < ($1.search?.name ?? "")
+                }) { link in
+                    if let search = link.search {
+                        let count = QueueSourceChecks.displayedCount(
+                            link.newResultCount, filters: search.filters
+                        )
+                        let layout = dynamicTypeSize.isAccessibilitySize
+                            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                            : AnyLayout(HStackLayout(alignment: .center, spacing: 10))
+                        Button { onFindMore(search) } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundStyle(.secondary)
+                                layout {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Find More").font(.subheadline.weight(.semibold))
+                                        Text(search.name).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 4) }
+                                    if let count {
+                                        Text(QueueSourceChecks.badge(count))
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.tint)
+                                    }
                                 }
-                                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 4) }
-                                if let count {
-                                    Text(QueueSourceChecks.badge(count))
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.tint)
-                                }
+                                // Stacked at AX sizes there is no Spacer: keep the card full width (third review).
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
                             }
-                            // Stacked at AX sizes there is no Spacer: keep the card full width (third review).
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+                            .padding(12)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
                         }
-                        .padding(12)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(QueueSourceChecks.findMoreAccessibilityLabel(
+                            name: search.name, count: link.newResultCount, filters: search.filters
+                        ))
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(QueueSourceChecks.findMoreAccessibilityLabel(
-                        name: search.name, count: link.newResultCount, filters: search.filters
-                    ))
                 }
             }
 
@@ -425,7 +429,8 @@ struct QueuePageHeader<FilterRail: View>: View {
             identity: queue.id,
             hue: queue.hue,
             pickedHex: queue.colorHex,
-            backs: Array(works.prefix(CoverStackLayout.maxBacks)),
+            // StackedWorkCover's rule: a concealed work's fandom colour stays out.
+            backs: Array(works.filter { !gate.isConcealed($0, enabled: hideMature) }.prefix(CoverStackLayout.maxBacks)),
             size: CGSize(width: 96, height: 96)
         )
         .accessibilityHidden(true)

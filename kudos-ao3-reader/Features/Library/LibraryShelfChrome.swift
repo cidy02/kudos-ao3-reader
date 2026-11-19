@@ -160,13 +160,16 @@ struct LibraryShelfButtonGrid: View {
 /// the short footer; this is the list's fuller line.
 struct LibraryQueueLedgerRow: View {
     let queue: ReadingQueue
+    var precomputedSmartWorks: [SavedWork]?
 
     @Environment(ThemeManager.self) private var themeManager
     @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 17
     @ScaledMetric(relativeTo: .footnote) private var detailSize: CGFloat = 13
 
     var body: some View {
-        let works = ReadingQueueService.orderedWorks(in: queue)
+        let works = queue.kind == .smart
+            ? (precomputedSmartWorks ?? ReadingQueueService.orderedWorks(in: queue))
+            : ReadingQueueService.orderedWorks(in: queue)
         let states = works.map(\.readingState)
         let progress = ReadingQueueFacts.progress(of: states)
         let preserved = works.filter { $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path) }

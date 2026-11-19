@@ -60,6 +60,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     private var readingSessions: [ReadingSession]
     @Query(sort: \FollowedTag.followedAt)
     private var followedTags: [FollowedTag]
+    @Query private var tagAliases: [TagAlias]
     @State private var readingStats = HomeReadingStats()
     @State private var path = NavigationPath()
     @State private var isHomeVisible = false
@@ -683,9 +684,15 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
 
     private var readingQueuesSection: some View {
         let customQueues = readingQueues
-            .filter { $0.kind == .custom }
+            .filter(\.isUserQueue)
             .sorted { $0.sortOrder < $1.sortOrder }
         let visibleQueues = Array(customQueues.prefix(3))
+        let smartSnapshot = visibleQueues.contains { $0.kind == .smart }
+            ? ReadingQueueService.SmartLibrarySnapshot(
+                works: works,
+                aliases: TagAliasResolver(models: tagAliases)
+            )
+            : nil
 
         return VStack(alignment: .leading, spacing: 6) {
             SectionRuleHeader(
@@ -711,6 +718,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         }
                         HomeQueueRow(
                             queue: queue,
+                            precomputedSmartWorks: queue.kind == .smart ? smartSnapshot?.matching(queue, where: passesPrivacy) : nil,
                             onOpenQueue: { path.append(AllReadingQueuesDestination(initialQueueID: queue.id)) },
                             onStartWork: { path.append(LocalWorkDestination.reader($0)) }
                         )
@@ -997,6 +1005,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             seededFrom: options.seed,
             tagNames: options.tagNames,
             seedWorkIDs: options.seedWorkIDs,
+            smartRulesJSON: options.isSmart ? options.smartRulesJSON : nil,
             in: context
         )
         // `createQueue` saved best-effort; this asks whether that stuck (a no-op when it
@@ -1394,6 +1403,7 @@ private struct HomeNewChapterRow: View {
 
 private struct HomeQueueRow: View {
     let queue: ReadingQueue
+    var precomputedSmartWorks: [SavedWork]?
     let onOpenQueue: () -> Void
     let onStartWork: (SavedWork) -> Void
 
@@ -1405,62 +1415,97 @@ private struct HomeQueueRow: View {
     /// The up-next work's measured chapters, so its "Ch N" matches its bars elsewhere.
     @State private var upNextLengths: ChapterLengths?
 
-    private var queuedMemberships: [ReadingQueueMembership] {
-        ReadingQueueService.orderedMemberships(in: queue)
+    private struct ResolvedState {
+        let queuedWorks: [SavedWork]
+        let upNextWork: SavedWork?
+        let worksBehind: [SavedWork]
+        let emptyUpNextLabel: String
+        let leftCount: Int
+        let queueProgress: ReadingQueueFacts.Progress
+        let queueFills: [Double]
+
+        var isResume: Bool {
+            guard let upNextWork else { return false }
+            return (upNextWork.readingProgress ?? 0) > 0 || upNextWork.readingState == .inProgress
+        }
+
+        var actionTitle: String {
+            isResume ? "Resume" : "Start"
+        }
     }
 
-    private var queuedWorks: [SavedWork] {
-        queuedMemberships.compactMap(\.work)
-    }
-
-    private var visibleQueuedMemberships: [ReadingQueueMembership] {
-        queuedMemberships.filter { membership in
+    private func resolveState() -> ResolvedState {
+        let memberships = queue.kind == .smart ? [] : ReadingQueueService.orderedMemberships(in: queue)
+        let queuedWorks: [SavedWork] = if queue.kind == .smart {
+            precomputedSmartWorks ?? ReadingQueueService.orderedWorks(in: queue)
+        } else {
+            memberships.compactMap(\.work)
+        }
+        let visibleMemberships = memberships.filter { membership in
             guard let work = membership.work else { return false }
             return !gate.isConcealed(work, enabled: hideMature)
         }
-    }
-
-    private var upNextWork: SavedWork? {
-        ReadingQueueFacts.upNext(inMemberships: visibleQueuedMemberships).upNext
-    }
-
-    private var worksBehind: [SavedWork] {
-        let split = ReadingQueueFacts.upNext(inMemberships: visibleQueuedMemberships)
-        var ordered = split.inLine
-        if let upNext = split.upNext { ordered.insert(upNext, at: 0) }
-        return Array(ordered.prefix(CoverStackLayout.maxBacks))
-    }
-
-    private var emptyUpNextLabel: String {
-        if queuedWorks.isEmpty { return "Empty queue" }
-        if visibleQueuedMemberships.isEmpty { return "Works hidden" }
-        let partition = ReadingQueueFacts.partition(memberships: visibleQueuedMemberships)
-        if !partition.new.isEmpty {
-            return partition.new.count == 1 ? "1 new to sort" : "\(partition.new.count) new to sort"
+        let visibleWorks = queuedWorks.filter { !gate.isConcealed($0, enabled: hideMature) }
+        let upNextWork: SavedWork?
+        let worksBehind: [SavedWork]
+        let emptyLabel: String
+        if queue.kind == .smart {
+            upNextWork = visibleWorks.first { !$0.isFinished }
+            if let first = upNextWork {
+                let rest = visibleWorks.filter { $0.id != first.id }
+                worksBehind = Array(([first] + rest).prefix(CoverStackLayout.maxBacks))
+            } else {
+                worksBehind = Array(visibleWorks.prefix(CoverStackLayout.maxBacks))
+            }
+            if queuedWorks.isEmpty {
+                emptyLabel = "No matches"
+            } else if visibleWorks.isEmpty {
+                emptyLabel = "Works hidden"
+            } else {
+                emptyLabel = "All finished"
+            }
+        } else {
+            let split = ReadingQueueFacts.upNext(inMemberships: visibleMemberships)
+            upNextWork = split.upNext
+            var ordered = split.inLine
+            if let upNext = split.upNext { ordered.insert(upNext, at: 0) }
+            worksBehind = Array(ordered.prefix(CoverStackLayout.maxBacks))
+            if queuedWorks.isEmpty {
+                emptyLabel = "Empty queue"
+            } else if visibleMemberships.isEmpty {
+                emptyLabel = "Works hidden"
+            } else {
+                let partition = ReadingQueueFacts.partition(memberships: visibleMemberships)
+                if !partition.new.isEmpty {
+                    emptyLabel = partition.new.count == 1
+                        ? "1 new to sort"
+                        : "\(partition.new.count) new to sort"
+                } else if !partition.waiting.isEmpty {
+                    emptyLabel = "Waiting for new chapters"
+                } else {
+                    emptyLabel = "All finished"
+                }
+            }
         }
-        if !partition.waiting.isEmpty { return "Waiting for new chapters" }
-        return "All finished"
+        return ResolvedState(
+            queuedWorks: queuedWorks,
+            upNextWork: upNextWork,
+            worksBehind: worksBehind,
+            emptyUpNextLabel: emptyLabel,
+            leftCount: queuedWorks.count { !$0.isFinished },
+            queueProgress: ReadingQueueFacts.progress(of: queuedWorks.map(\.readingState)),
+            queueFills: queuedWorks.map {
+                ReadingQueueFacts.segmentFill(state: $0.readingState, progress: $0.readingProgress)
+            }
+        )
     }
 
-    private var leftCount: Int {
-        queuedWorks.filter { !$0.isFinished }.count
-    }
-
-    private var isResume: Bool {
-        guard let upNextWork else { return false }
-        return (upNextWork.readingProgress ?? 0) > 0 || upNextWork.readingState == .inProgress
-    }
-
-    private var actionTitle: String {
-        isResume ? "Resume" : "Start"
-    }
-
-    private var metaLine: String {
-        guard let work = upNextWork else { return "No works" }
+    private func metaLine(for state: ResolvedState) -> String {
+        guard let work = state.upNextWork else { return "No works" }
         var parts: [String] = []
         let author = work.author.trimmingCharacters(in: .whitespacesAndNewlines)
         if !author.isEmpty { parts.append(author) }
-        if isResume {
+        if state.isResume {
             if let progress = work.readingProgress, progress > 0 {
                 parts.append(WorkCoverMetadata.reading(
                     chapters: work.chapters, progress: progress, weights: upNextLengths?.positions
@@ -1486,49 +1531,40 @@ private struct HomeQueueRow: View {
         themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
     }
 
-    private var queueProgress: ReadingQueueFacts.Progress {
-        ReadingQueueFacts.progress(of: queuedWorks.map(\.readingState))
-    }
-
-    private var queueFills: [Double] {
-        queuedWorks.map {
-            ReadingQueueFacts.segmentFill(state: $0.readingState, progress: $0.readingProgress)
-        }
-    }
-
     var body: some View {
+        let state = resolveState()
         Group {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .top, spacing: 12) {
-                        coverButton
-                        detailsButton
+                        coverButton(worksBehind: state.worksBehind)
+                        detailsButton(state: state)
                     }
-                    if upNextWork != nil {
+                    if state.upNextWork != nil {
                         HStack {
                             Spacer(minLength: 0)
-                            startButton
+                            startButton(state: state)
                         }
                     }
                 }
             } else {
                 HStack(alignment: .center, spacing: 12) {
-                    coverButton
-                    detailsButton
-                    startButton
+                    coverButton(worksBehind: state.worksBehind)
+                    detailsButton(state: state)
+                    startButton(state: state)
                 }
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .modifier(QueueCardMenu(queue: queue))
-        .task(id: ChapterLengthCache.taskKey(for: upNextWork)) {
-            guard let upNextWork else { upNextLengths = nil; return }
+        .task(id: ChapterLengthCache.taskKey(for: state.upNextWork)) {
+            guard let upNextWork = state.upNextWork else { upNextLengths = nil; return }
             upNextLengths = await ChapterLengthCache.lengths(for: upNextWork)
         }
     }
 
-    private var coverButton: some View {
+    private func coverButton(worksBehind: [SavedWork]) -> some View {
         Button(action: onOpenQueue) {
             StackedWorkCover(
                 kind: .queue,
@@ -1544,7 +1580,7 @@ private struct HomeQueueRow: View {
         .accessibilityHidden(true)
     }
 
-    private var detailsButton: some View {
+    private func detailsButton(state: ResolvedState) -> some View {
         Button(action: onOpenQueue) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(dynamicTypeSize.isAccessibilitySize
@@ -1556,13 +1592,13 @@ private struct HomeQueueRow: View {
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
                 // Two lines before it truncates: the offline count is the last fact.
-                Text(ReadingQueueFacts.planFacts(for: queuedWorks))
+                Text(ReadingQueueFacts.planFacts(for: state.queuedWorks))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if let work = upNextWork {
+                if let work = state.upNextWork {
                     Text(dynamicTypeSize.isAccessibilitySize
                         ? AccessibilitySoftBreak.opportunities(in: work.title)
                         : work.title)
@@ -1573,15 +1609,15 @@ private struct HomeQueueRow: View {
 
                     HStack(spacing: 8) {
                         QueueProgressStrip(
-                            progress: queueProgress,
+                            progress: state.queueProgress,
                             palette: palette,
-                            fills: queueFills,
+                            fills: state.queueFills,
                             height: 4,
                             gap: 3
                         )
                         .frame(maxWidth: .infinity)
 
-                        Text("\(leftCount) to go")
+                        Text("\(state.leftCount) to go")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
@@ -1589,12 +1625,12 @@ private struct HomeQueueRow: View {
                     }
                     .padding(.vertical, 2)
 
-                    Text(metaLine)
+                    Text(metaLine(for: state))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 } else {
-                    Text(emptyUpNextLabel)
+                    Text(state.emptyUpNextLabel)
                         .font(.body.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
@@ -1605,10 +1641,10 @@ private struct HomeQueueRow: View {
     }
 
     @ViewBuilder
-    private var startButton: some View {
-        if let work = upNextWork {
+    private func startButton(state: ResolvedState) -> some View {
+        if let work = state.upNextWork {
             Button(action: { onStartWork(work) }) {
-                Text(actionTitle)
+                Text(state.actionTitle)
                     .font(.subheadline.weight(.semibold))
                     // The theme's app colour (Sepia brown), not the fixed asset red.
                     .foregroundStyle(.accentInk)
@@ -1617,7 +1653,7 @@ private struct HomeQueueRow: View {
                     .background(accentFill.opacity(0.10), in: Capsule())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(actionTitle) \(work.title)")
+            .accessibilityLabel("\(state.actionTitle) \(work.title)")
         }
     }
 }

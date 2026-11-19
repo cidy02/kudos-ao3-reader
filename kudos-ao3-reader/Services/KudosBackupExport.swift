@@ -91,7 +91,9 @@ extension KudosBackupService {
         tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupExportPlan {
-        let queueMemberships = readingQueues.flatMap(\.memberships)
+        let queueMemberships = readingQueues
+            .filter { $0.kind != .smart }
+            .flatMap(\.memberships)
             .compactMap(KudosBackupReadingQueueMembership.init)
         let manifest = KudosBackupManifest(
             works: works.map(KudosBackupWork.init),

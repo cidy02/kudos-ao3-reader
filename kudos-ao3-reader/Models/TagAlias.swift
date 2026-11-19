@@ -79,6 +79,9 @@ nonisolated struct TagAliasResolver: Equatable, Sendable {
     static let empty = TagAliasResolver(entries: [])
 
     private let canonicalByKey: [LookupKey: String]
+    /// Lowercased names, for `resolveIgnoringCase`. AO3 matches tag names
+    /// case-insensitively (otwarchive `tags` uses `utf8mb4_unicode_ci`).
+    private let canonicalByFoldedKey: [LookupKey: String]
     private let parentsByFandom: [String: Set<String>]
 
     init(entries: [Entry]) {
@@ -100,6 +103,13 @@ nonisolated struct TagAliasResolver: Equatable, Sendable {
         }
 
         self.canonicalByKey = canonicalMap
+        var folded: [LookupKey: String] = [:]
+        // Sorted, so when several casings fold together the same one wins every launch.
+        for (key, canonical) in canonicalMap.sorted(by: { $0.key.name < $1.key.name }) {
+            let lower = LookupKey(kind: key.kind, name: key.name.lowercased())
+            if folded[lower] == nil { folded[lower] = canonical }
+        }
+        self.canonicalByFoldedKey = folded
         self.parentsByFandom = parentMap
     }
 
@@ -153,6 +163,17 @@ nonisolated struct TagAliasResolver: Equatable, Sendable {
             current = next
         }
         return current
+    }
+
+    /// `resolve`, but a name with no exact-case alias tries one with any case,
+    /// so "hp" follows a learned "HP" alias. Exact-case aliases win.
+    func resolveIgnoringCase(_ rawName: String, kind: TagAliasKind) -> String {
+        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let exact = resolve(trimmed, kind: kind)
+        guard exact == trimmed,
+              let folded = canonicalByFoldedKey[LookupKey(kind: kind, name: trimmed.lowercased())]
+        else { return exact }
+        return resolve(folded, kind: kind)
     }
 
     /// Resolves and deduplicates an ordered list of tag names for `kind`,

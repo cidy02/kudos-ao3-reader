@@ -332,9 +332,13 @@ final class RemoteWorkSelectionController {
 
     static func currentQueue(in queues: [ReadingQueue], sourceID: UUID?, storedID: String?) -> ReadingQueue? {
         let active = queues.filter { !$0.isPendingDeletion }
-        if let sourceID, let queue = active.first(where: { $0.id == sourceID }) { return queue }
+        if let sourceID, let queue = active.first(where: { $0.id == sourceID }), queue.kind != .smart {
+            return queue
+        }
         if let storedID, let id = UUID(uuidString: storedID),
-           let queue = active.first(where: { $0.id == id }) { return queue }
+           let queue = active.first(where: { $0.id == id }), queue.kind != .smart {
+            return queue
+        }
         return active.first { $0.kind == .savedForLater }
     }
 
