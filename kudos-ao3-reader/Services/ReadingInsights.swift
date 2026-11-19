@@ -1339,6 +1339,13 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         var progressPercent: Int?
         var daysUntouched: Int
         var work: SavedWork
+
+        /// Identity plus what the card shows: the model object itself is not comparable off the main actor (macOS).
+        nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.id == rhs.id && lhs.title == rhs.title && lhs.fandom == rhs.fandom
+                && lhs.chapterProgress == rhs.chapterProgress && lhs.progressPercent == rhs.progressPercent
+                && lhs.daysUntouched == rhs.daysUntouched
+        }
     }
 
     static func make(
