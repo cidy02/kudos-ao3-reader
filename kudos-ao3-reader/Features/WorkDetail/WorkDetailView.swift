@@ -42,6 +42,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// `read()` has nothing useful to push — it dismisses back to the live
     /// reader underneath instead of stacking a second reader on top of it.
     private let openedFromReader: Bool
+    @State private var recordedSeriesView = false
 
     init(work: SavedWork, openedFromReader: Bool = false, linkedChapterID: Int? = nil) {
         source = .saved(work)
@@ -226,6 +227,13 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             // switching sections re-renders from this already-loaded state without
             // re-fetching anything.
             resolveExistingIfNeeded()
+            if !openedFromReader, !recordedSeriesView {
+                recordedSeriesView = true
+                SavedSeriesWeeklyCheck.recordView(
+                    seriesID: localWork?.ao3SeriesID ?? ReadingQueueService.ao3SeriesID(from: displaySeriesURL),
+                    in: context
+                )
+            }
             #if DEBUG
             if let workID = ao3WorkID, DebugLaunchRoute.takeSheet("bookmarkform") {
                 workActions.startBookmark(workID: workID, auth: auth)

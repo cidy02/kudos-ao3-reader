@@ -917,6 +917,17 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 ignoringCooldown: false,
                 isScreenActive: { isHomeCheckActive }
             )
+            await SavedSeriesWeeklyCheck.run(
+                in: context,
+                mail: {
+                    #if os(iOS)
+                    (mailDriver.isConnected, mailDriver.updates)
+                    #else
+                    (false, [])
+                    #endif
+                },
+                isScreenActive: { isHomeCheckActive }
+            )
         }
     }
 

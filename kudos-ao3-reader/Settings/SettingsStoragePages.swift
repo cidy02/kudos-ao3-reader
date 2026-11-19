@@ -111,6 +111,7 @@ struct SettingsPreservationPage: View {
 struct SettingsLibraryPage: View {
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     @AppStorage("showsZeroStats") private var showsZeroStats = true
+    @AppStorage(SavedSeriesWeeklyCheck.enabledKey) private var checksSavedSeriesWeekly = true
 
     var body: some View {
         SettingsPageForm(route: .library) {
@@ -122,6 +123,17 @@ struct SettingsLibraryPage: View {
                     """
                     Confirm before deleting asks before a swipe removes a work from your Library. \
                     Show zero counts keeps empty stats on work cards; turn it off to hide them.
+                    """
+                )
+            }
+            Section {
+                Toggle("Check saved series weekly", isOn: $checksSavedSeriesWeekly).accentFill()
+            } footer: {
+                Text(
+                    """
+                    Once a week, Kudos asks AO3 whether a series you have opened has new parts, a few at a time and \
+                    spread across the week. Series whose AO3 notifications reach Kudos are never asked. Turn it off \
+                    and a series updates only when you open it.
                     """
                 )
             }

@@ -47,6 +47,12 @@ struct SubscriptionUpdate: Codable, Equatable, Identifiable, Sendable {
         /// this `.work` would report the work as pinned when nothing is.
         case unknown
 
+        /// The AO3 id inside `.series("Series #<id>")`, the only form this file writes (see `source` below).
+        var seriesID: Int? {
+            guard case let .series(name) = self, name.hasPrefix("Series #") else { return nil }
+            return Int(name.dropFirst("Series #".count))
+        }
+
         var tagWorksRequest: AO3TagWorksRequest? {
             guard case let .tag(tag) = self else { return nil }
             let url = tag.tagURLString

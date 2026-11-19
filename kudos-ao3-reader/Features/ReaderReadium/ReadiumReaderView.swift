@@ -23,10 +23,19 @@ struct BookReaderView: View {
     /// The saved locator remains untouched until the navigator reports movement.
     var initialSpineIndex: Int? = nil
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.modelContext) private var context
+    @State private var recordedSeriesView = false
 
     var body: some View {
         reader.keepScreenAwakeWhileReading()
             .accentTint(theme.effectiveTint, on: theme.readerChromeTheme)
+            .onAppear {
+                guard !recordedSeriesView else { return }
+                recordedSeriesView = true
+                SavedSeriesWeeklyCheck.recordView(
+                    seriesID: work.ao3SeriesID ?? ReadingQueueService.ao3SeriesID(from: work.seriesURL), in: context
+                )
+            }
     }
 
     @ViewBuilder private var reader: some View {
