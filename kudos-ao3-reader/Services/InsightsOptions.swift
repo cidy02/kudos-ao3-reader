@@ -6,15 +6,37 @@ import SwiftData
 /// Stored locally in `UserDefaults` and optionally carried in `KudosBackupSettings`
 /// so backups and Folder Sync can mirror choices without breaking older payloads.
 nonisolated struct InsightsOptions: Equatable, Sendable {
-    var discreetMode: Bool = false
-    var hideReadingTime: Bool = false
-    var countRereads: Bool = true
-    var countReadAloud: Bool = true
-    var askAboutUntouched: Bool = true
-    var untouchedDays: Int = Self.defaultUntouchedDays
-    var excludedFandoms: [String] = []
-    var excludedTags: [String] = []
-    var excludedWorkIDs: [String] = []
+    var discreetMode: Bool
+    var hideReadingTime: Bool
+    var countRereads: Bool
+    var countReadAloud: Bool
+    var askAboutUntouched: Bool
+    var untouchedDays: Int
+    var excludedFandoms: [String]
+    var excludedTags: [String]
+    var excludedWorkIDs: [String]
+
+    init(
+        discreetMode: Bool = false,
+        hideReadingTime: Bool = false,
+        countRereads: Bool = true,
+        countReadAloud: Bool = true,
+        askAboutUntouched: Bool = true,
+        untouchedDays: Int = Self.defaultUntouchedDays,
+        excludedFandoms: [String] = [],
+        excludedTags: [String] = [],
+        excludedWorkIDs: [String] = []
+    ) {
+        self.discreetMode = discreetMode
+        self.hideReadingTime = hideReadingTime
+        self.countRereads = countRereads
+        self.countReadAloud = countReadAloud
+        self.askAboutUntouched = askAboutUntouched
+        self.untouchedDays = Self.clampUntouchedDays(untouchedDays)
+        self.excludedFandoms = Self.normalizedNames(excludedFandoms)
+        self.excludedTags = Self.normalizedNames(excludedTags)
+        self.excludedWorkIDs = Self.normalizedWorkIDs(excludedWorkIDs)
+    }
 
     static let defaultUntouchedDays = 21
     static let untouchedDaysRange = 1...365

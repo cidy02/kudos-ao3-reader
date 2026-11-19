@@ -1377,6 +1377,15 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         var progressPercent: Int?
         var daysUntouched: Int
         var work: SavedWork
+
+        static func == (lhs: StillReadingCandidate, rhs: StillReadingCandidate) -> Bool {
+            lhs.id == rhs.id
+                && lhs.title == rhs.title
+                && lhs.fandom == rhs.fandom
+                && lhs.chapterProgress == rhs.chapterProgress
+                && lhs.progressPercent == rhs.progressPercent
+                && lhs.daysUntouched == rhs.daysUntouched
+        }
     }
 
     static func make(
