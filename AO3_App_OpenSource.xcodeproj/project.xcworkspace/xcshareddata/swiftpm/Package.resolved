@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/readium/Fuzi.git",
       "state" : {
-        "revision" : "173ec944ca6f2e8024ceb7324bcb8a3cc95a0661",
-        "version" : "4.0.1"
+        "revision" : "347aab158ff8894966ff80469b384bb5337928cd",
+        "version" : "4.0.0"
       }
     },
     {
@@ -69,8 +69,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/stephencelis/SQLite.swift.git",
       "state" : {
-        "revision" : "4114679379eeb4538638f49ec14e1854dd9cf73c",
-        "version" : "0.17.0"
+        "revision" : "964c300fb0736699ce945c9edb56ecd62eba27a3",
+        "version" : "0.16.0"
       }
     },
     {
@@ -88,7 +88,7 @@
       "location" : "https://github.com/cidy02/swift-toolkit.git",
       "state" : {
         "branch" : "kudos/page-transitions",
-        "revision" : "07c6470e8564f59ce4c67857b1821fb5b7865987"
+        "revision" : "2d0f9a903a4c9201e6dfbc4292662875b8ddc5e2"
       }
     },
     {
@@ -114,8 +114,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/readium/ZIPFoundation.git",
       "state" : {
-        "revision" : "4f8ac5b26ed781ce48deff08bd47222f3e220d06",
-        "version" : "3.0.2"
+        "revision" : "adb49c8bfe060cc187370b12fa081012a6440b86",
+        "version" : "3.0.1"
       }
     }
   ],
