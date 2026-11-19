@@ -22,9 +22,14 @@ struct InsightsOptionsSheet: View {
     @AppStorage(InsightsOptions.Keys.untouchedDays)
     private var untouchedDays: Int = InsightsOptions.defaultUntouchedDays
 
+    /// The main scope's works and hidden works: the exclusion choices never name hidden works.
     let works: [SavedWork]
-    /// Privacy-gated works: their sessions stay out of the export and the exclusion choices.
     var hiddenWorkIDs: Set<UUID> = []
+    /// What the screen counts (main, or combined while revealed); the export follows it.
+    let exportScope: InsightsScopeSelection
+    @Binding var includeHidden: Bool
+    /// Hide Mature is on and the privacy gate is revealed.
+    var canIncludeHidden = false
     let onShowHowCounted: () -> Void
     let onOptionsChanged: () -> Void
 
@@ -74,6 +79,9 @@ struct InsightsOptionsSheet: View {
         NavigationStack {
             List {
                 privacySection
+                if canIncludeHidden {
+                    hiddenSection
+                }
                 whatCountsSection
                 readingHistorySection
                 howCountedSection
@@ -216,6 +224,27 @@ struct InsightsOptionsSheet: View {
             Text("Privacy")
         } footer: {
             Text("Discreet Mode hides fandom, relationship, character and tag names here and in exports. Totals stay.")
+        }
+        .appThemedRows()
+    }
+
+    /// Session-only: the screen turns it off when the gate re-locks, and it is never stored.
+    private var hiddenSection: some View {
+        Section {
+            Toggle(isOn: $includeHidden) {
+                Label {
+                    Text("Include Hidden")
+                } icon: {
+                    Image(systemName: "eye")
+                        .foregroundStyle(.secondaryInk)
+                }
+            }
+            .accentFill()
+            .accessibilityHint("Counts hidden mature works in every figure and export until Mature is hidden again")
+        } header: {
+            Text("Hidden")
+        } footer: {
+            Text("Counts hidden mature works in every figure and export. Turns off when Mature is hidden again.")
         }
         .appThemedRows()
     }
@@ -402,9 +431,8 @@ struct InsightsOptionsSheet: View {
     }
 
     private func exportHistory(format: InsightsExportFormat) {
-        let hidden = hiddenWorkIDs
-        let sessions = ((try? modelContext.fetch(FetchDescriptor<ReadingSession>())) ?? [])
-            .filter { !hidden.contains($0.workID) }
+        let works = exportScope.libraryWorks
+        let sessions = exportScope.sessions((try? modelContext.fetch(FetchDescriptor<ReadingSession>())) ?? [])
         let options = InsightsOptions.load()
         let aliases = TagAliasStore.resolver(in: modelContext)
         do {

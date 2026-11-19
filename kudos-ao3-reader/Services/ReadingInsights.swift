@@ -1211,8 +1211,11 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
         return sorted.count.isMultiple(of: 2) ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
     }
 
+    /// `works` are the works whose sittings count (rereads, saved-to-finished);
+    /// `libraryWorks` (default `works`) is the saved library the stopped figures describe.
     static func make(
         works: [SavedWork],
+        libraryWorks: [SavedWork]? = nil,
         facts: [ReadingSessionFacts],
         allFacts: [ReadingSessionFacts],
         calendar: Calendar = .current,
@@ -1279,7 +1282,7 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
             return FandomTimelineLane(name: name, monthlyActivity: tiers)
         }
 
-        let stoppedWorks = works.filter { ReadingLogService.isAbandoned(work: $0) }
+        let stoppedWorks = (libraryWorks ?? works).filter { ReadingLogService.isAbandoned(work: $0) }
         let stoppedCount = stoppedWorks.count
 
         let stoppedMedianProgress = median(stoppedWorks.compactMap(\.readingProgress))

@@ -842,12 +842,47 @@ enum ReadingLogService {
         var discreetMasker: InsightsDiscreetMasker
     }
 
+    /// Gathers one `InsightsScope` (main, Hidden section, or combined).
+    static func gatherInsights(
+        for period: DateInterval,
+        previousPeriod: DateInterval?,
+        scope: InsightsScopeSelection,
+        periodMonths: Double = 1,
+        calendar: Calendar = .current,
+        context: ModelContext,
+        options: InsightsOptions = InsightsOptions(),
+        aliases: TagAliasResolver? = nil,
+        now: Date = Date()
+    ) -> InsightsGatherResult {
+        gatherInsights(
+            for: period,
+            previousPeriod: previousPeriod,
+            works: scope.libraryWorks,
+            readingWorks: scope.readingWorks,
+            hiddenWorkIDs: scope.excludedWorkIDs,
+            onlyWorkIDs: scope.onlyWorkIDs,
+            periodMonths: periodMonths,
+            calendar: calendar,
+            context: context,
+            options: options,
+            aliases: aliases,
+            now: now
+        )
+    }
+
     /// Gathers every Reading Insights figure through the single `options.filter` pass.
+    ///
+    /// `works` is the saved library the inventory figures describe (statuses, backlog,
+    /// WIP freshness, stopped works, preserved stats). `readingWorks` (default `works`)
+    /// is every work whose sittings count, queue-only included: it supplies metadata for
+    /// reading time, words, fandom shares, taste, habits and finished works.
     static func gatherInsights(
         for period: DateInterval,
         previousPeriod: DateInterval?,
         works: [SavedWork],
+        readingWorks: [SavedWork]? = nil,
         hiddenWorkIDs: Set<UUID> = [],
+        onlyWorkIDs: Set<UUID>? = nil,
         periodMonths: Double = 1,
         calendar: Calendar = .current,
         context: ModelContext,
@@ -857,11 +892,15 @@ enum ReadingLogService {
     ) -> InsightsGatherResult {
         let resolvedAliases = aliases ?? TagAliasStore.resolver(in: context)
         let rawHistory = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
-        // Hidden (mature, not revealed) works' sessions leave every figure, not just their rows.
-        let history = hiddenWorkIDs.isEmpty
-            ? rawHistory
-            : rawHistory.filter { !hiddenWorkIDs.contains($0.workID) }
-        let filtered = options.filter(sessions: history, works: works, aliases: resolvedAliases)
+        // Hidden (mature) works' sessions leave every figure, not just their rows; the
+        // Hidden section keeps only theirs.
+        let history = rawHistory.filter { session in
+            !hiddenWorkIDs.contains(session.workID)
+                && (onlyWorkIDs?.contains(session.workID) ?? true)
+        }
+        let filtered = options.filter(sessions: history, works: readingWorks ?? works, aliases: resolvedAliases)
+        let libraryIDs = Set(works.map(\.id))
+        let libraryWorks = filtered.works.filter { libraryIDs.contains($0.id) }
 
         let allFacts = facts(
             from: filtered.sessions,
@@ -888,13 +927,14 @@ enum ReadingLogService {
             : ReadingTasteInsights.make(works: worksInPeriod, facts: periodFacts, aliases: resolvedAliases)
         let habits = ReadingHabitsInsights.make(
             works: filtered.works,
+            libraryWorks: libraryWorks,
             facts: periodFacts,
             allFacts: allFacts,
             calendar: calendar,
             aliases: resolvedAliases
         )
         let library = ReadingLibraryInsights.make(
-            works: filtered.works,
+            works: libraryWorks,
             facts: periodFacts,
             periodInterval: period,
             periodMonths: periodMonths,
@@ -905,7 +945,7 @@ enum ReadingLogService {
             now: now
         )
         let libraryStats = ReadingStatistics(
-            works: filtered.works,
+            works: libraryWorks,
             now: now,
             calendar: calendar,
             aliases: resolvedAliases

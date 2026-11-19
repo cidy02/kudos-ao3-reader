@@ -453,6 +453,61 @@ struct LengthOfWhatYouReadCard: View {
     }
 }
 
+/// The Hidden section's top row (owner, 2026-11-19): hidden mature works' reading is
+/// summarized on its own, below the main figures. Locked, this row is all there is: it
+/// names no work, fandom or count, and offers the shared reveal control.
+struct InsightsHiddenHeader: View {
+    let isRevealed: Bool
+    /// The main figures above include hidden works too (Include Hidden).
+    let includesHidden: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(ThemeManager.self) private var theme
+
+    private var caption: String {
+        if !isRevealed { return "Mature works are kept out of Insights." }
+        return includesHidden
+            ? "Hidden mature works only. The figures above include them."
+            : "Hidden mature works only. The figures above leave them out."
+    }
+
+    var body: some View {
+        // Side by side until accessibility sizes, where the reveal button needs its own line.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 10))
+        layout {
+            HStack(spacing: 10) {
+                Image(systemName: isRevealed ? "eye" : "eye.slash")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.secondaryInk)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Hidden")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(caption)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            MatureRevealToggle()
+                .font(.subheadline.weight(.medium))
+        }
+        .padding(14)
+        .background(theme.appTheme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+        )
+    }
+}
+
 struct FinishedInPeriodSection: View {
     let works: [SavedWork]
     let discreetMode: Bool

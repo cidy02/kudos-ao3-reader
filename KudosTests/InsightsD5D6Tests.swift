@@ -399,30 +399,35 @@ import Testing
         }
         [visible, mature, queueOnly].forEach { context.insert($0) }
         let sVisible = finished(visible, day: 2)
-        [sVisible, finished(mature, day: 3), finished(queueOnly, day: 4)].forEach { context.insert($0) }
+        let sQueue = finished(queueOnly, day: 4)
+        [sVisible, finished(mature, day: 3), sQueue].forEach { context.insert($0) }
         try context.save()
 
-        let gate = PrivacyGate()
         let library = [visible, mature, queueOnly]
-        let shown = HomeReadingStats.insightsWorks(from: library, gate: gate, hideMature: true)
-        let hidden = HomeReadingStats.insightsHiddenWorkIDs(from: library, gate: gate, hideMature: true)
-        #expect(shown.map(\.id) == [visible.id])
-        #expect(hidden == [mature.id, queueOnly.id])
+        let hidden = HomeReadingStats.insightsHiddenWorkIDs(from: library, hideMature: true)
+        // Owner, 2026-11-19: queue-only reading counts; mature works go to their own section.
+        #expect(hidden == [mature.id])
         // The old wiring: an already-filtered list cannot name what it dropped.
-        #expect(HomeReadingStats.insightsHiddenWorkIDs(from: shown, gate: gate, hideMature: true).isEmpty)
+        let gate = PrivacyGate()
+        let shown = HomeReadingStats.insightsWorks(from: library, gate: gate, hideMature: true)
+        #expect(HomeReadingStats.insightsHiddenWorkIDs(from: shown, hideMature: true).isEmpty)
 
+        let main = HomeReadingStats.insightsScope(.main, from: library, hideMature: true, revealed: false)
         let gathered = ReadingLogService.gatherInsights(
-            for: aug, previousPeriod: jul, works: shown, hiddenWorkIDs: hidden,
+            for: aug, previousPeriod: jul, scope: main,
             calendar: utcCalendar, context: context,
             now: date(year: 2026, month: 8, day: 20)
         )
-        #expect(gathered.insights.totalWordsRead == 10_000)
-        #expect(gathered.insights.totalSeconds == 600)
-        #expect(gathered.insights.fandomWordsShares.filter { !$0.isRemainder }.map(\.name) == ["Fandom One"])
-        #expect(gathered.filteredSessions.map(\.id) == [sVisible.id])
+        #expect(gathered.insights.totalWordsRead == 16_000)
+        #expect(gathered.insights.totalSeconds == 1_200)
+        #expect(Set(gathered.insights.fandomWordsShares.filter { !$0.isRemainder }.map(\.name))
+            == ["Fandom One", "Queue Fandom"])
+        #expect(Set(gathered.filteredSessions.map(\.id)) == [sVisible.id, sQueue.id])
+        // Library inventory still describes the saved library only.
+        #expect(gathered.libraryStats.totalWorks == 1)
 
-        // Hide Mature off: the mature work is back, the queue-only one stays out.
-        #expect(HomeReadingStats.insightsHiddenWorkIDs(from: library, gate: gate, hideMature: false) == [queueOnly.id])
+        // Hide Mature off: nothing is hidden.
+        #expect(HomeReadingStats.insightsHiddenWorkIDs(from: library, hideMature: false).isEmpty)
     }
 
     @Test func countRereadsFalseExcludesRereadSittingsAndRereadList() throws {

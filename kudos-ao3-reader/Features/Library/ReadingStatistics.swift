@@ -186,17 +186,56 @@ struct HomeReadingStats: Equatable, Sendable {
         works.filter { !$0.isQueueOnlyWork && !gate.isConcealed($0, enabled: hideMature) }
     }
 
-    /// The works `insightsWorks` leaves out (queue-only, or concealed mature). Their
-    /// sessions must leave every Insights figure and export, so this needs the
-    /// UNFILTERED library: on an already-filtered list it is always empty.
+    /// The works Insights' Hidden section holds: every adult-rated work while Hide Mature
+    /// is on, whatever has been revealed this session, so the main figures do not change
+    /// when the gate opens. Queue-only works are not singled out: their reading counts
+    /// (owner, 2026-11-19). Needs the UNFILTERED library: on an already-filtered list it
+    /// is always empty.
     static func insightsHiddenWorkIDs(
         from libraryWorks: [SavedWork],
-        gate: PrivacyGate,
         hideMature: Bool
     ) -> Set<UUID> {
-        Set(libraryWorks.lazy
-            .filter { $0.isQueueOnlyWork || gate.isConcealed($0, enabled: hideMature) }
-            .map(\.id))
+        guard hideMature else { return [] }
+        return Set(libraryWorks.lazy.filter(\.isAdult).map(\.id))
+    }
+
+    /// What one Insights scope counts. `revealed` is `PrivacyGate.revealAll`: while it is
+    /// false the Hidden scope is empty and the combined scope is the main one, so nothing
+    /// hidden is computed or exported.
+    static func insightsScope(
+        _ scope: InsightsScope,
+        from libraryWorks: [SavedWork],
+        hideMature: Bool,
+        revealed: Bool
+    ) -> InsightsScopeSelection {
+        let hidden = insightsHiddenWorkIDs(from: libraryWorks, hideMature: hideMature)
+        switch scope {
+        case .hidden where !revealed:
+            return InsightsScopeSelection(libraryWorks: [], readingWorks: [], excludedWorkIDs: [], onlyWorkIDs: [])
+        case .hidden:
+            let reading = libraryWorks.filter { hidden.contains($0.id) }
+            return InsightsScopeSelection(
+                libraryWorks: reading.filter { !$0.isQueueOnlyWork },
+                readingWorks: reading,
+                excludedWorkIDs: [],
+                onlyWorkIDs: hidden
+            )
+        case .combined where revealed:
+            return InsightsScopeSelection(
+                libraryWorks: libraryWorks.filter { !$0.isQueueOnlyWork },
+                readingWorks: libraryWorks,
+                excludedWorkIDs: [],
+                onlyWorkIDs: nil
+            )
+        case .main, .combined:
+            let reading = libraryWorks.filter { !hidden.contains($0.id) }
+            return InsightsScopeSelection(
+                libraryWorks: reading.filter { !$0.isQueueOnlyWork },
+                readingWorks: reading,
+                excludedWorkIDs: hidden,
+                onlyWorkIDs: nil
+            )
+        }
     }
 
     /// Revision key for Home weekly reading stats. Incorporates the start of today
@@ -209,5 +248,37 @@ struct HomeReadingStats: Equatable, Sendable {
     ) -> String {
         let day = calendar.startOfDay(for: now).timeIntervalSince1970
         return "\(sessionCount)|\(newestModified)|\(day)"
+    }
+}
+
+/// Which reading Insights counts (owner, 2026-11-19): `main` leaves out the works Hide
+/// Mature conceals, `hidden` is only those (the Hidden section), `combined` is both.
+enum InsightsScope: Equatable, Sendable {
+    case main
+    case hidden
+    case combined
+}
+
+/// The works and sittings one `InsightsScope` counts.
+struct InsightsScopeSelection {
+    /// Saved-library works (never queue-only): the library-inventory figures (statuses,
+    /// unread backlog, WIP freshness, stopped works, preserved stats) and export statuses.
+    var libraryWorks: [SavedWork]
+    /// Every work whose sittings count, queue-only included: reading time, words,
+    /// fandom shares, taste, habits, finished works.
+    var readingWorks: [SavedWork]
+    /// These works' sittings never count.
+    var excludedWorkIDs: Set<UUID>
+    /// When set, only these works' sittings count (the Hidden section).
+    var onlyWorkIDs: Set<UUID>?
+
+    func includes(_ session: ReadingSession) -> Bool {
+        if excludedWorkIDs.contains(session.workID) { return false }
+        if let onlyWorkIDs { return onlyWorkIDs.contains(session.workID) }
+        return true
+    }
+
+    func sessions(_ all: [ReadingSession]) -> [ReadingSession] {
+        all.filter(includes)
     }
 }

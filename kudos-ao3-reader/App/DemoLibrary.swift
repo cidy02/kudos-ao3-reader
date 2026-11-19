@@ -842,6 +842,9 @@ enum DebugLaunchRoute {
     /// every other launch is unchanged.
     static var pageRoute: String? { shot?.route ?? value }
 
+    /// `insights-hidden`: Insights opens scrolled to Overview's Hidden section.
+    static var opensInsightsHidden: Bool { pageRoute == "insights-hidden" }
+
     /// Scrolls Home to a named section for design-review screenshots.
     static var homeAnchor: String? {
         guard let pageRoute, pageRoute.hasPrefix("home:") else { return nil }
@@ -1073,13 +1076,15 @@ enum DebugLaunchRoute {
         }
     }
 
-    /// Library's stack: `collections`, `collection:<name>`, `recentlyDeleted`, `insights`.
+    /// Library's stack: `collections`, `collection:<name>`, `recentlyDeleted`, `insights`,
+    /// `insights-hidden`.
     static func applyLibrary(to path: inout NavigationPath, collections: [WorkCollection]) {
         guard let value = pageRoute else { return }
         switch value {
         case "collections": path.append(AllCollectionsDestination())
         case "recentlyDeleted": path.append(RecentlyDeletedDestination())
-        case "insights": path.append(ReadingInsightsDestination())
+        // `insights-hidden` opens Insights scrolled to the Hidden section.
+        case "insights", "insights-hidden": path.append(ReadingInsightsDestination())
         default:
             if value.hasPrefix("collection:"),
                let collection = collections.first(where: { $0.name == String(value.dropFirst("collection:".count)) }) {
