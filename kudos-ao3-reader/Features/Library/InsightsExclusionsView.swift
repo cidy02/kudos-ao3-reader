@@ -18,6 +18,8 @@ struct InsightsExclusionsView: View {
     @Environment(ThemeManager.self) private var theme
 
     let works: [SavedWork]
+    /// Privacy-gated works: their sessions' names never appear as choices.
+    var hiddenWorkIDs: Set<UUID> = []
     @Binding var excludedFandoms: [String]
     @Binding var excludedTags: [String]
     @Binding var excludedWorkIDs: [String]
@@ -130,7 +132,9 @@ struct InsightsExclusionsView: View {
             }
         }
         .onAppear {
-            sessions = (try? modelContext.fetch(FetchDescriptor<ReadingSession>())) ?? []
+            let hidden = hiddenWorkIDs
+            sessions = ((try? modelContext.fetch(FetchDescriptor<ReadingSession>())) ?? [])
+                .filter { !hidden.contains($0.workID) }
         }
     }
 

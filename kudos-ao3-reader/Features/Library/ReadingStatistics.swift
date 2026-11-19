@@ -45,7 +45,7 @@ struct ReadingStatistics {
         startedWorks = started.count
         finishedWorks = finished.count
         inProgressWorks = inProgress.count
-        wordsRead = finished.reduce(0) { total, work in
+        wordsRead = finished.filter { $0.wordUnit == .words }.reduce(0) { total, work in
             total + max(0, work.wordCount)
         }
         latestReadDate = works.compactMap(\.lastReadDate).max()

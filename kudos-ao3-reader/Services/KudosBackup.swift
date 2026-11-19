@@ -3016,6 +3016,14 @@ enum KudosBackupService {
                     try ReadingQueueService.replaceEPUB(for: work, with: staged)
                     work.hasEPUB = true
                     markPreservedIfFileRestored(work)
+                    // `replaceEPUB` clears derived chapter counts when EPUB bytes change;
+                    // re-apply any validated D3 fields from the matching incoming record.
+                    if let validCounts = SavedWork.validatedChapterWordCountsJSON(archived.chapterWordCountsJSON) {
+                        work.chapterWordCountsJSON = validCounts
+                    }
+                    if let validUnit = SavedWork.validatedWordUnitRaw(archived.wordUnitRaw) {
+                        work.wordUnitRaw = validUnit
+                    }
                 } catch {
                     try? FileManager.default.removeItem(at: staged)
                     // This one work is being skipped while the restore carries
@@ -5501,11 +5509,11 @@ enum KudosBackupService {
            ) {
             work.coverRecipeJSON = GeneratedCoverRecipe.clampingFuturePinIfSupported(coverRecipeJSON)
         }
-        if let incomingCounts = archived.chapterWordCountsJSON, !incomingCounts.isEmpty,
+        if let incomingCounts = SavedWork.validatedChapterWordCountsJSON(archived.chapterWordCountsJSON),
            work.chapterWordCountsJSON.isEmpty || mode == .replaceLibrary || incomingWins {
             work.chapterWordCountsJSON = incomingCounts
         }
-        if let incomingUnit = archived.wordUnitRaw, !incomingUnit.isEmpty,
+        if let incomingUnit = SavedWork.validatedWordUnitRaw(archived.wordUnitRaw),
            work.wordUnitRaw.isEmpty || mode == .replaceLibrary || incomingWins {
             work.wordUnitRaw = incomingUnit
         }

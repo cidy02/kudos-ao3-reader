@@ -308,6 +308,62 @@ import Testing
         #expect(withoutAudio.finishedWorksInPeriod.isEmpty)
     }
 
+    @Test func hiddenWorkSessionsLeaveGatheredFiguresAlongsideOptionsFilter() throws {
+        let context = try makeContext()
+        let aug = interval(year: 2026, month: 8)
+        let jul = interval(year: 2026, month: 7)
+
+        let visible = SavedWork(title: "Visible Fic", author: "A")
+        visible.wordCount = 10_000
+        visible.workFandoms = ["Fandom One"]
+        let listened = SavedWork(title: "Listened Fic", author: "B")
+        listened.wordCount = 4_000
+        listened.workFandoms = ["Fandom Two"]
+        let hiddenID = UUID()
+
+        let sVisible = ReadingSession(
+            workID: visible.id, workTitle: visible.title,
+            startedAt: date(year: 2026, month: 8, day: 2),
+            endedAt: date(year: 2026, month: 8, day: 2).addingTimeInterval(600),
+            durationSeconds: 600,
+            startProgress: 0, endingProgress: 1.0, wordCount: 10_000, didFinish: true
+        )
+        let sListen = ReadingSession(
+            workID: listened.id, workTitle: listened.title,
+            startedAt: date(year: 2026, month: 8, day: 3),
+            endedAt: date(year: 2026, month: 8, day: 3).addingTimeInterval(900),
+            durationSeconds: 900,
+            startProgress: 0,
+            modeRaw: ReadingSession.Mode.listen.rawValue,
+            endingProgress: 0.5, wordCount: 4_000
+        )
+        // A privacy-gated work: not in `works`, so only `hiddenWorkIDs` keeps it out.
+        let sHidden = ReadingSession(
+            workID: hiddenID, workTitle: "Hidden Mature Fic",
+            startedAt: date(year: 2026, month: 8, day: 4),
+            endedAt: date(year: 2026, month: 8, day: 4).addingTimeInterval(1_200),
+            durationSeconds: 1_200,
+            startProgress: 0, endingProgress: 1.0, wordCount: 20_000, didFinish: true
+        )
+        sHidden.fandoms = ["Secret Fandom"]
+
+        [visible, listened].forEach { context.insert($0) }
+        [sVisible, sListen, sHidden].forEach { context.insert($0) }
+        try context.save()
+
+        let gathered = ReadingLogService.gatherInsights(
+            for: aug, previousPeriod: jul, works: [visible, listened],
+            hiddenWorkIDs: [hiddenID],
+            calendar: utcCalendar, context: context,
+            options: InsightsOptions(countReadAloud: false),
+            now: date(year: 2026, month: 8, day: 20)
+        )
+        #expect(gathered.insights.totalWordsRead == 10_000)
+        #expect(gathered.insights.totalSeconds == 600)
+        #expect(gathered.insights.fandomWordsShares.filter { !$0.isRemainder }.map(\.name) == ["Fandom One"])
+        #expect(gathered.filteredSessions.map(\.id) == [sVisible.id])
+    }
+
     @Test func countRereadsFalseExcludesRereadSittingsAndRereadList() throws {
         let context = try makeContext()
         let jan = interval(year: 2026, month: 1)

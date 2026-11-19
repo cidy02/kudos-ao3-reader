@@ -22,6 +22,11 @@ struct ReadingInsightsView: View {
         HomeReadingStats.insightsWorks(from: works, gate: gate, hideMature: hideMature)
     }
 
+    /// Works the privacy gate hides right now; their sessions leave every figure and export.
+    private var hiddenWorkIDs: Set<UUID> {
+        Set(works.map(\.id)).subtracting(effectiveWorks.map(\.id))
+    }
+
     @State private var selectedTab: Tab = .overview
     @State private var range: RangeMode = .month
     @State private var referenceDate: Date = Date()
@@ -186,6 +191,7 @@ struct ReadingInsightsView: View {
         .sheet(isPresented: $showingOptionsSheet) {
             InsightsOptionsSheet(
                 works: effectiveWorks,
+                hiddenWorkIDs: hiddenWorkIDs,
                 onShowHowCounted: {
                     showingOptionsSheet = false
                     showingHowCountedSheet = true
@@ -661,6 +667,7 @@ struct ReadingInsightsView: View {
             for: currentInterval,
             previousPeriod: previousInterval,
             works: effectiveWorks,
+            hiddenWorkIDs: hiddenWorkIDs,
             periodMonths: periodMonths,
             calendar: calendar,
             context: context,
@@ -678,7 +685,9 @@ struct ReadingInsightsView: View {
     // MARK: - Actions
 
     private func exportReadingHistory(format: InsightsExportFormat) {
-        let sessions = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let hidden = hiddenWorkIDs
+        let sessions = ((try? context.fetch(FetchDescriptor<ReadingSession>())) ?? [])
+            .filter { !hidden.contains($0.workID) }
         let options = InsightsOptions.load()
         let aliases = TagAliasStore.resolver(in: context)
         do {

@@ -23,6 +23,8 @@ struct InsightsOptionsSheet: View {
     private var untouchedDays: Int = InsightsOptions.defaultUntouchedDays
 
     let works: [SavedWork]
+    /// Privacy-gated works: their sessions stay out of the export and the exclusion choices.
+    var hiddenWorkIDs: Set<UUID> = []
     let onShowHowCounted: () -> Void
     let onOptionsChanged: () -> Void
 
@@ -269,6 +271,7 @@ struct InsightsOptionsSheet: View {
             NavigationLink {
                 InsightsExclusionsView(
                     works: works,
+                    hiddenWorkIDs: hiddenWorkIDs,
                     excludedFandoms: $excludedFandoms,
                     excludedTags: $excludedTags,
                     excludedWorkIDs: $excludedWorkIDs,
@@ -399,7 +402,9 @@ struct InsightsOptionsSheet: View {
     }
 
     private func exportHistory(format: InsightsExportFormat) {
-        let sessions = (try? modelContext.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let hidden = hiddenWorkIDs
+        let sessions = ((try? modelContext.fetch(FetchDescriptor<ReadingSession>())) ?? [])
+            .filter { !hidden.contains($0.workID) }
         let options = InsightsOptions.load()
         let aliases = TagAliasStore.resolver(in: modelContext)
         do {

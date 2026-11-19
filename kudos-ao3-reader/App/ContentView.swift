@@ -667,14 +667,17 @@ struct ContentView: View {
             WorkLifecycle.freeEPUBIfFinished(work, in: context)
         }
         speech.onStatusTransition = { workID, status, isReaderOpen in
-            guard !isReaderOpen, let work = savedWork(id: workID, in: context) else { return }
+            guard let work = savedWork(id: workID, in: context) else { return }
             let mapped: ReadingLogService.DetachedSpeechState = switch status {
             case .playing: .playing
             case .paused: .paused
             case .stopped, .unavailable: .stopped
             }
-            ReadingLogService.handleDetachedSpeech(
+            let isBackgrounded = UIApplication.shared.applicationState == .background
+            ReadingLogService.handleSpeechStatusChange(
                 mapped,
+                isReaderOpen: isReaderOpen,
+                isBackgrounded: isBackgrounded,
                 for: work,
                 playbackRate: ReaderSpeechPreferences.rateMultiplier,
                 now: Date()
