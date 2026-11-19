@@ -9,6 +9,29 @@ struct QueueSortNewRequest: Identifiable {
     let membershipIDs: [UUID]
 }
 
+/// T-529: the board's (`Queue-Sections`) filled "Sort" in the queue page's New
+/// header — one work at a time — beside T-528's sort-everything "Sort into line".
+struct QueueSortNewButton: View {
+    let count: Int
+    let action: () -> Void
+
+    @Environment(\.accentFill) private var accentFill
+
+    var body: some View {
+        Button(action: action) {
+            Text("Sort")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(accentFill, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .minimumHitTarget()
+        .accessibilityLabel(count == 1 ? "Sort 1 new work" : "Sort \(count) new works")
+    }
+}
+
 /// T-529 Sort New (board `Queue-Sort`): the queue's `New` works one at a time,
 /// with everything AO3 says about each, and Keep / Later / Drop plus Undo back
 /// to the start of the session. Keep sorts into `In line`, Later leaves the work

@@ -252,7 +252,9 @@ struct QueueSortNewTests {
         #expect(!fixture.queueOnly.isPendingDeletion)
         #expect(!fixture.third.isPendingDeletion)
         #expect(fixture.mLined.state == .inLine)
-        let partition = ReadingQueueFacts.partition(memberships: ReadingQueueService.orderedMemberships(in: fixture.queue))
+        let partition = ReadingQueueFacts.partition(
+            memberships: ReadingQueueService.orderedMemberships(in: fixture.queue)
+        )
         #expect(partition.new.map(\.work.title) == ["Library", "Queue only", "Third"])
     }
 

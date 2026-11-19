@@ -1084,23 +1084,11 @@ extension ReadingQueueBrowserView {
         }
     }
 
-    /// T-529: the board's filled "Sort" — one work at a time (`QueueSortNewView`),
-    /// beside T-528's sort-everything "Sort into line".
     private func sortNewButton(_ entries: [ReadingQueueSectionEntry]) -> some View {
-        Button {
+        QueueSortNewButton(count: entries.count) {
             guard let queue = selectedQueue else { return }
             sortNewRequest = QueueSortNewRequest(queueID: queue.id, membershipIDs: entries.map(\.membership.id))
-        } label: {
-            Text("Sort")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(accentFill, in: Capsule())
         }
-        .buttonStyle(.plain)
-        .minimumHitTarget()
-        .accessibilityLabel(entries.count == 1 ? "Sort 1 new work" : "Sort \(entries.count) new works")
     }
 
     private func sortAllIntoLineButton(_ entries: [ReadingQueueSectionEntry]) -> some View {
