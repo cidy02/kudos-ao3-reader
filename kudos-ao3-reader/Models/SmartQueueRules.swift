@@ -205,10 +205,10 @@ nonisolated struct SmartQueueDocument: Codable, Equatable, Sendable, Hashable {
                 case .wip: return !work.isComplete
                 }
             case .fandom:
-                let wanted = aliases.resolve(fandom ?? "", kind: .fandom)
+                let wanted = aliases.resolveIgnoringCase(fandom ?? "", kind: .fandom)
                 guard !wanted.isEmpty else { return false }
                 return work.fandoms.contains {
-                    aliases.resolve($0, kind: .fandom).caseInsensitiveCompare(wanted) == .orderedSame
+                    aliases.resolveIgnoringCase($0, kind: .fandom).caseInsensitiveCompare(wanted) == .orderedSame
                 }
             }
         }

@@ -143,9 +143,9 @@ struct SmartQueueRuleEditor: View {
     }
 
     private func fandomMatches(_ name: String) -> Bool {
-        let wanted = aliases.resolve(rule.fandom ?? "", kind: .fandom)
+        let wanted = aliases.resolveIgnoringCase(rule.fandom ?? "", kind: .fandom)
         guard !wanted.isEmpty else { return false }
-        return aliases.resolve(name, kind: .fandom).caseInsensitiveCompare(wanted) == .orderedSame
+        return aliases.resolveIgnoringCase(name, kind: .fandom).caseInsensitiveCompare(wanted) == .orderedSame
     }
 
     private func optionList<Option: Hashable>(

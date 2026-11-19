@@ -154,6 +154,19 @@ struct SmartQueueRulesTests {
                 .matching([unrelatedWork, synonymWork, canonicalWork], aliases: aliases)
                 .map(\.title) == ["Canonical", "Synonym"]
         )
+
+        // Review 2: a rule typed "hp" and a work tagged "hp" both follow the
+        // learned "HP" alias (AO3 tag names are case-insensitive), so learning
+        // the alias cannot empty the queue.
+        rule.fandom = "hp"
+        let lowercaseWork = work("Lowercase", fandoms: ["hp"])
+        #expect(
+            document([rule], sort: .title)
+                .matching([unrelatedWork, synonymWork, canonicalWork, lowercaseWork], aliases: aliases)
+                .map(\.title) == ["Canonical", "Lowercase", "Synonym"]
+        )
+        #expect(aliases.resolveIgnoringCase("hp", kind: .fandom) == "Harry Potter - J. K. Rowling")
+        #expect(aliases.resolve("hp", kind: .fandom) == "hp")
     }
 
     @Test func allRequiresEveryRuleAndAnyRequiresOne() {

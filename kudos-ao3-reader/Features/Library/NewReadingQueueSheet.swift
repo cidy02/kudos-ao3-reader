@@ -673,7 +673,7 @@ struct NewReadingQueueSheet: View {
         var names: [String] = []
         for work in libraryWorks where !work.isQueueOnlyWork && !gate.isConcealed(work, enabled: hideMature) {
             for fandom in work.workFandoms {
-                let resolved = aliases.resolve(fandom, kind: .fandom)
+                let resolved = aliases.resolveIgnoringCase(fandom, kind: .fandom)
                 guard !resolved.isEmpty, seen.insert(resolved.lowercased()).inserted else { continue }
                 names.append(resolved)
             }
