@@ -213,6 +213,12 @@ struct QueueSortNewView: View {
                     .padding(.bottom, 14)
             }
         }
+        // The card is exactly the column's width. At AX sizes a tag chip can be
+        // wider than the screen; like a List cell, the card keeps its width and
+        // clips that chip at its trailing edge instead of growing past the screen.
+        .containerRelativeFrame(.horizontal, alignment: .leading) { length, _ in
+            max(0, length - 2 * SubjectMetrics.gutter)
+        }
         .background(theme.cardSurface, in: shape)
         .clipShape(shape)
         .overlay(shape.strokeBorder(theme.cardBorder, lineWidth: 0.5))
