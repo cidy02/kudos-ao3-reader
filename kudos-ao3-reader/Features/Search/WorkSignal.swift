@@ -386,7 +386,7 @@ enum ReaderResponseCopy {
 enum ReaderResponseBands {
     static func chaptersPhrase(posted: Int) -> String? {
         guard posted > 0 else { return nil }
-        switch posted {
+        return switch posted {
         case 1: "1 chapter"
         case 2 ... 5: "2 to 5 chapters"
         case 6 ... 20: "6 to 20 chapters"
@@ -396,7 +396,7 @@ enum ReaderResponseBands {
 
     static func lengthPhrase(words: Int) -> String? {
         guard words >= 0 else { return nil }
-        switch words {
+        return switch words {
         case ..<5_000: "Under 5,000 words"
         case ..<20_000: "5,000 to 20,000 words"
         case ..<60_000: "20,000 to 60,000 words"
