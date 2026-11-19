@@ -23,10 +23,10 @@ enum ReadingMode: String, CaseIterable, Identifiable {
     }
 }
 
-/// How a paged turn moves. Stored at `storageKey`. Fade and curl are real cases
-/// so a later renderer can turn them on without a migration, and so a backup
-/// from that build still round-trips. The picker offers only what stock Readium
-/// can render today.
+/// How a paged turn moves. Stored at `storageKey`. Curl is a real case so a
+/// later renderer can turn it on without a migration, and so a backup from
+/// that build still round-trips. The picker offers None, Slide and Fast Fade.
+/// Curl stays hidden until its renderer exists.
 enum ReaderPageTurnStyle: String, CaseIterable, Identifiable {
     case none
     case slide
@@ -36,8 +36,8 @@ enum ReaderPageTurnStyle: String, CaseIterable, Identifiable {
     static let storageKey = "readerPageTurn"
     /// Used when the key is absent or the stored string is not a case.
     static let defaultStyle = ReaderPageTurnStyle.slide
-    /// None and Slide. Fade and curl stay out until their renderers exist.
-    static let pickerCases: [ReaderPageTurnStyle] = [.none, .slide]
+    /// None, Slide and Fast Fade. Curl stays out until its renderer exists.
+    static let pickerCases: [ReaderPageTurnStyle] = [.none, .slide, .fade]
 
     var id: String { rawValue }
 
@@ -45,7 +45,7 @@ enum ReaderPageTurnStyle: String, CaseIterable, Identifiable {
         switch self {
         case .none: "None"
         case .slide: "Slide"
-        case .fade: "Fade"
+        case .fade: "Fast Fade"
         case .curl: "Curl"
         }
     }
@@ -59,20 +59,26 @@ enum ReaderPageTurnStyle: String, CaseIterable, Identifiable {
 }
 
 /// Whether a directional turn (edge tap, arrow or space, `goForward` /
-/// `goBackward`) asks stock Readium to animate.
+/// `goBackward`) asks Readium to animate.
 ///
-/// Stock Readium's `animated: true` is a slide. Only `.slide` asks for it.
-/// `.fade` and `.curl` stay instant here so this build does not play a slide
-/// under a style whose renderer does not exist yet. Scroll mode and Reduce
-/// Motion are instant. Locator seeks are a different path and stay unanimated
-/// at the call site — this helper is not consulted for them.
+/// `animated: false` forces `PageTransition.none` inside the fork, so Fast
+/// Fade has to ask for animation or the preference is ignored. Curl stays
+/// instant: the fork declares `.curl` but still paints a slide, and a stored
+/// curl must not play that fallback. Scroll mode and Reduce Motion are
+/// instant. Locator seeks are a different path and stay unanimated at the
+/// call site — this helper is not consulted for them.
 enum ReaderPageTurnPolicy {
     static func animatedTransition(
         style: ReaderPageTurnStyle,
         readingMode: ReadingMode,
         reduceMotion: Bool
     ) -> Bool {
-        style == .slide && readingMode == .paged && !reduceMotion
+        switch style {
+        case .slide, .fade:
+            readingMode == .paged && !reduceMotion
+        case .none, .curl:
+            false
+        }
     }
 }
 

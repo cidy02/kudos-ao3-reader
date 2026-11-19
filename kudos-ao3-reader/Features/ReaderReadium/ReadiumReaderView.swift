@@ -115,6 +115,7 @@ struct ReadiumReaderView: View {
     /// is done in Swift — the list is small (per-reader marks, not the library).
     @Query(sort: \ReadingAnnotation.progression) private var allAnnotations: [ReadingAnnotation]
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
+    @AppStorage(ReaderPageTurnStyle.storageKey) private var pageTurn: ReaderPageTurnStyle = .slide
     @AppStorage("readerTwoPage") private var twoPageEnabled = false
     @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("hideMatureContent") private var hideMature = true
@@ -1016,8 +1017,10 @@ struct ReadiumReaderView: View {
         book.renderedLineHeightPoints = textStyle.fontSizePt * textStyle.lineHeight
         book.renderedPageMarginPoints = max(0, textStyle.margin)
         book.submit(preferences)
-        // The page-turn style is not an EPUB preference. Layout mode is, and
-        // it also changes whether a turn animates, so refresh with the submit.
+        // Page turn is an EPUB preference (`pageTransition`) and also the
+        // adapter's animated flag. Submit carries the style. Refresh keeps
+        // edge taps in step when only the flag changes (Reduce Motion, or
+        // curl staying instant so it does not play the slide fallback).
         book.refreshPageTurnAnimation()
         // Typography submit updates CSS but may not re-run spread updateContentInset.
         book.forcePageBoxContentInsetRefresh()
@@ -1657,7 +1660,8 @@ extension ReadiumReaderView {
             readingMode: readingMode,
             twoPageSpread: twoPageEnabled && wideLayoutAvailable,
             backgroundHex: readerPageColors.backgroundHex,
-            textHex: readerPageColors.textHex
+            textHex: readerPageColors.textHex,
+            pageTurn: pageTurn
         )
     }
 
@@ -1680,8 +1684,8 @@ extension ReadiumReaderView {
 
     /// Re-submit preferences whenever any mapped setting changes (instant updates).
     private var preferencesToken: String {
-        "\(readingMode.rawValue)|\(readerTheme.rawValue)|\(readerPageColors.backgroundHex)|\(fontID)|\(twoPageEnabled)|"
-            + "\(wideLayoutAvailable)|\(textStyle.token)"
+        "\(readingMode.rawValue)|\(pageTurn.rawValue)|\(readerTheme.rawValue)|\(readerPageColors.backgroundHex)|\(fontID)|"
+            + "\(twoPageEnabled)|\(wideLayoutAvailable)|\(textStyle.token)"
     }
 
     /// Font declarations are fixed when Readium builds its navigator. Recreate it

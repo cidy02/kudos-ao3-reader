@@ -784,10 +784,10 @@
 		};
 		000000000000000300000000 /* XCRemoteSwiftPackageReference "swift-toolkit" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/readium/swift-toolkit.git";
+			repositoryURL = "https://github.com/cidy02/swift-toolkit.git";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 3.9.0;
+				kind = branch;
+				branch = "kudos/page-transitions";
 			};
 		};
 		000000000000000700000000 /* XCRemoteSwiftPackageReference "sherpa-onnx" */ = {

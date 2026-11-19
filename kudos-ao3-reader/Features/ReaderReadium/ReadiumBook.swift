@@ -628,8 +628,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         navigator?.submitPreferences(preferences)
     }
 
-    /// Re-reads the page-turn style, layout and Reduce Motion into the adapter.
-    /// Preference submit does not carry the style (it is not an EPUB preference).
+    /// Re-reads the page-turn style, layout and Reduce Motion into the adapter's
+    /// animated flag. The preference itself goes out with the other EPUB
+    /// preferences; this only updates whether the next edge tap animates.
     func refreshPageTurnAnimation() {
         pageTurns.refresh()
     }
