@@ -94,7 +94,7 @@ struct ReadingLogTests {
         ReadingLogService.startSession(for: work, now: t0, timeZone: zone, defaults: defaults)
         work.readiumLocator = locator(progress: 0.75)
         work.lastSpineIndex = 8
-        ReadingLogService.setMode(.listen, for: work, playbackRate: 1.25)
+        ReadingLogService.setMode(.listen, for: work, playbackRate: 1.25, now: t0)
         ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(60))
         let session = try #require(try context.fetch(FetchDescriptor<ReadingSession>()).first)
         #expect(session.tzOffsetSeconds == 19_800)
@@ -112,16 +112,18 @@ struct ReadingLogTests {
         #expect(!settingsJSON.contains("readingLogDeviceID"))
     }
 
-    @Test func laterCheckpointUpdatesListeningFactsOnTheSameRow() throws {
+    @Test func laterCheckpointUpdatesListeningFactsOnTheSameRowWhenStayingInListeningMode() throws {
         ReadingLogService.resetOpenSessionsForTests()
         let context = try context()
         let work = SavedWork(title: "Checkpoint", author: "A")
         context.insert(work)
         let t0 = Date(timeIntervalSince1970: 10_000)
-        ReadingLogService.startSession(for: work, now: t0)
+        ReadingLogService.startSession(for: work, mode: .listen, playbackRate: 1.0, now: t0)
         ReadingLogService.pauseSession(for: work, now: t0.addingTimeInterval(20))
         ReadingLogService.resumeSession(for: work, now: t0.addingTimeInterval(30))
-        ReadingLogService.setMode(.listen, for: work, playbackRate: 1.25)
+        ReadingLogService.setMode(
+            .listen, for: work, playbackRate: 1.25, now: t0.addingTimeInterval(30)
+        )
         ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(50))
         let sessions = try context.fetch(FetchDescriptor<ReadingSession>())
         #expect(sessions.count == 1)

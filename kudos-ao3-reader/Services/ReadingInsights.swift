@@ -37,6 +37,10 @@ nonisolated struct ReadingSessionFacts: Equatable, Sendable {
     var startProgress: Double? = nil
     /// Seconds east of UTC when the sitting was read (`ReadingSession.tzOffsetSeconds`), when recorded.
     var tzOffsetSeconds: Int? = nil
+    /// Sitting mode (`.read` vs `.listen`), used so Pace excludes listening.
+    var mode: ReadingSession.Mode = .read
+    /// Measurement unit for the work's counts (`.words` vs `.characters`).
+    var wordUnit: SavedWork.WordUnit = .words
 }
 
 /// What the log knows about one work, for a history or favourites row.
@@ -106,6 +110,14 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
     var lengthMix: LengthMixCounts = LengthMixCounts()
     /// Duration spent reading.
     var readingSeconds: Double = 0
+    /// Duration spent silently reading (`.read` mode).
+    var silentReadingSeconds: Double = 0
+    /// Duration spent listening to Read Aloud (`.listen` mode).
+    var listeningSeconds: Double = 0
+    /// Characters read for no-space script works (`.characters`), never mixed into words.
+    var charactersRead: Int = 0
+    /// Visual reading pace in characters per hour for `.characters` works.
+    var charactersPerHour: Double = 0
     /// Count of distinct works finished in this period.
     var finishedWorksCount: Int = 0
     /// Days with at least one reading session in this period.
@@ -195,24 +207,31 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         insights.byFandom = fandomShares(from: facts, aliases: aliases)
         insights.medianSessionSeconds = medianSeconds(of: facts)
         insights.wordsPerHour = wordsPerHour(of: facts)
+        insights.charactersPerHour = charactersPerHour(of: facts)
         insights.finishRate = finishRate(of: facts)
         insights.longestStreakDays = longestStreak(of: facts, calendar: calendar)
 
-        // New redesign figures (T-497)
-        insights.totalWordsRead = facts.reduce(0) { $0 + $1.wordsRead }
+        // New redesign figures (T-497, D3/D4 character & listening separation)
+        let wordFacts = facts.filter { $0.wordUnit == .words }
+        let charFacts = facts.filter { $0.wordUnit == .characters }
+        let previousWordFacts = comparablePrevious.filter { $0.wordUnit == .words }
+        insights.totalWordsRead = wordFacts.reduce(0) { $0 + $1.wordsRead }
+        insights.charactersRead = charFacts.reduce(0) { $0 + $1.wordsRead }
         insights.previousPeriodWordsRead = comparablePrevious.isEmpty
             ? nil
-            : comparablePrevious.reduce(0) { $0 + $1.wordsRead }
+            : previousWordFacts.reduce(0) { $0 + $1.wordsRead }
         insights.fandomWordsShares = fandomWordsShares(from: facts, aliases: aliases)
 
         var wordCountsByWork: [UUID: Int] = [:]
-        for f in facts { wordCountsByWork[f.workID] = f.wordCount }
+        for f in wordFacts { wordCountsByWork[f.workID] = f.wordCount }
         insights.lengthMix = lengthMix(words: Array(wordCountsByWork.values))
 
         insights.dailyWords = dailyWordsBuckets(from: facts, in: dayRange, calendar: calendar)
         insights.hourlyDuration = hourlyDurationBuckets(from: facts, calendar: calendar)
         insights.sittingBuckets = sittingBuckets(from: facts)
         insights.readingSeconds = facts.reduce(0) { $0 + $1.durationSeconds }
+        insights.silentReadingSeconds = facts.filter { $0.mode == .read }.reduce(0) { $0 + $1.durationSeconds }
+        insights.listeningSeconds = facts.filter { $0.mode == .listen }.reduce(0) { $0 + $1.durationSeconds }
         insights.finishedWorksCount = Set(facts.filter(\.didFinish).map(\.workID)).count
         insights.readingDaysCount = Set(facts.map { sittingTime(for: $0, calendar: calendar).day }).count
         // Days without reading are empty chart slots, never the biggest day.
@@ -385,11 +404,26 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
     /// divide by zero or dilute the rate. Counts the words each sitting read,
     /// not the whole work's (owner Q27, 2026-10-20).
     static func wordsPerHour(of facts: [ReadingSessionFacts]) -> Double {
-        let usable = facts.filter { $0.durationSeconds > 0 }
+        pace(of: facts, unit: .words)
+    }
+
+    static func charactersPerHour(of facts: [ReadingSessionFacts]) -> Double {
+        pace(of: facts, unit: .characters)
+    }
+
+    private static func pace(
+        of facts: [ReadingSessionFacts],
+        unit: SavedWork.WordUnit
+    ) -> Double {
+        // D4 & D3: visual reading pace excludes listening sittings and never
+        // mixes `.words` with `.characters`.
+        let usable = facts.filter {
+            $0.durationSeconds > 0 && $0.mode == .read && $0.wordUnit == unit
+        }
         let totalSeconds = usable.reduce(0) { $0 + $1.durationSeconds }
         guard totalSeconds > 0 else { return 0 }
-        let totalWords = usable.reduce(0) { $0 + $1.wordsRead }
-        return Double(totalWords) / (totalSeconds / 3600)
+        let totalCount = usable.reduce(0) { $0 + $1.wordsRead }
+        return Double(totalCount) / (totalSeconds / 3600)
     }
 
     /// Share of works that reached a finish, counted **per work rather than per
@@ -551,7 +585,7 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         calendar: Calendar = .current
     ) -> [DailyWordsBucket] {
         var wordsByDay: [Date: Int] = [:]
-        for fact in facts {
+        for fact in facts where fact.wordUnit == .words {
             let day = sittingTime(for: fact, calendar: calendar).day
             wordsByDay[day, default: 0] += fact.wordsRead
         }
@@ -658,7 +692,7 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         var unattributedWords: Int = 0
         var unattributedWorks: Set<UUID> = []
 
-        for fact in facts {
+        for fact in facts where fact.wordUnit == .words {
             let fandom = aliases.resolve(fact.fandom, kind: .fandom)
             if fandom.isEmpty {
                 unattributedWords += fact.wordsRead

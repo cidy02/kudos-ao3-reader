@@ -982,6 +982,9 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     let epubDigest: String?
     /// Omitted for older/Android records; absence never clears a local pin.
     let coverRecipeJSON: String?
+    /// Additive D3 derived fields; omitted when empty so untouched works emit no key.
+    let chapterWordCountsJSON: String?
+    let wordUnitRaw: String?
 
     @MainActor
     init(work: SavedWork) {
@@ -1067,6 +1070,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         hiddenFromHistoryAt = .some(work.hiddenFromHistoryAt)
         epubDigest = work.epubDigest.isEmpty ? nil : work.epubDigest
         coverRecipeJSON = work.coverRecipeJSON
+        chapterWordCountsJSON = work.chapterWordCountsJSON.isEmpty ? nil : work.chapterWordCountsJSON
+        wordUnitRaw = work.wordUnitRaw.isEmpty ? nil : work.wordUnitRaw
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1141,6 +1146,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case hiddenFromHistoryAt
         case epubDigest
         case coverRecipeJSON
+        case chapterWordCountsJSON
+        case wordUnitRaw
     }
 
     init(from decoder: Decoder) throws {
@@ -1236,6 +1243,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
             ? .some(try container.decode(Date?.self, forKey: .hiddenFromHistoryAt)) : nil
         epubDigest = try container.decodeIfPresent(String.self, forKey: .epubDigest)
         coverRecipeJSON = try container.decodeIfPresent(String.self, forKey: .coverRecipeJSON)
+        chapterWordCountsJSON = try container.decodeIfPresent(String.self, forKey: .chapterWordCountsJSON)
+        wordUnitRaw = try container.decodeIfPresent(String.self, forKey: .wordUnitRaw)
     }
 }
 
@@ -5399,6 +5408,14 @@ enum KudosBackupService {
                incomingJSON: coverRecipeJSON
            ) {
             work.coverRecipeJSON = GeneratedCoverRecipe.clampingFuturePinIfSupported(coverRecipeJSON)
+        }
+        if let incomingCounts = archived.chapterWordCountsJSON, !incomingCounts.isEmpty,
+           work.chapterWordCountsJSON.isEmpty || mode == .replaceLibrary || incomingWins {
+            work.chapterWordCountsJSON = incomingCounts
+        }
+        if let incomingUnit = archived.wordUnitRaw, !incomingUnit.isEmpty,
+           work.wordUnitRaw.isEmpty || mode == .replaceLibrary || incomingWins {
+            work.wordUnitRaw = incomingUnit
         }
         let coverPinReconciled = work.reconcileCoverMetadata(notifySync: false)
         work.workTagsFetched = work.workTagsFetched || archived.workTagsFetched

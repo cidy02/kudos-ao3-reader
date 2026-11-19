@@ -657,14 +657,42 @@ struct ContentView: View {
             return .wrote(progressStamp: work.progressModifiedAt ?? date)
         }
         speech.onReleaseDetachedWork = { workID in
-            let targetID = workID
-            var descriptor = FetchDescriptor<SavedWork>(
-                predicate: #Predicate { $0.id == targetID }
+            guard let work = savedWork(id: workID, in: context) else { return }
+            ReadingLogService.handleDetachedSpeech(
+                .stopped,
+                for: work,
+                playbackRate: ReaderSpeechPreferences.rateMultiplier,
+                now: Date()
             )
-            descriptor.fetchLimit = 1
-            guard let works = try? context.fetch(descriptor), let work = works.first else { return }
             WorkLifecycle.freeEPUBIfFinished(work, in: context)
         }
+        speech.onStatusTransition = { workID, status, isReaderOpen in
+            guard !isReaderOpen, let work = savedWork(id: workID, in: context) else { return }
+            let mapped: ReadingLogService.DetachedSpeechState = switch status {
+            case .playing: .playing
+            case .paused: .paused
+            case .stopped, .unavailable: .stopped
+            }
+            ReadingLogService.handleDetachedSpeech(
+                mapped,
+                for: work,
+                playbackRate: ReaderSpeechPreferences.rateMultiplier,
+                now: Date()
+            )
+        }
+        speech.onPlaybackActivity = { workID, date in
+            guard let work = savedWork(id: workID, in: context) else { return }
+            ReadingLogService.noteActivity(for: work, now: date)
+        }
+    }
+
+    private func savedWork(id workID: UUID, in context: ModelContext) -> SavedWork? {
+        let targetID = workID
+        var descriptor = FetchDescriptor<SavedWork>(
+            predicate: #Predicate { $0.id == targetID }
+        )
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first
     }
 
     private var speechMetadataIsConcealed: Bool {

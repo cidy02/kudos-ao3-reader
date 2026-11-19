@@ -77,7 +77,12 @@ final class ReaderSpeechController {
         case paused
     }
 
-    private(set) var status: Status = .unavailable
+    private(set) var status: Status = .unavailable {
+        didSet {
+            guard status != oldValue, let workID = sessionWorkID else { return }
+            onStatusTransition?(workID, status, isReaderOpen)
+        }
+    }
     /// The sentence currently being spoken, for the mini player's caption.
     private(set) var spokenText: String = ""
     /// 0…1 **smoothed** envelope for the mini-player equalizer (attack/release).
@@ -116,8 +121,15 @@ final class ReaderSpeechController {
         _ sessionProgressStamp: Date
     ) -> ReaderSpeechPositionSaveResult)?
     /// Lets the app resume normal finished-copy cleanup after the detached
-    /// controller has released the Publication that still read from that EPUB.
+    /// controller has released the Publication that still read from that EPUB,
+    /// and closes any detached reading-log sitting cleanly.
     var onReleaseDetachedWork: ((_ workID: UUID) -> Void)?
+    /// Notifies the reading log when Read Aloud transitions between playing,
+    /// paused, and stopped (including detached transport).
+    var onStatusTransition: ((_ workID: UUID, _ status: Status, _ isReaderOpen: Bool) -> Void)?
+    /// Keeps listening `activeSeconds` advancing during spoken utterances even
+    /// when locked or detached (`ReadingLogService.activeGap`).
+    var onPlaybackActivity: ((_ workID: UUID, _ date: Date) -> Void)?
 
     private var publication: Publication?
     private(set) var sessionWorkID: UUID?
@@ -831,6 +843,9 @@ final class ReaderSpeechController {
         locator: Locator? = nil,
         at date: Date = Date()
     ) {
+        if let workID = sessionWorkID, status == .playing {
+            onPlaybackActivity?(workID, date)
+        }
         guard !isReaderOpen,
               !detachedWritesSuspended,
               let workID = sessionWorkID,

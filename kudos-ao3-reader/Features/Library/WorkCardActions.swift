@@ -135,7 +135,15 @@ private struct LocalWorkReaderDestination: View {
         guard !didPrepare else { return }
         didPrepare = true
         onOpen(work)
-        guard !WorkReaderPreparation.hasReadableEPUB(for: work) else { return }
+        guard !WorkReaderPreparation.hasReadableEPUB(for: work) else {
+            if work.chapterWordCountsJSON.isEmpty {
+                Task {
+                    await AO3EPUBChapterWordCounter.populate(for: work)
+                    context.saveBestEffort(reason: "Saving chapter word counts failed")
+                }
+            }
+            return
+        }
         phase = .restoring
 
         do {
@@ -295,6 +303,7 @@ enum WorkReaderPreparation {
         // the fresh copy doesn't restore mid-chapter-one from a stale fraction.
         work.lastScrollFraction = 0
         work.legacyReaderProgress = nil
+        await AO3EPUBChapterWordCounter.populate(for: work)
         work.markModified()
         try context.save()
     }
@@ -340,6 +349,7 @@ enum WorkReaderPreparation {
             work.epubPreservationStatus = .preserved
             work.preservedAt = Date()
         }
+        await AO3EPUBChapterWordCounter.populate(for: work, force: true)
         work.markModified()
         try context.save()
     }

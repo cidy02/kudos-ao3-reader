@@ -66,7 +66,11 @@ enum ReadingLogService {
     /// the same work is a no-op so SwiftUI re-appear / book-reload cannot
     /// double-count.
     static func startSession(
-        for work: SavedWork, now: Date = Date(), timeZone: TimeZone = .current,
+        for work: SavedWork,
+        mode: ReadingSession.Mode = .read,
+        playbackRate: Double? = nil,
+        now: Date = Date(),
+        timeZone: TimeZone = .current,
         defaults: UserDefaults = .standard
     ) {
         let workID = work.id
@@ -88,8 +92,8 @@ enum ReadingLogService {
                     && work.lastScrollFraction == 0 ? 0 : nil
             ),
             startSpineIndex: work.lastSpineIndex,
-            mode: .read,
-            playbackRate: nil,
+            mode: mode,
+            playbackRate: mode == .listen ? playbackRate : nil,
             activeSeconds: 0,
             lastActivityAt: now,
             deviceID: deviceID(defaults: defaults),
@@ -105,15 +109,77 @@ enum ReadingLogService {
         openSessions[work.id] = session
     }
 
+    static func openSessionMode(for workID: UUID) -> ReadingSession.Mode? {
+        openSessions[workID]?.mode
+    }
+
+    /// Switches the open session's mode (`.read` vs `.listen`).
+    ///
+    /// D4 rule: a sitting that changes mode mid-sitting splits into two
+    /// `ReadingSession` rows (finalizing the outgoing segment when it reached
+    /// `minimumPersistableDuration`, then opening a fresh segment at `now`). Rate
+    /// changes within `.listen` update the open row in place.
     static func setMode(
-        _ mode: ReadingSession.Mode, for work: SavedWork,
-        playbackRate: Double? = nil
+        _ mode: ReadingSession.Mode,
+        for work: SavedWork,
+        playbackRate: Double? = nil,
+        now: Date = Date()
     ) {
         guard var session = openSessions[work.id] else { return }
-        // One mode per sitting: any Read Aloud playback makes this a listening visit.
-        session.mode = mode
-        session.playbackRate = mode == .listen ? playbackRate : nil
-        openSessions[work.id] = session
+        if session.mode == mode {
+            session.playbackRate = mode == .listen ? playbackRate : nil
+            openSessions[work.id] = session
+            return
+        }
+
+        noteActivity(for: work, now: now)
+        session = openSessions[work.id] ?? session
+
+        let splitAt: Date
+        if !session.isPaused {
+            session.accumulatedSeconds += max(0, now.timeIntervalSince(session.lastResumedAt))
+            session.lastResumedAt = now
+            splitAt = now
+        } else {
+            splitAt = session.lastResumedAt
+        }
+
+        // Switching at open (0s active, same instant) keeps original start facts
+        // (location/spine) on the same row.
+        if session.accumulatedSeconds == 0 && !session.isPaused && now == session.startedAt {
+            session.mode = mode
+            session.playbackRate = mode == .listen ? playbackRate : nil
+            openSessions[work.id] = session
+            return
+        }
+
+        if session.accumulatedSeconds >= minimumPersistableDuration {
+            persist(session, for: work, now: splitAt, didFinish: didFinish(session, for: work))
+        }
+
+        openSessions[work.id] = OpenSession(
+            recordID: UUID(),
+            workID: work.id,
+            ao3WorkID: work.ao3WorkID,
+            sourceURL: work.sourceURL,
+            workTitle: work.title,
+            startedAt: now,
+            lastResumedAt: now,
+            accumulatedSeconds: 0,
+            isPaused: false,
+            tzOffsetSeconds: session.tzOffsetSeconds,
+            startProgress: work.publicationProgress ?? (
+                work.readiumLocator.isEmpty && work.lastSpineIndex == 0
+                    && work.lastScrollFraction == 0 ? 0 : nil
+            ),
+            startSpineIndex: work.lastSpineIndex,
+            mode: mode,
+            playbackRate: mode == .listen ? playbackRate : nil,
+            activeSeconds: 0,
+            lastActivityAt: now,
+            deviceID: session.deviceID,
+            wasFinishedAtStart: work.isFinished
+        )
     }
 
     /// Whether this visit is the one that finished the work — the reread signal.
@@ -252,6 +318,58 @@ enum ReadingLogService {
         context.saveBestEffort(reason: "Saving reading session failed")
     }
 
+    /// Closes or keeps the open sitting when the reader disappears.
+    ///
+    /// D4: Active Read Aloud detaches instead of closing the sitting so
+    /// background/out-of-reader listening stays tracked as `.listen`.
+    static func handleReaderClose(
+        for work: SavedWork,
+        detachListening: Bool,
+        isSpeechPlaying: Bool,
+        playbackRate: Double,
+        now: Date = Date()
+    ) {
+        guard detachListening else {
+            endSession(for: work, now: now)
+            return
+        }
+        if isSpeechPlaying {
+            setMode(.listen, for: work, playbackRate: playbackRate, now: now)
+            noteActivity(for: work, now: now)
+        } else {
+            pauseSession(for: work, now: now)
+        }
+    }
+
+    enum DetachedSpeechState {
+        case playing
+        case paused
+        case stopped
+    }
+
+    /// Updates the reading log for Read Aloud transport changes while the
+    /// reader view is detached.
+    static func handleDetachedSpeech(
+        _ state: DetachedSpeechState,
+        for work: SavedWork,
+        playbackRate: Double,
+        now: Date = Date()
+    ) {
+        switch state {
+        case .playing:
+            if hasOpenSession(for: work.id) {
+                resumeSession(for: work, now: now)
+                setMode(.listen, for: work, playbackRate: playbackRate, now: now)
+            } else {
+                startSession(for: work, mode: .listen, playbackRate: playbackRate, now: now)
+            }
+        case .paused:
+            pauseSession(for: work, now: now)
+        case .stopped:
+            endSession(for: work, now: now)
+        }
+    }
+
     static func hasOpenSession(for workID: UUID) -> Bool {
         openSessions[workID] != nil
     }
@@ -355,8 +473,8 @@ enum ReadingLogService {
     ///
     /// Delegates to `ReadingInsights` so the Insights screen and this helper
     /// cannot report two different rates for the same rows.
-    static func wordsPerHour(sessions: [ReadingSession]) -> Double {
-        ReadingInsights.wordsPerHour(of: facts(from: sessions, works: []))
+    static func wordsPerHour(sessions: [ReadingSession], works: [SavedWork] = []) -> Double {
+        ReadingInsights.wordsPerHour(of: facts(from: sessions, works: works))
     }
 
     /// Flattens log rows into the plain values the statistics work on, resolving
@@ -379,7 +497,7 @@ enum ReadingLogService {
         let worksByID = Dictionary(
             works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
         )
-        let read = wordsRead(sessions: history ?? sessions)
+        let read = wordsRead(sessions: history ?? sessions, works: works)
         return sessions.map { session in
             let work = worksByID[session.workID]
             let rawFandom = session.fandoms.first(where: { !$0.isEmpty })
@@ -399,52 +517,181 @@ enum ReadingLogService {
                 // work's count now, which is the best the log can do for them.
                 chapterCount: session.chapterCountAtVisit > 0
                     ? session.chapterCountAtVisit : work?.postedChapterCount ?? 0,
-                startProgress: session.startProgress
+                startProgress: session.startProgress,
+                mode: session.mode,
+                wordUnit: work?.wordUnit ?? .words
             )
         }
     }
 
-    /// Words each sitting read (owner Q27, 2026-10-20; T-515, 2026-11-13): this
-    /// sitting's end in words (`endingProgress × wordCount`) minus where it
-    /// started in words (`startProgress × wordCount` when recorded, else the
-    /// previous sitting's end in words, or 0 for a first sitting or a reread of a
-    /// finished work that did not grow), never below zero. A sitting that went
-    /// back reads nothing and is where the next one starts from.
-    static func wordsRead(sessions: [ReadingSession]) -> [UUID: Int] {
+    /// Words (or characters, per `SavedWork.wordUnit`) each sitting read.
+    ///
+    /// D3: Uses per-chapter EPUB counts when available on the work and within
+    /// 10% of AO3's reported word count, never double-counting a revised chapter
+    /// already read in the current read-through. Falls back to the legacy
+    /// `progress × wordCount` rule otherwise.
+    static func wordsRead(
+        sessions: [ReadingSession],
+        works: [SavedWork] = []
+    ) -> [UUID: Int] {
+        let worksByID = Dictionary(
+            works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
+        )
         var read: [UUID: Int] = [:]
-        for group in Dictionary(grouping: sessions, by: \.workID).values {
-            var previousEndFraction = 0.0
-            var previousEndWords = 0.0
-            var previousWords = 0
-            var previousFinished = false
+        for (workID, group) in Dictionary(grouping: sessions, by: \.workID) {
             let sorted = group.sorted {
                 ($0.startedAt, $0.id.uuidString) < ($1.startedAt, $1.id.uuidString)
             }
-            for session in sorted {
-                let words = max(0, session.wordCount)
-                let endFraction = min(1, max(0, session.endingProgress))
-                let endWords = endFraction * Double(words)
-                let startWords: Double
-                if let explicit = session.startProgress {
-                    let clamped = min(1, max(0, explicit))
-                    if previousWords > 0 && words > previousWords && clamped == previousEndFraction {
-                        startWords = previousEndWords
-                    } else {
-                        startWords = clamped * Double(words)
-                    }
-                } else if previousFinished && words <= previousWords {
-                    startWords = 0
-                } else {
-                    startWords = previousEndWords
-                }
-                read[session.id] = Int(max(0, endWords - startWords).rounded())
-                previousEndFraction = endFraction
-                previousEndWords = endWords
-                previousWords = words
-                previousFinished = session.didFinish
+            let work = worksByID[workID]
+            if let work, canUseChapterWordCounts(work.chapterWordCounts, for: work) {
+                chapterWordsRead(
+                    sortedSessions: sorted,
+                    chapterCounts: work.chapterWordCounts,
+                    into: &read
+                )
+            } else {
+                legacyWordsRead(sortedSessions: sorted, into: &read)
             }
         }
         return read
+    }
+
+    private static func canUseChapterWordCounts(
+        _ counts: [Int],
+        for work: SavedWork
+    ) -> Bool {
+        guard !counts.isEmpty else { return false }
+        let chapterSum = counts.reduce(0, +)
+        guard chapterSum > 0 else { return false }
+        let ao3Count = work.wordCount
+        if ao3Count > 0 && (work.postedChapterCount == 0 || counts.count >= work.postedChapterCount) {
+            return abs(Double(chapterSum - ao3Count)) <= Double(ao3Count) * 0.10
+        }
+        return true
+    }
+
+    private static func chapterWordsRead(
+        sortedSessions: [ReadingSession],
+        chapterCounts: [Int],
+        into read: inout [UUID: Int]
+    ) {
+        var chapterHighWater = Array(repeating: 0.0, count: chapterCounts.count)
+        var previousEndFraction = 0.0
+        var previousWords = 0
+        var previousChapterCount = 0
+        var previousFinished = false
+
+        for session in sortedSessions {
+            let activeCount: Int
+            if session.chapterCountAtVisit > 0 && session.chapterCountAtVisit < chapterCounts.count {
+                activeCount = session.chapterCountAtVisit
+            } else {
+                activeCount = chapterCounts.count
+            }
+            let activeCounts = Array(chapterCounts.prefix(activeCount))
+            let prefixSum = activeCounts.reduce(0, +)
+
+            let workGrew = (previousChapterCount > 0 && activeCount > previousChapterCount)
+                || (previousWords > 0 && session.wordCount > previousWords)
+            let clampedStart = session.startProgress.map { min(1, max(0, $0)) }
+            let endFraction = min(1, max(0, session.endingProgress))
+
+            if previousFinished && !workGrew {
+                if clampedStart == nil || (clampedStart ?? 0) < previousEndFraction {
+                    chapterHighWater = Array(repeating: 0.0, count: chapterCounts.count)
+                }
+            }
+
+            let startFraction: Double
+            if let clampedStart {
+                startFraction = clampedStart
+            } else if previousFinished && !workGrew {
+                startFraction = 0
+            } else {
+                startFraction = previousEndFraction
+            }
+
+            guard prefixSum > 0, endFraction > startFraction else {
+                read[session.id] = 0
+                previousEndFraction = endFraction
+                previousWords = session.wordCount
+                previousChapterCount = activeCount
+                previousFinished = session.didFinish
+                continue
+            }
+
+            let startPos = startFraction * Double(prefixSum)
+            let endPos = endFraction * Double(prefixSum)
+            var cumulative = 0.0
+            var rawWords = 0.0
+
+            for index in 0..<activeCounts.count {
+                let count = Double(max(0, activeCounts[index]))
+                let chapterStart = cumulative
+                let chapterEnd = cumulative + count
+                cumulative = chapterEnd
+                guard count > 0, endPos > chapterStart, startPos < chapterEnd else { continue }
+
+                let coveredStart = max(0.0, min(1.0, (startPos - chapterStart) / count))
+                let coveredEnd = max(0.0, min(1.0, (endPos - chapterStart) / count))
+                let effectiveStart = max(coveredStart, chapterHighWater[index])
+                if coveredEnd > effectiveStart {
+                    rawWords += (coveredEnd - effectiveStart) * count
+                }
+                chapterHighWater[index] = max(chapterHighWater[index], coveredEnd)
+            }
+
+            // If an older sitting of a WIP had a different pre-revision total (>10% off
+            // the current prefix because earlier chapters grew later), scale this
+            // historical sitting to its own AO3 word count while keeping highWater set.
+            let scale: Double
+            if session.wordCount > 0
+                && abs(Double(prefixSum - session.wordCount)) > Double(session.wordCount) * 0.10 {
+                scale = Double(session.wordCount) / Double(prefixSum)
+            } else {
+                scale = 1.0
+            }
+
+            read[session.id] = Int(max(0, rawWords * scale).rounded())
+            previousEndFraction = endFraction
+            previousWords = session.wordCount
+            previousChapterCount = activeCount
+            previousFinished = session.didFinish
+        }
+    }
+
+    private static func legacyWordsRead(
+        sortedSessions: [ReadingSession],
+        into read: inout [UUID: Int]
+    ) {
+        var previousEndFraction = 0.0
+        var previousEndWords = 0.0
+        var previousWords = 0
+        var previousFinished = false
+
+        for session in sortedSessions {
+            let words = max(0, session.wordCount)
+            let endFraction = min(1, max(0, session.endingProgress))
+            let endWords = endFraction * Double(words)
+            let startWords: Double
+            if let explicit = session.startProgress {
+                let clamped = min(1, max(0, explicit))
+                if previousWords > 0 && words > previousWords && clamped == previousEndFraction {
+                    startWords = previousEndWords
+                } else {
+                    startWords = clamped * Double(words)
+                }
+            } else if previousFinished && words <= previousWords {
+                startWords = 0
+            } else {
+                startWords = previousEndWords
+            }
+            read[session.id] = Int(max(0, endWords - startWords).rounded())
+            previousEndFraction = endFraction
+            previousEndWords = endWords
+            previousWords = words
+            previousFinished = session.didFinish
+        }
     }
 
     /// Everything artboard 1bi prints, for one period and the one before it.

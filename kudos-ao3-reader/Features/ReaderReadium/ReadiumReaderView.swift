@@ -443,10 +443,22 @@ struct ReadiumReaderView: View {
                 syncSliderFromPosition(newValue)
             }
             .onChange(of: speech.status) { _, status in
-                if status == .playing {
+                switch status {
+                case .playing:
+                    ReadingLogService.resumeSession(for: work, now: Date())
                     ReadingLogService.setMode(
                         .listen, for: work, playbackRate: ReaderSpeechPreferences.rateMultiplier
                     )
+                case .paused:
+                    if scenePhase == .background {
+                        ReadingLogService.pauseSession(for: work, now: Date())
+                    }
+                case .stopped, .unavailable:
+                    guard speech.isReaderOpen else { return }
+                    ReadingLogService.setMode(.read, for: work, now: Date())
+                    if scenePhase == .background {
+                        ReadingLogService.pauseSession(for: work, now: Date())
+                    }
                 }
             }
             .onAppear {
@@ -454,8 +466,15 @@ struct ReadiumReaderView: View {
                 if book.phase == .ready {
                     attachSpeechToReadyBook()
                 }
-                ReadingLogService.startSession(for: work, now: Date())
-                if speech.status == .playing {
+                let isPlayingSpeech = speech.status == .playing
+                ReadingLogService.startSession(
+                    for: work,
+                    mode: isPlayingSpeech ? .listen : .read,
+                    playbackRate: isPlayingSpeech ? ReaderSpeechPreferences.rateMultiplier : nil,
+                    now: Date()
+                )
+                if isPlayingSpeech {
+                    ReadingLogService.resumeSession(for: work, now: Date())
                     ReadingLogService.setMode(
                         .listen, for: work, playbackRate: ReaderSpeechPreferences.rateMultiplier
                     )
@@ -472,7 +491,9 @@ struct ReadiumReaderView: View {
                 switch phase {
                 case .background:
                     flushProgress(shelfStamp: true)
-                    ReadingLogService.pauseSession(for: work, now: Date())
+                    if speech.status != .playing {
+                        ReadingLogService.pauseSession(for: work, now: Date())
+                    }
                 case .inactive:
                     flushProgress(shelfStamp: false)
                 case .active:
@@ -494,13 +515,19 @@ struct ReadiumReaderView: View {
                 // Flush the exact final position so resume lands precisely, even if the
                 // last scroll's debounce window hadn't elapsed before we left.
                 flushProgress(shelfStamp: true)
-                ReadingLogService.endSession(for: work, now: Date())
                 let canFreeEPUB = ReaderSpeechSessionPolicy.canFreeEPUB(
                     workID: work.id,
                     sessionActive: speech.isSessionActive,
                     sessionWorkID: speech.sessionWorkID
                 )
-                speech.readerDidClose(workID: work.id)
+                let leaveAction = speech.readerDidClose(workID: work.id)
+                ReadingLogService.handleReaderClose(
+                    for: work,
+                    detachListening: leaveAction == .detach,
+                    isSpeechPlaying: speech.status == .playing,
+                    playbackRate: ReaderSpeechPreferences.rateMultiplier,
+                    now: Date()
+                )
                 // An active detached session retains this Publication. Keep its
                 // source EPUB until Stop/session end releases the publication.
                 if canFreeEPUB {

@@ -149,6 +149,7 @@ enum PersistenceMigrationService {
         } catch {
             // Retry on the next launch; never mark an incomplete pass done.
         }
+        try? await SavedWorkChapterWordCountBackfill(modelContainer: context.container).run()
         await backfillEPUBDigests(in: context)
         let current = PersistenceStatusStore.snapshot(defaults: defaults).migrationState
         if current == .completed {
@@ -768,6 +769,47 @@ actor ReadingSessionSnapshotBackfill {
                 offset += sessions.count
             }
             defaults.set(true, forKey: key)
+        } catch {
+            await MainActor.run { PersistenceOperationGate.end(.migration) }
+            throw error
+        }
+        await MainActor.run { PersistenceOperationGate.end(.migration) }
+    }
+}
+
+/// Lazily populates `SavedWork.chapterWordCountsJSON` and `wordUnitRaw` from
+/// existing local EPUBs (D3) in bounded batches off the main actor. Never calls
+/// `markModified()` so derived backfill never triggers Folder Sync uploads.
+@ModelActor
+actor SavedWorkChapterWordCountBackfill {
+    private static let worksPerPass = 50
+
+    func run(limit: Int = worksPerPass) async throws {
+        guard await MainActor.run(body: { PersistenceOperationGate.begin(.migration) }) else { return }
+        do {
+            var descriptor = FetchDescriptor<SavedWork>(
+                predicate: #Predicate {
+                    $0.hasEPUB && !$0.isPendingDeletion && $0.chapterWordCountsJSON == ""
+                },
+                sortBy: [SortDescriptor(\.lastReadDate, order: .reverse)]
+            )
+            descriptor.fetchLimit = limit
+            let pending = try modelContext.fetch(descriptor)
+            var changed = false
+            for work in pending {
+                await Task.yield()
+                let fileURL = work.fileURL
+                guard FileManager.default.fileExists(atPath: fileURL.path) else { continue }
+                guard let analysis = try? AO3EPUBChapterWordCounter.analyze(
+                    epubURL: fileURL,
+                    language: work.language
+                ) else { continue }
+                work.applyChapterWordAnalysis(analysis)
+                changed = true
+            }
+            if changed {
+                try modelContext.save()
+            }
         } catch {
             await MainActor.run { PersistenceOperationGate.end(.migration) }
             throw error
