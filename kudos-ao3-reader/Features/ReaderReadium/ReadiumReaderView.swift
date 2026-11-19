@@ -1020,7 +1020,7 @@ struct ReadiumReaderView: View {
         // Page turn is an EPUB preference (`pageTransition`) and also the
         // adapter's animated flag. Submit carries the style. Refresh keeps
         // edge taps in step when only the flag changes (Reduce Motion, or
-        // curl staying instant so it does not play the slide fallback).
+        // leaving paged mode).
         book.refreshPageTurnAnimation()
         // Typography submit updates CSS but may not re-run spread updateContentInset.
         book.forcePageBoxContentInsetRefresh()

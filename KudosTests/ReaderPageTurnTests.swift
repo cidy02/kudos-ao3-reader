@@ -27,7 +27,6 @@ struct ReaderPageTurnTests {
         #expect(ReaderPageTurnStyle.stored(in: defaults) == .none)
         defaults.set(ReaderPageTurnStyle.slide.rawValue, forKey: ReaderPageTurnStyle.storageKey)
         #expect(ReaderPageTurnStyle.stored(in: defaults) == .slide)
-        // Kept in the enum, hidden from the picker. A stored value still resolves.
         defaults.set(ReaderPageTurnStyle.curl.rawValue, forKey: ReaderPageTurnStyle.storageKey)
         #expect(ReaderPageTurnStyle.stored(in: defaults) == .curl)
         defaults.set("nope", forKey: ReaderPageTurnStyle.storageKey)
@@ -36,13 +35,13 @@ struct ReaderPageTurnTests {
         #expect(ReaderPageTurnStyle.stored(in: defaults) == .slide)
     }
 
-    @Test func pickerOffersNoneSlideAndFastFade() {
-        #expect(ReaderPageTurnStyle.pickerCases == [.none, .slide, .fade])
+    @Test func pickerOffersNoneSlideFastFadeAndCurl() {
+        #expect(ReaderPageTurnStyle.pickerCases == [.none, .slide, .fade, .curl])
         #expect(ReaderPageTurnStyle.allCases == [.none, .slide, .fade, .curl])
-        #expect(!ReaderPageTurnStyle.pickerCases.contains(.curl))
+        #expect(ReaderPageTurnStyle.curl.title == "Curl")
     }
 
-    @Test func animatedTransitionIsSlideOrFadeInPagedModeOnly() {
+    @Test func animatedTransitionIsSlideFadeOrCurlInPagedModeOnly() {
         for style in ReaderPageTurnStyle.allCases {
             for mode in ReadingMode.allCases {
                 for reduceMotion in [false, true] {
@@ -51,7 +50,8 @@ struct ReaderPageTurnTests {
                         readingMode: mode,
                         reduceMotion: reduceMotion
                     )
-                    let expected = (style == .slide || style == .fade) && mode == .paged && !reduceMotion
+                    let plays = style == .slide || style == .fade || style == .curl
+                    let expected = plays && mode == .paged && !reduceMotion
                     #expect(
                         animated == expected,
                         "style \(style.rawValue) mode \(mode.rawValue) reduceMotion \(reduceMotion)"
