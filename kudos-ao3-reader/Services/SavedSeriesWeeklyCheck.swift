@@ -73,6 +73,9 @@ enum SavedSeriesWeeklyCheck {
     /// words twice or turns `isSubscribed` back on after the reader unsubscribed. It says where the work sits
     /// ("Part N", capped: the text can be forged) and its words, never whether the series is now complete.
     static func applyMail(_ updates: [SubscriptionUpdate], in context: ModelContext, now: Date = Date()) {
+        // Compare with each series' stamp as it was before this call: one AO3 email can carry several works with the
+        // same timestamp, and all of them must apply together.
+        var appliedBefore: [Int: Date?] = [:]
         for update in updates.sorted(by: { $0.at < $1.at }) {
             guard let seriesID = update.source.seriesID, seriesID > 0,
                   update.workID > 0, update.workID <= UInt64(Int.max) else { continue }
@@ -81,8 +84,9 @@ enum SavedSeriesWeeklyCheck {
                 context.insert(created)
                 return created
             }()
-            if let last = saved.lastNotifiedAt, update.at <= last { continue }
-            saved.lastNotifiedAt = update.at
+            if appliedBefore[seriesID] == nil { appliedBefore[seriesID] = .some(saved.lastNotifiedAt) }
+            if let last = appliedBefore[seriesID] ?? nil, update.at <= last { continue }
+            saved.lastNotifiedAt = max(saved.lastNotifiedAt ?? update.at, update.at)
             saved.isSubscribed = true
             saved.lastModifiedAt = now
             let workID = Int(update.workID)

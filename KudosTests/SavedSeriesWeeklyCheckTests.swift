@@ -182,6 +182,17 @@ struct SavedSeriesWeeklyCheckTests {
         #expect(saved.partWorkIDs == [55, 66] && saved.partCount == 10)
     }
 
+    @Test func oneEmailWithTwoWorksOfASeriesAppliesBoth() throws {
+        let context = try makeContext()
+        let at = Date(timeIntervalSince1970: 5_000)
+        let batch = [update(workID: 1, seriesID: 3, series: "Part 1 of S", words: 10, at: at),
+                     update(workID: 2, seriesID: 3, series: "Part 2 of S", words: 20, at: at)]
+        SavedSeriesWeeklyCheck.applyMail(batch, in: context)
+        SavedSeriesWeeklyCheck.applyMail(batch, in: context)
+        let saved = try #require(SavedSeriesStore.series(for: 3, in: context))
+        #expect(saved.partWorkIDs == [1, 2] && saved.wordCount == 30)
+    }
+
     @Test func viewsCountOncePerCall() throws {
         let context = try makeContext()
         let saved = SavedSeries(ao3SeriesID: 4)
