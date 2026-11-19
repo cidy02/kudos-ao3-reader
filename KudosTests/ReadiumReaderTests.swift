@@ -41,6 +41,7 @@ struct ReadiumReaderTests {
         #expect(preferences.publisherStyles == false)
         #expect(preferences.scroll == false)
         #expect(preferences.textAlign == .justify)
+        #expect(preferences.pageTransition == .slide)
 
         let properties = ReadiumReaderStyleMapper.readingSystemProperties.cssProperties()
         #expect(properties["--RS__pageGutter"] == "1.00000px")
@@ -97,6 +98,20 @@ struct ReadiumReaderTests {
 
         #expect(preferences.columnCount == nil)
         #expect(preferences.scroll == true)
+    }
+
+    @Test func pageTurnMapsOntoTheReadiumPreference() {
+        for style in ReaderPageTurnStyle.allCases {
+            let preferences = ReadiumReaderStyleMapper.preferences(
+                style: ReaderTextStyle(),
+                theme: .light,
+                fontFamily: nil,
+                readingMode: .paged,
+                twoPageSpread: false,
+                pageTurn: style
+            )
+            #expect(preferences.pageTransition?.rawValue == style.rawValue)
+        }
     }
 
     @Test func builtInFontsKeepFallbacksAndImportedFontsInjectFontFace() throws {

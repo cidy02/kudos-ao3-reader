@@ -16,6 +16,7 @@ struct ReaderPageTurnTests {
         #expect(ReaderPageTurnStyle.storageKey == "readerPageTurn")
         #expect(ReaderPageTurnStyle.none.title == "None")
         #expect(ReaderPageTurnStyle.slide.title == "Slide")
+        #expect(ReaderPageTurnStyle.fade.title == "Fast Fade")
         let defaults = try isolatedDefaults()
         #expect(ReaderPageTurnStyle.stored(in: defaults) == .slide)
     }
@@ -35,12 +36,13 @@ struct ReaderPageTurnTests {
         #expect(ReaderPageTurnStyle.stored(in: defaults) == .slide)
     }
 
-    @Test func pickerOffersOnlyNoneAndSlide() {
-        #expect(ReaderPageTurnStyle.pickerCases == [.none, .slide])
+    @Test func pickerOffersNoneSlideAndFastFade() {
+        #expect(ReaderPageTurnStyle.pickerCases == [.none, .slide, .fade])
         #expect(ReaderPageTurnStyle.allCases == [.none, .slide, .fade, .curl])
+        #expect(!ReaderPageTurnStyle.pickerCases.contains(.curl))
     }
 
-    @Test func animatedTransitionIsSlideInPagedModeOnly() {
+    @Test func animatedTransitionIsSlideOrFadeInPagedModeOnly() {
         for style in ReaderPageTurnStyle.allCases {
             for mode in ReadingMode.allCases {
                 for reduceMotion in [false, true] {
@@ -49,7 +51,7 @@ struct ReaderPageTurnTests {
                         readingMode: mode,
                         reduceMotion: reduceMotion
                     )
-                    let expected = style == .slide && mode == .paged && !reduceMotion
+                    let expected = (style == .slide || style == .fade) && mode == .paged && !reduceMotion
                     #expect(
                         animated == expected,
                         "style \(style.rawValue) mode \(mode.rawValue) reduceMotion \(reduceMotion)"

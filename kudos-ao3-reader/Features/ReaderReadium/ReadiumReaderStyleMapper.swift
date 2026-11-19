@@ -17,7 +17,8 @@ enum ReadiumReaderStyleMapper {
         readingMode: ReadingMode,
         twoPageSpread: Bool,
         backgroundHex: String? = nil,
-        textHex: String? = nil
+        textHex: String? = nil,
+        pageTurn: ReaderPageTurnStyle = .slide
     ) -> EPUBPreferences {
         EPUBPreferences(
             backgroundColor: ReadiumNavigator.Color(hex: backgroundHex ?? theme.backgroundHex),
@@ -39,6 +40,9 @@ enum ReadiumReaderStyleMapper {
             // The navigator configuration uses a 1 px base gutter, turning
             // Readium's factor into the app's absolute point/px margin.
             pageMargins: max(0, style.margin),
+            // Raw values match `PageTransition`. An unknown string cannot
+            // appear here; the fallback keeps a turn on the historical slide.
+            pageTransition: PageTransition(rawValue: pageTurn.rawValue) ?? .slide,
             // The legacy reader always overrides the EPUB's base typography.
             // Advanced Readium settings require publisher styles to be off.
             publisherStyles: false,
