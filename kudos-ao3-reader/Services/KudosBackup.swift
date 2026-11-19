@@ -1782,7 +1782,10 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
         isPinned = queue.isPinned
         keepsWorksOffline = queue.kind == .smart ? false : queue.keepsWorksOffline
         notes = queue.notes
-        smartRulesJSON = queue.smartRulesJSON
+        // Rules travel only on a queue whose kind uses them, so a custom queue
+        // never carries rules that would read as a smart queue elsewhere.
+        smartRulesJSON = queue.kindRaw == ReadingQueueKind.custom.rawValue || queue.kind == .savedForLater
+            ? nil : queue.smartRulesJSON
         let links = queue.kind == .smart ? [] : queue.searchLinks.filter { $0.search != nil }
         searchSources = queue.kind == .smart || (queue.searchSourcesModifiedAt == nil && links.isEmpty)
             ? nil : links.map(KudosBackupQueueSearchLink.init)
@@ -3307,12 +3310,12 @@ enum KudosBackupService {
                 // Write the archived string, not `kind`. `ReadingQueueKind(rawValue:)`
                 // maps anything it does not know — including a future kind — to
                 // `.custom`, and assigning that would erase it on the way back out.
-                // Older shipped iOS builds decode unknown kinds as `.custom` and omit
-                // `smartRulesJSON`; never let that downgrade an existing non-custom queue.
+                // Older shipped iOS builds decode unknown kinds as `.custom`, so an
+                // archive's "custom" never downgrades a queue this device knows as
+                // another kind, with or without rules (no UI turns a queue custom).
                 if incomingWins, !archived.kindRaw.isEmpty,
                    !(archived.kindRaw == ReadingQueueKind.custom.rawValue
-                     && queue.kindRaw != ReadingQueueKind.custom.rawValue
-                     && archived.smartRulesJSON == nil) {
+                     && queue.kindRaw != ReadingQueueKind.custom.rawValue) {
                     queue.kindRaw = archived.kindRaw
                 }
                 queue.sortOrder = archived.sortOrder
@@ -3355,7 +3358,10 @@ enum KudosBackupService {
             // Same as notes: a missing key is an older archive or Android, not
             // a request to drop rules this device already stored. Replace
             // included — the key's absence is not part of the snapshot.
+            // A custom queue (or one an older build downgraded) never stores
+            // rules: they would be re-exported and read as a smart queue.
             if let archivedRules = archived.smartRulesJSON,
+               queue.kindRaw != ReadingQueueKind.custom.rawValue, queue.kind != .savedForLater,
                incomingWins || queue.smartRulesJSON == nil {
                 queue.smartRulesJSON = archivedRules
             }

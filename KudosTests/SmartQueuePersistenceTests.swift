@@ -301,6 +301,77 @@ struct SmartQueuePersistenceTests {
         }
     }
 
+    /// Review 2 P1: a device that was once on an older build holds the queue as
+    /// "custom"; it must neither pick up the smart archive's rules nor export a
+    /// "custom" + rules hybrid that slips past the downgrade guard elsewhere.
+    @Test func customHybridWithRulesNeverDowngradesOrCarriesRules() throws {
+        let json = rulesJSON(words: 15_000)
+        for mode in [BackupImportMode.merge, .replaceLibrary, .reconcile] {
+            let local = try context()
+            let queue = ReadingQueueService.createQueue(named: "Short Reads", smartRulesJSON: json, in: local)
+            queue.dateUpdated = Date(timeIntervalSince1970: 1_000)
+            queue.lastMembershipChangedAt = Date(timeIntervalSince1970: 1_000)
+            try local.save()
+            let contents = try KudosBackupService.makeContents(
+                works: [], bookmarks: [], fonts: [], readingQueues: [queue], defaults: try defaults()
+            )
+            var root = try #require(
+                JSONSerialization.jsonObject(with: contents.manifestData()) as? [String: Any]
+            )
+            var queues = try #require(root["readingQueues"] as? [[String: Any]])
+            let index = try #require(queues.firstIndex { $0["kindRaw"] as? String == "smart" })
+            // The hybrid: "custom" with the rules still attached, and newer.
+            queues[index]["kindRaw"] = ReadingQueueKind.custom.rawValue
+            queues[index]["dateUpdated"] = "2026-11-02T00:00:00.000Z"
+            queues[index]["lastMembershipChangedAt"] = "2026-11-02T00:00:00.000Z"
+            root["readingQueues"] = queues
+            _ = try KudosBackupService.restore(
+                KudosBackupContents(manifest: KudosBackupContents.decodeManifest(
+                    JSONSerialization.data(withJSONObject: root)
+                )),
+                into: local,
+                defaults: try defaults(),
+                mode: mode
+            )
+            let surviving = try #require(
+                try local.fetch(FetchDescriptor<ReadingQueue>()).first { $0.id == queue.id }
+            )
+            #expect(surviving.kind == .smart, "mode \(mode)")
+            #expect(surviving.smartRulesJSON == json, "mode \(mode)")
+        }
+
+        // A queue held as custom (downgraded by an older build) keeps no rules
+        // from a losing smart archive, and never exports rules.
+        let device = try context()
+        let custom = ReadingQueueService.createQueue(named: "Short Reads", in: device)
+        custom.dateUpdated = Date(timeIntervalSince1970: 2_000_000_000)
+        custom.lastMembershipChangedAt = Date(timeIntervalSince1970: 2_000_000_000)
+        try device.save()
+        let other = try context()
+        let smart = ReadingQueueService.createQueue(
+            id: custom.id, named: "Short Reads", smartRulesJSON: json, in: other
+        )
+        smart.dateUpdated = Date(timeIntervalSince1970: 1_000)
+        smart.lastMembershipChangedAt = Date(timeIntervalSince1970: 1_000)
+        try other.save()
+        let smartArchive = try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], readingQueues: [smart], defaults: try defaults()
+        )
+        _ = try KudosBackupService.restore(smartArchive, into: device, defaults: try defaults(), mode: .reconcile)
+        #expect(custom.kind == .custom)
+        #expect(custom.smartRulesJSON == nil)
+
+        custom.smartRulesJSON = json   // a hybrid left by an earlier build
+        let exported = try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], readingQueues: [custom], defaults: try defaults()
+        )
+        let exportedRoot = try #require(
+            JSONSerialization.jsonObject(with: exported.manifestData()) as? [String: Any]
+        )
+        let exportedQueue = try #require((exportedRoot["readingQueues"] as? [[String: Any]])?.first)
+        #expect(exportedQueue["smartRulesJSON"] == nil)
+    }
+
     @Test func restoreRefusesSmartQueueMembershipsKeepOfflineAndSearchSources() throws {
         let json = rulesJSON(words: 15_000)
         let source = try context()
