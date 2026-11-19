@@ -501,6 +501,19 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
                     let partition = ranking.partitioned(results)
 
+                    if let line = ReaderResponseCopy.rankedWorksLine(
+                        loaded: partition.ranked.count,
+                        rank: ranking.settings.rank,
+                        seenBeforeLine: partition.seenBeforeLine
+                    ) {
+                        Section {
+                            RankedWorksCaption(text: line)
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                        }
+                    }
+
                     Section {
                         // Ranked from whatever is loaded, so it re-ranks as `results` changes.
                         ForEach(partition.ranked) { entry in
@@ -548,7 +561,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                 )
                             }
                         } header: {
-                            combinedHeader("Not Ranked", count: partition.unranked.count)
+                            combinedHeader("Not ranked", count: partition.unranked.count)
                         }
                     }
 

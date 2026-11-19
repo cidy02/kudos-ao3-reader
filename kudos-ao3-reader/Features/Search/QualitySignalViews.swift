@@ -10,17 +10,19 @@ struct WorkSignalToneChip: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.accentFill) private var accentFill
     @Environment(\.accentInk) private var accentInk
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var theme: ReaderTheme { themeManager.appTheme }
 
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: iconName)
-                .font(.system(size: 10, weight: .bold))
+                .font(.caption2.weight(.bold))
                 .accessibilityHidden(true)
             Text(signal.label)
                 .font(.caption2.weight(.semibold))
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .fixedSize(horizontal: false, vertical: dynamicTypeSize.isAccessibilitySize)
         }
         .padding(.leading, 6)
         .padding(.trailing, 8)
@@ -118,13 +120,30 @@ struct WorkSignalRow: View {
     }
 }
 
-/// "Not Ranked" with its count (Quality-Results board), in the same bold section header
-/// every other list section uses.
+/// "Not ranked" with its count (Quality-Results). The board draws a 13pt
+/// uppercase "Not ranked · N"; this is the same section header every other
+/// list uses, sentence case, with the count beside the title.
 struct NotRankedSectionHeader: View {
     let count: Int
 
     var body: some View {
-        SectionRuleHeader(title: "Not Ranked", count: count)
+        SectionRuleHeader(title: "Not ranked", count: count)
             .textCase(nil)
+    }
+}
+
+/// The grey line above ranked results: what the order is, and for momentum
+/// how many works were seen before.
+struct RankedWorksCaption: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.footnote)
+            .foregroundStyle(.secondaryInk)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, SubjectMetrics.gutter)
+            .accessibilityLabel(text)
     }
 }
