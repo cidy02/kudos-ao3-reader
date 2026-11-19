@@ -673,6 +673,11 @@ enum ReadingLogService {
         var previousWords = 0
         var previousChapterCount = 0
         var previousFinished = false
+        // A finish was seen and no later sitting has read forward yet. It survives
+        // sittings that read nothing (open a finished work at its end, scroll back),
+        // so the first forward read after a finish decides "reread or revision".
+        struct FinishMark { let endFraction: Double, words: Int, chapterCount: Int }
+        var pendingFinish: FinishMark?
 
         for session in sortedSessions {
             let hasChapterMismatch = session.chapterCountAtVisit > chapterCounts.count
@@ -687,32 +692,40 @@ enum ReadingLogService {
 
             let workGrew = (previousChapterCount > 0 && activeCount > previousChapterCount)
                 || (previousWords > 0 && session.wordCount > previousWords)
-            let workShrank = previousWords > 0 && session.wordCount > 0 && session.wordCount < previousWords
             let clampedStart = session.startProgress.map { min(1, max(0, $0)) }
             let endFraction = min(1, max(0, session.endingProgress))
 
-            if previousFinished {
-                let isGenuineNewReread: Bool = if let clampedStart {
-                    if clampedStart == 0 {
-                        !workShrank
-                    } else {
-                        !workGrew && !workShrank && clampedStart < previousEndFraction
-                    }
-                } else {
-                    !workGrew && !workShrank
-                }
-                if isGenuineNewReread {
-                    chapterHighWater = Array(repeating: 0.0, count: chapterCounts.count)
-                }
-            }
-
+            // Same rule as `legacyWordsRead`: no recorded start right after a finish
+            // means a reread from 0 unless the work grew.
             let startFraction: Double
             if let clampedStart {
                 startFraction = clampedStart
-            } else if previousFinished && !workGrew && !workShrank {
+            } else if previousFinished && !workGrew {
                 startFraction = 0
             } else {
                 startFraction = previousEndFraction
+            }
+
+            if let finish = pendingFinish, endFraction > startFraction {
+                // Starting from 0 is always a reread (even after an AO3 recount). A start
+                // part-way in is a reread unless the work changed since the finish: grew
+                // (catching up on new chapters) or shrank by more than 10% (a revised,
+                // already-read chapter), where the read-through continues instead.
+                let grewSinceFinish = (finish.chapterCount > 0 && activeCount > finish.chapterCount)
+                    || (finish.words > 0 && session.wordCount > finish.words)
+                let shrankSinceFinish = finish.words > 0 && session.wordCount > 0
+                    && Double(session.wordCount) < Double(finish.words) * 0.90
+                let isGenuineNewReread = startFraction == 0
+                    || (!grewSinceFinish && !shrankSinceFinish && startFraction < finish.endFraction)
+                if isGenuineNewReread {
+                    chapterHighWater = Array(repeating: 0.0, count: chapterCounts.count)
+                }
+                pendingFinish = nil
+            }
+            if session.didFinish {
+                pendingFinish = FinishMark(
+                    endFraction: endFraction, words: session.wordCount, chapterCount: activeCount
+                )
             }
 
             guard prefixSum > 0, endFraction > startFraction else {

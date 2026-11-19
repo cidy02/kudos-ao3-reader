@@ -74,7 +74,8 @@ public final class SystemTTSService: TTSService {
         }
     }
 
-    public func speak(units: [TTSSpeechUnit]) async throws {
+    @discardableResult
+    public func speak(units: [TTSSpeechUnit]) async throws -> Bool {
         resetPlayback(notifyStopped: false)
 
         let prepared = TTSSpeechUnit.packedChunks(from: units)
@@ -91,7 +92,7 @@ public final class SystemTTSService: TTSService {
                 chunk.text.unicodeScalars.contains { CharacterSet.letters.contains($0)
                     || CharacterSet.decimalDigits.contains($0) }
             }
-        guard !prepared.isEmpty else { return }
+        guard !prepared.isEmpty else { return false }
 
         chunks = prepared
         currentIndex = 0
@@ -99,6 +100,7 @@ public final class SystemTTSService: TTSService {
         try activateAudioSession()
         status = .playing
         startPlayback(from: 0)
+        return true
     }
 
     public func pause() {

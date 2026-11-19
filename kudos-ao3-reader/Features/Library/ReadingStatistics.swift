@@ -186,6 +186,19 @@ struct HomeReadingStats: Equatable, Sendable {
         works.filter { !$0.isQueueOnlyWork && !gate.isConcealed($0, enabled: hideMature) }
     }
 
+    /// The works `insightsWorks` leaves out (queue-only, or concealed mature). Their
+    /// sessions must leave every Insights figure and export, so this needs the
+    /// UNFILTERED library: on an already-filtered list it is always empty.
+    static func insightsHiddenWorkIDs(
+        from libraryWorks: [SavedWork],
+        gate: PrivacyGate,
+        hideMature: Bool
+    ) -> Set<UUID> {
+        Set(libraryWorks.lazy
+            .filter { $0.isQueueOnlyWork || gate.isConcealed($0, enabled: hideMature) }
+            .map(\.id))
+    }
+
     /// Revision key for Home weekly reading stats. Incorporates the start of today
     /// so the stats recalculate across the midnight boundary.
     static func revisionKey(

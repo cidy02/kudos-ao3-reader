@@ -364,6 +364,67 @@ import Testing
         #expect(gathered.filteredSessions.map(\.id) == [sVisible.id])
     }
 
+    /// Review 2 P2: both Insights entry points used to hand the view an already-filtered
+    /// list, so "works minus visible works" was always empty and concealed works' sessions
+    /// still fed every figure. The hidden set must come from the unfiltered library.
+    @Test func hiddenWorkIDsComeFromTheUnfilteredLibrary() throws {
+        let context = try makeContext()
+        let aug = interval(year: 2026, month: 8)
+        let jul = interval(year: 2026, month: 7)
+
+        let visible = SavedWork(title: "Visible Fic", author: "A")
+        visible.wordCount = 10_000
+        visible.workFandoms = ["Fandom One"]
+        visible.isSaved = true
+        let mature = SavedWork(title: "Explicit Fic", author: "B")
+        mature.wordCount = 20_000
+        mature.rating = "Explicit"
+        mature.workFandoms = ["Secret Fandom"]
+        mature.isSaved = true
+        let queueOnly = SavedWork(title: "Queued Fic", author: "C")
+        queueOnly.wordCount = 6_000
+        queueOnly.workFandoms = ["Queue Fandom"]
+        queueOnly.isQueuedForLater = true
+
+        func finished(_ work: SavedWork, day: Int) -> ReadingSession {
+            let start = date(year: 2026, month: 8, day: day)
+            let session = ReadingSession(
+                workID: work.id, workTitle: work.title,
+                startedAt: start, endedAt: start.addingTimeInterval(600),
+                durationSeconds: 600,
+                startProgress: 0, endingProgress: 1.0, wordCount: work.wordCount, didFinish: true
+            )
+            session.fandoms = work.workFandoms
+            return session
+        }
+        [visible, mature, queueOnly].forEach { context.insert($0) }
+        let sVisible = finished(visible, day: 2)
+        [sVisible, finished(mature, day: 3), finished(queueOnly, day: 4)].forEach { context.insert($0) }
+        try context.save()
+
+        let gate = PrivacyGate()
+        let library = [visible, mature, queueOnly]
+        let shown = HomeReadingStats.insightsWorks(from: library, gate: gate, hideMature: true)
+        let hidden = HomeReadingStats.insightsHiddenWorkIDs(from: library, gate: gate, hideMature: true)
+        #expect(shown.map(\.id) == [visible.id])
+        #expect(hidden == [mature.id, queueOnly.id])
+        // The old wiring: an already-filtered list cannot name what it dropped.
+        #expect(HomeReadingStats.insightsHiddenWorkIDs(from: shown, gate: gate, hideMature: true).isEmpty)
+
+        let gathered = ReadingLogService.gatherInsights(
+            for: aug, previousPeriod: jul, works: shown, hiddenWorkIDs: hidden,
+            calendar: utcCalendar, context: context,
+            now: date(year: 2026, month: 8, day: 20)
+        )
+        #expect(gathered.insights.totalWordsRead == 10_000)
+        #expect(gathered.insights.totalSeconds == 600)
+        #expect(gathered.insights.fandomWordsShares.filter { !$0.isRemainder }.map(\.name) == ["Fandom One"])
+        #expect(gathered.filteredSessions.map(\.id) == [sVisible.id])
+
+        // Hide Mature off: the mature work is back, the queue-only one stays out.
+        #expect(HomeReadingStats.insightsHiddenWorkIDs(from: library, gate: gate, hideMature: false) == [queueOnly.id])
+    }
+
     @Test func countRereadsFalseExcludesRereadSittingsAndRereadList() throws {
         let context = try makeContext()
         let jan = interval(year: 2026, month: 1)

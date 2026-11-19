@@ -162,7 +162,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .ao3AuthorNavigation(path: $path, tab: .library)
                 .navigationDestination(for: RecentlyDeletedDestination.self) { _ in RecentlyDeletedView() }
                 .navigationDestination(for: ReadingInsightsDestination.self) { _ in
-                    ReadingInsightsView(works: statisticsWorks)
+                    ReadingInsightsView(libraryWorks: works)
                 }
                 #if DEBUG
                 .task {

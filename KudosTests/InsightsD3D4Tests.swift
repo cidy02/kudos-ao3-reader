@@ -619,6 +619,84 @@ struct InsightsD3D4Tests {
         #expect(read[fr2.id] == 3_000)
     }
 
+    /// Review 2 P2: an AO3 recount that drops a few words (a typo fix) must not turn a
+    /// genuine reread into 0 words. Legacy counting and History both treat it as a reread.
+    @Test func rereadAfterSmallWordCountDropStillCounts() {
+        func sitting(
+            _ work: SavedWork, at time: TimeInterval, start: Double?, end: Double = 1.0,
+            words: Int, finish: Bool = true
+        ) -> ReadingSession {
+            ReadingSession(
+                workID: work.id, startedAt: Date(timeIntervalSince1970: time),
+                endedAt: Date(timeIntervalSince1970: time + 600), durationSeconds: 600,
+                startProgress: start, endingProgress: end, wordCount: words,
+                chapterCountAtVisit: 2, didFinish: finish
+            )
+        }
+        func recounted(_ title: String) -> SavedWork {
+            let work = SavedWork(title: title, author: "A")
+            work.chapterWordCounts = [1_000, 990]
+            work.wordCount = 1_990
+            work.chapters = "2/2"
+            return work
+        }
+        let fromZero = recounted("Reread from 0")
+        let noStart = recounted("Reread, no recorded start")
+        let partWay = recounted("Reread from chapter 2")
+        let z1 = sitting(fromZero, at: 1_000, start: 0, words: 2_000)
+        let z2 = sitting(fromZero, at: 5_000, start: 0, words: 1_990)
+        let n1 = sitting(noStart, at: 1_000, start: 0, words: 2_000)
+        let n2 = sitting(noStart, at: 5_000, start: nil, words: 1_990)
+        let p1 = sitting(partWay, at: 1_000, start: 0, words: 2_000)
+        let p2 = sitting(partWay, at: 5_000, start: 1_000.0 / 1_990.0, words: 1_990)
+
+        let read = ReadingLogService.wordsRead(
+            sessions: [z1, z2, n1, n2, p1, p2], works: [fromZero, noStart, partWay]
+        )
+        #expect(read[z1.id] == 1_990)
+        #expect(read[z2.id] == 1_990)
+        #expect(read[n2.id] == 1_990)
+        // Under 10% shrink is a recount, not a revision: reading chapter 2 again counts.
+        #expect(read[p2.id] == 990)
+        // Legacy counting (no chapter counts) agrees on the from-0 and no-start rereads.
+        let legacy = ReadingLogService.wordsRead(sessions: [z1, z2, n1, n2], works: [])
+        #expect(legacy[z2.id] == 1_990)
+        #expect(legacy[n2.id] == 1_990)
+    }
+
+    /// Review 2 P2: a finished work reopens at its end; the reader scrolls back to
+    /// chapter 1 and rereads over later sittings. Those sittings must count, as legacy does.
+    @Test func chapterModeRereadOpenedAtTheEndThenScrolledBackCounts() {
+        let work = SavedWork(title: "Comfort Reread", author: "A")
+        work.chapterWordCounts = [1_000, 1_000, 1_000]
+        work.wordCount = 3_000
+        work.chapters = "3/3"
+        func sitting(at time: TimeInterval, start: Double, end: Double, finish: Bool = false) -> ReadingSession {
+            ReadingSession(
+                workID: work.id, startedAt: Date(timeIntervalSince1970: time),
+                endedAt: Date(timeIntervalSince1970: time + 600), durationSeconds: 600,
+                startProgress: start, endingProgress: end, wordCount: 3_000,
+                chapterCountAtVisit: 3, didFinish: finish
+            )
+        }
+        let s1 = sitting(at: 1_000, start: 0, end: 1.0, finish: true)
+        let s2 = sitting(at: 5_000, start: 1.0, end: 0.3)
+        let s3 = sitting(at: 9_000, start: 0.3, end: 0.6)
+        let s4 = sitting(at: 13_000, start: 0.6, end: 1.0, finish: true)
+        let s5 = sitting(at: 17_000, start: 0.2, end: 0.5)
+
+        let read = ReadingLogService.wordsRead(sessions: [s1, s2, s3, s4, s5], works: [work])
+        #expect(read[s1.id] == 3_000)
+        #expect(read[s2.id] == 0)
+        #expect(read[s3.id] == 900)
+        #expect(read[s4.id] == 1_200)
+        // A second reread straight after the next finish, started part-way in, also counts.
+        #expect(read[s5.id] == 900)
+        let legacy = ReadingLogService.wordsRead(sessions: [s1, s2, s3, s4, s5], works: [])
+        #expect(legacy[s3.id] == read[s3.id])
+        #expect(legacy[s4.id] == read[s4.id])
+    }
+
     // MARK: - D4: Mode split, sub-15s guard, pause/finish preservation & speech wiring
 
     @Test func modeSwitchMidSittingSplitsDropsSub15sKeepsPausedAndPreservesFinish() throws {
@@ -671,6 +749,62 @@ struct InsightsD3D4Tests {
         #expect(allRows.count == 3)
         #expect(allRows.last?.mode == .read)
         #expect(allRows.last?.durationSeconds == 20)
+    }
+
+    #if os(iOS)
+    /// Review 2 P2: the engine returns from `speak()` having queued nothing (a chapter
+    /// of "* * *" or ♡). Continuous Read Aloud must not sit on `.playing` in silence:
+    /// it moves to the next chapter, or stops with a real `.stopped` after the last one.
+    @Test func unspeakableChapterAdvancesOrStopsInsteadOfStickingOnPlaying() async throws {
+        let engine = SystemTTSService()
+        let symbolsOnly = [TTSSpeechUnit(text: "* * *  ♡  ~~~", locator: nil)]
+        #expect(try await engine.speak(units: symbolsOnly) == false)
+        #expect(engine.status == .stopped)
+
+        let controller = ReaderSpeechController()
+        var skips = 0
+        var chaptersLeft = 1
+        controller.seedSessionForTests(
+            workID: UUID(), status: .playing, isReaderOpen: true, withSystemEngine: true,
+            onSkipNext: {
+                skips += 1
+                guard chaptersLeft > 0 else { return false }
+                chaptersLeft -= 1
+                return true
+            }
+        )
+        // Nothing speakable, a next chapter exists: skip to it, stay one sitting.
+        controller.handleChapterSpeakResult(started: false)
+        #expect(skips == 1)
+        #expect(controller.status == .playing)
+        // That one is empty too and it is the last: a real stop, not silent `.playing`.
+        controller.handleChapterSpeakResult(started: false)
+        #expect(skips == 2)
+        #expect(controller.status == .stopped)
+
+        // A skip that never moves (every chapter "advances" into nothing) is bounded.
+        let looping = ReaderSpeechController()
+        var loopSkips = 0
+        looping.seedSessionForTests(
+            workID: UUID(), status: .playing, isReaderOpen: true, withSystemEngine: true,
+            onSkipNext: { loopSkips += 1; return true }
+        )
+        for _ in 0..<12 where looping.status == .playing {
+            looping.handleChapterSpeakResult(started: false)
+        }
+        #expect(looping.status == .stopped)
+        #expect(loopSkips == 10)
+
+        // A fresh tap on an empty chapter stays `.stopped` and asks for no skip.
+        let idle = ReaderSpeechController()
+        var idleSkips = 0
+        idle.seedSessionForTests(
+            workID: UUID(), status: .stopped, isReaderOpen: true, withSystemEngine: true,
+            onSkipNext: { idleSkips += 1; return true }
+        )
+        idle.handleChapterSpeakResult(started: false)
+        #expect(idle.status == .stopped)
+        #expect(idleSkips == 0)
     }
 
     @Test func readSpeechControllerAutoAdvanceDetachedReopenBackgroundAndAudition() throws {
@@ -767,6 +901,7 @@ struct InsightsD3D4Tests {
         #expect(finalRows[1].mode == .read)
         #expect(finalRows[1].durationSeconds == 25)
     }
+    #endif
 
     @Test func paceExcludesListeningUsingRealReadingSessionRows() {
         let work = SavedWork(title: "Mixed Pace", author: "A")

@@ -14,17 +14,22 @@ struct ReadingInsightsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.dismiss) private var dismiss
     @Environment(PrivacyGate.self) private var gate
-    @AppStorage("hideMature") private var hideMature: Bool = false
+    // The app-wide key (Settings, Home, Library); "hideMature" was never written, so the
+    // gate here was always off.
+    @AppStorage("hideMatureContent") private var hideMature = true
 
-    let works: [SavedWork]
+    /// The UNFILTERED library (every non-deleted work). The view applies the
+    /// queue-only / Hide Mature gate itself: given an already-filtered list it
+    /// could not tell which sessions belong to hidden works.
+    let libraryWorks: [SavedWork]
 
     private var effectiveWorks: [SavedWork] {
-        HomeReadingStats.insightsWorks(from: works, gate: gate, hideMature: hideMature)
+        HomeReadingStats.insightsWorks(from: libraryWorks, gate: gate, hideMature: hideMature)
     }
 
-    /// Works the privacy gate hides right now; their sessions leave every figure and export.
+    /// Queue-only and concealed mature works; their sessions leave every figure and export.
     private var hiddenWorkIDs: Set<UUID> {
-        Set(works.map(\.id)).subtracting(effectiveWorks.map(\.id))
+        HomeReadingStats.insightsHiddenWorkIDs(from: libraryWorks, gate: gate, hideMature: hideMature)
     }
 
     @State private var selectedTab: Tab = .overview
