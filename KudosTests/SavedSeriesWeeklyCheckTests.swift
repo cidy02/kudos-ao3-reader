@@ -36,11 +36,12 @@ struct SavedSeriesWeeklyCheckTests {
         """
     }
 
-    private func update(workID: UInt64, seriesID: Int, series: String? = nil, words: UInt64? = nil)
-        -> SubscriptionUpdate {
+    private func update(
+        workID: UInt64, seriesID: Int, series: String? = nil, words: UInt64? = nil, at: Date = Date()
+    ) -> SubscriptionUpdate {
         SubscriptionUpdate(
             uid: 1, workID: workID, chapterID: nil, chapterNumber: nil, isNewWork: true, isContested: false,
-            isAnchoredToWork: true, workTitle: "W", author: "A", at: Date(), source: .series("Series #\(seriesID)"),
+            isAnchoredToWork: true, workTitle: "W", author: "A", at: at, source: .series("Series #\(seriesID)"),
             words: words, series: series
         )
     }
@@ -56,12 +57,16 @@ struct SavedSeriesWeeklyCheckTests {
         for id in 1...1_000 { counts[SavedSeriesWeeklyCheck.homeSlot(seriesID: id)] += 1 }
         #expect(counts.max()! <= 3 * (1_000 / 168 + 1))
         let ny = calendar("America/New_York")
-        let id = (1...5_000).first { SavedSeriesWeeklyCheck.homeSlot(seriesID: $0) % 24 == 3 }!
-        // The week after the November 2026 fall-back: the slot is still at 03:00 local time.
-        let now = ny.date(from: DateComponents(year: 2026, month: 11, day: 14, hour: 23))!
+        // A slot at 03:00 on a day after Sunday 1 November 2026, the fall-back day: counting raw hours from the week's
+        // start would land it at 02:00 local time.
+        let id = (1...20_000).first {
+            let slot = SavedSeriesWeeklyCheck.homeSlot(seriesID: $0)
+            return slot % 24 == 3 && (1...5).contains(slot / 24)
+        }!
+        let now = ny.date(from: DateComponents(year: 2026, month: 11, day: 7, hour: 23))!
         let slot = SavedSeriesWeeklyCheck.lastSlotTime(seriesID: id, now: now, calendar: ny)
         #expect(ny.component(.hour, from: slot) == 3)
-        #expect(slot <= now && now.timeIntervalSince(slot) < 7 * 86_400 + 3_600)
+        #expect(ny.component(.day, from: slot) == 1 + SavedSeriesWeeklyCheck.homeSlot(seriesID: id) / 24)
     }
 
     @Test func dueOnlyAfterItsSlotAndAtLeastSixDaysAfterTheLastCheck() {
@@ -134,13 +139,16 @@ struct SavedSeriesWeeklyCheckTests {
         let context = try makeContext()
         let rows = insertDue([1, 2], in: context)
         rows[0].isSubscribed = true
+        // Series 2 was unsubscribed after its last notification; that old notification is still in the mail store.
+        rows[1].lastNotifiedAt = Date(timeIntervalSince1970: 2_000)
+        let oldMail = [update(workID: 5, seriesID: 2, at: Date(timeIntervalSince1970: 1_000))]
         var fetched: [Int] = []
         let html = seriesHTML(works: 1)
-        // Mail connected: the subscribed series is skipped, the other is asked.
-        await SavedSeriesWeeklyCheck.run(in: context, mail: { (true, []) }, isScreenActive: { true },
+        await SavedSeriesWeeklyCheck.run(in: context, mail: { (true, oldMail) }, isScreenActive: { true },
                                          defaults: defaults(), sleep: { _ in }, isHeld: { false },
                                          fetch: { fetched.append($0); return html })
         #expect(fetched == [2])
+        #expect(!rows[1].isSubscribed)
         // Mail not connected: being subscribed covers nothing.
         rows[0].checkedAt = .distantPast
         fetched = []
@@ -150,21 +158,38 @@ struct SavedSeriesWeeklyCheckTests {
         #expect(fetched == [1])
     }
 
-    @Test func mailAppliesEvenWithTheCheckOffAndPlacesThePart() async throws {
+    @Test func mailAppliesOnceOldestFirstEvenWithTheCheckOff() async throws {
         let context = try makeContext()
         var fetched = 0
-        let updates = [update(workID: 55, seriesID: 8, series: "Part 1 of Horizon", words: 1_000),
-                       update(workID: 66, seriesID: 8, series: "Part 2 of Horizon", words: 500)]
-        await SavedSeriesWeeklyCheck.run(in: context, mail: { (true, updates) }, isScreenActive: { true },
-                                         defaults: defaults(enabled: false), sleep: { _ in }, isHeld: { false },
-                                         fetch: { _ in fetched += 1; return "" })
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        // The mail store lists newest first.
+        let updates = [update(workID: 66, seriesID: 8, series: "Part 2 of Horizon", words: 500, at: t0 + 60),
+                       update(workID: 55, seriesID: 8, series: "Part 1 of Horizon", words: 1_000, at: t0)]
+        for _ in 0..<3 {
+            await SavedSeriesWeeklyCheck.run(in: context, mail: { (true, updates) }, isScreenActive: { true },
+                                             defaults: defaults(enabled: false), sleep: { _ in }, isHeld: { false },
+                                             fetch: { _ in fetched += 1; return "" })
+        }
         let saved = try #require(SavedSeriesStore.series(for: 8, in: context))
         #expect(fetched == 0)
-        #expect(saved.partWorkIDs == [55, 66] && saved.partCount == 2 && saved.wordCount == 1_500)
+        #expect(saved.partWorkIDs == [55, 66] && saved.partCount == 2)
+        #expect(saved.wordCount == 1_500)   // three passes, counted once
         #expect(saved.isSubscribed)
-        // A part far beyond a partial list raises the count but does not pretend the list is whole.
-        SavedSeriesWeeklyCheck.applyMail([update(workID: 99, seriesID: 8, series: "Part 9 of Horizon")], in: context)
-        #expect(saved.partWorkIDs == [55, 66] && saved.partCount == 9)
+        // A part far beyond the list raises the count without pretending the list is whole; an absurd one is ignored.
+        SavedSeriesWeeklyCheck.applyMail([update(workID: 99, seriesID: 8, series: "Part 9 of Horizon", at: t0 + 120),
+                                          update(workID: 98, seriesID: 8, series: "Part 999999 of H", at: t0 + 180)],
+                                         in: context)
+        #expect(saved.partWorkIDs == [55, 66] && saved.partCount == 10)
+    }
+
+    @Test func viewsCountOncePerCall() throws {
+        let context = try makeContext()
+        let saved = SavedSeries(ao3SeriesID: 4)
+        context.insert(saved)
+        SavedSeriesWeeklyCheck.recordView(seriesID: 4, in: context)
+        SavedSeriesWeeklyCheck.recordView(seriesID: 404, in: context)
+        SavedSeriesWeeklyCheck.recordView(seriesID: nil, in: context)
+        #expect(saved.viewCount == 1 && saved.lastViewedAt != nil)
     }
 
     @Test func anAnonymousViewThatCountsFewerWorksKeepsWhatWeHad() async throws {

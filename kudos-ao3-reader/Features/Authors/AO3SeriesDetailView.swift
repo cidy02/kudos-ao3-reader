@@ -269,7 +269,11 @@ struct AO3SeriesDetailView: View {
                 ) {
                     Button("Unsubscribe", role: .destructive) {
                         subscribeModel.confirmUnsubscribe(seriesID: series.id, auth: auth) {
-                            SavedSeriesStore.series(for: series.id, in: context)?.isSubscribed = false
+                            if let saved = SavedSeriesStore.series(for: series.id, in: context) {
+                                saved.isSubscribed = false
+                                // Mail from before the unsubscribe must not subscribe the series again.
+                                saved.lastNotifiedAt = max(saved.lastNotifiedAt ?? .distantPast, Date())
+                            }
                             await invalidateSeriesPageCache()
                         }
                     }
@@ -445,6 +449,13 @@ struct AO3SeriesDetailView: View {
 
     /// Keeps what this page says about the series (T-519): the header from page 1, and the whole part list once
     /// every page is loaded. No request of its own: it reads the page the reader just opened.
+    /// One view per screen, whether the page came fresh or from the offline cache.
+    private func recordSeriesViewOnce() {
+        guard !recordedSeriesView else { return }
+        recordedSeriesView = true
+        SavedSeriesWeeklyCheck.recordView(seriesID: series.id, in: context)
+    }
+
     private func recordSavedSeries(pageOneHTML: String?) {
         let ids = works.map(\.id)
         let isWholeList = currentPage >= totalPages
@@ -454,10 +465,7 @@ struct AO3SeriesDetailView: View {
            ) {
             let saved = SavedSeriesStore.upsert(parsed, in: context)
             if auth.isLoggedIn { saved?.isSubscribed = subscribeModel.isSubscribed }
-            if !recordedSeriesView {
-                recordedSeriesView = true
-                SavedSeriesWeeklyCheck.recordView(seriesID: series.id, in: context)
-            }
+            recordSeriesViewOnce()
         } else if isWholeList, let saved = SavedSeriesStore.series(for: series.id, in: context),
                   saved.partCount == ids.count {
             saved.partWorkIDs = SavedSeries.normalizedPartWorkIDs(ids)
@@ -520,6 +528,7 @@ struct AO3SeriesDetailView: View {
                 subscribeModel.syncFromSeriesPage(html: cached.html, isLoggedIn: auth.isLoggedIn)
             }
             if !cached.isStale { recordSavedSeries(pageOneHTML: page == 1 ? cached.html : nil) }
+            if page == 1 { recordSeriesViewOnce() }
             isShowingStaleCache = replace
                 ? cached.isStale
                 : isShowingStaleCache || cached.isStale

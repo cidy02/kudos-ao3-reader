@@ -109,6 +109,8 @@ final class SavedSeries {
     var lastViewedAt: Date?
     /// The series page's Subscribe button said "Unsubscribe" the last time the reader opened it.
     var isSubscribed: Bool = false
+    /// The newest series notification already applied; mail is applied once, never re-read into the counts.
+    var lastNotifiedAt: Date?
 
     init(
         id: UUID = UUID(),

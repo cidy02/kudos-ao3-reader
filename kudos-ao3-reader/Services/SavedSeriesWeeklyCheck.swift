@@ -65,33 +65,39 @@ enum SavedSeriesWeeklyCheck {
     /// "Part 4 of …" in a notification's series line.
     nonisolated static func partNumber(in seriesLine: String?) -> Int? {
         guard let seriesLine, let match = seriesLine.firstMatch(of: #/Part\s+(\d+)\s+of\b/#) else { return nil }
-        return Int(match.1).flatMap { $0 > 0 ? $0 : nil }
+        return Int(match.1).flatMap { (1...10_000).contains($0) ? $0 : nil }
     }
 
-    /// A series notification names the new work: record it without asking AO3. It says where the work sits ("Part
-    /// N") and its words, never whether the series is now complete, so completion waits for the reader's next visit.
+    /// A series notification names the new work: record it without asking AO3. Each notification is applied once
+    /// (only those newer than the series' `lastNotifiedAt`, oldest first), so the stored mail history never adds
+    /// words twice or turns `isSubscribed` back on after the reader unsubscribed. It says where the work sits
+    /// ("Part N", capped: the text can be forged) and its words, never whether the series is now complete.
     static func applyMail(_ updates: [SubscriptionUpdate], in context: ModelContext, now: Date = Date()) {
-        for update in updates {
+        for update in updates.sorted(by: { $0.at < $1.at }) {
             guard let seriesID = update.source.seriesID, seriesID > 0,
                   update.workID > 0, update.workID <= UInt64(Int.max) else { continue }
-            let workID = Int(update.workID)
             let saved = SavedSeriesStore.series(for: seriesID, in: context) ?? {
                 let created = SavedSeries(ao3SeriesID: seriesID, checkedAt: now)
                 context.insert(created)
                 return created
             }()
+            if let last = saved.lastNotifiedAt, update.at <= last { continue }
+            saved.lastNotifiedAt = update.at
             saved.isSubscribed = true
+            saved.lastModifiedAt = now
+            let workID = Int(update.workID)
             guard !saved.partWorkIDs.contains(workID) else { continue }
             let part = partNumber(in: update.series)
-            if let part, part - 1 <= saved.partWorkIDs.count {
-                saved.partWorkIDs.insert(workID, at: part - 1)
-            } else if part == nil, saved.partWorkIDs.count == saved.partCount {
-                saved.partWorkIDs.append(workID)
+            // Only a list known to be whole is extended; otherwise it would claim to be complete.
+            if saved.partWorkIDs.count == saved.partCount {
+                if let part, part - 1 <= saved.partWorkIDs.count {
+                    saved.partWorkIDs.insert(workID, at: part - 1)
+                } else if part == nil {
+                    saved.partWorkIDs.append(workID)
+                }
             }
-            // A part beyond a list that is not whole leaves the list alone: it would claim to be complete.
             saved.partCount = max(saved.partCount, part ?? saved.partCount + 1, saved.partWorkIDs.count)
-            if let words = update.words, words <= UInt64(Int.max) { saved.wordCount += Int(words) }
-            saved.lastModifiedAt = now
+            if let words = update.words, words <= 10_000_000 { saved.wordCount += Int(words) }
         }
     }
 
