@@ -2231,9 +2231,9 @@ private struct ReaderFoldProbe: View {
                 .onChange(of: regions) { _, next in publish(next) }
                 .onChange(of: hingeTick) { _, _ in publish(regions) }
         }
-        .modifier(ReaderHingeRefresh(tick: $hingeTick))
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+        .background { HingeStatusRefresh(tick: $hingeTick) }
     }
 
     private func publish(_ regions: AdaptiveContentRegions) {
@@ -2251,19 +2251,20 @@ private struct ReaderFoldProbe: View {
     }
 }
 
-/// Forces the probe to read reserved regions again when the hinge status
-/// changes and the bounds do not. Below iOS 27.1 there is no hinge.
-private struct ReaderHingeRefresh: ViewModifier {
+/// Re-reads reserved regions when the hinge status changes and the bounds
+/// do not. An angle-only update does not bump the tick. Below iOS 27.1 the
+/// view is empty: `onHingeChange` is not on the deployment target.
+private struct HingeStatusRefresh: View {
     @Binding var tick: Int
 
-    func body(content: Content) -> some View {
+    var body: some View {
         if #available(iOS 27.1, *) {
-            content.onHingeChange { previous, next in
+            Color.clear.onHingeChange { previous, next in
                 guard previous.hinge?.status != next.hinge?.status else { return }
                 tick += 1
             }
         } else {
-            content
+            Color.clear
         }
     }
 }
