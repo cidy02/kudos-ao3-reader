@@ -328,7 +328,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         try await fetchData(from: url)
     }
 
-    private static func htmlString(from data: Data) -> String {
+    static func htmlString(from data: Data) -> String {
         // Preserve the existing lossy UTF-8 behavior for AO3 HTML with bad bytes.
         // swiftlint:disable:next optional_data_string_conversion
         String(decoding: data, as: UTF8.self)

@@ -193,10 +193,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         .onAppear {
             if appearedAt == nil {
                 appearedAt = Date()
-                SavedSeriesWeeklyCheck.recordView(
-                    seriesID: localWork?.ao3SeriesID ?? ReadingQueueService.ao3SeriesID(from: displaySeriesURL),
-                    in: context
-                )
                 dismissIfAuthorBylineConflict()
                 #if DEBUG
                 if DebugLaunchRoute.pageRoute?.hasPrefix("mycopy:") == true { showingMyCopy = true }
@@ -229,6 +225,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             // switching sections re-renders from this already-loaded state without
             // re-fetching anything.
             resolveExistingIfNeeded()
+            if !openedFromReader {
+                SavedSeriesWeeklyCheck.recordView(
+                    seriesID: localWork?.ao3SeriesID ?? ReadingQueueService.ao3SeriesID(from: displaySeriesURL),
+                    in: context
+                )
+            }
             #if DEBUG
             if let workID = ao3WorkID, DebugLaunchRoute.takeSheet("bookmarkform") {
                 workActions.startBookmark(workID: workID, auth: auth)

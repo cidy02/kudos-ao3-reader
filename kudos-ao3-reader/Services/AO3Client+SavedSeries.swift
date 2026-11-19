@@ -25,7 +25,7 @@ extension AO3Client {
                     let (body, response) = try await session.data(for: request)
                     defer { Self.purgeSessionCookie(from: session.configuration.httpCookieStorage, url: url) }
                     try checkStatus(response) { body }
-                    return String(bytes: body, encoding: .utf8) ?? ""
+                    return Self.htmlString(from: body)
                 } catch AO3Error.rateLimited(let retryAfter) {
                     let delay = retryAfter.flatMap { $0.isFinite ? max($0, 0) : nil } ?? 6 * 60 * 60
                     let until = Date().addingTimeInterval(delay)

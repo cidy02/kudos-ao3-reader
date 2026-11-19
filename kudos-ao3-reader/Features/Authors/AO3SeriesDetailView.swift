@@ -10,6 +10,7 @@ struct AO3SeriesDetailView: View {
     }
 
     let series: AO3SeriesSummary
+    @State private var recordedSeriesView = false
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
@@ -235,6 +236,7 @@ struct AO3SeriesDetailView: View {
             if AO3SeriesSubscribeModel.showsSubscribe(isLoggedIn: auth.isLoggedIn) {
                 Button {
                     subscribeModel.tapped(seriesID: series.id, auth: auth) {
+                        SavedSeriesStore.series(for: series.id, in: context)?.isSubscribed = subscribeModel.isSubscribed
                         await invalidateSeriesPageCache()
                     }
                 } label: {
@@ -267,6 +269,7 @@ struct AO3SeriesDetailView: View {
                 ) {
                     Button("Unsubscribe", role: .destructive) {
                         subscribeModel.confirmUnsubscribe(seriesID: series.id, auth: auth) {
+                            SavedSeriesStore.series(for: series.id, in: context)?.isSubscribed = false
                             await invalidateSeriesPageCache()
                         }
                     }
@@ -451,7 +454,10 @@ struct AO3SeriesDetailView: View {
            ) {
             let saved = SavedSeriesStore.upsert(parsed, in: context)
             if auth.isLoggedIn { saved?.isSubscribed = subscribeModel.isSubscribed }
-            SavedSeriesWeeklyCheck.recordView(seriesID: series.id, in: context)
+            if !recordedSeriesView {
+                recordedSeriesView = true
+                SavedSeriesWeeklyCheck.recordView(seriesID: series.id, in: context)
+            }
         } else if isWholeList, let saved = SavedSeriesStore.series(for: series.id, in: context),
                   saved.partCount == ids.count {
             saved.partWorkIDs = SavedSeries.normalizedPartWorkIDs(ids)
