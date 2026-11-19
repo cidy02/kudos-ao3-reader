@@ -3302,7 +3302,9 @@ enum KudosBackupService {
                     incomingModifiedAt: incomingModifiedAt
                 )
             }
-            if kind == .savedForLater {
+            // `queue.kind` too: an archive that reuses Saved for Later's id under
+            // another kind must not turn the built-in queue into that kind.
+            if kind == .savedForLater || queue.kind == .savedForLater {
                 queue.name = ReadingQueueService.savedForLaterName
                 queue.kind = .savedForLater
             } else if incomingWins || queue.name.isEmpty {
