@@ -87,6 +87,55 @@ struct ReadiumReaderTests {
 
         #expect(spread.columnCount == .auto)
         #expect(single.columnCount == .one)
+        #expect(spread.spread == nil)
+        #expect(single.spread == nil)
+    }
+
+    @Test func bookPoseForcesTwoColumnsAndLeavesTheStoredSpreadAlone() {
+        let preferences = ReadiumReaderStyleMapper.preferences(
+            style: ReaderTextStyle(), theme: .light, fontFamily: nil,
+            readingMode: .paged, twoPageSpread: false,
+            bookPose: true, tabletopPose: false
+        )
+        #expect(preferences.columnCount == .two)
+        // Fixed-layout pairing. Book pose does not set it: a reflowable
+        // column count is the only spread this posture changes.
+        #expect(preferences.spread == nil)
+        #expect(preferences.scroll == false)
+    }
+
+    @Test func tabletopForcesOneColumnEvenWhenTwoPagesAreStored() {
+        #expect(ReadiumReaderStyleMapper.columnCount(
+            readingMode: .paged, twoPageSpread: true, bookPose: false, tabletopPose: true
+        ) == .one)
+        #expect(ReadiumReaderStyleMapper.columnCount(
+            readingMode: .paged, twoPageSpread: false, bookPose: true, tabletopPose: true
+        ) == .two)
+    }
+
+    @Test func scrollStaysUncolumnedInBookPose() {
+        #expect(ReadiumReaderStyleMapper.columnCount(
+            readingMode: .scroll, twoPageSpread: true, bookPose: true, tabletopPose: false
+        ) == nil)
+        #expect(ReadiumReaderStyleMapper.columnCount(
+            readingMode: .paged, twoPageSpread: true, bookPose: false, tabletopPose: false
+        ) == .auto)
+        #expect(ReadiumReaderStyleMapper.columnCount(
+            readingMode: .paged, twoPageSpread: false, bookPose: false, tabletopPose: false
+        ) == .one)
+    }
+
+    @Test func theFoldProbeDoesNotWriteTheStoredTwoPageSetting() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appending(path: "kudos-ao3-reader/Features/ReaderReadium/ReadiumReaderView.swift"),
+            encoding: .utf8
+        )
+        let start = try #require(source.range(of: "struct ReaderFoldProbe"))
+        let probe = source[start.lowerBound...]
+        #expect(!probe.contains("twoPageEnabled"))
+        #expect(!probe.contains("readerTwoPage"))
     }
 
     @Test(arguments: [false, true])

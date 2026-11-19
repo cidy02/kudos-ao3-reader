@@ -18,14 +18,24 @@ enum ReadiumReaderStyleMapper {
         twoPageSpread: Bool,
         backgroundHex: String? = nil,
         textHex: String? = nil,
-        pageTurn: ReaderPageTurnStyle = .slide
+        pageTurn: ReaderPageTurnStyle = .slide,
+        bookPose: Bool = false,
+        tabletopPose: Bool = false
     ) -> EPUBPreferences {
         EPUBPreferences(
             backgroundColor: ReadiumNavigator.Color(hex: backgroundHex ?? theme.backgroundHex),
             // Only set a column count in paged mode. Forcing `.one` in scroll mode makes
             // Readium lay the text out in screen-height columns (page breaks mid-text +
             // dead space top/bottom) instead of one continuous flow.
-            columnCount: readingMode == .scroll ? nil : (twoPageSpread ? .auto : .one),
+            // Book pose forces `.two` so the columns clear the hinge. `.auto` would
+            // drop to one column at a large size and draw straight across the fold.
+            // The stored two-page setting is an input here; this function never writes it.
+            columnCount: columnCount(
+                readingMode: readingMode,
+                twoPageSpread: twoPageSpread,
+                bookPose: bookPose,
+                tabletopPose: tabletopPose
+            ),
             fontFamily: fontFamily,
             // Legacy CSS emits the selected point size as px. Readium expects a
             // percentage of its 16 px root, so 18 pt becomes 112.5%.
@@ -54,6 +64,21 @@ enum ReadiumReaderStyleMapper {
             ).readiumTheme,
             wordSpacing: max(0, style.wordSpacing)
         )
+    }
+
+    /// Book pose forces two columns. Tabletop forces one, even when the stored
+    /// two-page setting is on. Flat and cover follow that setting, and only
+    /// when the layout is already wide (`twoPageSpread`). Scroll never sets a count.
+    static func columnCount(
+        readingMode: ReadingMode,
+        twoPageSpread: Bool,
+        bookPose: Bool,
+        tabletopPose: Bool
+    ) -> ColumnCount? {
+        guard readingMode != .scroll else { return nil }
+        if bookPose { return .two }
+        if tabletopPose { return .one }
+        return twoPageSpread ? .auto : .one
     }
 
     static var readingSystemProperties: CSSRSProperties {

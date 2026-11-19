@@ -201,8 +201,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     @ObservationIgnored private(set) var pageBoxRemeasureTask: Task<Void, Never>?
 
     /// Called by the peel host for layout and safe-area changes, including a
-    /// width-only resize. Readium owns the position through reflow; wait for quiet
-    /// before refreshing insets and measuring the new pages.
+    /// width-only resize. Readium's reflow anchor owns the position. The inset
+    /// refresh runs in this turn so it shares that reflow, instead of resizing
+    /// the page again 220 ms later (T-451). The page bar still waits until quiet.
     func updatePageBoxGeometry(size: CGSize, safeInsets: UIEdgeInsets) {
         let next = pageBoxGeometry.updating(
             size: size, safeInsets: safeInsets,
@@ -214,6 +215,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         pageBoxRemeasureTask?.cancel()
         // Invalidate old-layout samples immediately; measure only after quiet.
         clearVisualPageMetrics()
+        forcePageBoxContentInsetRefresh()
         pageBoxRemeasureTask = Task { @MainActor [weak self] in
             do { try await Task.sleep(nanoseconds: 220_000_000) } catch { return }
             guard let self else { return }
@@ -221,9 +223,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
                 self.cancelPageBoxRemeasure()
                 return
             }
-            self.forcePageBoxContentInsetRefresh()
             self.pageBoxRemeasureTask = nil
-            self.clearVisualPageMetrics()
             self.schedulePageBarRemeasure()
         }
     }

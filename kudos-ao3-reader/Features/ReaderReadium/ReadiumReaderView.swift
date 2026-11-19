@@ -117,6 +117,10 @@ struct ReadiumReaderView: View {
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
     @AppStorage(ReaderPageTurnStyle.storageKey) private var pageTurn: ReaderPageTurnStyle = .slide
     @AppStorage("readerTwoPage") private var twoPageEnabled = false
+    /// Book pose (vertical fold) and tabletop (horizontal fold). Measured by
+    /// `AdaptiveContentRegions`; neither writes `readerTwoPage`.
+    @State private var bookPose = false
+    @State private var tabletopPose = false
     @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("hideMatureContent") private var hideMature = true
     // Apple Books–style typography; layout options are gated by `customizeEnabled`
@@ -1136,6 +1140,9 @@ struct ReadiumReaderView: View {
         // bottom padding bug. This is the modifier the "peel host zeroes SwiftUI
         // safe regions" comments elsewhere assumed was already in effect.
         .ignoresSafeArea()
+        .background {
+            ReaderFoldProbe(bookPose: $bookPose, tabletopPose: $tabletopPose)
+        }
     }
 
     private var topBarLayer: some View {
@@ -1661,7 +1668,9 @@ extension ReadiumReaderView {
             twoPageSpread: twoPageEnabled && wideLayoutAvailable,
             backgroundHex: readerPageColors.backgroundHex,
             textHex: readerPageColors.textHex,
-            pageTurn: pageTurn
+            pageTurn: pageTurn,
+            bookPose: bookPose,
+            tabletopPose: tabletopPose
         )
     }
 
@@ -1685,7 +1694,7 @@ extension ReadiumReaderView {
     /// Re-submit preferences whenever any mapped setting changes (instant updates).
     private var preferencesToken: String {
         "\(readingMode.rawValue)|\(pageTurn.rawValue)|\(readerTheme.rawValue)|\(readerPageColors.backgroundHex)|\(fontID)|"
-            + "\(twoPageEnabled)|\(wideLayoutAvailable)|\(textStyle.token)"
+            + "\(twoPageEnabled)|\(wideLayoutAvailable)|\(bookPose)|\(tabletopPose)|\(textStyle.token)"
     }
 
     /// Font declarations are fixed when Readium builds its navigator. Recreate it
@@ -2200,6 +2209,62 @@ extension ReadiumReaderView {
     /// still archived. Drives the "Original File" pill.
     private var originalDocumentURL: URL? {
         WorkReconversion.candidate(for: work)?.originalURL
+    }
+}
+
+/// Book pose and tabletop, from the same reserved regions as the dashboard.
+/// A hinge-status change re-reads those regions. The angle is not a detector,
+/// and this view does not write the stored two-page setting.
+private struct ReaderFoldProbe: View {
+    @Binding var bookPose: Bool
+    @Binding var tabletopPose: Bool
+    /// Bumped only when the hinge status appears, disappears, or changes.
+    /// An angle update with the same status does not re-read the fold.
+    @State private var hingeTick = 0
+    @State private var loggedPose: String?
+
+    var body: some View {
+        GeometryReader { proxy in
+            let regions = AdaptiveContentRegions(viewport: proxy)
+            Color.clear
+                .onAppear { publish(regions) }
+                .onChange(of: regions) { _, next in publish(next) }
+                .onChange(of: hingeTick) { _, _ in publish(regions) }
+        }
+        .modifier(ReaderHingeRefresh(tick: $hingeTick))
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func publish(_ regions: AdaptiveContentRegions) {
+        let book = regions.isBookPose
+        let table = regions.isTabletopPose
+        let pose = "\(book)|\(table)|\(regions.panes.count)|\(regions.activeReservations.count)"
+        if pose != loggedPose {
+            loggedPose = pose
+            let width = Int(regions.safeBounds.width.rounded())
+            let height = Int(regions.safeBounds.height.rounded())
+            Log.epub.info("fold-pose book=\(book, privacy: .public) tabletop=\(table, privacy: .public) panes=\(regions.panes.count, privacy: .public) reservations=\(regions.activeReservations.count, privacy: .public) size=\(width, privacy: .public)x\(height, privacy: .public)")
+        }
+        bookPose = book
+        tabletopPose = table
+    }
+}
+
+/// Forces the probe to read reserved regions again when the hinge status
+/// changes and the bounds do not. Below iOS 27.1 there is no hinge.
+private struct ReaderHingeRefresh: ViewModifier {
+    @Binding var tick: Int
+
+    func body(content: Content) -> some View {
+        if #available(iOS 27.1, *) {
+            content.onHingeChange { previous, next in
+                guard previous.hinge?.status != next.hinge?.status else { return }
+                tick += 1
+            }
+        } else {
+            content
+        }
     }
 }
 

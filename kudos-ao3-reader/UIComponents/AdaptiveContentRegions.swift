@@ -58,6 +58,27 @@ nonisolated struct AdaptiveContentRegions: Equatable {
         return safeBounds
     }
 
+    /// Side-by-side panes from an active vertical division. Book pose.
+    /// A horizontal fold does not qualify: tabletop keeps one reading pane.
+    var isBookPose: Bool {
+        guard panes.count >= 2, safeBounds.height > 0 else { return false }
+        return panes.allSatisfy {
+            abs($0.minY - safeBounds.minY) < 0.5 && abs($0.height - safeBounds.height) < 0.5
+        }
+    }
+
+    /// An active horizontal division. Not a book split, and not a place for
+    /// a two-page spread: the reading pane is the one on the active side.
+    var isTabletopPose: Bool {
+        guard !isBookPose else { return false }
+        return activeReservations.contains { reservation in
+            reservation.width > reservation.height
+                && reservation.height > 0
+                && reservation.width > 1
+                && reservation.intersects(safeBounds)
+        }
+    }
+
     var viewportPanes: [CGRect] {
         panes.compactMap { pane in
             let visible = pane.intersection(viewport)
