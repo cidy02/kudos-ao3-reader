@@ -564,6 +564,8 @@ struct ReadiumReaderView: View {
             onAdvance: { locator in
                 // Dismiss freeze/exit latch, and hold-to-seek — never fight
                 // the user (or corrupt a committed exit flush) by page-follow.
+                // Locator seek, not goForward: one move, never an animated
+                // turn, so a sentence already on screen does not turn again.
                 guard !book.isLocatorIngestionBlocked, !speechSeekHolding else { return }
                 ReadingLogService.noteActivity(for: work)
                 book.go(to: locator)
@@ -1014,6 +1016,9 @@ struct ReadiumReaderView: View {
         book.renderedLineHeightPoints = textStyle.fontSizePt * textStyle.lineHeight
         book.renderedPageMarginPoints = max(0, textStyle.margin)
         book.submit(preferences)
+        // The page-turn style is not an EPUB preference. Layout mode is, and
+        // it also changes whether a turn animates, so refresh with the submit.
+        book.refreshPageTurnAnimation()
         // Typography submit updates CSS but may not re-run spread updateContentInset.
         book.forcePageBoxContentInsetRefresh()
         // Font/columns/mode/margin change swipe pageCount — remeasure instead of sticky Y.

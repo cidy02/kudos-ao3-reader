@@ -332,7 +332,7 @@ struct SettingsFontPage: View {
     }
 }
 
-/// Reading mode, two-page spread and keep screen awake.
+/// Reading mode, page turn (iOS), two-page spread and keep screen awake.
 struct SettingsReaderPage: View {
     var body: some View {
         SettingsPageForm(route: .reader) {

@@ -1931,6 +1931,10 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     var useEmbeddedCoverArt: Bool?
     /// Settings › Library's weekly saved-series check (T-519b). Nil = an older backup has no opinion.
     var checksSavedSeriesWeekly: Bool?
+    /// Reader page-turn style (`ReaderPageTurnStyle.storageKey`). Nil when the key is
+    /// absent, so an older archive leaves the local choice. An unknown string is kept
+    /// on the value for a round-trip but not applied. Additive — no manifest version bump.
+    var readerPageTurn: String?
     /// Settings › Listening's pinned voice id (`ReaderSpeechPreferences.voiceIDKey`).
     /// Nil when absent or nothing is stored so exports with no pinned voice omit it.
     var readerSpeechVoiceID: String?
@@ -1965,6 +1969,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         workSymbolPlacement: String? = nil,
         useEmbeddedCoverArt: Bool? = nil,
         checksSavedSeriesWeekly: Bool? = nil,
+        readerPageTurn: String? = nil,
         readerSpeechVoiceID: String? = nil,
         readerSpeechVoiceName: String? = nil,
         lastAddedReadingQueueID: String? = nil
@@ -1994,6 +1999,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         self.workSymbolPlacement = workSymbolPlacement
         self.useEmbeddedCoverArt = useEmbeddedCoverArt
         self.checksSavedSeriesWeekly = checksSavedSeriesWeekly
+        self.readerPageTurn = readerPageTurn
         self.readerSpeechVoiceID = readerSpeechVoiceID
         self.readerSpeechVoiceName = readerSpeechVoiceName
         self.lastAddedReadingQueueID = lastAddedReadingQueueID
@@ -2025,6 +2031,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         case workSymbolPlacement
         case useEmbeddedCoverArt
         case checksSavedSeriesWeekly
+        case readerPageTurn
         case readerSpeechVoiceID
         case readerSpeechVoiceName
         case lastAddedReadingQueueID
@@ -2083,6 +2090,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             useEmbeddedCoverArt: (try? container.decodeIfPresent(Bool.self, forKey: .useEmbeddedCoverArt)) ?? nil,
             checksSavedSeriesWeekly: (try? container.decodeIfPresent(
                 Bool.self, forKey: .checksSavedSeriesWeekly
+            )) ?? nil,
+            readerPageTurn: (try? container.decodeIfPresent(
+                String.self, forKey: .readerPageTurn
             )) ?? nil,
             readerSpeechVoiceID: (try? container.decodeIfPresent(
                 String.self,
@@ -2161,6 +2171,11 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
                 ? nil : defaults.bool(forKey: "useEmbeddedCoverArt"),
             checksSavedSeriesWeekly: defaults.object(forKey: "checksSavedSeriesWeekly") == nil
                 ? nil : defaults.bool(forKey: "checksSavedSeriesWeekly"),
+            readerPageTurn: {
+                let raw = defaults.string(forKey: ReaderPageTurnStyle.storageKey)
+                guard let raw, !raw.isEmpty else { return nil }
+                return raw
+            }(),
             readerSpeechVoiceID: capturedVoiceID,
             readerSpeechVoiceName: capturedVoiceName,
             lastAddedReadingQueueID: defaults.string(forKey: "lastAddedReadingQueueID")
@@ -2237,6 +2252,11 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         }
         if let useEmbeddedCoverArt { defaults.set(useEmbeddedCoverArt, forKey: "useEmbeddedCoverArt") }
         if let checksSavedSeriesWeekly { defaults.set(checksSavedSeriesWeekly, forKey: "checksSavedSeriesWeekly") }
+        // Absent leaves the local page-turn style. A string this build does not
+        // know stays in the archive (capture keeps it) but is not written.
+        if let readerPageTurn, ReaderPageTurnStyle(rawValue: readerPageTurn) != nil {
+            defaults.set(readerPageTurn, forKey: ReaderPageTurnStyle.storageKey)
+        }
         // Apply the display name only together with its voice id; an archive
         // with a name alone must never label a different local voice id.
         if let voiceID = Self.trimmedNonEmpty(readerSpeechVoiceID) {

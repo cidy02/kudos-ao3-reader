@@ -23,6 +23,59 @@ enum ReadingMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// How a paged turn moves. Stored at `storageKey`. Fade and curl are real cases
+/// so a later renderer can turn them on without a migration, and so a backup
+/// from that build still round-trips. The picker offers only what stock Readium
+/// can render today.
+enum ReaderPageTurnStyle: String, CaseIterable, Identifiable {
+    case none
+    case slide
+    case fade
+    case curl
+
+    static let storageKey = "readerPageTurn"
+    /// Used when the key is absent or the stored string is not a case.
+    static let defaultStyle = ReaderPageTurnStyle.slide
+    /// None and Slide. Fade and curl stay out until their renderers exist.
+    static let pickerCases: [ReaderPageTurnStyle] = [.none, .slide]
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .none: "None"
+        case .slide: "Slide"
+        case .fade: "Fade"
+        case .curl: "Curl"
+        }
+    }
+
+    /// The style the reader acts on. An absent or unknown string is slide,
+    /// matching the `@AppStorage` default. Does not write.
+    static func stored(in defaults: UserDefaults = .standard) -> ReaderPageTurnStyle {
+        guard let raw = defaults.string(forKey: storageKey) else { return defaultStyle }
+        return ReaderPageTurnStyle(rawValue: raw) ?? defaultStyle
+    }
+}
+
+/// Whether a directional turn (edge tap, arrow or space, `goForward` /
+/// `goBackward`) asks stock Readium to animate.
+///
+/// Stock Readium's `animated: true` is a slide. Only `.slide` asks for it.
+/// `.fade` and `.curl` stay instant here so this build does not play a slide
+/// under a style whose renderer does not exist yet. Scroll mode and Reduce
+/// Motion are instant. Locator seeks are a different path and stay unanimated
+/// at the call site — this helper is not consulted for them.
+enum ReaderPageTurnPolicy {
+    static func animatedTransition(
+        style: ReaderPageTurnStyle,
+        readingMode: ReadingMode,
+        reduceMotion: Bool
+    ) -> Bool {
+        style == .slide && readingMode == .paged && !reduceMotion
+    }
+}
+
 /// A reading color theme applied to the EPUB content.
 enum ReaderTheme: String, CaseIterable, Identifiable {
     case light, sepia, dark, oled

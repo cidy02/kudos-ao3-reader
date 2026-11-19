@@ -68,6 +68,8 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// on every settle.
     private(set) var isAtPublicationEnd = false
     private(set) var navigator: EPUBNavigatorViewController?
+    /// Edge taps, keyboard turns, and whether those turns animate.
+    private let pageTurns = ReadiumPageTurnController()
     /// Kept so Find in Work can drive Readium's own search service; the navigator
     /// does not expose the publication it was built from.
     private(set) var publication: Publication?
@@ -453,7 +455,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
                     $0.progression = next
                     $0.position = nil
                 })
-                await self.navigator?.go(to: target, options: NavigatorGoOptions())
+                await self.navigator?.go(to: target, options: NavigatorGoOptions(animated: false))
             }
         }
     }
@@ -566,6 +568,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             let tocLinks = await (try? publication.tableOfContents().get()) ?? []
             self.navigator = navigator
             self.publication = publication
+            // After the navigator exists. The legacy tap callback is already
+            // installed (and must stay a no-op — see `didTapAt`). This registers
+            // the edge/key adapter, then the centre-tap chrome toggle.
+            pageTurns.bind(to: navigator) { [weak self] in
+                self?.chromeHidden.toggle()
+            }
             visualPageBridge.book = self
             clearVisualPageMetrics()
             highlightTapsInstalled = false
@@ -620,22 +628,36 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         navigator?.submitPreferences(preferences)
     }
 
+    /// Re-reads the page-turn style, layout and Reduce Motion into the adapter.
+    /// Preference submit does not carry the style (it is not an EPUB preference).
+    func refreshPageTurnAnimation() {
+        pageTurns.refresh()
+    }
+
     func goForward() {
-        Task { @MainActor in await navigator?.goForward() }
+        Task { @MainActor in
+            await navigator?.goForward(options: pageTurns.goOptions)
+        }
     }
 
     func goBackward() {
-        Task { @MainActor in await navigator?.goBackward() }
+        Task { @MainActor in
+            await navigator?.goBackward(options: pageTurns.goOptions)
+        }
     }
 
     func go(to link: ReadiumShared.Link) {
         Task { @MainActor in await navigator?.go(to: link) }
     }
 
-    /// Navigates directly to a `Locator` — used by the position card's slider to
-    /// seek within the current chapter's Readium positions.
+    /// Navigates directly to a `Locator` — the position card, search, annotations
+    /// and Read Aloud. Always unanimated. Read Aloud calls this on every
+    /// utterance, including one already on screen; an animated seek would play
+    /// a page turn on top of that, and a `goForward` would turn a second time.
     func go(to locator: Locator) {
-        Task { @MainActor in await navigator?.go(to: locator, options: NavigatorGoOptions()) }
+        Task { @MainActor in
+            await navigator?.go(to: locator, options: NavigatorGoOptions(animated: false))
+        }
     }
 
     /// Navigates to a spine position directly — needed for `ReaderSection`s (like
@@ -1110,7 +1132,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     }
 
     func navigator(_: VisualNavigator, didTapAt _: CGPoint) {
-        chromeHidden.toggle()
+        // Do not toggle chrome here. Readium installs this legacy callback
+        // first, at navigator init, and the callback returns false, so it runs
+        // for edge taps as well as centre taps. Toggling here would hide the
+        // bars on every page turn. Chrome is the `.activate` observer
+        // registered after `DirectionalNavigationAdapter` in
+        // `ReadiumPageTurnController`.
     }
 
     /// Injects the one CSS safeguard Readium CSS has no preference for, matching

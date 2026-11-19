@@ -179,8 +179,8 @@ private struct ReaderThemeTile: View {
 }
 #endif
 
-/// Layout, two-page spread and keep screen awake — the reader's sheet and
-/// Settings › Reader.
+/// Layout, page turn (iOS), two-page spread and keep screen awake — the
+/// reader's sheet and Settings › Reader.
 struct ReaderLayoutSection: View {
     /// An additional host constraint; iOS availability also follows this view's size classes.
     var twoPageAvailable: Bool = true
@@ -188,6 +188,7 @@ struct ReaderLayoutSection: View {
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @AppStorage(ReaderPageTurnStyle.storageKey) private var pageTurn: ReaderPageTurnStyle = .slide
     #endif
 
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
@@ -220,6 +221,22 @@ struct ReaderLayoutSection: View {
                 .labelsHidden()
             }
 
+            // iOS only. macOS reads in the legacy web view, which has no
+            // Readium page-turn animation to choose. Disabled outside Paged,
+            // same as Two-page spread: the stored choice stays put.
+            #if os(iOS)
+            Picker(selection: $pageTurn) {
+                ForEach(ReaderPageTurnStyle.pickerCases) { style in
+                    Text(style.title).tag(style)
+                }
+            } label: {
+                ReaderSettingLabel(title: "Page Turn", systemImage: "arrow.left.arrow.right")
+            }
+            .disabled(readingMode != .paged)
+            .accentFill()
+            .accessibilityHint("Applies in Paged layout")
+            #endif
+
             if twoPageSpreadAvailable {
                 Toggle(isOn: $twoPageEnabled) {
                     ReaderSettingLabel(title: "Two-page spread", systemImage: "rectangle.split.2x1")
@@ -240,10 +257,19 @@ struct ReaderLayoutSection: View {
         } header: {
             Text("Reading")
         } footer: {
-            Text(twoPageSpreadAvailable
-                ? "On a wide screen, Paged mode can show two pages side by side."
-                : "Choose whether you turn pages or scroll while reading.")
+            Text(readingSectionFooter)
         }
+    }
+
+    private var readingSectionFooter: String {
+        let spread = twoPageSpreadAvailable
+            ? "On a wide screen, Paged mode can show two pages side by side."
+            : "Choose whether you turn pages or scroll while reading."
+        #if os(iOS)
+        return spread + " Page Turn applies in Paged mode."
+        #else
+        return spread
+        #endif
     }
 }
 
