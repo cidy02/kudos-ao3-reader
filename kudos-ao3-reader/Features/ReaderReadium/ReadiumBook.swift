@@ -1226,6 +1226,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             }
             function reportFromScroll() {
                 try {
+                    // A finger curl scrolls the column under an opaque cover to
+                    // snapshot the next page. That scroll is not a page the
+                    // reader has turned to; reporting it flickers the page digit
+                    // and, on a cancelled peek at the last page, can mark the
+                    // work finished. Readium sets the flag for the whole gesture.
+                    if (document.documentElement.dataset.readiumTransitioning === '1') return;
                     if (Date.now() > allowUntil) return;
                     // Keep arm alive while the page-turn animation is scrolling so
                     // the settle sample after finger-up still posts.
