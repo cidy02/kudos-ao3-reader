@@ -7,7 +7,7 @@ extension AO3Client {
     /// Page 1 of `/series/<id>`, anonymous, for the weekly saved-series check: the shared slot, `pace()`, its own
     /// `feature=` tag and 429 hold. The caller spaces series 3 s apart (policy row "Saved series, weekly check").
     func savedSeriesFirstPage(seriesID: Int) async throws -> String {
-        guard seriesID > 0, let url = URL(string: "\(base)/series/\(seriesID)") else {
+        guard seriesID > 0, let url = URL(string: "https://archiveofourown.org/series/\(seriesID)") else {
             throw AO3Error.network("Invalid AO3 series ID.")
         }
         try Self.rejectIfUntrusted(url)
@@ -25,7 +25,7 @@ extension AO3Client {
                     let (body, response) = try await session.data(for: request)
                     defer { Self.purgeSessionCookie(from: session.configuration.httpCookieStorage, url: url) }
                     try checkStatus(response) { body }
-                    return Self.htmlString(from: body)
+                    return String(bytes: body, encoding: .utf8) ?? ""
                 } catch AO3Error.rateLimited(let retryAfter) {
                     let delay = retryAfter.flatMap { $0.isFinite ? max($0, 0) : nil } ?? 6 * 60 * 60
                     let until = Date().addingTimeInterval(delay)

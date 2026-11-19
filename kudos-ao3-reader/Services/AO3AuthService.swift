@@ -263,6 +263,7 @@ nonisolated enum AO3AutomatedFeature: CaseIterable, Sendable {
         case .rankTop100: "reader-requested pages 2-5"
         case .queueSourceCounts: "queue-open first-page counts"
         case .followedTagFeeds: "followed-tag foreground feed checks"
+        case .savedSeriesChecks: "weekly saved-series first-page checks"
         }
     }
 }

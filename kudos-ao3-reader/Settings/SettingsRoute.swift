@@ -115,7 +115,7 @@ enum SettingsRoute: Hashable, CaseIterable {
         case .downloads: ["downloads", "offline", "storage", "keep", "subscribe", "space", "disk"]
         case .preservation: ["availability", "archive", "check", "missing", "works"]
         case .readingQueues: ["queue", "order", "auto-preserve", "series"]
-        case .library: ["delete", "confirm", "zero counts", "stats", "shelves"]
+        case .library: ["delete", "confirm", "zero counts", "stats", "shelves", "series", "weekly", "check"]
         case .backup: ["export", "import", "archive", "kudosbackup", "restore"]
         case .syncFolder: ["sync", "icloud", "folder", "devices", "tombstone", "pair"]
         case .importFiles: ["epub", "files", "document", "html", "txt", "import"]

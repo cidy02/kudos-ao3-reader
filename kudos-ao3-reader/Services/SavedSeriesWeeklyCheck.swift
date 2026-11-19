@@ -103,10 +103,11 @@ enum SavedSeriesWeeklyCheck {
             let seriesID = saved.ao3SeriesID
             do {
                 let html = try await fetch(seriesID)
-                let page = try AO3Client.parseSearchPage(html, page: 1)
+                // The header alone is worth keeping; the works list only fills `partWorkIDs`.
+                let page = try? AO3Client.parseSearchPage(html, page: 1)
                 if let parsed = AO3ParsedSeries.parse(
-                    html: html, ao3SeriesID: seriesID, pageWorkIDs: page.works.map(\.id),
-                    isWholeList: page.totalPages <= 1
+                    html: html, ao3SeriesID: seriesID, pageWorkIDs: page?.works.map(\.id) ?? [],
+                    isWholeList: (page?.totalPages ?? 2) <= 1
                 ) {
                     SavedSeriesStore.upsert(parsed, in: context, now: now())
                 } else {

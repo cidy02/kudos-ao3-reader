@@ -2054,7 +2054,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
                 forKey: .workSymbolPlacement
             )) ?? nil,
             useEmbeddedCoverArt: (try? container.decodeIfPresent(Bool.self, forKey: .useEmbeddedCoverArt)) ?? nil,
-            checksSavedSeriesWeekly: (try? container.decodeIfPresent(Bool.self, forKey: .checksSavedSeriesWeekly)) ?? nil,
+            checksSavedSeriesWeekly: (try? container.decodeIfPresent(
+                Bool.self, forKey: .checksSavedSeriesWeekly
+            )) ?? nil,
             readerSpeechVoiceID: (try? container.decodeIfPresent(
                 String.self,
                 forKey: .readerSpeechVoiceID
@@ -2130,7 +2132,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             workSymbolPlacement: defaults.string(forKey: WorkSymbolPlacement.storageKey),
             useEmbeddedCoverArt: defaults.object(forKey: "useEmbeddedCoverArt") == nil
                 ? nil : defaults.bool(forKey: "useEmbeddedCoverArt"),
-            checksSavedSeriesWeekly: defaults.object(forKey: "checksSavedSeriesWeekly") == nil ? nil : defaults.bool(forKey: "checksSavedSeriesWeekly"),
+            checksSavedSeriesWeekly: defaults.object(forKey: "checksSavedSeriesWeekly") == nil
+                ? nil : defaults.bool(forKey: "checksSavedSeriesWeekly"),
             readerSpeechVoiceID: capturedVoiceID,
             readerSpeechVoiceName: capturedVoiceName,
             lastAddedReadingQueueID: defaults.string(forKey: "lastAddedReadingQueueID")
