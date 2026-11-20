@@ -522,6 +522,7 @@ struct WorkRow: View {
                 font: .subheadline,
                 compact: !dynamicTypeSize.isAccessibilitySize
             )
+            .fixedSize(horizontal: false, vertical: true)
         }
         if expandedBinding.wrappedValue, nonemptyFandomNames.count > 1 {
             Text(nonemptyFandomNames.joined(separator: ", "))

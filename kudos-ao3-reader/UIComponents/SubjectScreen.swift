@@ -550,21 +550,29 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Byline: View, R
     /// sit beside the title block, so they are not part of the title's height.
     private var underTitleColumn: some View {
         let lines = underTitleLines
-        // At accessibility sizes, trailing controls (star + 44 pt chevron) beside
-        // the four fixed-width symbol tiles outgrow a narrow card (seen at AX5,
-        // 2026-11-19). Keeping trailing beside the wrapping heading alone lets the
-        // symbol row and byline take the full width.
-        let clusterKind: [WorkUnderTitleLine.Kind] = stacked
-            ? [.heading]
-            : WorkSymbolPlacement.underTitleTrailingCluster
+        let clusterKind = WorkSymbolPlacement.underTitleTrailingCluster
         let cluster = lines.filter { clusterKind.contains($0.kind) }
         let rest = lines.filter { !clusterKind.contains($0.kind) }
         return VStack(alignment: .leading, spacing: 0) {
             if showsUnderTitleTrailing {
-                HStack(alignment: .top, spacing: 6) {
+                if stacked {
+                    // At accessibility sizes, star + 44 pt chevron beside the
+                    // heading or the four fixed-width symbol tiles outgrow a
+                    // narrow card (clipped chevron / mid-word wrap at AX5).
+                    // Put trailing on its own row so heading, symbols, and
+                    // byline all get the full card width.
+                    HStack {
+                        Spacer(minLength: 0)
+                        trailing()
+                    }
+                    .padding(.bottom, 6)
                     underTitleStack(cluster, padFirst: false)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    trailing()
+                } else {
+                    HStack(alignment: .top, spacing: 6) {
+                        underTitleStack(cluster, padFirst: false)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        trailing()
+                    }
                 }
             } else {
                 underTitleStack(cluster, padFirst: false)
