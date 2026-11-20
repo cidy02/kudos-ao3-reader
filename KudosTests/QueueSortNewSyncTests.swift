@@ -98,9 +98,17 @@ extension PersistenceGateSuites {
             _ = try KudosBackupService.restore(initialBackup, into: deviceB, defaults: defaultsB, mode: .reconcile)
 
             var session = QueueSortSession(queueID: queueA.id, membershipIDs: [membershipA.id])
+            let dropSyncDefaults = try makeDefaults()
+            #expect(!FolderSyncService.snapshot(defaults: dropSyncDefaults).isDirty)
             TombstoneSigning.now = { t1 }
-            #expect(QueueSortNew.apply(.drop, session: &session, queue: queueA, context: deviceA))
-            #expect(FolderSyncService.snapshot().isDirty)
+            #expect(QueueSortNew.apply(
+                .drop,
+                session: &session,
+                queue: queueA,
+                context: deviceA,
+                syncDefaults: dropSyncDefaults
+            ))
+            #expect(FolderSyncService.snapshot(defaults: dropSyncDefaults).isDirty)
             TombstoneSigning.now = previousNow
 
             let afterDrop = try exportSnapshot(from: deviceA, defaults: defaultsA)
@@ -111,8 +119,16 @@ extension PersistenceGateSuites {
             #expect(workB.queueMemberships.isEmpty)
 
             // Undo on A, then reconcile onto B: both work and membership revive.
-            let undoResult = QueueSortNew.undo(session: &session, queue: queueA, context: deviceA)
+            let undoSyncDefaults = try makeDefaults()
+            #expect(!FolderSyncService.snapshot(defaults: undoSyncDefaults).isDirty)
+            let undoResult = QueueSortNew.undo(
+                session: &session,
+                queue: queueA,
+                context: deviceA,
+                syncDefaults: undoSyncDefaults
+            )
             #expect(undoResult.undoneRecord?.action == .drop)
+            #expect(FolderSyncService.snapshot(defaults: undoSyncDefaults).isDirty)
 
             let afterUndo = try exportSnapshot(from: deviceA, defaults: defaultsA)
             _ = try KudosBackupService.restore(afterUndo, into: deviceB, defaults: defaultsB, mode: .reconcile)
@@ -319,6 +335,84 @@ extension PersistenceGateSuites {
                 .filter { $0.recordType == .readingQueueMembership && $0.recordID == membershipA.id }
             #expect(tombstones.count == 1)
             #expect(tombstones.first?.signerPublicKey == peerPub)
+        }
+
+        @Test(arguments: [true, false])
+        func undoDropSucceedsDespiteOlderAdoptedWorkTombstoneAfterPeerDeleteAndRestore(saved: Bool) throws {
+            let previousNow = TombstoneSigning.now
+            defer { TombstoneSigning.now = previousNow }
+
+            let t0 = Date().addingTimeInterval(-300)
+            let tPeerDelete = Date().addingTimeInterval(-200)
+            let tPeerRestore = Date().addingTimeInterval(-120)
+            let tDrop = Date().addingTimeInterval(-60)
+            let defaultsA = try makeDefaults()
+            let defaultsB = try makeDefaults()
+            let peerKey = TombstoneSigning.makePrivateKey()
+            #expect(TombstoneTrustStore.add(TombstoneSigning.publicKeyHex(of: peerKey), defaults: defaultsA))
+
+            let deviceA = try makeContext()
+            let deviceB = try makeContext()
+            let seeded = try seedInitialQueue(in: deviceA, saved: saved, at: t0)
+            let queueA = seeded.queue
+            let workA = seeded.work
+            let membershipA = seeded.membership
+            let initial = try exportSnapshot(from: deviceA, defaults: defaultsA)
+            _ = try KudosBackupService.restore(initial, into: deviceB, defaults: defaultsB, mode: .reconcile)
+
+            // Peer B deletes W at tPeerDelete; A reconciles and adopts B's tombstone.
+            let workB = try #require(try deviceB.fetch(FetchDescriptor<SavedWork>()).first { $0.id == workA.id })
+            workB.isPendingDeletion = true
+            workB.deletedAt = tPeerDelete
+            workB.permanentDeletionScheduledAt = tPeerDelete.addingTimeInterval(PreservedWorkService.recoveryWindow)
+            workB.markModified(tPeerDelete)
+            let oldPeerTombstone = SyncTombstone(
+                recordID: workB.id,
+                recordType: .savedWork,
+                sourceURL: WorkTags.canonicalAO3WorkURL(from: workB.sourceURL) ?? workB.sourceURL,
+                ao3WorkID: workB.ao3WorkID,
+                createdAt: tPeerDelete,
+                deletedOnDeviceID: "peer-device",
+                deletionReason: "workDeleted"
+            )
+            TombstoneSigning.sign(oldPeerTombstone, key: peerKey)
+            deviceB.insert(oldPeerTombstone)
+            try deviceB.save()
+
+            let afterPeerDelete = try exportSnapshot(from: deviceB, defaults: defaultsB)
+            _ = try KudosBackupService.restore(afterPeerDelete, into: deviceA, defaults: defaultsA, mode: .reconcile)
+            #expect(workA.isPendingDeletion)
+
+            // Peer B restores W at tPeerRestore; A revives W as live, while keeping the older adopted tombstone.
+            PreservedWorkService.restore(workB, in: deviceB)
+            workB.lastModifiedAt = tPeerRestore
+            try deviceB.save()
+            let afterPeerRestore = try exportSnapshot(from: deviceB, defaults: defaultsB)
+            _ = try KudosBackupService.restore(afterPeerRestore, into: deviceA, defaults: defaultsA, mode: .reconcile)
+            #expect(!workA.isPendingDeletion)
+            let adoptedBeforeDrop = try deviceA.fetch(FetchDescriptor<SyncTombstone>())
+                .filter { $0.recordType == .savedWork && $0.recordID == workA.id }
+            #expect(adoptedBeforeDrop.count == 1)
+
+            // On A at tDrop > tPeerRestore: Sort New Drop -> Undo must succeed for both Library and queue-only works.
+            var session = QueueSortSession(queueID: queueA.id, membershipIDs: [membershipA.id])
+            TombstoneSigning.now = { tDrop }
+            #expect(QueueSortNew.apply(.drop, session: &session, queue: queueA, context: deviceA))
+            TombstoneSigning.now = previousNow
+            #expect(workA.isPendingDeletion == !saved)
+
+            let undoOutcome = QueueSortNew.undo(session: &session, queue: queueA, context: deviceA)
+            #expect(undoOutcome.undoneRecord?.action == .drop)
+            #expect(!workA.isPendingDeletion)
+            let restoredMembership = try #require(QueueSortNew.membership(membershipA.id, in: queueA))
+            #expect(restoredMembership.state == .new)
+            #expect(restoredMembership.origin?.label == "Sync search")
+
+            // Reconciling A's Undo back to B leaves W live and queued on B.
+            let afterUndo = try exportSnapshot(from: deviceA, defaults: defaultsA)
+            _ = try KudosBackupService.restore(afterUndo, into: deviceB, defaults: defaultsB, mode: .reconcile)
+            #expect(!workB.isPendingDeletion)
+            #expect(workB.queueMemberships.contains { $0.id == membershipA.id })
         }
     }
 }

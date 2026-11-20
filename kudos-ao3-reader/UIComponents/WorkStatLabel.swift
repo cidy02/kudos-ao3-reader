@@ -289,23 +289,29 @@ struct WorkTagLineView: View {
             relationships: relationships, characters: characters, freeforms: freeforms
         )
         if !line.shown.isEmpty {
-            FlowLayout(spacing: 6, rowSpacing: 6) {
-                ForEach(line.shown) { chip in
-                    if let onTap {
+            if let onTap {
+                FlowLayout(spacing: 6, rowSpacing: 6) {
+                    ForEach(line.shown) { chip in
                         Button { onTap(chip.text, chip.field) } label: {
                             chipLabel(chip)
                         }
                         .buttonStyle(.borderless)
                         .minimumHitTarget(28)
-                    } else {
-                        chipLabel(chip)
+                    }
+                    if line.extra > 0 {
+                        Text("+\(line.extra)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondaryInk)
                     }
                 }
-                if line.extra > 0 {
-                    Text("+\(line.extra)")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondaryInk)
-                }
+            } else {
+                let text = line.shown.map(\.text).joined(separator: ", ")
+                    + (line.extra > 0 ? " +\(line.extra)" : "")
+                Text(text)
+                    .font(.caption)
+                    .foregroundStyle(.secondaryInk)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

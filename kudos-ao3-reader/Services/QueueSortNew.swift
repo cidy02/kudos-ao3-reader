@@ -91,6 +91,9 @@ struct QueueSortDropOutcome: Equatable {
 /// Outcome of `QueueSortNew.undo(session:queue:context:isVisible:)`.
 enum QueueSortUndoResult: Equatable {
     case undone(QueueSortRecord)
+    /// The work is currently hidden by the mature privacy gate; the record stays
+    /// undoable so revealing it again lets Undo succeed.
+    case hidden(QueueSortRecord)
     case blocked(QueueSortRecord)
     case nothingToUndo
 
@@ -173,15 +176,19 @@ struct QueueSortSession: Equatable {
     let queueID: UUID
     /// Membership ids of the `New` works, in the queue's order, at the start.
     let membershipIDs: [UUID]
+    /// Real sessions sort only `New` memberships and skip any moved to `In line`
+    /// elsewhere; debug shots on queues with no `New` works pass `false`.
+    let requiresNewState: Bool
     private(set) var history: [QueueSortRecord] = []
     /// Memberships whose Undo was refused because they changed or vanished
     /// elsewhere; stepping forward after a deeper Undo skips them cleanly.
     private(set) var unrevisitableIDs: Set<UUID> = []
 
-    init(queueID: UUID, membershipIDs: [UUID]) {
+    init(queueID: UUID, membershipIDs: [UUID], requiresNewState: Bool = true) {
         self.queueID = queueID
         var seen = Set<UUID>()
         self.membershipIDs = membershipIDs.filter { seen.insert($0).inserted }
+        self.requiresNewState = requiresNewState
     }
 
     var total: Int { membershipIDs.count }
@@ -224,6 +231,35 @@ struct QueueSortSession: Equatable {
     /// Spoken by the progress bar: "2 of 7 sorted".
     var progressAccessibilityLabel: String {
         "\(sortedCount) of \(total) sorted"
+    }
+
+    /// VoiceOver announcement posted after a decision commits, naming what happened
+    /// and what replaced the card without leaking a concealed mature work's title.
+    func announcement(
+        after action: QueueSortAction,
+        nextTitle: String?,
+        nextIsConcealed: Bool
+    ) -> String {
+        let verb: String = switch action {
+        case .keep: "Kept"
+        case .later: "Left for later"
+        case .drop: "Dropped"
+        }
+        return "\(verb). \(nextCardAnnouncement(title: nextTitle, isConcealed: nextIsConcealed, prefixNext: true))"
+    }
+
+    func undoAnnouncement(nextTitle: String?, nextIsConcealed: Bool) -> String {
+        "Undone. \(nextCardAnnouncement(title: nextTitle, isConcealed: nextIsConcealed, prefixNext: false))"
+    }
+
+    private func nextCardAnnouncement(title: String?, isConcealed: Bool, prefixNext: Bool) -> String {
+        if isConcealed {
+            let label = prefixNext ? "Next: hidden mature work" : "Hidden mature work"
+            return "\(label), \(position) of \(total)."
+        }
+        guard let title, !title.isEmpty else { return "All sorted." }
+        let label = prefixNext ? "Next: \(title)" : title
+        return "\(label), \(position) of \(total)."
     }
 
     /// The board's line under the card: "About 37 min to read · found by Holmes
@@ -282,9 +318,20 @@ enum QueueSortNew {
         }
     }
 
+    private struct UndoContext {
+        let queue: ReadingQueue
+        let context: ModelContext
+        let requiresNewState: Bool
+        let syncDefaults: UserDefaults
+    }
+
+    private static func defaultPersist(_ context: ModelContext, _ reason: StaticString) -> Bool {
+        context.saveBestEffort(reason: reason)
+    }
+
     /// Applies `action` to the session's current work and records it. Returns
-    /// false (and records nothing) when that membership is gone or no longer
-    /// matches `expectedMembershipID`/`expectedWorkID`.
+    /// false (and records nothing) when that membership is gone, no longer New
+    /// (when `session.requiresNewState`), or mismatches the expected IDs.
     @discardableResult
     static func apply(
         _ action: QueueSortAction,
@@ -292,7 +339,8 @@ enum QueueSortNew {
         queue: ReadingQueue,
         context: ModelContext,
         expectedMembershipID: UUID? = nil,
-        expectedWorkID: UUID? = nil
+        expectedWorkID: UUID? = nil,
+        syncDefaults: UserDefaults = .standard
     ) -> Bool {
         guard queue.id == session.queueID,
               let id = session.currentMembershipID,
@@ -301,16 +349,18 @@ enum QueueSortNew {
                   action,
                   membershipID: id,
                   expectedWorkID: expectedWorkID,
+                  requiresNewState: session.requiresNewState,
                   in: queue,
-                  context: context
+                  context: context,
+                  syncDefaults: syncDefaults
               )
         else { return false }
         session.record(record)
         return true
     }
 
-    /// Steps the cursor over works that left the queue, entered Recently Deleted,
-    /// became hidden by privacy mode, or failed Undo since the session began.
+    /// Steps the cursor over works that left the queue, moved out of New, entered
+    /// Recently Deleted, became hidden by privacy mode, or failed Undo.
     static func skipMissing(
         session: inout QueueSortSession,
         queue: ReadingQueue,
@@ -319,6 +369,7 @@ enum QueueSortNew {
         while let id = session.currentMembershipID {
             guard !session.unrevisitableIDs.contains(id),
                   let membership = membership(id, in: queue),
+                  !session.requiresNewState || membership.state == .new,
                   let work = membership.work,
                   isVisible(work)
             else {
@@ -330,38 +381,56 @@ enum QueueSortNew {
     }
 
     /// Undoes the last undoable decision of the session. Only rewinds the cursor
-    /// when persistence succeeds; on refusal keeps the session consistent so the
-    /// user stays on the next live work instead of stranding on "All sorted".
+    /// when persistence succeeds; leaves privacy-hidden works undoable once
+    /// revealed again, and marks permanently invalidated records `undoBlocked`.
     @discardableResult
     static func undo(
         session: inout QueueSortSession,
         queue: ReadingQueue,
         context: ModelContext,
-        isVisible: (SavedWork) -> Bool = { _ in true }
+        isVisible: (SavedWork) -> Bool = { _ in true },
+        syncDefaults: UserDefaults = .standard,
+        persist: ((ModelContext, StaticString) -> Bool)? = nil
     ) -> QueueSortUndoResult {
         guard queue.id == session.queueID, let index = session.lastUndoableIndex else {
             return .nothingToUndo
         }
         let record = session.history[index]
-        if undo(record, in: queue, context: context, isVisible: isVisible) {
+        let env = UndoContext(
+            queue: queue,
+            context: context,
+            requiresNewState: session.requiresNewState,
+            syncDefaults: syncDefaults
+        )
+        let outcome = undoOutcome(record, env: env, isVisible: isVisible, persist: persist ?? defaultPersist)
+        switch outcome {
+        case .undone:
             session.popFrom(index)
             skipMissing(session: &session, queue: queue, isVisible: isVisible)
             return .undone(record)
+        case .hidden:
+            return .hidden(record)
+        case .blocked:
+            session.markUndoBlocked(at: index)
+            skipMissing(session: &session, queue: queue, isVisible: isVisible)
+            return .blocked(record)
+        case .nothingToUndo:
+            return .nothingToUndo
         }
-        session.markUndoBlocked(at: index)
-        skipMissing(session: &session, queue: queue, isVisible: isVisible)
-        return .blocked(record)
     }
 
     static func apply(
         _ action: QueueSortAction,
         membershipID: UUID,
         expectedWorkID: UUID? = nil,
+        requiresNewState: Bool = true,
         in queue: ReadingQueue,
-        context: ModelContext
+        context: ModelContext,
+        syncDefaults: UserDefaults = .standard
     ) -> QueueSortRecord? {
         guard queue.kind != .smart,
               let membership = membership(membershipID, in: queue),
+              !requiresNewState || membership.state == .new,
               let work = membership.work,
               expectedWorkID == nil || expectedWorkID == work.id
         else { return nil }
@@ -392,7 +461,7 @@ enum QueueSortNew {
                 ((try? context.fetch(FetchDescriptor<SyncTombstone>())) ?? []).map(\.id)
             )
             ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(work, from: queue, in: context)
-            FolderSyncService.markDirty()
+            FolderSyncService.markDirty(defaults: syncDefaults)
             let sentToRD = !wasPendingDeletion && work.isPendingDeletion
             let newTombstones = ((try? context.fetch(FetchDescriptor<SyncTombstone>())) ?? [])
                 .filter { !existingTombstoneIDs.contains($0.id) }
@@ -424,73 +493,183 @@ enum QueueSortNew {
         _ record: QueueSortRecord,
         in queue: ReadingQueue,
         context: ModelContext,
-        isVisible: (SavedWork) -> Bool = { _ in true }
+        requiresNewState: Bool = true,
+        isVisible: (SavedWork) -> Bool = { _ in true },
+        syncDefaults: UserDefaults = .standard,
+        persist: ((ModelContext, StaticString) -> Bool)? = nil
     ) -> Bool {
-        guard queue.kind != .smart, queue.modelContext != nil, !queue.isPendingDeletion else {
-            return false
+        let env = UndoContext(
+            queue: queue,
+            context: context,
+            requiresNewState: requiresNewState,
+            syncDefaults: syncDefaults
+        )
+        if case .undone = undoOutcome(record, env: env, isVisible: isVisible, persist: persist ?? defaultPersist) {
+            return true
+        }
+        return false
+    }
+
+    private static func undoOutcome(
+        _ record: QueueSortRecord,
+        env: UndoContext,
+        isVisible: (SavedWork) -> Bool,
+        persist: (ModelContext, StaticString) -> Bool
+    ) -> QueueSortUndoResult {
+        guard env.queue.kind != .smart, env.queue.modelContext != nil, !env.queue.isPendingDeletion else {
+            return .blocked(record)
         }
         switch record.action {
         case .later:
-            guard let work = membership(record.membershipID, in: queue)?.work, isVisible(work) else {
-                return false
-            }
-            return true
+            guard let membership = membership(record.membershipID, in: env.queue),
+                  let work = membership.work
+            else { return .blocked(record) }
+            guard isVisible(work) else { return .hidden(record) }
+            guard !env.requiresNewState || membership.state == .new else { return .blocked(record) }
+            return .undone(record)
         case .keep:
-            guard let before = record.before,
-                  let expected = record.keepOutcome,
-                  let membership = membership(record.membershipID, in: queue),
-                  let work = membership.work,
-                  isVisible(work),
-                  membership.stateRaw == expected.stateRaw,
-                  membership.stateWasRecorded == expected.stateWasRecorded,
-                  membership.sortOrderInQueue == expected.sortOrderInQueue
-            else { return false }
-            // Only revert the three fields Sort New changed; keep intervening
-            // edits to note, origin, and queuedAt intact.
-            membership.stateRaw = before.stateRaw
-            membership.stateWasRecorded = before.stateWasRecorded
-            membership.sortOrderInQueue = before.sortOrderInQueue
-            let now = Date()
-            membership.markModified(now)
-            queue.markMembershipChanged(now)
-            FolderSyncService.markDirty()
-            return context.saveBestEffort(reason: "Undoing Sort New keep failed")
+            return undoKeep(record, env: env, isVisible: isVisible, persist: persist)
         case .drop:
-            return undoDrop(record, in: queue, context: context, isVisible: isVisible)
+            return undoDrop(record, env: env, isVisible: isVisible, persist: persist)
         }
+    }
+
+    private static func undoKeep(
+        _ record: QueueSortRecord,
+        env: UndoContext,
+        isVisible: (SavedWork) -> Bool,
+        persist: (ModelContext, StaticString) -> Bool
+    ) -> QueueSortUndoResult {
+        guard let before = record.before,
+              let expected = record.keepOutcome,
+              let membership = membership(record.membershipID, in: env.queue),
+              let work = membership.work
+        else { return .blocked(record) }
+        guard isVisible(work) else { return .hidden(record) }
+        guard membership.stateRaw == expected.stateRaw,
+              membership.stateWasRecorded == expected.stateWasRecorded,
+              membership.sortOrderInQueue == expected.sortOrderInQueue
+        else { return .blocked(record) }
+        // A no-op Keep (already In line) must not bump `markModified` or dirty sync on Undo.
+        if before.stateRaw == expected.stateRaw,
+           before.stateWasRecorded == expected.stateWasRecorded,
+           before.sortOrderInQueue == expected.sortOrderInQueue {
+            return .undone(record)
+        }
+        let previousAutosave = env.context.autosaveEnabled
+        env.context.autosaveEnabled = false
+        defer { env.context.autosaveEnabled = previousAutosave }
+        // Only revert the three fields Sort New changed; keep intervening
+        // edits to note, origin, and queuedAt intact.
+        membership.stateRaw = before.stateRaw
+        membership.stateWasRecorded = before.stateWasRecorded
+        membership.sortOrderInQueue = before.sortOrderInQueue
+        let now = Date()
+        membership.markModified(now)
+        env.queue.markMembershipChanged(now)
+        guard persist(env.context, "Undoing Sort New keep failed") else {
+            env.context.rollback()
+            return .blocked(record)
+        }
+        FolderSyncService.markDirty(defaults: env.syncDefaults)
+        return .undone(record)
     }
 
     private static func undoDrop(
         _ record: QueueSortRecord,
-        in queue: ReadingQueue,
-        context: ModelContext,
-        isVisible: (SavedWork) -> Bool
-    ) -> Bool {
+        env: UndoContext,
+        isVisible: (SavedWork) -> Bool,
+        persist: (ModelContext, StaticString) -> Bool
+    ) -> QueueSortUndoResult {
         guard let before = record.before,
               let drop = record.dropOutcome,
               let expectedMembershipTombstone = drop.membershipTombstone
-        else { return false }
+        else { return .blocked(record) }
         let workID = record.workID
         var descriptor = FetchDescriptor<SavedWork>(predicate: #Predicate { $0.id == workID })
         descriptor.fetchLimit = 1
-        guard let work = try? context.fetch(descriptor).first,
-              work.modelContext != nil,
-              isVisible(work)
-        else { return false }
+        guard let work = try? env.context.fetch(descriptor).first, work.modelContext != nil else {
+            return .blocked(record)
+        }
+        guard isVisible(work) else { return .hidden(record) }
         // Check before any restore: if the work already joined this queue again
         // (under a new membership id or the same one), refuse rather than
         // mutating or reviving anything.
-        guard !work.queueMemberships.contains(where: { $0.queue?.id == queue.id && !$0.isPendingDeletion }) else {
-            return false
+        guard !work.queueMemberships.contains(where: { $0.queue?.id == env.queue.id && !$0.isPendingDeletion }) else {
+            return .blocked(record)
         }
-        guard let allTombstones = try? context.fetch(FetchDescriptor<SyncTombstone>()) else {
-            return false
+        guard let allTombstones = try? env.context.fetch(FetchDescriptor<SyncTombstone>()) else {
+            return .blocked(record)
         }
         let membershipTombstones = allTombstones.filter {
             $0.recordType == .readingQueueMembership && $0.recordID == before.id
         }
-        guard !membershipTombstones.isEmpty,
-              membershipTombstones.allSatisfy({ expectedMembershipTombstone.matches($0) })
+        guard canUndoDropTombstones(
+            work: work,
+            drop: drop,
+            expectedMembershipTombstone: expectedMembershipTombstone,
+            membershipTombstones: membershipTombstones,
+            allTombstones: allTombstones
+        ) else { return .blocked(record) }
+
+        // Keep restore, membership recreation, and tombstone retraction in one save
+        // so a save failure rolls back cleanly without leaving an unqueued live work.
+        let previousAutosave = env.context.autosaveEnabled
+        env.context.autosaveEnabled = false
+        defer { env.context.autosaveEnabled = previousAutosave }
+
+        if drop.sentWorkToRecentlyDeleted, work.isPendingDeletion {
+            PreservedWorkService.restore(work, in: env.context, save: false)
+        }
+        let membership = ReadingQueueMembership(
+            id: before.id,
+            queue: env.queue,
+            work: work,
+            queuedAt: before.queuedAt,
+            sortOrderInQueue: before.sortOrderInQueue,
+            note: before.note
+        )
+        restoreAll(before, onto: membership)
+        env.context.insert(membership)
+        env.queue.memberships.append(membership)
+        work.queueMemberships.append(membership)
+        for tombstone in membershipTombstones {
+            env.context.delete(tombstone)
+        }
+        let minAfter = max(
+            expectedMembershipTombstone.lastModifiedAt,
+            drop.workTombstone?.lastModifiedAt ?? .distantPast
+        ).addingTimeInterval(0.002)
+        let now = max(Date(), minAfter)
+        env.queue.markMembershipChanged(now)
+        membership.markModified(now)
+        work.markModified(now)
+        work.isQueuedForLater = true
+        ReadingQueueService.normalize(work)
+        if let statusRaw = drop.preservationStatusRaw, work.epubPreservationStatusRaw == statusRaw {
+            work.preservedAt = drop.preservedAt
+        }
+        guard persist(env.context, "Undoing Sort New drop failed") else {
+            env.context.rollback()
+            return .blocked(record)
+        }
+        FolderSyncService.markDirty(defaults: env.syncDefaults)
+        return .undone(record)
+    }
+
+    private static func canUndoDropTombstones(
+        work: SavedWork,
+        drop: QueueSortDropOutcome,
+        expectedMembershipTombstone: QueueSortTombstoneStamp,
+        membershipTombstones: [SyncTombstone],
+        allTombstones: [SyncTombstone]
+    ) -> Bool {
+        let dropStamp = expectedMembershipTombstone.lastModifiedAt
+        let relevantMembershipTombstones = membershipTombstones.filter {
+            expectedMembershipTombstone.matches($0) || $0.lastModifiedAt >= dropStamp
+        }
+        guard !relevantMembershipTombstones.isEmpty,
+              relevantMembershipTombstones.allSatisfy({ expectedMembershipTombstone.matches($0) })
         else { return false }
 
         let workTombstones = matchingWorkTombstones(for: work, in: allTombstones)
@@ -499,50 +678,18 @@ enum QueueSortNew {
                   let expectedDeletedAt = drop.workDeletedAt,
                   let actualDeletedAt = work.deletedAt,
                   abs(actualDeletedAt.timeIntervalSince(expectedDeletedAt)) <= 0.001,
-                  let expectedWorkTombstone = drop.workTombstone,
-                  !workTombstones.isEmpty,
-                  workTombstones.allSatisfy({ expectedWorkTombstone.matches($0) })
+                  let expectedWorkTombstone = drop.workTombstone
             else { return false }
-        } else {
-            // A live work with an un-swept `.savedWork` tombstone was deleted
-            // elsewhere; never bump `work.lastModifiedAt` past that tombstone.
-            guard workTombstones.isEmpty else { return false }
+            let workDropStamp = min(dropStamp, expectedWorkTombstone.lastModifiedAt)
+            let relevantWorkTombstones = workTombstones.filter {
+                expectedWorkTombstone.matches($0) || $0.lastModifiedAt >= workDropStamp
+            }
+            return !relevantWorkTombstones.isEmpty
+                && relevantWorkTombstones.allSatisfy { expectedWorkTombstone.matches($0) }
         }
-
-        if drop.sentWorkToRecentlyDeleted, work.isPendingDeletion {
-            guard PreservedWorkService.restore(work, in: context) else { return false }
-        }
-        let membership = ReadingQueueMembership(
-            id: before.id,
-            queue: queue,
-            work: work,
-            queuedAt: before.queuedAt,
-            sortOrderInQueue: before.sortOrderInQueue,
-            note: before.note
-        )
-        restoreAll(before, onto: membership)
-        context.insert(membership)
-        queue.memberships.append(membership)
-        work.queueMemberships.append(membership)
-        // Retract only this Drop's verified membership tombstone(s).
-        for tombstone in membershipTombstones {
-            context.delete(tombstone)
-        }
-        let minAfter = max(
-            expectedMembershipTombstone.lastModifiedAt,
-            drop.workTombstone?.lastModifiedAt ?? .distantPast
-        ).addingTimeInterval(0.002)
-        let now = max(Date(), minAfter)
-        queue.markMembershipChanged(now)
-        membership.markModified(now)
-        work.markModified(now)
-        work.isQueuedForLater = true
-        ReadingQueueService.normalize(work)
-        if let statusRaw = drop.preservationStatusRaw, work.epubPreservationStatusRaw == statusRaw {
-            work.preservedAt = drop.preservedAt
-        }
-        FolderSyncService.markDirty()
-        return context.saveBestEffort(reason: "Undoing Sort New drop failed")
+        // Older adopted `.savedWork` tombstones from an earlier delete+restore predate
+        // this Drop and must not refuse Undo; any tombstone at or newer than Drop still blocks.
+        return workTombstones.allSatisfy { $0.lastModifiedAt < dropStamp }
     }
 
     /// Mirrors `PreservedWorkService.retractTombstone` identity matching so a

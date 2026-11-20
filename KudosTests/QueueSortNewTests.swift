@@ -149,6 +149,25 @@ struct QueueSortNewTests {
         #expect(QueueSortSwipe.decision(for: dropSwipe) == .drop)
     }
 
+    @Test func voiceOverAnnouncementsDescribeActionAndHideConcealedTitles() {
+        let ids = (0..<3).map { _ in UUID() }
+        var session = QueueSortSession(queueID: UUID(), membershipIDs: ids)
+        session.record(QueueSortRecord(
+            membershipID: ids[0], workID: UUID(), action: .keep,
+            before: nil, keepOutcome: nil, dropOutcome: nil
+        ))
+        #expect(session.announcement(after: .keep, nextTitle: "Second Fic", nextIsConcealed: false)
+            == "Kept. Next: Second Fic, 2 of 3.")
+        #expect(session.announcement(after: .later, nextTitle: "Secret Mature Fic", nextIsConcealed: true)
+            == "Left for later. Next: hidden mature work, 2 of 3.")
+        #expect(session.announcement(after: .drop, nextTitle: nil, nextIsConcealed: false)
+            == "Dropped. All sorted.")
+        #expect(session.undoAnnouncement(nextTitle: "First Fic", nextIsConcealed: false)
+            == "Undone. First Fic, 2 of 3.")
+        #expect(session.undoAnnouncement(nextTitle: "Secret Mature Fic", nextIsConcealed: true)
+            == "Undone. Hidden mature work, 2 of 3.")
+    }
+
     // MARK: - Keep
 
     @Test func keepMovesToEndOfInLineAndUndoRestoresStateOrderAndOrigin() throws {
@@ -337,7 +356,9 @@ struct QueueSortNewTests {
     }
 
     // MARK: - Soft-delete, privacy, fly-out binding & intervening-mutation Undo
+}
 
+extension QueueSortNewTests {
     @Test func softDeletedWorkIsExcludedFromMembershipApplyAndSkipMissing() throws {
         let fixture = try makeFixture()
         var session = newSession(fixture)
@@ -356,7 +377,7 @@ struct QueueSortNewTests {
         #expect(session.currentMembershipID == fixture.mQueueOnly.id)
     }
 
-    @Test func hideMatureVisibilitySkipsHiddenWorksAndBlocksUndoOntoHiddenWork() throws {
+    @Test func hideMatureVisibilitySkipsHiddenWorksAndAllowsUndoOnceRevealed() throws {
         let fixture = try makeFixture()
         fixture.library.rating = "Explicit"
         var session = newSession(fixture)
@@ -364,14 +385,123 @@ struct QueueSortNewTests {
         QueueSortNew.skipMissing(session: &session, queue: fixture.queue) { !$0.isAdult }
         #expect(session.currentMembershipID == fixture.mQueueOnly.id)
 
+        // Keep then hide -> Undo reports .hidden without permanently blocking the step.
         #expect(QueueSortNew.apply(.keep, session: &session, queue: fixture.queue, context: fixture.context))
         fixture.queueOnly.rating = "Mature"
-        let outcome = QueueSortNew.undo(
+        let hiddenKeep = QueueSortNew.undo(
             session: &session, queue: fixture.queue, context: fixture.context
         ) { !$0.isAdult }
-        if case .blocked = outcome {} else { Issue.record("Expected blocked Undo for now-hidden mature work") }
+        if case .hidden = hiddenKeep {} else { Issue.record("Expected .hidden Undo for concealed mature work") }
         #expect(fixture.mQueueOnly.state == .inLine)
+        #expect(session.canUndo)
+        #expect(!session.unrevisitableIDs.contains(fixture.mQueueOnly.id))
         #expect(session.currentMembershipID == fixture.mThird.id)
+
+        // Revealing the work again lets the same Undo succeed.
+        let revealedKeep = QueueSortNew.undo(
+            session: &session, queue: fixture.queue, context: fixture.context
+        ) { _ in true }
+        #expect(revealedKeep.undoneRecord?.action == .keep)
+        #expect(fixture.mQueueOnly.state == .new)
+        #expect(session.currentMembershipID == fixture.mQueueOnly.id)
+
+        // Same for Drop of a queue-only work when its reveal lapses and then returns.
+        #expect(QueueSortNew.apply(.drop, session: &session, queue: fixture.queue, context: fixture.context))
+        let hiddenDrop = QueueSortNew.undo(
+            session: &session, queue: fixture.queue, context: fixture.context
+        ) { !$0.isAdult }
+        if case .hidden = hiddenDrop {} else { Issue.record("Expected .hidden Undo for dropped mature work") }
+        #expect(fixture.queueOnly.isPendingDeletion)
+        #expect(session.canUndo)
+
+        let revealedDrop = QueueSortNew.undo(
+            session: &session, queue: fixture.queue, context: fixture.context
+        ) { _ in true }
+        #expect(revealedDrop.undoneRecord?.action == .drop)
+        #expect(!fixture.queueOnly.isPendingDeletion)
+        #expect(QueueSortNew.membership(fixture.mQueueOnly.id, in: fixture.queue) != nil)
+        #expect(session.currentMembershipID == fixture.mQueueOnly.id)
+    }
+
+    @Test func undoQueueOnlyDropRollsBackAtomicallyOnSaveFailure() throws {
+        let fixture = try makeFixture()
+        let syncSuite = "QueueSortNewTests.atomic.\(UUID().uuidString)"
+        let syncDefaults = try #require(UserDefaults(suiteName: syncSuite))
+        syncDefaults.removePersistentDomain(forName: syncSuite)
+        defer { syncDefaults.removePersistentDomain(forName: syncSuite) }
+
+        var session = newSession(fixture)
+        #expect(QueueSortNew.apply(.later, session: &session, queue: fixture.queue, context: fixture.context))
+        let beforeID = fixture.mQueueOnly.id
+        #expect(QueueSortNew.apply(.drop, session: &session, queue: fixture.queue, context: fixture.context))
+        let deletedAt = try #require(fixture.queueOnly.deletedAt)
+        let scheduledAt = try #require(fixture.queueOnly.permanentDeletionScheduledAt)
+        #expect(!FolderSyncService.snapshot(defaults: syncDefaults).isDirty)
+
+        // Simulate final save failure: neither the work restore nor the membership may stick.
+        let outcome = QueueSortNew.undo(
+            session: &session,
+            queue: fixture.queue,
+            context: fixture.context,
+            syncDefaults: syncDefaults,
+            persist: { _, _ in false }
+        )
+        if case .blocked = outcome {} else { Issue.record("Expected .blocked when Undo save fails") }
+        #expect(fixture.queueOnly.isPendingDeletion)
+        #expect(fixture.queueOnly.deletedAt == deletedAt)
+        #expect(fixture.queueOnly.permanentDeletionScheduledAt == scheduledAt)
+        #expect(!fixture.queueOnly.isQueuedForLater)
+        #expect(fixture.queueOnly.queueMemberships.isEmpty)
+        #expect(QueueSortNew.membership(beforeID, in: fixture.queue) == nil)
+        let tombstones = try fixture.context.fetch(FetchDescriptor<SyncTombstone>())
+        #expect(tombstones.contains { $0.recordType == .savedWork && $0.recordID == fixture.queueOnly.id })
+        #expect(tombstones.contains { $0.recordType == .readingQueueMembership && $0.recordID == beforeID })
+        #expect(!FolderSyncService.snapshot(defaults: syncDefaults).isDirty)
+    }
+
+    @Test func membershipMovedOutOfNewIsSkippedAndNoOpKeepUndoDoesNotBumpModified() throws {
+        let fixture = try makeFixture()
+        let syncSuite = "QueueSortNewTests.noop.\(UUID().uuidString)"
+        let syncDefaults = try #require(UserDefaults(suiteName: syncSuite))
+        syncDefaults.removePersistentDomain(forName: syncSuite)
+        defer { syncDefaults.removePersistentDomain(forName: syncSuite) }
+
+        var session = newSession(fixture)
+        // External move to In line (e.g. Work Details or sync) before the card is decided.
+        ReadingQueueService.sortIntoLine(fixture.mLibrary, in: fixture.queue, context: fixture.context)
+        let movedModifiedAt = fixture.mLibrary.lastModifiedAt
+
+        #expect(!QueueSortNew.apply(.keep, session: &session, queue: fixture.queue, context: fixture.context))
+        #expect(fixture.mLibrary.lastModifiedAt == movedModifiedAt)
+        QueueSortNew.skipMissing(session: &session, queue: fixture.queue)
+        #expect(session.currentMembershipID == fixture.mQueueOnly.id)
+
+        // Later followed by external move to In line blocks Undo of Later.
+        #expect(QueueSortNew.apply(.later, session: &session, queue: fixture.queue, context: fixture.context))
+        ReadingQueueService.sortIntoLine(fixture.mQueueOnly, in: fixture.queue, context: fixture.context)
+        let laterUndo = QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context)
+        if case .blocked = laterUndo {} else { Issue.record("Expected blocked Undo of Later after move to In line") }
+
+        // A no-op Keep (when requiresNewState == false, e.g. already In line) must not bump timestamps on Undo.
+        let pastStamp = Date(timeIntervalSince1970: 1_700_000_000)
+        fixture.mLined.lastModifiedAt = pastStamp
+        fixture.queue.lastMembershipChangedAt = pastStamp
+        try fixture.context.save()
+
+        var nonNewSession = QueueSortSession(
+            queueID: fixture.queue.id, membershipIDs: [fixture.mLined.id], requiresNewState: false
+        )
+        #expect(QueueSortNew.apply(
+            .keep, session: &nonNewSession, queue: fixture.queue, context: fixture.context, syncDefaults: syncDefaults
+        ))
+        #expect(fixture.mLined.lastModifiedAt == pastStamp)
+        let undoNoOp = QueueSortNew.undo(
+            session: &nonNewSession, queue: fixture.queue, context: fixture.context, syncDefaults: syncDefaults
+        )
+        #expect(undoNoOp.undoneRecord?.action == .keep)
+        #expect(fixture.mLined.lastModifiedAt == pastStamp)
+        #expect(fixture.queue.lastMembershipChangedAt == pastStamp)
+        #expect(!FolderSyncService.snapshot(defaults: syncDefaults).isDirty)
     }
 
     @Test func applyRejectsMismatchedExpectedWorkOrMembershipID() throws {

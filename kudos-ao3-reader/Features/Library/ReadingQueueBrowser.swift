@@ -579,7 +579,8 @@ struct ReadingQueueBrowserView: View {
                     let new = visiblePartition.new.map(\.membership.id)
                     sortNewRequest = QueueSortNewRequest(
                         queueID: queue.id,
-                        membershipIDs: new.isEmpty ? visibleMemberships.map(\.id) : new
+                        membershipIDs: new.isEmpty ? visibleMemberships.map(\.id) : new,
+                        requiresNewState: !new.isEmpty
                     )
                 }
                 #endif

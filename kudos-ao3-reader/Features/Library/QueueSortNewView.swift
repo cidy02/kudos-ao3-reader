@@ -7,6 +7,9 @@ struct QueueSortNewRequest: Identifiable {
     let id = UUID()
     let queueID: UUID
     let membershipIDs: [UUID]
+    /// Real launches sort only `New` memberships (skipping any moved to `In line`
+    /// elsewhere). Debug shots on queues with no `New` works pass `false`.
+    var requiresNewState: Bool = true
 }
 
 /// T-529: the board's (`Queue-Sections`) filled "Sort" in the queue page's New
@@ -57,11 +60,14 @@ struct QueueSortNewView: View {
         let workID: UUID
     }
 
+    private struct CurrentMembershipToken: Equatable {
+        let membershipID: UUID
+        let workID: UUID
+    }
+
     @State private var session: QueueSortSession
-    /// Finger drag while the gesture is active; resets to 0 automatically if
-    /// the enclosing ScrollView or a system gesture cancels the drag.
-    @GestureState private var liveDragOffset: CGFloat = 0
-    /// Fly-out and spring-back horizontal travel, separate from live drag.
+    /// Fly-out horizontal travel; live finger drag stays isolated in `QueueSortSwipeContainer`
+    /// so drag frames do not re-evaluate this view or fault queue memberships.
     @State private var flyOutOffset: CGFloat = 0
     /// Captured at decision time so concurrent queue changes during the 0.18 s
     /// fly-out cannot redirect the decision to the next work, and Close /
@@ -75,12 +81,15 @@ struct QueueSortNewView: View {
 
     init(queue: ReadingQueue, request: QueueSortNewRequest) {
         self.queue = queue
-        _session = State(initialValue: QueueSortSession(queueID: queue.id, membershipIDs: request.membershipIDs))
+        _session = State(initialValue: QueueSortSession(
+            queueID: queue.id,
+            membershipIDs: request.membershipIDs,
+            requiresNewState: request.requiresNewState
+        ))
     }
 
     private var theme: ReaderTheme { themeManager.appTheme }
     private var isCommitting: Bool { pendingDecision != nil }
-    private var cardOffset: CGFloat { flyOutOffset + liveDragOffset }
     private var flyOutDistance: CGFloat { max(640, containerWidth + 80) }
 
     private func isWorkVisible(_ work: SavedWork) -> Bool {
@@ -89,7 +98,9 @@ struct QueueSortNewView: View {
 
     private var currentMembership: ReadingQueueMembership? {
         guard let id = session.currentMembershipID,
+              !session.unrevisitableIDs.contains(id),
               let membership = QueueSortNew.membership(id, in: queue),
+              !session.requiresNewState || membership.state == .new,
               let work = membership.work,
               isWorkVisible(work)
         else { return nil }
@@ -100,25 +111,20 @@ struct QueueSortNewView: View {
     private var hasNextVisibleWork: Bool {
         session.membershipIDs.dropFirst(session.sortedCount + 1).contains { id in
             guard !session.unrevisitableIDs.contains(id),
-                  let work = QueueSortNew.membership(id, in: queue)?.work
+                  let membership = QueueSortNew.membership(id, in: queue),
+                  !session.requiresNewState || membership.state == .new,
+                  let work = membership.work
             else { return false }
             return isWorkVisible(work)
         }
     }
 
-    /// Identity token of every live, visible membership in `queue`; changes when
-    /// a work is soft-deleted, replaced at the same count, or hidden by privacy.
-    private var activeMembershipIDs: Set<UUID> {
-        guard queue.modelContext != nil, !queue.isPendingDeletion else { return [] }
-        return Set(queue.memberships.compactMap { membership in
-            guard !membership.isPendingDeletion,
-                  let work = membership.work,
-                  work.modelContext != nil,
-                  !work.isPendingDeletion,
-                  isWorkVisible(work)
-            else { return nil }
-            return membership.id
-        })
+    /// Tracks only the current session item (O(1) work fault) so external removal,
+    /// soft-deletion, move to In line, or privacy hiding skips past it without
+    /// scanning every membership in the queue on every body pass.
+    private var currentEligibleToken: CurrentMembershipToken? {
+        guard let membership = currentMembership, let work = membership.work else { return nil }
+        return CurrentMembershipToken(membershipID: membership.id, workID: work.id)
     }
 
     var body: some View {
@@ -149,7 +155,7 @@ struct QueueSortNewView: View {
                 dismiss()
             }
         }
-        .onChange(of: activeMembershipIDs) { _, _ in
+        .onChange(of: currentEligibleToken) { _, _ in
             guard !isCommitting else { return }
             skipMissing()
         }
@@ -307,65 +313,73 @@ struct QueueSortNewView: View {
             originLabel: membership.origin?.label
         )
         let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
-        return VStack(alignment: .leading, spacing: 0) {
-            SensitiveWorkRow(
-                work: work,
-                expandAll: true,
-                openMode: .detail,
-                presentation: .standard,
-                showsFavoriteStar: true,
-                showsFullLedgerStats: true,
-                wide: true,
-                showsSeparator: false,
-                usesInlineNavigation: true
-            )
-            // Keep triage cards offline and local: fandom, tag, and author taps
-            // must not fire hidden AO3 searches or push behind the cover.
-            .environment(\.ao3AuthorNavigationEnabled, false)
-            .environment(\.workTagSearchEnabled, false)
-            .padding(.vertical, 4)
-            if let footer {
-                Divider()
-                Text(footer)
-                    .font(.footnote)
-                    .foregroundStyle(.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, SubjectMetrics.gutter)
-                    .padding(.top, 10)
-                    .padding(.bottom, 14)
+        return QueueSortSwipeContainer(
+            flyOutOffset: flyOutOffset,
+            isCommitting: isCommitting,
+            reduceMotion: reduceMotion,
+            onDecide: { action, startOffset in decide(action, from: startOffset) }
+        ) {
+            VStack(alignment: .leading, spacing: 0) {
+                SensitiveWorkRow(
+                    work: work,
+                    expandAll: true,
+                    openMode: .detail,
+                    presentation: .standard,
+                    showsFavoriteStar: true,
+                    showsFullLedgerStats: true,
+                    wide: true,
+                    showsSeparator: false,
+                    usesInlineNavigation: true
+                )
+                // Keep triage cards offline and local: fandom, tag, and author taps
+                // must not fire hidden AO3 searches or push behind the cover.
+                .environment(\.ao3AuthorNavigationEnabled, false)
+                .environment(\.workTagSearchEnabled, false)
+                .environment(\.workRowStacksTrailingAtAXSizes, true)
+                .padding(.vertical, 4)
+                if let footer {
+                    Divider()
+                    Text(footer)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, SubjectMetrics.gutter)
+                        .padding(.top, 10)
+                        .padding(.bottom, 14)
+                }
             }
-        }
-        // The card keeps the column's width (capped on wide screens) and aligns
-        // content to topLeading so an oversized child cannot vertically center
-        // the card body with blank space above the fandom label.
-        .containerRelativeFrame(.horizontal, alignment: .topLeading) { length, _ in
-            min(max(0, length - 2 * SubjectMetrics.gutter), Self.maxCardWidth)
-        }
-        .background(theme.cardSurface, in: shape)
-        .clipShape(shape)
-        .overlay(shape.strokeBorder(theme.cardBorder, lineWidth: 0.5))
-        .shadow(color: theme.cardShadow.color, radius: theme.cardShadow.radius * 2, y: theme.cardShadow.y * 2)
-        .background(alignment: .top) {
-            // The next work waiting behind this one (the board's peeking card).
-            if hasNextVisibleWork {
-                shape
-                    .fill(theme.cardSurface.opacity(0.7))
-                    .frame(height: 80)
-                    .padding(.horizontal, 16)
-                    .offset(y: -10)
-                    .accessibilityHidden(true)
+            // The card keeps the column's width (capped on wide screens) and aligns
+            // content to topLeading so an oversized child cannot vertically center
+            // the card body with blank space above the fandom label.
+            .containerRelativeFrame(.horizontal, alignment: .topLeading) { length, _ in
+                min(max(0, length - 2 * SubjectMetrics.gutter), Self.maxCardWidth)
             }
+            .background(theme.cardSurface, in: shape)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(theme.cardBorder, lineWidth: 0.5))
+            .shadow(color: theme.cardShadow.color, radius: theme.cardShadow.radius * 2, y: theme.cardShadow.y * 2)
+            .background(alignment: .top) {
+                // The next work waiting behind this one (the board's peeking card).
+                if hasNextVisibleWork {
+                    shape
+                        .fill(theme.cardSurface.opacity(0.7))
+                        .frame(height: 80)
+                        .padding(.horizontal, 16)
+                        .offset(y: -10)
+                        .accessibilityHidden(true)
+                }
+            }
+            // Group the card as one VoiceOver element so Keep / Later / Drop / Undo
+            // surface directly in its Actions rotor.
+            .accessibilityElement(children: .combine)
+            .accessibilityAction(named: "Keep in queue") { decide(.keep) }
+            .accessibilityAction(named: "Decide later") { decide(.later) }
+            .accessibilityAction(named: "Drop from queue") { decide(.drop) }
+            .modifier(UndoAccessibilityAction(enabled: session.canUndo, action: undo))
         }
-        .offset(x: cardOffset)
-        .rotationEffect(.degrees(reduceMotion ? 0 : Double(cardOffset) / 30), anchor: .bottom)
-        .simultaneousGesture(swipeGesture)
         .id(membership.id)
         .transition(cardTransition)
-        .accessibilityAction(named: "Keep in queue") { decide(.keep) }
-        .accessibilityAction(named: "Decide later") { decide(.later) }
-        .accessibilityAction(named: "Drop from queue") { decide(.drop) }
-        .modifier(UndoAccessibilityAction(enabled: session.canUndo, action: undo))
     }
 
     /// Reduce Motion: the next card fades in; otherwise it settles in from a
@@ -374,26 +388,6 @@ struct QueueSortNewView: View {
         reduceMotion
             ? .opacity
             : .asymmetric(insertion: .scale(scale: 0.94).combined(with: .opacity), removal: .opacity)
-    }
-
-    private var swipeGesture: some Gesture {
-        DragGesture(minimumDistance: 24)
-            .updating($liveDragOffset) { value, state, _ in
-                guard !isCommitting else { return }
-                state = QueueSortSwipe.dragOffset(for: value.translation)
-            }
-            .onEnded { value in
-                guard !isCommitting else { return }
-                let startOffset = QueueSortSwipe.dragOffset(for: value.translation)
-                if let action = QueueSortSwipe.decision(for: value.translation) {
-                    decide(action, from: startOffset)
-                } else if startOffset != 0 {
-                    var snap = Transaction()
-                    snap.disablesAnimations = true
-                    withTransaction(snap) { flyOutOffset = startOffset }
-                    withAnimation(reduceMotion ? nil : .spring(duration: 0.3)) { flyOutOffset = 0 }
-                }
-            }
     }
 
     private var swipeHint: some View {
@@ -571,7 +565,7 @@ extension QueueSortNewView {
     }
 
     private func commit(_ action: QueueSortAction, membershipID: UUID, workID: UUID) {
-        QueueSortNew.apply(
+        let applied = QueueSortNew.apply(
             action,
             session: &session,
             queue: queue,
@@ -580,6 +574,9 @@ extension QueueSortNewView {
             expectedWorkID: workID
         )
         skipMissing()
+        if applied {
+            postAnnouncement(for: action)
+        }
     }
 
     private func skipMissing() {
@@ -599,10 +596,77 @@ extension QueueSortNewView {
                 isVisible: isWorkVisible
             )
         }
-        if case .blocked = outcome {
+        switch outcome {
+        case .undone:
+            let nextWork = currentMembership?.work
+            let concealed = nextWork.map { gate.isConcealed($0, enabled: hideMature) } ?? false
+            let message = session.undoAnnouncement(
+                nextTitle: concealed ? nil : nextWork?.title,
+                nextIsConcealed: concealed
+            )
+            AccessibilityNotification.Announcement(message).post()
+        case .hidden:
+            undoErrorMessage =
+                "That work is hidden by your mature content privacy settings. Show mature content to undo this step."
+        case .blocked:
             undoErrorMessage =
                 "That change couldn’t be undone because the work or queue was changed or deleted elsewhere."
+        case .nothingToUndo:
+            break
         }
+    }
+
+    private func postAnnouncement(for action: QueueSortAction) {
+        let nextWork = currentMembership?.work
+        let concealed = nextWork.map { gate.isConcealed($0, enabled: hideMature) } ?? false
+        let message = session.announcement(
+            after: action,
+            nextTitle: concealed ? nil : nextWork?.title,
+            nextIsConcealed: concealed
+        )
+        AccessibilityNotification.Announcement(message).post()
+    }
+}
+
+/// Owns the per-frame swipe drag state so dragging a card only updates its
+/// offset and tilt without re-running `QueueSortNewView.body`.
+private struct QueueSortSwipeContainer<Content: View>: View {
+    let flyOutOffset: CGFloat
+    let isCommitting: Bool
+    let reduceMotion: Bool
+    let onDecide: (QueueSortAction, CGFloat) -> Void
+    @ViewBuilder var content: () -> Content
+
+    @GestureState private var liveDragOffset: CGFloat = 0
+    @State private var snapBackOffset: CGFloat = 0
+
+    private var offset: CGFloat { flyOutOffset + snapBackOffset + liveDragOffset }
+
+    var body: some View {
+        content()
+            .offset(x: offset)
+            .rotationEffect(.degrees(reduceMotion ? 0 : Double(offset) / 30), anchor: .bottom)
+            .simultaneousGesture(swipeGesture)
+    }
+
+    private var swipeGesture: some Gesture {
+        DragGesture(minimumDistance: 24)
+            .updating($liveDragOffset) { value, state, _ in
+                guard !isCommitting else { return }
+                state = QueueSortSwipe.dragOffset(for: value.translation)
+            }
+            .onEnded { value in
+                guard !isCommitting else { return }
+                let startOffset = QueueSortSwipe.dragOffset(for: value.translation)
+                if let action = QueueSortSwipe.decision(for: value.translation) {
+                    onDecide(action, startOffset)
+                } else if startOffset != 0 {
+                    var snap = Transaction()
+                    snap.disablesAnimations = true
+                    withTransaction(snap) { snapBackOffset = startOffset }
+                    withAnimation(reduceMotion ? nil : .spring(duration: 0.3)) { snapBackOffset = 0 }
+                }
+            }
     }
 }
 
