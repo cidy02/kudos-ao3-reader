@@ -172,7 +172,7 @@ enum PreservedWorkService {
     // was rescued. Silence is the whole bug; the caller must be able to speak.
 
     @discardableResult
-    static func restore(_ work: SavedWork, in context: ModelContext) -> Bool {
+    static func restore(_ work: SavedWork, in context: ModelContext, save: Bool = true) -> Bool {
         work.isPendingDeletion = false
         work.deletedAt = nil
         work.permanentDeletionScheduledAt = nil
@@ -184,6 +184,7 @@ enum PreservedWorkService {
             sourceURL: work.sourceURL,
             in: context
         )
+        guard save else { return true }
         return context.saveBestEffort(reason: "Saving restored work failed")
     }
 

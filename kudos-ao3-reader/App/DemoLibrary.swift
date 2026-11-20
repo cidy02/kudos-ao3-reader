@@ -703,6 +703,8 @@ enum DebugShots {
         ("newqueue", DebugShot(route: "queues", sheets: ["newqueue"])),
         ("editqueue", DebugShot(route: neon, sheets: ["editqueue"])),
         ("addworks", DebugShot(route: neon, sheets: ["addworks"])),
+        // T-529 Sort New over the queue page (the demo has no New works, so it sorts them all).
+        ("sortnew", DebugShot(route: neon, sheets: ["sortnew"])),
         ("queuetag", DebugShot(route: neonDetails, sheets: ["queuetag"])),
         ("queuetags", DebugShot(route: neonDetails, pushes: ["queuetags"])),
         ("queuetagedit", DebugShot(route: neonDetails, pushes: ["queuetags", "queuetagedit"])),

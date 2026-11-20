@@ -88,6 +88,7 @@ struct WorkRow: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.workTagSearchEnabled) private var tagSearchEnabled
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
     @State private var internalExpanded = false
@@ -285,7 +286,7 @@ struct WorkRow: View {
                 title: FandomDisplayName.bareTitle(fandom),
                 palette: subjectPalette,
                 additionalCount: max(0, nonemptyFandomNames.count - 1),
-                action: { router.searchAO3(.fandom, fandom) }
+                action: tagSearchEnabled ? { router.searchAO3(.fandom, fandom) } : nil
             )
         }
     }
@@ -412,7 +413,7 @@ struct WorkRow: View {
                 relationships: work.workRelationships,
                 characters: work.workCharacters,
                 freeforms: work.hasCategorizedWorkTags ? work.workFreeforms : work.workTags,
-                onTap: { tag, field in router.searchAO3(field, tag) }
+                onTap: tagSearchEnabled ? { tag, field in router.searchAO3(field, tag) } : nil
             )
         }
         if !summaryText.isEmpty {
@@ -521,6 +522,7 @@ struct WorkRow: View {
                 font: .subheadline,
                 compact: !dynamicTypeSize.isAccessibilitySize
             )
+            .fixedSize(horizontal: false, vertical: true)
         }
         if expandedBinding.wrappedValue, nonemptyFandomNames.count > 1 {
             Text(nonemptyFandomNames.joined(separator: ", "))
@@ -543,12 +545,22 @@ struct WorkRow: View {
                 Text(label)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
-                FlowLayout(spacing: 6, rowSpacing: 6) {
-                    ForEach(tags, id: \.self) { tag in
-                        Button { router.searchAO3(field, tag) } label: { TagChip(text: tag, symbol: field.symbol) }
-                            .buttonStyle(.borderless)
-                            .minimumHitTarget(28)
+                if tagSearchEnabled {
+                    FlowLayout(spacing: 6, rowSpacing: 6) {
+                        ForEach(tags, id: \.self) { tag in
+                            Button { router.searchAO3(field, tag) } label: { TagChip(text: tag, symbol: field.symbol) }
+                                .buttonStyle(.borderless)
+                                .minimumHitTarget(28)
+                        }
                     }
+                } else {
+                    Text(tags.joined(separator: ", "))
+                        .font(.caption)
+                        .foregroundStyle(
+                            field == .relationship ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondaryInk)
+                        )
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(.top, 2)

@@ -29,8 +29,10 @@ struct DebugShotRouteTests {
             "expandrow", "searchfilters", "collectionaddworks", "libedit", "sortby",
             "readerend", "welcome", "protectlibrary", "recentlydeleted",
             "chsettings", "challenge",
+            // T-529 Sort New; not in A82's list.
+            "sortnew",
         ]
-        #expect(names.count == 86)
+        #expect(names.count == 87)
         for name in names {
             #expect(DebugShots.byName[name] != nil)
             #expect(!DebugShots.byName[name]!.route.isEmpty)
