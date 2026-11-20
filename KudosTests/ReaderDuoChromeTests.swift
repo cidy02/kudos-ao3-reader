@@ -103,13 +103,13 @@ struct ReaderDuoChromeTests {
             verticalBar: .right, preserveStatusBarTop: true
         )
         #expect(hidden == shown)
-        // A new size or no bar starts afresh.
+        // A fold or rotation keeps the widest bar seen; no bar uses the system's insets.
         let cover = hidden.updating(
             size: CGSize(width: 466, height: 678),
             safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 0),
             verticalBar: .right, preserveStatusBarTop: true
         )
-        #expect(cover.safeInsets.right == ReaderPageBoxGeometry.verticalBarReserve)
+        #expect(cover.safeInsets.right == 84)
         let phone = hidden.updating(
             size: size, safeInsets: UIEdgeInsets(top: 0, left: 62, bottom: 21, right: 62),
             preserveStatusBarTop: true

@@ -14,6 +14,9 @@ nonisolated enum ReaderVerticalBar: Equatable, Sendable {
 /// from the host's traits and reserved regions (iOS 27.1) — never from a device check.
 nonisolated struct ReaderHostRegions: Equatable, Sendable {
     var verticalBar: ReaderVerticalBar = .none
+    /// The widest inset the system's vertical bar has had, status bar shown. A page
+    /// opened or rotated with the status bar hidden starts at this, not at zero.
+    var verticalBarExtent: CGFloat = 0
     /// Bottom of the status block at the top of the vertical bar (the occlusion
     /// region on that edge); 0 when there is none to clear.
     var barStatusBottom: CGFloat = 0
@@ -62,14 +65,18 @@ struct ReaderPageBoxGeometry: Equatable {
             top: max(0, safeInsets.top), left: max(0, safeInsets.left),
             bottom: max(0, safeInsets.bottom), right: max(0, safeInsets.right)
         )
-        // The vertical bar's edge: at least the rail, and never smaller than it was
-        // for this size, so hiding the status bar there cannot widen the page.
+        // The vertical bar's edge: at least the rail and the widest bar seen so far
+        // (kept across rotations and folds), and never smaller than it was for this
+        // size, so hiding the status bar there cannot widen the page.
+        var extent = verticalBarExtent
         switch verticalBar {
         case .none: break
         case .left:
-            safe.left = max(safe.left, Self.verticalBarReserve, sizeChanged ? 0 : self.safeInsets.left)
+            extent = max(extent, safe.left)
+            safe.left = max(safe.left, Self.verticalBarReserve, extent, sizeChanged ? 0 : self.safeInsets.left)
         case .right:
-            safe.right = max(safe.right, Self.verticalBarReserve, sizeChanged ? 0 : self.safeInsets.right)
+            extent = max(extent, safe.right)
+            safe.right = max(safe.right, Self.verticalBarReserve, extent, sizeChanged ? 0 : self.safeInsets.right)
         }
         let otherInsetsChanged = abs(safe.left - self.safeInsets.left) > 1
             || abs(safe.bottom - self.safeInsets.bottom) > 1
@@ -79,8 +86,8 @@ struct ReaderPageBoxGeometry: Equatable {
             safe.top = self.safeInsets.top
         }
         let insetsChanged = otherInsetsChanged || abs(safe.top - self.safeInsets.top) > 1
-        guard sizeChanged || insetsChanged else { return self }
-        return Self(size: size, safeInsets: safe, verticalBar: verticalBar)
+        guard sizeChanged || insetsChanged || extent != verticalBarExtent else { return self }
+        return Self(size: size, safeInsets: safe, verticalBar: verticalBar, verticalBarExtent: extent)
     }
 }
 #endif
