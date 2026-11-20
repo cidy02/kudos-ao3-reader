@@ -424,7 +424,7 @@ struct ReadiumReaderView: View {
             }
             // Immersive reading: hide the tab bar; the status bar follows the chrome.
             .toolbar(.hidden, for: .tabBar)
-            .statusBarHidden(!chromeVisible)
+            .statusBarHidden(hidesStatusBar)
             .persistentSystemOverlays(chromeVisible ? .automatic : .hidden)
             .animation(unlessReduced: .easeInOut(duration: 0.25), value: book.chromeHidden)
             .animation(unlessReduced: .easeInOut(duration: 0.25), value: speech.isSessionActive)
@@ -1115,19 +1115,27 @@ struct ReadiumReaderView: View {
         // UIKit host owns the peel transform for page + chrome as one unit.
         ReaderDismissPeelHost(
             surface: dismissSurface, reduceMotion: reduceMotion,
-            onGeometryChange: { book.updatePageBoxGeometry(size: $0, safeInsets: $1) }
+            onGeometryChange: { book.updatePageBoxGeometry(size: $0, safeInsets: $1, regions: $2) }
         ) {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // Each chrome layer sizes to its own content (no infinite-frame
                 // hit-test area), so taps between controls still reach the page.
-                .overlay(alignment: .top) { topBarLayer }
+                .overlay(alignment: .top) { if chromeLayout == .standard { topBarLayer } }
                 // Bottom stack: colour bar + position card / decoupled mini player.
-                .overlay(alignment: .bottom) { bottomChromeLayer }
+                .overlay(alignment: .bottom) {
+                    if chromeLayout == .standard {
+                        bottomChromeLayer(left: Self.chromeInset, right: Self.chromeInset)
+                    }
+                }
                 .overlay(alignment: .topTrailing) { fanMenuLayer }
                 // Inset text, loading skeleton, and every chrome layer together.
                 // The fill stays full-bleed; paged Readium ignores side insets.
                 .padding(book.pageBoxGeometry.horizontalInsets(in: layoutDirection))
+                // The Duo bars are placed in host points, over the side insets
+                // (the rail stands in the system bar's column).
+                .overlay(alignment: .top) { duoTopLayer }
+                .overlay(alignment: .bottom) { duoBottomLayer }
                 .background(readerPageColors.background)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1163,13 +1171,21 @@ struct ReadiumReaderView: View {
         .opacity(chromeVisible ? 1 : 0)
     }
 
+    /// Also hosts the Quick Look preview and the rebuild alert, which every
+    /// layout needs; the floating menu button itself is the standard layout's.
     private var fanMenuLayer: some View {
-        ReaderFanMenu(
-            pills: fanPills,
-            shareURL: shareURL,
-            roundActions: fanRoundActions,
-            accentColor: themeManager.effectiveTint
-        )
+        Group {
+            if chromeLayout == .standard {
+                ReaderFanMenu(
+                    pills: fanPills,
+                    shareURL: shareURL,
+                    roundActions: fanRoundActions,
+                    accentColor: themeManager.effectiveTint
+                )
+            } else {
+                Color.clear.frame(width: 1, height: 1)
+            }
+        }
             .padding(.trailing, ReaderChromeTopBar.edgeInset)
             .padding(.top, book.pageBoxChromeSafeTop)
             .allowsHitTesting(chromeVisible)
@@ -1213,8 +1229,9 @@ struct ReadiumReaderView: View {
     ///
     /// Colour bar lives in this VStack (not a magic `+ 88` offset) so it always
     /// clears the card cleanly.
+    /// `left` / `right` are physical insets from the host's edges.
     @ViewBuilder
-    private var bottomChromeLayer: some View {
+    private func bottomChromeLayer(left: CGFloat, right: CGFloat) -> some View {
         let speechActive = speech.isSessionActive
         let atEnd = book.isAtPublicationEnd
         VStack(spacing: 10) {
@@ -1230,7 +1247,8 @@ struct ReadiumReaderView: View {
             }
         }
         .padding(.top, chromeVisible && atEnd ? 18 : 0)
-        .padding(.horizontal, Self.chromeInset)
+        .padding(.leading, layoutDirection == .leftToRight ? left : right)
+        .padding(.trailing, layoutDirection == .leftToRight ? right : left)
         .padding(.bottom, book.pageBoxChromeSafeBottom + Self.chromeInset)
         .background { if chromeVisible, atEnd { readerPageColors.background.ignoresSafeArea() } }
         .allowsHitTesting(chromeVisible || speechActive)
@@ -1372,6 +1390,7 @@ struct ReadiumReaderView: View {
                     sliderEnabled: sliderEnabled,
                     scrubOrigin: sliderScrubOrigin,
                     scrubValuesEmphasized: scrubValuesEmphasized,
+                    compact: compactPositionBar(summary),
                     onEditingChanged: handleSliderEditingChanged
                 ) {
                     speechMiniPlayer(tint: tint)
@@ -1387,6 +1406,7 @@ struct ReadiumReaderView: View {
                     sliderEnabled: sliderEnabled,
                     scrubOrigin: sliderScrubOrigin,
                     scrubValuesEmphasized: scrubValuesEmphasized,
+                    compact: compactPositionBar(summary),
                     onEditingChanged: handleSliderEditingChanged
                 )
             }
@@ -2219,6 +2239,122 @@ extension ReadiumReaderView {
     /// still archived. Drives the "Original File" pill.
     private var originalDocumentURL: URL? {
         WorkReconversion.candidate(for: work)?.originalURL
+    }
+}
+
+// MARK: - iPhone Duo bars (T-562a)
+
+/// The Duo boards' reader bars: a rail on the system bar's edge (cover, inner
+/// landscape), or a Close + actions top bar on the inner screen in portrait. Every
+/// button runs the reader's existing action; the iPhone layout is `.standard` and
+/// untouched.
+extension ReadiumReaderView {
+    private var chromeLayout: ReaderChromeLayout {
+        ReaderChromeLayout.resolve(book.hostRegions)
+    }
+
+    private var duoPlacement: ReaderDuoChromePlacement {
+        ReaderDuoChromePlacement.resolve(
+            layout: chromeLayout, size: book.pageBoxGeometry.size,
+            safe: book.pageBoxGeometry.safeInsets, regions: book.hostRegions
+        )
+    }
+
+    /// The status bar follows the chrome. With the Duo bars it also shows while the
+    /// first page is still loading, so the page box is measured with the status bar's
+    /// inset and keeps it (`ReaderPageBoxGeometry`): the first tap then shows the bars
+    /// without moving the text.
+    private var hidesStatusBar: Bool {
+        !chromeVisible && !(chromeLayout != .standard && !book.hasPresentedFirstPage)
+    }
+
+    private var duoTint: SwiftUI.Color {
+        readerTheme.accentInk(for: themeManager.effectiveTint)
+    }
+
+    /// Aa, Contents, Bookmark, Read Aloud — the board's order, the existing actions.
+    private var duoGroupItems: [ReaderDuoGroupItem] {
+        var items: [ReaderDuoGroupItem] = []
+        let pills = fanPills
+        if let settings = pills.first(where: { $0.id == "settings" }) {
+            items.append(ReaderDuoGroupItem(
+                id: settings.id, accessibilityLabel: settings.title, text: "Aa",
+                isOn: router.panel == .readerDisplay, action: settings.action
+            ))
+        }
+        if let contents = pills.first(where: { $0.id == "contents" }) {
+            items.append(ReaderDuoGroupItem(
+                id: contents.id, accessibilityLabel: contents.title, systemImage: contents.systemImage,
+                isOn: router.panel == .readerChapters, action: contents.action
+            ))
+        }
+        let actions = fanRoundActions
+        for id in ["bookmark", "readAloud"] {
+            guard let action = actions.first(where: { $0.id == id }) else { continue }
+            items.append(ReaderDuoGroupItem(
+                id: action.id, accessibilityLabel: action.accessibilityLabel,
+                systemImage: action.systemImage, isOn: action.isEmphasized,
+                isEnabled: action.isEnabled, action: action.action
+            ))
+        }
+        return items
+    }
+
+    private func duoMoreMenu(buttonSize: CGSize) -> ReaderFanMenu {
+        ReaderFanMenu(
+            pills: fanPills,
+            shareURL: shareURL,
+            roundActions: fanRoundActions,
+            accentColor: themeManager.effectiveTint,
+            groupButtonSize: buttonSize
+        )
+    }
+
+    /// The compact bar's title row, for the Duo layouts only.
+    private func compactPositionBar(_ summary: ReaderPositionSummary) -> ReaderPositionCardCompact? {
+        guard chromeLayout != .standard else { return nil }
+        return ReaderPositionCardCompact(title: work.title, chapter: summary.chapterShortLabel)
+    }
+
+    /// Physical left/right as leading/trailing in this layout direction.
+    private func physicalAlignment(right: Bool) -> Alignment {
+        (layoutDirection == .leftToRight) == right ? .trailing : .leading
+    }
+
+    @ViewBuilder
+    private var duoTopLayer: some View {
+        switch chromeLayout {
+        case .standard:
+            EmptyView()
+        case let .rail(bar):
+            let placement = duoPlacement
+            let onRight = bar != .left
+            let edge: Edge.Set = (layoutDirection == .leftToRight) == onRight ? .trailing : .leading
+            ReaderDuoRail(items: duoGroupItems, tint: duoTint, onClose: dismissReader) {
+                duoMoreMenu(buttonSize: ReaderDuoActionGroup<EmptyView>.railButtonSize)
+            }
+            .padding(edge, max(0, placement.railCenterInset - ReaderDuoChromePlacement.railWidth / 2))
+            .padding(.top, placement.railTop)
+            .frame(maxWidth: .infinity, alignment: physicalAlignment(right: onRight))
+            .allowsHitTesting(chromeVisible)
+            .opacity(chromeVisible ? 1 : 0)
+        case .foldTopBar:
+            ReaderDuoTopBar(items: duoGroupItems, tint: duoTint, onClose: dismissReader) {
+                duoMoreMenu(buttonSize: ReaderDuoActionGroup<EmptyView>.barButtonSize)
+            }
+            .padding(.top, book.pageBoxChromeSafeTop)
+            .padding(book.pageBoxGeometry.horizontalInsets(in: layoutDirection))
+            .allowsHitTesting(chromeVisible)
+            .opacity(chromeVisible ? 1 : 0)
+        }
+    }
+
+    @ViewBuilder
+    private var duoBottomLayer: some View {
+        if chromeLayout != .standard {
+            let placement = duoPlacement
+            bottomChromeLayer(left: placement.barLeft, right: placement.barRight)
+        }
     }
 }
 

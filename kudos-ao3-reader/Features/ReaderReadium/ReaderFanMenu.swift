@@ -46,6 +46,17 @@ struct ReaderFanMenu: View {
     /// The app control colour (`ThemeManager.effectiveTint`), kept independent
     /// of the work, fandom, queue, and reader paper colours.
     let accentColor: Color
+    /// Set when the button sits in the Duo action group (rail or top bar) at this
+    /// size: the group already holds Contents, Themes & Settings, Bookmark and Read
+    /// Aloud, so the menu drops them, and the button takes the group's glass.
+    var groupButtonSize: CGSize?
+
+    /// Items the Duo action group shows itself (T-562a, Duo boards).
+    static let groupItemIDs: Set<String> = ["contents", "settings", "bookmark", "readAloud"]
+
+    private func shown(_ id: String) -> Bool {
+        groupButtonSize == nil || !Self.groupItemIDs.contains(id)
+    }
 
     var body: some View {
         Menu {
@@ -65,7 +76,7 @@ struct ReaderFanMenu: View {
                     .disabled(!comments.isEnabled)
                 }
 
-                if let readAloud = roundActions.first(where: { $0.id == "readAloud" }) {
+                if shown("readAloud"), let readAloud = roundActions.first(where: { $0.id == "readAloud" }) {
                     Button(action: readAloud.action) {
                         Label(
                             readAloud.isEmphasized ? "Stop Read Aloud" : "Read Aloud",
@@ -88,7 +99,7 @@ struct ReaderFanMenu: View {
             }
 
             ForEach(pills.filter {
-                $0.id != "find" && $0.id != "comments" && $0.id != "rebuild"
+                $0.id != "find" && $0.id != "comments" && $0.id != "rebuild" && shown($0.id)
             }) { pill in
                 Button(action: pill.action) {
                     Label(pill.title, systemImage: pill.systemImage)
@@ -96,7 +107,7 @@ struct ReaderFanMenu: View {
                 .disabled(!pill.isEnabled)
             }
 
-            ForEach(roundActions.filter { $0.id != "readAloud" }) { action in
+            ForEach(roundActions.filter { $0.id != "readAloud" && shown($0.id) }) { action in
                 Button(action: action.action) {
                     Label(rowTitle(for: action), systemImage: action.systemImage)
                 }
@@ -125,11 +136,11 @@ struct ReaderFanMenu: View {
             Image(systemName: "ellipsis")
                 .font(.headline)
                 .foregroundStyle(Color.primary)
-                .frame(width: 44, height: 44)
-                .contentShape(Circle())
+                .frame(width: groupButtonSize?.width ?? 44, height: groupButtonSize?.height ?? 44)
+                .contentShape(groupButtonSize == nil ? AnyShape(Circle()) : AnyShape(Capsule()))
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular, in: Circle())
+        .glassEffect(groupButtonSize == nil ? .regular : .identity, in: Circle())
         .accessibilityLabel("More actions")
         .tint(Color.primary)
     }

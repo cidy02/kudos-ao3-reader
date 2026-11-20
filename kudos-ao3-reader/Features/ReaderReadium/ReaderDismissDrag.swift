@@ -162,12 +162,12 @@ final class ReaderDismissPeelContainerController<Content: View>: UIViewControlle
     let host: UIHostingController<Content>
     let surface: ReaderDismissDragSurface
     var reduceMotion: Bool
-    var onGeometryChange: (CGSize, UIEdgeInsets) -> Void
+    var onGeometryChange: (CGSize, UIEdgeInsets, ReaderHostRegions) -> Void
     private var geometryReportPending = false
 
     init(
         content: Content, surface: ReaderDismissDragSurface, reduceMotion: Bool,
-        onGeometryChange: @escaping (CGSize, UIEdgeInsets) -> Void
+        onGeometryChange: @escaping (CGSize, UIEdgeInsets, ReaderHostRegions) -> Void
     ) {
         self.host = UIHostingController(rootView: content)
         self.surface = surface
@@ -191,6 +191,47 @@ final class ReaderDismissPeelContainerController<Content: View>: UIViewControlle
         host.didMove(toParent: self)
         // Transform the container, never the hosting child.
         surface.cardView = view
+        if #available(iOS 27.1, *) {
+            // The bar can move edge without a bounds or safe-area change.
+            registerForTraitChanges(UITraitCollection.systemTraitsAffectingVerticalBarEdge) {
+                (controller: Self, _: UITraitCollection) in
+                controller.reportGeometryAfterLayout()
+            }
+        }
+    }
+
+    /// The system vertical bar's physical edge, from this view's traits.
+    private var verticalBar: ReaderVerticalBar {
+        guard #available(iOS 27.1, *) else { return .none }
+        let leftToRight = view.effectiveUserInterfaceLayoutDirection == .leftToRight
+        switch view.traitCollection.verticalBarEdge {
+        case .leading: return leftToRight ? .left : .right
+        case .trailing: return leftToRight ? .right : .left
+        default: return .none
+        }
+    }
+
+    /// The bar edge, its status block, and the fold, in this view's points.
+    private var hostRegions: ReaderHostRegions {
+        var regions = ReaderHostRegions(verticalBar: verticalBar)
+        guard #available(iOS 27.1, *) else { return regions }
+        let bounds = view.bounds
+        regions.barStatusBottom = view.reservedRegions(kind: .occlusion)
+            .filter(\.isActive)
+            .map(\.frame)
+            .filter { frame in
+                frame.minY <= bounds.minY + 1 && {
+                    switch regions.verticalBar {
+                    case .none: false
+                    case .left: frame.minX <= bounds.minX + 1
+                    case .right: frame.maxX >= bounds.maxX - 1
+                    }
+                }()
+            }
+            .map(\.maxY)
+            .max() ?? 0
+        regions.fold = view.reservedRegions(kind: .division, options: .includeInactive).first?.frame
+        return regions
     }
 
     override func viewDidLayoutSubviews() {
@@ -221,7 +262,7 @@ final class ReaderDismissPeelContainerController<Content: View>: UIViewControlle
                 bottom: max(0, bounds.maxY - safeFrame.maxY),
                 right: max(0, bounds.maxX - safeFrame.maxX)
             )
-            self.onGeometryChange(bounds.size, safe)
+            self.onGeometryChange(bounds.size, safe, self.hostRegions)
         }
     }
 
@@ -244,13 +285,13 @@ final class ReaderDismissPeelContainerController<Content: View>: UIViewControlle
 struct ReaderDismissPeelHost<Content: View>: UIViewControllerRepresentable {
     let surface: ReaderDismissDragSurface
     let reduceMotion: Bool
-    let onGeometryChange: (CGSize, UIEdgeInsets) -> Void
+    let onGeometryChange: (CGSize, UIEdgeInsets, ReaderHostRegions) -> Void
     let content: Content
 
     init(
         surface: ReaderDismissDragSurface,
         reduceMotion: Bool,
-        onGeometryChange: @escaping (CGSize, UIEdgeInsets) -> Void,
+        onGeometryChange: @escaping (CGSize, UIEdgeInsets, ReaderHostRegions) -> Void,
         @ViewBuilder content: () -> Content
     ) {
         self.surface = surface

@@ -173,6 +173,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     var chromeHidden = true {
         didSet {
             if oldValue != chromeHidden {
+                Log.epub.debug("chrome hidden=\(self.chromeHidden, privacy: .public)")
                 pageBoxChromeTransitionUntil = Date().addingTimeInterval(0.6)
             }
         }
@@ -196,6 +197,8 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// or another scene's key window. Zero until the host is attached and laid out.
     private(set) var pageBoxGeometry = ReaderPageBoxGeometry()
     var pageBoxChromeSafeTop: CGFloat { pageBoxGeometry.safeInsets.top }
+    /// The host's bar edge, status block and fold, for the Duo chrome (T-562a).
+    private(set) var hostRegions = ReaderHostRegions()
     var pageBoxChromeSafeBottom: CGFloat { pageBoxGeometry.safeInsets.bottom }
 
     @ObservationIgnored private(set) var pageBoxRemeasureTask: Task<Void, Never>?
@@ -204,9 +207,20 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// width-only resize. Readium's reflow anchor owns the position. The inset
     /// refresh runs in this turn so it shares that reflow, instead of resizing
     /// the page again 220 ms later (T-451). The page bar still waits until quiet.
-    func updatePageBoxGeometry(size: CGSize, safeInsets: UIEdgeInsets) {
+    func updatePageBoxGeometry(
+        size: CGSize, safeInsets: UIEdgeInsets, regions: ReaderHostRegions = ReaderHostRegions()
+    ) {
+        let geometryLog = "size=\(Int(size.width))x\(Int(size.height)) safe=\(Int(safeInsets.top)),"
+            + "\(Int(safeInsets.left)),\(Int(safeInsets.bottom)),\(Int(safeInsets.right)) "
+            + "bar=\(regions.verticalBar) status=\(Int(regions.barStatusBottom)) "
+            + "fold=\(regions.fold.map { "\($0)" } ?? "-") chromeHidden=\(chromeHidden)"
+        Log.epub.debug("page-box \(geometryLog, privacy: .public)")
+        let sameSize = abs(size.width - pageBoxGeometry.size.width) <= 1
+            && abs(size.height - pageBoxGeometry.size.height) <= 1
+        let mergedRegions = regions.merging(previous: hostRegions, sameSize: sameSize)
+        if mergedRegions != hostRegions { hostRegions = mergedRegions }
         let next = pageBoxGeometry.updating(
-            size: size, safeInsets: safeInsets,
+            size: size, safeInsets: safeInsets, verticalBar: regions.verticalBar,
             // Showing chrome can lay out once before UIKit restores the status bar.
             preserveStatusBarTop: chromeHidden || Date() < pageBoxChromeTransitionUntil
         )
