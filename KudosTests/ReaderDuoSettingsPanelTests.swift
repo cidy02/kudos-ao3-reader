@@ -30,7 +30,8 @@ struct ReaderDuoSettingsPanelTests {
         #expect(!ReaderChromeLayout.standard.showsSettingsAsPanel)
         #expect(ReaderChromeLayout.rail(.right).showsSettingsAsPanel)
         #expect(ReaderChromeLayout.foldTopBar.showsSettingsAsPanel)
-        #expect(panel(.standard, size: CGSize(width: 402, height: 874), safe: .zero, regions: ReaderHostRegions()) == nil)
+        let phone = CGSize(width: 402, height: 874)
+        #expect(panel(.standard, size: phone, safe: .zero, regions: ReaderHostRegions()) == nil)
     }
 
     @Test func openFlatHugsTheRailOnTheTrailingPageLevelWithAa() throws {

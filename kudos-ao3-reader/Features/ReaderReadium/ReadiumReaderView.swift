@@ -1741,7 +1741,8 @@ extension ReadiumReaderView {
     /// Re-submit preferences whenever any mapped setting changes (instant updates).
     private var preferencesToken: String {
         "\(readingMode.rawValue)|\(pageTurn.rawValue)|\(readerTheme.rawValue)|\(readerPageColors.backgroundHex)|\(fontID)|"
-            + "\(twoPageEnabled)|\(wideLayoutAvailable)|\(chromeLayout.allowsTwoPageSpread)|\(bookPose)|\(tabletopPose)|"
+            + "\(twoPageEnabled)|\(wideLayoutAvailable)|\(chromeLayout.allowsTwoPageSpread)|"
+            + "\(bookPose)|\(tabletopPose)|"
             + "\(dynamicTypeSize.isAccessibilitySize)|\(textStyle.token)"
     }
 

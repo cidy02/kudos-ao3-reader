@@ -201,7 +201,9 @@ struct ReaderDuoSettingsPanel<Content: View>: View {
                 ? placement.left : proxy.size.width - placement.left - placement.width
             content()
                 .frame(width: placement.width, height: placement.height)
-                .clipShape(RoundedRectangle(cornerRadius: ReaderDuoSettingsPanelPlacement.cornerRadius, style: .continuous))
+                .clipShape(RoundedRectangle(
+                    cornerRadius: ReaderDuoSettingsPanelPlacement.cornerRadius, style: .continuous
+                ))
                 .shadow(color: .black.opacity(0.24), radius: 25, y: 18)
                 .accessibilityAddTraits(.isModal)
                 .accessibilityAction(.escape, onClose)

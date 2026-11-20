@@ -60,7 +60,9 @@ struct ReaderChromeAutoHideTests {
     @Test func aPanelOrSheetOpenKeepsTheControls() {
         #expect(ReaderChromeAutoHide.hidesControls(controlsShowing: true, overlayOpen: false, voiceOverRunning: false))
         #expect(!ReaderChromeAutoHide.hidesControls(controlsShowing: true, overlayOpen: true, voiceOverRunning: false))
-        #expect(!ReaderChromeAutoHide.hidesControls(controlsShowing: false, overlayOpen: false, voiceOverRunning: false))
+        #expect(!ReaderChromeAutoHide.hidesControls(
+            controlsShowing: false, overlayOpen: false, voiceOverRunning: false
+        ))
     }
 
     @Test func voiceOverKeepsTheControls() {

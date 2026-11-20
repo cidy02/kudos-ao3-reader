@@ -180,45 +180,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     }
     @ObservationIgnored private var pageBoxChromeTransitionUntil: Date = .distantPast
 
-    /// Shows or hides the controls with the shared fade (T-562b). Every path goes
-    /// through here — centre tap, a page turn, the mini player — so none snaps.
-    func setChromeHidden(_ hidden: Bool) {
-        guard hidden != chromeHidden else { return }
-        withAnimation(ReaderChromeAutoHide.fade) { chromeHidden = hidden }
-    }
-
     /// Called when a settle is a turn the reader made (`ReaderChromeAutoHide`).
     @ObservationIgnored var onUserPageTurn: (() -> Void)?
     /// Programmatic navigations still awaiting the navigator, and until when a
     /// settle may still be the echo of one (or of a relayout).
     @ObservationIgnored private var jumpsInFlight = 0
     @ObservationIgnored private var turnEchoUntil: Date = .distantPast
-
-    /// Runs a programmatic navigation so its settles are never taken for a turn.
-    private func jump(_ navigate: @escaping @MainActor () async -> Void) {
-        jumpsInFlight += 1
-        Task { @MainActor [weak self] in
-            await navigate()
-            self?.endJump()
-        }
-    }
-
-    private func endJump() {
-        jumpsInFlight = max(0, jumpsInFlight - 1)
-        noteTurnEcho(ReaderChromeAutoHide.jumpEchoWindow)
-    }
-
-    private func noteTurnEcho(_ window: TimeInterval) {
-        turnEchoUntil = max(turnEchoUntil, Date().addingTimeInterval(window))
-    }
-
-    private static func turnPlace(_ locator: Locator) -> ReaderChromeAutoHide.Place {
-        ReaderChromeAutoHide.Place(
-            href: ReaderSectionBuilder.hrefKey(locator.href.string),
-            position: locator.locations.position,
-            progression: locator.locations.progression
-        )
-    }
 
     /// The body's rendered line height in points — font size × the line-height
     /// multiplier, mirrored from the view's `ReaderTextStyle` whenever
@@ -1569,6 +1536,45 @@ private final class VisualPageMessageBridge: NSObject, WKScriptMessageHandler {
         Task { @MainActor [weak book] in
             book?.applyVisualPageFromUserScroll(page: page, pageCount: pageCount)
         }
+    }
+}
+
+// MARK: - Controls fade and hide on a turn (T-562b)
+
+/// Same file, so the stored state above stays `private`; outside the class body,
+/// which SwiftLint already holds over its length limit.
+extension ReadiumBook {
+    /// Shows or hides the controls with the shared fade (T-562b). Every path goes
+    /// through here — centre tap, a page turn, the mini player — so none snaps.
+    func setChromeHidden(_ hidden: Bool) {
+        guard hidden != chromeHidden else { return }
+        withAnimation(ReaderChromeAutoHide.fade) { chromeHidden = hidden }
+    }
+
+    /// Runs a programmatic navigation so its settles are never taken for a turn.
+    fileprivate func jump(_ navigate: @escaping @MainActor () async -> Void) {
+        jumpsInFlight += 1
+        Task { @MainActor [weak self] in
+            await navigate()
+            self?.endJump()
+        }
+    }
+
+    fileprivate func endJump() {
+        jumpsInFlight = max(0, jumpsInFlight - 1)
+        noteTurnEcho(ReaderChromeAutoHide.jumpEchoWindow)
+    }
+
+    fileprivate func noteTurnEcho(_ window: TimeInterval) {
+        turnEchoUntil = max(turnEchoUntil, Date().addingTimeInterval(window))
+    }
+
+    fileprivate static func turnPlace(_ locator: Locator) -> ReaderChromeAutoHide.Place {
+        ReaderChromeAutoHide.Place(
+            href: ReaderSectionBuilder.hrefKey(locator.href.string),
+            position: locator.locations.position,
+            progression: locator.locations.progression
+        )
     }
 }
 
