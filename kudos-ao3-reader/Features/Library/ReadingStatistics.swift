@@ -233,6 +233,7 @@ struct HomeReadingStats: Equatable, Sendable {
     ) -> InsightsScopeSelection {
         let hidden = insightsHiddenWorkIDs(from: libraryWorks, hideMature: hideMature)
         let liveWorks = libraryWorks.filter { !$0.isPendingDeletion }
+        let liveIDs = Set(liveWorks.map(\.id))
         switch scope {
         case .hidden where !revealed:
             return InsightsScopeSelection(
@@ -243,7 +244,8 @@ struct HomeReadingStats: Equatable, Sendable {
                 scope: .hidden,
                 hideMature: hideMature,
                 revealed: false,
-                hiddenWorkIDs: hidden
+                hiddenWorkIDs: hidden,
+                liveWorkIDs: liveIDs
             )
         case .hidden:
             let reading = liveWorks.filter { hidden.contains($0.id) }
@@ -255,7 +257,8 @@ struct HomeReadingStats: Equatable, Sendable {
                 scope: .hidden,
                 hideMature: hideMature,
                 revealed: true,
-                hiddenWorkIDs: hidden
+                hiddenWorkIDs: hidden,
+                liveWorkIDs: liveIDs
             )
         case .combined where revealed:
             return InsightsScopeSelection(
@@ -266,7 +269,8 @@ struct HomeReadingStats: Equatable, Sendable {
                 scope: .combined,
                 hideMature: hideMature,
                 revealed: true,
-                hiddenWorkIDs: hidden
+                hiddenWorkIDs: hidden,
+                liveWorkIDs: liveIDs
             )
         case .main, .combined:
             let reading = liveWorks.filter { !hidden.contains($0.id) }
@@ -278,7 +282,8 @@ struct HomeReadingStats: Equatable, Sendable {
                 scope: scope,
                 hideMature: hideMature,
                 revealed: revealed,
-                hiddenWorkIDs: hidden
+                hiddenWorkIDs: hidden,
+                liveWorkIDs: liveIDs
             )
         }
     }
@@ -322,31 +327,17 @@ struct InsightsScopeSelection {
     /// Known adult-rated work IDs while `hideMature` is on (live works; augmented
     /// with soft-deleted adult works and adult-rated session snapshots at filter time).
     var hiddenWorkIDs: Set<UUID> = []
-
-    /// Whether a single sitting belongs in this scope (live-work IDs plus its own
-    /// recorded rating snapshot, plus any caller-supplied soft-deleted adult IDs).
-    func includes(
-        _ session: ReadingSession,
-        extraHiddenWorkIDs: Set<UUID> = []
-    ) -> Bool {
-        if scope == .hidden && !revealed { return false }
-        if hideMature {
-            if scope == .combined && revealed { return true }
-            let isHidden = hiddenWorkIDs.contains(session.workID)
-                || extraHiddenWorkIDs.contains(session.workID)
-                || MatureContentRating.isAdult(session.rating)
-            return scope == .hidden ? isHidden : !isHidden
-        }
-        if excludedWorkIDs.contains(session.workID) { return false }
-        if let onlyWorkIDs { return onlyWorkIDs.contains(session.workID) }
-        return true
-    }
+    /// Every live (not pending deletion) work, queue-only included. A live work is
+    /// classified by its current rating, so a sitting's recorded rating never
+    /// overrides a re-rating; snapshots only classify works no longer live.
+    var liveWorkIDs: Set<UUID> = []
 
     /// Filters a set of sessions to this scope. Classifies sessions of deleted and
     /// soft-deleted mature works using `ModelContext` (soft-deleted `SavedWork`s)
     /// and any adult `ReadingSession.rating` snapshot for that `workID`, so every
     /// sitting of a deleted mature work stays out of locked views and lands in Hidden
-    /// when revealed.
+    /// when revealed. A live work follows its current rating instead (`liveWorkIDs`):
+    /// re-rated General/Teen, its old Explicit sittings return to main.
     @MainActor
     func sessions(
         _ all: [ReadingSession],
@@ -354,14 +345,19 @@ struct InsightsScopeSelection {
     ) -> [ReadingSession] {
         if scope == .hidden && !revealed { return [] }
         guard hideMature else {
-            return all.filter { includes($0) }
+            return all.filter { session in
+                if excludedWorkIDs.contains(session.workID) { return false }
+                if let onlyWorkIDs { return onlyWorkIDs.contains(session.workID) }
+                return true
+            }
         }
         if scope == .combined && revealed { return all }
         var allHiddenIDs = hiddenWorkIDs
         if let context {
             allHiddenIDs.formUnion(HomeReadingStats.softDeletedAdultWorkIDs(in: context))
         }
-        for session in all where MatureContentRating.isAdult(session.rating) {
+        for session in all
+        where !liveWorkIDs.contains(session.workID) && MatureContentRating.isAdult(session.rating) {
             allHiddenIDs.insert(session.workID)
         }
         return scope == .hidden

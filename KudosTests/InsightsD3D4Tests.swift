@@ -1010,7 +1010,8 @@ extension InsightsD3D4Tests {
         #expect(looping.status == .stopped)
         #expect(loopSkips == 10)
 
-        // A fresh tap on an empty chapter stays `.stopped` and asks for no skip.
+        // A fresh tap on an empty chapter asks for the next chapter once (T-535c: Play is
+        // never a dead button); this closure moves nothing, so it stays `.stopped`.
         let idleStub = StubTTSService()
         idleStub.speakHandler = { _ in false }
         let idle = ReaderSpeechController()
@@ -1025,7 +1026,7 @@ extension InsightsD3D4Tests {
         idle.toggle(from: locators[0])
         await idle.waitForStartTaskForTests()
         #expect(idle.status == .stopped)
-        #expect(idleSkips == 0)
+        #expect(idleSkips == 1)
     }
 
     /// Review 3 P2 #6 (Scenario A): paused skip/seek onto an unspeakable chapter (symbols-only

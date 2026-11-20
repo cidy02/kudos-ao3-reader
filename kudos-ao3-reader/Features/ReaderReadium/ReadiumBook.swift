@@ -286,6 +286,25 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         return nil
     }
 
+    /// 1-based spine chapter a Read Aloud ⏭ / ⏮ should go to (mini player and Lock
+    /// Screen alike), under `ReaderSpeechSkip.origin`'s one rule for both directions.
+    /// `speechLocator` is `ReaderSpeechController.resumeLocator`; `followsSpeech` is
+    /// `ReaderSpeechController.skipFollowsSpeechPosition`.
+    func speechSkipTarget(forward: Bool, speechLocator: Locator?, followsSpeech: Bool) -> Int? {
+        let position = readingPosition
+        guard let origin = ReaderSpeechSkip.origin(
+            followsSpeech: followsSpeech,
+            speechChapter: speechLocator.flatMap { spineChapter(for: $0) },
+            visibleChapter: position?.chapter,
+            visiblePage: position?.page ?? 1
+        ) else { return nil }
+        let chapterCount = max(
+            1,
+            positionsByReadingOrder.isEmpty ? readingOrder.count : positionsByReadingOrder.count
+        )
+        return ReaderSpeechSkip.targetChapter(forward: forward, from: origin, chapterCount: chapterCount)
+    }
+
     var readingPosition: ReadingPosition? {
         guard let locator = currentLocator else { return nil }
         let percent = Int(((locator.locations.totalProgression ?? 0) * 100).rounded())
@@ -673,6 +692,21 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     }
 
     #if DEBUG
+    /// Test seam: a spine of position lists and the page on screen, without a
+    /// publication or navigator.
+    func seedChaptersForTests(
+        _ positions: [[Locator]],
+        current: Locator?,
+        visualPage: Int? = nil,
+        visualPageCount: Int? = nil
+    ) {
+        positionsByReadingOrder = positions
+        currentLocator = current
+        self.visualPage = visualPage
+        self.visualPageCount = visualPageCount
+        pageBarReady = visualPage != nil && visualPageCount != nil
+    }
+
     private var pendingDebugGoToEnd = false
 
     func goToPublicationEndForDebug() {

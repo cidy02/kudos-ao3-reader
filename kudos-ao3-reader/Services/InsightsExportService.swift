@@ -564,7 +564,7 @@ enum InsightsExportService {
         }
         try context.save()
         FolderSyncService.markDirty()
-        ReadingLogService.resetOpenSessionsAfterLogReset(now: now)
+        ReadingLogService.resetOpenSessionsAfterLogReset(in: context, now: now)
         return deletedCount
     }
 

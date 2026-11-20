@@ -438,8 +438,11 @@ enum ReadingLogService {
 
     /// Called after the local reading log is wiped (`InsightsExportService.resetReadingLog`):
     /// rotates every open session's `recordID` so an active/detached Read Aloud sitting
-    /// cannot later re-insert a row with a now-tombstoned ID and pre-reset duration.
-    static func resetOpenSessionsAfterLogReset(now: Date = Date()) {
+    /// cannot later re-insert a row with a now-tombstoned ID and pre-reset duration, and
+    /// re-anchors it at the work's current position and finished state (the same
+    /// expressions `startSession` uses), so the first sitting after a Reset credits no
+    /// pre-Reset words and no pre-Reset finish.
+    static func resetOpenSessionsAfterLogReset(in context: ModelContext, now: Date = Date()) {
         for (workID, var session) in openSessions {
             session.recordID = UUID()
             session.startedAt = now
@@ -447,8 +450,23 @@ enum ReadingLogService {
             session.lastActivityAt = now
             session.accumulatedSeconds = 0
             session.activeSeconds = 0
+            let lookup = FetchDescriptor<SavedWork>(predicate: #Predicate { $0.id == workID })
+            if let work = try? context.fetch(lookup).first {
+                session.startProgress = startProgress(for: work)
+                session.startSpineIndex = work.lastSpineIndex
+                session.wasFinishedAtStart = work.isFinished
+            }
             openSessions[workID] = session
         }
+    }
+
+    /// A sitting's starting point: a stored overall fraction is trustworthy;
+    /// chapter-count fallbacks are not.
+    private static func startProgress(for work: SavedWork) -> Double? {
+        work.publicationProgress ?? (
+            work.readiumLocator.isEmpty && work.lastSpineIndex == 0
+                && work.lastScrollFraction == 0 ? 0 : nil
+        )
     }
 
     // MARK: Queries

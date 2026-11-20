@@ -157,6 +157,10 @@ final class ReaderSpeechController {
     /// the skip loop if a chapter skip fails to move the position.
     private var unspeakableChapterRun = 0
     private static let maxUnspeakableChapterRun = 10
+    /// True while Read Aloud itself asks for the next chapter because the current one
+    /// had nothing to speak. The reader's chapter skip then counts from the speech
+    /// position, not the page on screen (which may not have settled yet).
+    private(set) var isAdvancingChapter = false
     /// In-flight chapter extract + `speak` so a second tap can cancel it.
     private var startTask: Task<Void, Never>?
     /// Instantaneous target (0…1); `speechEnergy` lerps toward this at ~60 fps.
@@ -195,6 +199,15 @@ final class ReaderSpeechController {
     var isPlaying: Bool { status == .playing }
     /// Mini player / fan "session on" — playing or paused, not fully stopped.
     var isSessionActive: Bool { status == .playing || status == .paused }
+    /// Whether a chapter skip counts from the speech position (playing, or advancing
+    /// past an unspeakable chapter) rather than the page on screen. See
+    /// `ReaderSpeechSkip.origin`.
+    var skipFollowsSpeechPosition: Bool { isPlaying || isAdvancingChapter }
+    /// Set when Play (or a paused skip) in an open reader found nothing Read Aloud can
+    /// speak from the current chapter to the end of the work; the reader shows an
+    /// alert saying why and clears it. Cleared when a reader opens or closes, so it
+    /// never surfaces in a later reader.
+    var showsNothingToSpeakAlert = false
     var sessionTitle: String { nowPlayingTitle }
 
     isolated deinit {
@@ -298,6 +311,7 @@ final class ReaderSpeechController {
         }
         openReaderWorkID = workID
         isReaderOpen = true
+        showsNothingToSpeakAlert = false
     }
 
     /// Installs only callbacks owned by the live navigator. A same-work reopen
@@ -331,6 +345,7 @@ final class ReaderSpeechController {
         }
         openReaderWorkID = nil
         isReaderOpen = false
+        showsNothingToSpeakAlert = false
         let action = ReaderSpeechSessionPolicy.leaveReader(sessionActive: isSessionActive)
         switch action {
         case .detach:
@@ -935,15 +950,27 @@ final class ReaderSpeechController {
     /// `.playing`, no engine status will ever arrive. Treat it as the chapter
     /// ending, so playback moves on to the next chapter or stops with a real
     /// `.stopped`, instead of sitting on `.playing` in silence.
-    /// When re-anchoring while `.paused`, clear the pending pause and move to
-    /// `.stopped` so Play is never wedged against a stopped engine.
+    /// Paused (a skip or seek while paused) and a fresh Play move on to the next
+    /// speakable chapter the same way, staying paused or starting to play. When no
+    /// later chapter can be spoken, a paused session ends cleanly (Play is never
+    /// wedged against a stopped engine) and `showsNothingToSpeakAlert` says why.
     func handleChapterSpeakResult(started: Bool) {
         guard !started else {
             unspeakableChapterRun = 0
             return
         }
+        // `speak` also returns false when the engine went `.unavailable`; never skip
+        // chapters for that, only for a chapter with nothing to speak.
+        let canAdvance = ttsService != nil && status != .unavailable
+            && unspeakableChapterRun < Self.maxUnspeakableChapterRun
         if status == .paused || pendingPauseAfterReanchor {
             pendingPauseAfterReanchor = false
+            if canAdvance {
+                unspeakableChapterRun += 1
+                // `reanchor(resumePlaying: false)` on a paused session re-arms the pause.
+                if advanceToNextChapter(autoplay: false) { return }
+            }
+            let reachedEnd = status != .unavailable
             unspeakableChapterRun = 0
             spokenText = ""
             let wasStoppedManually = stoppedManually
@@ -956,11 +983,22 @@ final class ReaderSpeechController {
                 clearSpeechEnergy()
                 clearNowPlaying()
             }
+            if reachedEnd, isReaderOpen { showsNothingToSpeakAlert = true }
             if !isReaderOpen { releasePreparedSession() }
             return
         }
-        // A fresh tap is still `.stopped` (nothing to publish); an engine that went
-        // `.unavailable` has already published that.
+        if status == .stopped {
+            // A fresh Play on an unspeakable chapter: start at the next speakable one,
+            // as continuous playback does, instead of a dead button.
+            if canAdvance {
+                unspeakableChapterRun += 1
+                if advanceToNextChapter(autoplay: true) { return }
+            }
+            unspeakableChapterRun = 0
+            if isReaderOpen { showsNothingToSpeakAlert = true }
+            return
+        }
+        // An engine that went `.unavailable` has already published that.
         guard status == .playing else { return }
         unspeakableChapterRun += 1
         if ttsService != nil, unspeakableChapterRun <= Self.maxUnspeakableChapterRun {
@@ -972,6 +1010,18 @@ final class ReaderSpeechController {
         clearSpeechEnergy()
         clearNowPlaying()
         if !isReaderOpen { releasePreparedSession() }
+    }
+
+    /// Asks for the next chapter on Read Aloud's own behalf (the current one had
+    /// nothing to speak). `autoplay` makes the re-anchor start speaking even though
+    /// status is not `.playing`, the same flag a finished chapter uses.
+    private func advanceToNextChapter(autoplay: Bool) -> Bool {
+        isAdvancingChapter = true
+        pendingAutoContinue = autoplay
+        let didAdvance = requestNextChapter()
+        pendingAutoContinue = false
+        isAdvancingChapter = false
+        return didAdvance
     }
 
     #if DEBUG
@@ -1059,9 +1109,7 @@ final class ReaderSpeechController {
             }
             onSessionEnded?()
             if shouldContinue {
-                pendingAutoContinue = true
-                let didAdvance = requestNextChapter()
-                pendingAutoContinue = false
+                let didAdvance = advanceToNextChapter(autoplay: true)
                 if didAdvance {
                     // Keep `status == .playing` across chapters so continuous
                     // Read Aloud logs one sitting and Now Playing does not flicker.

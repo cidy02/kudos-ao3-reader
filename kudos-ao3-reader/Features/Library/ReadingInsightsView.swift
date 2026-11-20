@@ -1,3 +1,4 @@
+import Combine
 import SwiftData
 import SwiftUI
 
@@ -70,23 +71,15 @@ struct ReadingInsightsView: View {
     @AppStorage(InsightsOptions.Keys.untouchedDays)
     private var untouchedDays: Int = InsightsOptions.defaultUntouchedDays
 
-    /// Lightweight scalar fingerprint so mutations to `libraryWorks` while mounted
-    /// (e.g. AO3 refresh marking a work Explicit, or finishing a work) trigger a reload.
+    /// Bumped on every SwiftData save while mounted, so a change to a work (an AO3
+    /// refresh marking it Explicit, finishing it) reloads the figures. Replaces a
+    /// walk over every `SavedWork` on each body evaluation, which faulted and
+    /// observed the whole library (review 4 P3 #7).
+    @State private var librarySaveRevision = 0
+
+    /// Cheap reload fingerprint for `libraryWorks`: its size plus the save counter.
     private var libraryWorksFingerprint: String {
-        var adultCount = 0
-        var finishedCount = 0
-        var newestModified: TimeInterval = 0
-        var newestProgress: TimeInterval = 0
-        for work in libraryWorks {
-            if work.isAdult { adultCount += 1 }
-            if work.isFinished { finishedCount += 1 }
-            let mod = work.lastModifiedAt.timeIntervalSince1970
-            if mod > newestModified { newestModified = mod }
-            if let prog = work.progressModifiedAt?.timeIntervalSince1970, prog > newestProgress {
-                newestProgress = prog
-            }
-        }
-        return "\(libraryWorks.count)-\(adultCount)-\(finishedCount)-\(newestModified)-\(newestProgress)"
+        "\(libraryWorks.count)-\(librarySaveRevision)"
     }
 
     private var reloadKey: String {
@@ -242,6 +235,13 @@ struct ReadingInsightsView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .kudosSyncRelevantSettingChanged)) { _ in
             optionsRevision += 1
+        }
+        // A save can come from a background context; hop to main before touching state.
+        .onReceive(
+            NotificationCenter.default.publisher(for: ModelContext.didSave)
+                .receive(on: DispatchQueue.main)
+        ) { _ in
+            librarySaveRevision &+= 1
         }
         .refreshable {
             reload()
