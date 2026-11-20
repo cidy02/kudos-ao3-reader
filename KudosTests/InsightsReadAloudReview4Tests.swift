@@ -36,14 +36,14 @@ struct InsightsReadAloudReview4Tests {
         return try String(contentsOf: url, encoding: .utf8)
     }
 
-    /// The text from `start` up to (not including) the next `end` after it.
+    /// The text from `start` up to (not including) the next `end` after it, or `nil`
+    /// when either is missing: a moved anchor fails the test instead of silently
+    /// widening the slice to the end of the file.
     private func slice(_ text: String, from start: String, to end: String) -> String? {
-        guard let lower = text.range(of: start) else { return nil }
-        let rest = text[lower.lowerBound...]
-        guard let upper = rest.range(of: end, range: rest.index(after: rest.startIndex)..<rest.endIndex) else {
-            return String(rest)
-        }
-        return String(rest[..<upper.lowerBound])
+        guard let lower = text.range(of: start),
+              let upper = text.range(of: end, range: lower.upperBound..<text.endIndex)
+        else { return nil }
+        return String(text[lower.lowerBound..<upper.lowerBound])
     }
 
     // MARK: - 1. One skip rule for ⏭ and ⏮
@@ -87,45 +87,122 @@ struct InsightsReadAloudReview4Tests {
         ) == .init(chapter: 3, page: 1))
     }
 
-    // MARK: - 5. The view's skip handlers go through `ReadiumBook.speechSkipTarget`
+    // MARK: - 5. View wiring the controller tests cannot reach
 
-    @Test func readerSkipHandlersUseTheSharedSkipRule() throws {
+    @Test func readerSkipHandlersUseTheSharedRuleAndNeverMoveThePageThemselves() throws {
         let view = try source("Features/ReaderReadium/ReadiumReaderView.swift")
-        let handlers = try #require(slice(
-            view,
-            from: "private func handleSpeechSkipBack()",
-            to: "/// 1-based spine chapter → first Readium position"
+        let back = try #require(slice(
+            view, from: "private func handleSpeechSkipBack()", to: "private func handleSpeechSkipForward()"
         ))
-        #expect(handlers.contains("private func handleSpeechSkipForward()"))
-        // Both directions, both resolved by the book from the speech locator and the
-        // controller's follows-speech flag; neither reads the visible position itself.
-        #expect(handlers.components(separatedBy: "book.speechSkipTarget(").count - 1 == 2)
-        #expect(handlers.components(separatedBy: "speech.skipFollowsSpeechPosition").count - 1 == 2)
-        #expect(handlers.components(separatedBy: "speechLocator: speech.resumeLocator").count - 1 == 2)
-        #expect(!handlers.contains("readingPosition"))
+        #expect(back.contains("forward: false"))
+        #expect(back.contains("speechLocator: speech.resumeLocator"))
+        #expect(back.contains("followsSpeech: speech.skipFollowsSpeechPosition"))
+        #expect(back.contains("direction: .backward"))
+        #expect(!back.contains("readingPosition"))
+        let forward = try #require(slice(
+            view, from: "private func handleSpeechSkipForward()", to: "private func goToSpineChapterStart("
+        ))
+        #expect(forward.contains("forward: true"))
+        #expect(forward.contains("speechLocator: speech.resumeLocator"))
+        #expect(forward.contains("followsSpeech: speech.skipFollowsSpeechPosition"))
+        #expect(!forward.contains("readingPosition"))
+        // Read Aloud moves the page (`onAdvance`) once it has found a speakable chapter.
+        let go = try #require(slice(
+            view, from: "private func goToSpineChapterStart(", to: "private func handleSpeechSeekHoldStart("
+        ))
+        #expect(go.contains("speech.reanchor(to: first, resumePlaying: resumePlaying, direction: direction)"))
+        #expect(!go.contains("book.go("))
         #expect(view.contains("onSkipNext: { handleSpeechSkipForward() }"))
         #expect(view.contains("onSkipPrevious: { handleSpeechSkipBack() }"))
+        #expect(view.contains("onSkipForward: { handleSpeechSkipForward() }"))
+        #expect(view.contains("onSkipBack: { handleSpeechSkipBack() }"))
+        // The alert belongs to the reader Read Aloud is attached to.
+        #expect(view.contains(".alert(\"Nothing to Read Aloud\", isPresented: nothingToSpeakPresented)"))
+        let binding = try #require(slice(
+            view, from: "private var nothingToSpeakPresented: Binding<Bool>", to: "private var kudosErrorPresented"
+        ))
+        #expect(binding.contains("speech.showsNothingToSpeakAlert && speech.openReaderWorkID == work.id"))
+        #expect(binding.contains("speech.showsNothingToSpeakAlert = $0"))
     }
 
-    // MARK: - 5. Insights re-lock wiring and the cheap fingerprint
-
-    @Test func insightsViewKeepsItsRelockHandlersAndCheapFingerprint() throws {
+    @Test func insightsViewKeepsItsRelockHandlersAndGatedSaveObserver() throws {
         let view = try source("Features/Library/ReadingInsightsView.swift")
-        let reveal = try #require(slice(view, from: ".onChange(of: gate.revealAll)", to: ".onChange(of:"))
+        let reveal = try #require(slice(
+            view, from: ".onChange(of: gate.revealAll)", to: ".onChange(of: hideMature)"
+        ))
         #expect(reveal.contains("scopeState.handleRevealChange(revealed: revealed, hideMature: hideMature)"))
         #expect(reveal.contains("if !revealed { clearMainDisplayState() }"))
         #expect(reveal.contains("reload()"))
-        let hide = try #require(slice(view, from: ".onChange(of: hideMature)", to: ".onReceive("))
+        let hide = try #require(slice(
+            view, from: ".onChange(of: hideMature)",
+            to: ".onReceive(NotificationCenter.default.publisher(for: .kudosSyncRelevantSettingChanged))"
+        ))
         #expect(hide.contains("scopeState.handleHideMatureChange(hideMature: isHiding, revealed: gate.revealAll)"))
-        #expect(hide.contains("clearMainDisplayState()"))
+        #expect(hide.contains("if isHiding && !gate.revealAll { clearMainDisplayState() }"))
         #expect(hide.contains("reload()"))
         #expect(view.contains("if scopeState.mayDisplayLoadedData(hideMature: hideMature, revealed: gate.revealAll)"))
-        // No walk over the library on every body evaluation.
+        let saves = try #require(slice(
+            view, from: "publisher(for: ModelContext.didSave)", to: ".refreshable {"
+        ))
+        #expect(saves.contains(".debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)"))
+        #expect(saves.contains("guard isOnScreen else { return }"))
+        #expect(saves.contains("InsightsReloadDigest.make(works: libraryWorks, context: context)"))
+        #expect(view.contains(".onDisappear { isOnScreen = false }"))
         let fingerprint = try #require(slice(
             view, from: "private var libraryWorksFingerprint: String", to: "private var reloadKey"
         ))
-        #expect(!fingerprint.contains("for "))
-        #expect(view.contains("publisher(for: ModelContext.didSave)"))
+        #expect(fingerprint.contains("libraryDigest"))
+        #expect(!fingerprint.contains("InsightsReloadDigest"))
+    }
+
+    // MARK: - 5. What a save must change for Insights to reload
+
+    @Test func reloadDigestIgnoresPositionSavesAndTracksWhatInsightsCounts() throws {
+        let context = try makeContext()
+        let work = SavedWork(title: "Digest", author: "A")
+        work.isSaved = true
+        work.wordCount = 5_000
+        context.insert(work)
+        try context.save()
+        let works = [work]
+        let base = InsightsReloadDigest.make(works: works, context: context)
+
+        // Read Aloud / reader position saves.
+        work.legacyReaderProgress = 0.4
+        work.readiumLocator = "{\"href\":\"ch2.xhtml\",\"locations\":{\"totalProgression\":0.4}}"
+        work.lastSpineIndex = 1
+        work.lastReadDate = Date(timeIntervalSince1970: 9_000)
+        work.lastModifiedAt = Date(timeIntervalSince1970: 9_000)
+        try context.save()
+        #expect(InsightsReloadDigest.make(works: works, context: context) == base)
+
+        var previous = base
+        func expectChanged(_ label: Comment) {
+            let next = InsightsReloadDigest.make(works: works, context: context)
+            #expect(next != previous, label)
+            previous = next
+        }
+        work.rating = "Explicit"
+        expectChanged("rating")
+        work.isFinished = true
+        expectChanged("finished")
+        work.setReadingStatus(.stopped, at: Date(timeIntervalSince1970: 10_000))
+        expectChanged("status")
+        work.wordCount = 6_000
+        expectChanged("word count")
+        let session = ReadingSession(
+            workID: work.id,
+            startedAt: Date(timeIntervalSince1970: 11_000),
+            endedAt: Date(timeIntervalSince1970: 11_600),
+            durationSeconds: 600
+        )
+        context.insert(session)
+        try context.save()
+        expectChanged("sitting written")
+        session.durationSeconds = 900
+        session.lastModifiedAt = Date(timeIntervalSince1970: 12_000)
+        try context.save()
+        expectChanged("sitting updated")
     }
 
     // MARK: - 6. `includes(_:)` is gone
@@ -182,6 +259,40 @@ struct InsightsReadAloudReview4Tests {
         let combined = HomeReadingStats.insightsScope(.combined, from: library, hideMature: true, revealed: true)
             .sessions(all, in: context)
         #expect(combined.count == all.count)
+    }
+
+    @Test func softDeletedWorkFollowsItsCurrentRatingLikeALiveOne() throws {
+        let context = try makeContext()
+        let reRated = SavedWork(title: "Re-rated then deleted", author: "A")
+        reRated.rating = "General Audiences"
+        reRated.isPendingDeletion = true
+        context.insert(reRated)
+        let adult = SavedWork(title: "Adult then deleted", author: "A")
+        adult.rating = "Explicit"
+        adult.isPendingDeletion = true
+        context.insert(adult)
+        func sitting(_ workID: UUID, rating: String) -> ReadingSession {
+            let session = ReadingSession(
+                workID: workID,
+                startedAt: Date(timeIntervalSince1970: 1_000),
+                endedAt: Date(timeIntervalSince1970: 1_600),
+                durationSeconds: 600
+            )
+            session.rating = rating
+            context.insert(session)
+            return session
+        }
+        let oldExplicit = sitting(reRated.id, rating: "Explicit")
+        let blankAdult = sitting(adult.id, rating: "")
+        try context.save()
+        let all = try context.fetch(FetchDescriptor<ReadingSession>())
+        let library = [reRated, adult]
+        let main = HomeReadingStats.insightsScope(.main, from: library, hideMature: true, revealed: false)
+            .sessions(all, in: context).map(\.id)
+        #expect(main == [oldExplicit.id])
+        let hidden = HomeReadingStats.insightsScope(.hidden, from: library, hideMature: true, revealed: true)
+            .sessions(all, in: context).map(\.id)
+        #expect(hidden == [blankAdult.id])
     }
 
     // MARK: - 3. Reset re-anchors the open sitting
@@ -243,11 +354,13 @@ struct InsightsReadAloudReview4Tests {
 
 #if os(iOS)
 extension InsightsReadAloudReview4Tests {
-    /// A stub engine that, like a real one, reports the first utterance's text once it
-    /// starts, so a pending pause after a paused re-anchor takes effect.
+    /// A stub engine shaped like the real ones. It reports the first utterance's text
+    /// once it starts (so a pending pause after a paused re-anchor takes effect),
+    /// "plays" `silentHrefs` without ever reporting a word (Kokoro on a chapter it
+    /// renders no audio for), and can go `.unavailable`.
     @MainActor
     private final class SpeakingStub: TTSService {
-        var status: TTSServiceStatus = .stopped
+        var status: TTSServiceStatus
         var spokenText: String = ""
         var speechEnergy: Double = 0
         var speechEnergySeed: Double = 0
@@ -259,12 +372,30 @@ extension InsightsReadAloudReview4Tests {
         var onAdvance: ((Locator) -> Void)?
         var onSpokenRange: ((Locator) -> Void)?
 
+        var silentHrefs: Set<String> = []
+        var goesUnavailable = false
+        private(set) var spokenHrefs: [String] = []
+        private(set) var stopCount = 0
+
+        init(status: TTSServiceStatus = .stopped) {
+            self.status = status
+        }
+
         func speak(units: [TTSSpeechUnit]) async throws -> Bool {
+            // Real engines reset playback before looking at the text.
             status = .stopped
-            guard let prose = units.first(where: { $0.text.contains("Prose") }) else { return false }
+            if goesUnavailable {
+                status = .unavailable
+                onStatusChange?(.unavailable)
+                return false
+            }
+            guard let first = units.first(where: \.hasSpeakableText) else { return false }
+            spokenHrefs.append(first.locator?.href.string ?? "")
             status = .playing
             onStatusChange?(.playing)
-            onSpokenTextChange?(prose.text)
+            if !silentHrefs.contains(first.locator?.href.string ?? "") {
+                onSpokenTextChange?(first.text)
+            }
             return true
         }
 
@@ -281,6 +412,7 @@ extension InsightsReadAloudReview4Tests {
         }
 
         func stop() {
+            stopCount += 1
             let wasStopped = status == .stopped
             status = .stopped
             if !wasStopped { onStatusChange?(.stopped) }
@@ -325,125 +457,211 @@ extension InsightsReadAloudReview4Tests {
         #expect(book.speechSkipTarget(forward: true, speechLocator: positions[5][0], followsSpeech: true) == nil)
     }
 
-    /// Wires a controller to a seeded book the way `ReadiumReaderView` does: ⏭ resolves
-    /// through `speechSkipTarget` and re-anchors at the target chapter's first position.
-    /// The book never navigates (no navigator), so its visible page stays put, as an
-    /// unsettled navigator's does.
-    private func makeWiredController(
-        status: ReaderSpeechController.Status,
-        unspeakable: Set<String>,
-        resumeAt: Locator,
-        visible: Locator,
-        visited: @escaping (Int) -> Void
-    ) -> (ReaderSpeechController, ReadiumBook) {
-        let positions = chapterPositions()
+    /// A controller and book wired the way `ReadiumReaderView` wires them: ⏭/⏮ resolve
+    /// through `speechSkipTarget` and re-anchor at the target chapter's first position
+    /// (the view does not move the page); `onAdvance` is the page-follow, recorded in
+    /// `moves` and settled into the book.
+    @MainActor
+    private final class Rig {
+        let positions: [[Locator]]
         let book = ReadiumBook()
-        book.seedChaptersForTests(positions, current: visible)
         let controller = ReaderSpeechController()
-        controller.seedSessionForTests(
-            workID: UUID(),
-            status: status,
-            isReaderOpen: true,
-            ttsService: SpeakingStub(),
-            unitProvider: { locator in
-                let href = locator?.href.string ?? ""
-                return unspeakable.contains(href)
-                    ? [TTSSpeechUnit(text: "* * *", locator: locator)]
-                    : [TTSSpeechUnit(text: "Prose in \(href).", locator: locator)]
-            },
-            resumeLocator: resumeAt,
-            onSkipNext: { [weak controller] in
-                guard let controller,
-                      let target = book.speechSkipTarget(
-                          forward: true,
-                          speechLocator: controller.resumeLocator,
-                          followsSpeech: controller.skipFollowsSpeechPosition
-                      )
-                else { return false }
-                visited(target)
-                controller.reanchor(to: positions[target - 1][0], resumePlaying: controller.isPlaying)
-                return true
+        let engine: SpeakingStub
+        var moves: [String] = []
+
+        init(
+            status: ReaderSpeechController.Status,
+            unspeakable: Set<String>,
+            at chapter: Int,
+            isReaderOpen: Bool = true,
+            engine: SpeakingStub? = nil
+        ) {
+            let engine = engine ?? SpeakingStub()
+            let positions = (1...6).map { chapter in
+                (0..<2).map { offset in
+                    Locator(
+                        href: AnyURL(string: "ch\(chapter).xhtml")!,
+                        mediaType: .xhtml,
+                        locations: .init(position: (chapter - 1) * 2 + offset + 1)
+                    )
+                }
             }
-        )
-        return (controller, book)
+            self.positions = positions
+            self.engine = engine
+            if engine.status == .stopped, status == .paused { engine.status = .paused }
+            if engine.status == .stopped, status == .playing { engine.status = .playing }
+            book.seedChaptersForTests(positions, current: positions[chapter - 1][0])
+            controller.seedSessionForTests(
+                workID: UUID(),
+                status: status,
+                isReaderOpen: isReaderOpen,
+                ttsService: engine,
+                unitProvider: { locator in
+                    let href = locator?.href.string ?? ""
+                    if unspeakable.contains(href) {
+                        return href == "ch6.xhtml" ? [] : [TTSSpeechUnit(text: "* * *", locator: locator)]
+                    }
+                    return [TTSSpeechUnit(text: "Prose in \(href).", locator: locator)]
+                },
+                resumeLocator: positions[chapter - 1][0],
+                chapterStartLocators: positions.map(\.first)
+            )
+            controller.onAdvance = { [unowned self] locator in
+                moves.append(locator.href.string)
+                book.seedChaptersForTests(positions, current: locator)
+            }
+        }
+
+        func skip(forward: Bool) {
+            guard let target = book.speechSkipTarget(
+                forward: forward,
+                speechLocator: controller.resumeLocator,
+                followsSpeech: controller.skipFollowsSpeechPosition
+            ) else { return }
+            controller.reanchor(
+                to: positions[target - 1][0],
+                resumePlaying: controller.isPlaying,
+                direction: forward ? .forward : .backward
+            )
+        }
+
+        var speechHref: String? { controller.resumeLocator?.href.string }
     }
 
-    @Test func pausedSkipOntoUnspeakableChapterMovesOnAndStaysPaused() async throws {
-        let positions = chapterPositions()
-        var visited: [Int] = []
-        let (controller, _) = makeWiredController(
-            status: .paused,
-            unspeakable: ["ch3.xhtml"],
-            resumeAt: positions[1][0],
-            visible: positions[1][0],
-            visited: { visited.append($0) }
-        )
-        // ⏭ while paused on Ch 2: Ch 3 has nothing to speak, so Read Aloud moves on
-        // to Ch 4 (counting from the speech position, not the unsettled page) and
-        // stays paused there.
-        #expect(controller.onSkipNext?() == true)
-        await controller.waitForStartTaskForTests()
-        #expect(visited == [3, 4])
-        #expect(controller.status == .paused)
-        #expect(controller.isSessionActive)
-        #expect(controller.resumeLocator?.href.string == "ch4.xhtml")
-        #expect(!controller.showsNothingToSpeakAlert)
-        #expect(!controller.skipFollowsSpeechPosition)
+    @Test func pausedSkipOntoUnspeakableChapterMovesOnAndStaysPaused() async {
+        let rig = Rig(status: .paused, unspeakable: ["ch3.xhtml"], at: 2)
+        rig.skip(forward: true)
+        await rig.controller.waitForStartTaskForTests()
+        #expect(rig.controller.status == .paused)
+        #expect(rig.speechHref == "ch4.xhtml")
+        #expect(rig.moves == ["ch4.xhtml"])
+        #expect(rig.engine.spokenHrefs == ["ch4.xhtml"])
+        #expect(!rig.controller.showsNothingToSpeakAlert)
     }
 
-    @Test func freshPlayOnUnspeakableChapterStartsAtTheNextSpeakableOne() async throws {
-        let positions = chapterPositions()
-        var visited: [Int] = []
-        let (controller, _) = makeWiredController(
-            status: .stopped,
-            unspeakable: ["ch3.xhtml", "ch4.xhtml"],
-            resumeAt: positions[2][0],
-            visible: positions[2][0],
-            visited: { visited.append($0) }
-        )
-        controller.toggle(from: positions[2][0])
-        await controller.waitForStartTaskForTests()
-        #expect(visited == [4, 5])
-        #expect(controller.status == .playing)
-        #expect(controller.resumeLocator?.href.string == "ch5.xhtml")
-        #expect(!controller.showsNothingToSpeakAlert)
+    @Test func freshPlayOnUnspeakableChaptersStartsAtTheNextSpeakableOne() async {
+        let rig = Rig(status: .stopped, unspeakable: ["ch3.xhtml", "ch4.xhtml"], at: 3)
+        rig.controller.toggle(from: rig.positions[2][0])
+        await rig.controller.waitForStartTaskForTests()
+        #expect(rig.controller.status == .playing)
+        #expect(rig.speechHref == "ch5.xhtml")
+        #expect(rig.moves == ["ch5.xhtml"])
+        #expect(rig.engine.spokenHrefs == ["ch5.xhtml"])
     }
 
-    @Test func freshPlayWithNothingSpeakableToTheEndSaysWhy() async throws {
-        let positions = chapterPositions()
-        var visited: [Int] = []
-        let (controller, _) = makeWiredController(
-            status: .stopped,
-            unspeakable: ["ch5.xhtml", "ch6.xhtml"],
-            resumeAt: positions[4][0],
-            visible: positions[4][0],
-            visited: { visited.append($0) }
-        )
-        controller.toggle(from: positions[4][0])
-        await controller.waitForStartTaskForTests()
-        #expect(visited == [6])
-        #expect(controller.status == .stopped)
-        #expect(controller.showsNothingToSpeakAlert)
-        // A reader opening clears it, so it never shows in a later reader.
-        controller.readerDidOpen(workID: UUID())
-        #expect(!controller.showsNothingToSpeakAlert)
+    @Test func freshPlayWithNothingSpeakableToTheEndNeverMovesThePage() async {
+        let rig = Rig(status: .stopped, unspeakable: ["ch5.xhtml", "ch6.xhtml"], at: 5)
+        rig.controller.toggle(from: rig.positions[4][0])
+        await rig.controller.waitForStartTaskForTests()
+        #expect(rig.controller.status == .stopped)
+        #expect(rig.moves.isEmpty)
+        #expect(rig.engine.spokenHrefs.isEmpty)
+        #expect(rig.controller.showsNothingToSpeakAlert)
+        // Closing or tearing down the reader clears it, so it never shows later.
+        rig.controller.readerDidClose(workID: rig.controller.openReaderWorkID ?? UUID())
+        #expect(!rig.controller.showsNothingToSpeakAlert)
     }
 
-    @Test func pausedSkipWithNothingSpeakableToTheEndEndsCleanlyAndSaysWhy() async throws {
-        let positions = chapterPositions()
-        var visited: [Int] = []
-        let (controller, _) = makeWiredController(
-            status: .paused,
-            unspeakable: ["ch6.xhtml"],
-            resumeAt: positions[4][0],
-            visible: positions[4][0],
-            visited: { visited.append($0) }
-        )
-        #expect(controller.onSkipNext?() == true)
-        await controller.waitForStartTaskForTests()
-        #expect(visited == [6])
-        #expect(controller.status == .stopped)
-        #expect(controller.showsNothingToSpeakAlert)
+    @Test func pausedSkipWithNothingSpeakableAheadStaysPausedWhereItWas() async {
+        let rig = Rig(status: .paused, unspeakable: ["ch6.xhtml"], at: 5)
+        rig.skip(forward: true)
+        await rig.controller.waitForStartTaskForTests()
+        #expect(rig.controller.status == .paused)
+        #expect(rig.engine.status == .paused)
+        #expect(rig.engine.stopCount == 0)
+        #expect(rig.speechHref == "ch5.xhtml")
+        #expect(rig.moves.isEmpty)
+        #expect(rig.controller.showsNothingToSpeakAlert)
+        rig.controller.tearDown()
+        #expect(!rig.controller.showsNothingToSpeakAlert)
+    }
+
+    /// Review P1: a playing ⏭ onto an image-only final chapter used to end the session
+    /// while the engine kept speaking the previous chapter, with no stop control.
+    @Test func playingSkipOntoImageOnlyLastChapterKeepsAStoppableSession() async {
+        let rig = Rig(status: .playing, unspeakable: ["ch6.xhtml"], at: 5)
+        rig.skip(forward: true)
+        await rig.controller.waitForStartTaskForTests()
+        #expect(rig.controller.status == .playing)
+        #expect(rig.controller.isSessionActive)
+        #expect(rig.engine.status == .playing)
+        #expect(rig.speechHref == "ch5.xhtml")
+        #expect(rig.engine.spokenHrefs.isEmpty)
+        #expect(rig.moves.isEmpty)
+        #expect(rig.controller.showsNothingToSpeakAlert)
+        rig.controller.stop()
+        #expect(rig.controller.status == .stopped)
+        #expect(rig.engine.status == .stopped)
+    }
+
+    @Test func skipBackOntoUnspeakableChapterKeepsGoingBack() async {
+        let rig = Rig(status: .paused, unspeakable: ["ch2.xhtml"], at: 3)
+        rig.skip(forward: false)
+        await rig.controller.waitForStartTaskForTests()
+        #expect(rig.controller.status == .paused)
+        #expect(rig.speechHref == "ch1.xhtml")
+        #expect(rig.moves == ["ch1.xhtml"])
+
+        // Nothing speakable behind: stays put (paused at Ch 3) and says why.
+        let stuck = Rig(status: .playing, unspeakable: ["ch1.xhtml", "ch2.xhtml"], at: 3)
+        stuck.skip(forward: false)
+        await stuck.controller.waitForStartTaskForTests()
+        #expect(stuck.controller.status == .playing)
+        #expect(stuck.speechHref == "ch3.xhtml")
+        #expect(stuck.moves.isEmpty)
+        #expect(stuck.controller.showsNothingToSpeakAlert)
+    }
+
+    /// Review P2: Kokoro "plays" a chapter it renders no audio for and reports a natural
+    /// finish before the first word. While a paused re-anchor is pending, that must not
+    /// unpause the session, and the pending pause must not leak into a later Play.
+    @Test func silentChapterAfterPausedSkipStaysPausedAndLeavesNoPendingPause() async {
+        let rig = Rig(status: .paused, unspeakable: [], at: 2)
+        rig.engine.silentHrefs = ["ch3.xhtml"]
+        rig.skip(forward: true)
+        await rig.controller.waitForStartTaskForTests()
+        #expect(rig.engine.spokenHrefs == ["ch3.xhtml"])
+        rig.controller.handleEngineStatusChange(.stopped)
+        await rig.controller.waitForStartTaskForTests()
+        #expect(rig.controller.status == .paused)
+        #expect(rig.speechHref == "ch4.xhtml")
+        #expect(rig.engine.spokenHrefs == ["ch3.xhtml", "ch4.xhtml"])
+
+        // Same on the last chapter: the session ends, says why, and a fresh Play
+        // somewhere else plays instead of pausing itself.
+        let last = Rig(status: .paused, unspeakable: [], at: 5)
+        last.engine.silentHrefs = ["ch6.xhtml"]
+        last.skip(forward: true)
+        await last.controller.waitForStartTaskForTests()
+        last.controller.handleEngineStatusChange(.stopped)
+        await last.controller.waitForStartTaskForTests()
+        #expect(last.controller.status == .stopped)
+        #expect(last.controller.showsNothingToSpeakAlert)
+        last.controller.toggle(from: last.positions[0][0])
+        await last.controller.waitForStartTaskForTests()
+        #expect(last.controller.status == .playing)
+    }
+
+    /// Review P3: an engine that goes `.unavailable` on a paused skip is neither stopped
+    /// (which turned `.unavailable` back into `.stopped`) nor answered with chapter skips.
+    @Test func engineGoingUnavailableOnPausedSkipStaysUnavailable() async {
+        let engine = SpeakingStub()
+        let rig = Rig(status: .paused, unspeakable: [], at: 2, engine: engine)
+        engine.goesUnavailable = true
+        rig.skip(forward: true)
+        await rig.controller.waitForStartTaskForTests()
+        #expect(rig.controller.status == .unavailable)
+        #expect(engine.stopCount == 0)
+        #expect(rig.moves == ["ch3.xhtml"])
+        #expect(!rig.controller.showsNothingToSpeakAlert)
+    }
+
+    @Test func detachedSessionNeverRaisesTheReaderAlert() async {
+        let rig = Rig(status: .paused, unspeakable: ["ch6.xhtml"], at: 5, isReaderOpen: false)
+        rig.controller.reanchor(to: rig.positions[5][0], resumePlaying: false)
+        await rig.controller.waitForStartTaskForTests()
+        #expect(rig.controller.status == .paused)
+        #expect(!rig.controller.showsNothingToSpeakAlert)
     }
 }
 #endif

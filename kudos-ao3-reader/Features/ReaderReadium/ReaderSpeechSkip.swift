@@ -58,23 +58,6 @@ nonisolated enum ReaderSpeechSkip {
         return chapter < chapterCount ? .nextChapter : .none
     }
 
-    /// Resolves the next 1-based spine chapter for skip-forward / auto-advance,
-    /// preferring Read Aloud's synchronously-updated `speechChapter` over the
-    /// asynchronously-settling navigator `bookChapter`.
-    static func nextChapterForSkipForward(
-        speechChapter: Int?,
-        bookChapter: Int?,
-        chapterCount: Int
-    ) -> Int? {
-        guard let currentChapter = speechChapter ?? bookChapter else { return nil }
-        switch forwardAction(chapter: currentChapter, chapterCount: chapterCount) {
-        case .nextChapter:
-            return currentChapter + 1
-        case .none:
-            return nil
-        }
-    }
-
     /// Where a Read Aloud chapter skip counts from: a 1-based spine chapter and the
     /// 1-based page within it.
     struct Origin: Equatable {

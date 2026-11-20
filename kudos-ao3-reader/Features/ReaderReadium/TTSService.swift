@@ -51,6 +51,17 @@ public enum TTSServiceStatus: Equatable {
 /// A piece of source text paired with its Readium location. Engines can split
 /// these units for synthesis while preserving an exact range for the reader's
 /// transient "currently reading" decoration.
+extension TTSSpeechUnit {
+    /// Has at least one letter or digit: anything else (scene-break symbols,
+    /// emoji, punctuation) is silence to every engine. One rule for the Apple
+    /// engine's chunk filter and Read Aloud's speakable-chapter scan.
+    nonisolated public var hasSpeakableText: Bool {
+        text.unicodeScalars.contains {
+            CharacterSet.letters.contains($0) || CharacterSet.decimalDigits.contains($0)
+        }
+    }
+}
+
 public struct TTSSpeechUnit: Hashable, Sendable {
     public let text: String
     public let locator: Locator?

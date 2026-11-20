@@ -398,7 +398,8 @@ public final class CoreMLKokoroTTSService: TTSService {
         let waiters = pauseWaiters
         pauseWaiters.removeAll()
         waiters.forEach { $0.resume() }
-        if notifyStopped {
+        // Like the Apple and sherpa engines: a stop never overwrites `.unavailable`.
+        if notifyStopped, status != .unavailable {
             status = .stopped
             spokenText = ""
             speechEnergy = 0

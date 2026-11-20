@@ -71,15 +71,17 @@ struct ReadingInsightsView: View {
     @AppStorage(InsightsOptions.Keys.untouchedDays)
     private var untouchedDays: Int = InsightsOptions.defaultUntouchedDays
 
-    /// Bumped on every SwiftData save while mounted, so a change to a work (an AO3
-    /// refresh marking it Explicit, finishing it) reloads the figures. Replaces a
-    /// walk over every `SavedWork` on each body evaluation, which faulted and
-    /// observed the whole library (review 4 P3 #7).
-    @State private var librarySaveRevision = 0
+    /// `InsightsReloadDigest` of the library as of the last reload (or the last
+    /// relevant save seen while on screen). Part of `reloadKey`, so a change that
+    /// moves the figures (an AO3 refresh marking a work Explicit, finishing a work,
+    /// a sitting written) reloads them once; a reading-position save does not.
+    @State private var libraryDigest = ""
+    /// Saves arriving while another screen covers this one are ignored; `onAppear`
+    /// reloads on return.
+    @State private var isOnScreen = false
 
-    /// Cheap reload fingerprint for `libraryWorks`: its size plus the save counter.
     private var libraryWorksFingerprint: String {
-        "\(libraryWorks.count)-\(librarySaveRevision)"
+        "\(libraryWorks.count)-\(libraryDigest)"
     }
 
     private var reloadKey: String {
@@ -218,8 +220,10 @@ struct ReadingInsightsView: View {
             reload()
         }
         .onAppear {
+            isOnScreen = true
             if hasLoadedOnce { reload() }
         }
+        .onDisappear { isOnScreen = false }
         .onChange(of: gate.revealAll) { _, revealed in
             // Synchronously clear hidden state and recompute main figures on re-lock so
             // stale combined mature titles/figures are never painted while waiting for `.task`.
@@ -236,12 +240,17 @@ struct ReadingInsightsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .kudosSyncRelevantSettingChanged)) { _ in
             optionsRevision += 1
         }
-        // A save can come from a background context; hop to main before touching state.
+        // A save can come from a background context: debounce on main (also folds a
+        // bulk refresh's per-work saves into one), then reload only when what
+        // Insights counts changed. Detached Read Aloud saves a position per
+        // sentence; those leave the digest alone.
         .onReceive(
             NotificationCenter.default.publisher(for: ModelContext.didSave)
-                .receive(on: DispatchQueue.main)
+                .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
         ) { _ in
-            librarySaveRevision &+= 1
+            guard isOnScreen else { return }
+            let digest = InsightsReloadDigest.make(works: libraryWorks, context: context)
+            if digest != libraryDigest { libraryDigest = digest }
         }
         .refreshable {
             reload()
@@ -772,6 +781,9 @@ struct ReadingInsightsView: View {
     }
 
     private func reload() {
+        // Taken first, so `reloadKey` already holds it when `lastReloadKey` is
+        // written below and a save this reload follows triggers no second one.
+        libraryDigest = InsightsReloadDigest.make(works: libraryWorks, context: context)
         let component = range.component
         guard let currentInterval = calendar.dateInterval(of: component, for: referenceDate),
               let earlierDate = calendar.date(byAdding: component, value: -1, to: referenceDate),
@@ -895,4 +907,35 @@ struct ReadingInsightsView: View {
         f.setLocalizedDateFormatFromTemplate("y")
         return f
     }()
+}
+
+/// What a save must change for Reading Insights to reload: the library's size,
+/// ratings, finishes, statuses, queue-only works and word counts, and the reading
+/// log's size and newest edit. A reading-position save (detached Read Aloud writes
+/// one per sentence) changes none of them. Computed per relevant save and per
+/// reload, never per body evaluation.
+@MainActor
+enum InsightsReloadDigest {
+    static func make(works: [SavedWork], context: ModelContext) -> String {
+        var adult = 0
+        var finished = 0
+        var queueOnly = 0
+        var words = 0
+        var newestStatus: TimeInterval = 0
+        for work in works {
+            if work.isAdult { adult += 1 }
+            if work.isFinished { finished += 1 }
+            if work.isQueueOnlyWork { queueOnly += 1 }
+            words &+= work.wordCount
+            if let changed = work.statusChangedAt?.timeIntervalSince1970, changed > newestStatus {
+                newestStatus = changed
+            }
+        }
+        let sessionCount = (try? context.fetchCount(FetchDescriptor<ReadingSession>())) ?? 0
+        var newest = FetchDescriptor<ReadingSession>(sortBy: [SortDescriptor(\.lastModifiedAt, order: .reverse)])
+        newest.fetchLimit = 1
+        let newestSession = ((try? context.fetch(newest))?.first?.lastModifiedAt.timeIntervalSince1970) ?? 0
+        return "\(works.count)-\(adult)-\(finished)-\(queueOnly)-\(words)-\(newestStatus)"
+            + "-\(sessionCount)-\(newestSession)"
+    }
 }

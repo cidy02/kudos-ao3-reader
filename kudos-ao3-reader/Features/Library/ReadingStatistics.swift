@@ -205,10 +205,18 @@ struct HomeReadingStats: Equatable, Sendable {
     /// still classify as hidden while locked and appear in Hidden when revealed.
     @MainActor
     static func softDeletedAdultWorkIDs(in context: ModelContext) -> Set<UUID> {
+        softDeletedWorkIDs(in: context).adult
+    }
+
+    /// Every work in Recently Deleted, and the adult-rated ones among them. A
+    /// soft-deleted work still exists, so it follows its current rating like a live
+    /// one; only hard-deleted works fall back to a sitting's recorded rating.
+    @MainActor
+    static func softDeletedWorkIDs(in context: ModelContext) -> (all: Set<UUID>, adult: Set<UUID>) {
         let deleted = (try? context.fetch(
             FetchDescriptor<SavedWork>(predicate: #Predicate { $0.isPendingDeletion })
         )) ?? []
-        return Set(deleted.lazy.filter(\.isAdult).map(\.id))
+        return (Set(deleted.map(\.id)), Set(deleted.lazy.filter(\.isAdult).map(\.id)))
     }
 
     /// Whether Library's `•••` menu offers "Reading Insights": whenever the user has
@@ -336,8 +344,9 @@ struct InsightsScopeSelection {
     /// soft-deleted mature works using `ModelContext` (soft-deleted `SavedWork`s)
     /// and any adult `ReadingSession.rating` snapshot for that `workID`, so every
     /// sitting of a deleted mature work stays out of locked views and lands in Hidden
-    /// when revealed. A live work follows its current rating instead (`liveWorkIDs`):
-    /// re-rated General/Teen, its old Explicit sittings return to main.
+    /// when revealed. A work that still exists (live, or soft-deleted) follows its
+    /// current rating instead: re-rated General/Teen, its old Explicit sittings
+    /// return to main.
     @MainActor
     func sessions(
         _ all: [ReadingSession],
@@ -353,11 +362,15 @@ struct InsightsScopeSelection {
         }
         if scope == .combined && revealed { return all }
         var allHiddenIDs = hiddenWorkIDs
+        var existingIDs = liveWorkIDs
         if let context {
-            allHiddenIDs.formUnion(HomeReadingStats.softDeletedAdultWorkIDs(in: context))
+            let softDeleted = HomeReadingStats.softDeletedWorkIDs(in: context)
+            allHiddenIDs.formUnion(softDeleted.adult)
+            existingIDs.formUnion(softDeleted.all)
         }
+        // Only a work that no longer exists is classified by a sitting's snapshot.
         for session in all
-        where !liveWorkIDs.contains(session.workID) && MatureContentRating.isAdult(session.rating) {
+        where !existingIDs.contains(session.workID) && MatureContentRating.isAdult(session.rating) {
             allHiddenIDs.insert(session.workID)
         }
         return scope == .hidden

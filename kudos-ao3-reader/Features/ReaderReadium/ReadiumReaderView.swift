@@ -1921,7 +1921,7 @@ extension ReadiumReaderView {
             speechLocator: speech.resumeLocator,
             followsSpeech: speech.skipFollowsSpeechPosition
         ) else { return }
-        goToSpineChapterStart(target, resumePlaying: speech.isPlaying)
+        goToSpineChapterStart(target, resumePlaying: speech.isPlaying, direction: .backward)
         playSpeechChapterHaptic()
     }
 
@@ -1937,17 +1937,23 @@ extension ReadiumReaderView {
         return didMove
     }
 
-    /// 1-based spine chapter → first Readium position; re-anchors TTS.
+    /// 1-based spine chapter → first Readium position; re-anchors TTS there. The
+    /// page is not moved here: Read Aloud moves it (`onAdvance`) once it has found a
+    /// chapter it can speak, so skipping onto art-only chapters never jumps the
+    /// reader to the end, rewrites progress or marks the work finished.
     @discardableResult
-    private func goToSpineChapterStart(_ chapter1Based: Int, resumePlaying: Bool) -> Bool {
+    private func goToSpineChapterStart(
+        _ chapter1Based: Int,
+        resumePlaying: Bool,
+        direction: ReaderSpeechController.ScanDirection = .forward
+    ) -> Bool {
         let index = chapter1Based - 1
         guard book.positionsByReadingOrder.indices.contains(index),
               let first = book.positionsByReadingOrder[index].first
         else { return false }
-        book.go(to: first)
         // Keep a paused session paused at the new chapter; only autoplay if we
         // were already speaking.
-        speech.reanchor(to: first, resumePlaying: resumePlaying)
+        speech.reanchor(to: first, resumePlaying: resumePlaying, direction: direction)
         return true
     }
 
@@ -2136,9 +2142,10 @@ extension ReadiumReaderView {
     }
 
     private var nothingToSpeakPresented: Binding<Bool> {
-        // Play on an unspeakable chapter is never a silent dead button.
+        // Play on an unspeakable chapter is never a silent dead button. Only the
+        // reader Read Aloud belongs to shows it (a "Next Work" reader stacks on top).
         Binding(
-            get: { speech.showsNothingToSpeakAlert },
+            get: { speech.showsNothingToSpeakAlert && speech.openReaderWorkID == work.id },
             set: { speech.showsNothingToSpeakAlert = $0 }
         )
     }

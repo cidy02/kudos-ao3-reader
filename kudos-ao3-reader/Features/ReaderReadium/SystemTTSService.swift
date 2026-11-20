@@ -88,10 +88,7 @@ public final class SystemTTSService: TTSService {
                     pauseAfter: unit.pauseAfter
                 )
             }
-            .filter { chunk in
-                chunk.text.unicodeScalars.contains { CharacterSet.letters.contains($0)
-                    || CharacterSet.decimalDigits.contains($0) }
-            }
+            .filter(\.hasSpeakableText)
         guard !prepared.isEmpty else { return false }
 
         chunks = prepared
