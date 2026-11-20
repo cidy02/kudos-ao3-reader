@@ -688,9 +688,16 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     }
 
     func submit(_ preferences: EPUBPreferences) {
-        noteTurnEcho(ReaderChromeAutoHide.relayoutEchoWindow)
+        // Only a real change relays the page out. The view re-submits unchanged
+        // preferences whenever a panel closes; that must not mute the next turn.
+        if preferences != lastSubmittedPreferences {
+            noteTurnEcho(ReaderChromeAutoHide.relayoutEchoWindow)
+            lastSubmittedPreferences = preferences
+        }
         navigator?.submitPreferences(preferences)
     }
+
+    @ObservationIgnored private var lastSubmittedPreferences: EPUBPreferences?
 
     /// Re-reads the page-turn style, layout and Reduce Motion into the adapter's
     /// animated flag. The preference itself goes out with the other EPUB

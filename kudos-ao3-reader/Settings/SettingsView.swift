@@ -94,6 +94,9 @@ struct ReaderOptionsForm: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
+            // Stops where a navigation bar's title stops growing, as in the sheet:
+            // at AX5 the header otherwise took a third of a cover-sized panel.
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         } else {
             // Spaced like the board's header: Customize… · title · Done.
             HStack(spacing: 0) {
