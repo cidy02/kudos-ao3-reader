@@ -1248,12 +1248,16 @@ struct ReadiumReaderView: View {
             if chromeVisible, atEnd {
                 if speechActive { standaloneMiniPlayer }
                 endOfWorkCard.transition(.opacity)
-            } else if chromeVisible {
-                highlightColorBar
-                positionCard(includeMiniPlayer: speechActive).transition(.opacity)
-            } else if speechActive {
+            } else if speechActive, !chromeVisible {
                 // Decoupled: transport stays reachable while full chrome is hidden.
                 standaloneMiniPlayer.transition(.opacity)
+            } else if !atEnd {
+                highlightColorBar
+                // Stays in the tree and fades (T-562b): removing the glass card
+                // skipped its opacity transition, so it vanished in one frame.
+                positionCard(includeMiniPlayer: speechActive)
+                    .opacity(chromeVisible ? 1 : 0)
+                    .allowsHitTesting(chromeVisible)
             }
         }
         // Inside the peel host's own hosting controller: the body's animation does
