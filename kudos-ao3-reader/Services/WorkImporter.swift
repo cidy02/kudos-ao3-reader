@@ -26,9 +26,16 @@ func importEPUB(
     // Reading the EPUB's metadata pulls the whole file into memory and unzips it, so
     // run that off the main actor; everything below (SwiftData + the file move) stays
     // on the main actor where it belongs.
-    let meta = await Task.detached(priority: .userInitiated) {
-        try? EPUBDocument.metadata(ofEPUBAt: tempURL)
+    let inspected = await Task.detached(priority: .userInitiated) {
+        let meta = try? EPUBDocument.metadata(ofEPUBAt: tempURL)
+        let analysis = try? AO3EPUBChapterWordCounter.analyze(
+            epubURL: tempURL,
+            language: meta?.language ?? ""
+        )
+        return (meta, analysis)
     }.value
+    let meta = inspected.0
+    let wordAnalysis = inspected.1
     if let canImport, !canImport() {
         try? FileManager.default.removeItem(at: tempURL)
         throw CancellationError()
@@ -58,6 +65,16 @@ func importEPUB(
         do {
             try ReadingQueueService.replaceEPUB(for: existing, with: tempURL)
             existing.hasEPUB = true
+            if let wordAnalysis {
+                existing.applyChapterWordAnalysis(
+                    AO3EPUBChapterWordCounter.Analysis(
+                        chapterWordCounts: wordAnalysis.chapterWordCounts,
+                        wordUnit: SavedWork.wordUnit(forLanguage: existing.language) == .characters
+                            ? .characters
+                            : wordAnalysis.wordUnit
+                    )
+                )
+            }
             if existing.downloadedAt == nil { existing.downloadedAt = downloadedAt }
         } catch {
             Log.library.error("Couldn't save imported EPUB: \(error.localizedDescription, privacy: .public)")
@@ -110,6 +127,16 @@ func importEPUB(
     do {
         try ReadingQueueService.replaceEPUB(for: work, with: tempURL)
         work.hasEPUB = true
+        if let wordAnalysis {
+            work.applyChapterWordAnalysis(
+                AO3EPUBChapterWordCounter.Analysis(
+                    chapterWordCounts: wordAnalysis.chapterWordCounts,
+                    wordUnit: SavedWork.wordUnit(forLanguage: work.language) == .characters
+                        ? .characters
+                        : wordAnalysis.wordUnit
+                )
+            )
+        }
     } catch {
         Log.library.error("Couldn't save imported EPUB: \(error.localizedDescription, privacy: .public)")
         throw error
@@ -197,6 +224,7 @@ func waitForUbiquitousDownload(
 private nonisolated struct UserEPUBInspection {
     let package: EPUBPackageInspection
     let extracted: ExtractedAO3EPUBMetadata
+    let chapterAnalysis: AO3EPUBChapterWordCounter.Analysis?
 
     var metadata: EPUBMetadata {
         package.metadata
@@ -237,7 +265,11 @@ private nonisolated struct UserEPUBInspection {
     static func inspect(_ url: URL) throws -> Self {
         let package = try EPUBDocument.inspectPackage(ofEPUBAt: url)
         let extracted = AO3EPUBMetadataScanner.scan(url)
-        return Self(package: package, extracted: extracted)
+        let analysis = try? AO3EPUBChapterWordCounter.analyze(
+            epubURL: url,
+            language: extracted.groups.language.isEmpty ? package.metadata.language : extracted.groups.language
+        )
+        return Self(package: package, extracted: extracted, chapterAnalysis: analysis)
     }
 
     private func firstNonEmpty(_ first: String, _ second: String) -> String {
@@ -388,6 +420,17 @@ private func applyUserImportMetadata(
     }
     if work.ao3SeriesID == nil {
         work.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: work.seriesURL)
+    }
+    if let analysis = inspection.chapterAnalysis, !fillOnly || work.chapterWordCountsJSON.isEmpty {
+        let resolvedUnit: SavedWork.WordUnit = SavedWork.wordUnit(forLanguage: work.language) == .characters
+            ? .characters
+            : analysis.wordUnit
+        work.applyChapterWordAnalysis(
+            AO3EPUBChapterWordCounter.Analysis(
+                chapterWordCounts: analysis.chapterWordCounts,
+                wordUnit: resolvedUnit
+            )
+        )
     }
 }
 

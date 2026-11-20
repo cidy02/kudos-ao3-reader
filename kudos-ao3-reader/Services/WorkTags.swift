@@ -61,7 +61,7 @@ enum WorkTags {
             // dedicated fields and are not duplicated into Additional Tags.
             work.workTags = TagMerge.merged([], work.workFandoms + work.workRelationships
                 + work.workCharacters + work.workFreeforms)
-            if !groups.language.isEmpty { work.language = groups.language }
+            work.applyLanguageMetadata(groups.language)
             if let words = groups.words { work.wordCount = words }
             work.chapters = groups.chapters
             if let kudos = groups.kudos { work.kudos = kudos }

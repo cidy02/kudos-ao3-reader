@@ -344,6 +344,16 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// EPUB doesn't carry it); used by the Library word-count filter and sort.
     var wordCount: Int = 0
 
+    /// Per-chapter word (or character) counts from the local EPUB's chapter
+    /// prose only (preface, summaries, notes, and afterword excluded), encoded as
+    /// a JSON `[Int]`. Empty string until computed; read via `chapterWordCounts`.
+    var chapterWordCountsJSON: String = ""
+
+    /// Measurement unit for `chapterWordCountsJSON`: `"words"` or
+    /// `"characters"` (no-space languages: Chinese, Japanese, Thai). Empty string
+    /// until recorded so untouched works omit the backup key.
+    var wordUnitRaw: String = ""
+
     /// Best-effort AO3/EPUB date text. Remote AO3 summaries already carry their own
     /// dates; these persist dates parsed from a locally imported EPUB.
     var datePublished: String = ""
@@ -754,6 +764,101 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         if let before, let after = readiumProgress,
            abs(after - before) < ReadiumProgressPersistence.minProgressionDelta { return }
         legacyReaderProgress = nil
+    }
+}
+
+extension SavedWork {
+    nonisolated enum WordUnit: String, Equatable, Sendable {
+        case words
+        case characters
+    }
+
+    var wordUnit: WordUnit {
+        WordUnit(rawValue: wordUnitRaw) ?? Self.wordUnit(forLanguage: language)
+    }
+
+    var chapterWordCounts: [Int] {
+        get {
+            guard !chapterWordCountsJSON.isEmpty,
+                  let data = chapterWordCountsJSON.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([Int].self, from: data)
+            else { return [] }
+            return decoded
+        }
+        set {
+            if newValue.isEmpty {
+                chapterWordCountsJSON = ""
+                return
+            }
+            guard let data = try? JSONEncoder().encode(newValue),
+                  let json = String(data: data, encoding: .utf8)
+            else {
+                chapterWordCountsJSON = ""
+                return
+            }
+            chapterWordCountsJSON = json
+        }
+    }
+
+    func applyChapterWordAnalysis(_ analysis: AO3EPUBChapterWordCounter.Analysis) {
+        chapterWordCounts = analysis.chapterWordCounts
+        wordUnitRaw = analysis.wordUnit.rawValue
+    }
+
+    func applyLanguageMetadata(_ language: String) {
+        guard !language.isEmpty else { return }
+        self.language = language
+        if Self.wordUnit(forLanguage: language) == .characters {
+            wordUnitRaw = WordUnit.characters.rawValue
+        }
+    }
+
+    nonisolated static func validatedChapterWordCountsJSON(_ json: String?) -> String? {
+        guard let json, !json.isEmpty,
+              let data = json.data(using: .utf8),
+              let counts = try? JSONDecoder().decode([Int].self, from: data),
+              !counts.isEmpty,
+              counts.allSatisfy({ $0 >= 0 }),
+              let normalized = try? JSONEncoder().encode(counts),
+              let normalizedString = String(data: normalized, encoding: .utf8)
+        else { return nil }
+        return normalizedString
+    }
+
+    nonisolated static func validatedWordUnitRaw(_ raw: String?) -> String? {
+        guard let raw, let unit = WordUnit(rawValue: raw) else { return nil }
+        return unit.rawValue
+    }
+
+    /// Maps a `SavedWork.language` string (EPUB `dc:language` code or AO3
+    /// display language) to `.characters` for languages written without spaces
+    /// (Chinese, Japanese, Thai) and `.words` otherwise.
+    nonisolated static func wordUnit(forLanguage language: String) -> WordUnit {
+        let trimmed = language.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .words }
+        let lower = trimmed.lowercased()
+        let code = lower
+            .replacingOccurrences(of: "_", with: "-")
+            .split(whereSeparator: { $0 == "-" || $0.isWhitespace })
+            .first
+            .map(String.init) ?? lower
+        switch code {
+        case "zh", "zho", "chi", "cmn", "yue", "hak", "nan", "wuu",
+             "ja", "jpn",
+             "th", "tha":
+            return .characters
+        default:
+            break
+        }
+        let characterIndicators = [
+            "中文", "chinese", "mandarin", "cantonese", "hokkien", "hakka",
+            "日本語", "japanese",
+            "ไทย", "thai"
+        ]
+        if characterIndicators.contains(where: { lower.contains($0) }) {
+            return .characters
+        }
+        return .words
     }
 }
 

@@ -119,19 +119,20 @@ public final class SherpaKokoroTTSService: TTSService {
         attachPlayerNodeIfNeeded()
     }
 
-    public func speak(units: [TTSSpeechUnit]) async throws {
+    @discardableResult
+    public func speak(units: [TTSSpeechUnit]) async throws -> Bool {
         resetPlayback(notifyStopped: false)
 
         // The sherpa Kokoro frontend is configured for one sentence. Supplying
         // complete sentence units preserves punctuation/prosody and avoids
         // handing it a short paragraph that can end mid-thought.
         let chunks = TTSSpeechUnit.sentenceChunks(from: units)
-        guard !chunks.isEmpty else { return }
+        guard !chunks.isEmpty else { return false }
 
         guard loadEngineIfNeeded(), let tts else {
             Log.tts.error("Kokoro engine unavailable — model missing or failed to load")
             status = .unavailable
-            return
+            return false
         }
 
         try activateAudioSession()
@@ -274,6 +275,7 @@ public final class SherpaKokoroTTSService: TTSService {
 
             self.finishNaturally()
         }
+        return true
     }
 
     public func pause() {

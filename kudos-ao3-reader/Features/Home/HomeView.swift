@@ -182,10 +182,6 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         hasSectionCache = true
     }
 
-    private var statisticsWorks: [SavedWork] {
-        HomeReadingStats.insightsWorks(from: works, gate: gate, hideMature: hideMature)
-    }
-
     private var homeStatsRevision: String {
         let newest = readingSessions.map(\.lastModifiedAt).max()?.timeIntervalSince1970 ?? 0
         return HomeReadingStats.revisionKey(
@@ -261,7 +257,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             #endif
                 .navigationDestination(for: SavedWork.self) { HomeWorkDestination(work: $0) }
                 .navigationDestination(for: ReadingInsightsDestination.self) { _ in
-                    ReadingInsightsView(works: statisticsWorks)
+                    ReadingInsightsView(libraryWorks: works)
                 }
                 .navigationDestination(for: LocalWorkDestination.self) { destination in
                     LocalWorkDestinationView(destination: destination, onReaderOpen: markUpdateSeen)

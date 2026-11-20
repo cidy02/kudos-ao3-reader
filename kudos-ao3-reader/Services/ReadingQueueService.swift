@@ -784,6 +784,7 @@ enum ReadingQueueService {
             work.epubPreservationStatus = .preserved
             work.preservedAt = Date()
             work.lastAvailabilityCheck = Date()
+            await AO3EPUBChapterWordCounter.populate(for: work, force: true)
             try context.save()
             await WorkTags.backfillFromEPUB(for: work, in: context)
             await syncMetadata(for: work, in: context)
@@ -1227,7 +1228,13 @@ enum ReadingQueueService {
         // The one place an EPUB is written, so the one place the cached content
         // identity can be kept honest. Every other caller — download, import,
         // reconversion, restore, sync — comes through here.
-        work.epubDigest = Storage.fileDigest(at: destination) ?? ""
+        let previousDigest = work.epubDigest
+        let newDigest = Storage.fileDigest(at: destination) ?? ""
+        work.epubDigest = newDigest
+        if !previousDigest.isEmpty && !newDigest.isEmpty && newDigest != previousDigest {
+            work.chapterWordCountsJSON = ""
+            work.wordUnitRaw = ""
+        }
         // The bytes arrived, so nothing is outstanding any more.
         work.remoteEPUBPending = false
     }

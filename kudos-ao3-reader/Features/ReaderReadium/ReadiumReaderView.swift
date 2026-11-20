@@ -453,23 +453,32 @@ struct ReadiumReaderView: View {
                 syncSliderFromPosition(newValue)
             }
             .onChange(of: speech.status) { _, status in
-                if status == .playing {
-                    ReadingLogService.setMode(
-                        .listen, for: work, playbackRate: ReaderSpeechPreferences.rateMultiplier
-                    )
+                let mapped: ReadingLogService.DetachedSpeechState = switch status {
+                case .playing: .playing
+                case .paused: .paused
+                case .stopped, .unavailable: .stopped
                 }
+                ReadingLogService.handleSpeechStatusChange(
+                    mapped,
+                    isReaderOpen: speech.isReaderOpen,
+                    isBackgrounded: scenePhase == .background,
+                    for: work,
+                    playbackRate: ReaderSpeechPreferences.rateMultiplier,
+                    now: Date()
+                )
             }
             .onAppear {
                 speech.readerDidOpen(workID: work.id)
                 if book.phase == .ready {
                     attachSpeechToReadyBook()
                 }
-                ReadingLogService.startSession(for: work, now: Date())
-                if speech.status == .playing {
-                    ReadingLogService.setMode(
-                        .listen, for: work, playbackRate: ReaderSpeechPreferences.rateMultiplier
-                    )
-                }
+                ReadingLogService.handleReaderOpen(
+                    for: work,
+                    isSpeechPlaying: speech.status == .playing,
+                    isSpeechStopped: speech.status == .stopped || speech.status == .unavailable,
+                    playbackRate: ReaderSpeechPreferences.rateMultiplier,
+                    now: Date()
+                )
                 WorkLifecycle.keepIfKeepingWorksYouRead(work, in: modelContext)
                 WorkLifecycle.releaseHeldCopy(work)
             }
@@ -482,7 +491,9 @@ struct ReadiumReaderView: View {
                 switch phase {
                 case .background:
                     flushProgress(shelfStamp: true)
-                    ReadingLogService.pauseSession(for: work, now: Date())
+                    if speech.status != .playing {
+                        ReadingLogService.pauseSession(for: work, now: Date())
+                    }
                 case .inactive:
                     flushProgress(shelfStamp: false)
                 case .active:
@@ -504,13 +515,19 @@ struct ReadiumReaderView: View {
                 // Flush the exact final position so resume lands precisely, even if the
                 // last scroll's debounce window hadn't elapsed before we left.
                 flushProgress(shelfStamp: true)
-                ReadingLogService.endSession(for: work, now: Date())
                 let canFreeEPUB = ReaderSpeechSessionPolicy.canFreeEPUB(
                     workID: work.id,
                     sessionActive: speech.isSessionActive,
                     sessionWorkID: speech.sessionWorkID
                 )
-                speech.readerDidClose(workID: work.id)
+                let leaveAction = speech.readerDidClose(workID: work.id)
+                ReadingLogService.handleReaderClose(
+                    for: work,
+                    detachListening: leaveAction == .detach,
+                    isSpeechPlaying: speech.status == .playing,
+                    playbackRate: ReaderSpeechPreferences.rateMultiplier,
+                    now: Date()
+                )
                 // An active detached session retains this Publication. Keep its
                 // source EPUB until Stop/session end releases the publication.
                 if canFreeEPUB {
@@ -1906,27 +1923,35 @@ extension ReadiumReaderView {
         }
     }
 
-    private func handleSpeechSkipForward() {
-        guard let pos = book.readingPosition else { return }
-        switch ReaderSpeechSkip.forwardAction(chapter: pos.chapter, chapterCount: pos.chapterCount) {
-        case .nextChapter:
-            goToSpineChapterStart(pos.chapter + 1, resumePlaying: speech.isPlaying)
-            playSpeechChapterHaptic()
-        case .none:
-            break
-        }
+    @discardableResult
+    private func handleSpeechSkipForward() -> Bool {
+        let chapterCount = max(
+            1,
+            book.positionsByReadingOrder.isEmpty ? book.readingOrder.count : book.positionsByReadingOrder.count
+        )
+        let speechChapter = speech.resumeLocator.flatMap { book.spineChapter(for: $0) }
+        guard let nextChapter = ReaderSpeechSkip.nextChapterForSkipForward(
+            speechChapter: speechChapter,
+            bookChapter: book.readingPosition?.chapter,
+            chapterCount: chapterCount
+        ) else { return false }
+        let didMove = goToSpineChapterStart(nextChapter, resumePlaying: speech.isPlaying)
+        if didMove { playSpeechChapterHaptic() }
+        return didMove
     }
 
     /// 1-based spine chapter → first Readium position; re-anchors TTS.
-    private func goToSpineChapterStart(_ chapter1Based: Int, resumePlaying: Bool) {
+    @discardableResult
+    private func goToSpineChapterStart(_ chapter1Based: Int, resumePlaying: Bool) -> Bool {
         let index = chapter1Based - 1
         guard book.positionsByReadingOrder.indices.contains(index),
               let first = book.positionsByReadingOrder[index].first
-        else { return }
+        else { return false }
         book.go(to: first)
         // Keep a paused session paused at the new chapter; only autoplay if we
         // were already speaking.
         speech.reanchor(to: first, resumePlaying: resumePlaying)
+        return true
     }
 
     private func handleSpeechSeekHoldStart(forward: Bool) {
@@ -1976,7 +2001,7 @@ extension ReadiumReaderView {
     private func handleSpeechSeekHoldEnd() {
         guard speechSeekHolding else { return }
         speechSeekHolding = false
-        speech.reanchor(to: book.currentLocator, resumePlaying: speechSeekWasPlaying)
+        speech.reanchor(to: speech.resumeLocator ?? book.currentLocator, resumePlaying: speechSeekWasPlaying)
         speechSeekWasPlaying = false
     }
 

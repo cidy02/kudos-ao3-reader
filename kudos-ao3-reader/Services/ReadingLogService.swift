@@ -66,7 +66,11 @@ enum ReadingLogService {
     /// the same work is a no-op so SwiftUI re-appear / book-reload cannot
     /// double-count.
     static func startSession(
-        for work: SavedWork, now: Date = Date(), timeZone: TimeZone = .current,
+        for work: SavedWork,
+        mode: ReadingSession.Mode = .read,
+        playbackRate: Double? = nil,
+        now: Date = Date(),
+        timeZone: TimeZone = .current,
         defaults: UserDefaults = .standard
     ) {
         let workID = work.id
@@ -88,8 +92,8 @@ enum ReadingLogService {
                     && work.lastScrollFraction == 0 ? 0 : nil
             ),
             startSpineIndex: work.lastSpineIndex,
-            mode: .read,
-            playbackRate: nil,
+            mode: mode,
+            playbackRate: mode == .listen ? playbackRate : nil,
             activeSeconds: 0,
             lastActivityAt: now,
             deviceID: deviceID(defaults: defaults),
@@ -105,15 +109,78 @@ enum ReadingLogService {
         openSessions[work.id] = session
     }
 
+    static func openSessionMode(for workID: UUID) -> ReadingSession.Mode? {
+        openSessions[workID]?.mode
+    }
+
+    /// Switches the open session's mode (`.read` vs `.listen`).
+    ///
+    /// D4 rule: a sitting that changes mode mid-sitting splits into two
+    /// `ReadingSession` rows (finalizing the outgoing segment when it reached
+    /// `minimumPersistableDuration`, then opening a fresh segment at `now`). Rate
+    /// changes within `.listen` update the open row in place.
     static func setMode(
-        _ mode: ReadingSession.Mode, for work: SavedWork,
-        playbackRate: Double? = nil
+        _ mode: ReadingSession.Mode,
+        for work: SavedWork,
+        playbackRate: Double? = nil,
+        now: Date = Date()
     ) {
         guard var session = openSessions[work.id] else { return }
-        // One mode per sitting: any Read Aloud playback makes this a listening visit.
-        session.mode = mode
-        session.playbackRate = mode == .listen ? playbackRate : nil
-        openSessions[work.id] = session
+        if session.mode == mode {
+            session.playbackRate = mode == .listen ? playbackRate : nil
+            openSessions[work.id] = session
+            return
+        }
+
+        noteActivity(for: work, now: now)
+        session = openSessions[work.id] ?? session
+
+        let splitAt: Date
+        if !session.isPaused {
+            session.accumulatedSeconds += max(0, now.timeIntervalSince(session.lastResumedAt))
+            session.lastResumedAt = now
+            splitAt = now
+        } else {
+            splitAt = session.lastResumedAt
+        }
+
+        // Switching at open (0s active, same instant) keeps original start facts
+        // (location/spine) on the same row.
+        if session.accumulatedSeconds == 0 && !session.isPaused && now == session.startedAt {
+            session.mode = mode
+            session.playbackRate = mode == .listen ? playbackRate : nil
+            openSessions[work.id] = session
+            return
+        }
+
+        let persistedOutgoing = session.accumulatedSeconds >= minimumPersistableDuration
+        if persistedOutgoing {
+            persist(session, for: work, now: splitAt, didFinish: didFinish(session, for: work))
+        }
+
+        openSessions[work.id] = OpenSession(
+            recordID: UUID(),
+            workID: work.id,
+            ao3WorkID: work.ao3WorkID,
+            sourceURL: work.sourceURL,
+            workTitle: work.title,
+            startedAt: now,
+            lastResumedAt: now,
+            accumulatedSeconds: 0,
+            isPaused: session.isPaused,
+            tzOffsetSeconds: session.tzOffsetSeconds,
+            startProgress: work.publicationProgress ?? (
+                work.readiumLocator.isEmpty && work.lastSpineIndex == 0
+                    && work.lastScrollFraction == 0 ? 0 : nil
+            ),
+            startSpineIndex: work.lastSpineIndex,
+            mode: mode,
+            playbackRate: mode == .listen ? playbackRate : nil,
+            activeSeconds: 0,
+            lastActivityAt: now,
+            deviceID: session.deviceID,
+            wasFinishedAtStart: persistedOutgoing ? work.isFinished : session.wasFinishedAtStart
+        )
     }
 
     /// Whether this visit is the one that finished the work — the reread signal.
@@ -252,6 +319,114 @@ enum ReadingLogService {
         context.saveBestEffort(reason: "Saving reading session failed")
     }
 
+    /// Closes or keeps the open sitting when the reader disappears.
+    ///
+    /// D4: Active Read Aloud detaches instead of closing the sitting so
+    /// background/out-of-reader listening stays tracked as `.listen`.
+    static func handleReaderClose(
+        for work: SavedWork,
+        detachListening: Bool,
+        isSpeechPlaying: Bool,
+        playbackRate: Double,
+        now: Date = Date()
+    ) {
+        guard detachListening else {
+            endSession(for: work, now: now)
+            return
+        }
+        if isSpeechPlaying {
+            setMode(.listen, for: work, playbackRate: playbackRate, now: now)
+            noteActivity(for: work, now: now)
+        } else {
+            pauseSession(for: work, now: now)
+        }
+    }
+
+    enum DetachedSpeechState {
+        case playing
+        case paused
+        case stopped
+    }
+
+    /// Updates the reading log for Read Aloud transport changes while the
+    /// reader view is detached.
+    static func handleDetachedSpeech(
+        _ state: DetachedSpeechState,
+        for work: SavedWork,
+        playbackRate: Double,
+        now: Date = Date()
+    ) {
+        switch state {
+        case .playing:
+            if hasOpenSession(for: work.id) {
+                resumeSession(for: work, now: now)
+                setMode(.listen, for: work, playbackRate: playbackRate, now: now)
+            } else {
+                startSession(for: work, mode: .listen, playbackRate: playbackRate, now: now)
+            }
+        case .paused:
+            pauseSession(for: work, now: now)
+        case .stopped:
+            endSession(for: work, now: now)
+        }
+    }
+
+    /// Opens or resumes the reading session when a reader view appears.
+    static func handleReaderOpen(
+        for work: SavedWork,
+        isSpeechPlaying: Bool,
+        isSpeechStopped: Bool,
+        playbackRate: Double,
+        now: Date = Date()
+    ) {
+        if hasOpenSession(for: work.id) {
+            resumeSession(for: work, now: now)
+            if isSpeechPlaying {
+                setMode(.listen, for: work, playbackRate: playbackRate, now: now)
+            } else if isSpeechStopped {
+                setMode(.read, for: work, now: now)
+            }
+        } else {
+            startSession(
+                for: work,
+                mode: isSpeechPlaying ? .listen : .read,
+                playbackRate: isSpeechPlaying ? playbackRate : nil,
+                now: now
+            )
+        }
+    }
+
+    /// Updates the open reading log for Read Aloud status transitions while the
+    /// reader is mounted (including backgrounded Lock Screen / Control Center
+    /// pause or stop events delivered directly from the speech controller).
+    static func handleSpeechStatusChange(
+        _ state: DetachedSpeechState,
+        isReaderOpen: Bool,
+        isBackgrounded: Bool,
+        for work: SavedWork,
+        playbackRate: Double,
+        now: Date = Date()
+    ) {
+        guard isReaderOpen else {
+            handleDetachedSpeech(state, for: work, playbackRate: playbackRate, now: now)
+            return
+        }
+        switch state {
+        case .playing:
+            resumeSession(for: work, now: now)
+            setMode(.listen, for: work, playbackRate: playbackRate, now: now)
+        case .paused:
+            if isBackgrounded {
+                pauseSession(for: work, now: now)
+            }
+        case .stopped:
+            setMode(.read, for: work, now: now)
+            if isBackgrounded {
+                pauseSession(for: work, now: now)
+            }
+        }
+    }
+
     static func hasOpenSession(for workID: UUID) -> Bool {
         openSessions[workID] != nil
     }
@@ -259,6 +434,21 @@ enum ReadingLogService {
     /// Test seam: in-memory open sessions otherwise leak across tests.
     static func resetOpenSessionsForTests() {
         openSessions.removeAll()
+    }
+
+    /// Called after the local reading log is wiped (`InsightsExportService.resetReadingLog`):
+    /// rotates every open session's `recordID` so an active/detached Read Aloud sitting
+    /// cannot later re-insert a row with a now-tombstoned ID and pre-reset duration.
+    static func resetOpenSessionsAfterLogReset(now: Date = Date()) {
+        for (workID, var session) in openSessions {
+            session.recordID = UUID()
+            session.startedAt = now
+            session.lastResumedAt = now
+            session.lastActivityAt = now
+            session.accumulatedSeconds = 0
+            session.activeSeconds = 0
+            openSessions[workID] = session
+        }
     }
 
     // MARK: Queries
@@ -355,8 +545,8 @@ enum ReadingLogService {
     ///
     /// Delegates to `ReadingInsights` so the Insights screen and this helper
     /// cannot report two different rates for the same rows.
-    static func wordsPerHour(sessions: [ReadingSession]) -> Double {
-        ReadingInsights.wordsPerHour(of: facts(from: sessions, works: []))
+    static func wordsPerHour(sessions: [ReadingSession], works: [SavedWork]) -> Double {
+        ReadingInsights.wordsPerHour(of: facts(from: sessions, works: works))
     }
 
     /// Flattens log rows into the plain values the statistics work on, resolving
@@ -379,7 +569,7 @@ enum ReadingLogService {
         let worksByID = Dictionary(
             works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
         )
-        let read = wordsRead(sessions: history ?? sessions)
+        let read = wordsRead(sessions: history ?? sessions, works: works)
         return sessions.map { session in
             let work = worksByID[session.workID]
             let rawFandom = session.fandoms.first(where: { !$0.isEmpty })
@@ -399,52 +589,264 @@ enum ReadingLogService {
                 // work's count now, which is the best the log can do for them.
                 chapterCount: session.chapterCountAtVisit > 0
                     ? session.chapterCountAtVisit : work?.postedChapterCount ?? 0,
-                startProgress: session.startProgress
+                startProgress: session.startProgress,
+                mode: session.mode,
+                wordUnit: work?.wordUnit ?? .words
             )
         }
     }
 
-    /// Words each sitting read (owner Q27, 2026-10-20; T-515, 2026-11-13): this
-    /// sitting's end in words (`endingProgress × wordCount`) minus where it
-    /// started in words (`startProgress × wordCount` when recorded, else the
-    /// previous sitting's end in words, or 0 for a first sitting or a reread of a
-    /// finished work that did not grow), never below zero. A sitting that went
-    /// back reads nothing and is where the next one starts from.
-    static func wordsRead(sessions: [ReadingSession]) -> [UUID: Int] {
+    /// Words (or characters, per `SavedWork.wordUnit`) each sitting read.
+    ///
+    /// D3: Uses per-chapter EPUB counts when available on the work and within
+    /// 10% of AO3's reported word count, never double-counting a revised chapter
+    /// already read in the current read-through. Falls back to the legacy
+    /// `progress × wordCount` rule otherwise.
+    static func wordsRead(
+        sessions: [ReadingSession],
+        works: [SavedWork]
+    ) -> [UUID: Int] {
+        let worksByID = Dictionary(
+            works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
+        )
         var read: [UUID: Int] = [:]
-        for group in Dictionary(grouping: sessions, by: \.workID).values {
-            var previousEndFraction = 0.0
-            var previousEndWords = 0.0
-            var previousWords = 0
-            var previousFinished = false
+        for (workID, group) in Dictionary(grouping: sessions, by: \.workID) {
             let sorted = group.sorted {
                 ($0.startedAt, $0.id.uuidString) < ($1.startedAt, $1.id.uuidString)
             }
-            for session in sorted {
-                let words = max(0, session.wordCount)
-                let endFraction = min(1, max(0, session.endingProgress))
-                let endWords = endFraction * Double(words)
-                let startWords: Double
-                if let explicit = session.startProgress {
-                    let clamped = min(1, max(0, explicit))
-                    if previousWords > 0 && words > previousWords && clamped == previousEndFraction {
-                        startWords = previousEndWords
-                    } else {
-                        startWords = clamped * Double(words)
-                    }
-                } else if previousFinished && words <= previousWords {
-                    startWords = 0
-                } else {
-                    startWords = previousEndWords
-                }
-                read[session.id] = Int(max(0, endWords - startWords).rounded())
-                previousEndFraction = endFraction
-                previousEndWords = endWords
-                previousWords = words
-                previousFinished = session.didFinish
+            let work = worksByID[workID]
+            if let work, canUseChapterWordCounts(work.chapterWordCounts, for: work, sessions: sorted) {
+                chapterWordsRead(
+                    sortedSessions: sorted,
+                    chapterCounts: work.chapterWordCounts,
+                    into: &read
+                )
+            } else {
+                legacyWordsRead(sortedSessions: sorted, into: &read)
             }
         }
         return read
+    }
+
+    private static func canUseChapterWordCounts(
+        _ counts: [Int],
+        for work: SavedWork,
+        sessions: [ReadingSession]
+    ) -> Bool {
+        guard !counts.isEmpty else { return false }
+        let chapterSum = counts.reduce(0, +)
+        guard chapterSum > 0 else { return false }
+        let ao3Count = work.wordCount
+        if work.postedChapterCount > 0 && counts.count < work.postedChapterCount {
+            // Local EPUB has fewer chapters than AO3 reports: only use chapter counts
+            // when a sitting explicitly stayed within `counts.count` and matched its
+            // own AO3 word count within 10% (or had no AO3 count). Otherwise a
+            // collapsed TOC (e.g. [500] vs 50_000) falls back to `progress * wordCount`.
+            return sessions.contains { session in
+                guard session.chapterCountAtVisit > 0,
+                      session.chapterCountAtVisit <= counts.count else { return false }
+                guard session.wordCount > 0 else { return true }
+                let prefixSum = counts.prefix(session.chapterCountAtVisit).reduce(0, +)
+                return abs(Double(prefixSum - session.wordCount)) <= Double(session.wordCount) * 0.10
+            }
+        }
+        if ao3Count > 0 {
+            return abs(Double(chapterSum - ao3Count)) <= Double(ao3Count) * 0.10
+        }
+        return true
+    }
+
+    private static func inferredChapterCount(
+        forWordCount wordCount: Int,
+        in chapterCounts: [Int]
+    ) -> Int {
+        let totalSum = chapterCounts.reduce(0, +)
+        guard wordCount > 0, Double(wordCount) < Double(totalSum) * 0.90 else {
+            return chapterCounts.count
+        }
+        var cumulative = 0
+        var bestCount = chapterCounts.count
+        var bestDiff = Int.max
+        for (index, count) in chapterCounts.enumerated() {
+            cumulative += count
+            let diff = abs(cumulative - wordCount)
+            if diff < bestDiff {
+                bestDiff = diff
+                bestCount = index + 1
+            }
+        }
+        return bestCount
+    }
+
+    private static func chapterWordsRead(
+        sortedSessions: [ReadingSession],
+        chapterCounts: [Int],
+        into read: inout [UUID: Int]
+    ) {
+        var chapterHighWater = Array(repeating: 0.0, count: chapterCounts.count)
+        var previousEndFraction = 0.0
+        var previousWords = 0
+        var previousChapterCount = 0
+        var previousFinished = false
+        // A finish was seen and no later sitting has read forward yet. It survives
+        // sittings that read nothing (open a finished work at its end, scroll back),
+        // so the first forward read after a finish decides "reread or revision".
+        struct FinishMark { let endFraction: Double, words: Int, chapterCount: Int }
+        var pendingFinish: FinishMark?
+
+        for session in sortedSessions {
+            let hasChapterMismatch = session.chapterCountAtVisit > chapterCounts.count
+            let activeCount: Int
+            if session.chapterCountAtVisit > 0 {
+                activeCount = min(session.chapterCountAtVisit, chapterCounts.count)
+            } else {
+                activeCount = inferredChapterCount(forWordCount: session.wordCount, in: chapterCounts)
+            }
+            let activeCounts = Array(chapterCounts.prefix(activeCount))
+            let prefixSum = activeCounts.reduce(0, +)
+
+            let workGrew = (previousChapterCount > 0 && activeCount > previousChapterCount)
+                || (previousWords > 0 && session.wordCount > previousWords)
+            let clampedStart = session.startProgress.map { min(1, max(0, $0)) }
+            let endFraction = min(1, max(0, session.endingProgress))
+
+            // Same rule as `legacyWordsRead`: no recorded start right after a finish
+            // means a reread from 0 unless the work grew.
+            let startFraction: Double
+            if let clampedStart {
+                startFraction = clampedStart
+            } else if previousFinished && !workGrew {
+                startFraction = 0
+            } else {
+                startFraction = previousEndFraction
+            }
+
+            if let finish = pendingFinish, endFraction > startFraction {
+                // Starting from 0 is always a reread (even after an AO3 recount). A start
+                // part-way in is a reread unless the work changed meaningfully since the
+                // finish: gained chapters or grew/shrank by more than 10%, where the
+                // read-through continues instead.
+                let grewSinceFinish = (finish.chapterCount > 0 && activeCount > finish.chapterCount)
+                    || (finish.words > 0 && Double(session.wordCount) > Double(finish.words) * 1.10)
+                let shrankSinceFinish = finish.words > 0 && session.wordCount > 0
+                    && Double(session.wordCount) < Double(finish.words) * 0.90
+                let isGenuineNewReread = startFraction == 0
+                    || (!grewSinceFinish && !shrankSinceFinish && startFraction < finish.endFraction)
+                if isGenuineNewReread {
+                    chapterHighWater = Array(repeating: 0.0, count: chapterCounts.count)
+                    pendingFinish = nil
+                } else if grewSinceFinish || shrankSinceFinish {
+                    pendingFinish = nil
+                } else {
+                    // Forward nudge at/past the finish point (e.g. reading end notes):
+                    // keep `pendingFinish` armed so a later scroll-back reread still resets.
+                    pendingFinish = FinishMark(
+                        endFraction: max(finish.endFraction, endFraction),
+                        words: finish.words,
+                        chapterCount: finish.chapterCount
+                    )
+                }
+            }
+            if session.didFinish {
+                pendingFinish = FinishMark(
+                    endFraction: endFraction, words: session.wordCount, chapterCount: activeCount
+                )
+            }
+
+            guard prefixSum > 0, endFraction > startFraction else {
+                read[session.id] = 0
+                previousEndFraction = endFraction
+                previousWords = session.wordCount
+                previousChapterCount = activeCount
+                previousFinished = session.didFinish
+                continue
+            }
+
+            let differsBeyondTenPercent = session.wordCount > 0
+                && abs(Double(prefixSum - session.wordCount)) > Double(session.wordCount) * 0.10
+            // Never scale up across a chapter mismatch (counts.count < session.chapterCountAtVisit),
+            // and do not project a partial fraction across shifted chapter boundaries when >10% off.
+            if !hasChapterMismatch && differsBeyondTenPercent && endFraction < 1.0 {
+                read[session.id] = Int(max(0, (endFraction - startFraction) * Double(session.wordCount)).rounded())
+                let completedWholeChapters = min(
+                    activeCounts.count,
+                    max(0, Int(floor(endFraction * Double(activeCounts.count))))
+                )
+                for index in 0..<completedWholeChapters {
+                    chapterHighWater[index] = 1.0
+                }
+                previousEndFraction = endFraction
+                previousWords = session.wordCount
+                previousChapterCount = activeCount
+                previousFinished = session.didFinish
+                continue
+            }
+
+            let startPos = startFraction * Double(prefixSum)
+            let endPos = endFraction * Double(prefixSum)
+            var cumulative = 0.0
+            var rawWords = 0.0
+
+            for index in 0..<activeCounts.count {
+                let count = Double(max(0, activeCounts[index]))
+                let chapterStart = cumulative
+                let chapterEnd = cumulative + count
+                cumulative = chapterEnd
+                guard count > 0, endPos > chapterStart, startPos < chapterEnd else { continue }
+
+                let coveredStart = max(0.0, min(1.0, (startPos - chapterStart) / count))
+                let coveredEnd = max(0.0, min(1.0, (endPos - chapterStart) / count))
+                let effectiveStart = max(coveredStart, chapterHighWater[index])
+                if coveredEnd > effectiveStart {
+                    rawWords += (coveredEnd - effectiveStart) * count
+                }
+                chapterHighWater[index] = max(chapterHighWater[index], coveredEnd)
+            }
+
+            let scale: Double = (!hasChapterMismatch && differsBeyondTenPercent)
+                ? Double(session.wordCount) / Double(prefixSum)
+                : 1.0
+
+            read[session.id] = Int(max(0, rawWords * scale).rounded())
+            previousEndFraction = endFraction
+            previousWords = session.wordCount
+            previousChapterCount = activeCount
+            previousFinished = session.didFinish
+        }
+    }
+
+    private static func legacyWordsRead(
+        sortedSessions: [ReadingSession],
+        into read: inout [UUID: Int]
+    ) {
+        var previousEndFraction = 0.0
+        var previousEndWords = 0.0
+        var previousWords = 0
+        var previousFinished = false
+
+        for session in sortedSessions {
+            let words = max(0, session.wordCount)
+            let endFraction = min(1, max(0, session.endingProgress))
+            let endWords = endFraction * Double(words)
+            let startWords: Double
+            if let explicit = session.startProgress {
+                let clamped = min(1, max(0, explicit))
+                if previousWords > 0 && words > previousWords && clamped == previousEndFraction {
+                    startWords = previousEndWords
+                } else {
+                    startWords = clamped * Double(words)
+                }
+            } else if previousFinished && words <= previousWords {
+                startWords = 0
+            } else {
+                startWords = previousEndWords
+            }
+            read[session.id] = Int(max(0, endWords - startWords).rounded())
+            previousEndFraction = endFraction
+            previousEndWords = endWords
+            previousWords = words
+            previousFinished = session.didFinish
+        }
     }
 
     /// Everything artboard 1bi prints, for one period and the one before it.
@@ -452,29 +854,212 @@ enum ReadingLogService {
     /// `period` is the window on screen; `previousPeriod` is what the delta is
     /// measured against. Both are fetched here rather than in the view so the
     /// screen cannot accidentally compare a month against a week.
+    /// Gathered and option-filtered Insights snapshot for a period.
+    struct InsightsGatherResult {
+        var insights: ReadingInsights
+        var taste: ReadingTasteInsights?
+        var habits: ReadingHabitsInsights
+        var library: ReadingLibraryInsights
+        var libraryStats: ReadingStatistics
+        var finishedWorksInPeriod: [SavedWork]
+        var filteredWorks: [SavedWork]
+        var filteredSessions: [ReadingSession]
+        var discreetMasker: InsightsDiscreetMasker
+    }
+
+    private struct GatherRequest {
+        var period: DateInterval
+        var previousPeriod: DateInterval?
+        var works: [SavedWork]
+        var readingWorks: [SavedWork]
+        var history: [ReadingSession]
+        var periodMonths: Double
+        var calendar: Calendar
+        var context: ModelContext
+        var options: InsightsOptions
+        var aliases: TagAliasResolver?
+        var now: Date
+    }
+
+    /// Gathers one `InsightsScope` (main, Hidden section, or combined).
+    static func gatherInsights(
+        for period: DateInterval,
+        previousPeriod: DateInterval?,
+        scope: InsightsScopeSelection,
+        periodMonths: Double = 1,
+        calendar: Calendar = .current,
+        context: ModelContext,
+        options: InsightsOptions = InsightsOptions(),
+        aliases: TagAliasResolver? = nil,
+        now: Date = Date()
+    ) -> InsightsGatherResult {
+        let rawHistory = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let history = scope.sessions(rawHistory, in: context)
+        return gatherInsightsCore(GatherRequest(
+            period: period,
+            previousPeriod: previousPeriod,
+            works: scope.libraryWorks,
+            readingWorks: scope.readingWorks,
+            history: history,
+            periodMonths: periodMonths,
+            calendar: calendar,
+            context: context,
+            options: options,
+            aliases: aliases,
+            now: now
+        ))
+    }
+
+    /// Gathers every Reading Insights figure through the single `options.filter` pass.
+    ///
+    /// `works` is the saved library the inventory figures describe (statuses, backlog,
+    /// WIP freshness, stopped works, preserved stats). `readingWorks` (default `works`)
+    /// is every work whose sittings count, queue-only included: it supplies metadata for
+    /// reading time, words, fandom shares, taste, habits and finished works.
+    static func gatherInsights(
+        for period: DateInterval,
+        previousPeriod: DateInterval?,
+        works: [SavedWork],
+        readingWorks: [SavedWork]? = nil,
+        hiddenWorkIDs: Set<UUID> = [],
+        onlyWorkIDs: Set<UUID>? = nil,
+        periodMonths: Double = 1,
+        calendar: Calendar = .current,
+        context: ModelContext,
+        options: InsightsOptions = InsightsOptions(),
+        aliases: TagAliasResolver? = nil,
+        now: Date = Date()
+    ) -> InsightsGatherResult {
+        let rawHistory = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let history = rawHistory.filter { session in
+            !hiddenWorkIDs.contains(session.workID)
+                && (onlyWorkIDs?.contains(session.workID) ?? true)
+        }
+        return gatherInsightsCore(GatherRequest(
+            period: period,
+            previousPeriod: previousPeriod,
+            works: works,
+            readingWorks: readingWorks ?? works,
+            history: history,
+            periodMonths: periodMonths,
+            calendar: calendar,
+            context: context,
+            options: options,
+            aliases: aliases,
+            now: now
+        ))
+    }
+
+    private static func gatherInsightsCore(_ req: GatherRequest) -> InsightsGatherResult {
+        let resolvedAliases = req.aliases ?? TagAliasStore.resolver(in: req.context)
+        let filtered = req.options.filter(
+            sessions: req.history, works: req.readingWorks, aliases: resolvedAliases
+        )
+        let libraryIDs = Set(req.works.map(\.id))
+        let libraryWorks = filtered.works.filter { libraryIDs.contains($0.id) }
+
+        let allFacts = facts(
+            from: filtered.sessions,
+            works: filtered.works,
+            history: filtered.historySessions,
+            aliases: resolvedAliases
+        )
+        let periodFacts = allFacts.filter { req.period.contains($0.startedAt) }
+        let previousFacts = req.previousPeriod.map { interval in
+            allFacts.filter { interval.contains($0.startedAt) }
+        } ?? []
+
+        let figures = ReadingInsights.make(
+            facts: periodFacts,
+            previousPeriodFacts: previousFacts,
+            dayRange: ReadingInsights.chartDays(for: req.period, now: req.now, calendar: req.calendar),
+            calendar: req.calendar,
+            aliases: resolvedAliases
+        )
+        let readWorkIDs = Set(periodFacts.map(\.workID))
+        let worksInPeriod = filtered.works.filter { readWorkIDs.contains($0.id) }
+        let taste = worksInPeriod.isEmpty
+            ? nil
+            : ReadingTasteInsights.make(works: worksInPeriod, facts: periodFacts, aliases: resolvedAliases)
+        let habits = ReadingHabitsInsights.make(
+            works: filtered.works,
+            libraryWorks: libraryWorks,
+            facts: periodFacts,
+            allFacts: allFacts,
+            calendar: req.calendar,
+            aliases: resolvedAliases
+        )
+        let library = ReadingLibraryInsights.make(
+            works: libraryWorks,
+            facts: periodFacts,
+            periodInterval: req.period,
+            periodMonths: req.periodMonths,
+            calendar: req.calendar,
+            aliases: resolvedAliases,
+            askAboutUntouched: req.options.askAboutUntouched,
+            untouchedDays: req.options.clampedUntouchedDays,
+            now: req.now
+        )
+        let libraryStats = ReadingStatistics(
+            works: libraryWorks,
+            now: req.now,
+            calendar: req.calendar,
+            aliases: resolvedAliases
+        )
+        let finishedWorksInPeriod = filtered.works.filter { w in
+            w.isFinished && periodFacts.contains { $0.workID == w.id && $0.didFinish }
+        }
+        let masker = InsightsDiscreetMasker.forScreen(
+            InsightsDiscreetMasker.ScreenSeed(
+                insights: figures,
+                taste: taste,
+                habits: habits,
+                library: library,
+                stats: libraryStats,
+                finishedWorks: finishedWorksInPeriod,
+                works: filtered.works,
+                sessions: filtered.sessions
+            ),
+            aliases: resolvedAliases
+        )
+        return InsightsGatherResult(
+            insights: figures,
+            taste: taste,
+            habits: habits,
+            library: library,
+            libraryStats: libraryStats,
+            finishedWorksInPeriod: finishedWorksInPeriod,
+            filteredWorks: filtered.works,
+            filteredSessions: filtered.sessions,
+            discreetMasker: masker
+        )
+    }
+
     static func insights(
         for period: DateInterval,
         previousPeriod: DateInterval?,
         works: [SavedWork],
+        hiddenWorkIDs: Set<UUID> = [],
         calendar: Calendar = .current,
         context: ModelContext,
-        aliases: TagAliasResolver? = nil
+        aliases: TagAliasResolver? = nil,
+        options: InsightsOptions = InsightsOptions()
     ) -> ReadingInsights {
         let resolvedAliases = aliases ?? TagAliasStore.resolver(in: context)
-        let history = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
-        let current = facts(
-            from: history.filter { period.contains($0.startedAt) },
-            works: works,
-            history: history,
+        let rawHistory = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let history = hiddenWorkIDs.isEmpty
+            ? rawHistory
+            : rawHistory.filter { !hiddenWorkIDs.contains($0.workID) }
+        let filtered = options.filter(sessions: history, works: works, aliases: resolvedAliases)
+        let allFacts = facts(
+            from: filtered.sessions,
+            works: filtered.works,
+            history: filtered.historySessions,
             aliases: resolvedAliases
         )
+        let current = allFacts.filter { period.contains($0.startedAt) }
         let previous = previousPeriod.map { interval in
-            facts(
-                from: history.filter { interval.contains($0.startedAt) },
-                works: works,
-                history: history,
-                aliases: resolvedAliases
-            )
+            allFacts.filter { interval.contains($0.startedAt) }
         } ?? []
         return ReadingInsights.make(
             facts: current, previousPeriodFacts: previous,

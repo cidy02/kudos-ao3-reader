@@ -982,6 +982,9 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     let epubDigest: String?
     /// Omitted for older/Android records; absence never clears a local pin.
     let coverRecipeJSON: String?
+    /// Additive D3 derived fields; omitted when empty so untouched works emit no key.
+    let chapterWordCountsJSON: String?
+    let wordUnitRaw: String?
 
     @MainActor
     init(work: SavedWork) {
@@ -1067,6 +1070,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         hiddenFromHistoryAt = .some(work.hiddenFromHistoryAt)
         epubDigest = work.epubDigest.isEmpty ? nil : work.epubDigest
         coverRecipeJSON = work.coverRecipeJSON
+        chapterWordCountsJSON = work.chapterWordCountsJSON.isEmpty ? nil : work.chapterWordCountsJSON
+        wordUnitRaw = work.wordUnitRaw.isEmpty ? nil : work.wordUnitRaw
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1141,6 +1146,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case hiddenFromHistoryAt
         case epubDigest
         case coverRecipeJSON
+        case chapterWordCountsJSON
+        case wordUnitRaw
     }
 
     init(from decoder: Decoder) throws {
@@ -1236,6 +1243,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
             ? .some(try container.decode(Date?.self, forKey: .hiddenFromHistoryAt)) : nil
         epubDigest = try container.decodeIfPresent(String.self, forKey: .epubDigest)
         coverRecipeJSON = try container.decodeIfPresent(String.self, forKey: .coverRecipeJSON)
+        chapterWordCountsJSON = try container.decodeIfPresent(String.self, forKey: .chapterWordCountsJSON)
+        wordUnitRaw = try container.decodeIfPresent(String.self, forKey: .wordUnitRaw)
     }
 }
 
@@ -1950,6 +1959,17 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     /// Applied only alongside `readerSpeechVoiceID` so one device's label never lands on another's id.
     var readerSpeechVoiceName: String?
     var lastAddedReadingQueueID: String?
+    /// Reading Insights options (D5). Nil when unset or absent so untouched
+    /// devices omit them and older/Android payloads leave local choices alone.
+    var discreetMode: Bool?
+    var hideReadingTime: Bool?
+    var countRereads: Bool?
+    var countReadAloud: Bool?
+    var askAboutUntouched: Bool?
+    var untouchedDays: Int?
+    var excludedFandoms: [String]?
+    var excludedTags: [String]?
+    var excludedWorkIDs: [String]?
 
     init(
         readerFontID: String,
@@ -1980,7 +2000,16 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         readerPageTurn: String? = nil,
         readerSpeechVoiceID: String? = nil,
         readerSpeechVoiceName: String? = nil,
-        lastAddedReadingQueueID: String? = nil
+        lastAddedReadingQueueID: String? = nil,
+        discreetMode: Bool? = nil,
+        hideReadingTime: Bool? = nil,
+        countRereads: Bool? = nil,
+        countReadAloud: Bool? = nil,
+        askAboutUntouched: Bool? = nil,
+        untouchedDays: Int? = nil,
+        excludedFandoms: [String]? = nil,
+        excludedTags: [String]? = nil,
+        excludedWorkIDs: [String]? = nil
     ) {
         self.readerFontID = readerFontID
         self.readerMode = readerMode
@@ -2011,6 +2040,15 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         self.readerSpeechVoiceID = readerSpeechVoiceID
         self.readerSpeechVoiceName = readerSpeechVoiceName
         self.lastAddedReadingQueueID = lastAddedReadingQueueID
+        self.discreetMode = discreetMode
+        self.hideReadingTime = hideReadingTime
+        self.countRereads = countRereads
+        self.countReadAloud = countReadAloud
+        self.askAboutUntouched = askAboutUntouched
+        self.untouchedDays = untouchedDays
+        self.excludedFandoms = excludedFandoms
+        self.excludedTags = excludedTags
+        self.excludedWorkIDs = excludedWorkIDs
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -2043,6 +2081,15 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         case readerSpeechVoiceID
         case readerSpeechVoiceName
         case lastAddedReadingQueueID
+        case discreetMode
+        case hideReadingTime
+        case countRereads
+        case countReadAloud
+        case askAboutUntouched
+        case untouchedDays
+        case excludedFandoms
+        case excludedTags
+        case excludedWorkIDs
     }
 
     init(from decoder: Decoder) throws {
@@ -2113,7 +2160,16 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             lastAddedReadingQueueID: (try? container.decodeIfPresent(
                 String.self,
                 forKey: .lastAddedReadingQueueID
-            )) ?? nil
+            )) ?? nil,
+            discreetMode: (try? container.decodeIfPresent(Bool.self, forKey: .discreetMode)) ?? nil,
+            hideReadingTime: (try? container.decodeIfPresent(Bool.self, forKey: .hideReadingTime)) ?? nil,
+            countRereads: (try? container.decodeIfPresent(Bool.self, forKey: .countRereads)) ?? nil,
+            countReadAloud: (try? container.decodeIfPresent(Bool.self, forKey: .countReadAloud)) ?? nil,
+            askAboutUntouched: (try? container.decodeIfPresent(Bool.self, forKey: .askAboutUntouched)) ?? nil,
+            untouchedDays: (try? container.decodeIfPresent(Int.self, forKey: .untouchedDays)) ?? nil,
+            excludedFandoms: (try? container.decodeIfPresent([String].self, forKey: .excludedFandoms)) ?? nil,
+            excludedTags: (try? container.decodeIfPresent([String].self, forKey: .excludedTags)) ?? nil,
+            excludedWorkIDs: (try? container.decodeIfPresent([String].self, forKey: .excludedWorkIDs)) ?? nil
         )
     }
 
@@ -2186,7 +2242,25 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             }(),
             readerSpeechVoiceID: capturedVoiceID,
             readerSpeechVoiceName: capturedVoiceName,
-            lastAddedReadingQueueID: defaults.string(forKey: "lastAddedReadingQueueID")
+            lastAddedReadingQueueID: defaults.string(forKey: "lastAddedReadingQueueID"),
+            discreetMode: defaults.object(forKey: InsightsOptions.Keys.discreetMode) == nil
+                ? nil : defaults.bool(forKey: InsightsOptions.Keys.discreetMode),
+            hideReadingTime: defaults.object(forKey: InsightsOptions.Keys.hideReadingTime) == nil
+                ? nil : defaults.bool(forKey: InsightsOptions.Keys.hideReadingTime),
+            countRereads: defaults.object(forKey: InsightsOptions.Keys.countRereads) == nil
+                ? nil : defaults.bool(forKey: InsightsOptions.Keys.countRereads),
+            countReadAloud: defaults.object(forKey: InsightsOptions.Keys.countReadAloud) == nil
+                ? nil : defaults.bool(forKey: InsightsOptions.Keys.countReadAloud),
+            askAboutUntouched: defaults.object(forKey: InsightsOptions.Keys.askAboutUntouched) == nil
+                ? nil : defaults.bool(forKey: InsightsOptions.Keys.askAboutUntouched),
+            untouchedDays: defaults.object(forKey: InsightsOptions.Keys.untouchedDays) == nil
+                ? nil : InsightsOptions.clampUntouchedDays(defaults.integer(forKey: InsightsOptions.Keys.untouchedDays)),
+            excludedFandoms: defaults.object(forKey: InsightsOptions.Keys.excludedFandoms) == nil
+                ? nil : InsightsOptions.normalizedNames(defaults.stringArray(forKey: InsightsOptions.Keys.excludedFandoms) ?? []),
+            excludedTags: defaults.object(forKey: InsightsOptions.Keys.excludedTags) == nil
+                ? nil : InsightsOptions.normalizedNames(defaults.stringArray(forKey: InsightsOptions.Keys.excludedTags) ?? []),
+            excludedWorkIDs: defaults.object(forKey: InsightsOptions.Keys.excludedWorkIDs) == nil
+                ? nil : InsightsOptions.normalizedWorkIDs(defaults.stringArray(forKey: InsightsOptions.Keys.excludedWorkIDs) ?? [])
         )
     }
 
@@ -2278,6 +2352,33 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         }
         if let lastAddedReadingQueueID, UUID(uuidString: lastAddedReadingQueueID) != nil {
             defaults.set(lastAddedReadingQueueID, forKey: "lastAddedReadingQueueID")
+        }
+        if let discreetMode {
+            defaults.set(discreetMode, forKey: InsightsOptions.Keys.discreetMode)
+        }
+        if let hideReadingTime {
+            defaults.set(hideReadingTime, forKey: InsightsOptions.Keys.hideReadingTime)
+        }
+        if let countRereads {
+            defaults.set(countRereads, forKey: InsightsOptions.Keys.countRereads)
+        }
+        if let countReadAloud {
+            defaults.set(countReadAloud, forKey: InsightsOptions.Keys.countReadAloud)
+        }
+        if let askAboutUntouched {
+            defaults.set(askAboutUntouched, forKey: InsightsOptions.Keys.askAboutUntouched)
+        }
+        if let untouchedDays {
+            defaults.set(InsightsOptions.clampUntouchedDays(untouchedDays), forKey: InsightsOptions.Keys.untouchedDays)
+        }
+        if let excludedFandoms {
+            defaults.set(InsightsOptions.normalizedNames(excludedFandoms), forKey: InsightsOptions.Keys.excludedFandoms)
+        }
+        if let excludedTags {
+            defaults.set(InsightsOptions.normalizedNames(excludedTags), forKey: InsightsOptions.Keys.excludedTags)
+        }
+        if let excludedWorkIDs {
+            defaults.set(InsightsOptions.normalizedWorkIDs(excludedWorkIDs), forKey: InsightsOptions.Keys.excludedWorkIDs)
         }
     }
 
@@ -2985,6 +3086,14 @@ enum KudosBackupService {
                     try ReadingQueueService.replaceEPUB(for: work, with: staged)
                     work.hasEPUB = true
                     markPreservedIfFileRestored(work)
+                    // `replaceEPUB` clears derived chapter counts when EPUB bytes change;
+                    // re-apply any validated D3 fields from the matching incoming record.
+                    if let validCounts = SavedWork.validatedChapterWordCountsJSON(archived.chapterWordCountsJSON) {
+                        work.chapterWordCountsJSON = validCounts
+                    }
+                    if let validUnit = SavedWork.validatedWordUnitRaw(archived.wordUnitRaw) {
+                        work.wordUnitRaw = validUnit
+                    }
                 } catch {
                     try? FileManager.default.removeItem(at: staged)
                     // This one work is being skipped while the restore carries
@@ -5534,6 +5643,14 @@ enum KudosBackupService {
                incomingJSON: coverRecipeJSON
            ) {
             work.coverRecipeJSON = GeneratedCoverRecipe.clampingFuturePinIfSupported(coverRecipeJSON)
+        }
+        if let incomingCounts = SavedWork.validatedChapterWordCountsJSON(archived.chapterWordCountsJSON),
+           work.chapterWordCountsJSON.isEmpty || mode == .replaceLibrary || incomingWins {
+            work.chapterWordCountsJSON = incomingCounts
+        }
+        if let incomingUnit = SavedWork.validatedWordUnitRaw(archived.wordUnitRaw),
+           work.wordUnitRaw.isEmpty || mode == .replaceLibrary || incomingWins {
+            work.wordUnitRaw = incomingUnit
         }
         let coverPinReconciled = work.reconcileCoverMetadata(notifySync: false)
         work.workTagsFetched = work.workTagsFetched || archived.workTagsFetched

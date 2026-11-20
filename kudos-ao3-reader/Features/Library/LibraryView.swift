@@ -75,6 +75,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @State private var isSelecting = false
     @State private var selection = Set<UUID>()
     @State private var showingSelectionList = false
+    /// Only queried when `works.isEmpty`, so a user who deleted all works can
+    /// still reach Reading Insights for remaining reading log history.
+    @State private var hasReadingLogSessions = false
     /// Tracks the select-mode list's in-flight refresh so it can be cancelled if the
     /// user switches tabs (see `cancelRefreshOnTabChange`) — this can be the whole Library.
     @State private var refreshTask: Task<Void, Never>?
@@ -84,11 +87,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     /// Select hid rows that stayed selected, and Delete took them unseen (audit A12-4).
     private var selectedWorks: [SavedWork] {
         selectableWorks.filter { selection.contains($0.id) }
-    }
-
-    /// Keeps privacy-hidden works out of aggregate counts and fandom labels.
-    private var statisticsWorks: [SavedWork] {
-        HomeReadingStats.insightsWorks(from: works, gate: gate, hideMature: hideMature)
     }
 
     /// The dashboard's currently-visible/filtered works (mirrors `dashboardWorks(for:)`
@@ -163,7 +161,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .ao3AuthorNavigation(path: $path, tab: .library)
                 .navigationDestination(for: RecentlyDeletedDestination.self) { _ in RecentlyDeletedView() }
                 .navigationDestination(for: ReadingInsightsDestination.self) { _ in
-                    ReadingInsightsView(works: statisticsWorks)
+                    ReadingInsightsView(libraryWorks: works)
                 }
                 #if DEBUG
                 .task {
@@ -241,6 +239,18 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     // before we spend the main actor filtering every section.
                     await Task.yield()
                     rebuildSectionCache()
+                }
+                .task(id: works.isEmpty) {
+                    guard works.isEmpty else {
+                        hasReadingLogSessions = false
+                        return
+                    }
+                    hasReadingLogSessions = ((try? context.fetchCount(FetchDescriptor<ReadingSession>())) ?? 0) > 0
+                }
+                .onAppear {
+                    if works.isEmpty {
+                        hasReadingLogSessions = ((try? context.fetchCount(FetchDescriptor<ReadingSession>())) ?? 0) > 0
+                    }
                 }
                 // A tag tapped on a work's detail page filters the Library to it.
                 // `initial: true` catches a tag set just before this view appears.
@@ -1020,7 +1030,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             #endif
         } else {
             let showsMature = hideMature
-            let showsStatistics = !statisticsWorks.isEmpty
+            let showsStatistics = HomeReadingStats.showsReadingInsightsMenuEntry(
+                liveWorkCount: works.count,
+                sessionCount: finishingSessions.count + (hasReadingLogSessions ? 1 : 0)
+            )
             let showsSelect = !works.isEmpty
             let showsMoreMenu = true
             // Gated as a whole, not just its inner pieces — an empty HStack (or a
