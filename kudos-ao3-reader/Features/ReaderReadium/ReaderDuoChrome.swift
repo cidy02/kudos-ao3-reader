@@ -21,6 +21,15 @@ nonisolated enum ReaderChromeLayout: Equatable, Sendable {
         case .none: regions.fold == nil ? .standard : .foldTopBar
         }
     }
+
+    /// Themes & Settings opens as a panel by the Duo bars (T-562b); the iPhone and
+    /// iPad keep the sheet.
+    var showsSettingsAsPanel: Bool { self != .standard }
+
+    /// The Duo held upright (inner portrait, the top bar) reads one page, like the
+    /// portrait board, even with Two-page spread on (owner, 2026-11-20). The stored
+    /// setting is untouched: the rail layouts and wide iPad layouts still use it.
+    var allowsTwoPageSpread: Bool { self != .foldTopBar }
 }
 
 /// Where the Duo chrome sits, in host points measured from the physical left and
@@ -39,6 +48,11 @@ nonisolated struct ReaderDuoChromePlacement: Equatable, Sendable {
     static let railTopGap: CGFloat = 10
     /// The portrait top bar's 44 pt row and 8 pt under it, kept clear above the page.
     static let topBarReserve: CGFloat = 52
+    /// The rail's Close circle, the gap under it, and the action group's end padding:
+    /// together, how far below `railTop` the group's first button (Aa) starts.
+    static let railCloseDiameter: CGFloat = 48
+    static let railSpacing: CGFloat = 10
+    static let groupEndPadding: CGFloat = 2
 
     /// From the rail's edge to the rail's centre: the middle of the system bar's column.
     var railCenterInset: CGFloat = 0
@@ -77,6 +91,123 @@ nonisolated struct ReaderDuoChromePlacement: Equatable, Sendable {
                 return Self(railCenterInset: center, railTop: top, barLeft: left, barRight: railSide)
             }
         }
+    }
+}
+
+/// Where Themes & Settings opens in the Duo layouts (T-562b): a 360 pt panel, not a
+/// sheet (`Duo-Open-Reader`, `showSettings`: right 84, top 150, width 360). Host points
+/// from the physical left edge, like `ReaderDuoChromePlacement`.
+///
+/// - Rail: hugs the rail (the position bar's rail-side edge), top level with the Aa
+///   button, on the rail's own page — never across a vertical fold. On the cover, which
+///   has no fold, it runs to the free edge's margin, so its Done stays clear of the
+///   status column the rail stands under.
+/// - Portrait top bar: under the bar, trailing-aligned with it (so under Aa and the rest
+///   of the group), and above a horizontal fold when that leaves the panel room.
+nonisolated struct ReaderDuoSettingsPanelPlacement: Equatable, Sendable {
+    static let width: CGFloat = 360
+    static let cornerRadius: CGFloat = 24
+    /// Below this the panel gives up the anchor (starts higher, or crosses the
+    /// portrait fold) rather than show a sliver.
+    static let minimumHeight: CGFloat = 280
+
+    var left: CGFloat
+    var top: CGFloat
+    var width: CGFloat
+    var height: CGFloat
+
+    /// nil for `.standard`: the iPhone and iPad keep the sheet.
+    /// - Parameters:
+    ///   - chrome: the bars' placement for the same layout and size.
+    ///   - chromeTop: the top safe inset the portrait bar sits under.
+    static func resolve(
+        layout: ReaderChromeLayout, chrome: ReaderDuoChromePlacement, size: CGSize,
+        safe: UIEdgeInsets, regions: ReaderHostRegions, chromeTop: CGFloat
+    ) -> Self? {
+        let margin = ReaderDuoChromePlacement.edgeInset
+        let foldGap = ReaderDuoChromePlacement.foldGap
+        let screenBottom = size.height - max(margin, safe.bottom)
+        var bottom = screenBottom
+        let anchoredTop: CGFloat
+        let leftLimit: CGFloat
+        let rightLimit: CGFloat
+        let hugsLeft: Bool
+        switch layout {
+        case .standard:
+            return nil
+        case let .rail(bar):
+            anchoredTop = chrome.railTop + ReaderDuoChromePlacement.railCloseDiameter
+                + ReaderDuoChromePlacement.railSpacing + ReaderDuoChromePlacement.groupEndPadding
+            let fold = regions.fold.flatMap { $0.height > $0.width ? $0 : nil }
+            hugsLeft = bar == .left
+            if hugsLeft {
+                leftLimit = chrome.barLeft
+                rightLimit = fold.map { $0.minX - foldGap } ?? size.width - max(margin, safe.right)
+            } else {
+                leftLimit = fold.map { $0.maxX + foldGap } ?? max(margin, safe.left)
+                rightLimit = size.width - chrome.barRight
+            }
+        case .foldTopBar:
+            anchoredTop = chromeTop + ReaderDuoChromePlacement.topBarReserve
+            hugsLeft = false
+            leftLimit = safe.left + margin
+            rightLimit = size.width - safe.right - margin
+            if let fold = regions.fold, fold.width >= fold.height,
+               fold.minY - foldGap - anchoredTop >= minimumHeight {
+                bottom = fold.minY - foldGap
+            }
+        }
+        let width = max(0, min(Self.width, rightLimit - leftLimit))
+        let top = bottom - anchoredTop >= minimumHeight
+            ? anchoredTop
+            : max(min(anchoredTop, bottom - minimumHeight), max(margin, safe.top))
+        return Self(
+            left: hugsLeft ? leftLimit : rightLimit - width, top: top,
+            width: width, height: max(0, bottom - top)
+        )
+    }
+}
+
+/// The light scrim behind the Duo settings panel: a tap anywhere outside closes it.
+/// Sits under the bars, so the rail's Aa still toggles the panel.
+struct ReaderDuoPanelScrim: View {
+    let onClose: () -> Void
+
+    var body: some View {
+        Button(action: onClose) {
+            Color.black.opacity(0.14)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .ignoresSafeArea()
+        .accessibilityLabel("Dismiss")
+    }
+}
+
+/// The Duo settings panel's card: the content (a navigation stack with its own Done)
+/// clipped to the board's 24 pt corners, with its shadow. VoiceOver stays inside it;
+/// the escape gesture closes it.
+struct ReaderDuoSettingsPanel<Content: View>: View {
+    let placement: ReaderDuoSettingsPanelPlacement
+    let onClose: () -> Void
+    @ViewBuilder var content: () -> Content
+
+    @Environment(\.layoutDirection) private var layoutDirection
+
+    var body: some View {
+        GeometryReader { proxy in
+            // Placement is physical; offset from the layout's leading edge.
+            let leading = layoutDirection == .leftToRight
+                ? placement.left : proxy.size.width - placement.left - placement.width
+            content()
+                .frame(width: placement.width, height: placement.height)
+                .clipShape(RoundedRectangle(cornerRadius: ReaderDuoSettingsPanelPlacement.cornerRadius, style: .continuous))
+                .shadow(color: .black.opacity(0.24), radius: 25, y: 18)
+                .accessibilityAddTraits(.isModal)
+                .accessibilityAction(.escape, onClose)
+                .offset(x: leading, y: placement.top)
+        }
+        .ignoresSafeArea()
     }
 }
 
@@ -131,7 +262,7 @@ struct ReaderDuoActionGroup<More: View>: View {
             }
             more()
         }
-        .padding(axis == .vertical ? .vertical : .horizontal, 2)
+        .padding(axis == .vertical ? .vertical : .horizontal, ReaderDuoChromePlacement.groupEndPadding)
         .glassEffect(.regular, in: Capsule())
     }
 
@@ -175,8 +306,8 @@ struct ReaderDuoRail<More: View>: View {
     @ViewBuilder var more: () -> More
 
     var body: some View {
-        VStack(spacing: 10) {
-            ReaderDuoCloseButton(diameter: 48, action: onClose)
+        VStack(spacing: ReaderDuoChromePlacement.railSpacing) {
+            ReaderDuoCloseButton(diameter: ReaderDuoChromePlacement.railCloseDiameter, action: onClose)
             ReaderDuoActionGroup(axis: .vertical, items: items, tint: tint, more: more)
         }
         .frame(width: ReaderDuoChromePlacement.railWidth)

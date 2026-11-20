@@ -16,16 +16,27 @@ struct ReaderSettingLabel: View {
     }
 }
 
-/// The reader's display options — theme, text size, layout, read-aloud and font —
-/// in the reader's options sheet (iOS) and inspector (macOS).
+/// The reader's display options — theme, text size, layout and font — in the
+/// reader's options sheet (iOS), its iPhone Duo panel, and the inspector (macOS).
 ///
-/// Settings shows the same Reader, Listening and Font sections on its own pages
-/// (`SettingsReaderPage`, `SettingsListeningPage`, `SettingsFontPage`) through the
-/// shared views below, so the two always show the same controls and stay in sync
-/// via `@AppStorage`. App-wide settings live on those pages, not here.
+/// Settings shows the same Reader and Font sections on its own pages
+/// (`SettingsReaderPage`, `SettingsFontPage`) through the shared views below, so
+/// the two always show the same controls and stay in sync via `@AppStorage`.
+/// App-wide settings live on those pages, not here.
+///
+/// Read Aloud is not here (T-562b, owner): its voice settings live in the Read
+/// Aloud controls (`ReaderSpeechSettingsSheet`, from the mini player and More ›
+/// Read Aloud Settings) and in Settings › Listening.
 struct ReaderOptionsForm: View {
     /// An additional host constraint on spreads (the macOS reader checks its width).
     var twoPageAvailable: Bool = true
+    /// The Duo panel's order (`Duo-Open-Reader`): Font is one row under Text Size
+    /// that opens the font list, instead of the whole list after Reading. Needs a
+    /// navigation stack around the form.
+    var fontAsRow: Bool = false
+    /// False where the host reads one page whatever the setting (the Duo held
+    /// upright): the toggle stays, and the Reading footnote says where it applies.
+    var twoPageSpreadApplies: Bool = true
 
     @Environment(ThemeManager.self) private var themeManager
     #if os(iOS)
@@ -64,17 +75,21 @@ struct ReaderOptionsForm: View {
                 Section("Text Size") {
                     TextSizeSlider()
                 }
+
+                if fontAsRow {
+                    Section {
+                        ReaderFontRow()
+                    }
+                }
                 #endif
 
-                ReaderLayoutSection(twoPageAvailable: twoPageAvailable)
+                ReaderLayoutSection(
+                    twoPageAvailable: twoPageAvailable, twoPageSpreadApplies: twoPageSpreadApplies
+                )
 
-                #if os(iOS)
-                // Voice / rate / pitch for the Readium read-aloud mini player.
-                // macOS still uses the legacy WKWebView reader without TTS.
-                ReaderSpeechSettingsSection()
-                #endif
-
-                ReaderFontSection(onAddFont: { isImportingFonts = true })
+                if !fontAsRow {
+                    ReaderFontSection(onAddFont: { isImportingFonts = true })
+                }
             }
             .appThemedRows()
         }
@@ -99,6 +114,30 @@ struct ReaderOptionsForm: View {
         #endif
     }
 }
+
+#if os(iOS)
+/// Font, with the chosen font's name, opening the same list Settings › Font shows.
+private struct ReaderFontRow: View {
+    @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
+    @AppStorage("readerFontID") private var fontID: String = "system"
+
+    private var fontName: String {
+        ReaderFontOption.options(customFonts: customFonts).first { $0.id == fontID }?.name ?? ""
+    }
+
+    var body: some View {
+        NavigationLink {
+            SettingsFontPage()
+        } label: {
+            LabeledContent {
+                Text(fontName)
+            } label: {
+                ReaderSettingLabel(title: "Font", systemImage: "textformat")
+            }
+        }
+    }
+}
+#endif
 
 /// Light/Sepia/Dark/OLED tiles on iOS; the macOS inspector keeps its segmented picker.
 struct ReaderThemePicker: View {
@@ -184,6 +223,13 @@ private struct ReaderThemeTile: View {
 struct ReaderLayoutSection: View {
     /// An additional host constraint; iOS availability also follows this view's size classes.
     var twoPageAvailable: Bool = true
+    /// False in the iPhone Duo's upright layout, which shows one page whatever the
+    /// setting: the toggle stays usable and the footnote says so.
+    var twoPageSpreadApplies: Bool = true
+
+    /// The footnote's spread line where the reader shows one page anyway.
+    static let uprightSpreadNote =
+        "Held upright, iPhone Duo shows one page. Two-page spread applies when it is open in landscape."
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -263,9 +309,13 @@ struct ReaderLayoutSection: View {
 
     private var readingSectionFooter: String {
         #if os(iOS)
-        let spread = twoPageSpreadAvailable
-            ? "Two-page spread shows two pages side by side in Paged mode on wide screens, and on iPhone Duo when it is open."
-            : "Choose whether you turn pages or scroll while reading."
+        let spread = if !twoPageSpreadAvailable {
+            "Choose whether you turn pages or scroll while reading."
+        } else if twoPageSpreadApplies {
+            "Two-page spread shows two pages side by side in Paged mode on wide screens, and on iPhone Duo when it is open."
+        } else {
+            Self.uprightSpreadNote
+        }
         return spread + " Page Turn applies in Paged mode."
         #else
         return twoPageSpreadAvailable

@@ -117,8 +117,11 @@ struct ReaderFanMenu: View {
                 .accessibilityAddTraits(action.isEmphasized ? [.isSelected] : [])
             }
 
+            // Shown even while Read Aloud can't start: since T-562b this and the mini
+            // player are the reader's only ways to the voice settings (the Themes &
+            // Settings form no longer carries them), and a missing voice is exactly
+            // when they are needed.
             if let readAloud = roundActions.first(where: { $0.id == "readAloud" }),
-               readAloud.isEnabled,
                let settings = readAloud.settingsAction {
                 Button(action: settings) {
                     Label("Read Aloud Settings", systemImage: "gearshape")

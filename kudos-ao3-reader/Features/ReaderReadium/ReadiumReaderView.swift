@@ -397,7 +397,7 @@ struct ReadiumReaderView: View {
                       let locator = book.currentLocator else { return }
                 if !speech.isSessionActive { speech.toggle(from: locator) }
             }
-            // Voice changes from the Display sheet apply on the next utterance.
+            // Voice changes from the Read Aloud sheet apply on the next utterance.
             .onChange(of: speechVoiceID) { _, _ in speech.applyPreferences() }
             .onChange(of: speechRate) { _, _ in
                 if speech.status == .playing {
@@ -1134,8 +1134,10 @@ struct ReadiumReaderView: View {
                 .padding(book.pageBoxGeometry.horizontalInsets(in: layoutDirection))
                 // The Duo bars are placed in host points, over the side insets
                 // (the rail stands in the system bar's column).
+                .overlay { duoSettingsScrimLayer }
                 .overlay(alignment: .top) { duoTopLayer }
                 .overlay(alignment: .bottom) { duoBottomLayer }
+                .overlay { duoSettingsPanelLayer }
                 .background(readerPageColors.background)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1693,7 +1695,7 @@ extension ReadiumReaderView {
             theme: readerTheme,
             fontFamily: readiumFontFamily,
             readingMode: readingMode,
-            twoPageSpread: twoPageEnabled && wideLayoutAvailable,
+            twoPageSpread: twoPageEnabled && wideLayoutAvailable && chromeLayout.allowsTwoPageSpread,
             backgroundHex: readerPageColors.backgroundHex,
             textHex: readerPageColors.textHex,
             pageTurn: pageTurn,
@@ -1723,7 +1725,7 @@ extension ReadiumReaderView {
     /// Re-submit preferences whenever any mapped setting changes (instant updates).
     private var preferencesToken: String {
         "\(readingMode.rawValue)|\(pageTurn.rawValue)|\(readerTheme.rawValue)|\(readerPageColors.backgroundHex)|\(fontID)|"
-            + "\(twoPageEnabled)|\(wideLayoutAvailable)|\(bookPose)|\(tabletopPose)|"
+            + "\(twoPageEnabled)|\(wideLayoutAvailable)|\(chromeLayout.allowsTwoPageSpread)|\(bookPose)|\(tabletopPose)|"
             + "\(dynamicTypeSize.isAccessibilitySize)|\(textStyle.token)"
     }
 
@@ -1763,8 +1765,16 @@ extension ReadiumReaderView {
     }
     #endif
 
+    /// Contents, Find and (outside the Duo layouts) Themes & Settings. In a Duo
+    /// layout Themes & Settings is the rail panel instead (`duoSettingsPanelLayer`),
+    /// so the sheet neither shows it nor clears it when it hands over.
     private var readerPanelBinding: Binding<Bool> {
-        router.readerPanelBinding(includesFind: true, suppressed: readerPanelSuppressed)
+        let base = router.readerPanelBinding(includesFind: true, suppressed: readerPanelSuppressed)
+        let panelShowsDisplay = { chromeLayout.showsSettingsAsPanel && router.panel == .readerDisplay }
+        return Binding(
+            get: { base.wrappedValue && !panelShowsDisplay() },
+            set: { if !$0, !panelShowsDisplay() { base.wrappedValue = false } }
+        )
     }
 
     // MARK: Contents sheet helpers
@@ -1838,6 +1848,16 @@ extension ReadiumReaderView {
         }
     }
 
+    private var readerPanelDoneItem: some ToolbarContent {
+        ToolbarItem(placement: .confirmationAction) {
+            Button { router.panel = .none } label: {
+                Image(systemName: "checkmark")
+            }
+            .sheetConfirmStyle()
+            .accessibilityLabel("Done")
+        }
+    }
+
     private var readerSheet: some View {
         NavigationStack {
             Group {
@@ -1903,15 +1923,7 @@ extension ReadiumReaderView {
             }
             .navigationTitle(readerSheetTitle)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button { router.panel = .none } label: {
-                        Image(systemName: "checkmark")
-                    }
-                    .sheetConfirmStyle()
-                    .accessibilityLabel("Done")
-                }
-            }
+            .toolbar { readerPanelDoneItem }
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
@@ -2346,6 +2358,51 @@ extension ReadiumReaderView {
             .padding(book.pageBoxGeometry.horizontalInsets(in: layoutDirection))
             .allowsHitTesting(chromeVisible)
             .opacity(chromeVisible ? 1 : 0)
+        }
+    }
+
+    /// Themes & Settings in a Duo layout (T-562b): open while the router's panel is
+    /// `.readerDisplay` and this reader owns the panel, as the sheet would be.
+    private var showsDuoSettingsPanel: Bool {
+        chromeLayout.showsSettingsAsPanel && router.panel == .readerDisplay
+            && AppRouter.readerOwnsSharedPanel(landingCoversReader: readerPanelSuppressed)
+    }
+
+    private var duoSettingsPanelPlacement: ReaderDuoSettingsPanelPlacement? {
+        ReaderDuoSettingsPanelPlacement.resolve(
+            layout: chromeLayout, chrome: duoPlacement, size: book.pageBoxGeometry.size,
+            safe: book.pageBoxGeometry.safeInsets, regions: book.hostRegions,
+            chromeTop: book.pageBoxChromeSafeTop
+        )
+    }
+
+    @ViewBuilder
+    private var duoSettingsScrimLayer: some View {
+        if showsDuoSettingsPanel {
+            ReaderDuoPanelScrim { router.panel = .none }
+                .transition(.opacity)
+        }
+    }
+
+    /// An overlay over the page, never a change to its insets: opening or closing it
+    /// does not reflow the text.
+    @ViewBuilder
+    private var duoSettingsPanelLayer: some View {
+        if showsDuoSettingsPanel, let placement = duoSettingsPanelPlacement {
+            ReaderDuoSettingsPanel(placement: placement, onClose: { router.panel = .none }) {
+                NavigationStack {
+                    ReaderOptionsForm(
+                        fontAsRow: true, twoPageSpreadApplies: chromeLayout.allowsTwoPageSpread
+                    )
+                        .navigationTitle("Themes & Settings")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar { readerPanelDoneItem }
+                }
+                .background(themeManager.appTheme.cardBackdrop)
+                .accentTint(themeManager.effectiveTint, on: themeManager.readerChromeTheme)
+                .environment(\.colorScheme, readerPageColors.colorScheme)
+            }
+            .transition(.opacity)
         }
     }
 
