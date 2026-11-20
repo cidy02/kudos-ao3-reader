@@ -199,6 +199,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     var pageBoxChromeSafeTop: CGFloat { pageBoxGeometry.safeInsets.top }
     /// The host's bar edge, status block and fold, for the Duo chrome (T-562a).
     private(set) var hostRegions = ReaderHostRegions()
+    @ObservationIgnored private var statusBottomBySize: [String: CGFloat] = [:]
     var pageBoxChromeSafeBottom: CGFloat { pageBoxGeometry.safeInsets.bottom }
 
     @ObservationIgnored private(set) var pageBoxRemeasureTask: Task<Void, Never>?
@@ -217,7 +218,20 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         Log.epub.debug("page-box \(geometryLog, privacy: .public)")
         let sameSize = abs(size.width - pageBoxGeometry.size.width) <= 1
             && abs(size.height - pageBoxGeometry.size.height) <= 1
-        let mergedRegions = regions.merging(previous: hostRegions, sameSize: sameSize)
+        var mergedRegions = regions.merging(previous: hostRegions, sameSize: sameSize)
+        // A rotation or fold while the status bar is hidden reports no status block,
+        // and showing it can report before the block is back: reuse the one this
+        // size had, so the rail does not ride up under the status bar.
+        let statusKey = "\(Int(size.width))x\(Int(size.height))|\(regions.verticalBar)"
+        if mergedRegions.barStatusBottom > 0 {
+            statusBottomBySize[statusKey] = mergedRegions.barStatusBottom
+        } else if regions.verticalBar != .none {
+            // A size never seen with its status bar: the tallest block this bar edge
+            // has had (the open-time status bar always measures one) — too low beats
+            // under the status bar.
+            let sameEdge = statusBottomBySize.filter { $0.key.hasSuffix("|\(regions.verticalBar)") }
+            mergedRegions.barStatusBottom = statusBottomBySize[statusKey] ?? sameEdge.values.max() ?? 0
+        }
         let reserveChanged = Self.topBarReserve(for: mergedRegions) != Self.topBarReserve(for: hostRegions)
         if mergedRegions != hostRegions { hostRegions = mergedRegions }
         let next = pageBoxGeometry.updating(
