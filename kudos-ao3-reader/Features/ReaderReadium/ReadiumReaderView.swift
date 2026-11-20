@@ -2390,14 +2390,12 @@ extension ReadiumReaderView {
     private var duoSettingsPanelLayer: some View {
         if showsDuoSettingsPanel, let placement = duoSettingsPanelPlacement {
             ReaderDuoSettingsPanel(placement: placement, onClose: { router.panel = .none }) {
-                NavigationStack {
-                    ReaderOptionsForm(
-                        fontAsRow: true, twoPageSpreadApplies: chromeLayout.allowsTwoPageSpread
-                    )
-                        .navigationTitle("Themes & Settings")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar { readerPanelDoneItem }
-                }
+                // No NavigationStack here: inside the pushed reader one takes over the
+                // app's stack (it popped the reader). The form draws its own header.
+                ReaderOptionsForm(
+                    panelDone: { router.panel = .none },
+                    twoPageSpreadApplies: chromeLayout.allowsTwoPageSpread
+                )
                 .background(themeManager.appTheme.cardBackdrop)
                 .accentTint(themeManager.effectiveTint, on: themeManager.readerChromeTheme)
                 .environment(\.colorScheme, readerPageColors.colorScheme)

@@ -30,10 +30,13 @@ struct ReaderSettingLabel: View {
 struct ReaderOptionsForm: View {
     /// An additional host constraint on spreads (the macOS reader checks its width).
     var twoPageAvailable: Bool = true
-    /// The Duo panel's order (`Duo-Open-Reader`): Font is one row under Text Size
-    /// that opens the font list, instead of the whole list after Reading. Needs a
-    /// navigation stack around the form.
-    var fontAsRow: Bool = false
+    /// Set when the form is the iPhone Duo panel (T-562b), and called by its Done.
+    /// The panel is an overlay inside the pushed reader, where a navigation stack
+    /// would take over the app's own (it popped the reader on the Duo), so the form
+    /// draws the sheet's header itself — Customize…, the title, Done — and lists
+    /// Font as one row under Text Size that opens the font list in a sheet: the
+    /// board's order (`Duo-Open-Reader`), instead of the whole list after Reading.
+    var panelDone: (() -> Void)?
     /// False where the host reads one page whatever the setting (the Duo held
     /// upright): the toggle stays, and the Reading footnote says where it applies.
     var twoPageSpreadApplies: Bool = true
@@ -49,7 +52,65 @@ struct ReaderOptionsForm: View {
         Binding(get: { themeManager.readerTheme }, set: { themeManager.readerTheme = $0 })
     }
 
+    private var isPanel: Bool { panelDone != nil }
+
     var body: some View {
+        #if os(iOS)
+        if let panelDone {
+            VStack(spacing: 0) {
+                panelHeader(done: panelDone)
+                form
+            }
+        } else {
+            form
+        }
+        #else
+        form
+        #endif
+    }
+
+    #if os(iOS)
+    /// The sheet's navigation bar, drawn for the panel: Customize… (inline in the
+    /// form instead at accessibility sizes, as in the sheet), the title, Done.
+    @ViewBuilder
+    private func panelHeader(done: @escaping () -> Void) -> some View {
+        let title = Text("Themes & Settings")
+            .font(.headline)
+            .accessibilityAddTraits(.isHeader)
+        let doneButton = Button(action: done) {
+            Image(systemName: "checkmark")
+                .font(.body.weight(.semibold))
+                .frame(width: 30, height: 30)
+        }
+        .sheetConfirmStyle()
+        .buttonBorderShape(.circle)
+        .accessibilityLabel("Done")
+        // At accessibility sizes the centred title would run under the buttons:
+        // it leads and wraps instead (Customize… is already inline in the form).
+        if dynamicTypeSize.isAccessibilitySize {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                title.frame(maxWidth: .infinity, alignment: .leading)
+                doneButton
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        } else {
+            // Spaced like the board's header: Customize… · title · Done.
+            HStack(spacing: 0) {
+                Button("Customize…") { showCustomize = true }
+                    .buttonStyle(.glass)
+                Spacer(minLength: 8)
+                title.lineLimit(1).minimumScaleFactor(0.8)
+                Spacer(minLength: 8)
+                doneButton
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+    }
+    #endif
+
+    private var form: some View {
         Form {
             // Group so .appThemedRows() (a .listRowBackground) reaches every section's
             // rows — it does NOT propagate from the Form container, only from a Group/
@@ -76,7 +137,7 @@ struct ReaderOptionsForm: View {
                     TextSizeSlider()
                 }
 
-                if fontAsRow {
+                if isPanel {
                     Section {
                         ReaderFontRow()
                     }
@@ -87,7 +148,7 @@ struct ReaderOptionsForm: View {
                     twoPageAvailable: twoPageAvailable, twoPageSpreadApplies: twoPageSpreadApplies
                 )
 
-                if !fontAsRow {
+                if !isPanel {
                     ReaderFontSection(onAddFont: { isImportingFonts = true })
                 }
             }
@@ -98,7 +159,7 @@ struct ReaderOptionsForm: View {
         .readerFontImporter(isPresented: $isImportingFonts)
         #if os(iOS)
         .toolbar {
-            if !dynamicTypeSize.isAccessibilitySize {
+            if !dynamicTypeSize.isAccessibilitySize, !isPanel {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Customize…") { showCustomize = true }
                 }
@@ -116,24 +177,52 @@ struct ReaderOptionsForm: View {
 }
 
 #if os(iOS)
-/// Font, with the chosen font's name, opening the same list Settings › Font shows.
+/// Font, with the chosen font's name, opening the same list Settings › Font shows
+/// (in a sheet: the Duo panel has no navigation stack to push onto).
 private struct ReaderFontRow: View {
+    @Environment(ThemeManager.self) private var themeManager
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
     @AppStorage("readerFontID") private var fontID: String = "system"
+    @State private var showFonts = false
 
     private var fontName: String {
         ReaderFontOption.options(customFonts: customFonts).first { $0.id == fontID }?.name ?? ""
     }
 
     var body: some View {
-        NavigationLink {
-            SettingsFontPage()
+        Button {
+            showFonts = true
         } label: {
             LabeledContent {
-                Text(fontName)
+                HStack(spacing: 6) {
+                    Text(fontName)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
             } label: {
                 ReaderSettingLabel(title: "Font", systemImage: "textformat")
             }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showFonts) {
+            NavigationStack {
+                SettingsFontPage()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button { showFonts = false } label: {
+                                Image(systemName: "checkmark")
+                            }
+                            .sheetConfirmStyle()
+                            .accessibilityLabel("Done")
+                        }
+                    }
+            }
+            .accentTint(themeManager.effectiveTint, on: themeManager.readerChromeTheme)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
     }
 }

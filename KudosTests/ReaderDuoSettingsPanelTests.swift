@@ -45,7 +45,7 @@ struct ReaderDuoSettingsPanelTests {
         #expect(placement.left >= Self.innerFold.maxX)
         // railTop 134 + Close 48 + 10 + the group's 2: the Aa button's top.
         #expect(placement.top == 194)
-        #expect(placement.top + placement.height == 669 - 34)
+        #expect(placement.top + placement.height == CGFloat(669 - 34))
     }
 
     @Test func aLeadingRailKeepsThePanelOnItsOwnPage() throws {
@@ -67,7 +67,7 @@ struct ReaderDuoSettingsPanelTests {
         #expect(placement.width == 360)
         #expect(placement.left == 20)
         // Done sits inside the panel, which ends before the 84 pt bar column.
-        #expect(placement.left + placement.width <= 466 - 84)
+        #expect(placement.left + placement.width <= CGFloat(466 - 84))
         #expect(placement.top == 244)
     }
 
@@ -88,7 +88,7 @@ struct ReaderDuoSettingsPanelTests {
             regions: ReaderHostRegions(fold: Self.portraitFold), chromeTop: 82
         ))
         #expect(placement.top == 82 + ReaderDuoChromePlacement.topBarReserve)
-        #expect(placement.left + placement.width == 669 - 16)
+        #expect(placement.left + placement.width == CGFloat(669 - 16))
         #expect(placement.top + placement.height == Self.portraitFold.minY - 8)
     }
 
@@ -98,7 +98,7 @@ struct ReaderDuoSettingsPanelTests {
             safe: UIEdgeInsets(top: 82, left: 0, bottom: 34, right: 0),
             regions: ReaderHostRegions(fold: CGRect(x: 0, y: 300, width: 669, height: 40)), chromeTop: 82
         ))
-        #expect(placement.top + placement.height == 951 - 34)
+        #expect(placement.top + placement.height == CGFloat(951 - 34))
     }
 
     @Test func uprightDuoReadsOnePageWithTwoPageSpreadOn() {
