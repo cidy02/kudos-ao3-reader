@@ -109,6 +109,52 @@ nonisolated struct InsightsResetCounts: Equatable, Sendable {
     var workCount: Int
 }
 
+/// Alert copy for Reset Insights. When the privacy gate is locked with Hide Mature on,
+/// never reveals hidden sitting/work counts or whether hidden reading exists.
+nonisolated struct InsightsResetAlertCopy: Equatable, Sendable {
+    var title: String
+    var destructiveButtonTitle: String?
+    var message: String
+
+    static func make(counts: InsightsResetCounts, isPrivacyLocked: Bool) -> InsightsResetAlertCopy {
+        if isPrivacyLocked {
+            let message: String
+            if counts.sessionCount == 0 {
+                message = "This permanently deletes your local reading log, including any hidden mature "
+                    + "reading history. Your saved works, shelves, reading progress and statuses stay."
+            } else {
+                let sittingWord = counts.sessionCount == 1 ? "sitting" : "sittings"
+                let workWord = counts.workCount == 1 ? "work" : "works"
+                message = "This permanently deletes \(counts.sessionCount) reading \(sittingWord) across "
+                    + "\(counts.workCount) \(workWord), along with any hidden mature reading history. "
+                    + "Your saved works, shelves, reading progress and statuses stay."
+            }
+            return InsightsResetAlertCopy(
+                title: "Reset Reading Log?",
+                destructiveButtonTitle: "Reset Reading Log",
+                message: message
+            )
+        }
+        if counts.sessionCount == 0 {
+            return InsightsResetAlertCopy(
+                title: "No Reading Log Entries to Reset",
+                destructiveButtonTitle: nil,
+                message: "Your local reading log has 0 sittings to delete. Saved works, progress and statuses stay."
+            )
+        }
+        let sittingWord = counts.sessionCount == 1 ? "sitting" : "sittings"
+        let titleSittingWord = counts.sessionCount == 1 ? "Sitting" : "Sittings"
+        let workWord = counts.workCount == 1 ? "work" : "works"
+        return InsightsResetAlertCopy(
+            title: "Reset \(counts.sessionCount) Reading \(titleSittingWord)?",
+            destructiveButtonTitle: "Reset \(counts.sessionCount) \(titleSittingWord)",
+            message: "This permanently deletes \(counts.sessionCount) reading \(sittingWord) across "
+                + "\(counts.workCount) \(workWord) from your local reading log. Your saved works, "
+                + "shelves, reading progress and statuses stay."
+        )
+    }
+}
+
 @MainActor
 enum InsightsExportService {
     static let csvHeaderColumns: [String] = [
@@ -139,27 +185,42 @@ enum InsightsExportService {
 
     /// Builds the structured JSON document through `options.filter(...)` and applies
     /// Discreet Mode when enabled.
+    ///
+    /// `works` is the saved library (used for `statuses`, `reasons`, and `notes`);
+    /// `readingWorks` (default `works`) includes queue-only works so their sittings
+    /// honour exclusions, `word_unit`, D3 chapter word counts, and metadata fallbacks.
     static func makeDocument(
         works: [SavedWork],
+        readingWorks: [SavedWork]? = nil,
         sessions: [ReadingSession],
         options: InsightsOptions = InsightsOptions(),
         aliases: TagAliasResolver = .empty,
         exportedAt: Date = Date()
     ) -> InsightsExportDocument {
-        let filtered = options.filter(sessions: sessions, works: works, aliases: aliases)
-        let sortedWorks = filtered.works.sorted {
+        let effectiveReadingWorks = readingWorks ?? works
+        let filtered = options.filter(
+            sessions: sessions,
+            works: effectiveReadingWorks,
+            aliases: aliases
+        )
+        let libraryIDs = Set(works.map(\.id))
+        let sortedReadingWorks = filtered.works.sorted {
             ($0.title, $0.id.uuidString) < ($1.title, $1.id.uuidString)
         }
+        let sortedLibraryWorks = sortedReadingWorks.filter { libraryIDs.contains($0.id) }
         let sortedSessions = filtered.sessions.sorted {
             ($0.startedAt, $0.id.uuidString) < ($1.startedAt, $1.id.uuidString)
         }
         let worksByID = Dictionary(
-            sortedWorks.map { ($0.id, $0) },
+            sortedReadingWorks.map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
         )
-        let readBySession = ReadingLogService.wordsRead(sessions: sortedSessions, works: sortedWorks)
+        let readBySession = ReadingLogService.wordsRead(
+            sessions: filtered.historySessions,
+            works: sortedReadingWorks
+        )
         let masker = options.discreetMode
-            ? makeExportMasker(works: sortedWorks, sessions: sortedSessions, aliases: aliases)
+            ? makeExportMasker(works: sortedReadingWorks, sessions: sortedSessions, aliases: aliases)
             : .empty
 
         let context = ExportBuildContext(
@@ -175,7 +236,7 @@ enum InsightsExportService {
                 context: context
             )
         }
-        let exportedStatuses = sortedWorks.map { work in
+        let exportedStatuses = sortedLibraryWorks.map { work in
             makeWorkStatus(work: work, context: context)
         }
 
@@ -326,6 +387,7 @@ enum InsightsExportService {
 
     static func jsonData(
         works: [SavedWork],
+        readingWorks: [SavedWork]? = nil,
         sessions: [ReadingSession],
         options: InsightsOptions = InsightsOptions(),
         aliases: TagAliasResolver = .empty,
@@ -333,6 +395,7 @@ enum InsightsExportService {
     ) throws -> Data {
         let document = makeDocument(
             works: works,
+            readingWorks: readingWorks,
             sessions: sessions,
             options: options,
             aliases: aliases,
@@ -346,6 +409,7 @@ enum InsightsExportService {
 
     static func csvString(
         works: [SavedWork],
+        readingWorks: [SavedWork]? = nil,
         sessions: [ReadingSession],
         options: InsightsOptions = InsightsOptions(),
         aliases: TagAliasResolver = .empty,
@@ -353,6 +417,7 @@ enum InsightsExportService {
     ) -> String {
         let document = makeDocument(
             works: works,
+            readingWorks: readingWorks,
             sessions: sessions,
             options: options,
             aliases: aliases,
@@ -429,6 +494,7 @@ enum InsightsExportService {
     static func writeTemporaryExportFile(
         format: InsightsExportFormat,
         works: [SavedWork],
+        readingWorks: [SavedWork]? = nil,
         sessions: [ReadingSession],
         options: InsightsOptions = InsightsOptions(),
         aliases: TagAliasResolver = .empty,
@@ -452,6 +518,7 @@ enum InsightsExportService {
         case .csv:
             data = Data(csvString(
                 works: works,
+                readingWorks: readingWorks,
                 sessions: sessions,
                 options: options,
                 aliases: aliases,
@@ -460,6 +527,7 @@ enum InsightsExportService {
         case .json:
             data = try jsonData(
                 works: works,
+                readingWorks: readingWorks,
                 sessions: sessions,
                 options: options,
                 aliases: aliases,
@@ -472,29 +540,31 @@ enum InsightsExportService {
 
     // MARK: - Reset Insights (D6)
 
-    static func resetCounts(in context: ModelContext) -> InsightsResetCounts {
-        let sessions = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
-        let distinctWorks = Set(sessions.map(\.workID))
-        return InsightsResetCounts(sessionCount: sessions.count, workCount: distinctWorks.count)
+    static func resetCounts(
+        in context: ModelContext,
+        scope: InsightsScopeSelection? = nil
+    ) -> InsightsResetCounts {
+        let all = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let visible = scope.map { $0.sessions(all, in: context) } ?? all
+        let distinctWorks = Set(visible.map(\.workID))
+        return InsightsResetCounts(sessionCount: visible.count, workCount: distinctWorks.count)
     }
 
-    /// Deletes all local `ReadingSession` rows via `ReadingLogService.delete(_:in:)`,
-    /// minting signed sync tombstones without modifying any `SavedWork`, progress, or status.
+    /// Atomically deletes all local `ReadingSession` rows with signed sync tombstones
+    /// in a single save, without modifying any `SavedWork`, progress, or status, and
+    /// rotates any active open sessions so detached Read Aloud cannot re-insert a
+    /// tombstoned `recordID`.
     @discardableResult
-    static func resetReadingLog(in context: ModelContext) throws -> Int {
+    static func resetReadingLog(in context: ModelContext, now: Date = Date()) throws -> Int {
         let sessions = try context.fetch(FetchDescriptor<ReadingSession>())
         let deletedCount = sessions.count
         for session in sessions {
-            ReadingLogService.delete(session, in: context)
+            SyncTombstones.recordDeletion(of: session, in: context)
+            context.delete(session)
         }
-        let remaining = try context.fetchCount(FetchDescriptor<ReadingSession>())
-        if remaining > 0 {
-            throw NSError(
-                domain: "InsightsReset",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Could not delete all reading log entries."]
-            )
-        }
+        try context.save()
+        FolderSyncService.markDirty()
+        ReadingLogService.resetOpenSessionsAfterLogReset(now: now)
         return deletedCount
     }
 

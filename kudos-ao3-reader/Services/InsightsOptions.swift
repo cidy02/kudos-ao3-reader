@@ -126,6 +126,13 @@ nonisolated struct InsightsOptions: Equatable, Sendable {
         )
     }
 
+    enum ExclusionKind: Sendable {
+        case fandoms
+        case tags
+        case workIDs
+        case all
+    }
+
     func save(to defaults: UserDefaults = .standard, notifySync: Bool = true) {
         defaults.set(discreetMode, forKey: Keys.discreetMode)
         defaults.set(hideReadingTime, forKey: Keys.hideReadingTime)
@@ -136,6 +143,71 @@ nonisolated struct InsightsOptions: Equatable, Sendable {
         defaults.set(Self.normalizedNames(excludedFandoms), forKey: Keys.excludedFandoms)
         defaults.set(Self.normalizedNames(excludedTags), forKey: Keys.excludedTags)
         defaults.set(Self.normalizedWorkIDs(excludedWorkIDs), forKey: Keys.excludedWorkIDs)
+        if notifySync {
+            NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+        }
+    }
+
+    /// Writes only the changed exclusion key(s) so untouched options stay absent
+    /// in `UserDefaults` and `KudosBackupSettings` cannot clobber another device's
+    /// toggles or other exclusion lists on Folder Sync / backup merge.
+    @discardableResult
+    static func saveExcludedFandoms(
+        _ values: [String],
+        to defaults: UserDefaults = .standard,
+        notifySync: Bool = true
+    ) -> [String] {
+        let normalized = normalizedNames(values)
+        defaults.set(normalized, forKey: Keys.excludedFandoms)
+        if notifySync {
+            NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+        }
+        return normalized
+    }
+
+    @discardableResult
+    static func saveExcludedTags(
+        _ values: [String],
+        to defaults: UserDefaults = .standard,
+        notifySync: Bool = true
+    ) -> [String] {
+        let normalized = normalizedNames(values)
+        defaults.set(normalized, forKey: Keys.excludedTags)
+        if notifySync {
+            NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+        }
+        return normalized
+    }
+
+    @discardableResult
+    static func saveExcludedWorkIDs(
+        _ values: [String],
+        to defaults: UserDefaults = .standard,
+        notifySync: Bool = true
+    ) -> [String] {
+        let normalized = normalizedWorkIDs(values)
+        defaults.set(normalized, forKey: Keys.excludedWorkIDs)
+        if notifySync {
+            NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+        }
+        return normalized
+    }
+
+    /// Clears only the exclusion keys already present in `defaults`, leaving unset
+    /// keys omitted so sync never clobbers another device's untouched lists.
+    static func clearAllExclusions(
+        in defaults: UserDefaults = .standard,
+        notifySync: Bool = true
+    ) {
+        if defaults.object(forKey: Keys.excludedFandoms) != nil {
+            defaults.set([String](), forKey: Keys.excludedFandoms)
+        }
+        if defaults.object(forKey: Keys.excludedTags) != nil {
+            defaults.set([String](), forKey: Keys.excludedTags)
+        }
+        if defaults.object(forKey: Keys.excludedWorkIDs) != nil {
+            defaults.set([String](), forKey: Keys.excludedWorkIDs)
+        }
         if notifySync {
             NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
         }
@@ -229,13 +301,10 @@ nonisolated struct InsightsOptions: Equatable, Sendable {
             includedWorks.append(work)
         }
 
-        var filteredSessions: [ReadingSession] = []
-        filteredSessions.reserveCapacity(sessions.count)
+        var includedWorkSessions: [ReadingSession] = []
+        includedWorkSessions.reserveCapacity(sessions.count)
 
         for session in sessions {
-            if !countReadAloud && session.mode == .listen {
-                continue
-            }
             let sessionWorkKey = session.workID.uuidString.lowercased()
             if matchers.excludedWorkIDs.contains(sessionWorkKey) || excludedLiveWorkIDs.contains(session.workID) {
                 continue
@@ -243,15 +312,30 @@ nonisolated struct InsightsOptions: Equatable, Sendable {
             if isExcluded(session: session, matchers: matchers, aliases: aliases) {
                 continue
             }
-            filteredSessions.append(session)
+            includedWorkSessions.append(session)
         }
 
-        if !countRereads {
-            let firstReadIDs = Self.firstReadThroughSessionIDs(from: filteredSessions)
-            filteredSessions = filteredSessions.filter { firstReadIDs.contains($0.id) }
+        // Compute read-through boundaries before dropping `.listen` rows so turning
+        // off `countReadAloud` never turns a reread after an audio finish into read #1.
+        let firstReadIDs: Set<UUID>? = countRereads
+            ? nil
+            : Self.firstReadThroughSessionIDs(from: includedWorkSessions)
+
+        let filteredSessions = includedWorkSessions.filter { session in
+            if !countReadAloud && session.mode == .listen {
+                return false
+            }
+            if let firstReadIDs, !firstReadIDs.contains(session.id) {
+                return false
+            }
+            return true
         }
 
-        return InsightsFilteredData(works: includedWorks, sessions: filteredSessions)
+        return InsightsFilteredData(
+            works: includedWorks,
+            sessions: filteredSessions,
+            historySessions: includedWorkSessions
+        )
     }
 
     @MainActor
@@ -313,6 +397,20 @@ nonisolated struct InsightsOptions: Equatable, Sendable {
 struct InsightsFilteredData {
     var works: [SavedWork]
     var sessions: [ReadingSession]
+    /// Sessions of included works before mode (`countReadAloud`) and reread
+    /// (`countRereads`) filtering — passed as `history:` to `wordsRead` so
+    /// excluding `.listen` never inflates a following nil-start visual sitting.
+    var historySessions: [ReadingSession]
+
+    init(
+        works: [SavedWork],
+        sessions: [ReadingSession],
+        historySessions: [ReadingSession]? = nil
+    ) {
+        self.works = works
+        self.sessions = sessions
+        self.historySessions = historySessions ?? sessions
+    }
 }
 
 // MARK: - Discreet Mode Masker

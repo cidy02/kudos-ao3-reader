@@ -264,27 +264,30 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         let pageBarReady: Bool
     }
 
+    /// 1-based spine chapter index for `locator`, matching `readingPosition.chapter`.
+    func spineChapter(for locator: Locator) -> Int? {
+        if let globalPos = locator.locations.position,
+           !positionsByReadingOrder.isEmpty,
+           let idx = positionsByReadingOrder.firstIndex(where: { chapter in
+               guard let first = chapter.first?.locations.position,
+                     let last = chapter.last?.locations.position else { return false }
+               return globalPos >= first && globalPos <= last
+           }) {
+            return idx + 1
+        }
+        let key = ReaderSectionBuilder.hrefKey(locator.href.string)
+        if let idx = readingOrder.firstIndex(where: {
+            ReaderSectionBuilder.hrefKey($0.href) == key
+        }) {
+            return idx + 1
+        }
+        return nil
+    }
+
     var readingPosition: ReadingPosition? {
         guard let locator = currentLocator else { return nil }
         let percent = Int(((locator.locations.totalProgression ?? 0) * 100).rounded())
-        let chapterIndex: Int = {
-            if let globalPos = locator.locations.position,
-               !positionsByReadingOrder.isEmpty,
-               let idx = positionsByReadingOrder.firstIndex(where: { chapter in
-                   guard let first = chapter.first?.locations.position,
-                         let last = chapter.last?.locations.position else { return false }
-                   return globalPos >= first && globalPos <= last
-               }) {
-                return idx
-            }
-            let key = ReaderSectionBuilder.hrefKey(locator.href.string)
-            if let idx = readingOrder.firstIndex(where: {
-                ReaderSectionBuilder.hrefKey($0.href) == key
-            }) {
-                return idx
-            }
-            return 0
-        }()
+        let chapterIndex = (spineChapter(for: locator) ?? 1) - 1
         let chapterCount = max(
             1,
             positionsByReadingOrder.isEmpty ? readingOrder.count : positionsByReadingOrder.count

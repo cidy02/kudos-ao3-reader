@@ -100,6 +100,113 @@ extension PersistenceGateSuites {
             #expect(InsightsOptions.load(from: localDefaults) == localCustom)
         }
 
+        /// Review 3 P2 #2: editing one exclusion list writes only that key so backup/sync
+        /// omits the other 8 keys and never clobbers another device's untouched toggles or lists.
+        @Test func singleExclusionEditOmitsOtherEightKeysAndPreservesOtherDeviceOnMerge() throws {
+            let context = try makeContext()
+            let deviceADefaults = try testDefaults()
+            let deviceAOptions = InsightsOptions(
+                discreetMode: true,
+                hideReadingTime: true,
+                countRereads: false,
+                countReadAloud: false,
+                askAboutUntouched: false,
+                untouchedDays: 14,
+                excludedFandoms: ["Sherlock"],
+                excludedTags: ["Slow Burn"],
+                excludedWorkIDs: []
+            )
+            deviceAOptions.save(to: deviceADefaults, notifySync: false)
+
+            let deviceBDefaults = try testDefaults()
+            let excludedWorkID = UUID().uuidString.lowercased()
+            InsightsOptions.saveExcludedWorkIDs([excludedWorkID], to: deviceBDefaults, notifySync: false)
+
+            let deviceBContents = try KudosBackupService.makeContents(
+                works: [], bookmarks: [], fonts: [], readingQueues: [],
+                defaults: deviceBDefaults
+            )
+            let root = try #require(
+                try JSONSerialization.jsonObject(with: deviceBContents.manifestData()) as? [String: Any]
+            )
+            let settings = try #require(root["settings"] as? [String: Any])
+            #expect(settings["excludedWorkIDs"] as? [String] == [excludedWorkID])
+            for untouchedKey in [
+                "discreetMode", "hideReadingTime", "countRereads", "countReadAloud",
+                "askAboutUntouched", "untouchedDays", "excludedFandoms", "excludedTags"
+            ] {
+                #expect(settings[untouchedKey] == nil)
+            }
+
+            // Merging Device B's backup into Device A applies `excludedWorkIDs` without clobbering.
+            _ = try KudosBackupService.restore(
+                deviceBContents, into: context, defaults: deviceADefaults, mode: .merge
+            )
+            let merged = InsightsOptions.load(from: deviceADefaults)
+            #expect(merged.discreetMode == true)
+            #expect(merged.hideReadingTime == true)
+            #expect(merged.countRereads == false)
+            #expect(merged.countReadAloud == false)
+            #expect(merged.askAboutUntouched == false)
+            #expect(merged.untouchedDays == 14)
+            #expect(merged.excludedFandoms == ["Sherlock"])
+            #expect(merged.excludedTags == ["Slow Burn"])
+            #expect(merged.excludedWorkIDs == [excludedWorkID])
+
+            // Clear All on Device B clears only keys present on Device B, leaving others absent.
+            InsightsOptions.clearAllExclusions(in: deviceBDefaults, notifySync: false)
+            let clearedContents = try KudosBackupService.makeContents(
+                works: [], bookmarks: [], fonts: [], readingQueues: [],
+                defaults: deviceBDefaults
+            )
+            let clearedRoot = try #require(
+                try JSONSerialization.jsonObject(with: clearedContents.manifestData()) as? [String: Any]
+            )
+            let clearedSettings = try #require(clearedRoot["settings"] as? [String: Any])
+            #expect(clearedSettings["excludedWorkIDs"] as? [String] == [])
+            #expect(clearedSettings["excludedFandoms"] == nil)
+            #expect(clearedSettings["excludedTags"] == nil)
+        }
+
+        /// Review 3 P3 #13: resetting the log while a detached Read Aloud session is open
+        /// rotates its `recordID` and zeros pre-reset seconds so ending it later does not
+        /// re-insert a tombstoned row with pre-reset duration.
+        @Test func resetReadingLogRotatesOpenDetachedSessionRecordIDAndResetsDuration() throws {
+            ReadingLogService.resetOpenSessionsForTests()
+            let context = try makeContext()
+            let work = SavedWork(title: "Detached Audio", author: "Author A")
+            work.wordCount = 10_000
+            context.insert(work)
+            try context.save()
+
+            let t0 = Date(timeIntervalSince1970: 500_000)
+            ReadingLogService.handleDetachedSpeech(.playing, for: work, playbackRate: 1.0, now: t0)
+            ReadingLogService.handleDetachedSpeech(
+                .paused, for: work, playbackRate: 1.0, now: t0.addingTimeInterval(60)
+            )
+            let beforeReset = try context.fetch(FetchDescriptor<ReadingSession>())
+            let oldRecordID = try #require(beforeReset.first?.id)
+            #expect(beforeReset.count == 1)
+
+            let resetTime = t0.addingTimeInterval(100)
+            let deleted = try InsightsExportService.resetReadingLog(in: context, now: resetTime)
+            #expect(deleted == 1)
+            #expect(try context.fetch(FetchDescriptor<ReadingSession>()).isEmpty)
+
+            // Resuming and stopping after reset must write a fresh non-tombstoned row with only post-reset time.
+            ReadingLogService.handleDetachedSpeech(
+                .playing, for: work, playbackRate: 1.0, now: resetTime.addingTimeInterval(10)
+            )
+            ReadingLogService.handleDetachedSpeech(
+                .stopped, for: work, playbackRate: 1.0, now: resetTime.addingTimeInterval(35)
+            )
+            let afterReset = try context.fetch(FetchDescriptor<ReadingSession>())
+            #expect(afterReset.count == 1)
+            let fresh = try #require(afterReset.first)
+            #expect(fresh.id != oldRecordID)
+            #expect(fresh.durationSeconds == 25)
+        }
+
         @Test func resetReadingLogMintsTombstonesAndFolderSyncMergeDoesNotResurrect() throws {
             let context = try makeContext()
             let defaults = try testDefaults()

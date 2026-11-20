@@ -1,4 +1,8 @@
 import Foundation
+#if os(iOS)
+import ReadiumNavigator
+import ReadiumShared
+#endif
 import SwiftData
 import Testing
 @testable import Kudos
@@ -697,6 +701,69 @@ struct InsightsD3D4Tests {
         #expect(legacy[s4.id] == read[s4.id])
     }
 
+    /// Review 3 P3 #10: a tiny positive AO3 word recount (+0.5%, same chapters) or a small
+    /// forward nudge into end notes after a `< 1.0` finish must not zero out a scrolled-back reread.
+    @Test func chapterModeRereadSurvivesTinyPositiveRecountAndEndNotesNudge() {
+        let recounted = SavedWork(title: "Tiny Recount", author: "A")
+        recounted.chapterWordCounts = [1_000, 1_010]
+        recounted.wordCount = 2_010
+        recounted.chapters = "2/2"
+        let r1 = ReadingSession(
+            workID: recounted.id, startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 2_000), durationSeconds: 1_000,
+            startProgress: 0, endingProgress: 1.0, wordCount: 2_000,
+            chapterCountAtVisit: 2, didFinish: true
+        )
+        let r2 = ReadingSession(
+            workID: recounted.id, startedAt: Date(timeIntervalSince1970: 3_000),
+            endedAt: Date(timeIntervalSince1970: 3_100), durationSeconds: 100,
+            startProgress: 1.0, endingProgress: 0.3, wordCount: 2_010,
+            chapterCountAtVisit: 2, didFinish: false
+        )
+        let r3 = ReadingSession(
+            workID: recounted.id, startedAt: Date(timeIntervalSince1970: 4_000),
+            endedAt: Date(timeIntervalSince1970: 5_000), durationSeconds: 1_000,
+            startProgress: 0.3, endingProgress: 1.0, wordCount: 2_010,
+            chapterCountAtVisit: 2, didFinish: true
+        )
+
+        let endNotes = SavedWork(title: "End Notes Finish", author: "A")
+        endNotes.chapterWordCounts = [1_000, 1_000]
+        endNotes.wordCount = 2_000
+        endNotes.chapters = "2/2"
+        let e1 = ReadingSession(
+            workID: endNotes.id, startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 2_000), durationSeconds: 1_000,
+            startProgress: 0, endingProgress: 0.95, wordCount: 2_000,
+            chapterCountAtVisit: 2, didFinish: true
+        )
+        let e2 = ReadingSession(
+            workID: endNotes.id, startedAt: Date(timeIntervalSince1970: 3_000),
+            endedAt: Date(timeIntervalSince1970: 3_200), durationSeconds: 200,
+            startProgress: 0.95, endingProgress: 0.99, wordCount: 2_000,
+            chapterCountAtVisit: 2, didFinish: false
+        )
+        let e3 = ReadingSession(
+            workID: endNotes.id, startedAt: Date(timeIntervalSince1970: 4_000),
+            endedAt: Date(timeIntervalSince1970: 4_100), durationSeconds: 100,
+            startProgress: 0.99, endingProgress: 0.2, wordCount: 2_000,
+            chapterCountAtVisit: 2, didFinish: false
+        )
+        let e4 = ReadingSession(
+            workID: endNotes.id, startedAt: Date(timeIntervalSince1970: 5_000),
+            endedAt: Date(timeIntervalSince1970: 5_600), durationSeconds: 600,
+            startProgress: 0.2, endingProgress: 0.6, wordCount: 2_000,
+            chapterCountAtVisit: 2, didFinish: false
+        )
+
+        let read = ReadingLogService.wordsRead(
+            sessions: [r1, r2, r3, e1, e2, e3, e4], works: [recounted, endNotes]
+        )
+        #expect(read[r3.id] == 1_407)
+        #expect(read[e2.id] == 80)
+        #expect(read[e4.id] == 800)
+    }
+
     // MARK: - D4: Mode split, sub-15s guard, pause/finish preservation & speech wiring
 
     @Test func modeSwitchMidSittingSplitsDropsSub15sKeepsPausedAndPreservesFinish() throws {
@@ -751,158 +818,6 @@ struct InsightsD3D4Tests {
         #expect(allRows.last?.durationSeconds == 20)
     }
 
-    #if os(iOS)
-    /// Review 2 P2: the engine returns from `speak()` having queued nothing (a chapter
-    /// of "* * *" or ♡). Continuous Read Aloud must not sit on `.playing` in silence:
-    /// it moves to the next chapter, or stops with a real `.stopped` after the last one.
-    @Test func unspeakableChapterAdvancesOrStopsInsteadOfStickingOnPlaying() async throws {
-        let engine = SystemTTSService()
-        let symbolsOnly = [TTSSpeechUnit(text: "* * *  ♡  ~~~", locator: nil)]
-        #expect(try await engine.speak(units: symbolsOnly) == false)
-        #expect(engine.status == .stopped)
-
-        let controller = ReaderSpeechController()
-        var skips = 0
-        var chaptersLeft = 1
-        controller.seedSessionForTests(
-            workID: UUID(), status: .playing, isReaderOpen: true, withSystemEngine: true,
-            onSkipNext: {
-                skips += 1
-                guard chaptersLeft > 0 else { return false }
-                chaptersLeft -= 1
-                return true
-            }
-        )
-        // Nothing speakable, a next chapter exists: skip to it, stay one sitting.
-        controller.handleChapterSpeakResult(started: false)
-        #expect(skips == 1)
-        #expect(controller.status == .playing)
-        // That one is empty too and it is the last: a real stop, not silent `.playing`.
-        controller.handleChapterSpeakResult(started: false)
-        #expect(skips == 2)
-        #expect(controller.status == .stopped)
-
-        // A skip that never moves (every chapter "advances" into nothing) is bounded.
-        let looping = ReaderSpeechController()
-        var loopSkips = 0
-        looping.seedSessionForTests(
-            workID: UUID(), status: .playing, isReaderOpen: true, withSystemEngine: true,
-            onSkipNext: { loopSkips += 1; return true }
-        )
-        for _ in 0..<12 where looping.status == .playing {
-            looping.handleChapterSpeakResult(started: false)
-        }
-        #expect(looping.status == .stopped)
-        #expect(loopSkips == 10)
-
-        // A fresh tap on an empty chapter stays `.stopped` and asks for no skip.
-        let idle = ReaderSpeechController()
-        var idleSkips = 0
-        idle.seedSessionForTests(
-            workID: UUID(), status: .stopped, isReaderOpen: true, withSystemEngine: true,
-            onSkipNext: { idleSkips += 1; return true }
-        )
-        idle.handleChapterSpeakResult(started: false)
-        #expect(idle.status == .stopped)
-        #expect(idleSkips == 0)
-    }
-
-    @Test func readSpeechControllerAutoAdvanceDetachedReopenBackgroundAndAudition() throws {
-        ReadingLogService.resetOpenSessionsForTests()
-        let context = try makeContext()
-        let work = SavedWork(title: "Speech Wired", author: "A")
-        context.insert(work)
-        try context.save()
-
-        var clock = Date(timeIntervalSince1970: 300_000)
-        let controller = ReaderSpeechController()
-        controller.onStatusTransition = { _, newStatus, isReaderOpen in
-            let state: ReadingLogService.DetachedSpeechState = switch newStatus {
-            case .playing: .playing
-            case .paused: .paused
-            case .stopped, .unavailable: .stopped
-            }
-            ReadingLogService.handleSpeechStatusChange(
-                state,
-                isReaderOpen: isReaderOpen,
-                isBackgrounded: false,
-                for: work,
-                playbackRate: 1.25,
-                now: clock
-            )
-        }
-
-        var canAdvanceChapter = true
-        controller.seedSessionForTests(
-            workID: work.id,
-            status: .playing,
-            isReaderOpen: true,
-            onSkipNext: { canAdvanceChapter }
-        )
-        ReadingLogService.handleReaderOpen(
-            for: work,
-            isSpeechPlaying: controller.status == .playing,
-            isSpeechStopped: false,
-            playbackRate: 1.25,
-            now: clock
-        )
-
-        // Chapter 1 finishes in 10s (<15s) and auto-advances to Chapter 2 -> MUST NOT
-        // flip status to `.stopped`, drop the <15s chapter, or split the sitting.
-        clock = clock.addingTimeInterval(10)
-        controller.handleEngineStatusChange(.stopped)
-        #expect(controller.status == .playing)
-        #expect(ReadingLogService.openSessionMode(for: work.id) == .listen)
-
-        // Background pause while reader is still open must flush/pause synchronously.
-        clock = clock.addingTimeInterval(20)
-        ReadingLogService.handleSpeechStatusChange(
-            .paused, isReaderOpen: true, isBackgrounded: true, for: work,
-            playbackRate: 1.25, now: clock
-        )
-        let flushed = try context.fetch(FetchDescriptor<ReadingSession>())
-        #expect(flushed.count == 1)
-        #expect(flushed.first?.mode == .listen)
-        #expect(flushed.first?.durationSeconds == 30)
-
-        // Auditioning a sample while detached paused session exists must not end it.
-        controller.seedSessionForTests(
-            workID: work.id, status: .paused, isReaderOpen: false, isAuditioning: true
-        )
-        controller.handleEngineStatusChange(.stopped)
-        #expect(ReadingLogService.hasOpenSession(for: work.id))
-
-        // Re-opening reader while detached Read Aloud is `.paused` must resume tracking.
-        clock = clock.addingTimeInterval(60)
-        ReadingLogService.handleReaderOpen(
-            for: work, isSpeechPlaying: false, isSpeechStopped: false,
-            playbackRate: 1.25, now: clock
-        )
-        clock = clock.addingTimeInterval(40)
-        ReadingLogService.noteActivity(for: work, now: clock)
-
-        // Last chapter ends (`onSkipNext` returns false) while open -> splits back to `.read`.
-        controller.seedSessionForTests(
-            workID: work.id, status: .playing, isReaderOpen: true, onSkipNext: { false }
-        )
-        canAdvanceChapter = false
-        controller.handleEngineStatusChange(.stopped)
-        #expect(controller.status == .stopped)
-        #expect(ReadingLogService.openSessionMode(for: work.id) == .read)
-
-        clock = clock.addingTimeInterval(25)
-        ReadingLogService.endSession(for: work, now: clock)
-        let finalRows = try context.fetch(
-            FetchDescriptor<ReadingSession>(sortBy: [SortDescriptor(\.startedAt)])
-        )
-        #expect(finalRows.count == 2)
-        #expect(finalRows[0].mode == .listen)
-        #expect(finalRows[0].durationSeconds == 70)
-        #expect(finalRows[1].mode == .read)
-        #expect(finalRows[1].durationSeconds == 25)
-    }
-    #endif
-
     @Test func paceExcludesListeningUsingRealReadingSessionRows() {
         let work = SavedWork(title: "Mixed Pace", author: "A")
         work.wordCount = 20_000
@@ -942,3 +857,332 @@ struct InsightsD3D4Tests {
         #expect(insights.readingSeconds == 5_400)
     }
 }
+
+#if os(iOS)
+extension InsightsD3D4Tests {
+    @MainActor
+    private final class StubTTSService: TTSService {
+        var status: TTSServiceStatus = .stopped
+        var spokenText: String = ""
+        var speechEnergy: Double = 0
+        var speechEnergySeed: Double = 0
+        var availableVoices: [TTSVoice] = []
+        var onStatusChange: ((TTSServiceStatus) -> Void)?
+        var onSpokenTextChange: ((String) -> Void)?
+        var onSpeechEnergyPulse: ((Double, Double) -> Void)?
+        var onSpeechSpectrum: ((SpeechSpectrum) -> Void)?
+        var onAdvance: ((Locator) -> Void)?
+        var onSpokenRange: ((Locator) -> Void)?
+
+        var speakHandler: ([TTSSpeechUnit]) -> Bool = { _ in true }
+        var speakCallCount = 0
+        var resumeCallCount = 0
+        var stopCallCount = 0
+
+        func speak(units: [TTSSpeechUnit]) async throws -> Bool {
+            speakCallCount += 1
+            // Mirror real engines: resetPlayback(notifyStopped: false) before checking speakability.
+            status = .stopped
+            let started = speakHandler(units)
+            if started {
+                status = .playing
+                onStatusChange?(.playing)
+            }
+            return started
+        }
+
+        func pause() {
+            guard status == .playing else { return }
+            status = .paused
+            onStatusChange?(.paused)
+        }
+
+        func resume() {
+            resumeCallCount += 1
+            guard status == .paused else { return }
+            status = .playing
+            onStatusChange?(.playing)
+        }
+
+        func stop() {
+            stopCallCount += 1
+            let wasStopped = status == .stopped
+            status = .stopped
+            if !wasStopped {
+                onStatusChange?(.stopped)
+            }
+        }
+
+        func setVoice(id _: String) {}
+        func setRate(_: Float) {}
+        func setPitch(_: Float) {}
+    }
+
+    private func chapterLocator(_ href: String) -> Locator {
+        Locator(href: AnyURL(string: href)!, mediaType: .xhtml)
+    }
+
+    /// Review 2 P2 + Review 3 P2 #6 & #8: exercises real `startSpeech` -> `handleChapterSpeakResult`
+    /// wiring (both empty units and `speak()` returning false) and in-reader auto-advance over an
+    /// unspeakable chapter with a stale `book.readingPosition`.
+    @Test func startSpeechWiringAdvancesOverUnspeakableChapterAndBoundsLoops() async throws {
+        let engine = SystemTTSService()
+        let symbolsOnly = [TTSSpeechUnit(text: "* * *  ♡  ~~~", locator: nil)]
+        #expect(try await engine.speak(units: symbolsOnly) == false)
+        #expect(engine.status == .stopped)
+
+        // Scenario B: in-reader auto-advance from Ch 2 -> unspeakable Ch 3 -> speakable Ch 4
+        // while `book.readingPosition` stays stale on Ch 2 (async WKWebView hasn't settled).
+        let stub = StubTTSService()
+        stub.speakHandler = { units in
+            units.contains { $0.text.contains("Prose") }
+        }
+        let locators = [1, 2, 3, 4].map { chapterLocator("ch\($0).xhtml") }
+        var visitedChapters: [Int] = []
+        let controller = ReaderSpeechController()
+        controller.seedSessionForTests(
+            workID: UUID(),
+            status: .playing,
+            isReaderOpen: true,
+            ttsService: stub,
+            unitProvider: { locator in
+                switch locator?.href.string {
+                case "ch3.xhtml":
+                    return [TTSSpeechUnit(text: "* * *", locator: locator)]
+                case "ch4.xhtml":
+                    return [TTSSpeechUnit(text: "Prose in chapter 4.", locator: locator)]
+                default:
+                    return []
+                }
+            },
+            resumeLocator: locators[1], // Chapter 2
+            onSkipNext: {
+                let speechChapter = controller.resumeLocator.flatMap { loc in
+                    locators.firstIndex { $0.href.string == loc.href.string }.map { $0 + 1 }
+                }
+                // `bookChapter` intentionally pinned stale at 2 (WKWebView not settled yet).
+                guard let next = ReaderSpeechSkip.nextChapterForSkipForward(
+                    speechChapter: speechChapter,
+                    bookChapter: 2,
+                    chapterCount: locators.count
+                ) else { return false }
+                visitedChapters.append(next)
+                controller.reanchor(to: locators[next - 1], resumePlaying: controller.isPlaying)
+                return true
+            }
+        )
+
+        controller.handleEngineStatusChange(.stopped)
+        await controller.waitForStartTaskForTests()
+        #expect(visitedChapters == [3, 4])
+        #expect(controller.status == .playing)
+        #expect(controller.resumeLocator?.href.string == "ch4.xhtml")
+
+        // Empty-units last chapter (exercises `units.isEmpty -> handleChapterSpeakResult` wiring).
+        let emptyController = ReaderSpeechController()
+        emptyController.seedSessionForTests(
+            workID: UUID(), status: .playing, isReaderOpen: true,
+            ttsService: StubTTSService(), unitProvider: { _ in [] },
+            resumeLocator: locators[3], onSkipNext: { false }
+        )
+        emptyController.reanchor(to: locators[3], resumePlaying: true)
+        await emptyController.waitForStartTaskForTests()
+        #expect(emptyController.status == .stopped)
+
+        // Bounded loop protection: if every skipped chapter stays unspeakable, stop after 10 skips.
+        let loopingStub = StubTTSService()
+        loopingStub.speakHandler = { _ in false }
+        let looping = ReaderSpeechController()
+        var loopSkips = 0
+        looping.seedSessionForTests(
+            workID: UUID(), status: .playing, isReaderOpen: true,
+            ttsService: loopingStub,
+            unitProvider: { loc in [TTSSpeechUnit(text: "* * *", locator: loc)] },
+            resumeLocator: locators[0],
+            onSkipNext: {
+                loopSkips += 1
+                looping.reanchor(to: locators[0], resumePlaying: true)
+                return true
+            }
+        )
+        looping.reanchor(to: locators[0], resumePlaying: true)
+        await looping.waitForStartTaskForTests()
+        #expect(looping.status == .stopped)
+        #expect(loopSkips == 10)
+
+        // A fresh tap on an empty chapter stays `.stopped` and asks for no skip.
+        let idleStub = StubTTSService()
+        idleStub.speakHandler = { _ in false }
+        let idle = ReaderSpeechController()
+        var idleSkips = 0
+        idle.seedSessionForTests(
+            workID: UUID(), status: .stopped, isReaderOpen: true,
+            ttsService: idleStub,
+            unitProvider: { loc in [TTSSpeechUnit(text: "* * *", locator: loc)] },
+            resumeLocator: locators[0],
+            onSkipNext: { idleSkips += 1; return true }
+        )
+        idle.toggle(from: locators[0])
+        await idle.waitForStartTaskForTests()
+        #expect(idle.status == .stopped)
+        #expect(idleSkips == 0)
+    }
+
+    /// Review 3 P2 #6 (Scenario A): paused skip/seek onto an unspeakable chapter (symbols-only
+    /// or image-only) must move the controller to `.stopped` so subsequent Play is never wedged.
+    @Test func pausedReanchorOntoUnspeakableChapterDoesNotWedgePlay() async throws {
+        let locators = [1, 2, 3, 4].map { chapterLocator("ch\($0).xhtml") }
+
+        // Scenario A1: symbols-only chapter (`speak` returns false and silently stops engine).
+        let pausedStub = StubTTSService()
+        pausedStub.status = .paused
+        pausedStub.speakHandler = { units in units.contains { $0.text.contains("Prose") } }
+        let pausedController = ReaderSpeechController()
+        pausedController.seedSessionForTests(
+            workID: UUID(), status: .paused, isReaderOpen: true,
+            ttsService: pausedStub,
+            unitProvider: { locator in
+                if locator?.href.string == "ch3.xhtml" {
+                    return [TTSSpeechUnit(text: "* * *", locator: locator)]
+                }
+                return [TTSSpeechUnit(text: "Prose in chapter 4.", locator: locator)]
+            },
+            resumeLocator: locators[1]
+        )
+        pausedController.reanchor(to: locators[2], resumePlaying: false)
+        await pausedController.waitForStartTaskForTests()
+        #expect(pausedController.status == .stopped)
+        #expect(pausedStub.status == .stopped)
+
+        // Tapping Play on Chapter 4 must call `speak` and start playing (not no-op `resume`).
+        let speaksBeforePlay = pausedStub.speakCallCount
+        pausedController.toggle(from: locators[3])
+        await pausedController.waitForStartTaskForTests()
+        #expect(pausedStub.speakCallCount == speaksBeforePlay + 1)
+        #expect(pausedController.status == .playing)
+
+        // Scenario A2: image-only chapter (`units.isEmpty`) must stop the previously paused engine.
+        let emptyPausedStub = StubTTSService()
+        emptyPausedStub.status = .paused
+        let emptyPausedController = ReaderSpeechController()
+        emptyPausedController.seedSessionForTests(
+            workID: UUID(), status: .paused, isReaderOpen: true,
+            ttsService: emptyPausedStub,
+            unitProvider: { locator in
+                locator?.href.string == "ch3.xhtml"
+                    ? []
+                    : [TTSSpeechUnit(text: "Prose in chapter 4.", locator: locator)]
+            },
+            resumeLocator: locators[1]
+        )
+        emptyPausedController.reanchor(to: locators[2], resumePlaying: false)
+        await emptyPausedController.waitForStartTaskForTests()
+        #expect(emptyPausedController.status == .stopped)
+        #expect(emptyPausedStub.status == .stopped)
+        emptyPausedController.toggle(from: locators[3])
+        await emptyPausedController.waitForStartTaskForTests()
+        #expect(emptyPausedController.status == .playing)
+    }
+
+    @Test func readSpeechControllerAutoAdvanceDetachedReopenBackgroundAndAudition() async throws {
+        ReadingLogService.resetOpenSessionsForTests()
+        let context = try makeContext()
+        let work = SavedWork(title: "Speech Wired", author: "A")
+        context.insert(work)
+        try context.save()
+
+        var clock = Date(timeIntervalSince1970: 300_000)
+        var isBackgrounded = false
+        let controller = ReaderSpeechController()
+        controller.onStatusTransition = { _, newStatus, isReaderOpen in
+            let state: ReadingLogService.DetachedSpeechState = switch newStatus {
+            case .playing: .playing
+            case .paused: .paused
+            case .stopped, .unavailable: .stopped
+            }
+            ReadingLogService.handleSpeechStatusChange(
+                state,
+                isReaderOpen: isReaderOpen,
+                isBackgrounded: isBackgrounded,
+                for: work,
+                playbackRate: 1.25,
+                now: clock
+            )
+        }
+
+        let stub = StubTTSService()
+        var canAdvanceChapter = true
+        controller.seedSessionForTests(
+            workID: work.id,
+            status: .playing,
+            isReaderOpen: true,
+            ttsService: stub,
+            onSkipNext: { canAdvanceChapter }
+        )
+        ReadingLogService.handleReaderOpen(
+            for: work,
+            isSpeechPlaying: controller.status == .playing,
+            isSpeechStopped: false,
+            playbackRate: 1.25,
+            now: clock
+        )
+
+        // Chapter 1 finishes in 10s (<15s) and auto-advances to Chapter 2 -> MUST NOT
+        // flip status to `.stopped`, drop the <15s chapter, or split the sitting.
+        clock = clock.addingTimeInterval(10)
+        controller.handleEngineStatusChange(.stopped)
+        #expect(controller.status == .playing)
+        #expect(ReadingLogService.openSessionMode(for: work.id) == .listen)
+
+        // Background pause routed through the controller must flush/pause synchronously.
+        clock = clock.addingTimeInterval(20)
+        isBackgrounded = true
+        controller.handleEngineStatusChange(.paused)
+        isBackgrounded = false
+        let flushed = try context.fetch(FetchDescriptor<ReadingSession>())
+        #expect(flushed.count == 1)
+        #expect(flushed.first?.mode == .listen)
+        #expect(flushed.first?.durationSeconds == 30)
+
+        // Real `audition(text:)` while a detached session exists must keep `isAuditioning`
+        // active after `speak()` returns until `.stopped` arrives, so it never ends the log sitting.
+        controller.seedSessionForTests(
+            workID: work.id, status: .paused, isReaderOpen: false, ttsService: stub
+        )
+        controller.audition(text: "Voice sample")
+        await controller.waitForStartTaskForTests()
+        controller.handleEngineStatusChange(.stopped)
+        #expect(ReadingLogService.hasOpenSession(for: work.id))
+
+        // Re-opening reader while detached Read Aloud is `.paused` must resume tracking.
+        clock = clock.addingTimeInterval(60)
+        ReadingLogService.handleReaderOpen(
+            for: work, isSpeechPlaying: false, isSpeechStopped: false,
+            playbackRate: 1.25, now: clock
+        )
+        clock = clock.addingTimeInterval(40)
+        ReadingLogService.noteActivity(for: work, now: clock)
+
+        // Last chapter ends (`onSkipNext` returns false) while open -> splits back to `.read`.
+        controller.seedSessionForTests(
+            workID: work.id, status: .playing, isReaderOpen: true, ttsService: stub,
+            onSkipNext: { false }
+        )
+        canAdvanceChapter = false
+        controller.handleEngineStatusChange(.stopped)
+        #expect(controller.status == .stopped)
+        #expect(ReadingLogService.openSessionMode(for: work.id) == .read)
+
+        clock = clock.addingTimeInterval(25)
+        ReadingLogService.endSession(for: work, now: clock)
+        let finalRows = try context.fetch(
+            FetchDescriptor<ReadingSession>(sortBy: [SortDescriptor(\.startedAt)])
+        )
+        #expect(finalRows.count == 2)
+        #expect(finalRows[0].mode == .listen)
+        #expect(finalRows[0].durationSeconds == 70)
+        #expect(finalRows[1].mode == .read)
+        #expect(finalRows[1].durationSeconds == 25)
+    }
+}
+#endif

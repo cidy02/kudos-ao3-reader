@@ -17,13 +17,17 @@ struct InsightsExclusionsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(ThemeManager.self) private var theme
 
-    let works: [SavedWork]
-    /// Privacy-gated works: their sessions' names never appear as choices.
-    var hiddenWorkIDs: Set<UUID> = []
+    /// Main Insights scope: filters out live, soft-deleted, and hard-deleted hidden
+    /// mature works so their fandoms, tags, and titles never appear as choices.
+    let scope: InsightsScopeSelection
     @Binding var excludedFandoms: [String]
     @Binding var excludedTags: [String]
     @Binding var excludedWorkIDs: [String]
-    let onChange: () -> Void
+    let onChange: (InsightsOptions.ExclusionKind) -> Void
+
+    private var works: [SavedWork] {
+        scope.readingWorks
+    }
 
     @State private var searchText = ""
     @State private var sessions: [ReadingSession] = []
@@ -125,16 +129,15 @@ struct InsightsExclusionsView: View {
                         excludedFandoms = []
                         excludedTags = []
                         excludedWorkIDs = []
-                        onChange()
+                        onChange(.all)
                     }
                     .foregroundStyle(theme.accentInk)
                 }
             }
         }
         .onAppear {
-            let hidden = hiddenWorkIDs
-            sessions = ((try? modelContext.fetch(FetchDescriptor<ReadingSession>())) ?? [])
-                .filter { !hidden.contains($0.workID) }
+            let allSessions = (try? modelContext.fetch(FetchDescriptor<ReadingSession>())) ?? []
+            sessions = scope.sessions(allSessions, in: modelContext)
         }
     }
 
@@ -145,7 +148,7 @@ struct InsightsExclusionsView: View {
                 ForEach(filteredFandoms, id: \.self) { fandom in
                     let selected = isSelected(fandom, in: excludedFandoms)
                     exclusionToggleRow(title: fandom, subtitle: nil, isExcluded: selected) {
-                        toggleName(fandom, in: &excludedFandoms)
+                        toggleName(fandom, in: &excludedFandoms, kind: .fandoms)
                     }
                 }
             }
@@ -179,7 +182,7 @@ struct InsightsExclusionsView: View {
                 ForEach(filteredTags, id: \.self) { tag in
                     let selected = isSelected(tag, in: excludedTags)
                     exclusionToggleRow(title: tag, subtitle: nil, isExcluded: selected) {
-                        toggleName(tag, in: &excludedTags)
+                        toggleName(tag, in: &excludedTags, kind: .tags)
                     }
                 }
             }
@@ -244,7 +247,11 @@ struct InsightsExclusionsView: View {
         return list.contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == key }
     }
 
-    private func toggleName(_ value: String, in list: inout [String]) {
+    private func toggleName(
+        _ value: String,
+        in list: inout [String],
+        kind: InsightsOptions.ExclusionKind
+    ) {
         let key = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if let index = list.firstIndex(where: {
             $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == key
@@ -253,7 +260,7 @@ struct InsightsExclusionsView: View {
         } else {
             list.append(value)
         }
-        onChange()
+        onChange(kind)
     }
 
     private func toggleWorkID(_ id: String) {
@@ -263,7 +270,7 @@ struct InsightsExclusionsView: View {
         } else {
             excludedWorkIDs.append(key)
         }
-        onChange()
+        onChange(.workIDs)
     }
 }
 

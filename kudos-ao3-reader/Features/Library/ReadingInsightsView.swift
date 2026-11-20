@@ -23,14 +23,15 @@ struct ReadingInsightsView: View {
     /// could not tell which sessions belong to hidden works.
     let libraryWorks: [SavedWork]
 
-    /// "Include Hidden" (Insights Options): the figures count hidden works too. Only
-    /// while the gate is revealed; never stored, and turned off when the gate re-locks.
-    @State private var includeHidden = false
+    /// View-level scope, re-lock, subtitle and Hidden cache state.
+    @State private var scopeState = ReadingInsightsScopeState()
+    @State private var lastReloadKey = ""
+    @State private var hasLoadedOnce = false
 
     /// What the figures and exports on screen count: everything but hidden works, or
     /// (revealed, Include Hidden on) everything.
     private var screenScope: InsightsScope {
-        includeHidden && gate.revealAll && hideMature ? .combined : .main
+        scopeState.screenScope(hideMature: hideMature, revealed: gate.revealAll)
     }
 
     private func selection(_ scope: InsightsScope) -> InsightsScopeSelection {
@@ -42,9 +43,6 @@ struct ReadingInsightsView: View {
     @State private var referenceDate: Date = Date()
 
     @State private var insights = ReadingInsights()
-    /// The Hidden section's figures; nil while the gate is locked (never computed then).
-    @State private var hiddenInsights: ReadingInsights?
-    @State private var hiddenMasker: InsightsDiscreetMasker = .empty
     @State private var tasteInsights: ReadingTasteInsights?
     @State private var habitsInsights: ReadingHabitsInsights?
     @State private var libraryInsights: ReadingLibraryInsights?
@@ -72,13 +70,33 @@ struct ReadingInsightsView: View {
     @AppStorage(InsightsOptions.Keys.untouchedDays)
     private var untouchedDays: Int = InsightsOptions.defaultUntouchedDays
 
+    /// Lightweight scalar fingerprint so mutations to `libraryWorks` while mounted
+    /// (e.g. AO3 refresh marking a work Explicit, or finishing a work) trigger a reload.
+    private var libraryWorksFingerprint: String {
+        var adultCount = 0
+        var finishedCount = 0
+        var newestModified: TimeInterval = 0
+        var newestProgress: TimeInterval = 0
+        for work in libraryWorks {
+            if work.isAdult { adultCount += 1 }
+            if work.isFinished { finishedCount += 1 }
+            let mod = work.lastModifiedAt.timeIntervalSince1970
+            if mod > newestModified { newestModified = mod }
+            if let prog = work.progressModifiedAt?.timeIntervalSince1970, prog > newestProgress {
+                newestProgress = prog
+            }
+        }
+        return "\(libraryWorks.count)-\(adultCount)-\(finishedCount)-\(newestModified)-\(newestProgress)"
+    }
+
     private var reloadKey: String {
         [
             range.rawValue,
             "\(referenceDate.timeIntervalSince1970)",
-            "\(hideMature)-\(gate.revealAll)-\(includeHidden)",
+            "\(hideMature)-\(gate.revealAll)-\(scopeState.includeHidden)",
             "\(countRereads)-\(countReadAloud)-\(askAboutUntouched)-\(untouchedDays)",
-            "\(optionsRevision)"
+            "\(optionsRevision)",
+            libraryWorksFingerprint
         ].joined(separator: "|")
     }
 
@@ -130,15 +148,17 @@ struct ReadingInsightsView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 14) {
-                        switch selectedTab {
-                        case .overview:
-                            overviewContent
-                        case .taste:
-                            tasteContent
-                        case .habits:
-                            habitsContent
-                        case .library:
-                            libraryContent
+                        if scopeState.mayDisplayLoadedData(hideMature: hideMature, revealed: gate.revealAll) {
+                            switch selectedTab {
+                            case .overview:
+                                overviewContent
+                            case .taste:
+                                tasteContent
+                            case .habits:
+                                habitsContent
+                            case .library:
+                                libraryContent
+                            }
                         }
                     }
                     .padding(.horizontal, 16)
@@ -201,14 +221,27 @@ struct ReadingInsightsView: View {
             }
         }
         .task(id: reloadKey) {
+            guard lastReloadKey != reloadKey else { return }
             reload()
         }
+        .onAppear {
+            if hasLoadedOnce { reload() }
+        }
         .onChange(of: gate.revealAll) { _, revealed in
-            if !revealed { includeHidden = false }
+            // Synchronously clear hidden state and recompute main figures on re-lock so
+            // stale combined mature titles/figures are never painted while waiting for `.task`.
+            if scopeState.handleRevealChange(revealed: revealed, hideMature: hideMature) {
+                if !revealed { clearMainDisplayState() }
+                reload()
+            }
+        }
+        .onChange(of: hideMature) { _, isHiding in
+            scopeState.handleHideMatureChange(hideMature: isHiding, revealed: gate.revealAll)
+            if isHiding && !gate.revealAll { clearMainDisplayState() }
+            reload()
         }
         .onReceive(NotificationCenter.default.publisher(for: .kudosSyncRelevantSettingChanged)) { _ in
             optionsRevision += 1
-            reload()
         }
         .refreshable {
             reload()
@@ -217,18 +250,16 @@ struct ReadingInsightsView: View {
             InsightsOptionsSheet(
                 // Exclusion choices never list hidden works' names: what is chosen is
                 // stored, and would still show after the gate re-locks.
-                works: selection(.main).readingWorks,
-                hiddenWorkIDs: selection(.main).excludedWorkIDs,
+                exclusionsScope: selection(.main),
                 exportScope: selection(screenScope),
-                includeHidden: $includeHidden,
-                canIncludeHidden: hideMature && gate.revealAll,
+                includeHidden: $scopeState.includeHidden,
+                canIncludeHidden: scopeState.canIncludeHidden(hideMature: hideMature, revealed: gate.revealAll),
                 onShowHowCounted: {
                     showingOptionsSheet = false
                     showingHowCountedSheet = true
                 },
                 onOptionsChanged: {
                     optionsRevision += 1
-                    reload()
                 }
             )
         }
@@ -313,7 +344,8 @@ struct ReadingInsightsView: View {
                     Text(periodSubtitle)
                         .font(.system(size: 12))
                         .foregroundStyle(.secondaryInk)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -462,7 +494,7 @@ struct ReadingInsightsView: View {
 
     @ViewBuilder
     private var hiddenSection: some View {
-        if gate.revealAll, let hidden = hiddenInsights {
+        if gate.revealAll, let hidden = scopeState.hiddenInsights {
             InsightsHiddenHeader(isRevealed: true, includesHidden: screenScope == .combined)
                 .id(Self.hiddenSectionID)
 
@@ -478,7 +510,11 @@ struct ReadingInsightsView: View {
             WhereTheWordsWentCard(
                 fandoms: hidden.fandomWordsShares,
                 discreetMode: discreetMode,
-                discreetMasker: hiddenMasker
+                discreetMasker: scopeState.hiddenSectionMasker(
+                    mainMasker: discreetMasker,
+                    hideMature: hideMature,
+                    revealed: gate.revealAll
+                )
             )
         } else {
             InsightsHiddenHeader(isRevealed: false, includesHidden: false)
@@ -679,7 +715,7 @@ struct ReadingInsightsView: View {
 
     /// Says on screen when the figures include hidden works.
     private var scopeSuffix: String {
-        screenScope == .combined ? " · incl. hidden" : ""
+        scopeState.scopeSuffix(hideMature: hideMature, revealed: gate.revealAll)
     }
 
     private var previousPeriodShortName: String {
@@ -725,6 +761,16 @@ struct ReadingInsightsView: View {
 
     // MARK: - Reload Data
 
+    private func clearMainDisplayState() {
+        insights = ReadingInsights()
+        tasteInsights = nil
+        habitsInsights = nil
+        libraryInsights = nil
+        libraryStats = nil
+        finishedWorksInPeriod = []
+        discreetMasker = .empty
+    }
+
     private func reload() {
         let component = range.component
         guard let currentInterval = calendar.dateInterval(of: component, for: referenceDate),
@@ -734,10 +780,11 @@ struct ReadingInsightsView: View {
 
         let periodMonths: Double = range == .year ? 12 : 1
         let options = InsightsOptions.load()
+        let activeScope = screenScope
         let gathered = ReadingLogService.gatherInsights(
             for: currentInterval,
             previousPeriod: previousInterval,
-            scope: selection(screenScope),
+            scope: selection(activeScope),
             periodMonths: periodMonths,
             calendar: calendar,
             context: context,
@@ -753,11 +800,17 @@ struct ReadingInsightsView: View {
                 context: context,
                 options: options
             )
-            hiddenInsights = hidden.insights
-            hiddenMasker = hidden.discreetMasker
+            scopeState.recordGather(
+                scope: activeScope,
+                hiddenInsights: hidden.insights,
+                hiddenMasker: hidden.discreetMasker
+            )
         } else {
-            hiddenInsights = nil
-            hiddenMasker = .empty
+            scopeState.recordGather(
+                scope: activeScope,
+                hiddenInsights: nil,
+                hiddenMasker: .empty
+            )
         }
         insights = gathered.insights
         tasteInsights = gathered.taste
@@ -766,6 +819,8 @@ struct ReadingInsightsView: View {
         libraryStats = gathered.libraryStats
         finishedWorksInPeriod = gathered.finishedWorksInPeriod
         discreetMasker = gathered.discreetMasker
+        lastReloadKey = reloadKey
+        hasLoadedOnce = true
     }
 
     // MARK: - Actions
@@ -774,7 +829,11 @@ struct ReadingInsightsView: View {
         // Follows what is on screen; while locked that is never the hidden works.
         let scope = selection(screenScope)
         let exportWorks = scope.libraryWorks
-        let sessions = scope.sessions((try? context.fetch(FetchDescriptor<ReadingSession>())) ?? [])
+        let exportReadingWorks = scope.readingWorks
+        let sessions = scope.sessions(
+            (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? [],
+            in: context
+        )
         let options = InsightsOptions.load()
         let aliases = TagAliasStore.resolver(in: context)
         do {
@@ -782,6 +841,7 @@ struct ReadingInsightsView: View {
             let url = try InsightsExportService.writeTemporaryExportFile(
                 format: format,
                 works: exportWorks,
+                readingWorks: exportReadingWorks,
                 sessions: sessions,
                 options: options,
                 aliases: aliases
@@ -793,6 +853,7 @@ struct ReadingInsightsView: View {
             case .csv:
                 data = Data(InsightsExportService.csvString(
                     works: exportWorks,
+                    readingWorks: exportReadingWorks,
                     sessions: sessions,
                     options: options,
                     aliases: aliases
@@ -800,6 +861,7 @@ struct ReadingInsightsView: View {
             case .json:
                 data = try InsightsExportService.jsonData(
                     works: exportWorks,
+                    readingWorks: exportReadingWorks,
                     sessions: sessions,
                     options: options,
                     aliases: aliases

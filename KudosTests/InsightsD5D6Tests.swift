@@ -308,6 +308,94 @@ import Testing
         #expect(withoutAudio.finishedWorksInPeriod.isEmpty)
     }
 
+    /// Review 3 P2 #7: turning off `countReadAloud` must not change which visual sittings
+    /// count as rereads (when an audio sitting finished read #1) or inflate a nil-start
+    /// visual sitting that followed an audio sitting.
+    @Test func countReadAloudFalsePreservesRereadBoundariesAndNilStartWordTotals() throws {
+        let context = try makeContext()
+        let aug = interval(year: 2026, month: 8)
+        let jul = interval(year: 2026, month: 7)
+
+        let rereadWork = SavedWork(title: "Audio Finish Then Reread", author: "A")
+        rereadWork.wordCount = 20_000
+        rereadWork.workFandoms = ["Fandom One"]
+        rereadWork.isFinished = true
+
+        let s1 = ReadingSession(
+            workID: rereadWork.id, workTitle: rereadWork.title,
+            startedAt: date(year: 2026, month: 8, day: 1, hour: 10),
+            endedAt: date(year: 2026, month: 8, day: 1, hour: 10).addingTimeInterval(600),
+            durationSeconds: 600,
+            startProgress: 0, modeRaw: ReadingSession.Mode.read.rawValue,
+            endingProgress: 0.8, wordCount: 20_000, didFinish: false
+        )
+        let s2 = ReadingSession(
+            workID: rereadWork.id, workTitle: rereadWork.title,
+            startedAt: date(year: 2026, month: 8, day: 2, hour: 10),
+            endedAt: date(year: 2026, month: 8, day: 2, hour: 10).addingTimeInterval(300),
+            durationSeconds: 300,
+            startProgress: 0.8, modeRaw: ReadingSession.Mode.listen.rawValue,
+            endingProgress: 1.0, wordCount: 20_000, didFinish: true
+        )
+        let s3 = ReadingSession(
+            workID: rereadWork.id, workTitle: rereadWork.title,
+            startedAt: date(year: 2026, month: 8, day: 3, hour: 10),
+            endedAt: date(year: 2026, month: 8, day: 3, hour: 10).addingTimeInterval(900),
+            durationSeconds: 900,
+            startProgress: 0, modeRaw: ReadingSession.Mode.read.rawValue,
+            endingProgress: 1.0, wordCount: 20_000, didFinish: true
+        )
+
+        let nilStartWork = SavedWork(title: "Audio Then Nil Start Visual", author: "B")
+        nilStartWork.wordCount = 20_000
+        nilStartWork.workFandoms = ["Fandom Two"]
+        let n1 = ReadingSession(
+            workID: nilStartWork.id, workTitle: nilStartWork.title,
+            startedAt: date(year: 2026, month: 8, day: 4, hour: 10),
+            endedAt: date(year: 2026, month: 8, day: 4, hour: 10).addingTimeInterval(600),
+            durationSeconds: 600,
+            startProgress: 0, modeRaw: ReadingSession.Mode.listen.rawValue,
+            endingProgress: 0.5, wordCount: 20_000, didFinish: false
+        )
+        let n2 = ReadingSession(
+            workID: nilStartWork.id, workTitle: nilStartWork.title,
+            startedAt: date(year: 2026, month: 8, day: 5, hour: 10),
+            endedAt: date(year: 2026, month: 8, day: 5, hour: 10).addingTimeInterval(600),
+            durationSeconds: 600,
+            startProgress: nil, modeRaw: ReadingSession.Mode.read.rawValue,
+            endingProgress: 1.0, wordCount: 20_000, didFinish: true
+        )
+
+        [rereadWork, nilStartWork].forEach { context.insert($0) }
+        [s1, s2, s3, n1, n2].forEach { context.insert($0) }
+        try context.save()
+
+        let options = InsightsOptions(countRereads: false, countReadAloud: false)
+        let gathered = ReadingLogService.gatherInsights(
+            for: aug, previousPeriod: jul, works: [rereadWork, nilStartWork],
+            calendar: utcCalendar, context: context,
+            options: options, now: date(year: 2026, month: 8, day: 20)
+        )
+        // s1 (16_000) + n2 (10_000, NOT 20_000); s2/n1 dropped (audio), s3 dropped (reread).
+        #expect(Set(gathered.filteredSessions.map(\.id)) == [s1.id, n2.id])
+        #expect(gathered.insights.totalWordsRead == 26_000)
+
+        let direct = ReadingLogService.insights(
+            for: aug, previousPeriod: jul, works: [rereadWork, nilStartWork],
+            calendar: utcCalendar, context: context, options: options
+        )
+        #expect(direct.totalWordsRead == 26_000)
+
+        let exported = InsightsExportService.makeDocument(
+            works: [rereadWork, nilStartWork],
+            sessions: [s1, s2, s3, n1, n2],
+            options: options
+        )
+        #expect(exported.sittings.first { $0.sessionID == s1.id }?.wordsRead == 16_000)
+        #expect(exported.sittings.first { $0.sessionID == n2.id }?.wordsRead == 10_000)
+        #expect(!exported.sittings.contains { $0.sessionID == s3.id })
+    }
+
     @Test func hiddenWorkSessionsLeaveGatheredFiguresAlongsideOptionsFilter() throws {
         let context = try makeContext()
         let aug = interval(year: 2026, month: 8)

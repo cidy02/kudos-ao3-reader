@@ -436,6 +436,21 @@ enum ReadingLogService {
         openSessions.removeAll()
     }
 
+    /// Called after the local reading log is wiped (`InsightsExportService.resetReadingLog`):
+    /// rotates every open session's `recordID` so an active/detached Read Aloud sitting
+    /// cannot later re-insert a row with a now-tombstoned ID and pre-reset duration.
+    static func resetOpenSessionsAfterLogReset(now: Date = Date()) {
+        for (workID, var session) in openSessions {
+            session.recordID = UUID()
+            session.startedAt = now
+            session.lastResumedAt = now
+            session.lastActivityAt = now
+            session.accumulatedSeconds = 0
+            session.activeSeconds = 0
+            openSessions[workID] = session
+        }
+    }
+
     // MARK: Queries
 
     static func sessions(in context: ModelContext, interval: DateInterval) -> [ReadingSession] {
@@ -708,19 +723,29 @@ enum ReadingLogService {
 
             if let finish = pendingFinish, endFraction > startFraction {
                 // Starting from 0 is always a reread (even after an AO3 recount). A start
-                // part-way in is a reread unless the work changed since the finish: grew
-                // (catching up on new chapters) or shrank by more than 10% (a revised,
-                // already-read chapter), where the read-through continues instead.
+                // part-way in is a reread unless the work changed meaningfully since the
+                // finish: gained chapters or grew/shrank by more than 10%, where the
+                // read-through continues instead.
                 let grewSinceFinish = (finish.chapterCount > 0 && activeCount > finish.chapterCount)
-                    || (finish.words > 0 && session.wordCount > finish.words)
+                    || (finish.words > 0 && Double(session.wordCount) > Double(finish.words) * 1.10)
                 let shrankSinceFinish = finish.words > 0 && session.wordCount > 0
                     && Double(session.wordCount) < Double(finish.words) * 0.90
                 let isGenuineNewReread = startFraction == 0
                     || (!grewSinceFinish && !shrankSinceFinish && startFraction < finish.endFraction)
                 if isGenuineNewReread {
                     chapterHighWater = Array(repeating: 0.0, count: chapterCounts.count)
+                    pendingFinish = nil
+                } else if grewSinceFinish || shrankSinceFinish {
+                    pendingFinish = nil
+                } else {
+                    // Forward nudge at/past the finish point (e.g. reading end notes):
+                    // keep `pendingFinish` armed so a later scroll-back reread still resets.
+                    pendingFinish = FinishMark(
+                        endFraction: max(finish.endFraction, endFraction),
+                        words: finish.words,
+                        chapterCount: finish.chapterCount
+                    )
                 }
-                pendingFinish = nil
             }
             if session.didFinish {
                 pendingFinish = FinishMark(
@@ -842,6 +867,20 @@ enum ReadingLogService {
         var discreetMasker: InsightsDiscreetMasker
     }
 
+    private struct GatherRequest {
+        var period: DateInterval
+        var previousPeriod: DateInterval?
+        var works: [SavedWork]
+        var readingWorks: [SavedWork]
+        var history: [ReadingSession]
+        var periodMonths: Double
+        var calendar: Calendar
+        var context: ModelContext
+        var options: InsightsOptions
+        var aliases: TagAliasResolver?
+        var now: Date
+    }
+
     /// Gathers one `InsightsScope` (main, Hidden section, or combined).
     static func gatherInsights(
         for period: DateInterval,
@@ -854,20 +893,21 @@ enum ReadingLogService {
         aliases: TagAliasResolver? = nil,
         now: Date = Date()
     ) -> InsightsGatherResult {
-        gatherInsights(
-            for: period,
+        let rawHistory = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let history = scope.sessions(rawHistory, in: context)
+        return gatherInsightsCore(GatherRequest(
+            period: period,
             previousPeriod: previousPeriod,
             works: scope.libraryWorks,
             readingWorks: scope.readingWorks,
-            hiddenWorkIDs: scope.excludedWorkIDs,
-            onlyWorkIDs: scope.onlyWorkIDs,
+            history: history,
             periodMonths: periodMonths,
             calendar: calendar,
             context: context,
             options: options,
             aliases: aliases,
             now: now
-        )
+        ))
     }
 
     /// Gathers every Reading Insights figure through the single `options.filter` pass.
@@ -890,34 +930,50 @@ enum ReadingLogService {
         aliases: TagAliasResolver? = nil,
         now: Date = Date()
     ) -> InsightsGatherResult {
-        let resolvedAliases = aliases ?? TagAliasStore.resolver(in: context)
         let rawHistory = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
-        // Hidden (mature) works' sessions leave every figure, not just their rows; the
-        // Hidden section keeps only theirs.
         let history = rawHistory.filter { session in
             !hiddenWorkIDs.contains(session.workID)
                 && (onlyWorkIDs?.contains(session.workID) ?? true)
         }
-        let filtered = options.filter(sessions: history, works: readingWorks ?? works, aliases: resolvedAliases)
-        let libraryIDs = Set(works.map(\.id))
+        return gatherInsightsCore(GatherRequest(
+            period: period,
+            previousPeriod: previousPeriod,
+            works: works,
+            readingWorks: readingWorks ?? works,
+            history: history,
+            periodMonths: periodMonths,
+            calendar: calendar,
+            context: context,
+            options: options,
+            aliases: aliases,
+            now: now
+        ))
+    }
+
+    private static func gatherInsightsCore(_ req: GatherRequest) -> InsightsGatherResult {
+        let resolvedAliases = req.aliases ?? TagAliasStore.resolver(in: req.context)
+        let filtered = req.options.filter(
+            sessions: req.history, works: req.readingWorks, aliases: resolvedAliases
+        )
+        let libraryIDs = Set(req.works.map(\.id))
         let libraryWorks = filtered.works.filter { libraryIDs.contains($0.id) }
 
         let allFacts = facts(
             from: filtered.sessions,
             works: filtered.works,
-            history: filtered.sessions,
+            history: filtered.historySessions,
             aliases: resolvedAliases
         )
-        let periodFacts = allFacts.filter { period.contains($0.startedAt) }
-        let previousFacts = previousPeriod.map { interval in
+        let periodFacts = allFacts.filter { req.period.contains($0.startedAt) }
+        let previousFacts = req.previousPeriod.map { interval in
             allFacts.filter { interval.contains($0.startedAt) }
         } ?? []
 
         let figures = ReadingInsights.make(
             facts: periodFacts,
             previousPeriodFacts: previousFacts,
-            dayRange: ReadingInsights.chartDays(for: period, now: now, calendar: calendar),
-            calendar: calendar,
+            dayRange: ReadingInsights.chartDays(for: req.period, now: req.now, calendar: req.calendar),
+            calendar: req.calendar,
             aliases: resolvedAliases
         )
         let readWorkIDs = Set(periodFacts.map(\.workID))
@@ -930,24 +986,24 @@ enum ReadingLogService {
             libraryWorks: libraryWorks,
             facts: periodFacts,
             allFacts: allFacts,
-            calendar: calendar,
+            calendar: req.calendar,
             aliases: resolvedAliases
         )
         let library = ReadingLibraryInsights.make(
             works: libraryWorks,
             facts: periodFacts,
-            periodInterval: period,
-            periodMonths: periodMonths,
-            calendar: calendar,
+            periodInterval: req.period,
+            periodMonths: req.periodMonths,
+            calendar: req.calendar,
             aliases: resolvedAliases,
-            askAboutUntouched: options.askAboutUntouched,
-            untouchedDays: options.clampedUntouchedDays,
-            now: now
+            askAboutUntouched: req.options.askAboutUntouched,
+            untouchedDays: req.options.clampedUntouchedDays,
+            now: req.now
         )
         let libraryStats = ReadingStatistics(
             works: libraryWorks,
-            now: now,
-            calendar: calendar,
+            now: req.now,
+            calendar: req.calendar,
             aliases: resolvedAliases
         )
         let finishedWorksInPeriod = filtered.works.filter { w in
@@ -998,7 +1054,7 @@ enum ReadingLogService {
         let allFacts = facts(
             from: filtered.sessions,
             works: filtered.works,
-            history: filtered.sessions,
+            history: filtered.historySessions,
             aliases: resolvedAliases
         )
         let current = allFacts.filter { period.contains($0.startedAt) }

@@ -1904,15 +1904,19 @@ extension ReadiumReaderView {
 
     @discardableResult
     private func handleSpeechSkipForward() -> Bool {
-        guard let pos = book.readingPosition else { return false }
-        switch ReaderSpeechSkip.forwardAction(chapter: pos.chapter, chapterCount: pos.chapterCount) {
-        case .nextChapter:
-            let didMove = goToSpineChapterStart(pos.chapter + 1, resumePlaying: speech.isPlaying)
-            if didMove { playSpeechChapterHaptic() }
-            return didMove
-        case .none:
-            return false
-        }
+        let chapterCount = max(
+            1,
+            book.positionsByReadingOrder.isEmpty ? book.readingOrder.count : book.positionsByReadingOrder.count
+        )
+        let speechChapter = speech.resumeLocator.flatMap { book.spineChapter(for: $0) }
+        guard let nextChapter = ReaderSpeechSkip.nextChapterForSkipForward(
+            speechChapter: speechChapter,
+            bookChapter: book.readingPosition?.chapter,
+            chapterCount: chapterCount
+        ) else { return false }
+        let didMove = goToSpineChapterStart(nextChapter, resumePlaying: speech.isPlaying)
+        if didMove { playSpeechChapterHaptic() }
+        return didMove
     }
 
     /// 1-based spine chapter → first Readium position; re-anchors TTS.
@@ -1976,7 +1980,7 @@ extension ReadiumReaderView {
     private func handleSpeechSeekHoldEnd() {
         guard speechSeekHolding else { return }
         speechSeekHolding = false
-        speech.reanchor(to: book.currentLocator, resumePlaying: speechSeekWasPlaying)
+        speech.reanchor(to: speech.resumeLocator ?? book.currentLocator, resumePlaying: speechSeekWasPlaying)
         speechSeekWasPlaying = false
     }
 

@@ -22,9 +22,9 @@ struct InsightsOptionsSheet: View {
     @AppStorage(InsightsOptions.Keys.untouchedDays)
     private var untouchedDays: Int = InsightsOptions.defaultUntouchedDays
 
-    /// The main scope's works and hidden works: the exclusion choices never name hidden works.
-    let works: [SavedWork]
-    var hiddenWorkIDs: Set<UUID> = []
+    /// The main scope used by Exclusions: choices never name live, soft-deleted, or
+    /// hard-deleted hidden mature works.
+    let exclusionsScope: InsightsScopeSelection
     /// What the screen counts (main, or combined while revealed); the export follows it.
     let exportScope: InsightsScopeSelection
     @Binding var includeHidden: Bool
@@ -32,6 +32,14 @@ struct InsightsOptionsSheet: View {
     var canIncludeHidden = false
     let onShowHowCounted: () -> Void
     let onOptionsChanged: () -> Void
+
+    private var isPrivacyLocked: Bool {
+        exportScope.hideMature && !exportScope.revealed
+    }
+
+    private var resetAlertCopy: InsightsResetAlertCopy {
+        InsightsResetAlertCopy.make(counts: resetCounts, isPrivacyLocked: isPrivacyLocked)
+    }
 
     @State private var excludedFandoms: [String] = []
     @State private var excludedTags: [String] = []
@@ -128,34 +136,19 @@ struct InsightsOptionsSheet: View {
                 )
             }
             .alert(
-                resetCounts.sessionCount == 0
-                    ? "No Reading Log Entries to Reset"
-                    : "Reset \(resetCounts.sessionCount) Reading \(resetCounts.sessionCount == 1 ? "Sitting" : "Sittings")?",
+                resetAlertCopy.title,
                 isPresented: $showingResetAlert
             ) {
-                if resetCounts.sessionCount > 0 {
+                if let destructiveTitle = resetAlertCopy.destructiveButtonTitle {
                     Button("Cancel", role: .cancel) {}
-                    Button(
-                        "Reset \(resetCounts.sessionCount) \(resetCounts.sessionCount == 1 ? "Sitting" : "Sittings")",
-                        role: .destructive
-                    ) {
+                    Button(destructiveTitle, role: .destructive) {
                         resetReadingLog()
                     }
                 } else {
                     Button("OK", role: .cancel) {}
                 }
             } message: {
-                if resetCounts.sessionCount == 0 {
-                    Text("Your local reading log has 0 sittings to delete. Saved works, progress and statuses stay.")
-                } else {
-                    Text(
-                        "This permanently deletes \(resetCounts.sessionCount) reading "
-                            + "\(resetCounts.sessionCount == 1 ? "sitting" : "sittings") across "
-                            + "\(resetCounts.workCount) \(resetCounts.workCount == 1 ? "work" : "works") "
-                            + "from your local reading log. Your saved works, shelves, reading progress "
-                            + "and statuses stay."
-                    )
-                }
+                Text(resetAlertCopy.message)
             }
             .alert("Couldn’t Export Reading History", isPresented: Binding(
                 get: { exportFailure != nil },
@@ -299,8 +292,7 @@ struct InsightsOptionsSheet: View {
 
             NavigationLink {
                 InsightsExclusionsView(
-                    works: works,
-                    hiddenWorkIDs: hiddenWorkIDs,
+                    scope: exclusionsScope,
                     excludedFandoms: $excludedFandoms,
                     excludedTags: $excludedTags,
                     excludedWorkIDs: $excludedWorkIDs,
@@ -352,7 +344,10 @@ struct InsightsOptionsSheet: View {
             .accessibilityHint("Choose CSV or JSON format to share")
 
             Button(role: .destructive) {
-                resetCounts = InsightsExportService.resetCounts(in: modelContext)
+                resetCounts = InsightsExportService.resetCounts(
+                    in: modelContext,
+                    scope: isPrivacyLocked ? exportScope : nil
+                )
                 showingResetAlert = true
             } label: {
                 Label {
@@ -413,15 +408,17 @@ struct InsightsOptionsSheet: View {
         excludedWorkIDs = current.excludedWorkIDs
     }
 
-    private func persistExclusions() {
-        var current = InsightsOptions.load()
-        current.excludedFandoms = excludedFandoms
-        current.excludedTags = excludedTags
-        current.excludedWorkIDs = excludedWorkIDs
-        current.save(notifySync: true)
-        excludedFandoms = current.excludedFandoms
-        excludedTags = current.excludedTags
-        excludedWorkIDs = current.excludedWorkIDs
+    private func persistExclusions(_ kind: InsightsOptions.ExclusionKind) {
+        switch kind {
+        case .fandoms:
+            excludedFandoms = InsightsOptions.saveExcludedFandoms(excludedFandoms, notifySync: true)
+        case .tags:
+            excludedTags = InsightsOptions.saveExcludedTags(excludedTags, notifySync: true)
+        case .workIDs:
+            excludedWorkIDs = InsightsOptions.saveExcludedWorkIDs(excludedWorkIDs, notifySync: true)
+        case .all:
+            InsightsOptions.clearAllExclusions(notifySync: true)
+        }
         onOptionsChanged()
     }
 
@@ -432,7 +429,11 @@ struct InsightsOptionsSheet: View {
 
     private func exportHistory(format: InsightsExportFormat) {
         let works = exportScope.libraryWorks
-        let sessions = exportScope.sessions((try? modelContext.fetch(FetchDescriptor<ReadingSession>())) ?? [])
+        let readingWorks = exportScope.readingWorks
+        let sessions = exportScope.sessions(
+            (try? modelContext.fetch(FetchDescriptor<ReadingSession>())) ?? [],
+            in: modelContext
+        )
         let options = InsightsOptions.load()
         let aliases = TagAliasStore.resolver(in: modelContext)
         do {
@@ -440,6 +441,7 @@ struct InsightsOptionsSheet: View {
             let url = try InsightsExportService.writeTemporaryExportFile(
                 format: format,
                 works: works,
+                readingWorks: readingWorks,
                 sessions: sessions,
                 options: options,
                 aliases: aliases
@@ -451,6 +453,7 @@ struct InsightsOptionsSheet: View {
             case .csv:
                 data = Data(InsightsExportService.csvString(
                     works: works,
+                    readingWorks: readingWorks,
                     sessions: sessions,
                     options: options,
                     aliases: aliases
@@ -458,6 +461,7 @@ struct InsightsOptionsSheet: View {
             case .json:
                 data = try InsightsExportService.jsonData(
                     works: works,
+                    readingWorks: readingWorks,
                     sessions: sessions,
                     options: options,
                     aliases: aliases

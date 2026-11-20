@@ -181,9 +181,15 @@ final class ReaderSpeechController {
     /// duration/elapsed via `ReaderTimeEstimate` (same model as the position card).
     private var totalPositionCount: Int = 0
     /// Last locator spoken or requested — remote Play after pause/stop uses this
-    /// when the in-reader `toggle(from:)` call has no locator.
-    private var resumeLocator: Locator?
+    /// when the in-reader `toggle(from:)` call has no locator, and in-reader
+    /// auto-advance uses it so skipping an unspeakable chapter never stalls on a
+    /// stale navigator locator.
+    private(set) var resumeLocator: Locator?
     private var remoteCommandsInstalled = false
+    #if DEBUG
+    private var testUnitProvider: ((Locator?) async -> [TTSSpeechUnit])?
+    private var skipsEngineReplacementForTests = false
+    #endif
 
     var isAvailable: Bool { status != .unavailable }
     var isPlaying: Bool { status == .playing }
@@ -609,19 +615,38 @@ final class ReaderSpeechController {
     /// where it left off. Walks only the current spine resource — not the rest
     /// of the publication — so a long work does not stall the first tap.
     private func startSpeech(from locator: Locator?) {
-        guard let publication else { return }
+        #if DEBUG
+        let hasContentSource = publication != nil || testUnitProvider != nil
+        #else
+        let hasContentSource = publication != nil
+        #endif
+        guard hasContentSource else { return }
         isAuditioning = false
         SpeechOwnerRegistry.shared.claim(self)
         let startLoc = locator ?? resumeLocator
+        #if DEBUG
+        if !skipsEngineReplacementForTests { ensureEngineForPlayback() }
+        #else
         ensureEngineForPlayback()
+        #endif
         applyPreferences()
 
         startTask?.cancel()
         startTask = Task {
             do {
-                let units = await Self.chapterUnits(
-                    from: startLoc, in: publication
-                )
+                let units: [TTSSpeechUnit]
+                #if DEBUG
+                if let testUnitProvider {
+                    units = await testUnitProvider(startLoc)
+                } else if let publication {
+                    units = await Self.chapterUnits(from: startLoc, in: publication)
+                } else {
+                    units = []
+                }
+                #else
+                guard let publication else { return }
+                units = await Self.chapterUnits(from: startLoc, in: publication)
+                #endif
                 guard !units.isEmpty else {
                     Log.tts.error("No extractable text in the current chapter")
                     if !Task.isCancelled { handleChapterSpeakResult(started: false) }
@@ -632,15 +657,30 @@ final class ReaderSpeechController {
                 stoppedManually = false
                 // Re-check after chapter extract so a download that finished
                 // while we were walking the spine is used for this tap.
+                #if DEBUG
+                if !skipsEngineReplacementForTests { ensureEngineForPlayback() }
+                #else
                 ensureEngineForPlayback()
+                #endif
                 applyPreferences()
                 let started = try await ttsService?.speak(units: units) ?? false
                 if !Task.isCancelled { handleChapterSpeakResult(started: started) }
             } catch {
                 Log.tts.error("speak() failed: \(error.localizedDescription, privacy: .public)")
-                if !Task.isCancelled && status == .playing {
-                    status = ttsService == nil ? .unavailable : .stopped
-                    clearNowPlaying()
+                if !Task.isCancelled && (status == .playing || status == .paused || pendingPauseAfterReanchor) {
+                    pendingPauseAfterReanchor = false
+                    unspeakableChapterRun = 0
+                    let wasStoppedManually = stoppedManually
+                    stoppedManually = true
+                    ttsService?.stop()
+                    stoppedManually = wasStoppedManually
+                    spokenText = ""
+                    if status == .playing || status == .paused {
+                        onSessionEnded?()
+                        status = ttsService == nil ? .unavailable : .stopped
+                        clearSpeechEnergy()
+                        clearNowPlaying()
+                    }
                     if !isReaderOpen { releasePreparedSession() }
                 }
             }
@@ -677,7 +717,11 @@ final class ReaderSpeechController {
         startTask?.cancel()
         isAuditioning = true
         stoppedManually = false
+        #if DEBUG
+        if !skipsEngineReplacementForTests { ensureEngineForPlayback() }
+        #else
         ensureEngineForPlayback()
+        #endif
         applyPreferences()
         guard let service = ttsService else {
             status = .unavailable
@@ -687,14 +731,17 @@ final class ReaderSpeechController {
         let unit = TTSSpeechUnit(text: text, locator: nil)
         startTask = Task { [weak self] in
             do {
-                try await service.speak(units: [unit])
+                let started = try await service.speak(units: [unit])
+                if !started {
+                    self?.isAuditioning = false
+                }
             } catch {
                 Log.tts.error(
                     "Audition failed: \(error.localizedDescription, privacy: .public)"
                 )
                 self?.status = .stopped
+                self?.isAuditioning = false
             }
-            self?.isAuditioning = false
         }
     }
 
@@ -888,9 +935,28 @@ final class ReaderSpeechController {
     /// `.playing`, no engine status will ever arrive. Treat it as the chapter
     /// ending, so playback moves on to the next chapter or stops with a real
     /// `.stopped`, instead of sitting on `.playing` in silence.
+    /// When re-anchoring while `.paused`, clear the pending pause and move to
+    /// `.stopped` so Play is never wedged against a stopped engine.
     func handleChapterSpeakResult(started: Bool) {
         guard !started else {
             unspeakableChapterRun = 0
+            return
+        }
+        if status == .paused || pendingPauseAfterReanchor {
+            pendingPauseAfterReanchor = false
+            unspeakableChapterRun = 0
+            spokenText = ""
+            let wasStoppedManually = stoppedManually
+            stoppedManually = true
+            ttsService?.stop()
+            stoppedManually = wasStoppedManually
+            if status == .paused || status == .playing {
+                onSessionEnded?()
+                status = ttsService == nil ? .unavailable : .stopped
+                clearSpeechEnergy()
+                clearNowPlaying()
+            }
+            if !isReaderOpen { releasePreparedSession() }
             return
         }
         // A fresh tap is still `.stopped` (nothing to publish); an engine that went
@@ -916,19 +982,43 @@ final class ReaderSpeechController {
         isReaderOpen: Bool,
         isAuditioning: Bool = false,
         withSystemEngine: Bool = false,
+        ttsService customService: TTSService? = nil,
+        unitProvider: ((Locator?) async -> [TTSSpeechUnit])? = nil,
+        resumeLocator: Locator? = nil,
+        chapterStartLocators: [Locator?] = [],
         onSkipNext: (() -> Bool)? = nil
     ) {
         self.isAuditioning = true
-        if withSystemEngine, ttsService == nil {
+        if let customService {
+            self.skipsEngineReplacementForTests = true
+            installTTSService(customService, kind: .system, runtimeConfiguration: nil)
+        } else if withSystemEngine, ttsService == nil {
             installTTSService(SystemTTSService(), kind: .system, runtimeConfiguration: nil)
         }
+        self.testUnitProvider = unitProvider
         self.sessionWorkID = workID
         self.isReaderOpen = isReaderOpen
         self.openReaderWorkID = isReaderOpen ? workID : nil
+        self.resumeLocator = resumeLocator
+        self.chapterStartLocators = chapterStartLocators
         self.stoppedManually = false
+        self.pendingPauseAfterReanchor = false
+        self.pendingAutoContinue = false
+        self.unspeakableChapterRun = 0
         self.status = status
         self.onSkipNext = onSkipNext
         self.isAuditioning = isAuditioning
+    }
+
+    /// Awaits the current in-flight `startSpeech` / `audition` task (and any chained
+    /// auto-advance `startTask` it spawned) so unit tests exercise real `startSpeech` wiring.
+    func waitForStartTaskForTests() async {
+        while let task = startTask {
+            await task.value
+            if startTask == task {
+                break
+            }
+        }
     }
     #endif
 
