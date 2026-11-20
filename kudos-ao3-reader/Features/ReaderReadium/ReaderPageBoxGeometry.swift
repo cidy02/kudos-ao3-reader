@@ -14,9 +14,6 @@ nonisolated enum ReaderVerticalBar: Equatable, Sendable {
 /// from the host's traits and reserved regions (iOS 27.1) — never from a device check.
 nonisolated struct ReaderHostRegions: Equatable, Sendable {
     var verticalBar: ReaderVerticalBar = .none
-    /// The widest inset the system's vertical bar has had, status bar shown. A page
-    /// opened or rotated with the status bar hidden starts at this, not at zero.
-    var verticalBarExtent: CGFloat = 0
     /// Bottom of the status block at the top of the vertical bar (the occlusion
     /// region on that edge); 0 when there is none to clear.
     var barStatusBottom: CGFloat = 0
@@ -38,6 +35,9 @@ struct ReaderPageBoxGeometry: Equatable {
     var size: CGSize = .zero
     var safeInsets: UIEdgeInsets = .zero
     var verticalBar: ReaderVerticalBar = .none
+    /// The widest inset the system's vertical bar has had, status bar shown. A page
+    /// opened or rotated with the status bar hidden starts at this, not at zero.
+    var verticalBarExtent: CGFloat = 0
 
     /// What the page keeps clear on the vertical bar's edge: the reader's 64 pt rail
     /// and its 8 pt from the screen edge (Duo boards, `DuoSideBar`). The system's own
