@@ -37,6 +37,8 @@ nonisolated struct ReaderDuoChromePlacement: Equatable, Sendable {
     static let portraitBarWidth: CGFloat = 440
     /// Between the status block and the rail's Close button.
     static let railTopGap: CGFloat = 10
+    /// The portrait top bar's 44 pt row and 8 pt under it, kept clear above the page.
+    static let topBarReserve: CGFloat = 52
 
     /// From the rail's edge to the rail's centre: the middle of the system bar's column.
     var railCenterInset: CGFloat = 0

@@ -218,13 +218,14 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         let sameSize = abs(size.width - pageBoxGeometry.size.width) <= 1
             && abs(size.height - pageBoxGeometry.size.height) <= 1
         let mergedRegions = regions.merging(previous: hostRegions, sameSize: sameSize)
+        let reserveChanged = Self.topBarReserve(for: mergedRegions) != Self.topBarReserve(for: hostRegions)
         if mergedRegions != hostRegions { hostRegions = mergedRegions }
         let next = pageBoxGeometry.updating(
             size: size, safeInsets: safeInsets, verticalBar: regions.verticalBar,
             // Showing chrome can lay out once before UIKit restores the status bar.
             preserveStatusBarTop: chromeHidden || Date() < pageBoxChromeTransitionUntil
         )
-        guard next != pageBoxGeometry else { return }
+        guard next != pageBoxGeometry || reserveChanged else { return }
         pageBoxGeometry = next
         pageBoxRemeasureTask?.cancel()
         // Invalidate old-layout samples immediately; measure only after quiet.
@@ -240,6 +241,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             self.pageBoxRemeasureTask = nil
             self.schedulePageBarRemeasure()
         }
+    }
+
+    /// The Duo portrait top bar stands under the status bar; the page starts below
+    /// it, shown or not, so the bar never covers or moves the first line (T-562a).
+    nonisolated static func topBarReserve(for regions: ReaderHostRegions) -> CGFloat {
+        ReaderChromeLayout.resolve(regions) == .foldTopBar ? ReaderDuoChromePlacement.topBarReserve : 0
     }
 
     func cancelPageBoxRemeasure() {
@@ -1322,7 +1329,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             ? pageBoxGeometry.size.height : max(liveHeight, 0)
         let insets = Self.pageBoxContentInsets(
             viewHeight: height,
-            safeTop: pageBoxGeometry.safeInsets.top,
+            safeTop: pageBoxGeometry.safeInsets.top + Self.topBarReserve(for: hostRegions),
             safeBottom: pageBoxGeometry.safeInsets.bottom,
             lineHeight: CGFloat(renderedLineHeightPoints),
             // The live horizontal gutter, so bottom breathing room tracks the

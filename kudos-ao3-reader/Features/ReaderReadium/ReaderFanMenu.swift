@@ -143,6 +143,9 @@ struct ReaderFanMenu: View {
         .glassEffect(groupButtonSize == nil ? .regular : .identity, in: Circle())
         .accessibilityLabel("More actions")
         .tint(Color.primary)
+        // The rail's menu opens upward from low on the screen; keep the board's
+        // order (top row first) instead of the system's mirrored one.
+        .menuOrder(groupButtonSize == nil ? .automatic : .fixed)
     }
 
     private func rowTitle(for action: ReaderFanRoundAction) -> String {
