@@ -193,8 +193,8 @@ final class ReaderDismissPeelContainerController<Content: View>: UIViewControlle
         surface.cardView = view
         if #available(iOS 27.1, *) {
             // The bar can move edge without a bounds or safe-area change.
-            registerForTraitChanges(UITraitCollection.systemTraitsAffectingVerticalBarEdge) {
-                (controller: Self, _: UITraitCollection) in
+            let barTraits = UITraitCollection.systemTraitsAffectingVerticalBarEdge
+            registerForTraitChanges(barTraits) { (controller: Self, _: UITraitCollection) in
                 controller.reportGeometryAfterLayout()
             }
         }

@@ -218,20 +218,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         Log.epub.debug("page-box \(geometryLog, privacy: .public)")
         let sameSize = abs(size.width - pageBoxGeometry.size.width) <= 1
             && abs(size.height - pageBoxGeometry.size.height) <= 1
-        var mergedRegions = regions.merging(previous: hostRegions, sameSize: sameSize)
-        // A rotation or fold while the status bar is hidden reports no status block,
-        // and showing it can report before the block is back: reuse the one this
-        // size had, so the rail does not ride up under the status bar.
-        let statusKey = "\(Int(size.width))x\(Int(size.height))|\(regions.verticalBar)"
-        if mergedRegions.barStatusBottom > 0 {
-            statusBottomBySize[statusKey] = mergedRegions.barStatusBottom
-        } else if regions.verticalBar != .none {
-            // A size never seen with its status bar: the tallest block this bar edge
-            // has had (the open-time status bar always measures one) — too low beats
-            // under the status bar.
-            let sameEdge = statusBottomBySize.filter { $0.key.hasSuffix("|\(regions.verticalBar)") }
-            mergedRegions.barStatusBottom = statusBottomBySize[statusKey] ?? sameEdge.values.max() ?? 0
-        }
+        let mergedRegions = mergedHostRegions(regions, size: size, sameSize: sameSize)
         let reserveChanged = Self.topBarReserve(for: mergedRegions) != Self.topBarReserve(for: hostRegions)
         if mergedRegions != hostRegions { hostRegions = mergedRegions }
         let next = pageBoxGeometry.updating(
@@ -255,12 +242,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             self.pageBoxRemeasureTask = nil
             self.schedulePageBarRemeasure()
         }
-    }
-
-    /// The Duo portrait top bar stands under the status bar; the page starts below
-    /// it, shown or not, so the bar never covers or moves the first line (T-562a).
-    nonisolated static func topBarReserve(for regions: ReaderHostRegions) -> CGFloat {
-        ReaderChromeLayout.resolve(regions) == .foldTopBar ? ReaderDuoChromePlacement.topBarReserve : 0
     }
 
     func cancelPageBoxRemeasure() {
@@ -1459,6 +1440,41 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         else { return false }
         onOpenExternalURL(url)
         return true
+    }
+}
+
+// MARK: - Duo host regions (T-562a)
+
+extension ReadiumBook {
+    /// The Duo portrait top bar stands under the status bar; the page starts below
+    /// it, shown or not, so the bar never covers or moves the first line (T-562a).
+    nonisolated static func topBarReserve(for regions: ReaderHostRegions) -> CGFloat {
+        ReaderChromeLayout.resolve(regions) == .foldTopBar ? ReaderDuoChromePlacement.topBarReserve : 0
+    }
+
+    /// `regions` with the status block carried over where the system did not report one.
+    fileprivate func mergedHostRegions(
+        _ regions: ReaderHostRegions, size: CGSize, sameSize: Bool
+    ) -> ReaderHostRegions {
+        var mergedRegions = regions.merging(previous: hostRegions, sameSize: sameSize)
+        // A rotation or fold while the status bar is hidden reports no status block,
+        // and showing it can report before the block is back: reuse the one this
+        // size had, so the rail does not ride up under the status bar.
+        // The block can also report a partial frame (82 of the cover's 174 seen on the
+        // Duo), so each size keeps the tallest block it has reported.
+        let statusKey = "\(Int(size.width))x\(Int(size.height))|\(regions.verticalBar)"
+        if mergedRegions.barStatusBottom > 0 {
+            let tallest = max(mergedRegions.barStatusBottom, statusBottomBySize[statusKey] ?? 0)
+            statusBottomBySize[statusKey] = tallest
+            mergedRegions.barStatusBottom = tallest
+        } else if regions.verticalBar != .none {
+            // A size never seen with its status bar: the tallest block this bar edge
+            // has had (the open-time status bar always measures one) — too low beats
+            // under the status bar.
+            let sameEdge = statusBottomBySize.filter { $0.key.hasSuffix("|\(regions.verticalBar)") }
+            mergedRegions.barStatusBottom = statusBottomBySize[statusKey] ?? sameEdge.values.max() ?? 0
+        }
+        return mergedRegions
     }
 }
 

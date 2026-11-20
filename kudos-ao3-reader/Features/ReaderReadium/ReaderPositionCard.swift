@@ -225,14 +225,13 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
         let pageReady = page >= 1 && pageCount >= 1
         let digit = Text(pageReady ? "\(page)" : "…")
             .foregroundStyle(scrubValuesEmphasized ? AnyShapeStyle(ink) : AnyShapeStyle(.secondaryInk))
-        var line = Text("Page ") + digit
-        if pageReady { line = line + Text(" of \(pageCount)") }
-        if let minutes = chapterRemainingMinutes {
-            line = line + Text(" · ")
+        let page = pageReady ? Text("Page ") + digit + Text(" of \(pageCount)") : Text("Page ") + digit
+        let line = chapterRemainingMinutes.map { minutes in
+            page + Text(" · ")
                 + Text(ReaderTimeEstimate.durationLabel(minutes: minutes))
                     .foregroundStyle(scrubValuesEmphasized ? AnyShapeStyle(ink) : AnyShapeStyle(.secondaryInk))
                 + Text(" left")
-        }
+        } ?? page
         return line
             .font(.caption)
             .monospacedDigit()
