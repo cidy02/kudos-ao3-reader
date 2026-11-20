@@ -201,8 +201,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     @ObservationIgnored private(set) var pageBoxRemeasureTask: Task<Void, Never>?
 
     /// Called by the peel host for layout and safe-area changes, including a
-    /// width-only resize. Readium owns the position through reflow; wait for quiet
-    /// before refreshing insets and measuring the new pages.
+    /// width-only resize. Readium's reflow anchor owns the position. The inset
+    /// refresh runs in this turn so it shares that reflow, instead of resizing
+    /// the page again 220 ms later (T-451). The page bar still waits until quiet.
     func updatePageBoxGeometry(size: CGSize, safeInsets: UIEdgeInsets) {
         let next = pageBoxGeometry.updating(
             size: size, safeInsets: safeInsets,
@@ -214,6 +215,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         pageBoxRemeasureTask?.cancel()
         // Invalidate old-layout samples immediately; measure only after quiet.
         clearVisualPageMetrics()
+        forcePageBoxContentInsetRefresh()
         pageBoxRemeasureTask = Task { @MainActor [weak self] in
             do { try await Task.sleep(nanoseconds: 220_000_000) } catch { return }
             guard let self else { return }
@@ -221,9 +223,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
                 self.cancelPageBoxRemeasure()
                 return
             }
-            self.forcePageBoxContentInsetRefresh()
             self.pageBoxRemeasureTask = nil
-            self.clearVisualPageMetrics()
             self.schedulePageBarRemeasure()
         }
     }
@@ -1229,6 +1229,15 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             }
             function reportFromScroll() {
                 try {
+                    // A finger curl scrolls the column under an opaque cover to
+                    // snapshot the next page. That scroll is not a page the
+                    // reader has turned to; reporting it flickers the page digit
+                    // and, on a cancelled peek at the last page, can mark the
+                    // work finished. Readium sets the flag for the whole gesture.
+                    if (document.documentElement.dataset.readiumTransitioning === '1') {
+                        if (pending) { clearTimeout(pending); pending = null; }
+                        return;
+                    }
                     if (Date.now() > allowUntil) return;
                     // Keep arm alive while the page-turn animation is scrolling so
                     // the settle sample after finger-up still posts.
@@ -1252,6 +1261,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
                     if (pending) clearTimeout(pending);
                     pending = setTimeout(function() {
                         pending = null;
+                        if (document.documentElement.dataset.readiumTransitioning === '1') return;
                         if (Date.now() > allowUntil) return;
                         var m = measure();
                         if (!m) return;

@@ -262,13 +262,15 @@ struct ReaderLayoutSection: View {
     }
 
     private var readingSectionFooter: String {
-        let spread = twoPageSpreadAvailable
-            ? "On a wide screen, Paged mode can show two pages side by side."
-            : "Choose whether you turn pages or scroll while reading."
         #if os(iOS)
+        let spread = twoPageSpreadAvailable
+            ? "Two-page spread shows two pages side by side in Paged mode on wide screens, and on iPhone Duo when it is open."
+            : "Choose whether you turn pages or scroll while reading."
         return spread + " Page Turn applies in Paged mode."
         #else
-        return spread
+        return twoPageSpreadAvailable
+            ? "Two-page spread shows two pages side by side in Paged mode in a wide window."
+            : "Choose whether you turn pages or scroll while reading."
         #endif
     }
 }

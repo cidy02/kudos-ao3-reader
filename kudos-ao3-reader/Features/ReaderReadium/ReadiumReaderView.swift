@@ -107,6 +107,7 @@ struct ReadiumReaderView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.readerPanelSuppressed) private var readerPanelSuppressed
 
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
@@ -117,6 +118,10 @@ struct ReadiumReaderView: View {
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
     @AppStorage(ReaderPageTurnStyle.storageKey) private var pageTurn: ReaderPageTurnStyle = .slide
     @AppStorage("readerTwoPage") private var twoPageEnabled = false
+    /// Book pose (vertical fold) and tabletop (horizontal fold). Measured by
+    /// `AdaptiveContentRegions`; neither writes `readerTwoPage`.
+    @State private var bookPose = false
+    @State private var tabletopPose = false
     @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("hideMatureContent") private var hideMature = true
     // Apple Books–style typography; layout options are gated by `customizeEnabled`
@@ -1037,7 +1042,7 @@ struct ReadiumReaderView: View {
         // Page turn is an EPUB preference (`pageTransition`) and also the
         // adapter's animated flag. Submit carries the style. Refresh keeps
         // edge taps in step when only the flag changes (Reduce Motion, or
-        // curl staying instant so it does not play the slide fallback).
+        // leaving paged mode).
         book.refreshPageTurnAnimation()
         // Typography submit updates CSS but may not re-run spread updateContentInset.
         book.forcePageBoxContentInsetRefresh()
@@ -1153,6 +1158,9 @@ struct ReadiumReaderView: View {
         // bottom padding bug. This is the modifier the "peel host zeroes SwiftUI
         // safe regions" comments elsewhere assumed was already in effect.
         .ignoresSafeArea()
+        .background {
+            ReaderFoldProbe(bookPose: $bookPose, tabletopPose: $tabletopPose)
+        }
     }
 
     private var topBarLayer: some View {
@@ -1612,8 +1620,15 @@ struct ReadiumReaderView: View {
             fontFamilyDeclarations: fontFamilyDeclarations,
             readiumCSSRSProperties: ReadiumReaderStyleMapper.readingSystemProperties
         )
+        // Pose can publish while `open` is suspended and `book.navigator` is
+        // still nil. That submit is a no-op, and the navigator is then built
+        // from the preferences captured above. Re-submit if they moved.
+        let tokenAtOpen = preferencesToken
         await book.open(fileURL: work.fileURL, initialLocator: initialLocator,
                         fallbackSpineIndex: fallbackSpineIndex, config: config)
+        if preferencesToken != tokenAtOpen {
+            applyReaderPreferences()
+        }
         #if DEBUG
         if DebugLaunchRoute.takeSheet("readerend") {
             book.goToPublicationEndForDebug()
@@ -1678,7 +1693,10 @@ extension ReadiumReaderView {
             twoPageSpread: twoPageEnabled && wideLayoutAvailable,
             backgroundHex: readerPageColors.backgroundHex,
             textHex: readerPageColors.textHex,
-            pageTurn: pageTurn
+            pageTurn: pageTurn,
+            bookPose: bookPose,
+            tabletopPose: tabletopPose,
+            accessibilityText: dynamicTypeSize.isAccessibilitySize
         )
     }
 
@@ -1702,7 +1720,8 @@ extension ReadiumReaderView {
     /// Re-submit preferences whenever any mapped setting changes (instant updates).
     private var preferencesToken: String {
         "\(readingMode.rawValue)|\(pageTurn.rawValue)|\(readerTheme.rawValue)|\(readerPageColors.backgroundHex)|\(fontID)|"
-            + "\(twoPageEnabled)|\(wideLayoutAvailable)|\(textStyle.token)"
+            + "\(twoPageEnabled)|\(wideLayoutAvailable)|\(bookPose)|\(tabletopPose)|"
+            + "\(dynamicTypeSize.isAccessibilitySize)|\(textStyle.token)"
     }
 
     /// Font declarations are fixed when Readium builds its navigator. Recreate it
@@ -2225,6 +2244,75 @@ extension ReadiumReaderView {
     /// still archived. Drives the "Original File" pill.
     private var originalDocumentURL: URL? {
         WorkReconversion.candidate(for: work)?.originalURL
+    }
+}
+
+/// Book pose and tabletop, from the same reserved regions as the dashboard.
+/// A hinge-status change re-reads those regions. The angle is not a detector,
+/// and this view does not write the stored two-page setting.
+private struct ReaderFoldProbe: View {
+    @Binding var bookPose: Bool
+    @Binding var tabletopPose: Bool
+    /// Bumped only when the hinge status appears, disappears, or changes.
+    /// An angle update with the same status does not re-read the fold.
+    @State private var hingeTick = 0
+    @State private var loggedPose: String?
+
+    var body: some View {
+        GeometryReader { proxy in
+            let regions = AdaptiveContentRegions(viewport: proxy)
+            Color.clear
+                .onAppear { publish(regions) }
+                .onChange(of: regions) { _, next in publish(next) }
+                .onChange(of: hingeTick) { _, _ in publish(regions) }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .background { HingeStatusRefresh(tick: $hingeTick) }
+    }
+
+    /// `-ReadiumCurlDebug YES`. The navigator reads the same process arguments.
+    private static let curlDebugLogging: Bool = {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: "-ReadiumCurlDebug"), index + 1 < args.count else {
+            return false
+        }
+        return args[index + 1] == "YES"
+    }()
+
+    private func publish(_ regions: AdaptiveContentRegions) {
+        let book = regions.isBookPose
+        let table = regions.isTabletopPose
+        let pose = "\(book)|\(table)|\(regions.panes.count)|\(regions.activeReservations.count)"
+        if pose != loggedPose {
+            loggedPose = pose
+            let width = Int(regions.safeBounds.width.rounded())
+            let height = Int(regions.safeBounds.height.rounded())
+            // Same switch as the navigator's curl lines: `-ReadiumCurlDebug YES`.
+            if Self.curlDebugLogging {
+                Log.epub.info("fold-pose book=\(book, privacy: .public) tabletop=\(table, privacy: .public) panes=\(regions.panes.count, privacy: .public) reservations=\(regions.activeReservations.count, privacy: .public) size=\(width, privacy: .public)x\(height, privacy: .public)")
+            }
+        }
+        bookPose = book
+        tabletopPose = table
+    }
+}
+
+/// Re-reads reserved regions when the hinge status changes and the bounds
+/// do not. An angle-only update does not bump the tick. Below iOS 27.1 the
+/// view is empty: `onHingeChange` is not on the deployment target.
+private struct HingeStatusRefresh: View {
+    @Binding var tick: Int
+
+    var body: some View {
+        if #available(iOS 27.1, *) {
+            Color.clear.onHingeChange { previous, next in
+                guard previous.hinge?.status != next.hinge?.status else { return }
+                tick += 1
+            }
+        } else {
+            Color.clear
+        }
     }
 }
 
