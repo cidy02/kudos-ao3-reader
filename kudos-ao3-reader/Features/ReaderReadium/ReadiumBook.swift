@@ -180,6 +180,46 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     }
     @ObservationIgnored private var pageBoxChromeTransitionUntil: Date = .distantPast
 
+    /// Shows or hides the controls with the shared fade (T-562b). Every path goes
+    /// through here — centre tap, a page turn, the mini player — so none snaps.
+    func setChromeHidden(_ hidden: Bool) {
+        guard hidden != chromeHidden else { return }
+        withAnimation(ReaderChromeAutoHide.fade) { chromeHidden = hidden }
+    }
+
+    /// Called when a settle is a turn the reader made (`ReaderChromeAutoHide`).
+    @ObservationIgnored var onUserPageTurn: (() -> Void)?
+    /// Programmatic navigations still awaiting the navigator, and until when a
+    /// settle may still be the echo of one (or of a relayout).
+    @ObservationIgnored private var jumpsInFlight = 0
+    @ObservationIgnored private var turnEchoUntil: Date = .distantPast
+
+    /// Runs a programmatic navigation so its settles are never taken for a turn.
+    private func jump(_ navigate: @escaping @MainActor () async -> Void) {
+        jumpsInFlight += 1
+        Task { @MainActor [weak self] in
+            await navigate()
+            self?.endJump()
+        }
+    }
+
+    private func endJump() {
+        jumpsInFlight = max(0, jumpsInFlight - 1)
+        noteTurnEcho(ReaderChromeAutoHide.jumpEchoWindow)
+    }
+
+    private func noteTurnEcho(_ window: TimeInterval) {
+        turnEchoUntil = max(turnEchoUntil, Date().addingTimeInterval(window))
+    }
+
+    private static func turnPlace(_ locator: Locator) -> ReaderChromeAutoHide.Place {
+        ReaderChromeAutoHide.Place(
+            href: ReaderSectionBuilder.hrefKey(locator.href.string),
+            position: locator.locations.position,
+            progression: locator.locations.progression
+        )
+    }
+
     /// The body's rendered line height in points — font size × the line-height
     /// multiplier, mirrored from the view's `ReaderTextStyle` whenever
     /// preferences are submitted. `navigatorContentInset` uses it to end the
@@ -228,6 +268,8 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         )
         guard next != pageBoxGeometry || reserveChanged else { return }
         pageBoxGeometry = next
+        // The page lays out again: its settles are not turns.
+        noteTurnEcho(ReaderChromeAutoHide.relayoutEchoWindow)
         pageBoxRemeasureTask?.cancel()
         // Invalidate old-layout samples immediately; measure only after quiet.
         clearVisualPageMetrics()
@@ -462,8 +504,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         pendingScrubProgression = min(1, max(0, progression))
         guard !isScrubSeekInFlight else { return }
         isScrubSeekInFlight = true
+        jumpsInFlight += 1
         Task { @MainActor [weak self] in
-            defer { self?.isScrubSeekInFlight = false }
+            defer {
+                self?.isScrubSeekInFlight = false
+                self?.endJump()
+            }
             while let self, let next = self.pendingScrubProgression {
                 self.pendingScrubProgression = nil
                 guard let locator = self.currentLocator else { return }
@@ -588,7 +634,8 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             // installed (and must stay a no-op — see `didTapAt`). This registers
             // the edge/key adapter, then the centre-tap chrome toggle.
             pageTurns.bind(to: navigator) { [weak self] in
-                self?.chromeHidden.toggle()
+                guard let self else { return }
+                self.setChromeHidden(!self.chromeHidden)
             }
             visualPageBridge.book = self
             clearVisualPageMetrics()
@@ -641,6 +688,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     }
 
     func submit(_ preferences: EPUBPreferences) {
+        noteTurnEcho(ReaderChromeAutoHide.relayoutEchoWindow)
         navigator?.submitPreferences(preferences)
     }
 
@@ -664,7 +712,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     }
 
     func go(to link: ReadiumShared.Link) {
-        Task { @MainActor in await navigator?.go(to: link) }
+        jump { [weak self] in _ = await self?.navigator?.go(to: link) }
     }
 
     /// Navigates directly to a `Locator` — the position card, search, annotations
@@ -672,8 +720,8 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// utterance, including one already on screen; an animated seek would play
     /// a page turn on top of that, and a `goForward` would turn a second time.
     func go(to locator: Locator) {
-        Task { @MainActor in
-            await navigator?.go(to: locator, options: NavigatorGoOptions(animated: false))
+        jump { [weak self] in
+            _ = await self?.navigator?.go(to: locator, options: NavigatorGoOptions(animated: false))
         }
     }
 
@@ -779,6 +827,16 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         // through successful dismiss teardown so a late settle cannot corrupt
         // the flushed resume point.
         guard !isLocatorIngestionBlocked else { return }
+        // A turn the reader made hides the controls (T-562b); jumps, scrubs and
+        // relayouts do not. The first settle after opening has no previous place.
+        if ReaderChromeAutoHide.isUserTurn(
+            from: settledLocationCount > 0 ? currentLocator.map(Self.turnPlace) : nil,
+            to: Self.turnPlace(locator),
+            jumpInFlight: jumpsInFlight > 0, isScrubbing: isScrubbing,
+            echoUntil: turnEchoUntil, now: Date()
+        ) {
+            onUserPageTurn?()
+        }
         // First post-open settle: the spread has painted enough for Readium to
         // report a location — lift the skeleton that was covering its spinner.
         markFirstPagePresentedIfNeeded()

@@ -426,7 +426,9 @@ struct ReadiumReaderView: View {
             .toolbar(.hidden, for: .tabBar)
             .statusBarHidden(hidesStatusBar)
             .persistentSystemOverlays(chromeVisible ? .automatic : .hidden)
-            .animation(unlessReduced: .easeInOut(duration: 0.25), value: book.chromeHidden)
+            // The status bar fades with the bars (T-562b). Not dropped under Reduce
+            // Motion any more: a fade has no movement, and dropping it made them snap.
+            .animation(ReaderChromeAutoHide.fade, value: book.chromeHidden)
             .animation(unlessReduced: .easeInOut(duration: 0.25), value: speech.isSessionActive)
             // Readium's WebView swallows the system edge-swipe; add our own.
             .edgeSwipeToGoBack { dismissReader() }
@@ -1134,10 +1136,14 @@ struct ReadiumReaderView: View {
                 .padding(book.pageBoxGeometry.horizontalInsets(in: layoutDirection))
                 // The Duo bars are placed in host points, over the side insets
                 // (the rail stands in the system bar's column).
-                .overlay { duoSettingsScrimLayer }
+                .overlay {
+                    duoSettingsScrimLayer.animation(ReaderChromeAutoHide.fade, value: showsDuoSettingsPanel)
+                }
                 .overlay(alignment: .top) { duoTopLayer }
                 .overlay(alignment: .bottom) { duoBottomLayer }
-                .overlay { duoSettingsPanelLayer }
+                .overlay {
+                    duoSettingsPanelLayer.animation(ReaderChromeAutoHide.fade, value: showsDuoSettingsPanel)
+                }
                 .background(readerPageColors.background)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1171,6 +1177,7 @@ struct ReadiumReaderView: View {
         .background(readerPageColors.background.ignoresSafeArea(edges: .top))
         .allowsHitTesting(chromeVisible)
         .opacity(chromeVisible ? 1 : 0)
+        .animation(ReaderChromeAutoHide.fade, value: chromeVisible)
     }
 
     /// Also hosts the Quick Look preview and the rebuild alert, which every
@@ -1192,6 +1199,7 @@ struct ReadiumReaderView: View {
             .padding(.top, book.pageBoxChromeSafeTop)
             .allowsHitTesting(chromeVisible)
             .opacity(chromeVisible ? 1 : 0)
+            .animation(ReaderChromeAutoHide.fade, value: chromeVisible)
             // QuickLook renders the archived original in place — a PDF stays a PDF, so
             // the reader can compare the conversion against the source, including the
             // images conversion drops.
@@ -1239,15 +1247,18 @@ struct ReadiumReaderView: View {
         VStack(spacing: 10) {
             if chromeVisible, atEnd {
                 if speechActive { standaloneMiniPlayer }
-                endOfWorkCard
+                endOfWorkCard.transition(.opacity)
             } else if chromeVisible {
                 highlightColorBar
-                positionCard(includeMiniPlayer: speechActive)
+                positionCard(includeMiniPlayer: speechActive).transition(.opacity)
             } else if speechActive {
                 // Decoupled: transport stays reachable while full chrome is hidden.
-                standaloneMiniPlayer
+                standaloneMiniPlayer.transition(.opacity)
             }
         }
+        // Inside the peel host's own hosting controller: the body's animation does
+        // not reach in here, which is why the bars used to snap (T-562b).
+        .animation(ReaderChromeAutoHide.fade, value: chromeVisible)
         .padding(.top, chromeVisible && atEnd ? 18 : 0)
         .padding(.leading, layoutDirection == .leftToRight ? left : right)
         .padding(.trailing, layoutDirection == .leftToRight ? right : left)
@@ -1310,7 +1321,7 @@ struct ReadiumReaderView: View {
             onSeekHoldEnd: { handleSpeechSeekHoldEnd() },
             // Empty areas of the strip (caption, waveform, gutters) show chrome —
             // same idea as tapping the page when only the mini player is up.
-            onBackgroundTap: { book.chromeHidden = false }
+            onBackgroundTap: { book.setChromeHidden(false) }
         )
     }
 
@@ -1563,6 +1574,7 @@ struct ReadiumReaderView: View {
             // syncUp (that still waits for flush/close/background or launch).
             FolderSyncService.markDirty()
         }
+        book.onUserPageTurn = { hideControlsAfterTurn() }
         book.onLocatorSettled = { locator in
             guard let string = locator.persistenceString else { return }
             initialPositionPersistence.observeSettledLocator(string)
@@ -2350,6 +2362,7 @@ extension ReadiumReaderView {
             .frame(maxWidth: .infinity, alignment: physicalAlignment(right: onRight))
             .allowsHitTesting(chromeVisible)
             .opacity(chromeVisible ? 1 : 0)
+            .animation(ReaderChromeAutoHide.fade, value: chromeVisible)
         case .foldTopBar:
             ReaderDuoTopBar(items: duoGroupItems, tint: duoTint, onClose: dismissReader) {
                 duoMoreMenu(buttonSize: ReaderDuoActionGroup<EmptyView>.barButtonSize)
@@ -2358,7 +2371,20 @@ extension ReadiumReaderView {
             .padding(book.pageBoxGeometry.horizontalInsets(in: layoutDirection))
             .allowsHitTesting(chromeVisible)
             .opacity(chromeVisible ? 1 : 0)
+            .animation(ReaderChromeAutoHide.fade, value: chromeVisible)
         }
+    }
+
+    /// A turn the reader made hides the controls, like Apple Books (T-562b): not
+    /// while anything is open over the page, and not while VoiceOver runs.
+    private func hideControlsAfterTurn() {
+        let overlayOpen = router.panel != .none || showingComments || showingWorkDetail
+            || showingSpeechSettings || editingNote != nil || correctingPronunciation != nil
+        guard ReaderChromeAutoHide.hidesControls(
+            controlsShowing: chromeVisible, overlayOpen: overlayOpen,
+            voiceOverRunning: UIAccessibility.isVoiceOverRunning
+        ) else { return }
+        book.setChromeHidden(true)
     }
 
     /// Themes & Settings in a Duo layout (T-562b): open while the router's panel is
