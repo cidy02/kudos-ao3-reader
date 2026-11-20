@@ -88,6 +88,7 @@ struct WorkRow: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.workTagSearchEnabled) private var tagSearchEnabled
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
     @State private var internalExpanded = false
@@ -285,7 +286,7 @@ struct WorkRow: View {
                 title: FandomDisplayName.bareTitle(fandom),
                 palette: subjectPalette,
                 additionalCount: max(0, nonemptyFandomNames.count - 1),
-                action: { router.searchAO3(.fandom, fandom) }
+                action: tagSearchEnabled ? { router.searchAO3(.fandom, fandom) } : nil
             )
         }
     }
@@ -412,7 +413,7 @@ struct WorkRow: View {
                 relationships: work.workRelationships,
                 characters: work.workCharacters,
                 freeforms: work.hasCategorizedWorkTags ? work.workFreeforms : work.workTags,
-                onTap: { tag, field in router.searchAO3(field, tag) }
+                onTap: tagSearchEnabled ? { tag, field in router.searchAO3(field, tag) } : nil
             )
         }
         if !summaryText.isEmpty {
@@ -545,9 +546,13 @@ struct WorkRow: View {
                     .foregroundStyle(.tertiary)
                 FlowLayout(spacing: 6, rowSpacing: 6) {
                     ForEach(tags, id: \.self) { tag in
-                        Button { router.searchAO3(field, tag) } label: { TagChip(text: tag, symbol: field.symbol) }
-                            .buttonStyle(.borderless)
-                            .minimumHitTarget(28)
+                        if tagSearchEnabled {
+                            Button { router.searchAO3(field, tag) } label: { TagChip(text: tag, symbol: field.symbol) }
+                                .buttonStyle(.borderless)
+                                .minimumHitTarget(28)
+                        } else {
+                            TagChip(text: tag, symbol: field.symbol)
+                        }
                     }
                 }
             }

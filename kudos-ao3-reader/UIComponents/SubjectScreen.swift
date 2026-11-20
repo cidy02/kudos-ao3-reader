@@ -281,6 +281,9 @@ extension EnvironmentValues {
     /// three-views-down reason as `ledgerKickerMuted`. The row itself does not
     /// draw the number.
     @Entry var ledgerPositionNumber: Int?
+    /// Whether tapping a work row's fandom label or tag chips triggers an AO3 search.
+    /// Off on triage cards (e.g. Sort New) so taps cannot fire hidden searches behind a cover.
+    @Entry var workTagSearchEnabled = true
 }
 
 /// Padding and the separator inset shared by every plain work row.
@@ -547,7 +550,13 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Byline: View, R
     /// sit beside the title block, so they are not part of the title's height.
     private var underTitleColumn: some View {
         let lines = underTitleLines
-        let clusterKind = WorkSymbolPlacement.underTitleTrailingCluster
+        // At accessibility sizes, trailing controls (star + 44 pt chevron) beside
+        // the four fixed-width symbol tiles outgrow a narrow card (seen at AX5,
+        // 2026-11-19). Keeping trailing beside the wrapping heading alone lets the
+        // symbol row and byline take the full width.
+        let clusterKind: [WorkUnderTitleLine.Kind] = stacked
+            ? [.heading]
+            : WorkSymbolPlacement.underTitleTrailingCluster
         let cluster = lines.filter { clusterKind.contains($0.kind) }
         let rest = lines.filter { !clusterKind.contains($0.kind) }
         return VStack(alignment: .leading, spacing: 0) {

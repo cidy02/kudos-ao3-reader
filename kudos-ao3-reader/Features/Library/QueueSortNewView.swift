@@ -45,22 +45,33 @@ struct QueueSortNewView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accentFill) private var accentFill
+    @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
-    @State private var session: QueueSortSession
-    /// The card's horizontal travel: the finger while swiping, then the fly-out.
-    @State private var dragOffset: CGFloat = 0
-    /// True between a decision and the next card, so a second tap cannot land
-    /// on the card that is leaving.
-    @State private var isCommitting = false
+    private struct PendingDecision {
+        let action: QueueSortAction
+        let membershipID: UUID
+        let workID: UUID
+    }
 
-    /// Past this, letting go of a swipe decides (right keeps, left drops).
-    private static let swipeThreshold: CGFloat = 110
-    /// Far enough that a flown-out card has left any iPhone screen.
-    private static let flyOutDistance: CGFloat = 640
+    @State private var session: QueueSortSession
+    /// Finger drag while the gesture is active; resets to 0 automatically if
+    /// the enclosing ScrollView or a system gesture cancels the drag.
+    @GestureState private var liveDragOffset: CGFloat = 0
+    /// Fly-out and spring-back horizontal travel, separate from live drag.
+    @State private var flyOutOffset: CGFloat = 0
+    /// Captured at decision time so concurrent queue changes during the 0.18 s
+    /// fly-out cannot redirect the decision to the next work, and Close /
+    /// disappear can flush it once without losing it.
+    @State private var pendingDecision: PendingDecision?
+    @State private var containerWidth: CGFloat = 390
+    @State private var undoErrorMessage: String?
+
+    /// Caps the card on iPad / wide macOS windows so it does not stretch edge-to-edge.
+    private static let maxCardWidth: CGFloat = 560
 
     init(queue: ReadingQueue, request: QueueSortNewRequest) {
         self.queue = queue
@@ -68,9 +79,46 @@ struct QueueSortNewView: View {
     }
 
     private var theme: ReaderTheme { themeManager.appTheme }
+    private var isCommitting: Bool { pendingDecision != nil }
+    private var cardOffset: CGFloat { flyOutOffset + liveDragOffset }
+    private var flyOutDistance: CGFloat { max(640, containerWidth + 80) }
+
+    private func isWorkVisible(_ work: SavedWork) -> Bool {
+        !gate.isHidden(work, enabled: hideMature, mode: matureMode)
+    }
 
     private var currentMembership: ReadingQueueMembership? {
-        session.currentMembershipID.flatMap { QueueSortNew.membership($0, in: queue) }
+        guard let id = session.currentMembershipID,
+              let membership = QueueSortNew.membership(id, in: queue),
+              let work = membership.work,
+              isWorkVisible(work)
+        else { return nil }
+        return membership
+    }
+
+    /// True when at least one live, visible work remains after the current one.
+    private var hasNextVisibleWork: Bool {
+        session.membershipIDs.dropFirst(session.sortedCount + 1).contains { id in
+            guard !session.unrevisitableIDs.contains(id),
+                  let work = QueueSortNew.membership(id, in: queue)?.work
+            else { return false }
+            return isWorkVisible(work)
+        }
+    }
+
+    /// Identity token of every live, visible membership in `queue`; changes when
+    /// a work is soft-deleted, replaced at the same count, or hidden by privacy.
+    private var activeMembershipIDs: Set<UUID> {
+        guard queue.modelContext != nil, !queue.isPendingDeletion else { return [] }
+        return Set(queue.memberships.compactMap { membership in
+            guard !membership.isPendingDeletion,
+                  let work = membership.work,
+                  work.modelContext != nil,
+                  !work.isPendingDeletion,
+                  isWorkVisible(work)
+            else { return nil }
+            return membership.id
+        })
     }
 
     var body: some View {
@@ -83,10 +131,54 @@ struct QueueSortNewView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 #endif
                 .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
+                .navigationDestination(for: LocalWorkDestination.self) {
+                    LocalWorkDestinationView(destination: $0)
+                }
         }
-        .onAppear { QueueSortNew.skipMissing(session: &session, queue: queue) }
-        .onChange(of: queue.memberships.count) { _, _ in
-            QueueSortNew.skipMissing(session: &session, queue: queue)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { containerWidth = $0 }
+        .onAppear {
+            if queue.modelContext == nil || queue.isPendingDeletion {
+                dismiss()
+                return
+            }
+            skipMissing()
+        }
+        .onChange(of: queue.isPendingDeletion) { _, deleted in
+            if deleted {
+                pendingDecision = nil
+                dismiss()
+            }
+        }
+        .onChange(of: activeMembershipIDs) { _, _ in
+            guard !isCommitting else { return }
+            skipMissing()
+        }
+        // If the reader drilled into Work Details from a card and tapped a tag or
+        // author there, close Sort New so the destination is shown rather than
+        // hidden behind the full-screen cover.
+        .onChange(of: router.pendingTagSearch) { _, search in
+            if search != nil {
+                finishPendingDecision(animated: false)
+                dismiss()
+            }
+        }
+        .onChange(of: router.authorProfileNavigationEpoch) { _, _ in
+            finishPendingDecision(animated: false)
+            dismiss()
+        }
+        .onDisappear {
+            finishPendingDecision(animated: false)
+        }
+        .alert(
+            "Couldn’t Undo",
+            isPresented: Binding(
+                get: { undoErrorMessage != nil },
+                set: { if !$0 { undoErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(undoErrorMessage ?? "")
         }
     }
 
@@ -94,6 +186,7 @@ struct QueueSortNewView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
             Button {
+                finishPendingDecision(animated: false)
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
@@ -133,6 +226,7 @@ struct QueueSortNewView: View {
                         swipeHint
                         accessibilitySizeActions
                     }
+                    .frame(maxWidth: Self.maxCardWidth)
                     .padding(.horizontal, SubjectMetrics.gutter)
                     .padding(.vertical, 12)
                     // Pin the column to the screen's width: at AX sizes the row's
@@ -143,6 +237,7 @@ struct QueueSortNewView: View {
             } else {
                 VStack(spacing: 0) {
                     progressBar
+                        .frame(maxWidth: Self.maxCardWidth)
                         .padding(.horizontal, SubjectMetrics.gutter)
                         .padding(.top, 8)
                     ScrollView {
@@ -150,6 +245,7 @@ struct QueueSortNewView: View {
                             .padding(.horizontal, SubjectMetrics.gutter)
                             .padding(.top, 20)
                             .padding(.bottom, 16)
+                            .frame(maxWidth: .infinity)
                             .containerRelativeFrame(.horizontal)
                     }
                     .scrollBounceBehavior(.basedOnSize)
@@ -205,8 +301,8 @@ struct QueueSortNewView: View {
     }
 
     private func card(membership: ReadingQueueMembership, work: SavedWork) -> some View {
-        let isBlurred = gate.isBlurred(work, enabled: hideMature, mode: matureMode)
-        let footer = isBlurred ? nil : QueueSortSession.footerLine(
+        let isConcealed = gate.isConcealed(work, enabled: hideMature)
+        let footer = isConcealed ? nil : QueueSortSession.footerLine(
             minutes: ReadingQueueFacts.minutesLeft(for: work),
             originLabel: membership.origin?.label
         )
@@ -223,6 +319,10 @@ struct QueueSortNewView: View {
                 showsSeparator: false,
                 usesInlineNavigation: true
             )
+            // Keep triage cards offline and local: fandom, tag, and author taps
+            // must not fire hidden AO3 searches or push behind the cover.
+            .environment(\.ao3AuthorNavigationEnabled, false)
+            .environment(\.workTagSearchEnabled, false)
             .padding(.vertical, 4)
             if let footer {
                 Divider()
@@ -236,11 +336,11 @@ struct QueueSortNewView: View {
                     .padding(.bottom, 14)
             }
         }
-        // The card is exactly the column's width. At AX sizes a tag chip can be
-        // wider than the screen; like a List cell, the card keeps its width and
-        // clips that chip at its trailing edge instead of growing past the screen.
-        .containerRelativeFrame(.horizontal, alignment: .leading) { length, _ in
-            max(0, length - 2 * SubjectMetrics.gutter)
+        // The card keeps the column's width (capped on wide screens) and aligns
+        // content to topLeading so an oversized child cannot vertically center
+        // the card body with blank space above the fandom label.
+        .containerRelativeFrame(.horizontal, alignment: .topLeading) { length, _ in
+            min(max(0, length - 2 * SubjectMetrics.gutter), Self.maxCardWidth)
         }
         .background(theme.cardSurface, in: shape)
         .clipShape(shape)
@@ -248,7 +348,7 @@ struct QueueSortNewView: View {
         .shadow(color: theme.cardShadow.color, radius: theme.cardShadow.radius * 2, y: theme.cardShadow.y * 2)
         .background(alignment: .top) {
             // The next work waiting behind this one (the board's peeking card).
-            if session.nextMembershipID != nil {
+            if hasNextVisibleWork {
                 shape
                     .fill(theme.cardSurface.opacity(0.7))
                     .frame(height: 80)
@@ -257,8 +357,8 @@ struct QueueSortNewView: View {
                     .accessibilityHidden(true)
             }
         }
-        .offset(x: dragOffset)
-        .rotationEffect(.degrees(reduceMotion ? 0 : Double(dragOffset) / 30), anchor: .bottom)
+        .offset(x: cardOffset)
+        .rotationEffect(.degrees(reduceMotion ? 0 : Double(cardOffset) / 30), anchor: .bottom)
         .simultaneousGesture(swipeGesture)
         .id(membership.id)
         .transition(cardTransition)
@@ -278,21 +378,20 @@ struct QueueSortNewView: View {
 
     private var swipeGesture: some Gesture {
         DragGesture(minimumDistance: 24)
-            .onChanged { value in
-                guard !isCommitting,
-                      abs(value.translation.width) > abs(value.translation.height)
-                else { return }
-                dragOffset = value.translation.width
+            .updating($liveDragOffset) { value, state, _ in
+                guard !isCommitting else { return }
+                state = QueueSortSwipe.dragOffset(for: value.translation)
             }
             .onEnded { value in
                 guard !isCommitting else { return }
-                let width = value.translation.width
-                if width > Self.swipeThreshold {
-                    decide(.keep)
-                } else if width < -Self.swipeThreshold {
-                    decide(.drop)
-                } else {
-                    withAnimation(reduceMotion ? nil : .spring(duration: 0.3)) { dragOffset = 0 }
+                let startOffset = QueueSortSwipe.dragOffset(for: value.translation)
+                if let action = QueueSortSwipe.decision(for: value.translation) {
+                    decide(action, from: startOffset)
+                } else if startOffset != 0 {
+                    var snap = Transaction()
+                    snap.disablesAnimations = true
+                    withTransaction(snap) { flyOutOffset = startOffset }
+                    withAnimation(reduceMotion ? nil : .spring(duration: 0.3)) { flyOutOffset = 0 }
                 }
             }
     }
@@ -305,7 +404,9 @@ struct QueueSortNewView: View {
             .frame(maxWidth: .infinity)
             .accessibilityHidden(true)
     }
+}
 
+extension QueueSortNewView {
     /// The board's three round buttons: Drop and Keep at 64 pt, Later at 52 pt
     /// and set a little lower. Keep is the filled accent.
     private var actionButtons: some View {
@@ -423,40 +524,84 @@ struct QueueSortNewView: View {
         }
     }
 
-    private func decide(_ action: QueueSortAction) {
-        guard !isCommitting, session.currentMembershipID != nil else { return }
+    private func decide(_ action: QueueSortAction, from startOffset: CGFloat = 0) {
+        guard !isCommitting,
+              let membership = currentMembership,
+              let targetID = session.currentMembershipID,
+              membership.id == targetID,
+              let targetWorkID = membership.work?.id
+        else { return }
         Haptics.selection()
         // Reduce Motion: no fly-out, the cards cross-fade. Later has nowhere to
         // fly (the work stays in New), so it only steps to the next card.
         if reduceMotion || action == .later {
-            dragOffset = 0
-            withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .snappy(duration: 0.28)) { commit(action) }
+            flyOutOffset = 0
+            withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .snappy(duration: 0.28)) {
+                commit(action, membershipID: targetID, workID: targetWorkID)
+            }
             return
         }
-        isCommitting = true
-        let target = action == .keep ? Self.flyOutDistance : -Self.flyOutDistance
+        pendingDecision = PendingDecision(action: action, membershipID: targetID, workID: targetWorkID)
+        if startOffset != 0 {
+            var handoff = Transaction()
+            handoff.disablesAnimations = true
+            withTransaction(handoff) { flyOutOffset = startOffset }
+        }
+        let target = action == .keep ? flyOutDistance : -flyOutDistance
         withAnimation(.easeIn(duration: 0.18)) {
-            dragOffset = target
+            flyOutOffset = target
         } completion: {
-            var settle = Transaction()
-            settle.disablesAnimations = true
-            withTransaction(settle) { dragOffset = 0 }
-            withAnimation(.snappy(duration: 0.28)) { commit(action) }
-            isCommitting = false
+            finishPendingDecision(animated: true)
         }
     }
 
-    private func commit(_ action: QueueSortAction) {
-        QueueSortNew.apply(action, session: &session, queue: queue, context: context)
-        QueueSortNew.skipMissing(session: &session, queue: queue)
+    private func finishPendingDecision(animated: Bool) {
+        guard let pending = pendingDecision else { return }
+        pendingDecision = nil
+        var settle = Transaction()
+        settle.disablesAnimations = true
+        withTransaction(settle) { flyOutOffset = 0 }
+        if animated {
+            withAnimation(.snappy(duration: 0.28)) {
+                commit(pending.action, membershipID: pending.membershipID, workID: pending.workID)
+            }
+        } else {
+            commit(pending.action, membershipID: pending.membershipID, workID: pending.workID)
+        }
+    }
+
+    private func commit(_ action: QueueSortAction, membershipID: UUID, workID: UUID) {
+        QueueSortNew.apply(
+            action,
+            session: &session,
+            queue: queue,
+            context: context,
+            expectedMembershipID: membershipID,
+            expectedWorkID: workID
+        )
+        skipMissing()
+    }
+
+    private func skipMissing() {
+        QueueSortNew.skipMissing(session: &session, queue: queue, isVisible: isWorkVisible)
     }
 
     private func undo() {
         guard session.canUndo, !isCommitting else { return }
         Haptics.selection()
-        dragOffset = 0
+        flyOutOffset = 0
+        var outcome: QueueSortUndoResult = .nothingToUndo
         withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .snappy(duration: 0.28)) {
-            _ = QueueSortNew.undo(session: &session, queue: queue, context: context)
+            outcome = QueueSortNew.undo(
+                session: &session,
+                queue: queue,
+                context: context,
+                isVisible: isWorkVisible
+            )
+        }
+        if case .blocked = outcome {
+            undoErrorMessage =
+                "That change couldn’t be undone because the work or queue was changed or deleted elsewhere."
         }
     }
 }

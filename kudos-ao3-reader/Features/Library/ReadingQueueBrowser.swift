@@ -1077,10 +1077,18 @@ extension ReadingQueueBrowserView {
         .padding(.bottom, 4)
     }
 
-    @ViewBuilder
     private func sortNewView(_ request: QueueSortNewRequest) -> some View {
-        if let queue = allQueues.first(where: { $0.id == request.queueID }) {
-            QueueSortNewView(queue: queue, request: request)
+        Group {
+            if let queue = allQueues.first(where: { $0.id == request.queueID }) {
+                QueueSortNewView(queue: queue, request: request)
+            } else {
+                Color.clear.onAppear { sortNewRequest = nil }
+            }
+        }
+        .onChange(of: allQueues.map(\.id)) { _, ids in
+            if !ids.contains(request.queueID) {
+                sortNewRequest = nil
+            }
         }
     }
 

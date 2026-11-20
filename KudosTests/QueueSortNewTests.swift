@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import SwiftData
 import Testing
@@ -82,7 +83,7 @@ struct QueueSortNewTests {
         ReadingQueueService.orderedMemberships(in: queue).compactMap { $0.work?.title }
     }
 
-    // MARK: - Session
+    // MARK: - Session & Swipe
 
     @Test func sessionCountsProgressSegmentsAndSubtitle() {
         let ids = (0..<4).map { _ in UUID() }
@@ -93,8 +94,8 @@ struct QueueSortNewTests {
         #expect(!session.canUndo)
 
         let keep = QueueSortRecord(
-            membershipID: ids[0], workID: UUID(), action: .keep, before: nil,
-            sentWorkToRecentlyDeleted: false, preservationStatusRaw: nil, preservedAt: nil
+            membershipID: ids[0], workID: UUID(), action: .keep,
+            before: nil, keepOutcome: nil, dropOutcome: nil
         )
         session.record(keep)
         // Only the current membership can be recorded.
@@ -121,6 +122,33 @@ struct QueueSortNewTests {
         #expect(QueueSortSession.footerLine(minutes: 90, originLabel: nil) == "About 1 h 30 min to read")
     }
 
+    @Test func swipeRequiresClearHorizontalIntent() {
+        // Diagonal vertical scroll on a long card must neither tilt nor decide.
+        let diagonalScroll = CGSize(width: -115, height: -260)
+        #expect(!QueueSortSwipe.isHorizontalIntent(diagonalScroll))
+        #expect(QueueSortSwipe.dragOffset(for: diagonalScroll) == 0)
+        #expect(QueueSortSwipe.decision(for: diagonalScroll) == nil)
+
+        // Even a shallow diagonal (dx < 1.5 * dy) must not trigger Drop/Keep.
+        let shallowDiagonal = CGSize(width: 120, height: 100)
+        #expect(!QueueSortSwipe.isHorizontalIntent(shallowDiagonal))
+        #expect(QueueSortSwipe.decision(for: shallowDiagonal) == nil)
+
+        // Clear horizontal swipe below threshold tilts without deciding.
+        let shortSwipe = CGSize(width: 80, height: 10)
+        #expect(QueueSortSwipe.dragOffset(for: shortSwipe) == 80)
+        #expect(QueueSortSwipe.decision(for: shortSwipe) == nil)
+
+        // Clear horizontal swipe past threshold keeps right / drops left.
+        let keepSwipe = CGSize(width: 120, height: 20)
+        #expect(QueueSortSwipe.dragOffset(for: keepSwipe) == 120)
+        #expect(QueueSortSwipe.decision(for: keepSwipe) == .keep)
+
+        let dropSwipe = CGSize(width: -120, height: -30)
+        #expect(QueueSortSwipe.dragOffset(for: dropSwipe) == -120)
+        #expect(QueueSortSwipe.decision(for: dropSwipe) == .drop)
+    }
+
     // MARK: - Keep
 
     @Test func keepMovesToEndOfInLineAndUndoRestoresStateOrderAndOrigin() throws {
@@ -136,12 +164,51 @@ struct QueueSortNewTests {
         #expect(session.currentMembershipID == fixture.mQueueOnly.id)
 
         let undone = QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context)
-        #expect(undone?.action == .keep)
+        #expect(undone.undoneRecord?.action == .keep)
         #expect(QueueSortMembershipSnapshot(fixture.mLibrary) == before)
         #expect(fixture.mLibrary.state == .new)
         #expect(fixture.mLibrary.origin?.label == "Holmes casefic")
         #expect(titlesInOrder(fixture.queue) == ["Lined", "Library", "Queue only", "Third"])
         #expect(session.currentMembershipID == fixture.mLibrary.id)
+    }
+
+    @Test func undoKeepPreservesInterveningNoteOriginAndQueuedAtEdits() throws {
+        let fixture = try makeFixture()
+        var session = newSession(fixture)
+        let originalOrder = fixture.mLibrary.sortOrderInQueue
+
+        #expect(QueueSortNew.apply(.keep, session: &session, queue: fixture.queue, context: fixture.context))
+
+        let editedOrigin = ReadingQueueMembershipOrigin(kind: .link, label: "Shared rec")
+        let editedQueuedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        fixture.mLibrary.note = "edited on iPad"
+        fixture.mLibrary.origin = editedOrigin
+        fixture.mLibrary.queuedAt = editedQueuedAt
+
+        let result = QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context)
+        #expect(result.undoneRecord?.action == .keep)
+        #expect(fixture.mLibrary.state == .new)
+        #expect(fixture.mLibrary.sortOrderInQueue == originalOrder)
+        #expect(fixture.mLibrary.note == "edited on iPad")
+        #expect(fixture.mLibrary.origin == editedOrigin)
+        #expect(fixture.mLibrary.queuedAt == editedQueuedAt)
+    }
+
+    @Test func undoKeepRefusesWhenMembershipWasReorderedSinceKeep() throws {
+        let fixture = try makeFixture()
+        var session = newSession(fixture)
+
+        #expect(QueueSortNew.apply(.keep, session: &session, queue: fixture.queue, context: fixture.context))
+        fixture.mLibrary.sortOrderInQueue = 999
+
+        let result = QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context)
+        if case .blocked = result {} else { Issue.record("Expected blocked Undo after external reorder") }
+        #expect(fixture.mLibrary.state == .inLine)
+        #expect(fixture.mLibrary.sortOrderInQueue == 999)
+        // Session stays on the next live work, not stranded on "All sorted".
+        #expect(session.currentMembershipID == fixture.mQueueOnly.id)
+        #expect(!session.isFinished)
+        #expect(!session.canUndo)
     }
 
     // MARK: - Later
@@ -156,7 +223,9 @@ struct QueueSortNewTests {
         #expect(fixture.mLibrary.state == .new)
         #expect(session.currentMembershipID == fixture.mQueueOnly.id)
 
-        #expect(QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context)?.action == .later)
+        #expect(QueueSortNew.undo(
+            session: &session, queue: fixture.queue, context: fixture.context
+        ).undoneRecord?.action == .later)
         #expect(QueueSortMembershipSnapshot(fixture.mLibrary) == before)
         #expect(session.currentMembershipID == fixture.mLibrary.id)
     }
@@ -178,7 +247,9 @@ struct QueueSortNewTests {
         #expect(session.history.last?.sentWorkToRecentlyDeleted == false)
         #expect(try membershipTombstones(fixture.context, id: before.id) == 1)
 
-        #expect(QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context)?.action == .drop)
+        #expect(QueueSortNew.undo(
+            session: &session, queue: fixture.queue, context: fixture.context
+        ).undoneRecord?.action == .drop)
         let restored = try #require(QueueSortNew.membership(before.id, in: fixture.queue))
         #expect(QueueSortMembershipSnapshot(restored) == before)
         #expect(restored.state == .new)
@@ -191,8 +262,21 @@ struct QueueSortNewTests {
         #expect(session.currentMembershipID == before.id)
     }
 
-    @Test func dropOfAQueueOnlyWorkSendsItToRecentlyDeletedAndUndoBringsItBack() throws {
+    @Test func dropOfAQueueOnlyWorkSendsItToRecentlyDeletedAndUndoRestoresWorkAndPreservedAt() throws {
         let fixture = try makeFixture()
+        // Real EPUB file on disk with a distinct historical `preservedAt` so the
+        // preservation-date restore branch is genuinely exercised (non-nil).
+        let epubURL = fixture.queueOnly.fileURL
+        try FileManager.default.createDirectory(
+            at: epubURL.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        try Data("stub-epub-bytes".utf8).write(to: epubURL)
+        defer { try? FileManager.default.removeItem(at: epubURL) }
+        let originalPreservedAt = Date(timeIntervalSince1970: 1_710_000_000)
+        fixture.queueOnly.hasEPUB = true
+        fixture.queueOnly.epubPreservationStatus = .preserved
+        fixture.queueOnly.preservedAt = originalPreservedAt
+
         var session = newSession(fixture)
         #expect(QueueSortNew.apply(.later, session: &session, queue: fixture.queue, context: fixture.context))
         let before = QueueSortMembershipSnapshot(fixture.mQueueOnly)
@@ -203,22 +287,217 @@ struct QueueSortNewTests {
         let dropped = try #require(try fixture.context.fetch(FetchDescriptor<SavedWork>()).first { $0.id == workID })
         #expect(dropped.isPendingDeletion)
         #expect(dropped.permanentDeletionScheduledAt != nil)
+        #expect(dropped.epubPreservationStatus == .notPreserved)
+        #expect(dropped.preservedAt == nil)
         #expect(session.history.last?.sentWorkToRecentlyDeleted == true)
         let workTombstones = try fixture.context.fetch(FetchDescriptor<SyncTombstone>())
             .filter { $0.recordType == .savedWork && $0.recordID == workID }
         #expect(workTombstones.count == 1)
 
-        #expect(QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context)?.action == .drop)
+        #expect(QueueSortNew.undo(
+            session: &session, queue: fixture.queue, context: fixture.context
+        ).undoneRecord?.action == .drop)
         #expect(!dropped.isPendingDeletion)
         #expect(dropped.deletedAt == nil)
         #expect(dropped.permanentDeletionScheduledAt == nil)
         #expect(dropped.isQueuedForLater)
+        #expect(dropped.epubPreservationStatus == .preserved)
+        #expect(dropped.preservedAt == originalPreservedAt)
         let restored = try #require(QueueSortNew.membership(before.id, in: fixture.queue))
         #expect(QueueSortMembershipSnapshot(restored) == before)
         #expect(try fixture.context.fetch(FetchDescriptor<SyncTombstone>())
             .filter { $0.recordID == workID || $0.recordID == before.id }.isEmpty)
         #expect(titlesInOrder(fixture.queue) == ["Lined", "Library", "Queue only", "Third"])
         #expect(session.currentMembershipID == before.id)
+    }
+
+    @Test func dropOfQueueOnlyWorkInSecondQueueKeepsItAlive() throws {
+        let fixture = try makeFixture()
+        let secondQueue = ReadingQueue(name: "Weekend")
+        fixture.context.insert(secondQueue)
+        _ = ReadingQueueService.add(fixture.queueOnly, to: secondQueue, state: .inLine, in: fixture.context)
+
+        var session = newSession(fixture)
+        #expect(QueueSortNew.apply(.later, session: &session, queue: fixture.queue, context: fixture.context))
+        let before = QueueSortMembershipSnapshot(fixture.mQueueOnly)
+
+        #expect(QueueSortNew.apply(.drop, session: &session, queue: fixture.queue, context: fixture.context))
+        #expect(!fixture.queueOnly.isPendingDeletion)
+        #expect(fixture.queueOnly.deletedAt == nil)
+        #expect(fixture.queueOnly.isQueuedForLater)
+        #expect(session.history.last?.sentWorkToRecentlyDeleted == false)
+        #expect(fixture.queueOnly.queueMemberships.contains { $0.queue?.id == secondQueue.id })
+        #expect(!fixture.queueOnly.queueMemberships.contains { $0.queue?.id == fixture.queue.id })
+
+        #expect(QueueSortNew.undo(
+            session: &session, queue: fixture.queue, context: fixture.context
+        ).undoneRecord?.action == .drop)
+        #expect(QueueSortNew.membership(before.id, in: fixture.queue) != nil)
+        #expect(fixture.queueOnly.queueMemberships.contains { $0.queue?.id == secondQueue.id })
+    }
+
+    // MARK: - Soft-delete, privacy, fly-out binding & intervening-mutation Undo
+
+    @Test func softDeletedWorkIsExcludedFromMembershipApplyAndSkipMissing() throws {
+        let fixture = try makeFixture()
+        var session = newSession(fixture)
+        let membershipCountBefore = fixture.queue.memberships.count
+
+        PreservedWorkService.softDelete(fixture.library, in: fixture.context)
+        // Soft-deleting a work keeps its queue memberships so Restore re-joins.
+        #expect(fixture.queue.memberships.count == membershipCountBefore)
+        #expect(QueueSortNew.membership(fixture.mLibrary.id, in: fixture.queue) == nil)
+        #expect(!QueueSortNew.apply(.keep, session: &session, queue: fixture.queue, context: fixture.context))
+        #expect(!QueueSortNew.apply(.drop, session: &session, queue: fixture.queue, context: fixture.context))
+        #expect(fixture.mLibrary.state == .new)
+        #expect(fixture.library.queueMemberships.contains { $0.id == fixture.mLibrary.id })
+
+        QueueSortNew.skipMissing(session: &session, queue: fixture.queue)
+        #expect(session.currentMembershipID == fixture.mQueueOnly.id)
+    }
+
+    @Test func hideMatureVisibilitySkipsHiddenWorksAndBlocksUndoOntoHiddenWork() throws {
+        let fixture = try makeFixture()
+        fixture.library.rating = "Explicit"
+        var session = newSession(fixture)
+
+        QueueSortNew.skipMissing(session: &session, queue: fixture.queue) { !$0.isAdult }
+        #expect(session.currentMembershipID == fixture.mQueueOnly.id)
+
+        #expect(QueueSortNew.apply(.keep, session: &session, queue: fixture.queue, context: fixture.context))
+        fixture.queueOnly.rating = "Mature"
+        let outcome = QueueSortNew.undo(
+            session: &session, queue: fixture.queue, context: fixture.context
+        ) { !$0.isAdult }
+        if case .blocked = outcome {} else { Issue.record("Expected blocked Undo for now-hidden mature work") }
+        #expect(fixture.mQueueOnly.state == .inLine)
+        #expect(session.currentMembershipID == fixture.mThird.id)
+    }
+
+    @Test func applyRejectsMismatchedExpectedWorkOrMembershipID() throws {
+        let fixture = try makeFixture()
+        var session = newSession(fixture)
+
+        #expect(!QueueSortNew.apply(
+            .drop, session: &session, queue: fixture.queue, context: fixture.context,
+            expectedMembershipID: fixture.mLibrary.id, expectedWorkID: fixture.queueOnly.id
+        ))
+        #expect(QueueSortNew.membership(fixture.mLibrary.id, in: fixture.queue) != nil)
+
+        // Simulate M0 vanishing during fly-out and cursor advancing to M1:
+        ReadingQueueService.removeFromQueue(fixture.library, from: fixture.queue, in: fixture.context)
+        QueueSortNew.skipMissing(session: &session, queue: fixture.queue)
+        #expect(session.currentMembershipID == fixture.mQueueOnly.id)
+
+        #expect(!QueueSortNew.apply(
+            .drop, session: &session, queue: fixture.queue, context: fixture.context,
+            expectedMembershipID: fixture.mLibrary.id, expectedWorkID: fixture.library.id
+        ))
+        // M1 was NOT dropped unseen.
+        #expect(QueueSortNew.membership(fixture.mQueueOnly.id, in: fixture.queue) != nil)
+        #expect(!fixture.queueOnly.isPendingDeletion)
+    }
+
+    @Test func undoRefusesWhenLibraryWorkWasSoftDeletedAfterDrop() throws {
+        let fixture = try makeFixture()
+        var session = newSession(fixture)
+
+        #expect(QueueSortNew.apply(.drop, session: &session, queue: fixture.queue, context: fixture.context))
+        PreservedWorkService.softDelete(fixture.library, in: fixture.context)
+        let deletedModifiedAt = fixture.library.lastModifiedAt
+
+        let outcome = QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context)
+        if case .blocked = outcome {} else { Issue.record("Expected blocked Undo for soft-deleted library work") }
+        #expect(fixture.library.isPendingDeletion)
+        #expect(fixture.library.lastModifiedAt == deletedModifiedAt)
+        #expect(fixture.library.queueMemberships.isEmpty)
+        #expect(session.currentMembershipID == fixture.mQueueOnly.id)
+        #expect(!session.isFinished)
+    }
+
+    @Test func undoRefusesWhenQueueOnlyWorkWasRestoredAndReDeletedLocally() throws {
+        let fixture = try makeFixture()
+        var session = newSession(fixture)
+        #expect(QueueSortNew.apply(.later, session: &session, queue: fixture.queue, context: fixture.context))
+        #expect(QueueSortNew.apply(.drop, session: &session, queue: fixture.queue, context: fixture.context))
+
+        PreservedWorkService.restore(fixture.queueOnly, in: fixture.context)
+        PreservedWorkService.softDelete(fixture.queueOnly, in: fixture.context)
+
+        let outcome = QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context)
+        if case .blocked = outcome {} else { Issue.record("Expected blocked Undo after local restore + re-delete") }
+        #expect(fixture.queueOnly.isPendingDeletion)
+        #expect(QueueSortNew.membership(fixture.mQueueOnly.id, in: fixture.queue) == nil)
+        #expect(session.currentMembershipID == fixture.mThird.id)
+    }
+
+    @Test func undoRefusesWhenQueueWasSoftDeletedAfterDrop() throws {
+        let fixture = try makeFixture()
+        var session = newSession(fixture)
+        #expect(QueueSortNew.apply(.later, session: &session, queue: fixture.queue, context: fixture.context))
+        #expect(QueueSortNew.apply(.drop, session: &session, queue: fixture.queue, context: fixture.context))
+
+        PreservedWorkService.softDelete(fixture.queue, in: fixture.context)
+        let queueUpdatedAt = fixture.queue.dateUpdated
+
+        let outcome = QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context)
+        if case .blocked = outcome {} else { Issue.record("Expected blocked Undo on soft-deleted queue") }
+        #expect(fixture.queueOnly.isPendingDeletion)
+        #expect(fixture.queue.dateUpdated == queueUpdatedAt)
+        #expect(fixture.queueOnly.queueMemberships.isEmpty)
+    }
+
+    @Test func undoAfterExternalRemovalOrReAddKeepsSessionConsistentWithoutPrematureFinish() throws {
+        // Case 1: Keep A, then A leaves the queue; Undo fails without landing on "All sorted".
+        let fixture1 = try makeFixture()
+        var session1 = newSession(fixture1)
+        #expect(QueueSortNew.apply(.keep, session: &session1, queue: fixture1.queue, context: fixture1.context))
+        ReadingQueueService.removeFromQueue(fixture1.library, from: fixture1.queue, in: fixture1.context)
+
+        let outcome1 = QueueSortNew.undo(session: &session1, queue: fixture1.queue, context: fixture1.context)
+        if case .blocked = outcome1 {} else { Issue.record("Expected blocked Undo when kept work left queue") }
+        #expect(session1.currentMembershipID == fixture1.mQueueOnly.id)
+        #expect(!session1.isFinished)
+        #expect(!session1.canUndo)
+
+        // Case 2: Drop A, then A is re-added under a new membership UUID; Undo refuses and leaves new membership.
+        let fixture2 = try makeFixture()
+        var session2 = newSession(fixture2)
+        let oldID = fixture2.mLibrary.id
+        #expect(QueueSortNew.apply(.drop, session: &session2, queue: fixture2.queue, context: fixture2.context))
+        let replacement = ReadingQueueService.add(
+            fixture2.library, to: fixture2.queue, state: .inLine, in: fixture2.context
+        )
+        #expect(replacement.id != oldID)
+
+        let outcome2 = QueueSortNew.undo(session: &session2, queue: fixture2.queue, context: fixture2.context)
+        if case .blocked = outcome2 {} else { Issue.record("Expected blocked Undo when work was re-added") }
+        #expect(fixture2.library.queueMemberships.map(\.id) == [replacement.id])
+        #expect(session2.currentMembershipID == fixture2.mQueueOnly.id)
+        #expect(!session2.isFinished)
+
+        // Case 3: Keep A, Drop B, permanently delete B -> Undo #1 blocks B (stays on C), Undo #2 undoes A cleanly.
+        let fixture3 = try makeFixture()
+        var session3 = newSession(fixture3)
+        #expect(QueueSortNew.apply(.keep, session: &session3, queue: fixture3.queue, context: fixture3.context))
+        #expect(QueueSortNew.apply(.drop, session: &session3, queue: fixture3.queue, context: fixture3.context))
+        PreservedWorkService.deletePermanently(fixture3.queueOnly, in: fixture3.context)
+
+        let blockedB = QueueSortNew.undo(session: &session3, queue: fixture3.queue, context: fixture3.context)
+        if case .blocked(let rec) = blockedB {
+            #expect(rec.membershipID == fixture3.mQueueOnly.id)
+        } else {
+            Issue.record("Expected blocked Undo for permanently deleted B")
+        }
+        #expect(session3.currentMembershipID == fixture3.mThird.id)
+        #expect(session3.canUndo)
+
+        let undoneA = QueueSortNew.undo(session: &session3, queue: fixture3.queue, context: fixture3.context)
+        #expect(undoneA.undoneRecord?.membershipID == fixture3.mLibrary.id)
+        #expect(session3.currentMembershipID == fixture3.mLibrary.id)
+        #expect(QueueSortNew.apply(.later, session: &session3, queue: fixture3.queue, context: fixture3.context))
+        QueueSortNew.skipMissing(session: &session3, queue: fixture3.queue)
+        #expect(session3.currentMembershipID == fixture3.mThird.id)
     }
 
     // MARK: - Whole session
@@ -240,7 +519,11 @@ struct QueueSortNewTests {
         // Nothing left to decide.
         #expect(!QueueSortNew.apply(.keep, session: &session, queue: fixture.queue, context: fixture.context))
 
-        while QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context) != nil {}
+        var undoneCount = 0
+        while case .undone = QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context) {
+            undoneCount += 1
+        }
+        #expect(undoneCount == 3)
 
         #expect(!session.canUndo)
         #expect(session.currentMembershipID == snapshots[0].id)

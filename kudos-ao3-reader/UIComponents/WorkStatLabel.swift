@@ -273,12 +273,13 @@ enum WorkTagLine {
     }
 }
 
-/// Relationships take the app colour. Everything else is grey. Each chip searches.
+/// Relationships take the app colour. Everything else is grey. Each chip searches
+/// when `onTap` is provided, and renders as read-only metadata when `onTap` is nil.
 struct WorkTagLineView: View {
     var relationships: [String]
     var characters: [String] = []
     var freeforms: [String] = []
-    var onTap: (String, AO3TagSearch.Field) -> Void
+    var onTap: ((String, AO3TagSearch.Field) -> Void)?
 
     @Environment(\.accentFill) private var accentFill
     @Environment(\.accentInk) private var accentInk
@@ -290,20 +291,15 @@ struct WorkTagLineView: View {
         if !line.shown.isEmpty {
             FlowLayout(spacing: 6, rowSpacing: 6) {
                 ForEach(line.shown) { chip in
-                    Button { onTap(chip.text, chip.field) } label: {
-                        Text(chip.text)
-                            .font(.caption.weight(chip.isRelationship ? .semibold : .regular))
-                            .foregroundStyle(chip.isRelationship ? AnyShapeStyle(accentInk) : AnyShapeStyle(.secondaryInk))
-                            .lineLimit(1)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(
-                                chip.isRelationship ? accentFill.opacity(0.10) : Color.primary.opacity(0.08),
-                                in: Capsule()
-                            )
+                    if let onTap {
+                        Button { onTap(chip.text, chip.field) } label: {
+                            chipLabel(chip)
+                        }
+                        .buttonStyle(.borderless)
+                        .minimumHitTarget(28)
+                    } else {
+                        chipLabel(chip)
                     }
-                    .buttonStyle(.borderless)
-                    .minimumHitTarget(28)
                 }
                 if line.extra > 0 {
                     Text("+\(line.extra)")
@@ -312,6 +308,19 @@ struct WorkTagLineView: View {
                 }
             }
         }
+    }
+
+    private func chipLabel(_ chip: WorkTagChip) -> some View {
+        Text(chip.text)
+            .font(.caption.weight(chip.isRelationship ? .semibold : .regular))
+            .foregroundStyle(chip.isRelationship ? AnyShapeStyle(accentInk) : AnyShapeStyle(.secondaryInk))
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                chip.isRelationship ? accentFill.opacity(0.10) : Color.primary.opacity(0.08),
+                in: Capsule()
+            )
     }
 }
 
