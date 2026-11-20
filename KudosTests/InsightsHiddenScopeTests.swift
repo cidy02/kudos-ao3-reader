@@ -88,6 +88,10 @@ import Testing
         let unreadVisible = work("Unread Backlog", words: 5_000, fandom: "Fandom One")
 
         let stoppedVisible = work("Stopped Fic", words: 9_000, fandom: "Fandom One")
+        stoppedVisible.hasEPUB = true
+        stoppedVisible.lastSpineIndex = 1
+        stoppedVisible.legacyReaderProgress = 0.45
+        stoppedVisible.lastReadDate = date(day: 20).addingTimeInterval(-30 * 86_400)
         stoppedVisible.setReadingStatus(.stopped, at: date(day: 10))
         stoppedVisible.stoppedAt = date(day: 10)
         stoppedVisible.stopReasonRaw = "tooLong"
