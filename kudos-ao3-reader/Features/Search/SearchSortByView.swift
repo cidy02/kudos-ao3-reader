@@ -11,9 +11,12 @@ struct SearchSortByView: View {
     /// Nil on a surface with no computed ranking (Browse): those sections hide.
     var ranking: Binding<LoadedWorksRanking>?
     var allowsRelevanceSort = true
+    /// False when embedded inside the docked Duo Filters pane so it does not overwrite
+    /// Search's outer navigation bar title.
+    var showsNavigationTitle = true
 
     var body: some View {
-        Form {
+        let content = Form {
             Group {
                 waysToFindSection
                 loadSection
@@ -29,10 +32,16 @@ struct SearchSortByView: View {
         }
         .formStyle(.grouped)
         .appThemedScroll()
-        .navigationTitle("Sort By")
-        #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-        #endif
+
+        if showsNavigationTitle {
+            content
+                .navigationTitle("Sort By")
+                #if os(iOS)
+                    .navigationBarTitleDisplayMode(.inline)
+                #endif
+        } else {
+            content
+        }
     }
 
     // MARK: - Sections

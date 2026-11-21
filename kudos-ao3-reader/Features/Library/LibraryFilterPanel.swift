@@ -6,6 +6,8 @@ import SwiftUI
 /// on iPad/macOS through `filterPanelPresentation`.
 struct LibraryFilterPanel: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.filterPanelInInspector) private var inInspector
+    @Environment(\.duoLayout) private var duoLayout
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(ThemeManager.self) private var theme
     @Binding var filters: LibraryFilters
@@ -29,14 +31,19 @@ struct LibraryFilterPanel: View {
     }
 
     var body: some View {
+        let bookLeadingInset: CGFloat = (inInspector && duoLayout.isVerticalFoldActive)
+            ? DuoLayoutSignal.bookFoldInset
+            : 0
         NavigationStack {
             form
+                .padding(.leading, bookLeadingInset)
                 .filterPanelChrome(title: "Filters")
                 .safeAreaInset(edge: .bottom) {
                     FilterResultsBar(
                         buttonTitle: "Show \(matchingCount.formatted()) \(matchingCount == 1 ? "Work" : "Works")",
                         onConfirm: { dismiss() }
                     )
+                    .padding(.leading, bookLeadingInset)
                 }
         }
         #if DEBUG

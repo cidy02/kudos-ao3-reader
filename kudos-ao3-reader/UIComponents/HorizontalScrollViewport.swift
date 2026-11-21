@@ -33,6 +33,8 @@ private struct HorizontalScrollViewport<Content: View>: View {
     let cardGutter: CGFloat
     @State private var availableWidth: CGFloat?
     @Environment(\.carouselCardAvailableWidth) private var inheritedWidth
+    @Environment(\.duoPaneFoldEdge) private var foldEdge
+    @Environment(\.layoutDirection) private var layoutDirection
     @Namespace private var viewportSpace
 
     init(scrollView: ScrollView<Content>, preservesShadows: Bool, cardGutter: CGFloat) {
@@ -55,7 +57,10 @@ private struct HorizontalScrollViewport<Content: View>: View {
                                 Path(HorizontalScrollViewportMetrics.clipRect(
                                     viewportBounds: viewport,
                                     contentHeight: proxy.size.height,
-                                    preservesShadows: preservesShadows
+                                    preservesShadows: preservesShadows,
+                                    trimLeading: foldEdge == .leading ? SubjectMetrics.gutter : 0,
+                                    trimTrailing: foldEdge == .trailing ? SubjectMetrics.gutter : 0,
+                                    rightToLeft: layoutDirection == .rightToLeft
                                 ))
                             }
                         }
@@ -75,12 +80,23 @@ private struct HorizontalScrollViewport<Content: View>: View {
 #endif
 
 enum HorizontalScrollViewportMetrics {
-    static func clipRect(viewportBounds: CGRect, contentHeight: CGFloat, preservesShadows: Bool) -> CGRect {
+    static func clipRect(
+        viewportBounds: CGRect,
+        contentHeight: CGFloat,
+        preservesShadows: Bool,
+        trimLeading: CGFloat = 0,
+        trimTrailing: CGFloat = 0,
+        rightToLeft: Bool = false
+    ) -> CGRect {
         // Three of the current card shadow radii plus their offset fit in 32pt.
         let overflow: CGFloat = preservesShadows ? 32 : 0
+        let trimLeft = rightToLeft ? trimTrailing : trimLeading
+        let trimRight = rightToLeft ? trimLeading : trimTrailing
         return CGRect(
-            x: viewportBounds.minX, y: -overflow,
-            width: viewportBounds.width, height: contentHeight + 2 * overflow
+            x: viewportBounds.minX + trimLeft,
+            y: -overflow,
+            width: max(0, viewportBounds.width - trimLeft - trimRight),
+            height: contentHeight + 2 * overflow
         )
     }
 }

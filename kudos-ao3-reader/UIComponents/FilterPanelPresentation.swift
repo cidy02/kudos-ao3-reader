@@ -31,6 +31,9 @@ private struct FilterPanelPresentation<Panel: View>: ViewModifier {
     #endif
 
     @Binding var isPresented: Bool
+    /// When true, the panel stays open as a persistent trailing pane (e.g. Search on
+    /// the open/Book iPhone Duo) and hides its Close button.
+    var isDocked: Bool = false
     /// The compact layout's sheet detents; nil keeps the sheet's own full height.
     var detents: Set<PresentationDetent>?
     /// A width swap can remove the compact sheet without SwiftUI's dismiss callback.
@@ -42,21 +45,33 @@ private struct FilterPanelPresentation<Panel: View>: ViewModifier {
     /// (Library and Search read "Filters" with a stray ✕, T-562c N1). Build it only
     /// while presented.
     @ViewBuilder private var inspectorPanel: some View {
-        if isPresented { panel() }
+        if isDocked || isPresented { panel() }
+    }
+
+    private var inspectorPresented: Binding<Bool> {
+        isDocked ? Binding(get: { true }, set: { _ in }) : $isPresented
     }
 
     func body(content: Content) -> some View {
         #if os(iOS)
-        let wide = WideLayout.isAvailable(
+        let wide = isDocked || WideLayout.isAvailable(
             horizontal: horizontalSizeClass, vertical: verticalSizeClass
         )
         return Group {
             if wide {
-                content.inspector(isPresented: $isPresented) {
-                    inspectorPanel.environment(\.filterPanelInInspector, true)
+                content.inspector(isPresented: inspectorPresented) {
+                    inspectorPanel
+                        .environment(\.filterPanelInInspector, true)
+                        .environment(\.filterPanelIsDocked, isDocked)
                 }
                     .onChange(of: isPresented) { _, presented in
                         if !presented { onDismiss?() }
+                    }
+                    .onChange(of: isDocked) { _, docked in
+                        if docked {
+                            if isPresented { isPresented = false }
+                            onDismiss?()
+                        }
                     }
             } else {
                 content.sheet(isPresented: $isPresented, onDismiss: onDismiss) {
@@ -90,12 +105,13 @@ extension View {
     /// `[.medium, .large]`, spec 1ao's "opens over the results at half height".
     func filterPanelPresentation(
         isPresented: Binding<Bool>,
+        isDocked: Bool = false,
         detents: Set<PresentationDetent>? = nil,
         onDismiss: (() -> Void)? = nil,
         @ViewBuilder panel: @escaping () -> some View
     ) -> some View {
         modifier(FilterPanelPresentation(
-            isPresented: isPresented, detents: detents, onDismiss: onDismiss, panel: panel
+            isPresented: isPresented, isDocked: isDocked, detents: detents, onDismiss: onDismiss, panel: panel
         ))
     }
 }
@@ -103,6 +119,8 @@ extension View {
 extension EnvironmentValues {
     /// True inside the filter panel's inspector (wide layouts, macOS), false in the sheet.
     @Entry var filterPanelInInspector = false
+    /// True when the inspector is persistently docked beside its host (Duo Search).
+    @Entry var filterPanelIsDocked = false
 }
 
 /// The filter panel's header. In a sheet it is the navigation title and Close button. In an
@@ -111,6 +129,7 @@ extension EnvironmentValues {
 /// inspector draws its own header inside the pane instead and publishes no title.
 struct FilterPanelChrome: ViewModifier {
     @Environment(\.filterPanelInInspector) private var inInspector
+    @Environment(\.filterPanelIsDocked) private var isDocked
     @Environment(\.dismiss) private var dismiss
     let title: String
 
@@ -118,16 +137,21 @@ struct FilterPanelChrome: ViewModifier {
         if inInspector {
             content.safeAreaInset(edge: .top, spacing: 0) {
                 HStack {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
-                        .accessibilityLabel("Close")
+                    if !isDocked {
+                        Button { dismiss() } label: { Image(systemName: "xmark") }
+                            .accessibilityLabel("Close")
+                    }
                     Spacer(minLength: 0)
                     Text(title).font(.headline).accessibilityAddTraits(.isHeader)
                     Spacer(minLength: 0)
-                    // Balances the Close button so the title stays centred.
-                    Image(systemName: "xmark").hidden().accessibilityHidden(true)
+                    if !isDocked {
+                        // Balances the Close button so the title stays centred.
+                        Image(systemName: "xmark").hidden().accessibilityHidden(true)
+                    }
                 }
+                .frame(minHeight: isDocked ? 44 : 0)
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.vertical, isDocked ? 8 : 12)
             }
         } else {
             content

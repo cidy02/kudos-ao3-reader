@@ -100,6 +100,10 @@ struct LibraryShelfTile: View {
 struct LibraryShelfButtonGrid: View {
     var buttons: [LibraryShelfID]
     var counts: [LibraryShelfID: Int]
+    /// A Duo split pane is ~355 pt wide despite `.regular` horizontal size class;
+    /// keep the board's 2-column shelf tile grid (`Duo-Open-Library-Root`) while
+    /// preserving the 1-column accessibility layout.
+    var forcesCompactColumns: Bool = false
     var onEdit: () -> Void
     var onOpen: (LibraryShelfID) -> Void
 
@@ -117,11 +121,15 @@ struct LibraryShelfButtonGrid: View {
 
     private var columns: [GridItem] {
         let isRegular: Bool
-        #if os(iOS)
-        isRegular = horizontalSizeClass == .regular
-        #else
-        isRegular = true
-        #endif
+        if forcesCompactColumns {
+            isRegular = false
+        } else {
+            #if os(iOS)
+            isRegular = horizontalSizeClass == .regular
+            #else
+            isRegular = true
+            #endif
+        }
         let count = Self.columnCount(
             isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
             isRegularWidth: isRegular
