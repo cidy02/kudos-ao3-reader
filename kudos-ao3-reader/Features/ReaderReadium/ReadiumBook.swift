@@ -802,7 +802,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
                 origin: .readiumScheme,
                 onOpenExternalURL: ReaderWebIsolation.onReadiumOpenExternalURL
             )
-            attachTurnGestureObservers(in: view)
         }
         // Freeze `setContentOffset` / hide-under-snapshot can emit spurious
         // location settles. Ignoring them keeps `currentLocator` (and flush)
@@ -1166,9 +1165,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     func navigator(_: any ViewportObservingNavigator, viewportDidChange viewport: NavigatorViewport?) {
         // Same freeze/exit gate as locator — dismiss must not flip completion.
         guard !isLocatorIngestionBlocked else { return }
-        if let view = navigator?.view {
-            attachTurnGestureObservers(in: view)
-        }
         let atEnd = ReadiumReaderCompletion.isAtEnd(viewport: viewport, readingOrder: readingOrder)
         let wasAtEnd = isAtPublicationEnd
         if atEnd != wasAtEnd {
@@ -1258,10 +1254,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         // come from Swift's host observer + scheduled measures, never JS guesses.
         controller.removeScriptMessageHandler(forName: VisualPageMessageBridge.handlerName)
         controller.add(visualPageBridge, name: VisualPageMessageBridge.handlerName)
-        Task { @MainActor [weak self] in
-            guard let self, let view = self.navigator?.view else { return }
-            self.attachTurnGestureObservers(in: view)
-        }
         // Debounce to scroll settle (not first mid-animation sample). Throttle-on-
         // first was posting an intermediate page then the true page → bar snap.
         let visualPageSource = """
@@ -1689,8 +1681,6 @@ private struct TurnAutoHideState {
     var nextAttemptToken: UInt64 = 0
     /// Directional attempts (edge tap, key, `goForward`/`goBackward`) awaiting Readium's result.
     var inFlightAttempts: [UInt64: UInt64] = [:]
-    let gestureTracker = ReaderCommittedGestureTracker()
-    var gestureTrackerConfigured = false
 }
 
 /// Same file, so the stored state above stays `private`; outside the class body,
@@ -1721,45 +1711,7 @@ extension ReadiumBook {
         )
     }
 
-    /// Gesture tracker for drag and trackpad turns (internal for unit tests).
-    var committedGestureTracker: ReaderCommittedGestureTracker {
-        configureGestureTrackerIfNeeded()
-        return turnAutoHide.gestureTracker
-    }
-
     var hasJumpInFlight: Bool { turnAutoHide.jumpsInFlight > 0 }
-
-    fileprivate func configureGestureTrackerIfNeeded() {
-        guard !turnAutoHide.gestureTrackerConfigured else { return }
-        turnAutoHide.gestureTrackerConfigured = true
-        turnAutoHide.gestureTracker.isInteractionBlocked = { [weak self] in
-            guard let self else { return true }
-            return self.turnAutoHide.jumpsInFlight > 0
-                || self.isScrubbing
-                || self.isLocatorIngestionBlocked
-        }
-        turnAutoHide.gestureTracker.currentGeneration = { [weak self] in
-            self?.turnAutoHide.generation ?? 0
-        }
-        turnAutoHide.gestureTracker.currentHref = { [weak self] in
-            self?.currentLocator.map { ReaderSectionBuilder.hrefKey($0.href.string) }
-        }
-        turnAutoHide.gestureTracker.currentPlaceKey = { [weak self] in
-            self?.currentLocator.map {
-                let locations = $0.locations
-                return "\(ReaderSectionBuilder.hrefKey($0.href.string))|\(locations.position ?? -1)"
-                    + "|\(locations.progression ?? -1)"
-            }
-        }
-        turnAutoHide.gestureTracker.onCommit = { [weak self] in
-            self?.reportUserTurn()
-        }
-    }
-
-    fileprivate func attachTurnGestureObservers(in rootView: UIView) {
-        configureGestureTrackerIfNeeded()
-        turnAutoHide.gestureTracker.attach(to: rootView)
-    }
 
     fileprivate func resetTurnAutoHideForOpen() {
         invalidatePendingTurnAttribution()
@@ -1768,7 +1720,6 @@ extension ReadiumBook {
     fileprivate func invalidatePendingTurnAttribution() {
         turnAutoHide.generation &+= 1
         turnAutoHide.inFlightAttempts.removeAll()
-        turnAutoHide.gestureTracker.invalidate()
     }
 
     /// Runs a programmatic navigation so nothing it causes is taken for a turn.
@@ -1799,6 +1750,17 @@ extension ReadiumBook {
     func endExplicitUserTurn(_ token: UInt64, moved: Bool) {
         guard let began = turnAutoHide.inFlightAttempts.removeValue(forKey: token) else { return }
         guard moved, began == turnAutoHide.generation else { return }
+        reportUserTurn()
+    }
+
+    /// Readium reports a drag or trackpad turn once, when it has landed (T-562g). It
+    /// never reports a snap-back, an aborted turn, a jump, a link or a relayout, so
+    /// nothing here is inferred from a gesture, a locator or a timer.
+    func navigator(
+        _: EPUBNavigatorViewController,
+        didCommitUserPageTurn _: UserPageTurnDirection,
+        source _: UserPageTurnSource
+    ) {
         reportUserTurn()
     }
 

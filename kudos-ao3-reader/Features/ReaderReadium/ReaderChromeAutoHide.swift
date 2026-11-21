@@ -7,9 +7,9 @@ import SwiftUI
 ///
 /// A turn hides the controls only when the reader's own input commits it, reported
 /// once at that moment by the input path (T-562f): an accepted edge tap, key,
-/// page-turner or `goForward`/`goBackward` (`ReadiumPageTurnController`), a Slide
-/// or Curl drag the release tracker commits, or a trackpad Slide turn
-/// (`ReaderCommittedGestureTracker`). Nothing is inferred from a locator or viewport
+/// page-turner or `goForward`/`goBackward` (`ReadiumPageTurnController`), and a Slide
+/// or Curl drag or a trackpad Slide turn, which Readium itself reports once it has
+/// landed (`didCommitUserPageTurn`, T-562g). Nothing is inferred from a locator or viewport
 /// change, so a reflow, a link, a jump, a scrub or Read Aloud can never hide them.
 /// The view decides whether a reported turn may hide the controls (`hidesControls`)
 /// and hides them through `ReadiumBook.setChromeHidden`, the one place the
