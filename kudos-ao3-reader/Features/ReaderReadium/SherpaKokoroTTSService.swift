@@ -47,6 +47,7 @@ public final class SherpaKokoroTTSService: TTSService {
     public var onSpokenRange: ((Locator) -> Void)?
 
     private var activeTask: Task<Void, Never>?
+    private var playbackGeneration: UInt64 = 0
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private var playerAttached = false
@@ -149,6 +150,7 @@ public final class SherpaKokoroTTSService: TTSService {
         }
 
         status = .playing
+        let generation = playbackGeneration
         let speed = currentSpeed
         let sid = currentVoiceId
         let engineRef = tts
@@ -172,6 +174,7 @@ public final class SherpaKokoroTTSService: TTSService {
             // audio, not an unbounded chapter cache. A sentence can overshoot
             // the target because sentence boundaries remain intact.
             while !Task.isCancelled,
+                  self.playbackGeneration == generation,
                   KokoroPlaybackAnalysis.needsMoreQueuedAudio(
                     queuedAudioSeconds: primed.map {
                         Double($0.generated.samples.count) / sampleRate
@@ -179,7 +182,7 @@ public final class SherpaKokoroTTSService: TTSService {
                     requiredFollowingAudioSeconds: Self.requiredFollowingAudioSeconds
                   ) {
                 await self.waitWhilePaused()
-                guard !Task.isCancelled, self.status != .stopped else { return }
+                guard !Task.isCancelled, self.playbackGeneration == generation, self.status != .stopped else { return }
 
                 guard let next = await Self.generateNextAudibleChunk(
                     request: synthesis,
@@ -193,24 +196,39 @@ public final class SherpaKokoroTTSService: TTSService {
                 nextStartIndex = next.index + 1
             }
 
+            guard !Task.isCancelled, self.playbackGeneration == generation else { return }
             guard !primed.isEmpty else {
                 self.finishNaturally()
                 return
             }
 
+            // First audible PCM is confirmed: announce the first unit before
+            // starting the player node so a paused skip commits and pauses without
+            // bleeding audio.
+            let firstUnit = primed[0].unit
+            if let locator = firstUnit.locator {
+                self.onAdvance?(locator)
+            }
+            guard !Task.isCancelled, self.playbackGeneration == generation, self.status != .stopped else { return }
+            self.spokenText = firstUnit.text
+            if let locator = firstUnit.locator {
+                self.onSpokenRange?(locator)
+            }
+
             // Nothing is scheduled until the whole initial lead is ready. That
             // keeps pause/resume from starting a lone first sentence mid-prime.
             await self.waitWhilePaused()
-            guard !Task.isCancelled, self.status == .playing else { return }
+            guard !Task.isCancelled, self.playbackGeneration == generation, self.status == .playing else { return }
 
             var queued: [(chunk: GeneratedTextChunk, playback: ScheduledPlayback)] = []
-            for chunk in primed {
+            for (offset, chunk) in primed.enumerated() {
                 guard let playback = self.enqueue(
                     unit: chunk.unit,
                     samples: chunk.generated.samples,
                     energyEnvelope: chunk.generated.energyEnvelope,
                     seed: Double.random(in: 0...1),
-                    startsPlayback: false
+                    startsPlayback: false,
+                    skipInitialAdvance: offset == 0
                 ) else {
                     self.finishNaturally()
                     return
@@ -227,9 +245,9 @@ public final class SherpaKokoroTTSService: TTSService {
             )
             Log.tts.debug("\(primingMessage, privacy: .public)")
 
-            while !Task.isCancelled {
+            while !Task.isCancelled, self.playbackGeneration == generation {
                 await self.waitWhilePaused()
-                guard !Task.isCancelled, self.status != .stopped else { return }
+                guard !Task.isCancelled, self.playbackGeneration == generation, self.status != .stopped else { return }
 
                 if !sourceExhausted,
                    KokoroPlaybackAnalysis.needsMoreQueuedAudio(
@@ -247,7 +265,9 @@ public final class SherpaKokoroTTSService: TTSService {
                     nextStartIndex = next.index + 1
 
                     await self.waitWhilePaused()
-                    guard !Task.isCancelled, self.status == .playing else { return }
+                    guard !Task.isCancelled, self.playbackGeneration == generation, self.status == .playing else {
+                        return
+                    }
                     guard let playback = self.enqueue(
                         unit: next.unit,
                         samples: next.generated.samples,
@@ -265,7 +285,7 @@ public final class SherpaKokoroTTSService: TTSService {
                 guard !queued.isEmpty else { break }
                 let oldest = queued.removeFirst()
                 await self.waitUntilConsumed(oldest.playback)
-                guard !Task.isCancelled, self.status != .stopped else { return }
+                guard !Task.isCancelled, self.playbackGeneration == generation, self.status != .stopped else { return }
 
                 if sourceExhausted, queued.isEmpty {
                     await self.waitForPlaybackDrain()
@@ -273,6 +293,7 @@ public final class SherpaKokoroTTSService: TTSService {
                 }
             }
 
+            guard !Task.isCancelled, self.playbackGeneration == generation else { return }
             self.finishNaturally()
         }
         return true
@@ -474,6 +495,7 @@ public final class SherpaKokoroTTSService: TTSService {
         let levels: [Double]
         let seed: Double
         let unit: TTSSpeechUnit
+        let skipInitialAdvance: Bool
     }
 
     private struct ScheduledPlayback {
@@ -490,7 +512,8 @@ public final class SherpaKokoroTTSService: TTSService {
         samples: [Float],
         energyEnvelope: [Double],
         seed: Double,
-        startsPlayback: Bool = true
+        startsPlayback: Bool = true,
+        skipInitialAdvance: Bool = false
     ) -> ScheduledPlayback? {
         guard status == .playing, !Task.isCancelled else { return nil }
         guard let format = playbackFormat else { return nil }
@@ -553,7 +576,12 @@ public final class SherpaKokoroTTSService: TTSService {
             streamContinuation.finish()
         }
         hasScheduledPlayback = true
-        enqueueSpeechEnergy(energyEnvelope, seed: seed, unit: unit)
+        enqueueSpeechEnergy(
+            energyEnvelope,
+            seed: seed,
+            unit: unit,
+            skipInitialAdvance: skipInitialAdvance
+        )
         if startsPlayback {
             startPlayerIfNeeded()
         }
@@ -620,6 +648,7 @@ public final class SherpaKokoroTTSService: TTSService {
     }
 
     private func resetPlayback(notifyStopped: Bool) {
+        playbackGeneration &+= 1
         activeTask?.cancel()
         activeTask = nil
         stopSpeechEnergyPulses()
@@ -662,11 +691,17 @@ private extension SherpaKokoroTTSService {
     private func enqueueSpeechEnergy(
         _ envelope: [Double],
         seed: Double,
-        unit: TTSSpeechUnit
+        unit: TTSSpeechUnit,
+        skipInitialAdvance: Bool = false
     ) {
         guard !envelope.isEmpty else { return }
 
-        let nextEnvelope = SpeechEnergyEnvelope(levels: envelope, seed: seed, unit: unit)
+        let nextEnvelope = SpeechEnergyEnvelope(
+            levels: envelope,
+            seed: seed,
+            unit: unit,
+            skipInitialAdvance: skipInitialAdvance
+        )
         if let waiter = speechEnergyWaiter {
             speechEnergyWaiter = nil
             waiter.resume(returning: nextEnvelope)
@@ -694,7 +729,9 @@ private extension SherpaKokoroTTSService {
 
                 self.spokenText = envelope.unit.text
                 if let locator = envelope.unit.locator {
-                    self.onAdvance?(locator)
+                    if !envelope.skipInitialAdvance {
+                        self.onAdvance?(locator)
+                    }
                     self.onSpokenRange?(locator)
                 }
                 self.speechEnergySeed = envelope.seed

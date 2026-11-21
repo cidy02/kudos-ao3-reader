@@ -887,6 +887,13 @@ extension InsightsD3D4Tests {
             if started {
                 status = .playing
                 onStatusChange?(.playing)
+                if let first = units.first(where: \.hasSpeakableText) ?? units.first {
+                    if let locator = first.locator {
+                        onAdvance?(locator)
+                    }
+                    spokenText = first.text
+                    onSpokenTextChange?(first.text)
+                }
             }
             return started
         }

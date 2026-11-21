@@ -51,11 +51,16 @@ public final class SystemTTSService: TTSService {
     private let synthesizer = AVSpeechSynthesizer()
     private let delegateProxy = DelegateProxy()
     private var activeTask: Task<Void, Never>?
+    private var playbackGeneration: UInt64 = 0
     private var interruptionObserver: NSObjectProtocol?
     private var utteranceWaiter: CheckedContinuation<Void, Never>?
     private var pauseWaiters: [CheckedContinuation<Void, Never>] = []
     private var activeUtteranceID: ObjectIdentifier?
     private var activeUtteranceUnit: TTSSpeechUnit?
+    #if DEBUG
+    var testSpeakUtterance: ((TTSSpeechUnit) async -> Void)?
+    var testSkipAudioSessionActivation = false
+    #endif
 
     private var chunks: [TTSSpeechUnit] = []
     private var currentIndex: Int = 0
@@ -93,10 +98,18 @@ public final class SystemTTSService: TTSService {
 
         chunks = prepared
         currentIndex = 0
+        let generation = playbackGeneration
 
+        #if DEBUG
+        if !testSkipAudioSessionActivation {
+            try activateAudioSession()
+        }
+        #else
         try activateAudioSession()
+        #endif
+        guard !Task.isCancelled, playbackGeneration == generation else { return false }
         status = .playing
-        startPlayback(from: 0)
+        startPlayback(from: 0, generation: generation)
         return true
     }
 
@@ -137,15 +150,15 @@ public final class SystemTTSService: TTSService {
 
     // MARK: - Playback
 
-    private func startPlayback(from index: Int) {
+    private func startPlayback(from index: Int, generation: UInt64) {
         activeTask?.cancel()
         currentIndex = index
         activeTask = Task { [weak self] in
-            await self?.playChunks(from: index)
+            await self?.playChunks(from: index, generation: generation)
         }
     }
 
-    private func playChunks(from startIndex: Int) async {
+    private func playChunks(from startIndex: Int, generation: UInt64) async {
         let bound = chunks.count
         guard startIndex < bound else {
             finishNaturally()
@@ -153,20 +166,33 @@ public final class SystemTTSService: TTSService {
         }
 
         for index in startIndex..<bound {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, playbackGeneration == generation else { return }
             await waitWhilePaused()
-            guard !Task.isCancelled, status != .stopped else { return }
+            guard !Task.isCancelled, playbackGeneration == generation, status == .playing else { return }
 
             currentIndex = index
             let chunk = chunks[index]
-            spokenText = chunk.text
             if let locator = chunk.locator {
                 onAdvance?(locator)
             }
+            guard !Task.isCancelled, playbackGeneration == generation, status != .stopped else { return }
+            spokenText = chunk.text
+            // A paused skip pauses from `onAdvance` / `onSpokenTextChange` before
+            // the synthesizer has started; hold this chunk until Resume instead of
+            // enqueuing an utterance while `.paused`.
+            await waitWhilePaused()
+            guard !Task.isCancelled, playbackGeneration == generation, status == .playing else { return }
 
+            #if DEBUG
+            if let testSpeakUtterance {
+                await testSpeakUtterance(chunk)
+                continue
+            }
+            #endif
             await speakUtterance(chunk)
         }
 
+        guard !Task.isCancelled, playbackGeneration == generation else { return }
         finishNaturally()
     }
 
@@ -251,6 +277,7 @@ public final class SystemTTSService: TTSService {
     }
 
     private func resetPlayback(notifyStopped: Bool) {
+        playbackGeneration &+= 1
         activeTask?.cancel()
         activeTask = nil
         synthesizer.stopSpeaking(at: .immediate)

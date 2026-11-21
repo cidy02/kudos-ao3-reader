@@ -99,6 +99,7 @@ struct InsightsReadAloudReview4Tests {
         #expect(back.contains("followsSpeech: speech.skipFollowsSpeechPosition"))
         #expect(back.contains("direction: .backward"))
         #expect(!back.contains("readingPosition"))
+        #expect(!back.contains("playSpeechChapterHaptic"))
         let forward = try #require(slice(
             view, from: "private func handleSpeechSkipForward()", to: "private func goToSpineChapterStart("
         ))
@@ -106,23 +107,31 @@ struct InsightsReadAloudReview4Tests {
         #expect(forward.contains("speechLocator: speech.resumeLocator"))
         #expect(forward.contains("followsSpeech: speech.skipFollowsSpeechPosition"))
         #expect(!forward.contains("readingPosition"))
-        // Read Aloud moves the page (`onAdvance`) once it has found a speakable chapter.
+        #expect(!forward.contains("playSpeechChapterHaptic"))
+        // Read Aloud moves the page (`onAdvance`) and fires the manual chapter haptic
+        // (`onChapterSkipCommitted`) only once a speakable chapter commits.
         let go = try #require(slice(
             view, from: "private func goToSpineChapterStart(", to: "private func handleSpeechSeekHoldStart("
         ))
-        #expect(go.contains("speech.reanchor(to: first, resumePlaying: resumePlaying, direction: direction)"))
+        #expect(go.contains(
+            "speech.reanchor(to: first, resumePlaying: resumePlaying, direction: direction, isManualSkip: true)"
+        ))
         #expect(!go.contains("book.go("))
+        #expect(view.contains("onChapterSkipCommitted: { playSpeechChapterHaptic() }"))
         #expect(view.contains("onSkipNext: { handleSpeechSkipForward() }"))
         #expect(view.contains("onSkipPrevious: { handleSpeechSkipBack() }"))
         #expect(view.contains("onSkipForward: { handleSpeechSkipForward() }"))
         #expect(view.contains("onSkipBack: { handleSpeechSkipBack() }"))
-        // The alert belongs to the reader Read Aloud is attached to.
+        // The alerts belong to the reader Read Aloud is attached to.
         #expect(view.contains(".alert(\"Nothing to Read Aloud\", isPresented: nothingToSpeakPresented)"))
+        #expect(view.contains("Text(speech.nothingToSpeakMessage)"))
+        #expect(view.contains(".alert(\"Couldn't Start Read Aloud\", isPresented: speechErrorPresented)"))
         let binding = try #require(slice(
             view, from: "private var nothingToSpeakPresented: Binding<Bool>", to: "private var kudosErrorPresented"
         ))
         #expect(binding.contains("speech.showsNothingToSpeakAlert && speech.openReaderWorkID == work.id"))
         #expect(binding.contains("speech.showsNothingToSpeakAlert = $0"))
+        #expect(binding.contains("speech.speechErrorMessage != nil && speech.openReaderWorkID == work.id"))
     }
 
     @Test func insightsViewKeepsItsRelockHandlersAndGatedSaveObserver() throws {
@@ -144,10 +153,19 @@ struct InsightsReadAloudReview4Tests {
         let saves = try #require(slice(
             view, from: "publisher(for: ModelContext.didSave)", to: ".refreshable {"
         ))
-        #expect(saves.contains(".debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)"))
+        #expect(saves.contains(".receive(on: DispatchQueue.main)"))
         #expect(saves.contains("guard isOnScreen else { return }"))
-        #expect(saves.contains("InsightsReloadDigest.make(works: libraryWorks, context: context)"))
-        #expect(view.contains(".onDisappear { isOnScreen = false }"))
+        #expect(saves.contains(
+            "reloadTracker.shouldReload(afterSave: notification, works: libraryWorks, context: context)"
+        ))
+        #expect(saves.contains("saveCoalescer.schedule"))
+        #expect(saves.contains("let digest = reloadTracker.currentDigest(works: libraryWorks, context: context)"))
+        #expect(saves.contains("if digest != libraryDigest { libraryDigest = digest }"))
+        let disappear = try #require(slice(
+            view, from: ".onDisappear {", to: ".onChange(of: gate.revealAll)"
+        ))
+        #expect(disappear.contains("isOnScreen = false"))
+        #expect(disappear.contains("saveCoalescer.cancel()"))
         let fingerprint = try #require(slice(
             view, from: "private var libraryWorksFingerprint: String", to: "private var reloadKey"
         ))
@@ -159,26 +177,33 @@ struct InsightsReadAloudReview4Tests {
 
     @Test func reloadDigestIgnoresPositionSavesAndTracksWhatInsightsCounts() throws {
         let context = try makeContext()
+        let now = Date(timeIntervalSince1970: 100_000)
         let work = SavedWork(title: "Digest", author: "A")
         work.isSaved = true
         work.wordCount = 5_000
+        // Already started and read today: mid-chapter position saves do not change
+        // any displayed bucket (unread/started, caught-up, abandoned, 7d/30d).
+        work.readiumLocator = #"{"href":"ch1.xhtml","locations":{"totalProgression":0.2}}"#
+        work.lastSpineIndex = 0
+        work.lastReadDate = now.addingTimeInterval(-600)
+        work.lastModifiedAt = now.addingTimeInterval(-600)
         context.insert(work)
         try context.save()
         let works = [work]
-        let base = InsightsReloadDigest.make(works: works, context: context)
+        let base = InsightsReloadDigest.make(works: works, context: context, now: now)
 
-        // Read Aloud / reader position saves.
+        // Read Aloud / reader mid-chapter position saves.
         work.legacyReaderProgress = 0.4
-        work.readiumLocator = "{\"href\":\"ch2.xhtml\",\"locations\":{\"totalProgression\":0.4}}"
+        work.readiumLocator = #"{"href":"ch2.xhtml","locations":{"totalProgression":0.4}}"#
         work.lastSpineIndex = 1
-        work.lastReadDate = Date(timeIntervalSince1970: 9_000)
-        work.lastModifiedAt = Date(timeIntervalSince1970: 9_000)
+        work.lastReadDate = now.addingTimeInterval(-60)
+        work.lastModifiedAt = now.addingTimeInterval(-60)
         try context.save()
-        #expect(InsightsReloadDigest.make(works: works, context: context) == base)
+        #expect(InsightsReloadDigest.make(works: works, context: context, now: now) == base)
 
         var previous = base
         func expectChanged(_ label: Comment) {
-            let next = InsightsReloadDigest.make(works: works, context: context)
+            let next = InsightsReloadDigest.make(works: works, context: context, now: now)
             #expect(next != previous, label)
             previous = next
         }
@@ -642,8 +667,9 @@ extension InsightsReadAloudReview4Tests {
         #expect(last.controller.status == .playing)
     }
 
-    /// Review P3: an engine that goes `.unavailable` on a paused skip is neither stopped
-    /// (which turned `.unavailable` back into `.stopped`) nor answered with chapter skips.
+    /// Review P3 / T-535e P1 #3: an engine that goes `.unavailable` on a paused skip
+    /// is neither stopped (which turned `.unavailable` back into `.stopped`) nor
+    /// allowed to move the reader or advance `resumeLocator`.
     @Test func engineGoingUnavailableOnPausedSkipStaysUnavailable() async {
         let engine = SpeakingStub()
         let rig = Rig(status: .paused, unspeakable: [], at: 2, engine: engine)
@@ -652,7 +678,8 @@ extension InsightsReadAloudReview4Tests {
         await rig.controller.waitForStartTaskForTests()
         #expect(rig.controller.status == .unavailable)
         #expect(engine.stopCount == 0)
-        #expect(rig.moves == ["ch3.xhtml"])
+        #expect(rig.moves.isEmpty)
+        #expect(rig.speechHref == "ch2.xhtml")
         #expect(!rig.controller.showsNothingToSpeakAlert)
     }
 

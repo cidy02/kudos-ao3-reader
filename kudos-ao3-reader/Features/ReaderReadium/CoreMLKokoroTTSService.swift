@@ -37,9 +37,19 @@ public final class CoreMLKokoroTTSService: TTSService {
     public var onSpokenRange: ((Locator) -> Void)?
 
     private var activeTask: Task<Void, Never>?
+    /// Monotonic token incremented on every `resetPlayback` so a cancelled `speak`
+    /// waking up after setup awaits (`readyManager`, lexicon, observer) can never
+    /// publish `.playing` or start audio after Stop or reader teardown.
+    private var playbackGeneration: UInt64 = 0
     /// The prefetch is an *unstructured* `Task`, so cancelling `activeTask`
     /// does not reach it. Type-erased so the property needs no `#if`.
     private var cancelPrefetch: (() -> Void)?
+    #if DEBUG
+    /// Test seam: replaces availability + Core ML pack/manager setup so unit tests
+    /// can suspend `speak(units:)` mid-startup without requiring the 180 MB pack.
+    var testSetupOverride: (() async throws -> Void)?
+    var testDidStartPlaybackTask = false
+    #endif
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private var playerAttached = false
@@ -59,6 +69,18 @@ public final class CoreMLKokoroTTSService: TTSService {
     @discardableResult
     public func speak(units: [TTSSpeechUnit]) async throws -> Bool {
         resetPlayback(notifyStopped: false)
+        let generation = playbackGeneration
+        guard !Task.isCancelled else { return false }
+
+        #if DEBUG
+        if let testSetupOverride {
+            return try await runTestSpeak(
+                units: units,
+                generation: generation,
+                setup: testSetupOverride
+            )
+        }
+        #endif
 
         guard KokoroAneAvailability.isUsableForPlayback else {
             Log.tts.error("Kokoro Neural Engine pack is not installed")
@@ -73,11 +95,13 @@ public final class CoreMLKokoroTTSService: TTSService {
 
         #if canImport(FluidAudio)
         let manager = try await CoreMLKokoroPackInstaller.shared.readyManager()
+        guard isCurrentStart(generation) else { return false }
         let (lexicon, lexiconRevision) = pronunciations.resolved()
         // `KokoroAneManager` is an actor: without `await` the lexicon lands
         // *after* the first utterances synthesize (and it is a hard error in
         // Swift 6 language mode).
         await manager.setEnglishCustomLexicon(lexicon)
+        guard isCurrentStart(generation) else { return false }
         // Record what the model had to guess at, so the reader can correct it
         // later. Buffered, not written per word: the observer fires inside
         // synthesis and a disk write there would sit on the path that has to
@@ -86,6 +110,7 @@ public final class CoreMLKokoroTTSService: TTSService {
         await manager.setNeuralFallbackObserver { word in
             collector.add(word)
         }
+        guard isCurrentStart(generation) else { return false }
         #else
         status = .unavailable
         return false
@@ -102,88 +127,152 @@ public final class CoreMLKokoroTTSService: TTSService {
         // the chapter in the voice it started in.
         let voice = currentVoice
 
+        #if canImport(FluidAudio)
         activeTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            #if canImport(FluidAudio)
-            var prefetched: PreparedClip?
-            for index in utterances.indices {
-                guard !Task.isCancelled, self.status != .stopped else { return }
-                await self.waitWhilePaused()
-                guard !Task.isCancelled, self.status == .playing else { return }
+            await self?.runPlaybackLoop(
+                utterances: utterances,
+                generation: generation,
+                manager: manager,
+                voice: voice,
+                lexiconRevision: lexiconRevision
+            )
+        }
+        #endif
+        return true
+    }
 
-                let utterance = utterances[index]
-                self.spokenText = utterance.text
-                if let locator = utterance.locator {
+    #if DEBUG
+    private func runTestSpeak(
+        units: [TTSSpeechUnit],
+        generation: UInt64,
+        setup: () async throws -> Void
+    ) async throws -> Bool {
+        let utterances = TTSSpeechUnit.kokoroUtterances(from: units)
+        guard !utterances.isEmpty else { return false }
+        try await setup()
+        guard isCurrentStart(generation) else { return false }
+        status = .playing
+        testDidStartPlaybackTask = true
+        activeTask = Task { @MainActor [weak self] in
+            guard let self, self.isCurrentStart(generation) else { return }
+            if let first = utterances.first {
+                if let locator = first.locator {
                     self.onAdvance?(locator)
+                }
+                guard self.isCurrentStart(generation), self.status != .stopped else { return }
+                self.spokenText = first.text
+                if let locator = first.locator {
                     self.onSpokenRange?(locator)
                 }
+                await self.waitWhilePaused()
+                guard self.isCurrentStart(generation), self.status == .playing else { return }
+            }
+        }
+        return true
+    }
+    #endif
 
-                let clip: PreparedClip
+    #if canImport(FluidAudio)
+    private func runPlaybackLoop(
+        utterances: [KokoroUtterance],
+        generation: UInt64,
+        manager: KokoroAneManager,
+        voice: String,
+        lexiconRevision: String
+    ) async {
+        var prefetched: PreparedClip?
+        for index in utterances.indices {
+            guard isCurrentStart(generation), status != .stopped else { return }
+            await waitWhilePaused()
+            guard isCurrentStart(generation), status == .playing else { return }
+
+            let utterance = utterances[index]
+            let clip: PreparedClip
+            do {
+                if let prefetched {
+                    clip = prefetched
+                } else {
+                    clip = try await prepareClip(
+                        utterance: utterance,
+                        isLast: index == utterances.indices.last,
+                        manager: manager,
+                        voice: voice,
+                        speed: currentSpeed,
+                        lexiconRevision: lexiconRevision
+                    )
+                }
+                prefetched = nil
+            } catch is CancellationError {
+                return
+            } catch {
+                guard isCurrentStart(generation) else { return }
+                Log.tts.error(
+                    "Kokoro ANE synthesize failed: \(error.localizedDescription, privacy: .public)"
+                )
+                status = .unavailable
+                return
+            }
+
+            guard isCurrentStart(generation), status != .stopped else { return }
+            guard !clip.samples.isEmpty else { continue }
+
+            // Emit the utterance's locator/caption only once playable PCM exists,
+            // then re-check pause so a paused skip holds clip 0 ready for Resume
+            // instead of playing or skipping it.
+            if let locator = utterance.locator {
+                onAdvance?(locator)
+            }
+            guard isCurrentStart(generation), status != .stopped else { return }
+            spokenText = utterance.text
+            if let locator = utterance.locator {
+                onSpokenRange?(locator)
+            }
+            await waitWhilePaused()
+            guard isCurrentStart(generation), status == .playing else { return }
+
+            let nextIndex = utterances.index(after: index)
+            let prefetch: Task<PreparedClip, Error>?
+            if nextIndex < utterances.endIndex {
+                let next = utterances[nextIndex]
+                let task = Task {
+                    try await self.prepareClip(
+                        utterance: next,
+                        isLast: nextIndex == utterances.indices.last,
+                        manager: manager,
+                        voice: voice,
+                        speed: self.currentSpeed,
+                        lexiconRevision: lexiconRevision
+                    )
+                }
+                cancelPrefetch = { task.cancel() }
+                prefetch = task
+            } else {
+                prefetch = nil
+            }
+
+            Log.tts.info(
+                "Kokoro ANE \(clip.timingsMs, privacy: .public)ms phonemes=\(clip.phonemeCount, privacy: .public)"
+            )
+            await play(clip: clip)
+
+            if let prefetch {
                 do {
-                    if let prefetched {
-                        clip = prefetched
-                    } else {
-                        clip = try await self.prepareClip(
-                            utterance: utterance,
-                            isLast: index == utterances.indices.last,
-                            manager: manager,
-                            voice: voice,
-                            speed: self.currentSpeed,
-                            lexiconRevision: lexiconRevision
-                        )
-                    }
-                    prefetched = nil
+                    prefetched = try await prefetch.value
                 } catch is CancellationError {
                     return
                 } catch {
-                    Log.tts.error(
-                        "Kokoro ANE synthesize failed: \(error.localizedDescription, privacy: .public)"
-                    )
-                    self.status = .unavailable
-                    return
+                    prefetched = nil
                 }
-
-                let nextIndex = utterances.index(after: index)
-                let prefetch: Task<PreparedClip, Error>?
-                if nextIndex < utterances.endIndex {
-                    let next = utterances[nextIndex]
-                    let task = Task {
-                        try await self.prepareClip(
-                            utterance: next,
-                            isLast: nextIndex == utterances.indices.last,
-                            manager: manager,
-                            voice: voice,
-                            speed: self.currentSpeed,
-                            lexiconRevision: lexiconRevision
-                        )
-                    }
-                    self.cancelPrefetch = { task.cancel() }
-                    prefetch = task
-                } else {
-                    prefetch = nil
-                }
-
-                Log.tts.info(
-                    "Kokoro ANE \(clip.timingsMs, privacy: .public)ms phonemes=\(clip.phonemeCount, privacy: .public)"
-                )
-                await self.play(clip: clip)
-
-                if let prefetch {
-                    do {
-                        prefetched = try await prefetch.value
-                    } catch is CancellationError {
-                        return
-                    } catch {
-                        prefetched = nil
-                    }
-                    self.cancelPrefetch = nil
-                }
+                cancelPrefetch = nil
             }
-            #endif
-            guard !Task.isCancelled else { return }
-            self.finishNaturally()
         }
-        return true
+        guard isCurrentStart(generation) else { return }
+        finishNaturally()
+    }
+    #endif
+
+    private func isCurrentStart(_ generation: UInt64) -> Bool {
+        !Task.isCancelled && playbackGeneration == generation
     }
 
     #if canImport(FluidAudio)
@@ -387,6 +476,7 @@ public final class CoreMLKokoroTTSService: TTSService {
     }
 
     private func resetPlayback(notifyStopped: Bool) {
+        playbackGeneration &+= 1
         activeTask?.cancel()
         activeTask = nil
         cancelPrefetch?()

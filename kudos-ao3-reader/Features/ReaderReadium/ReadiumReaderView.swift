@@ -420,7 +420,12 @@ struct ReadiumReaderView: View {
             .alert("Nothing to Read Aloud", isPresented: nothingToSpeakPresented) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("From here to the end of this work there is no text Read Aloud can speak, only images, symbols or scene breaks.")
+                Text(speech.nothingToSpeakMessage)
+            }
+            .alert("Couldn't Start Read Aloud", isPresented: speechErrorPresented) {
+                Button("OK", role: .cancel) { speech.speechErrorMessage = nil }
+            } message: {
+                Text(speech.speechErrorMessage ?? "")
             }
             // Immersive reading: hide the tab bar; the status bar follows the chrome.
             .toolbar(.hidden, for: .tabBar)
@@ -595,6 +600,7 @@ struct ReadiumReaderView: View {
             },
             onSpokenRange: { locator in book.applySpeechDecoration(at: locator) },
             onSessionEnded: { book.applySpeechDecoration(at: nil) },
+            onChapterSkipCommitted: { playSpeechChapterHaptic() },
             // Lock Screen / Island previous-next track = chapter skip (mini player).
             onSkipPrevious: { handleSpeechSkipBack() },
             onSkipNext: { handleSpeechSkipForward() }
@@ -1922,7 +1928,6 @@ extension ReadiumReaderView {
             followsSpeech: speech.skipFollowsSpeechPosition
         ) else { return }
         goToSpineChapterStart(target, resumePlaying: speech.isPlaying, direction: .backward)
-        playSpeechChapterHaptic()
     }
 
     @discardableResult
@@ -1932,15 +1937,14 @@ extension ReadiumReaderView {
             speechLocator: speech.resumeLocator,
             followsSpeech: speech.skipFollowsSpeechPosition
         ) else { return false }
-        let didMove = goToSpineChapterStart(target, resumePlaying: speech.isPlaying)
-        if didMove { playSpeechChapterHaptic() }
-        return didMove
+        return goToSpineChapterStart(target, resumePlaying: speech.isPlaying)
     }
 
     /// 1-based spine chapter → first Readium position; re-anchors TTS there. The
-    /// page is not moved here: Read Aloud moves it (`onAdvance`) once it has found a
-    /// chapter it can speak, so skipping onto art-only chapters never jumps the
-    /// reader to the end, rewrites progress or marks the work finished.
+    /// page is not moved here: Read Aloud moves it (`onAdvance`) and fires the
+    /// chapter haptic (`onChapterSkipCommitted`) once a speakable chapter commits,
+    /// so skipping onto art-only chapters never jumps the reader to the end,
+    /// rewrites progress or marks the work finished.
     @discardableResult
     private func goToSpineChapterStart(
         _ chapter1Based: Int,
@@ -1953,7 +1957,7 @@ extension ReadiumReaderView {
         else { return false }
         // Keep a paused session paused at the new chapter; only autoplay if we
         // were already speaking.
-        speech.reanchor(to: first, resumePlaying: resumePlaying, direction: direction)
+        speech.reanchor(to: first, resumePlaying: resumePlaying, direction: direction, isManualSkip: true)
         return true
     }
 
@@ -2147,6 +2151,13 @@ extension ReadiumReaderView {
         Binding(
             get: { speech.showsNothingToSpeakAlert && speech.openReaderWorkID == work.id },
             set: { speech.showsNothingToSpeakAlert = $0 }
+        )
+    }
+
+    private var speechErrorPresented: Binding<Bool> {
+        Binding(
+            get: { speech.speechErrorMessage != nil && speech.openReaderWorkID == work.id },
+            set: { if !$0 { speech.speechErrorMessage = nil } }
         )
     }
 
