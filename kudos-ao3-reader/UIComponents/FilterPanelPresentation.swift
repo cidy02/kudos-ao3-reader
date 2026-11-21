@@ -143,8 +143,9 @@ struct FilterPanelChrome: ViewModifier {
                         Image(systemName: "xmark").hidden().accessibilityHidden(true)
                     }
                 }
+                .frame(minHeight: isDocked ? 44 : 0)
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.vertical, isDocked ? 8 : 12)
             }
         } else {
             content

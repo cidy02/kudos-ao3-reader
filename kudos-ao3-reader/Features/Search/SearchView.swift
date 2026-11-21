@@ -179,6 +179,13 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     var body: some View {
         NavigationStack(path: $path) {
             content
+                // On the open/Book Duo, host the search field at the top of the leading
+                // pane instead of the full-width navigation bar so it never spans the fold.
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if isFiltersDocked {
+                        dockedSearchBar
+                    }
+                }
                 // Shares the inner bottom inset with the queue toast inside NavigationStack so
                 // neither draws over the other (a stack-outer inset never reduced the inner safe area).
                 // Applied inside the leading fold inset & before `.filterPanelPresentation` so
@@ -224,7 +231,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     consumeQueueSearch()
                 }
                 .onChange(of: savedSearches.map(\.id)) { _, _ in consumeQueueSearch() }
-                .navigationTitle("Search")
+                .navigationTitle(isFiltersDocked ? "" : "Search")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -289,7 +296,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                             .accessibilityLabel("Back")
                         }
                         #endif
-                        ToolbarItem(placement: .principal) { searchField }
+                        if !isFiltersDocked {
+                            ToolbarItem(placement: .principal) { searchField }
+                        }
                         // Save and Filter sit directly visible after the search field —
                         // everything else (Select, Expand/Collapse) lives behind "...".
                         ActionToolbar(items: [
@@ -936,6 +945,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     }
 
     // MARK: Search bar + filter button
+
+    private var dockedSearchBar: some View {
+        searchField
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .glassEffect(.regular.interactive(), in: .capsule)
+            .padding(.horizontal, SubjectMetrics.gutter)
+            .padding(.vertical, 8)
+    }
 
     private var searchField: some View {
         GlassFieldBar(text: $filters.query, placeholder: "Library and AO3", onSubmit: { runSearch() }) {

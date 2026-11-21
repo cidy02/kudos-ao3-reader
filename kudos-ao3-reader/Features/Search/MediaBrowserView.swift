@@ -141,29 +141,6 @@ struct MediaBrowserView: View {
     }
 
     #if os(iOS)
-    /// Pure column spans aligning the Browse category grid's gutter to the Duo fold
-    /// (40 pt clear in Open, 16 pt inset from the fold shadow in Book), inside the
-    /// grid's `gutter`-padded box. At accessibility sizes keeps one column in the
-    /// leading pane so cards neither squeeze nor cross the fold.
-    nonisolated static func duoCategoryColumnSpans(
-        panes: DuoFoldPanes,
-        gutter: CGFloat = 16,
-        isAccessibilitySize: Bool,
-        rightToLeft: Bool = false
-    ) -> [MasonryLayout.ColumnSpan] {
-        let ordered = panes.ordered(rightToLeft: rightToLeft)
-        let leadingWidth = max(0, ordered.leading.width - gutter)
-        let leadingSpan = MasonryLayout.ColumnSpan(minX: 0, width: leadingWidth)
-        if isAccessibilitySize {
-            return [leadingSpan]
-        }
-        let trailingSpan = MasonryLayout.ColumnSpan(
-            minX: leadingWidth + panes.foldClearance,
-            width: max(0, ordered.trailing.width - gutter)
-        )
-        return [leadingSpan, trailingSpan]
-    }
-
     /// Board 13: Jump Back In followed by a two-column masonry of solid colour cards.
     /// On the open/Book iPhone Duo, aligns the masonry gutter to the vertical fold and
     /// keeps Jump Back In and the website row inside the leading pane.
@@ -1257,3 +1234,30 @@ struct BrowseCategoryFandomChipLabel: View {
         return "\(title), \(count) works\(familiarNote)"
     }
 }
+
+#if os(iOS)
+extension MediaBrowserView {
+    /// Pure column spans aligning the Browse category grid's gutter to the Duo fold
+    /// (40 pt clear in Open, 16 pt inset from the fold shadow in Book), inside the
+    /// grid's `gutter`-padded box. At accessibility sizes keeps one column in the
+    /// leading pane so cards neither squeeze nor cross the fold.
+    nonisolated static func duoCategoryColumnSpans(
+        panes: DuoFoldPanes,
+        gutter: CGFloat = 16,
+        isAccessibilitySize: Bool,
+        rightToLeft: Bool = false
+    ) -> [MasonryLayout.ColumnSpan] {
+        let ordered = panes.ordered(rightToLeft: rightToLeft)
+        let leadingWidth = max(0, ordered.leading.width - gutter)
+        let leadingSpan = MasonryLayout.ColumnSpan(minX: 0, width: leadingWidth)
+        if isAccessibilitySize {
+            return [leadingSpan]
+        }
+        let trailingSpan = MasonryLayout.ColumnSpan(
+            minX: leadingWidth + panes.foldClearance,
+            width: max(0, ordered.trailing.width - gutter)
+        )
+        return [leadingSpan, trailingSpan]
+    }
+}
+#endif
