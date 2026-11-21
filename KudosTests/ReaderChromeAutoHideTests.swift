@@ -682,26 +682,26 @@ struct ReaderChromeAutoHideTests {
         book.seedInitialPreferences(EPUBPreferences(scroll: false))
         let ch1 = try #require(AnyURL(string: "OEBPS/chapter1.xhtml"))
         let ch2 = try #require(AnyURL(string: "OEBPS/chapter2.xhtml"))
-        let a = Locator(href: ch1, mediaType: .xhtml, locations: .init(progression: 0.0, position: 1))
-        let b = Locator(href: ch2, mediaType: .xhtml, locations: .init(progression: 0.0, position: 9))
+        let start = Locator(href: ch1, mediaType: .xhtml, locations: .init(progression: 0.0, position: 1))
+        let landing = Locator(href: ch2, mediaType: .xhtml, locations: .init(progression: 0.0, position: 9))
         let ch3 = try #require(AnyURL(string: "OEBPS/chapter3.xhtml"))
-        let c = Locator(href: ch3, mediaType: .xhtml, locations: .init(progression: 0.0, position: 17))
+        let later = Locator(href: ch3, mediaType: .xhtml, locations: .init(progression: 0.0, position: 17))
 
         var turns = 0
         book.onUserPageTurn = { turns += 1 }
-        book.navigator(nav, locationDidChange: a)
+        book.navigator(nav, locationDidChange: start)
         clock = clock.addingTimeInterval(5) // opening and relayout windows long gone
 
         let link = ReadiumShared.Link(href: "OEBPS/chapter2.xhtml")
         #expect(book.navigator(nav, shouldNavigateToLink: link))
         clock = clock.addingTimeInterval(0.4)
-        book.navigator(nav, locationDidChange: b)
-        book.navigator(nav, didJumpTo: b)
+        book.navigator(nav, locationDidChange: landing)
+        book.navigator(nav, didJumpTo: landing)
         #expect(turns == 0)
 
         // Once the echo expires an ordinary page turn hides again.
         clock = clock.addingTimeInterval(ReaderChromeAutoHide.linkJumpLead + 0.1)
-        book.navigator(nav, locationDidChange: c)
+        book.navigator(nav, locationDidChange: later)
         #expect(turns == 1)
     }
 
