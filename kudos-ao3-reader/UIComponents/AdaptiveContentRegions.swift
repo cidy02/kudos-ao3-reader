@@ -186,6 +186,9 @@ nonisolated struct AdaptiveContentRegions: Equatable {
 
 extension EnvironmentValues {
     @Entry var dashboardContentRegions: AdaptiveContentRegions?
+    /// The `DashboardRegionHost`'s global leading edge, so window-coordinate fold
+    /// frames translate accurately into local viewport coordinates (e.g. 180° landscape).
+    @Entry var dashboardViewportMinX: CGFloat = 0
 }
 
 /// Measure outside the vertical scroll: reservations stay in viewport coordinates
@@ -202,8 +205,10 @@ struct DashboardRegionHost<Content: View>: View {
             GeometryReader { proxy in
                 let regions = AdaptiveContentRegions(viewport: proxy)
                 let viewport = regions.viewport
+                let globalMinX = proxy.frame(in: .global).minX + viewport.minX
                 content()
                     .environment(\.dashboardContentRegions, regions)
+                    .environment(\.dashboardViewportMinX, globalMinX)
                     .frame(width: viewport.width, height: viewport.height)
                     .position(x: viewport.midX, y: viewport.midY)
                     .opacity(viewport.isEmpty ? 0 : 1)

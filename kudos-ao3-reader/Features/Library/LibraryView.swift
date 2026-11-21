@@ -427,31 +427,57 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     private var realDashboard: some View { shelvesDashboard }
 
     private var shelvesDashboard: some View {
-        ScrollView {
-            // 26pt between sections (Rules; 1c drew 22), the chips' row included.
-            VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
-                libraryHeaderLink
-                fandomFilterBar
-                ForEach(pageArrangement.sections) { section in
-                    arrangedSection(section)
-                }
-                if !pageArrangement.buttons.isEmpty {
-                    LibraryShelfButtonGrid(
-                        buttons: pageArrangement.buttons,
-                        counts: shelfCounts,
-                        onEdit: { showingEditShelves = true },
-                        onOpen: openShelf
-                    )
-                    .dashboardLeadingRegion()
-                }
-                onAO3Panel.dashboardLeadingRegion()
-                if recentlyDeletedCount > 0 {
-                    recentlyDeletedRow.dashboardLeadingRegion()
-                }
+        let duoSplit = pageArrangement.duoPaneSections()
+        return DuoFoldAdaptiveScrollHost(onRefresh: { await refreshLibraryDashboard() }) {
+            libraryHeaderLink
+            fandomFilterBar
+            ForEach(duoSplit.leading) { section in
+                arrangedSection(section)
             }
-            .padding(.vertical, 12)
+        } trailing: {
+            ForEach(duoSplit.trailing) { section in
+                arrangedSection(section)
+            }
+            if !pageArrangement.buttons.isEmpty {
+                LibraryShelfButtonGrid(
+                    buttons: pageArrangement.buttons,
+                    counts: shelfCounts,
+                    forcesCompactColumns: true,
+                    onEdit: { showingEditShelves = true },
+                    onOpen: openShelf
+                )
+            }
+            onAO3Panel
+            if recentlyDeletedCount > 0 {
+                recentlyDeletedRow
+            }
+        } fallback: {
+            ScrollView {
+                // 26pt between sections (Rules; 1c drew 22), the chips' row included.
+                VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
+                    libraryHeaderLink
+                    fandomFilterBar
+                    ForEach(pageArrangement.sections) { section in
+                        arrangedSection(section)
+                    }
+                    if !pageArrangement.buttons.isEmpty {
+                        LibraryShelfButtonGrid(
+                            buttons: pageArrangement.buttons,
+                            counts: shelfCounts,
+                            onEdit: { showingEditShelves = true },
+                            onOpen: openShelf
+                        )
+                        .dashboardLeadingRegion()
+                    }
+                    onAO3Panel.dashboardLeadingRegion()
+                    if recentlyDeletedCount > 0 {
+                        recentlyDeletedRow.dashboardLeadingRegion()
+                    }
+                }
+                .padding(.vertical, 12)
+            }
+            .refreshable { await refreshLibraryDashboard() }
         }
-        .refreshable { await refreshLibraryDashboard() }
     }
 
     private var onAO3Panel: some View {

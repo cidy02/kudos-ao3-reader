@@ -203,30 +203,28 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 if hasSectionCache {
                     DashboardRegionHost {
                         ScrollViewReader { proxy in
-                            ScrollView {
-                                // 26pt between sections (Rules; 1b drew 22).
-                                VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
-                                    statsLine
-                                    resumeSection
-                                    newChaptersSection
-                                        .id("chapters")
-                                    readingQueuesSection
-                                        .id("queues")
-                                    let shelves = HomeCollectionShelves.shelves(homeCollections)
-                                    ForEach(Array(shelves.enumerated()), id: \.element.id) { index, collection in
-                                        HomeCollectionShelf(
-                                            collection: collection,
-                                            works: HomeCollectionShelves.works(in: collection, visible: passesPrivacy),
-                                            onSeeAll: { path.append(collection) }
-                                        )
-                                        .id(index == 0 ? "collections" : "collection:\(collection.id)")
+                            DuoFoldAdaptiveScrollHost(onRefresh: { await refreshHome() }) {
+                                duoLeadingHomeSections
+                            } trailing: {
+                                duoTrailingHomeSections
+                            } fallback: {
+                                ScrollView {
+                                    // 26pt between sections (Rules; 1b drew 22).
+                                    VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
+                                        statsLine
+                                        resumeSection
+                                        newChaptersSection
+                                            .id("chapters")
+                                        readingQueuesSection
+                                            .id("queues")
+                                        pinnedCollectionShelves
+                                        subscriptionsSection
+                                            .id("subscriptions")
                                     }
-                                    subscriptionsSection
-                                        .id("subscriptions")
+                                    .padding(.vertical, 12)
                                 }
-                                .padding(.vertical, 12)
+                                .refreshable { await refreshHome() }
                             }
-                            .refreshable { await refreshHome() }
                             #if os(iOS)
                             .task { await mailDriver.refreshIfNeeded() }
                             #endif
@@ -540,37 +538,139 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         .buttonStyle(.plain)
     }
 
+    /// Open & Book Duo leading pane (`Duo-Open-Home`, `Duo-Book-Home`):
+    /// weekly stats, Resume card, Reading Now ("Also Reading") carousel, then pinned collections.
+    @ViewBuilder
+    private var duoLeadingHomeSections: some View {
+        statsLine
+        if readingNow.isEmpty {
+            resumeEmptySection
+        } else {
+            let heroWork = readingNow[0]
+            let carouselWorks = Array(readingNow.dropFirst().prefix(HomeReadingNowCount.carouselLimit))
+            let counts = HomeReadingNowCount.shelfCounts(total: readingNow.count)
+            HomeResumeHero(
+                work: heroWork,
+                isSelecting: isSelecting,
+                isSelected: selection.contains(heroWork.id),
+                onToggleSelection: { toggleSelection(heroWork) },
+                onSelect: selectAction(for: heroWork),
+                onPrimary: { path.append(LocalWorkDestination.reader(heroWork)) },
+                onReadAloud: { path.append(LocalWorkDestination.readerReadAloud(heroWork)) }
+            )
+            .downloadDimmed(heroWork)
+            .padding(.horizontal, 16)
+
+            if !carouselWorks.isEmpty {
+                WorkCarouselSection(
+                    title: "Reading Now",
+                    hasItems: true,
+                    itemCount: counts.sectionCount,
+                    visibleCount: counts.visibleCount,
+                    onSeeAll: { router.showLibrarySection(.readingNow, from: "Home") }
+                ) {
+                    readingNowCarouselCards(carouselWorks)
+                } emptyState: {
+                    EmptyView()
+                }
+            }
+        }
+        pinnedCollectionShelves
+    }
+
+    /// Open & Book Duo trailing pane (`Duo-Open-Home`, `Duo-Book-Home`):
+    /// New Chapters, Reading Queues, and Subscriptions.
+    @ViewBuilder
+    private var duoTrailingHomeSections: some View {
+        newChaptersSection
+            .id("chapters")
+        readingQueuesSection
+            .id("queues")
+        subscriptionsSection
+            .id("subscriptions")
+    }
+
+    @ViewBuilder
+    private var pinnedCollectionShelves: some View {
+        let shelves = HomeCollectionShelves.shelves(homeCollections)
+        ForEach(Array(shelves.enumerated()), id: \.element.id) { index, collection in
+            HomeCollectionShelf(
+                collection: collection,
+                works: HomeCollectionShelves.works(in: collection, visible: passesPrivacy),
+                onSeeAll: { path.append(collection) }
+            )
+            .id(index == 0 ? "collections" : "collection:\(collection.id)")
+        }
+    }
+
+    private var resumeEmptySection: some View {
+        // Strong empty state (Synthesis v2): section chrome + CTAs, not a
+        // dead hero-shaped hole. Same header weight as other Home rows.
+        VStack(alignment: .leading, spacing: 11) {
+            SectionRuleHeader(title: "Continue Reading")
+                .dashboardLeadingRegion()
+
+            SectionEmptyState(
+                message: HomeSectionKind.readingNow.emptyMessage,
+                systemImage: HomeSectionKind.readingNow.emptyIcon
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .dashboardLeadingRegion()
+
+            HStack(spacing: 12) {
+                Button("Browse AO3") {
+                    router.selection = .browse
+                }
+                .buttonStyle(.kudosPrimary)
+
+                Button("Open Library") {
+                    router.selection = .library
+                }
+                .buttonStyle(.kudosSecondary)
+            }
+            .padding(.horizontal, 16)
+            .dashboardLeadingRegion()
+        }
+    }
+
+    @ViewBuilder
+    private func readingNowCarouselCards(_ carouselWorks: [SavedWork]) -> some View {
+        ForEach(carouselWorks) { work in
+            if isSelecting {
+                SensitiveWorkCoverCard(
+                    work: work,
+                    footer: footer(.readingNow, work),
+                    progress: progress(.readingNow, work),
+                    isSelecting: true,
+                    isSelected: selection.contains(work.id),
+                    onToggleSelection: { toggleSelection(work) }
+                )
+                .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+            } else if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+                SensitiveWorkCoverCard(
+                    work: work,
+                    footer: footer(.readingNow, work),
+                    progress: progress(.readingNow, work)
+                )
+            } else {
+                NavigationLink(value: LocalWorkDestination.reader(work)) {
+                    SensitiveWorkCoverCard(
+                        work: work,
+                        footer: footer(.readingNow, work),
+                        progress: progress(.readingNow, work)
+                    )
+                }
+                .buttonStyle(.plain)
+                .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+            }
+        }
+    }
+
     private var resumeSection: some View {
         Group {
             if readingNow.isEmpty {
-                // Strong empty state (Synthesis v2): section chrome + CTAs, not a
-                // dead hero-shaped hole. Same header weight as other Home rows.
-                VStack(alignment: .leading, spacing: 11) {
-                    SectionRuleHeader(title: "Continue Reading")
-                        .dashboardLeadingRegion()
-
-                    SectionEmptyState(
-                        message: HomeSectionKind.readingNow.emptyMessage,
-                        systemImage: HomeSectionKind.readingNow.emptyIcon
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .dashboardLeadingRegion()
-
-                    HStack(spacing: 12) {
-                        Button("Browse AO3") {
-                            router.selection = .browse
-                        }
-                        .buttonStyle(.kudosPrimary)
-
-                        Button("Open Library") {
-                            router.selection = .library
-                        }
-                        .buttonStyle(.kudosSecondary)
-                    }
-                    .padding(.horizontal, 16)
-                    .dashboardLeadingRegion()
-                }
+                resumeEmptySection
             } else {
                 let heroWork = readingNow[0]
                 let carouselWorks = Array(readingNow.dropFirst().prefix(HomeReadingNowCount.carouselLimit))
@@ -593,35 +693,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     )
                     .downloadDimmed(heroWork)
                 } next: {
-                    ForEach(carouselWorks) { work in
-                        if isSelecting {
-                            SensitiveWorkCoverCard(
-                                work: work,
-                                footer: footer(.readingNow, work),
-                                progress: progress(.readingNow, work),
-                                isSelecting: true,
-                                isSelected: selection.contains(work.id),
-                                onToggleSelection: { toggleSelection(work) }
-                            )
-                            .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
-                        } else if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
-                            SensitiveWorkCoverCard(
-                                work: work,
-                                footer: footer(.readingNow, work),
-                                progress: progress(.readingNow, work)
-                            )
-                        } else {
-                            NavigationLink(value: LocalWorkDestination.reader(work)) {
-                                SensitiveWorkCoverCard(
-                                    work: work,
-                                    footer: footer(.readingNow, work),
-                                    progress: progress(.readingNow, work)
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
-                        }
-                    }
+                    readingNowCarouselCards(carouselWorks)
                 }
             }
         }

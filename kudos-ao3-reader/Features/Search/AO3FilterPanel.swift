@@ -30,6 +30,8 @@ struct AO3FilterPanel: View {
     enum Mode { case search, refine }
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.filterPanelIsDocked) private var isDocked
+    @Environment(\.duoLayout) private var duoLayout
     @Environment(ThemeManager.self) var theme
     @ScaledMetric(relativeTo: .footnote) private var refineMatchSize: CGFloat = 12.5
     @ScaledMetric(relativeTo: .caption) var sortHintSize: CGFloat = 12
@@ -118,11 +120,15 @@ struct AO3FilterPanel: View {
     }
 
     var body: some View {
+        let bookLeadingInset: CGFloat = (isDocked && duoLayout.isVerticalFoldActive)
+            ? DuoLayoutSignal.bookFoldInset
+            : 0
         NavigationStack {
             VStack(spacing: 0) {
                 refineMatchLine
                 form
             }
+            .padding(.leading, bookLeadingInset)
             .filterPanelChrome(title: worksSort == nil ? (mode == .refine ? "Refine" : "Filters") : "Sort and Filter")
                 .modifier(WorksFilterSheetGround())
                 .safeAreaInset(edge: .bottom) {
@@ -133,6 +139,7 @@ struct AO3FilterPanel: View {
                         isSaveDisabled: !filters.isSearchable,
                         onConfirm: confirm
                     )
+                    .padding(.leading, bookLeadingInset)
                 }
         }
         #if os(iOS)
@@ -169,7 +176,7 @@ struct AO3FilterPanel: View {
             onApplyWorksSort?(sort)
         }
         onApply()
-        dismiss()
+        if !isDocked { dismiss() }
     }
 
     static func showsPageCompletionFacet(worksSort: AO3WorksSort?) -> Bool {

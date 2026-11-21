@@ -164,9 +164,30 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         case idle, loading, loaded, failed(String)
     }
 
+    /// On the open/Book iPhone Duo, Search splits into results on the leading pane
+    /// and a persistently docked Filters pane on the trailing pane (`Duo-Open-Search`).
+    private var isFiltersDocked: Bool {
+        duoLayout.isFoldSplitLandscape && path.isEmpty && !bulkSelection.isSelecting && !isSelectingLocal
+    }
+
+    private var searchBackdrop: Color {
+        phase == .idle && localQuery.isEmpty && savedSearches.isEmpty
+            ? themeManager.appTheme.cardBackdrop
+            : themeManager.appTheme.contentBackdrop
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
             content
+                // Shares the inner bottom inset with the queue toast inside NavigationStack so
+                // neither draws over the other (a stack-outer inset never reduced the inner safe area).
+                // Applied inside the leading fold inset & before `.filterPanelPresentation` so
+                // the pagination pill stays centred in the leading pane and never crosses the fold.
+                .remoteWorkSelectionChrome(bulkSelection, showsBottomAccessory: showPagination) {
+                    paginationBar.padding(.horizontal, SubjectMetrics.gutter)
+                }
+                .padding(.trailing, isFiltersDocked ? duoLayout.searchLeadingFoldClearance : 0)
+                .background(searchBackdrop.ignoresSafeArea())
                 .scrollAwayTopChrome()
                 .task { await FandomCatalog.shared.warmCache() }
                 #if DEBUG
@@ -281,11 +302,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                     action: presentResultsSaveDialog
                                 ))
                                 : nil,
-                            // The toolbar owns the one filter control and its active count.
-                            AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
-                                                  showingFilters: router.isShowing(.searchFilters),
-                                                  onClearFilters: clearAllFilters,
-                                                  badgeCount: SearchFilterBadge.count(for: filters))),
+                            // The toolbar owns the one filter control and its active count;
+                            // hidden while the Filters pane is persistently docked on the Duo.
+                            isFiltersDocked
+                                ? nil
+                                : AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
+                                                       showingFilters: router.isShowing(.searchFilters),
+                                                       onClearFilters: clearAllFilters,
+                                                       badgeCount: SearchFilterBadge.count(for: filters))),
                             (!results.isEmpty && (phase == .loaded || phase == .loading))
                                 ? AnyView(WorkListMoreMenu {
                                     if hideMature {
@@ -339,6 +363,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 }
                 .filterPanelPresentation(
                     isPresented: router.isShowing(.searchFilters),
+                    isDocked: isFiltersDocked,
                     detents: [.medium, .large],
                     onDismiss: { router.panelDidDismiss() }
                 ) {
@@ -373,11 +398,6 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     SaveSearchSheet(filters: filters, name: $saveName, onSave: commitSavedSearch)
                         .presentationDetents([.medium, .large])
                         .presentationDragIndicator(.visible)
-                }
-                // Shares the inner bottom inset with the queue toast inside NavigationStack so
-                // neither draws over the other (a stack-outer inset never reduced the inner safe area).
-                .remoteWorkSelectionChrome(bulkSelection, showsBottomAccessory: showPagination) {
-                    paginationBar.padding(.horizontal, SubjectMetrics.gutter)
                 }
                 .environment(\.queueMembershipOrigin, bulkSelection.origin)
                 .onChange(of: router.selection) { _, selection in

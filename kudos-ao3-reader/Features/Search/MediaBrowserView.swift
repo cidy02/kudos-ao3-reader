@@ -16,6 +16,8 @@ struct MediaBrowserView: View {
     var onSelectFandom: (_ names: [String], _ title: String) -> Void
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.duoLayout) private var duoLayout
+    @Environment(\.layoutDirection) private var layoutDirection
     #if os(iOS)
     /// Set by BrowseView on the stack; pairs a category card with the fandom list
     /// it pushes. Absent elsewhere (Search's idle state), where the helper no-ops.
@@ -139,11 +141,75 @@ struct MediaBrowserView: View {
     }
 
     #if os(iOS)
+    /// Pure column spans aligning the Browse category grid's gutter to the Duo fold
+    /// (40 pt clear in Open, 16 pt inset from the fold shadow in Book), inside the
+    /// grid's `gutter`-padded box. At accessibility sizes keeps one column in the
+    /// leading pane so cards neither squeeze nor cross the fold.
+    nonisolated static func duoCategoryColumnSpans(
+        panes: DuoFoldPanes,
+        gutter: CGFloat = 16,
+        isAccessibilitySize: Bool,
+        rightToLeft: Bool = false
+    ) -> [MasonryLayout.ColumnSpan] {
+        let ordered = panes.ordered(rightToLeft: rightToLeft)
+        let leadingWidth = max(0, ordered.leading.width - gutter)
+        let leadingSpan = MasonryLayout.ColumnSpan(minX: 0, width: leadingWidth)
+        if isAccessibilitySize {
+            return [leadingSpan]
+        }
+        let trailingSpan = MasonryLayout.ColumnSpan(
+            minX: leadingWidth + panes.foldClearance,
+            width: max(0, ordered.trailing.width - gutter)
+        )
+        return [leadingSpan, trailingSpan]
+    }
+
     /// Board 13: Jump Back In followed by a two-column masonry of solid colour cards.
+    /// On the open/Book iPhone Duo, aligns the masonry gutter to the vertical fold and
+    /// keeps Jump Back In and the website row inside the leading pane.
+    @ViewBuilder
     private var categoryGrid: some View {
-        ScrollView {
+        if duoLayout.hasVerticalBar, duoLayout.verticalFold != nil {
+            GeometryReader { proxy in
+                let regions = AdaptiveContentRegions(viewport: proxy)
+                let globalMinX = proxy.frame(in: .global).minX + regions.viewport.minX
+                let activeVertical = regions.divisionFrames.first { $0.height > $0.width }
+                let panes = duoLayout.foldPanes(
+                    viewportWidth: regions.viewport.width,
+                    viewportMinX: globalMinX,
+                    viewportHeight: regions.viewport.height,
+                    activeDivision: activeVertical
+                )
+                categoryGridScroll(foldPanes: panes, viewportWidth: regions.viewport.width)
+            }
+        } else {
+            categoryGridScroll(foldPanes: nil, viewportWidth: nil)
+        }
+    }
+
+    private func categoryGridScroll(foldPanes: DuoFoldPanes?, viewportWidth: CGFloat?) -> some View {
+        let rightToLeft = layoutDirection == .rightToLeft
+        let ordered = foldPanes?.ordered(rightToLeft: rightToLeft)
+        let spans = foldPanes.map {
+            Self.duoCategoryColumnSpans(
+                panes: $0,
+                gutter: 16,
+                isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
+                rightToLeft: rightToLeft
+            )
+        }
+        return ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                jumpBackInSection
+                if let ordered, let viewportWidth {
+                    DashboardRegionRow(panes: [ordered.leading], width: viewportWidth) {
+                        jumpBackInSection
+                            .padding(.trailing, -SubjectMetrics.gutter)
+                            .frame(width: ordered.leading.width, alignment: .leading)
+                            .environment(\.duoPaneFoldEdge, .trailing)
+                    }
+                } else {
+                    jumpBackInSection
+                }
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Categories")
@@ -153,7 +219,7 @@ struct MediaBrowserView: View {
                         .accessibilityAddTraits(.isHeader)
 
                     let columns = dynamicTypeSize.isAccessibilitySize ? 1 : 2
-                    MasonryLayout(columns: columns, spacing: 10, rowSpacing: 8) {
+                    MasonryLayout(columns: columns, spacing: 10, rowSpacing: 8, columnSpans: spans) {
                         ForEach(categories) { category in
                             categoryCardView(category)
                                 .onAppear { visibleCategoryIDs.insert(category.id) }
@@ -163,7 +229,15 @@ struct MediaBrowserView: View {
                     .padding(.horizontal, 16)
                 }
 
-                openWebsiteRow
+                if let ordered, let viewportWidth {
+                    DashboardRegionRow(panes: [ordered.leading], width: viewportWidth) {
+                        openWebsiteRow
+                            .padding(.trailing, -SubjectMetrics.gutter)
+                            .frame(width: ordered.leading.width, alignment: .leading)
+                    }
+                } else {
+                    openWebsiteRow
+                }
             }
             .padding(.top, 4)
             .padding(.bottom, 12)
