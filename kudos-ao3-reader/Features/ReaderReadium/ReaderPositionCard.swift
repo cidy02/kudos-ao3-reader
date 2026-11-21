@@ -42,6 +42,9 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
     let onEditingChanged: (Bool) -> Void
     /// Non-nil draws the compact bar instead of the three-line card.
     let compact: ReaderPositionCardCompact?
+    /// Disabled on a committed turn that will hide the controls, so the page digit
+    /// and remaining time update in lockstep with the slider before the fade.
+    let animatesNumericChanges: Bool
     /// Optional read-aloud strip. Pass `EmptyView` (the default) when speech is
     /// stopped — the separator only appears when a real mini player is provided.
     @ViewBuilder private var miniPlayer: () -> MiniPlayer
@@ -57,6 +60,7 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
         scrubOrigin: Double? = nil,
         scrubValuesEmphasized: Bool = false,
         compact: ReaderPositionCardCompact? = nil,
+        animatesNumericChanges: Bool = true,
         onEditingChanged: @escaping (Bool) -> Void,
         @ViewBuilder miniPlayer: @escaping () -> MiniPlayer = { EmptyView() }
     ) {
@@ -71,6 +75,7 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
         self.scrubValuesEmphasized = scrubValuesEmphasized
         self.onEditingChanged = onEditingChanged
         self.compact = compact
+        self.animatesNumericChanges = animatesNumericChanges
         self.miniPlayer = miniPlayer
     }
 
@@ -118,10 +123,21 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
                     .padding(.horizontal, SubjectMetrics.gutter)
             }
 
-            if let compact {
-                compactBody(compact)
-            } else {
-                standardBody
+            Group {
+                if let compact {
+                    compactBody(compact)
+                } else {
+                    standardBody
+                }
+            }
+            // Keep the card's page digit, slider thumb and work line in lockstep
+            // when a committed turn hides chrome: do not inherit the chrome fade
+            // transaction onto the card's content (the card's outer opacity still fades).
+            .transaction { transaction in
+                if !animatesNumericChanges {
+                    transaction.animation = nil
+                    transaction.disablesAnimations = true
+                }
             }
         }
         .glassEffect(
@@ -159,6 +175,7 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
 
             scrubSlider
                 .disabled(!sliderEnabled)
+                .animation(nil, value: sliderValue)
                 .accessibilityLabel("Seek within chapter")
                 .accessibilityValue(pageAccessibilityLabel)
 
@@ -173,6 +190,7 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
                 // progress pill this card replaced (HIG wave, A-F: position
                 // readout must not clip or truncate as text scales).
                 .minimumScaleFactor(0.75)
+                .animation(nil, value: workLine)
         }
         .padding(.horizontal, SubjectMetrics.gutter)
         .padding(.top, showsMiniPlayer ? 12 : 13)
@@ -209,10 +227,12 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
 
             scrubSlider
                 .disabled(!sliderEnabled)
+                .animation(nil, value: sliderValue)
                 .accessibilityLabel("Seek within chapter")
                 .accessibilityValue(pageAccessibilityLabel)
 
             compactPositionLine
+                .animation(nil, value: page)
         }
         .padding(.horizontal, 18)
         .padding(.top, showsMiniPlayer ? 12 : 10)
@@ -265,8 +285,8 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
                     .foregroundStyle(.primary)
                 Text("\(page)")
                     .foregroundStyle(scrubValuesEmphasized ? ink : Color.primary)
-                    .contentTransition(.numericText())
-                    .animation(.default, value: page)
+                    .contentTransition(animatesNumericChanges ? .numericText() : .identity)
+                    .animation(animatesNumericChanges ? .default : nil, value: page)
                     .animation(.easeInOut(duration: 0.15), value: scrubValuesEmphasized)
                 Text(" of \(pageCount)")
                     .foregroundStyle(.primary)
@@ -290,8 +310,8 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 Text(ReaderTimeEstimate.durationLabel(minutes: minutes))
                     .foregroundStyle(scrubValuesEmphasized ? AnyShapeStyle(ink) : AnyShapeStyle(.secondaryInk))
-                    .contentTransition(.numericText())
-                    .animation(.default, value: minutes)
+                    .contentTransition(animatesNumericChanges ? .numericText() : .identity)
+                    .animation(animatesNumericChanges ? .default : nil, value: minutes)
                     .animation(.easeInOut(duration: 0.15), value: scrubValuesEmphasized)
                 Text(" left in chapter")
                     .foregroundStyle(.secondaryInk)

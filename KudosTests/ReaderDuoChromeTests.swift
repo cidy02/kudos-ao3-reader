@@ -342,5 +342,99 @@ struct ReaderDuoChromeTests {
         let zeroHeightCrease = CGRect(x: 0, y: 475, width: 669, height: 0)
         #expect(ReaderHostRegions.foldFrame(from: [zeroHeightCrease], in: portraitBounds) == zeroHeightCrease)
     }
+
+    @Test func borrowedStatusBlockFallbackDoesNotStickAfterLiveOcclusionArrives() throws {
+        let book = ReadiumBook()
+        let cover = CGSize(width: 466, height: 678)
+        let landscape = CGSize(width: 951, height: 669)
+
+        // Measure Cover's taller 174 pt status block on the right edge.
+        book.updatePageBoxGeometry(
+            size: cover,
+            safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 84),
+            regions: ReaderHostRegions(verticalBar: .right, barStatusBottom: 174)
+        )
+        #expect(book.hostRegions.barStatusBottom == 174)
+
+        // Unfold with chrome hidden into unmeasured Open Landscape: borrows 174 pt.
+        book.updatePageBoxGeometry(
+            size: landscape,
+            safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 0),
+            regions: ReaderHostRegions(verticalBar: .right, barStatusBottom: 0, fold: Self.innerFold)
+        )
+        #expect(book.hostRegions.barStatusBottom == 174)
+
+        // A second same-size unmeasured report arrives before live occlusion activates.
+        book.chromeHidden = false
+        book.updatePageBoxGeometry(
+            size: landscape,
+            safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 84),
+            regions: ReaderHostRegions(verticalBar: .right, barStatusBottom: 0, fold: Self.innerFold)
+        )
+        #expect(book.hostRegions.barStatusBottom == 174)
+
+        // Live SwiftUI occlusion reports Open Landscape's real 124 pt status block:
+        // live geometry must win over the borrowed 174 pt fallback.
+        book.updateLiveOcclusions([CGRect(x: 867, y: 0, width: 84, height: 124)], in: landscape)
+        #expect(book.hostRegions.barStatusBottom == 124)
+        let placement = ReaderDuoChromePlacement.resolve(
+            layout: .rail(.right), size: landscape,
+            safe: book.pageBoxGeometry.safeInsets, regions: book.hostRegions
+        )
+        #expect(placement.railTop == 134)
+        let panel = try #require(ReaderDuoSettingsPanelPlacement.resolve(
+            layout: .rail(.right), chrome: placement, size: landscape,
+            safe: book.pageBoxGeometry.safeInsets, regions: book.hostRegions, chromeTop: 0
+        ))
+        #expect(panel.top == 194)
+
+        // Subsequent unmeasured report at this size keeps the real 124 pt measurement.
+        book.chromeHidden = true
+        book.updatePageBoxGeometry(
+            size: landscape,
+            safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 0),
+            regions: ReaderHostRegions(verticalBar: .right, barStatusBottom: 0, fold: Self.innerFold)
+        )
+        #expect(book.hostRegions.barStatusBottom == 124)
+        book.cancelPageBoxRemeasure()
+    }
+
+    @Test func repeatedStandardReportsDoNotRestartDeferredDropDeadline() async throws {
+        let book = ReadiumBook()
+        book.updatePageBoxGeometry(
+            size: CGSize(width: 466, height: 678),
+            safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 84),
+            regions: ReaderHostRegions(verticalBar: .right, barStatusBottom: 174)
+        )
+        #expect(ReaderChromeLayout.resolve(book.hostRegions) == .rail(.right))
+
+        // First standard report starts the 120 ms deadline.
+        book.updatePageBoxGeometry(
+            size: CGSize(width: 400, height: 870),
+            safeInsets: UIEdgeInsets(top: 62, left: 0, bottom: 34, right: 0),
+            regions: ReaderHostRegions()
+        )
+        let firstTask = try #require(book.pendingStandardLayoutTask)
+
+        // Repeated standard reports during a resize update pending geometry without cancelling the timer.
+        book.updatePageBoxGeometry(
+            size: CGSize(width: 410, height: 880),
+            safeInsets: UIEdgeInsets(top: 62, left: 0, bottom: 34, right: 0),
+            regions: ReaderHostRegions()
+        )
+        #expect(!firstTask.isCancelled)
+        book.updatePageBoxGeometry(
+            size: CGSize(width: 420, height: 890),
+            safeInsets: UIEdgeInsets(top: 62, left: 0, bottom: 34, right: 0),
+            regions: ReaderHostRegions()
+        )
+        #expect(!firstTask.isCancelled)
+
+        await firstTask.value
+        #expect(book.pendingStandardLayoutTask == nil)
+        #expect(ReaderChromeLayout.resolve(book.hostRegions) == .standard)
+        #expect(book.pageBoxGeometry.size == CGSize(width: 420, height: 890))
+        book.cancelPageBoxRemeasure()
+    }
 }
 #endif

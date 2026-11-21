@@ -256,6 +256,8 @@ struct ReadiumReaderView: View {
     @State private var speechSeekHolding = false
     /// 0…1 thumb position when the chapter slider scrub began — origin `|` tick.
     @State private var sliderScrubOrigin: Double?
+    /// Suppresses the card's `.numericText()` roll on a turn that will fade chrome out.
+    @State private var suppressCardNumericAnimation = false
     // `kudosGiven` used to be session-only @State (AO3 doesn't expose a "did I
     // already leave kudos" check, so there was nothing to initialize it from on
     // appear) — the heart reset to unfilled on every relaunch even after a real,
@@ -407,7 +409,9 @@ struct ReadiumReaderView: View {
                 }
             }
             .onChange(of: chromeVisible) { _, visible in
-                if !visible {
+                if visible {
+                    suppressCardNumericAnimation = false
+                } else {
                     colorBarAnnotationID = nil
                 }
             }
@@ -1439,6 +1443,7 @@ struct ReadiumReaderView: View {
                     scrubOrigin: sliderScrubOrigin,
                     scrubValuesEmphasized: scrubValuesEmphasized,
                     compact: compactPositionBar(summary),
+                    animatesNumericChanges: !suppressCardNumericAnimation,
                     onEditingChanged: handleSliderEditingChanged
                 ) {
                     speechMiniPlayer(tint: tint)
@@ -1455,6 +1460,7 @@ struct ReadiumReaderView: View {
                     scrubOrigin: sliderScrubOrigin,
                     scrubValuesEmphasized: scrubValuesEmphasized,
                     compact: compactPositionBar(summary),
+                    animatesNumericChanges: !suppressCardNumericAnimation,
                     onEditingChanged: handleSliderEditingChanged
                 )
             }
@@ -2435,11 +2441,18 @@ extension ReadiumReaderView {
             controlsShowing: chromeVisible, overlayOpen: hasChromeBlockingOverlay,
             voiceOverRunning: UIAccessibility.isVoiceOverRunning
         ) else { return }
+        // Commit page digit, chapter time and slider in lockstep without the
+        // independent `.numericText()` roll before the opacity fade starts.
+        suppressCardNumericAnimation = true
+        syncSliderFromPosition(book.readingPosition)
         DispatchQueue.main.async {
             guard ReaderChromeAutoHide.hidesControls(
                 controlsShowing: chromeVisible, overlayOpen: hasChromeBlockingOverlay,
                 voiceOverRunning: UIAccessibility.isVoiceOverRunning
-            ) else { return }
+            ) else {
+                suppressCardNumericAnimation = false
+                return
+            }
             book.setChromeHidden(true)
         }
     }

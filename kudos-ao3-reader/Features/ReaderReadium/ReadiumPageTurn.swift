@@ -31,14 +31,18 @@ final class ReadiumPageTurnController {
         return NavigatorGoOptions(animated: adapter?.animatedTransition ?? false)
     }
 
-    func bind(to navigator: EPUBNavigatorViewController, toggleChrome: @escaping @MainActor () -> Void) {
+    func bind(
+        to navigator: EPUBNavigatorViewController,
+        toggleChrome: @escaping @MainActor () -> Void,
+        onUserTurn: @escaping @MainActor () -> Void = {}
+    ) {
         if let chromeToken, let boundNavigator {
             boundNavigator.removeObserver(chromeToken)
         }
         // Defaults: horizontal edges (30% of the width, at least 80 pt),
         // ignore taps while scrolling, arrows and space. That is Readium's
         // own edge policy — not a second set of zones.
-        let adapter = DirectionalNavigationAdapter(animatedTransition: false)
+        let adapter = DirectionalNavigationAdapter(animatedTransition: false, onNavigation: onUserTurn)
         adapter.bind(to: navigator)
         chromeToken = navigator.addObserver(.activate { _ in
             toggleChrome()

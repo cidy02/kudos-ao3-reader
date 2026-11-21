@@ -22,11 +22,14 @@ nonisolated enum ReaderChromeAutoHide {
     /// The same after the page is laid out again (preferences, size, rotation),
     /// which can take several settles.
     static let relayoutEchoWindow: TimeInterval = 1.2
+    /// How long after an explicit directional user turn (edge tap, key, `goForward`/
+    /// `goBackward`) its resulting settle is attributed as a committed user turn.
+    static let explicitTurnWindow: TimeInterval = 1.2
 
     /// Minimum scroll delta (fraction of one viewport height) in scrolled mode so
     /// a tiny accidental finger nudge does not hide controls.
     static let scrolledViewportFractionThreshold: Double = 0.15
-    /// Fallback progression delta when page count has not been measured yet.
+    /// Fallback progression delta in scrolled mode when page count has not been measured yet.
     static let fallbackProgressionThreshold: Double = 0.01
 
     /// The parts of a Readium locator that say which page is showing.
@@ -36,19 +39,15 @@ nonisolated enum ReaderChromeAutoHide {
         var progression: Double?
     }
 
-    /// Another resource, a committed page change in paged mode, or a meaningful
+    /// Another resource, a committed visual page change in paged mode (or an
+    /// explicit committed turn before pagination is known), or a meaningful
     /// scroll in scrolled mode (never a cancelled sub-page wobble or 1 px nudge).
     static func moved(
         from old: Place, to new: Place,
-        isPaged: Bool = true, pageCount: Int? = nil
+        isPaged: Bool = true, pageCount: Int? = nil,
+        explicitUserTurn: Bool = false
     ) -> Bool {
         if old.href != new.href { return true }
-        if isPaged, let pageCount, pageCount >= 1,
-           let oldProgression = old.progression, let newProgression = new.progression,
-           oldProgression.isFinite, newProgression.isFinite {
-            return ReaderPageMetrics.pageFromLeadingProgression(oldProgression, pageCount: pageCount)
-                != ReaderPageMetrics.pageFromLeadingProgression(newProgression, pageCount: pageCount)
-        }
         if !isPaged {
             guard let oldProgression = old.progression, let newProgression = new.progression,
                   oldProgression.isFinite, newProgression.isFinite else { return false }
@@ -59,30 +58,45 @@ nonisolated enum ReaderChromeAutoHide {
             }
             return abs(oldProgression - newProgression) >= threshold
         }
-        if let oldPosition = old.position, let newPosition = new.position, oldPosition != newPosition {
-            return true
+        if let pageCount, pageCount >= 1,
+           let oldProgression = old.progression, let newProgression = new.progression,
+           oldProgression.isFinite, newProgression.isFinite {
+            return ReaderPageMetrics.pageFromLeadingProgression(oldProgression, pageCount: pageCount)
+                != ReaderPageMetrics.pageFromLeadingProgression(newProgression, pageCount: pageCount)
         }
-        guard let oldProgression = old.progression, let newProgression = new.progression,
-              oldProgression.isFinite, newProgression.isFinite else { return false }
-        return abs(oldProgression - newProgression) >= fallbackProgressionThreshold
+        // Before pagination is known (`pageCount == nil`), Readium position boundaries
+        // and arbitrary progression deltas do not match visual pages. Only an explicit
+        // committed user turn that moved may hide on the same resource.
+        guard explicitUserTurn else { return false }
+        return old != new
     }
 
     /// A settle the reader caused by turning (swipe, curl drag, flick, edge tap,
     /// key): never one while a jump is in flight or just after it (scrubber,
     /// Contents, bookmarks, search, Read Aloud), during a scrub, while a paged
     /// scroll view is still dragging/bouncing, or just after a relayout or
-    /// rotation. The first settle after opening has no `previous`.
+    /// rotation. Explicit user turns (edge tap / key / `goForward` / `goBackward`)
+    /// carry their own attribution so a prior jump's echo cannot mask them.
+    /// The first settle after opening has no `previous`.
     static func isUserTurn(
         from previous: Place?, to next: Place,
         jumpInFlight: Bool, isScrubbing: Bool,
         isScrollInteracting: Bool = false,
         isPaged: Bool = true, pageCount: Int? = nil,
-        echoUntil: Date, now: Date
+        explicitUserTurn: Bool = false,
+        jumpEchoUntil: Date = .distantPast,
+        relayoutEchoUntil: Date = .distantPast,
+        now: Date
     ) -> Bool {
         guard let previous, !jumpInFlight, !isScrubbing,
               !(isPaged && isScrollInteracting),
-              now >= echoUntil else { return false }
-        return moved(from: previous, to: next, isPaged: isPaged, pageCount: pageCount)
+              now >= relayoutEchoUntil,
+              explicitUserTurn || now >= jumpEchoUntil else { return false }
+        return moved(
+            from: previous, to: next,
+            isPaged: isPaged, pageCount: pageCount,
+            explicitUserTurn: explicitUserTurn
+        )
     }
 
     /// Whether a turn hides the controls: only while they show, never while a

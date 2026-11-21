@@ -182,12 +182,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
 
     /// Called when a settle is a turn the reader made (`ReaderChromeAutoHide`).
     @ObservationIgnored var onUserPageTurn: (() -> Void)?
-    /// Programmatic navigations still awaiting the navigator, and until when a
-    /// settle may still be the echo of one (or of a relayout).
-    @ObservationIgnored private var jumpsInFlight = 0
-    @ObservationIgnored private var turnEchoUntil: Date = .distantPast
-    /// Last settled non-mid-drag place, so a cancelled Slide drag never poisons the turn baseline.
-    @ObservationIgnored private var lastSettledTurnPlace: ReaderChromeAutoHide.Place?
+    /// Programmatic jumps, echo windows, explicit user turns and settled place.
+    @ObservationIgnored private var turnAutoHide = TurnAutoHideState()
+    /// Clock seam for deterministic echo-expiry tests; production uses `Date.init`.
+    @ObservationIgnored var autoHideNow: () -> Date = Date.init
 
     /// The body's rendered line height in points — font size × the line-height
     /// multiplier, mirrored from the view's `ReaderTextStyle` whenever
@@ -215,6 +213,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// Coalesces a transient Duo → `.standard` frame (Cover → Open unfold) so an open
     /// settings panel is not destroyed during the ~35 ms gap before traits arrive.
     @ObservationIgnored private(set) var pendingStandardLayoutTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingStandardGeometry: PendingStandardGeometry?
     var pageBoxChromeSafeBottom: CGFloat { pageBoxGeometry.safeInsets.bottom }
 
     @ObservationIgnored private(set) var pageBoxRemeasureTask: Task<Void, Never>?
@@ -226,6 +225,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     func updatePageBoxGeometry(
         size: CGSize, safeInsets: UIEdgeInsets, regions: ReaderHostRegions = ReaderHostRegions()
     ) {
+        guard size.width.isFinite, size.height.isFinite, size.width > 1, size.height > 1 else { return }
         let geometryLog = "size=\(Int(size.width))x\(Int(size.height)) safe=\(Int(safeInsets.top)),"
             + "\(Int(safeInsets.left)),\(Int(safeInsets.bottom)),\(Int(safeInsets.right)) "
             + "bar=\(regions.verticalBar) status=\(Int(regions.barStatusBottom)) "
@@ -241,6 +241,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         }
         pendingStandardLayoutTask?.cancel()
         pendingStandardLayoutTask = nil
+        pendingStandardGeometry = nil
         applyPageBoxGeometry(size: size, safeInsets: safeInsets, mergedRegions: mergedRegions)
     }
 
@@ -249,6 +250,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         pageBoxRemeasureTask = nil
         pendingStandardLayoutTask?.cancel()
         pendingStandardLayoutTask = nil
+        pendingStandardGeometry = nil
     }
 
     /// Fires on every position change. The view records this for the progress
@@ -464,7 +466,8 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         pendingScrubProgression = min(1, max(0, progression))
         guard !isScrubSeekInFlight else { return }
         isScrubSeekInFlight = true
-        jumpsInFlight += 1
+        turnAutoHide.jumpsInFlight += 1
+        turnAutoHide.explicitUserTurnUntil = .distantPast
         Task { @MainActor [weak self] in
             defer {
                 self?.isScrubSeekInFlight = false
@@ -554,7 +557,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         }
         phase = .loading
         settledLocationCount = 0
-        lastSettledTurnPlace = nil
+        turnAutoHide.lastSettledTurnPlace = nil
+        turnAutoHide.explicitUserTurnUntil = .distantPast
+        navigator = nil
+        lastSubmittedPreferences = nil
         hasPresentedFirstPage = false
         firstPagePresentationGeneration += 1
         let presentationGeneration = firstPagePresentationGeneration
@@ -597,10 +603,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             // After the navigator exists. The legacy tap callback is already
             // installed (and must stay a no-op — see `didTapAt`). This registers
             // the edge/key adapter, then the centre-tap chrome toggle.
-            pageTurns.bind(to: navigator) { [weak self] in
+            pageTurns.bind(to: navigator, toggleChrome: { [weak self] in
                 guard let self else { return }
                 self.setChromeHidden(!self.chromeHidden)
-            }
+            }, onUserTurn: { [weak self] in
+                self?.noteExplicitUserTurn()
+            })
             visualPageBridge.book = self
             clearVisualPageMetrics()
             highlightTapsInstalled = false
@@ -654,14 +662,13 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     @discardableResult
     func submit(_ preferences: EPUBPreferences) -> Bool {
         // Only a real change relays the page out. The view re-submits unchanged
-        // preferences whenever a panel closes; that must not mute the next turn.
-        let changed = preferences != lastSubmittedPreferences
-        if changed {
-            noteTurnEcho(ReaderChromeAutoHide.relayoutEchoWindow)
-            lastSubmittedPreferences = preferences
-        }
+        // preferences whenever a panel closes; returning early avoids both the
+        // 1.2 s turn echo and discarding Readium's prepared curl frames.
+        guard preferences != lastSubmittedPreferences else { return false }
+        noteRelayoutEcho(ReaderChromeAutoHide.relayoutEchoWindow)
+        lastSubmittedPreferences = preferences
         navigator?.submitPreferences(preferences)
-        return changed
+        return true
     }
 
     @ObservationIgnored private var lastSubmittedPreferences: EPUBPreferences?
@@ -674,14 +681,20 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     }
 
     func goForward() {
-        Task { @MainActor in
-            await navigator?.goForward(options: pageTurns.goOptions)
+        noteExplicitUserTurn()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let moved = await self.navigator?.goForward(options: self.pageTurns.goOptions) ?? false
+            if !moved { self.clearExplicitUserTurn() }
         }
     }
 
     func goBackward() {
-        Task { @MainActor in
-            await navigator?.goBackward(options: pageTurns.goOptions)
+        noteExplicitUserTurn()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let moved = await self.navigator?.goBackward(options: self.pageTurns.goOptions) ?? false
+            if !moved { self.clearExplicitUserTurn() }
         }
     }
 
@@ -803,19 +816,27 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         guard !isLocatorIngestionBlocked else { return }
         // A turn the reader made hides the controls (T-562b); jumps, scrubs,
         // cancelled Slide drags, micro-scrolls and relayouts do not.
+        let now = autoHideNow()
         let isPaged = isPagedReadingMode
         let scrollInteracting = navigator?.view.map(Self.hasActiveScrollGesture(in:)) ?? false
         let incomingPlace = Self.turnPlace(locator)
+        let explicitUserTurn = now < turnAutoHide.explicitUserTurnUntil
         let userTurn = ReaderChromeAutoHide.isUserTurn(
-            from: settledLocationCount > 0 ? lastSettledTurnPlace : nil,
+            from: settledLocationCount > 0 ? turnAutoHide.lastSettledTurnPlace : nil,
             to: incomingPlace,
-            jumpInFlight: jumpsInFlight > 0, isScrubbing: isScrubbing,
+            jumpInFlight: turnAutoHide.jumpsInFlight > 0, isScrubbing: isScrubbing,
             isScrollInteracting: scrollInteracting, isPaged: isPaged,
             pageCount: pageBarReady ? visualPageCount : nil,
-            echoUntil: turnEchoUntil, now: Date()
+            explicitUserTurn: explicitUserTurn,
+            jumpEchoUntil: turnAutoHide.jumpEchoUntil,
+            relayoutEchoUntil: turnAutoHide.relayoutEchoUntil,
+            now: now
         )
         if !(isPaged && scrollInteracting) {
-            lastSettledTurnPlace = incomingPlace
+            turnAutoHide.lastSettledTurnPlace = incomingPlace
+            if userTurn {
+                turnAutoHide.explicitUserTurnUntil = .distantPast
+            }
         }
         // First post-open settle: the spread has painted enough for Readium to
         // report a location — lift the skeleton that was covering its spinner.
@@ -829,10 +850,11 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             schedulePageBarRemeasure()
         } else if pageBarReady, !isScrubbing {
             // Update the page digit right away from leading-edge progression on
-            // settled turns (e.g. edge tap / key where Readium's transitioning flag
-            // silenced JS scroll posts) so the card is consistent before fading out,
-            // then let the quiet DOM remeasure refine it if needed.
-            if !(isPaged && scrollInteracting),
+            // settled paged turns (e.g. edge tap / key where Readium's transitioning
+            // flag silenced JS scroll posts) so the card is consistent before fading
+            // out. Scroll mode keeps the live/quiet DOM measurements authoritative
+            // because `scrollHeight / viewportHeight` is not an integer.
+            if isPaged, !scrollInteracting,
                let vCount = visualPageCount, vCount > 0,
                let prog = locator.locations.progression, prog.isFinite,
                prog != currentLocator?.locations.progression {
@@ -1492,6 +1514,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
 
 // MARK: - Duo host regions (T-562a)
 
+private struct PendingStandardGeometry {
+    var size: CGSize
+    var safeInsets: UIEdgeInsets
+    var regions: ReaderHostRegions
+}
+
 extension ReadiumBook {
     /// Delay before dropping from a Duo layout to `.standard`, covering the ~35 ms
     /// Cover → Open intermediate frame that reports `bar=none, fold=nil`.
@@ -1530,16 +1558,24 @@ extension ReadiumBook {
     fileprivate func scheduleDeferredStandardLayout(
         size: CGSize, safeInsets: UIEdgeInsets, regions: ReaderHostRegions
     ) {
-        pendingStandardLayoutTask?.cancel()
+        // Keep the newest standard geometry, but never restart a running deadline:
+        // repeated resize reports must commit `standardLayoutDropDelay` after the first.
+        pendingStandardGeometry = PendingStandardGeometry(
+            size: size, safeInsets: safeInsets, regions: regions
+        )
+        guard pendingStandardLayoutTask == nil else { return }
         let delayNs = UInt64(Self.standardLayoutDropDelay * 1_000_000_000)
         pendingStandardLayoutTask = Task { @MainActor [weak self] in
             do { try await Task.sleep(nanoseconds: delayNs) } catch { return }
-            guard let self else { return }
+            guard let self, let pending = self.pendingStandardGeometry else { return }
             self.pendingStandardLayoutTask = nil
-            let sameSize = abs(size.width - self.pageBoxGeometry.size.width) <= 1
-                && abs(size.height - self.pageBoxGeometry.size.height) <= 1
-            let merged = self.mergedHostRegions(regions, size: size, sameSize: sameSize)
-            self.applyPageBoxGeometry(size: size, safeInsets: safeInsets, mergedRegions: merged)
+            self.pendingStandardGeometry = nil
+            let sameSize = abs(pending.size.width - self.pageBoxGeometry.size.width) <= 1
+                && abs(pending.size.height - self.pageBoxGeometry.size.height) <= 1
+            let merged = self.mergedHostRegions(pending.regions, size: pending.size, sameSize: sameSize)
+            self.applyPageBoxGeometry(
+                size: pending.size, safeInsets: pending.safeInsets, mergedRegions: merged
+            )
         }
     }
 
@@ -1560,7 +1596,7 @@ extension ReadiumBook {
         }
         guard layoutChanged else { return }
         // The page lays out again: its settles are not turns.
-        noteTurnEcho(ReaderChromeAutoHide.relayoutEchoWindow)
+        noteRelayoutEcho(ReaderChromeAutoHide.relayoutEchoWindow)
         pageBoxRemeasureTask?.cancel()
         // Invalidate old-layout samples immediately; measure only after quiet.
         clearVisualPageMetrics()
@@ -1585,35 +1621,39 @@ extension ReadiumBook {
     fileprivate func mergedHostRegions(
         _ regions: ReaderHostRegions, size: CGSize, sameSize: Bool
     ) -> ReaderHostRegions {
-        var mergedRegions = regions.merging(previous: hostRegions, sameSize: sameSize)
+        var mergedRegions = regions
         // If SwiftUI's live occlusion probe already reported an active status block
         // for this exact size before UIKit's geometry callback arrived, use it now.
-        if mergedRegions.barStatusBottom <= 0, regions.verticalBar != .none,
-           abs(latestLiveOcclusions.size.width - size.width) <= 1,
-           abs(latestLiveOcclusions.size.height - size.height) <= 1 {
-            mergedRegions.barStatusBottom = ReaderHostRegions.statusBottom(
+        let liveBottom: CGFloat = if regions.verticalBar != .none,
+            abs(latestLiveOcclusions.size.width - size.width) <= 1,
+            abs(latestLiveOcclusions.size.height - size.height) <= 1 {
+            ReaderHostRegions.statusBottom(
                 from: latestLiveOcclusions.frames,
                 in: CGRect(origin: .zero, size: size),
                 verticalBar: regions.verticalBar
             )
+        } else {
+            0
         }
-        // A rotation or fold while the status bar is hidden reports no status block,
-        // and showing it can report before the block is back: reuse the one this
-        // size had, so the rail does not ride up under the status bar.
-        // The block can also report a partial frame (82 of the cover's 174 seen on the
-        // Duo), so each size keeps the tallest block it has reported.
+        // Only positive live measurements (UIKit or the matching SwiftUI occlusion
+        // snapshot) may be cached for this exact size + edge. Borrowed fallbacks
+        // must stay out of `statusBottomBySize` so live geometry always wins later.
+        let measuredBottom = max(regions.barStatusBottom, liveBottom)
         let statusKey = Self.statusKey(for: size, verticalBar: regions.verticalBar)
-        if mergedRegions.barStatusBottom > 0 {
-            let tallest = max(mergedRegions.barStatusBottom, statusBottomBySize[statusKey] ?? 0)
+        if regions.verticalBar != .none, measuredBottom > 0 {
+            let tallest = max(measuredBottom, statusBottomBySize[statusKey] ?? 0)
             statusBottomBySize[statusKey] = tallest
             mergedRegions.barStatusBottom = tallest
         } else if regions.verticalBar != .none {
-            // Prefer an exact size match (including 180° rotation onto the opposite
-            // edge), then fall back to the same edge's tallest observed block.
+            // Prefer an exact measured size+edge match, then same-size opposite edge
+            // (180° rotation), then the same edge's tallest observed block.
             let sizePrefix = "\(Int(size.width))x\(Int(size.height))|"
             let sameSizeAnyEdge = statusBottomBySize.filter { $0.key.hasPrefix(sizePrefix) }.values.max()
             let sameEdge = statusBottomBySize.filter { $0.key.hasSuffix("|\(regions.verticalBar)") }.values.max()
-            mergedRegions.barStatusBottom = statusBottomBySize[statusKey] ?? sameSizeAnyEdge ?? sameEdge ?? 0
+            mergedRegions.barStatusBottom = statusBottomBySize[statusKey]
+                ?? sameSizeAnyEdge
+                ?? sameEdge
+                ?? regions.merging(previous: hostRegions, sameSize: sameSize).barStatusBottom
         }
         return mergedRegions
     }
@@ -1650,6 +1690,15 @@ private final class VisualPageMessageBridge: NSObject, WKScriptMessageHandler {
 
 // MARK: - Controls fade and hide on a turn (T-562b)
 
+private struct TurnAutoHideState {
+    var jumpsInFlight = 0
+    var jumpEchoUntil: Date = .distantPast
+    var relayoutEchoUntil: Date = .distantPast
+    var explicitUserTurnUntil: Date = .distantPast
+    /// Last settled non-mid-drag place, so a cancelled Slide drag never poisons the turn baseline.
+    var lastSettledTurnPlace: ReaderChromeAutoHide.Place?
+}
+
 /// Same file, so the stored state above stays `private`; outside the class body,
 /// which SwiftLint already holds over its length limit.
 extension ReadiumBook {
@@ -1662,7 +1711,8 @@ extension ReadiumBook {
 
     /// Runs a programmatic navigation so its settles are never taken for a turn.
     fileprivate func jump(_ navigate: @escaping @MainActor () async -> Void) {
-        jumpsInFlight += 1
+        turnAutoHide.jumpsInFlight += 1
+        turnAutoHide.explicitUserTurnUntil = .distantPast
         Task { @MainActor [weak self] in
             await navigate()
             self?.endJump()
@@ -1670,12 +1720,33 @@ extension ReadiumBook {
     }
 
     fileprivate func endJump() {
-        jumpsInFlight = max(0, jumpsInFlight - 1)
-        noteTurnEcho(ReaderChromeAutoHide.jumpEchoWindow)
+        turnAutoHide.jumpsInFlight = max(0, turnAutoHide.jumpsInFlight - 1)
+        turnAutoHide.jumpEchoUntil = max(
+            turnAutoHide.jumpEchoUntil,
+            autoHideNow().addingTimeInterval(ReaderChromeAutoHide.jumpEchoWindow)
+        )
     }
 
-    fileprivate func noteTurnEcho(_ window: TimeInterval) {
-        turnEchoUntil = max(turnEchoUntil, Date().addingTimeInterval(window))
+    fileprivate func noteRelayoutEcho(_ window: TimeInterval) {
+        turnAutoHide.explicitUserTurnUntil = .distantPast
+        turnAutoHide.relayoutEchoUntil = max(
+            turnAutoHide.relayoutEchoUntil,
+            autoHideNow().addingTimeInterval(window)
+        )
+    }
+
+    /// Attributes the next settled navigation from an explicit user turn (edge tap,
+    /// hardware key, `goForward`/`goBackward`) so it works before `pageBarReady`
+    /// and is not masked by a prior jump's echo window.
+    func noteExplicitUserTurn() {
+        turnAutoHide.explicitUserTurnUntil = max(
+            turnAutoHide.explicitUserTurnUntil,
+            autoHideNow().addingTimeInterval(ReaderChromeAutoHide.explicitTurnWindow)
+        )
+    }
+
+    func clearExplicitUserTurn() {
+        turnAutoHide.explicitUserTurnUntil = .distantPast
     }
 
     fileprivate static func turnPlace(_ locator: Locator) -> ReaderChromeAutoHide.Place {
