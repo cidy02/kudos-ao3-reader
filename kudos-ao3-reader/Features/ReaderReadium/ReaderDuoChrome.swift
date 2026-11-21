@@ -30,6 +30,12 @@ nonisolated enum ReaderChromeLayout: Equatable, Sendable {
     /// portrait board, even with Two-page spread on (owner, 2026-11-20). The stored
     /// setting is untouched: the rail layouts and wide iPad layouts still use it.
     var allowsTwoPageSpread: Bool { self != .foldTopBar }
+
+    /// Effective two-page spread input for `ReadiumReaderStyleMapper`: honours the
+    /// stored setting and size class, gated by `allowsTwoPageSpread`.
+    func effectiveTwoPageSpread(enabled: Bool, wideLayout: Bool) -> Bool {
+        enabled && wideLayout && allowsTwoPageSpread
+    }
 }
 
 /// Where the Duo chrome sits, in host points measured from the physical left and
@@ -53,6 +59,8 @@ nonisolated struct ReaderDuoChromePlacement: Equatable, Sendable {
     static let railCloseDiameter: CGFloat = 48
     static let railSpacing: CGFloat = 10
     static let groupEndPadding: CGFloat = 2
+    /// Total height of the rail (Close + spacing + 5 action slots + group end padding).
+    static let railHeight: CGFloat = railCloseDiameter + railSpacing + 5 * 44 + 2 * groupEndPadding
 
     /// From the rail's edge to the rail's centre: the middle of the system bar's column.
     var railCenterInset: CGFloat = 0
@@ -79,7 +87,12 @@ nonisolated struct ReaderDuoChromePlacement: Equatable, Sendable {
             let barInset = max(bar == .left ? safe.left : safe.right, ReaderPageBoxGeometry.verticalBarReserve)
             let center = barInset / 2
             let railSide = center + railWidth / 2 + railGap
-            let top = (regions.barStatusBottom > 0 ? regions.barStatusBottom : safe.top) + railTopGap
+            let unclampedTop = (regions.barStatusBottom > 0 ? regions.barStatusBottom : safe.top) + railTopGap
+            // Never push the rail onto the bottom safe area (e.g. a fallback status
+            // height carried over from a taller orientation on Cover landscape).
+            let top = size.height > 1
+                ? max(0, min(unclampedTop, size.height - safe.bottom - Self.railHeight))
+                : unclampedTop
             // A vertical fold puts the bar on the rail's own page, clear of the crease.
             let fold = regions.fold.flatMap { $0.height > $0.width ? $0 : nil }
             switch bar {
@@ -122,7 +135,8 @@ nonisolated struct ReaderDuoSettingsPanelPlacement: Equatable, Sendable {
     ///   - chromeTop: the top safe inset the portrait bar sits under.
     static func resolve(
         layout: ReaderChromeLayout, chrome: ReaderDuoChromePlacement, size: CGSize,
-        safe: UIEdgeInsets, regions: ReaderHostRegions, chromeTop: CGFloat
+        safe: UIEdgeInsets, regions: ReaderHostRegions, chromeTop: CGFloat,
+        layoutDirection: LayoutDirection = .leftToRight
     ) -> Self? {
         let margin = ReaderDuoChromePlacement.edgeInset
         let foldGap = ReaderDuoChromePlacement.foldGap
@@ -149,7 +163,8 @@ nonisolated struct ReaderDuoSettingsPanelPlacement: Equatable, Sendable {
             }
         case .foldTopBar:
             anchoredTop = chromeTop + ReaderDuoChromePlacement.topBarReserve
-            hugsLeft = false
+            // In RTL `ReaderDuoTopBar` places the action group (Aa) on the physical left.
+            hugsLeft = layoutDirection == .rightToLeft
             leftLimit = safe.left + margin
             rightLimit = size.width - safe.right - margin
             if let fold = regions.fold, fold.width >= fold.height,

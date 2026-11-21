@@ -164,6 +164,8 @@ final class ReaderDismissPeelContainerController<Content: View>: UIViewControlle
     var reduceMotion: Bool
     var onGeometryChange: (CGSize, UIEdgeInsets, ReaderHostRegions) -> Void
     private var geometryReportPending = false
+    /// Raw `UIHinge.Status` stored as `Int?` so it does not require `@available` on the property.
+    private var lastHingeStatusRaw: Int?
 
     init(
         content: Content, surface: ReaderDismissDragSurface, reduceMotion: Bool,
@@ -197,6 +199,16 @@ final class ReaderDismissPeelContainerController<Content: View>: UIViewControlle
             registerForTraitChanges(barTraits) { (controller: Self, _: UITraitCollection) in
                 controller.reportGeometryAfterLayout()
             }
+            // Re-read division regions when hinge status flips (e.g. flat ↔ Book)
+            // without a bounds change. Angle-only updates with the same status skip.
+            let hingeInteraction = UIHingeInteraction { [weak self] _, update in
+                guard let self else { return }
+                let statusRaw = update.hinge?.status.rawValue
+                guard statusRaw != self.lastHingeStatusRaw else { return }
+                self.lastHingeStatusRaw = statusRaw
+                self.reportGeometryAfterLayout()
+            }
+            view.addInteraction(hingeInteraction)
         }
     }
 
@@ -216,21 +228,15 @@ final class ReaderDismissPeelContainerController<Content: View>: UIViewControlle
         var regions = ReaderHostRegions(verticalBar: verticalBar)
         guard #available(iOS 27.1, *) else { return regions }
         let bounds = view.bounds
-        regions.barStatusBottom = view.reservedRegions(kind: .occlusion)
+        let activeOcclusions = view.reservedRegions(kind: .occlusion)
             .filter(\.isActive)
             .map(\.frame)
-            .filter { frame in
-                frame.minY <= bounds.minY + 1 && {
-                    switch regions.verticalBar {
-                    case .none: false
-                    case .left: frame.minX <= bounds.minX + 1
-                    case .right: frame.maxX >= bounds.maxX - 1
-                    }
-                }()
-            }
-            .map(\.maxY)
-            .max() ?? 0
-        regions.fold = view.reservedRegions(kind: .division, options: .includeInactive).first?.frame
+        regions.barStatusBottom = ReaderHostRegions.statusBottom(
+            from: activeOcclusions, in: bounds, verticalBar: regions.verticalBar
+        )
+        let divisionFrames = view.reservedRegions(kind: .division, options: .includeInactive)
+            .map(\.frame)
+        regions.fold = ReaderHostRegions.foldFrame(from: divisionFrames, in: bounds)
         return regions
     }
 

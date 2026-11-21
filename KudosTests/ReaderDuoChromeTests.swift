@@ -147,8 +147,200 @@ struct ReaderDuoChromeTests {
         #expect(summary.chapterShortLabel == "Ch 7 of 20")
     }
 
-    @Test func theDuoMenuLeavesOutWhatTheGroupShows() {
-        #expect(ReaderFanMenu.groupItemIDs == ["contents", "settings", "bookmark", "readAloud"])
+    @Test func theDuoMenuLeavesOutWhatTheGroupShowsAndKeepsReadAloudSettings() {
+        let pills: [ReaderFanMenuPill] = [
+            .init(id: "contents", title: "Contents", systemImage: "list.bullet", action: {}),
+            .init(id: "bookmarks", title: "Bookmarks & Highlights", systemImage: "bookmark", action: {}),
+            .init(id: "find", title: "Find in Work", systemImage: "magnifyingglass", action: {}),
+            .init(id: "comments", title: "Comments", systemImage: "bubble.left.and.bubble.right", action: {}),
+            .init(id: "rebuild", title: "Rebuild from Original", systemImage: "arrow.triangle.2.circlepath", action: {}),
+            .init(id: "settings", title: "Themes & Settings", systemImage: "textformat.size", action: {})
+        ]
+        var settingsOpened = false
+        let roundActions: [ReaderFanRoundAction] = [
+            .init(id: "kudos", systemImage: "heart", accessibilityLabel: "Give kudos", action: {}),
+            .init(
+                id: "readAloud", systemImage: "waveform", accessibilityLabel: "Read aloud",
+                isEnabled: false, action: {}
+            ).withSettingsAction { settingsOpened = true },
+            .init(id: "rotationLock", systemImage: "lock.open.rotation", accessibilityLabel: "Lock rotation", action: {}),
+            .init(id: "bookmark", systemImage: "bookmark", accessibilityLabel: "Add bookmark", action: {})
+        ]
+
+        let standard = ReaderFanMenu.resolvedItems(pills: pills, roundActions: roundActions, inGroup: false)
+        #expect(standard.find?.id == "find")
+        #expect(standard.comments?.id == "comments")
+        #expect(standard.readAloud?.id == "readAloud")
+        #expect(standard.pillRows.map(\.id) == ["contents", "bookmarks", "settings"])
+        #expect(standard.roundActionRows.map(\.id) == ["kudos", "rotationLock", "bookmark"])
+        #expect(standard.readAloudSettings != nil)
+        #expect(standard.rebuild?.id == "rebuild")
+
+        let duo = ReaderFanMenu.resolvedItems(pills: pills, roundActions: roundActions, inGroup: true)
+        #expect(duo.find?.id == "find")
+        #expect(duo.comments?.id == "comments")
+        #expect(duo.readAloud == nil)
+        #expect(duo.pillRows.map(\.id) == ["bookmarks"])
+        #expect(duo.roundActionRows.map(\.id) == ["kudos", "rotationLock"])
+        #expect(duo.rebuild?.id == "rebuild")
+        // Read Aloud Settings stays reachable even when Read Aloud is disabled.
+        duo.readAloudSettings?()
+        #expect(settingsOpened)
+    }
+
+    @Test func liveOcclusionsFixRailStatusAfterHiddenPortraitToLandscapeRotation() {
+        let book = ReadiumBook()
+        let portrait = CGSize(width: 669, height: 951)
+        let landscape = CGSize(width: 951, height: 669)
+        let portraitFold = CGRect(x: 0, y: 455.5, width: 669, height: 40)
+
+        // Open in portrait (no vertical bar -> statusBottomBySize stays empty).
+        book.updatePageBoxGeometry(
+            size: portrait,
+            safeInsets: UIEdgeInsets(top: 82, left: 0, bottom: 34, right: 0),
+            regions: ReaderHostRegions(fold: portraitFold)
+        )
+        // Rotate to landscape with bars hidden, then reveal bars before occlusion activates.
+        book.updatePageBoxGeometry(
+            size: landscape,
+            safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 0),
+            regions: ReaderHostRegions(verticalBar: .right, barStatusBottom: 0, fold: Self.innerFold)
+        )
+        book.chromeHidden = false
+        book.updatePageBoxGeometry(
+            size: landscape,
+            safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 84),
+            regions: ReaderHostRegions(verticalBar: .right, barStatusBottom: 0, fold: Self.innerFold)
+        )
+        #expect(book.hostRegions.barStatusBottom == 0)
+
+        // SwiftUI's live occlusion probe delivers the activated status block ~14 ms later.
+        book.updateLiveOcclusions([CGRect(x: 867, y: 0, width: 84, height: 124)], in: landscape)
+        #expect(book.hostRegions.barStatusBottom == 124)
+        let placement = ReaderDuoChromePlacement.resolve(
+            layout: .rail(.right), size: landscape,
+            safe: book.pageBoxGeometry.safeInsets, regions: book.hostRegions
+        )
+        #expect(placement.railTop == 134)
+
+        // Rotate 180° to `.left` with bars hidden: reuses same-size status bottom and accepts live `.left` occlusion.
+        book.chromeHidden = true
+        book.updatePageBoxGeometry(
+            size: landscape,
+            safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 0),
+            regions: ReaderHostRegions(verticalBar: .left, barStatusBottom: 0, fold: Self.innerFold)
+        )
+        #expect(book.hostRegions.barStatusBottom == 124)
+        book.updateLiveOcclusions([CGRect(x: 0, y: 0, width: 84, height: 128)], in: landscape)
+        #expect(book.hostRegions.barStatusBottom == 128)
+    }
+
+    @Test func coverLandscapeClampsFallbackRailTopAboveHomeIndicator() {
+        let size = CGSize(width: 678, height: 466)
+        let safe = UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 84)
+        let placement = ReaderDuoChromePlacement.resolve(
+            layout: .rail(.right), size: size, safe: safe,
+            regions: ReaderHostRegions(verticalBar: .right, barStatusBottom: 174)
+        )
+        #expect(placement.railTop + ReaderDuoChromePlacement.railHeight <= size.height - safe.bottom)
+        #expect(placement.railTop == 150)
+    }
+
+    @Test func hiddenOrientationChangesHoldDuoInsetsWithoutReflow() async {
+        // Portrait -> Landscape with bars hidden reserves full 84 pt bar column up front.
+        #expect(ReaderPageBoxGeometry.verticalBarReserve == 84)
+        let book = ReadiumBook()
+        let portrait = CGSize(width: 669, height: 951)
+        let landscape = CGSize(width: 951, height: 669)
+        let portraitFold = CGRect(x: 0, y: 455.5, width: 669, height: 40)
+
+        book.updatePageBoxGeometry(
+            size: landscape,
+            safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 0),
+            regions: ReaderHostRegions(verticalBar: .right, fold: Self.innerFold)
+        )
+        await book.pageBoxRemeasureTask?.value
+        #expect(book.pageBoxGeometry.safeInsets.right == 84)
+        // First show reports safe.right = 84: page box did not change -> no reflow remeasure.
+        book.chromeHidden = false
+        book.updatePageBoxGeometry(
+            size: landscape,
+            safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 84),
+            regions: ReaderHostRegions(verticalBar: .right, barStatusBottom: 124, fold: Self.innerFold)
+        )
+        #expect(book.pageBoxRemeasureTask == nil)
+        #expect(book.pageBoxGeometry.safeInsets.right == 84)
+
+        // Landscape -> Portrait with bars hidden holds the 82 pt upright status-bar reserve.
+        book.chromeHidden = true
+        book.updatePageBoxGeometry(
+            size: portrait,
+            safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 0),
+            regions: ReaderHostRegions(fold: portraitFold)
+        )
+        await book.pageBoxRemeasureTask?.value
+        #expect(book.pageBoxGeometry.safeInsets.top == ReaderPageBoxGeometry.foldTopBarTopReserve)
+        // Showing bars in Portrait reports safe.top = 82: zero reflow and no remeasure.
+        book.chromeHidden = false
+        book.updatePageBoxGeometry(
+            size: portrait,
+            safeInsets: UIEdgeInsets(top: 82, left: 0, bottom: 34, right: 0),
+            regions: ReaderHostRegions(fold: portraitFold)
+        )
+        #expect(book.pageBoxRemeasureTask == nil)
+        #expect(book.pageBoxGeometry.safeInsets.top == 82)
+    }
+
+    @Test func transientStandardFrameDuringUnfoldDoesNotDropDuoLayout() async {
+        let book = ReadiumBook()
+        let cover = CGSize(width: 466, height: 678)
+        let open = CGSize(width: 951, height: 669)
+
+        book.updatePageBoxGeometry(
+            size: cover,
+            safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 84),
+            regions: ReaderHostRegions(verticalBar: .right, barStatusBottom: 174)
+        )
+        #expect(ReaderChromeLayout.resolve(book.hostRegions) == .rail(.right))
+
+        // Intermediate Cover -> Open frame arrives with bar=none and fold=nil.
+        book.updatePageBoxGeometry(
+            size: open,
+            safeInsets: UIEdgeInsets(top: 82, left: 0, bottom: 34, right: 0),
+            regions: ReaderHostRegions()
+        )
+        #expect(ReaderChromeLayout.resolve(book.hostRegions) == .rail(.right))
+        #expect(book.pendingStandardLayoutTask != nil)
+
+        // Real Open frame arrives 35 ms later and cancels the deferred drop.
+        book.updatePageBoxGeometry(
+            size: open,
+            safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 84),
+            regions: ReaderHostRegions(verticalBar: .right, barStatusBottom: 124, fold: Self.innerFold)
+        )
+        #expect(book.pendingStandardLayoutTask == nil)
+        #expect(ReaderChromeLayout.resolve(book.hostRegions) == .rail(.right))
+
+        // A genuine permanent move to a standard display commits once the debounce elapses.
+        book.updatePageBoxGeometry(
+            size: CGSize(width: 402, height: 874),
+            safeInsets: UIEdgeInsets(top: 62, left: 0, bottom: 34, right: 0),
+            regions: ReaderHostRegions()
+        )
+        #expect(ReaderChromeLayout.resolve(book.hostRegions) == .rail(.right))
+        await book.pendingStandardLayoutTask?.value
+        #expect(ReaderChromeLayout.resolve(book.hostRegions) == .standard)
+        book.cancelPageBoxRemeasure()
+    }
+
+    @Test func foldFrameRequiresBoundsIntersectionAndAcceptsZeroThicknessCrease() {
+        let sheetBounds = CGRect(x: 0, y: 0, width: 400, height: 669)
+        let outOfBoundsFold = CGRect(x: 455.5, y: 0, width: 40, height: 669)
+        #expect(ReaderHostRegions.foldFrame(from: [outOfBoundsFold], in: sheetBounds) == nil)
+
+        let portraitBounds = CGRect(x: 0, y: 0, width: 669, height: 951)
+        let zeroHeightCrease = CGRect(x: 0, y: 475, width: 669, height: 0)
+        #expect(ReaderHostRegions.foldFrame(from: [zeroHeightCrease], in: portraitBounds) == zeroHeightCrease)
     }
 }
 #endif

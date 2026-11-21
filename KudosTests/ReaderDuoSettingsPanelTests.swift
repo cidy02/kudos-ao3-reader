@@ -102,20 +102,58 @@ struct ReaderDuoSettingsPanelTests {
         #expect(placement.top + placement.height == CGFloat(951 - 34))
     }
 
-    @Test func uprightDuoReadsOnePageWithTwoPageSpreadOn() {
+    @Test func uprightPanelInRTLAnchorsOnPhysicalLeftUnderAa() throws {
+        let size = CGSize(width: 669, height: 951)
+        let safe = UIEdgeInsets(top: 82, left: 0, bottom: 34, right: 0)
+        let regions = ReaderHostRegions(fold: Self.portraitFold)
+        let chrome = ReaderDuoChromePlacement.resolve(layout: .foldTopBar, size: size, safe: safe, regions: regions)
+        let placement = try #require(ReaderDuoSettingsPanelPlacement.resolve(
+            layout: .foldTopBar, chrome: chrome, size: size, safe: safe,
+            regions: regions, chromeTop: 82, layoutDirection: .rightToLeft
+        ))
+        #expect(placement.left == ReaderDuoChromePlacement.edgeInset)
+        #expect(placement.width == ReaderDuoSettingsPanelPlacement.width)
+    }
+
+    @Test func uprightDuoReadsOnePageWithTwoPageSpreadOn() throws {
         #expect(!ReaderChromeLayout.foldTopBar.allowsTwoPageSpread)
         #expect(ReaderChromeLayout.rail(.right).allowsTwoPageSpread)
         #expect(ReaderChromeLayout.standard.allowsTwoPageSpread)
+        #expect(!ReaderChromeLayout.foldTopBar.effectiveTwoPageSpread(enabled: true, wideLayout: true))
+        #expect(ReaderChromeLayout.rail(.right).effectiveTwoPageSpread(enabled: true, wideLayout: true))
+        #expect(!ReaderChromeLayout.rail(.right).effectiveTwoPageSpread(enabled: true, wideLayout: false))
         let upright = ReadiumReaderStyleMapper.columnCount(
-            readingMode: .paged, twoPageSpread: true && ReaderChromeLayout.foldTopBar.allowsTwoPageSpread,
+            readingMode: .paged,
+            twoPageSpread: ReaderChromeLayout.foldTopBar.effectiveTwoPageSpread(enabled: true, wideLayout: true),
             bookPose: false, tabletopPose: false
         )
         #expect(upright == .one)
         let open = ReadiumReaderStyleMapper.columnCount(
-            readingMode: .paged, twoPageSpread: true && ReaderChromeLayout.rail(.right).allowsTwoPageSpread,
+            readingMode: .paged,
+            twoPageSpread: ReaderChromeLayout.rail(.right).effectiveTwoPageSpread(enabled: true, wideLayout: true),
             bookPose: false, tabletopPose: false
         )
         #expect(open == .two)
+
+        // Verify the production reader wires `effectiveTwoPageSpread` into both
+        // preferences and preferencesToken, and ReaderOptionsForm omits Read Aloud.
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let readerSource = try String(
+            contentsOf: root.appending(path: "kudos-ao3-reader/Features/ReaderReadium/ReadiumReaderView.swift"),
+            encoding: .utf8
+        )
+        #expect(readerSource.contains("chromeLayout.effectiveTwoPageSpread("))
+        let settingsSource = try String(
+            contentsOf: root.appending(path: "kudos-ao3-reader/Settings/SettingsView.swift"),
+            encoding: .utf8
+        )
+        let formStart = try #require(settingsSource.range(of: "struct ReaderOptionsForm"))
+        let formEnd = try #require(settingsSource.range(
+            of: "struct ReaderFontRow", range: formStart.upperBound..<settingsSource.endIndex
+        ))
+        let formBody = settingsSource[formStart.lowerBound..<formEnd.lowerBound]
+        #expect(!formBody.contains("ReaderSpeechSettingsSection"))
+        #expect(settingsSource.contains("when it is open in landscape."))
     }
 }
 #endif

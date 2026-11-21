@@ -426,9 +426,9 @@ struct ReadiumReaderView: View {
             .toolbar(.hidden, for: .tabBar)
             .statusBarHidden(hidesStatusBar)
             .persistentSystemOverlays(chromeVisible ? .automatic : .hidden)
-            // The status bar fades with the bars (T-562b). Not dropped under Reduce
-            // Motion any more: a fade has no movement, and dropping it made them snap.
-            .animation(ReaderChromeAutoHide.fade, value: book.chromeHidden)
+            // The status bar fades with the bars (T-562b), including Duo's initial
+            // hide once the first page paints. Not dropped under Reduce Motion.
+            .animation(ReaderChromeAutoHide.fade, value: hidesStatusBar)
             .animation(unlessReduced: .easeInOut(duration: 0.25), value: speech.isSessionActive)
             // Readium's WebView swallows the system edge-swipe; add our own.
             .edgeSwipeToGoBack { dismissReader() }
@@ -1023,12 +1023,13 @@ struct ReadiumReaderView: View {
     private func applyReaderPreferences() {
         book.renderedLineHeightPoints = textStyle.fontSizePt * textStyle.lineHeight
         book.renderedPageMarginPoints = max(0, textStyle.margin)
-        book.submit(preferences)
+        let changed = book.submit(preferences)
         // Page turn is an EPUB preference (`pageTransition`) and also the
         // adapter's animated flag. Submit carries the style. Refresh keeps
         // edge taps in step when only the flag changes (Reduce Motion, or
         // leaving paged mode).
         book.refreshPageTurnAnimation()
+        guard changed else { return }
         // Typography submit updates CSS but may not re-run spread updateContentInset.
         book.forcePageBoxContentInsetRefresh()
         // Font/columns/mode/margin change swipe pageCount — remeasure instead of sticky Y.
@@ -1135,12 +1136,13 @@ struct ReadiumReaderView: View {
                 // The fill stays full-bleed; paged Readium ignores side insets.
                 .padding(book.pageBoxGeometry.horizontalInsets(in: layoutDirection))
                 // The Duo bars are placed in host points, over the side insets
-                // (the rail stands in the system bar's column).
+                // (the rail stands in the system bar's column). Bottom bar sits
+                // under the settings scrim so it dims and stays inert while open.
+                .overlay(alignment: .bottom) { duoBottomLayer }
                 .overlay {
                     duoSettingsScrimLayer.animation(ReaderChromeAutoHide.fade, value: showsDuoSettingsPanel)
                 }
                 .overlay(alignment: .top) { duoTopLayer }
-                .overlay(alignment: .bottom) { duoBottomLayer }
                 .overlay {
                     duoSettingsPanelLayer.animation(ReaderChromeAutoHide.fade, value: showsDuoSettingsPanel)
                 }
@@ -1160,6 +1162,11 @@ struct ReadiumReaderView: View {
         .background {
             ReaderFoldProbe(bookPose: $bookPose, tabletopPose: $tabletopPose)
         }
+        .background {
+            ReaderOcclusionProbe { frames, size in
+                book.updateLiveOcclusions(frames, in: size)
+            }
+        }
     }
 
     private var topBarLayer: some View {
@@ -1176,6 +1183,7 @@ struct ReadiumReaderView: View {
         .padding(.bottom, 2)
         .background(readerPageColors.background.ignoresSafeArea(edges: .top))
         .allowsHitTesting(chromeVisible)
+        .accessibilityHidden(!chromeVisible)
         .opacity(chromeVisible ? 1 : 0)
         .animation(ReaderChromeAutoHide.fade, value: chromeVisible)
     }
@@ -1198,6 +1206,7 @@ struct ReadiumReaderView: View {
             .padding(.trailing, ReaderChromeTopBar.edgeInset)
             .padding(.top, book.pageBoxChromeSafeTop)
             .allowsHitTesting(chromeVisible)
+            .accessibilityHidden(!chromeVisible)
             .opacity(chromeVisible ? 1 : 0)
             .animation(ReaderChromeAutoHide.fade, value: chromeVisible)
             // QuickLook renders the archived original in place — a PDF stays a PDF, so
@@ -1245,30 +1254,51 @@ struct ReadiumReaderView: View {
         let speechActive = speech.isSessionActive
         let atEnd = book.isAtPublicationEnd
         VStack(spacing: 10) {
-            if chromeVisible, atEnd {
-                if speechActive { standaloneMiniPlayer }
-                endOfWorkCard.transition(.opacity)
-            } else if speechActive, !chromeVisible {
-                // Decoupled: transport stays reachable while full chrome is hidden.
-                standaloneMiniPlayer.transition(.opacity)
-            } else if !atEnd {
-                highlightColorBar
-                // Stays in the tree and fades (T-562b): removing the glass card
-                // skipped its opacity transition, so it vanished in one frame.
-                positionCard(includeMiniPlayer: speechActive)
+            highlightColorBar
+            // Every glass/material chrome surface stays mounted while its mode
+            // (`atEnd` / `speechActive`) holds and fades via opacity — removing
+            // a `.glassEffect` or `.regularMaterial` view on `chromeVisible`
+            // skips its fade and snaps in one frame (T-562b / fix1).
+            ZStack(alignment: .bottom) {
+                if speechActive {
+                    standaloneMiniPlayer
+                        .opacity(chromeVisible ? 0 : 1)
+                        .allowsHitTesting(!chromeVisible)
+                        .accessibilityHidden(chromeVisible)
+                }
+                if atEnd {
+                    VStack(spacing: 10) {
+                        if speechActive { standaloneMiniPlayer }
+                        endOfWorkCard
+                    }
                     .opacity(chromeVisible ? 1 : 0)
                     .allowsHitTesting(chromeVisible)
+                    .accessibilityHidden(!chromeVisible)
+                } else {
+                    positionCard(includeMiniPlayer: speechActive)
+                        .opacity(chromeVisible ? 1 : 0)
+                        .allowsHitTesting(chromeVisible)
+                        .accessibilityHidden(!chromeVisible)
+                }
             }
         }
-        // Inside the peel host's own hosting controller: the body's animation does
-        // not reach in here, which is why the bars used to snap (T-562b).
-        .animation(ReaderChromeAutoHide.fade, value: chromeVisible)
-        .padding(.top, chromeVisible && atEnd ? 18 : 0)
+        .padding(.top, atEnd ? 18 : 0)
         .padding(.leading, layoutDirection == .leftToRight ? left : right)
         .padding(.trailing, layoutDirection == .leftToRight ? right : left)
         .padding(.bottom, book.pageBoxChromeSafeBottom + Self.chromeInset)
-        .background { if chromeVisible, atEnd { readerPageColors.background.ignoresSafeArea() } }
-        .allowsHitTesting(chromeVisible || speechActive)
+        .background {
+            if atEnd {
+                readerPageColors.background
+                    .opacity(chromeVisible ? 1 : 0)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
+        }
+        // Inside the peel host's own hosting controller: the body's animation does
+        // not reach in here, which is why the bars used to snap (T-562b). Keep
+        // below `.background` so the end-of-work backdrop fades with the card.
+        .animation(ReaderChromeAutoHide.fade, value: chromeVisible)
+        .allowsHitTesting(chromeVisible || speechActive || colorBarAnnotationID != nil)
     }
 
     private var endOfWorkCard: some View {
@@ -1325,7 +1355,8 @@ struct ReadiumReaderView: View {
             onSeekHoldEnd: { handleSpeechSeekHoldEnd() },
             // Empty areas of the strip (caption, waveform, gutters) show chrome —
             // same idea as tapping the page when only the mini player is up.
-            onBackgroundTap: { book.setChromeHidden(false) }
+            onBackgroundTap: { book.setChromeHidden(false) },
+            onOpenSettings: { showingSpeechSettings = true }
         )
     }
 
@@ -1711,7 +1742,9 @@ extension ReadiumReaderView {
             theme: readerTheme,
             fontFamily: readiumFontFamily,
             readingMode: readingMode,
-            twoPageSpread: twoPageEnabled && wideLayoutAvailable && chromeLayout.allowsTwoPageSpread,
+            twoPageSpread: chromeLayout.effectiveTwoPageSpread(
+                enabled: twoPageEnabled, wideLayout: wideLayoutAvailable
+            ),
             backgroundHex: readerPageColors.backgroundHex,
             textHex: readerPageColors.textHex,
             pageTurn: pageTurn,
@@ -1740,8 +1773,11 @@ extension ReadiumReaderView {
 
     /// Re-submit preferences whenever any mapped setting changes (instant updates).
     private var preferencesToken: String {
-        "\(readingMode.rawValue)|\(pageTurn.rawValue)|\(readerTheme.rawValue)|\(readerPageColors.backgroundHex)|\(fontID)|"
-            + "\(twoPageEnabled)|\(wideLayoutAvailable)|\(chromeLayout.allowsTwoPageSpread)|"
+        let effectiveTwoPage = chromeLayout.effectiveTwoPageSpread(
+            enabled: twoPageEnabled, wideLayout: wideLayoutAvailable
+        )
+        return "\(readingMode.rawValue)|\(pageTurn.rawValue)|\(readerTheme.rawValue)|"
+            + "\(readerPageColors.backgroundHex)|\(fontID)|\(effectiveTwoPage)|"
             + "\(bookPose)|\(tabletopPose)|"
             + "\(dynamicTypeSize.isAccessibilitySize)|\(textStyle.token)"
     }
@@ -2308,7 +2344,8 @@ extension ReadiumReaderView {
         if let settings = pills.first(where: { $0.id == "settings" }) {
             items.append(ReaderDuoGroupItem(
                 id: settings.id, accessibilityLabel: settings.title, text: "Aa",
-                isOn: router.panel == .readerDisplay, action: settings.action
+                isOn: router.panel == .readerDisplay,
+                action: { router.toggle(.readerDisplay) }
             ))
         }
         if let contents = pills.first(where: { $0.id == "contents" }) {
@@ -2366,6 +2403,7 @@ extension ReadiumReaderView {
             .padding(.top, placement.railTop)
             .frame(maxWidth: .infinity, alignment: physicalAlignment(right: onRight))
             .allowsHitTesting(chromeVisible)
+            .accessibilityHidden(!chromeVisible)
             .opacity(chromeVisible ? 1 : 0)
             .animation(ReaderChromeAutoHide.fade, value: chromeVisible)
         case .foldTopBar:
@@ -2375,21 +2413,35 @@ extension ReadiumReaderView {
             .padding(.top, book.pageBoxChromeSafeTop)
             .padding(book.pageBoxGeometry.horizontalInsets(in: layoutDirection))
             .allowsHitTesting(chromeVisible)
+            .accessibilityHidden(!chromeVisible)
             .opacity(chromeVisible ? 1 : 0)
             .animation(ReaderChromeAutoHide.fade, value: chromeVisible)
         }
     }
 
+    private var hasChromeBlockingOverlay: Bool {
+        router.panel != .none || showingComments || showingWorkDetail
+            || showingSpeechSettings || editingNote != nil || correctingPronunciation != nil
+    }
+
     /// A turn the reader made hides the controls, like Apple Books (T-562b): not
     /// while anything is open over the page, and not while VoiceOver runs.
+    /// Dispatched to the next main turn so the `withAnimation` status-bar hide
+    /// runs in its own clean transaction after `currentLocator`/`sliderValue`
+    /// settle — otherwise synchronous un-animated writes in `locationDidChange`
+    /// caused the status bar to snap off in 1 frame.
     private func hideControlsAfterTurn() {
-        let overlayOpen = router.panel != .none || showingComments || showingWorkDetail
-            || showingSpeechSettings || editingNote != nil || correctingPronunciation != nil
         guard ReaderChromeAutoHide.hidesControls(
-            controlsShowing: chromeVisible, overlayOpen: overlayOpen,
+            controlsShowing: chromeVisible, overlayOpen: hasChromeBlockingOverlay,
             voiceOverRunning: UIAccessibility.isVoiceOverRunning
         ) else { return }
-        book.setChromeHidden(true)
+        DispatchQueue.main.async {
+            guard ReaderChromeAutoHide.hidesControls(
+                controlsShowing: chromeVisible, overlayOpen: hasChromeBlockingOverlay,
+                voiceOverRunning: UIAccessibility.isVoiceOverRunning
+            ) else { return }
+            book.setChromeHidden(true)
+        }
     }
 
     /// Themes & Settings in a Duo layout (T-562b): open while the router's panel is
@@ -2403,7 +2455,7 @@ extension ReadiumReaderView {
         ReaderDuoSettingsPanelPlacement.resolve(
             layout: chromeLayout, chrome: duoPlacement, size: book.pageBoxGeometry.size,
             safe: book.pageBoxGeometry.safeInsets, regions: book.hostRegions,
-            chromeTop: book.pageBoxChromeSafeTop
+            chromeTop: book.pageBoxChromeSafeTop, layoutDirection: layoutDirection
         )
     }
 
@@ -2440,6 +2492,40 @@ extension ReadiumReaderView {
         if chromeLayout != .standard {
             let placement = duoPlacement
             bottomChromeLayer(left: placement.barLeft, right: placement.barRight)
+                .allowsHitTesting(!showsDuoSettingsPanel)
+                .accessibilityHidden(showsDuoSettingsPanel)
+        }
+    }
+}
+
+/// Live active occlusion frames in full-host coordinates for `ReadiumBook`.
+/// UIKit's `viewSafeAreaInsetsDidChange` fires before iOS 27.1 activates the
+/// vertical bar's status-block occlusion (~14 ms later) and never fires again;
+/// SwiftUI's `GeometryProxy.reservedRegions` updates live when it activates.
+private struct ReaderOcclusionProbe: View {
+    struct Snapshot: Equatable {
+        var size: CGSize
+        var frames: [CGRect]
+    }
+
+    let onChange: ([CGRect], CGSize) -> Void
+
+    var body: some View {
+        if #available(iOS 27.1, *) {
+            GeometryReader { proxy in
+                let snapshot = Snapshot(
+                    size: proxy.size,
+                    frames: proxy.reservedRegions(kind: .occlusion, layoutDirectionBehavior: .fixed)
+                        .filter(\.isActive)
+                        .map(\.frame)
+                )
+                Color.clear
+                    .onAppear { onChange(snapshot.frames, snapshot.size) }
+                    .onChange(of: snapshot) { _, next in onChange(next.frames, next.size) }
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
     }
 }

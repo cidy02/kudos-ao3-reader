@@ -102,6 +102,7 @@ struct ReaderOptionsForm: View {
             HStack(spacing: 0) {
                 Button("Customize…") { showCustomize = true }
                     .buttonStyle(.glass)
+                    .lineLimit(1)
                 Spacer(minLength: 8)
                 title.lineLimit(1).minimumScaleFactor(0.8)
                 Spacer(minLength: 8)
@@ -109,6 +110,7 @@ struct ReaderOptionsForm: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
+            .dynamicTypeSize(...DynamicTypeSize.xLarge)
         }
     }
     #endif
@@ -224,6 +226,7 @@ private struct ReaderFontRow: View {
                     }
             }
             .accentTint(themeManager.effectiveTint, on: themeManager.readerChromeTheme)
+            .preferredColorScheme(themeManager.readerPage.colorScheme)
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
@@ -404,7 +407,8 @@ struct ReaderLayoutSection: View {
         let spread = if !twoPageSpreadAvailable {
             "Choose whether you turn pages or scroll while reading."
         } else if twoPageSpreadApplies {
-            "Two-page spread shows two pages side by side in Paged mode on wide screens, and on iPhone Duo when it is open."
+            "Two-page spread shows two pages side by side in Paged mode on wide screens, "
+                + "and on iPhone Duo when it is open in landscape."
         } else {
             Self.uprightSpreadNote
         }

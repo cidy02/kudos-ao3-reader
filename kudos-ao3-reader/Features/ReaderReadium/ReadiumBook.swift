@@ -186,6 +186,8 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// settle may still be the echo of one (or of a relayout).
     @ObservationIgnored private var jumpsInFlight = 0
     @ObservationIgnored private var turnEchoUntil: Date = .distantPast
+    /// Last settled non-mid-drag place, so a cancelled Slide drag never poisons the turn baseline.
+    @ObservationIgnored private var lastSettledTurnPlace: ReaderChromeAutoHide.Place?
 
     /// The body's rendered line height in points — font size × the line-height
     /// multiplier, mirrored from the view's `ReaderTextStyle` whenever
@@ -207,6 +209,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// The host's bar edge, status block and fold, for the Duo chrome (T-562a).
     private(set) var hostRegions = ReaderHostRegions()
     @ObservationIgnored private var statusBottomBySize: [String: CGFloat] = [:]
+    /// Live active occlusion frames from SwiftUI's full-host `GeometryProxy`, which
+    /// updates after UIKit's `viewSafeAreaInsetsDidChange` when the status block activates.
+    @ObservationIgnored private var latestLiveOcclusions: (size: CGSize, frames: [CGRect]) = (.zero, [])
+    /// Coalesces a transient Duo → `.standard` frame (Cover → Open unfold) so an open
+    /// settings panel is not destroyed during the ~35 ms gap before traits arrive.
+    @ObservationIgnored private(set) var pendingStandardLayoutTask: Task<Void, Never>?
     var pageBoxChromeSafeBottom: CGFloat { pageBoxGeometry.safeInsets.bottom }
 
     @ObservationIgnored private(set) var pageBoxRemeasureTask: Task<Void, Never>?
@@ -226,36 +234,21 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         let sameSize = abs(size.width - pageBoxGeometry.size.width) <= 1
             && abs(size.height - pageBoxGeometry.size.height) <= 1
         let mergedRegions = mergedHostRegions(regions, size: size, sameSize: sameSize)
-        let reserveChanged = Self.topBarReserve(for: mergedRegions) != Self.topBarReserve(for: hostRegions)
-        if mergedRegions != hostRegions { hostRegions = mergedRegions }
-        let next = pageBoxGeometry.updating(
-            size: size, safeInsets: safeInsets, verticalBar: regions.verticalBar,
-            // Showing chrome can lay out once before UIKit restores the status bar.
-            preserveStatusBarTop: chromeHidden || Date() < pageBoxChromeTransitionUntil
-        )
-        guard next != pageBoxGeometry || reserveChanged else { return }
-        pageBoxGeometry = next
-        // The page lays out again: its settles are not turns.
-        noteTurnEcho(ReaderChromeAutoHide.relayoutEchoWindow)
-        pageBoxRemeasureTask?.cancel()
-        // Invalidate old-layout samples immediately; measure only after quiet.
-        clearVisualPageMetrics()
-        forcePageBoxContentInsetRefresh()
-        pageBoxRemeasureTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(nanoseconds: 220_000_000) } catch { return }
-            guard let self else { return }
-            guard !self.isLocatorIngestionBlocked else {
-                self.cancelPageBoxRemeasure()
-                return
-            }
-            self.pageBoxRemeasureTask = nil
-            self.schedulePageBarRemeasure()
+        if ReaderChromeLayout.resolve(hostRegions) != .standard,
+           ReaderChromeLayout.resolve(mergedRegions) == .standard {
+            scheduleDeferredStandardLayout(size: size, safeInsets: safeInsets, regions: regions)
+            return
         }
+        pendingStandardLayoutTask?.cancel()
+        pendingStandardLayoutTask = nil
+        applyPageBoxGeometry(size: size, safeInsets: safeInsets, mergedRegions: mergedRegions)
     }
 
     func cancelPageBoxRemeasure() {
         pageBoxRemeasureTask?.cancel()
         pageBoxRemeasureTask = nil
+        pendingStandardLayoutTask?.cancel()
+        pendingStandardLayoutTask = nil
     }
 
     /// Fires on every position change. The view records this for the progress
@@ -561,6 +554,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         }
         phase = .loading
         settledLocationCount = 0
+        lastSettledTurnPlace = nil
         hasPresentedFirstPage = false
         firstPagePresentationGeneration += 1
         let presentationGeneration = firstPagePresentationGeneration
@@ -597,6 +591,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             let tocLinks = await (try? publication.tableOfContents().get()) ?? []
             self.navigator = navigator
             self.publication = publication
+            // Seed with the navigator's opening preferences so closing an unchanged
+            // panel does not look like a preference change and arm the 1.2 s turn echo.
+            self.lastSubmittedPreferences = config.preferences
             // After the navigator exists. The legacy tap callback is already
             // installed (and must stay a no-op — see `didTapAt`). This registers
             // the edge/key adapter, then the centre-tap chrome toggle.
@@ -654,14 +651,17 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         hasPresentedFirstPage = true
     }
 
-    func submit(_ preferences: EPUBPreferences) {
+    @discardableResult
+    func submit(_ preferences: EPUBPreferences) -> Bool {
         // Only a real change relays the page out. The view re-submits unchanged
         // preferences whenever a panel closes; that must not mute the next turn.
-        if preferences != lastSubmittedPreferences {
+        let changed = preferences != lastSubmittedPreferences
+        if changed {
             noteTurnEcho(ReaderChromeAutoHide.relayoutEchoWindow)
             lastSubmittedPreferences = preferences
         }
         navigator?.submitPreferences(preferences)
+        return changed
     }
 
     @ObservationIgnored private var lastSubmittedPreferences: EPUBPreferences?
@@ -801,15 +801,21 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         // through successful dismiss teardown so a late settle cannot corrupt
         // the flushed resume point.
         guard !isLocatorIngestionBlocked else { return }
-        // A turn the reader made hides the controls (T-562b); jumps, scrubs and
-        // relayouts do not. The first settle after opening has no previous place.
-        if ReaderChromeAutoHide.isUserTurn(
-            from: settledLocationCount > 0 ? currentLocator.map(Self.turnPlace) : nil,
-            to: Self.turnPlace(locator),
+        // A turn the reader made hides the controls (T-562b); jumps, scrubs,
+        // cancelled Slide drags, micro-scrolls and relayouts do not.
+        let isPaged = isPagedReadingMode
+        let scrollInteracting = navigator?.view.map(Self.hasActiveScrollGesture(in:)) ?? false
+        let incomingPlace = Self.turnPlace(locator)
+        let userTurn = ReaderChromeAutoHide.isUserTurn(
+            from: settledLocationCount > 0 ? lastSettledTurnPlace : nil,
+            to: incomingPlace,
             jumpInFlight: jumpsInFlight > 0, isScrubbing: isScrubbing,
+            isScrollInteracting: scrollInteracting, isPaged: isPaged,
+            pageCount: pageBarReady ? visualPageCount : nil,
             echoUntil: turnEchoUntil, now: Date()
-        ) {
-            onUserPageTurn?()
+        )
+        if !(isPaged && scrollInteracting) {
+            lastSettledTurnPlace = incomingPlace
         }
         // First post-open settle: the spread has painted enough for Readium to
         // report a location — lift the skeleton that was covering its spinner.
@@ -822,12 +828,17 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             clearVisualPageMetrics()
             schedulePageBarRemeasure()
         } else if pageBarReady, !isScrubbing {
-            // Same-resource settle (edge tap / goForward / programmatic seek):
-            // touch-armed JS may never fire. Refresh digit from the primary
-            // webview scroll position after a short quiet window — never from
-            // progression alone (mid-animation progression was the old snap).
-            // Skipped mid-scrub: the slider is the source of truth there, and a
-            // refresh landing after release is what briefly showed a stale page.
+            // Update the page digit right away from leading-edge progression on
+            // settled turns (e.g. edge tap / key where Readium's transitioning flag
+            // silenced JS scroll posts) so the card is consistent before fading out,
+            // then let the quiet DOM remeasure refine it if needed.
+            if !(isPaged && scrollInteracting),
+               let vCount = visualPageCount, vCount > 0,
+               let prog = locator.locations.progression, prog.isFinite,
+               prog != currentLocator?.locations.progression {
+                let derivedPage = ReaderPageMetrics.pageFromLeadingProgression(prog, pageCount: vCount)
+                publishPageBar(page: derivedPage, pageCount: vCount, allowShrink: false)
+            }
             scheduleSettledPageDigitRefresh()
         } else if !pageBarReady, !isScrubbing, pageBoxRemeasureTask == nil {
             // A late first layout can outlive the bounded opening samples. A
@@ -841,8 +852,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         // these pages, not reading them. `currentLocator` still advances (so a
         // dismiss mid-drag flushes the right spot), but the debounced progress
         // write is skipped until release, which commits the final position.
-        guard !isScrubbing else { return }
-        onLocatorChange?(locator)
+        if !isScrubbing {
+            onLocatorChange?(locator)
+        }
+        if userTurn {
+            onUserPageTurn?()
+        }
     }
 
     /// One-shot digit refresh after same-resource navigation settles. Debounced
@@ -1478,10 +1493,92 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
 // MARK: - Duo host regions (T-562a)
 
 extension ReadiumBook {
+    /// Delay before dropping from a Duo layout to `.standard`, covering the ~35 ms
+    /// Cover → Open intermediate frame that reports `bar=none, fold=nil`.
+    static let standardLayoutDropDelay: TimeInterval = 0.12
+
     /// The Duo portrait top bar stands under the status bar; the page starts below
     /// it, shown or not, so the bar never covers or moves the first line (T-562a).
     nonisolated static func topBarReserve(for regions: ReaderHostRegions) -> CGFloat {
         ReaderChromeLayout.resolve(regions) == .foldTopBar ? ReaderDuoChromePlacement.topBarReserve : 0
+    }
+
+    /// Receives live active occlusion frames from SwiftUI's full-host `GeometryProxy`
+    /// so the vertical-bar status block is picked up as soon as iOS 27.1 activates it
+    /// (typically ~14 ms after UIKit's `viewSafeAreaInsetsDidChange`).
+    func updateLiveOcclusions(_ frames: [CGRect], in size: CGSize) {
+        guard size.width > 1, size.height > 1 else { return }
+        latestLiveOcclusions = (size, frames)
+        guard hostRegions.verticalBar != .none,
+              abs(size.width - pageBoxGeometry.size.width) <= 1,
+              abs(size.height - pageBoxGeometry.size.height) <= 1
+        else { return }
+        let bottom = ReaderHostRegions.statusBottom(
+            from: frames, in: CGRect(origin: .zero, size: size), verticalBar: hostRegions.verticalBar
+        )
+        guard bottom > 0 else { return }
+        let statusKey = Self.statusKey(for: size, verticalBar: hostRegions.verticalBar)
+        let tallest = max(bottom, statusBottomBySize[statusKey] ?? 0)
+        statusBottomBySize[statusKey] = tallest
+        if hostRegions.barStatusBottom != tallest {
+            var updated = hostRegions
+            updated.barStatusBottom = tallest
+            hostRegions = updated
+        }
+    }
+
+    fileprivate func scheduleDeferredStandardLayout(
+        size: CGSize, safeInsets: UIEdgeInsets, regions: ReaderHostRegions
+    ) {
+        pendingStandardLayoutTask?.cancel()
+        let delayNs = UInt64(Self.standardLayoutDropDelay * 1_000_000_000)
+        pendingStandardLayoutTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: delayNs) } catch { return }
+            guard let self else { return }
+            self.pendingStandardLayoutTask = nil
+            let sameSize = abs(size.width - self.pageBoxGeometry.size.width) <= 1
+                && abs(size.height - self.pageBoxGeometry.size.height) <= 1
+            let merged = self.mergedHostRegions(regions, size: size, sameSize: sameSize)
+            self.applyPageBoxGeometry(size: size, safeInsets: safeInsets, mergedRegions: merged)
+        }
+    }
+
+    fileprivate func applyPageBoxGeometry(
+        size: CGSize, safeInsets: UIEdgeInsets, mergedRegions: ReaderHostRegions
+    ) {
+        let reserveChanged = Self.topBarReserve(for: mergedRegions) != Self.topBarReserve(for: hostRegions)
+        if mergedRegions != hostRegions { hostRegions = mergedRegions }
+        let next = pageBoxGeometry.updating(
+            size: size, safeInsets: safeInsets, verticalBar: mergedRegions.verticalBar,
+            isFoldTopBar: ReaderChromeLayout.resolve(mergedRegions) == .foldTopBar,
+            // Showing chrome can lay out once before UIKit restores the status bar.
+            preserveStatusBarTop: chromeHidden || Date() < pageBoxChromeTransitionUntil
+        )
+        let layoutChanged = next.hasLayoutChange(comparedTo: pageBoxGeometry) || reserveChanged
+        if next != pageBoxGeometry {
+            pageBoxGeometry = next
+        }
+        guard layoutChanged else { return }
+        // The page lays out again: its settles are not turns.
+        noteTurnEcho(ReaderChromeAutoHide.relayoutEchoWindow)
+        pageBoxRemeasureTask?.cancel()
+        // Invalidate old-layout samples immediately; measure only after quiet.
+        clearVisualPageMetrics()
+        forcePageBoxContentInsetRefresh()
+        pageBoxRemeasureTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: 220_000_000) } catch { return }
+            guard let self else { return }
+            guard !self.isLocatorIngestionBlocked else {
+                self.cancelPageBoxRemeasure()
+                return
+            }
+            self.pageBoxRemeasureTask = nil
+            self.schedulePageBarRemeasure()
+        }
+    }
+
+    private static func statusKey(for size: CGSize, verticalBar: ReaderVerticalBar) -> String {
+        "\(Int(size.width))x\(Int(size.height))|\(verticalBar)"
     }
 
     /// `regions` with the status block carried over where the system did not report one.
@@ -1489,22 +1586,34 @@ extension ReadiumBook {
         _ regions: ReaderHostRegions, size: CGSize, sameSize: Bool
     ) -> ReaderHostRegions {
         var mergedRegions = regions.merging(previous: hostRegions, sameSize: sameSize)
+        // If SwiftUI's live occlusion probe already reported an active status block
+        // for this exact size before UIKit's geometry callback arrived, use it now.
+        if mergedRegions.barStatusBottom <= 0, regions.verticalBar != .none,
+           abs(latestLiveOcclusions.size.width - size.width) <= 1,
+           abs(latestLiveOcclusions.size.height - size.height) <= 1 {
+            mergedRegions.barStatusBottom = ReaderHostRegions.statusBottom(
+                from: latestLiveOcclusions.frames,
+                in: CGRect(origin: .zero, size: size),
+                verticalBar: regions.verticalBar
+            )
+        }
         // A rotation or fold while the status bar is hidden reports no status block,
         // and showing it can report before the block is back: reuse the one this
         // size had, so the rail does not ride up under the status bar.
         // The block can also report a partial frame (82 of the cover's 174 seen on the
         // Duo), so each size keeps the tallest block it has reported.
-        let statusKey = "\(Int(size.width))x\(Int(size.height))|\(regions.verticalBar)"
+        let statusKey = Self.statusKey(for: size, verticalBar: regions.verticalBar)
         if mergedRegions.barStatusBottom > 0 {
             let tallest = max(mergedRegions.barStatusBottom, statusBottomBySize[statusKey] ?? 0)
             statusBottomBySize[statusKey] = tallest
             mergedRegions.barStatusBottom = tallest
         } else if regions.verticalBar != .none {
-            // A size never seen with its status bar: the tallest block this bar edge
-            // has had (the open-time status bar always measures one) — too low beats
-            // under the status bar.
-            let sameEdge = statusBottomBySize.filter { $0.key.hasSuffix("|\(regions.verticalBar)") }
-            mergedRegions.barStatusBottom = statusBottomBySize[statusKey] ?? sameEdge.values.max() ?? 0
+            // Prefer an exact size match (including 180° rotation onto the opposite
+            // edge), then fall back to the same edge's tallest observed block.
+            let sizePrefix = "\(Int(size.width))x\(Int(size.height))|"
+            let sameSizeAnyEdge = statusBottomBySize.filter { $0.key.hasPrefix(sizePrefix) }.values.max()
+            let sameEdge = statusBottomBySize.filter { $0.key.hasSuffix("|\(regions.verticalBar)") }.values.max()
+            mergedRegions.barStatusBottom = statusBottomBySize[statusKey] ?? sameSizeAnyEdge ?? sameEdge ?? 0
         }
         return mergedRegions
     }
@@ -1575,6 +1684,30 @@ extension ReadiumBook {
             position: locator.locations.position,
             progression: locator.locations.progression
         )
+    }
+
+    /// True when the active book is in paged layout (uses submitted preferences
+    /// when known, falling back to the stored reading mode).
+    fileprivate var isPagedReadingMode: Bool {
+        if let scroll = lastSubmittedPreferences?.scroll { return !scroll }
+        return UserDefaults.standard.string(forKey: "readerMode") == ReadingMode.paged.rawValue
+    }
+
+    /// True while any visible spread scroll view is mid-drag or decelerating,
+    /// so a cancelled/bounced Slide drag cannot hide the controls mid-gesture.
+    fileprivate static func hasActiveScrollGesture(in view: UIView) -> Bool {
+        guard !view.isHidden, view.alpha > 0.01 else { return false }
+        if let scrollView = view as? UIScrollView,
+           scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating {
+            return true
+        }
+        return view.subviews.contains { hasActiveScrollGesture(in: $0) }
+    }
+
+    /// Seeds initial preferences for unit tests that exercise `submit` without
+    /// opening an EPUB.
+    func seedInitialPreferences(_ preferences: EPUBPreferences) {
+        lastSubmittedPreferences = preferences
     }
 }
 

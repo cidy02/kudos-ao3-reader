@@ -93,6 +93,21 @@ struct ReaderPageMetricsTests {
         #expect(ReaderPageMetrics.page(progression: 0.3, pageCount: 1) == 1)
     }
 
+    @Test func pageFromLeadingProgressionMatchesReadiumPageStarts() {
+        // Readium's `locations.progression` is `scrollX / scrollWidth = (page - 1) / pageCount`.
+        #expect(ReaderPageMetrics.pageFromLeadingProgression(0.0, pageCount: 4) == 1)
+        #expect(ReaderPageMetrics.pageFromLeadingProgression(0.25, pageCount: 4) == 2)
+        #expect(ReaderPageMetrics.pageFromLeadingProgression(0.50, pageCount: 4) == 3)
+        #expect(ReaderPageMetrics.pageFromLeadingProgression(0.75, pageCount: 4) == 4)
+        #expect(ReaderPageMetrics.pageFromLeadingProgression(1.0, pageCount: 4) == 4)
+        #expect(ReaderPageMetrics.pageFromLeadingProgression(0.0, pageCount: 3) == 1)
+        #expect(ReaderPageMetrics.pageFromLeadingProgression(1.0 / 3.0, pageCount: 3) == 2)
+        #expect(ReaderPageMetrics.pageFromLeadingProgression(2.0 / 3.0, pageCount: 3) == 3)
+        #expect(ReaderPageMetrics.pageFromLeadingProgression(-0.2, pageCount: 4) == 1)
+        #expect(ReaderPageMetrics.pageFromLeadingProgression(.nan, pageCount: 4) == 1)
+        #expect(ReaderPageMetrics.pageFromLeadingProgression(0.5, pageCount: 1) == 1)
+    }
+
     // MARK: - positionIndex(visualPage:…)
 
     @Test func positionIndexMatchesPageMinusOneWhenCountsAgree() {
