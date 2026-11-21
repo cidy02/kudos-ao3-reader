@@ -1055,9 +1055,16 @@ extension WorkResumeCard {
                 title.multilineTextAlignment(.center)
             }
         } else {
+            // One line, never broken inside the word: when a pane is too narrow the
+            // layout above is what gives, not the label (T-562c N8).
+            // Work Detail's "Resume Chapter 123" is long and keeps wrapping to the card.
             HStack(spacing: 8) {
                 primaryIcon
-                title
+                if variant == .detail {
+                    title
+                } else {
+                    title.lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                }
             }
         }
     }
@@ -1085,11 +1092,15 @@ struct HomeResumeComposition<Hero: View, Next: View>: View {
     @ViewBuilder var next: () -> Next
     @Environment(\.dashboardContentRegions) private var regions
     @Environment(\.layoutDirection) private var direction
+    /// The Duo held upright stacks the card full width, like `Duo-Portrait-Home`: the
+    /// dashboard's own region host does not see the fold from inside the scroll view,
+    /// so this reads the app-level signal (T-562c N8).
+    @Environment(\.duoLayout) private var duoLayout
     private var cardSize = ScaledCarouselCardSize()
 
     var body: some View {
         #if os(iOS)
-        if let regions, let panes = regions.resumePanes(
+        if !duoLayout.isUprightFold, let regions, let panes = regions.resumePanes(
             hasNext: hasNext,
             cardWidth: cardSize.width(in: nil),
             rightToLeft: direction == .rightToLeft

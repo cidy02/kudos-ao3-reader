@@ -37,6 +37,14 @@ private struct FilterPanelPresentation<Panel: View>: ViewModifier {
     var onDismiss: (() -> Void)? = nil
     @ViewBuilder var panel: () -> Panel
 
+    /// The inspector's content lives in the host's view tree, so a panel built while
+    /// closed leaks its own navigation title and Close button into the host's toolbar
+    /// (Library and Search read "Filters" with a stray ✕, T-562c N1). Build it only
+    /// while presented.
+    @ViewBuilder private var inspectorPanel: some View {
+        if isPresented { panel() }
+    }
+
     func body(content: Content) -> some View {
         #if os(iOS)
         let wide = WideLayout.isAvailable(
@@ -44,7 +52,9 @@ private struct FilterPanelPresentation<Panel: View>: ViewModifier {
         )
         return Group {
             if wide {
-                content.inspector(isPresented: $isPresented) { panel() }
+                content.inspector(isPresented: $isPresented) {
+                    inspectorPanel.environment(\.filterPanelInInspector, true)
+                }
                     .onChange(of: isPresented) { _, presented in
                         if !presented { onDismiss?() }
                     }
@@ -63,7 +73,9 @@ private struct FilterPanelPresentation<Panel: View>: ViewModifier {
             if !isPresented { onDismiss?() }
         }
         #else
-        content.inspector(isPresented: $isPresented) { panel() }
+        content.inspector(isPresented: $isPresented) {
+            inspectorPanel.environment(\.filterPanelInInspector, true)
+        }
             .onChange(of: isPresented) { _, presented in
                 if !presented { onDismiss?() }
             }
@@ -86,4 +98,53 @@ extension View {
             isPresented: isPresented, detents: detents, onDismiss: onDismiss, panel: panel
         ))
     }
+}
+
+extension EnvironmentValues {
+    /// True inside the filter panel's inspector (wide layouts, macOS), false in the sheet.
+    @Entry var filterPanelInInspector = false
+}
+
+/// The filter panel's header. In a sheet it is the navigation title and Close button. In an
+/// inspector the panel's navigation stack is part of the host's, so a title there replaces the
+/// screen's own ("Library" read "Filters" while the Library was still showing, T-562c): the
+/// inspector draws its own header inside the pane instead and publishes no title.
+struct FilterPanelChrome: ViewModifier {
+    @Environment(\.filterPanelInInspector) private var inInspector
+    @Environment(\.dismiss) private var dismiss
+    let title: String
+
+    func body(content: Content) -> some View {
+        if inInspector {
+            content.safeAreaInset(edge: .top, spacing: 0) {
+                HStack {
+                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Close")
+                    Spacer(minLength: 0)
+                    Text(title).font(.headline).accessibilityAddTraits(.isHeader)
+                    Spacer(minLength: 0)
+                    // Balances the Close button so the title stays centred.
+                    Image(systemName: "xmark").hidden().accessibilityHidden(true)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            }
+        } else {
+            content
+                .navigationTitle(title)
+            #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+            #endif
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button { dismiss() } label: { Image(systemName: "xmark") }
+                            .accessibilityLabel("Close")
+                    }
+                }
+        }
+    }
+}
+
+extension View {
+    func filterPanelChrome(title: String) -> some View { modifier(FilterPanelChrome(title: title)) }
 }

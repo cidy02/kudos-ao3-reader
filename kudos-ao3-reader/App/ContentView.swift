@@ -445,7 +445,7 @@ struct ContentView: View {
         #if os(macOS)
         sidebarSplit
         #else
-        tabs
+        tabs.duoLayoutProbe()
         #endif
     }
 

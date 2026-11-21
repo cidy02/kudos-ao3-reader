@@ -14,6 +14,7 @@ import SwiftUI
 /// list-based Library.
 struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Environment(\.modelContext) private var context
+    @Environment(\.duoLayout) private var duoLayout
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var gate
@@ -224,7 +225,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                         works: works.filter(passesPrivacy),
                         userTagNames: userTagNames
                     )
-                        .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+                        .inspectorColumnWidth(
+                            min: 280, ideal: duoLayout.inspectorWidth ?? 320,
+                            max: max(380, duoLayout.inspectorWidth ?? 0)
+                        )
                 }
                 .task {
                     // ContentView already normalizes the full library at launch.
