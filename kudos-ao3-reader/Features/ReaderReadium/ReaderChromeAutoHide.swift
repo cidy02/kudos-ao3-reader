@@ -37,11 +37,29 @@ nonisolated enum ReaderChromeAutoHide {
         var href: String
         var position: Int?
         var progression: Double?
+        /// Visible resource progression range (`first...last`) from Readium's
+        /// `NavigatorViewport`. In paged mode, `upperBound - lowerBound` is
+        /// `viewportWidth / scrollWidth` (`1 / visualPageCount`), letting us tell
+        /// a real visual page turn apart from a same-page wobble before `pageBarReady`.
+        var viewportProgression: ClosedRange<Double>?
+
+        init(
+            href: String,
+            position: Int? = nil,
+            progression: Double? = nil,
+            viewportProgression: ClosedRange<Double>? = nil
+        ) {
+            self.href = href
+            self.position = position
+            self.progression = progression
+            self.viewportProgression = viewportProgression
+        }
     }
 
-    /// Another resource, a committed visual page change in paged mode (or an
-    /// explicit committed turn before pagination is known), or a meaningful
-    /// scroll in scrolled mode (never a cancelled sub-page wobble or 1 px nudge).
+    /// Another resource, a committed visual page change in paged mode (from
+    /// measured `pageCount`, Readium's `viewportProgression` span, or an explicit
+    /// committed turn when neither is available), or a meaningful scroll in
+    /// scrolled mode (never a cancelled sub-page wobble or 1 px nudge).
     static func moved(
         from old: Place, to new: Place,
         isPaged: Bool = true, pageCount: Int? = nil,
@@ -64,11 +82,60 @@ nonisolated enum ReaderChromeAutoHide {
             return ReaderPageMetrics.pageFromLeadingProgression(oldProgression, pageCount: pageCount)
                 != ReaderPageMetrics.pageFromLeadingProgression(newProgression, pageCount: pageCount)
         }
-        // Before pagination is known (`pageCount == nil`), Readium position boundaries
-        // and arbitrary progression deltas do not match visual pages. Only an explicit
-        // committed user turn that moved may hide on the same resource.
+        // Before `pageBarReady`, Readium's own `NavigatorViewport` gives the
+        // visible page's progression span (`scrollX/scrollW ... (scrollX+vw)/scrollW`),
+        // so committed Slide swipes and Curl drags in the first ~450 ms still hide
+        // while same-page wobbles and layout-width reflows stay silent.
+        if let visualMoved = viewportVisualPageMoved(from: old, to: new) {
+            return visualMoved
+        }
+        // When neither `pageCount` nor a usable `viewportProgression` is available,
+        // only a confirmed explicit user turn that moved may hide on the same resource.
         guard explicitUserTurn else { return false }
-        return old != new
+        return old.position != new.position || old.progression != new.progression
+    }
+
+    /// Classifies a same-resource paged move from Readium's `NavigatorViewport`
+    /// progression span (`first...last`). Returns `nil` when neither settle has a
+    /// usable span.
+    private static func viewportVisualPageMoved(from old: Place, to new: Place) -> Bool? {
+        func validSpan(_ range: ClosedRange<Double>?) -> Double? {
+            guard let range,
+                  range.lowerBound.isFinite, range.upperBound.isFinite else { return nil }
+            let span = range.upperBound - range.lowerBound
+            guard span > 1e-6, span <= 1.0 + 1e-6 else { return nil }
+            return min(1.0, span)
+        }
+
+        let oldSpan = validSpan(old.viewportProgression)
+        let newSpan = validSpan(new.viewportProgression)
+        guard oldSpan != nil || newSpan != nil else { return nil }
+
+        // When both settles are unclamped (`upperBound < 0.999`), `lowerBound / span`
+        // equals `scrollX / viewportWidth` (the 0-based column index). Comparing that
+        // keeps async font/image reflows silent while catching every real page turn.
+        if let oldRange = old.viewportProgression, let oldSpan,
+           let newRange = new.viewportProgression, let newSpan,
+           oldRange.upperBound < 0.999, newRange.upperBound < 0.999 {
+            let oldCol = oldRange.lowerBound / oldSpan
+            let newCol = newRange.lowerBound / newSpan
+            return Int(oldCol.rounded()) != Int(newCol.rounded())
+                && abs(newCol - oldCol) >= 0.45
+        }
+
+        guard let span = [oldSpan, newSpan].compactMap({ $0 }).max() else { return nil }
+        // Single-page resource (`0...1`): no intra-resource turns exist.
+        guard span < 0.999 else { return false }
+
+        let oldProgression = old.progression ?? old.viewportProgression?.lowerBound
+        let newProgression = new.progression ?? new.viewportProgression?.lowerBound
+        guard let oldP = oldProgression, let newP = newProgression,
+              oldP.isFinite, newP.isFinite else { return nil }
+
+        let pageCount = max(1, Int((1.0 / span).rounded()))
+        let oldPage = ReaderPageMetrics.pageFromLeadingProgression(oldP, pageCount: pageCount)
+        let newPage = ReaderPageMetrics.pageFromLeadingProgression(newP, pageCount: pageCount)
+        return oldPage != newPage && abs(newP - oldP) >= span * 0.45
     }
 
     /// A settle the reader caused by turning (swipe, curl drag, flick, edge tap,

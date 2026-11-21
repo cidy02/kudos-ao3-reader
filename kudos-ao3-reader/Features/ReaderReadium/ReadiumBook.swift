@@ -69,7 +69,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     private(set) var isAtPublicationEnd = false
     private(set) var navigator: EPUBNavigatorViewController?
     /// Edge taps, keyboard turns, and whether those turns animate.
-    private let pageTurns = ReadiumPageTurnController()
+    let pageTurns = ReadiumPageTurnController()
     /// Kept so Find in Work can drive Readium's own search service; the navigator
     /// does not expose the publication it was built from.
     private(set) var publication: Publication?
@@ -470,7 +470,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         guard !isScrubSeekInFlight else { return }
         isScrubSeekInFlight = true
         turnAutoHide.jumpsInFlight += 1
-        turnAutoHide.explicitUserTurnUntil = .distantPast
+        invalidatePendingTurnAttribution()
         Task { @MainActor [weak self] in
             defer {
                 self?.isScrubSeekInFlight = false
@@ -560,8 +560,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         }
         phase = .loading
         settledLocationCount = 0
-        turnAutoHide.lastSettledTurnPlace = nil
-        turnAutoHide.explicitUserTurnUntil = .distantPast
+        resetTurnAutoHideForOpen()
         navigator = nil
         lastSubmittedPreferences = nil
         hasPresentedFirstPage = false
@@ -606,12 +605,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             // After the navigator exists. The legacy tap callback is already
             // installed (and must stay a no-op — see `didTapAt`). This registers
             // the edge/key adapter, then the centre-tap chrome toggle.
-            pageTurns.bind(to: navigator, toggleChrome: { [weak self] in
-                guard let self else { return }
-                self.setChromeHidden(!self.chromeHidden)
-            }, onUserTurn: { [weak self] in
-                self?.noteExplicitUserTurn()
-            })
+            bindPageTurns(to: navigator)
             visualPageBridge.book = self
             clearVisualPageMetrics()
             highlightTapsInstalled = false
@@ -684,20 +678,20 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     }
 
     func goForward() {
-        noteExplicitUserTurn()
+        let token = beginExplicitUserTurn()
         Task { @MainActor [weak self] in
             guard let self else { return }
             let moved = await self.navigator?.goForward(options: self.pageTurns.goOptions) ?? false
-            if !moved { self.clearExplicitUserTurn() }
+            self.endExplicitUserTurn(token, moved: moved)
         }
     }
 
     func goBackward() {
-        noteExplicitUserTurn()
+        let token = beginExplicitUserTurn()
         Task { @MainActor [weak self] in
             guard let self else { return }
             let moved = await self.navigator?.goBackward(options: self.pageTurns.goOptions) ?? false
-            if !moved { self.clearExplicitUserTurn() }
+            self.endExplicitUserTurn(token, moved: moved)
         }
     }
 
@@ -801,7 +795,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
 
     // MARK: EPUBNavigatorDelegate
 
-    func navigator(_: Navigator, locationDidChange locator: Locator) {
+    func navigator(_ nav: Navigator, locationDidChange locator: Locator) {
         // Belt-and-braces sweep after a page settles. Creation-time wrap
         // is the setter hook in ReaderWebIsolation.
         if let view = navigator?.view {
@@ -810,6 +804,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
                 origin: .readiumScheme,
                 onOpenExternalURL: ReaderWebIsolation.onReadiumOpenExternalURL
             )
+            attachTurnGestureObservers(in: view)
         }
         // Freeze `setContentOffset` / hide-under-snapshot can emit spurious
         // location settles. Ignoring them keeps `currentLocator` (and flush)
@@ -822,25 +817,14 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         let now = autoHideNow()
         let isPaged = isPagedReadingMode
         let scrollInteracting = navigator?.view.map(Self.hasActiveScrollGesture(in:)) ?? false
-        let incomingPlace = Self.turnPlace(locator)
-        let explicitUserTurn = now < turnAutoHide.explicitUserTurnUntil
-        let userTurn = ReaderChromeAutoHide.isUserTurn(
-            from: settledLocationCount > 0 ? turnAutoHide.lastSettledTurnPlace : nil,
+        let activeViewport = (nav as? any ViewportObservingNavigator)?.viewport ?? turnAutoHide.latestViewport
+        let incomingPlace = Self.turnPlace(locator, viewport: activeViewport)
+        let userTurn = classifySettledTurn(
             to: incomingPlace,
-            jumpInFlight: turnAutoHide.jumpsInFlight > 0, isScrubbing: isScrubbing,
-            isScrollInteracting: scrollInteracting, isPaged: isPaged,
-            pageCount: pageBarReady ? visualPageCount : nil,
-            explicitUserTurn: explicitUserTurn,
-            jumpEchoUntil: turnAutoHide.jumpEchoUntil,
-            relayoutEchoUntil: turnAutoHide.relayoutEchoUntil,
+            isPaged: isPaged,
+            scrollInteracting: scrollInteracting,
             now: now
         )
-        if !(isPaged && scrollInteracting) {
-            turnAutoHide.lastSettledTurnPlace = incomingPlace
-            if userTurn {
-                turnAutoHide.explicitUserTurnUntil = .distantPast
-            }
-        }
         // First post-open settle: the spread has painted enough for Readium to
         // report a location — lift the skeleton that was covering its spinner.
         markFirstPagePresentedIfNeeded()
@@ -1196,6 +1180,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     func navigator(_: any ViewportObservingNavigator, viewportDidChange viewport: NavigatorViewport?) {
         // Same freeze/exit gate as locator — dismiss must not flip completion.
         guard !isLocatorIngestionBlocked else { return }
+        turnAutoHide.latestViewport = viewport
+        if let view = navigator?.view {
+            attachTurnGestureObservers(in: view)
+        }
         let atEnd = ReadiumReaderCompletion.isAtEnd(viewport: viewport, readingOrder: readingOrder)
         let wasAtEnd = isAtPublicationEnd
         if atEnd != wasAtEnd {
@@ -1274,6 +1262,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         // come from Swift's host observer + scheduled measures, never JS guesses.
         controller.removeScriptMessageHandler(forName: VisualPageMessageBridge.handlerName)
         controller.add(visualPageBridge, name: VisualPageMessageBridge.handlerName)
+        Task { @MainActor [weak self] in
+            guard let self, let view = self.navigator?.view else { return }
+            self.attachTurnGestureObservers(in: view)
+        }
         // Debounce to scroll settle (not first mid-animation sample). Throttle-on-
         // first was posting an intermediate page then the true page → bar snap.
         let visualPageSource = """
@@ -1691,13 +1683,32 @@ private final class VisualPageMessageBridge: NSObject, WKScriptMessageHandler {
     }
 }
 
-// MARK: - Controls fade and hide on a turn (T-562b)
+// MARK: - Controls fade and hide on a turn (T-562b / T-562d)
+
+private struct PendingTurnAttempt {
+    var generation: UInt64
+    var heldCandidate = false
+}
+
+private struct ConfirmedExplicitTurn {
+    var token: UInt64
+    var generation: UInt64
+    var expiresAt: Date
+}
 
 private struct TurnAutoHideState {
     var jumpsInFlight = 0
     var jumpEchoUntil: Date = .distantPast
     var relayoutEchoUntil: Date = .distantPast
-    var explicitUserTurnUntil: Date = .distantPast
+    /// Bumped on open, jump, scrub and relayout so no earlier attempt or gesture
+    /// can survive across a jump or relayout.
+    var generation: UInt64 = 0
+    var nextAttemptToken: UInt64 = 0
+    var inFlightAttempts: [UInt64: PendingTurnAttempt] = [:]
+    var confirmedTurns: [ConfirmedExplicitTurn] = []
+    var latestViewport: NavigatorViewport?
+    let gestureTracker = ReaderCommittedGestureTracker()
+    var gestureTrackerConfigured = false
     /// Last settled non-mid-drag place, so a cancelled Slide drag never poisons the turn baseline.
     var lastSettledTurnPlace: ReaderChromeAutoHide.Place?
 }
@@ -1712,10 +1723,74 @@ extension ReadiumBook {
         withAnimation(ReaderChromeAutoHide.fade) { chromeHidden = hidden }
     }
 
+    /// Binds Readium's directional adapter (edge taps, keyboard) and centre-tap chrome
+    /// toggle to `navigator`. Shared by `open(...)` and wiring regression tests.
+    func bindPageTurns(to navigator: any VisualNavigator) {
+        pageTurns.bind(
+            to: navigator,
+            toggleChrome: { [weak self] in
+                guard let self else { return }
+                self.setChromeHidden(!self.chromeHidden)
+            },
+            onBeginUserTurn: { [weak self] in
+                self?.beginExplicitUserTurn() ?? 0
+            },
+            onEndUserTurn: { [weak self] token, moved in
+                self?.endExplicitUserTurn(token, moved: moved)
+            }
+        )
+    }
+
+    /// Gesture tracker for Slide/Curl turn detection (internal for unit tests).
+    var committedGestureTracker: ReaderCommittedGestureTracker {
+        configureGestureTrackerIfNeeded()
+        return turnAutoHide.gestureTracker
+    }
+
+    var hasJumpInFlight: Bool { turnAutoHide.jumpsInFlight > 0 }
+
+    fileprivate func configureGestureTrackerIfNeeded() {
+        guard !turnAutoHide.gestureTrackerConfigured else { return }
+        turnAutoHide.gestureTrackerConfigured = true
+        turnAutoHide.gestureTracker.isInteractionBlocked = { [weak self] in
+            guard let self else { return true }
+            return self.turnAutoHide.jumpsInFlight > 0
+                || self.isScrubbing
+                || self.isLocatorIngestionBlocked
+        }
+        turnAutoHide.gestureTracker.currentGeneration = { [weak self] in
+            self?.turnAutoHide.generation ?? 0
+        }
+        turnAutoHide.gestureTracker.currentHref = { [weak self] in
+            self?.currentLocator.map { ReaderSectionBuilder.hrefKey($0.href.string) }
+        }
+        turnAutoHide.gestureTracker.nowProvider = { [weak self] in
+            self?.autoHideNow() ?? Date()
+        }
+    }
+
+    fileprivate func attachTurnGestureObservers(in rootView: UIView) {
+        configureGestureTrackerIfNeeded()
+        turnAutoHide.gestureTracker.attach(to: rootView)
+    }
+
+    fileprivate func resetTurnAutoHideForOpen() {
+        turnAutoHide.lastSettledTurnPlace = nil
+        turnAutoHide.latestViewport = nil
+        invalidatePendingTurnAttribution()
+    }
+
+    fileprivate func invalidatePendingTurnAttribution() {
+        turnAutoHide.generation &+= 1
+        turnAutoHide.inFlightAttempts.removeAll()
+        turnAutoHide.confirmedTurns.removeAll()
+        turnAutoHide.gestureTracker.invalidate()
+    }
+
     /// Runs a programmatic navigation so its settles are never taken for a turn.
     fileprivate func jump(_ navigate: @escaping @MainActor () async -> Void) {
         turnAutoHide.jumpsInFlight += 1
-        turnAutoHide.explicitUserTurnUntil = .distantPast
+        invalidatePendingTurnAttribution()
         Task { @MainActor [weak self] in
             await navigate()
             self?.endJump()
@@ -1731,32 +1806,135 @@ extension ReadiumBook {
     }
 
     fileprivate func noteRelayoutEcho(_ window: TimeInterval) {
-        turnAutoHide.explicitUserTurnUntil = .distantPast
+        invalidatePendingTurnAttribution()
         turnAutoHide.relayoutEchoUntil = max(
             turnAutoHide.relayoutEchoUntil,
             autoHideNow().addingTimeInterval(window)
         )
     }
 
-    /// Attributes the next settled navigation from an explicit user turn (edge tap,
-    /// hardware key, `goForward`/`goBackward`) so it works before `pageBarReady`
-    /// and is not masked by a prior jump's echo window.
-    func noteExplicitUserTurn() {
-        turnAutoHide.explicitUserTurnUntil = max(
-            turnAutoHide.explicitUserTurnUntil,
-            autoHideNow().addingTimeInterval(ReaderChromeAutoHide.explicitTurnWindow)
+    /// Starts a scoped directional turn attempt (edge tap, hardware key, `goForward`/
+    /// `goBackward`). Attribution is not armed until Readium confirms `moved == true`.
+    func beginExplicitUserTurn() -> UInt64 {
+        turnAutoHide.nextAttemptToken &+= 1
+        let token = turnAutoHide.nextAttemptToken
+        turnAutoHide.inFlightAttempts[token] = PendingTurnAttempt(generation: turnAutoHide.generation)
+        return token
+    }
+
+    /// Completes a directional turn attempt. A rejected move (`moved == false`)
+    /// discards any candidate held for that token without touching other attempts.
+    func endExplicitUserTurn(_ token: UInt64, moved: Bool) {
+        guard let attempt = turnAutoHide.inFlightAttempts.removeValue(forKey: token) else { return }
+        guard moved, attempt.generation == turnAutoHide.generation else { return }
+        if attempt.heldCandidate {
+            for key in Array(turnAutoHide.inFlightAttempts.keys) {
+                turnAutoHide.inFlightAttempts[key]?.heldCandidate = false
+            }
+            guard !isLocatorIngestionBlocked, !isScrubbing,
+                  turnAutoHide.jumpsInFlight == 0,
+                  autoHideNow() >= turnAutoHide.relayoutEchoUntil else { return }
+            onUserPageTurn?()
+            return
+        }
+        turnAutoHide.confirmedTurns.append(ConfirmedExplicitTurn(
+            token: token,
+            generation: attempt.generation,
+            expiresAt: autoHideNow().addingTimeInterval(ReaderChromeAutoHide.explicitTurnWindow)
+        ))
+    }
+
+    /// Classifies a settled location report, consuming any confirmed directional turn
+    /// or committed Slide/Curl gesture and holding a candidate settle if a directional
+    /// move is still awaiting Readium's `Bool` result.
+    fileprivate func classifySettledTurn(
+        to incomingPlace: ReaderChromeAutoHide.Place,
+        isPaged: Bool,
+        scrollInteracting: Bool,
+        now: Date
+    ) -> Bool {
+        let generation = turnAutoHide.generation
+        turnAutoHide.confirmedTurns.removeAll {
+            $0.generation != generation || now >= $0.expiresAt
+        }
+        let hasConfirmed = !turnAutoHide.confirmedTurns.isEmpty
+        let hasCommittedGesture = turnAutoHide.gestureTracker.hasCommittedTurn(
+            to: incomingPlace.href,
+            generation: generation,
+            now: now
         )
+        let explicitUserTurn = hasConfirmed || hasCommittedGesture
+        let previousPlace = settledLocationCount > 0 ? turnAutoHide.lastSettledTurnPlace : nil
+        let measuredPageCount = pageBarReady ? visualPageCount : nil
+        let userTurn = ReaderChromeAutoHide.isUserTurn(
+            from: previousPlace,
+            to: incomingPlace,
+            jumpInFlight: turnAutoHide.jumpsInFlight > 0, isScrubbing: isScrubbing,
+            isScrollInteracting: scrollInteracting, isPaged: isPaged,
+            pageCount: measuredPageCount,
+            explicitUserTurn: explicitUserTurn,
+            jumpEchoUntil: turnAutoHide.jumpEchoUntil,
+            relayoutEchoUntil: turnAutoHide.relayoutEchoUntil,
+            now: now
+        )
+        guard !(isPaged && scrollInteracting) else { return false }
+        turnAutoHide.lastSettledTurnPlace = incomingPlace
+        if userTurn {
+            if hasConfirmed {
+                turnAutoHide.confirmedTurns.removeFirst()
+            } else if !hasCommittedGesture,
+                      let oldestInFlight = turnAutoHide.inFlightAttempts
+                          .filter({ $0.value.generation == generation })
+                          .keys.min() {
+                turnAutoHide.inFlightAttempts.removeValue(forKey: oldestInFlight)
+            }
+            if hasCommittedGesture {
+                turnAutoHide.gestureTracker.consumeCommittedTurn()
+            }
+            return true
+        }
+        // If a directional move is still awaiting Readium's result, hold a candidate
+        // settle that would qualify once `moved == true`; discard if rejected.
+        let activeKeys = Array(turnAutoHide.inFlightAttempts
+            .filter { $0.value.generation == generation }
+            .keys)
+        if !activeKeys.isEmpty,
+           ReaderChromeAutoHide.isUserTurn(
+               from: previousPlace,
+               to: incomingPlace,
+               jumpInFlight: turnAutoHide.jumpsInFlight > 0, isScrubbing: isScrubbing,
+               isScrollInteracting: false, isPaged: isPaged,
+               pageCount: measuredPageCount,
+               explicitUserTurn: true,
+               jumpEchoUntil: turnAutoHide.jumpEchoUntil,
+               relayoutEchoUntil: turnAutoHide.relayoutEchoUntil,
+               now: now
+           ) {
+            for key in activeKeys {
+                turnAutoHide.inFlightAttempts[key]?.heldCandidate = true
+            }
+        }
+        return false
     }
 
-    func clearExplicitUserTurn() {
-        turnAutoHide.explicitUserTurnUntil = .distantPast
-    }
-
-    fileprivate static func turnPlace(_ locator: Locator) -> ReaderChromeAutoHide.Place {
-        ReaderChromeAutoHide.Place(
-            href: ReaderSectionBuilder.hrefKey(locator.href.string),
+    fileprivate static func turnPlace(
+        _ locator: Locator,
+        viewport: NavigatorViewport? = nil
+    ) -> ReaderChromeAutoHide.Place {
+        let hrefKey = ReaderSectionBuilder.hrefKey(locator.href.string)
+        let viewportRange: ClosedRange<Double>? = viewport?.resources.first(where: {
+            ReaderSectionBuilder.hrefKey($0.href.string) == hrefKey
+        }).flatMap { resource in
+            let range = resource.progression
+            guard range.lowerBound.isFinite, range.upperBound.isFinite,
+                  range.upperBound - range.lowerBound > 1e-6 else { return nil }
+            return range
+        }
+        return ReaderChromeAutoHide.Place(
+            href: hrefKey,
             position: locator.locations.position,
-            progression: locator.locations.progression
+            progression: locator.locations.progression,
+            viewportProgression: viewportRange
         )
     }
 
