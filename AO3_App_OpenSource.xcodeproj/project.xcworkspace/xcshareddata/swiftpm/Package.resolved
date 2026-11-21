@@ -87,7 +87,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/cidy02/swift-toolkit.git",
       "state" : {
-        "revision" : "7253ef0bd0d02ddfb22e91327f93e6e912f99952"
+        "revision" : "5fe4132824feca9a2284cc57543d999e1f3cfc99"
       }
     },
     {

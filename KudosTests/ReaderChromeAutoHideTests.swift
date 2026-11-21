@@ -12,8 +12,8 @@ import UIKit
 #if os(iOS)
 /// T-562b / T-562f (owner, after Apple Books): the reader's controls hide only when the
 /// reader's own input commits a page turn, reported once by the input path: an accepted
-/// edge tap / key / page-turner, a Slide or Curl drag the release tracker commits, or a
-/// trackpad Slide turn. A reflow, link, jump, scrub, cancelled drag or rejected input
+/// edge tap / key / page-turner, or a Slide or Curl drag or trackpad Slide turn that
+/// Readium itself reports as landed (`didCommitUserPageTurn`, T-562g). A reflow, link, jump, scrub, cancelled drag or rejected input
 /// never hides them; nothing hides them while something is open over the page or
 /// VoiceOver runs; every show and hide fades.
 @MainActor
@@ -33,13 +33,6 @@ struct ReaderChromeAutoHideTests {
         for _ in 0 ..< 400 where !done() {
             try await Task.sleep(nanoseconds: 5_000_000)
         }
-    }
-
-    private func fastTracker(_ book: ReadiumBook) -> ReaderCommittedGestureTracker {
-        let tracker = book.committedGestureTracker
-        tracker.pollNanoseconds = 2_000_000
-        tracker.maxPolls = 25
-        return tracker
     }
 
     @Test func aPanelOrSheetOpenKeepsTheControls() {
@@ -185,125 +178,87 @@ struct ReaderChromeAutoHideTests {
         #expect(turns == 1)
     }
 
-    // MARK: - Drags and trackpad
+    // MARK: - Drags and trackpad (Readium reports the landed turn)
 
-    private func hostWithSlide() -> (host: UIView, scroll: RecordingPagedScrollView) {
-        let host = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-        let scroll = RecordingPagedScrollView(frame: host.bounds)
-        scroll.isPagingEnabled = true
-        scroll.contentSize = CGSize(width: 390 * 4, height: 844)
-        host.addSubview(scroll)
-        return (host, scroll)
+    private func openedBook() async throws -> (book: ReadiumBook, navigator: EPUBNavigatorViewController) {
+        let epubURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appending(path: "Fixtures/demo_work.epub")
+        let book = ReadiumBook()
+        await book.open(
+            fileURL: epubURL,
+            initialLocator: nil,
+            config: EPUBNavigatorViewController.Configuration(preferences: EPUBPreferences(fontSize: 1.0, scroll: false))
+        )
+        #expect(book.phase == .ready)
+        return (book, try #require(book.navigator))
     }
 
-    @Test func aSlideDragReportsOnlyWhenItCommitsAndNeverWhenItSnapsBack() async throws {
-        let book = ReadiumBook()
-        let nav = AutoHideTestNavigator()
-        let (host, scroll) = hostWithSlide()
-        let tracker = fastTracker(book)
-        tracker.attach(to: host)
-        #expect(!scroll.recorder.recordedTargets.isEmpty)
+    /// Readium calls the delegate method once for a turn it commits, and the book reports it.
+    /// Fails if `ReadiumBook` stops implementing it (the protocol default is a no-op).
+    @Test func aDragOrTrackpadTurnReadiumCommitsHidesThroughTheDelegate() async throws {
+        let (book, navigator) = try await openedBook()
+        defer {
+            book.cancelPageBoxRemeasure()
+            book.clearVisualPageMetrics()
+        }
+        #expect(navigator.delegate === book)
         var turns = 0
         book.onUserPageTurn = { turns += 1 }
-        book.navigator(nav, locationDidChange: loc(0.0, 1))
+        let delegate: any EPUBNavigatorDelegate = book
 
-        // Cancelled: released back on page 0, then a reflow moves the page index.
-        scroll.recorder.fire(.began)
-        scroll.recorder.fire(.ended)
-        try await wait { !tracker.hasPendingResolution }
-        scroll.contentOffset = CGPoint(x: 390, y: 0)
-        book.navigator(nav, locationDidChange: loc(0.25, 2))
-        try await Task.sleep(nanoseconds: 30_000_000)
-        #expect(turns == 0)
+        delegate.navigator(navigator, didCommitUserPageTurn: .forward, source: .drag)
+        #expect(turns == 1)
+        delegate.navigator(navigator, didCommitUserPageTurn: .backward, source: .trackpad)
+        #expect(turns == 2)
 
-        // Committed: released onto the next page.
-        scroll.contentOffset = .zero
-        scroll.recorder.fire(.began)
-        scroll.contentOffset = CGPoint(x: 390, y: 0)
-        scroll.recorder.fire(.ended)
-        try await wait { turns > 0 }
-        #expect(turns == 1)
-        try await wait { !tracker.hasPendingResolution }
-        #expect(turns == 1)
+        // A scrub or a jump under way owns the settle: the same report is dropped.
+        book.go(to: loc(0.5, 5))
+        delegate.navigator(navigator, didCommitUserPageTurn: .forward, source: .drag)
+        #expect(turns == 2)
     }
 
-    @Test func aCurlDragReportsWhenItCommitsAndNotWhenItIsCancelled() async throws {
-        let book = ReadiumBook()
-        let nav = AutoHideTestNavigator()
-        let (host, scroll) = hostWithSlide()
-        let curl = RecordingPageCurlPan()
-        host.addGestureRecognizer(curl)
-        let tracker = fastTracker(book)
-        tracker.maxPolls = 8
-        tracker.attach(to: host)
-        #expect(!curl.recordedTargets.isEmpty)
+    /// The real navigator reports a marked move it accepts (the trackpad Slide path) exactly
+    /// once, and nothing else it does: an unmarked `goForward`, `go(to:)`, a settle.
+    @Test func theRealNavigatorReportsOnlyTheUserTurnsItLands() async throws {
+        let (book, navigator) = try await openedBook()
+        defer {
+            book.cancelPageBoxRemeasure()
+            book.clearVisualPageMetrics()
+        }
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        let frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow(frame: frame)
+        window.frame = frame
+        let previousRoot = window.rootViewController
+        window.rootViewController = navigator
+        window.isHidden = false
+        window.layoutIfNeeded()
+        defer {
+            window.rootViewController = previousRoot
+            window.isHidden = true
+        }
+        for _ in 0 ..< 100 where book.settledLocationCount == 0 {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        #expect(book.settledLocationCount >= 1)
         var turns = 0
         book.onUserPageTurn = { turns += 1 }
-        book.navigator(nav, locationDidChange: loc(0.0, 1))
 
-        curl.fire(.began)
-        curl.fire(.cancelled)
-        try await wait { !tracker.hasPendingResolution }
-        // A reflow after the cancelled drag has been given up on.
-        scroll.contentOffset = CGPoint(x: 390, y: 0)
-        try await Task.sleep(nanoseconds: 30_000_000)
+        // Not input: a programmatic move and a jump.
+        _ = await navigator.goForward(options: NavigatorGoOptions(animated: false))
+        #expect(turns == 0)
+        if let start = book.currentLocator {
+            _ = await navigator.go(to: start, options: NavigatorGoOptions(animated: false))
+        }
         #expect(turns == 0)
 
-        scroll.contentOffset = .zero
-        curl.fire(.began)
-        scroll.contentOffset = CGPoint(x: 780, y: 0)
-        curl.fire(.ended)
-        try await wait { turns > 0 }
+        // Input: a move the host marks as the user's.
+        var marked = NavigatorGoOptions(animated: false)
+        marked.userTurnSource = .trackpad
+        let moved = await navigator.goForward(options: marked)
+        #expect(moved)
         #expect(turns == 1)
-    }
-
-    @Test func aTrackpadSlideTurnReportsWhenItMovesThePage() async throws {
-        let book = ReadiumBook()
-        let nav = AutoHideTestNavigator()
-        let host = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-        let trackpad = RecordingPan()
-        trackpad.markIndirect()
-        host.addGestureRecognizer(trackpad)
-        let tracker = fastTracker(book)
-        tracker.maxPolls = 8
-        tracker.attach(to: host)
-        #expect(tracker.hasObservedIndirectPan)
-        #expect(!trackpad.recordedTargets.isEmpty)
-        var turns = 0
-        book.onUserPageTurn = { turns += 1 }
-        book.navigator(nav, locationDidChange: loc(0.0, 1))
-
-        // A scroll below Readium's threshold turns nothing.
-        trackpad.fire(.began)
-        trackpad.fire(.ended)
-        try await wait { !tracker.hasPendingResolution }
-        #expect(turns == 0)
-
-        // A scroll that turns the page: Readium goes forward and reports the new place.
-        trackpad.fire(.began)
-        book.navigator(nav, locationDidChange: loc(0.25, 2))
-        trackpad.fire(.ended)
-        try await wait { turns > 0 }
-        #expect(turns == 1)
-    }
-
-    @Test func aLinkOrJumpAfterTheDragEndsDropsIt() async throws {
-        let book = ReadiumBook()
-        let nav = DirectionalAutoHideTestNavigator()
-        let (host, scroll) = hostWithSlide()
-        let tracker = fastTracker(book)
-        tracker.attach(to: host)
-        var turns = 0
-        book.onUserPageTurn = { turns += 1 }
-        book.navigator(nav, locationDidChange: loc(0.0, 1))
-
-        scroll.recorder.fire(.began)
-        scroll.contentOffset = CGPoint(x: 390, y: 0)
-        scroll.recorder.fire(.ended)
-        _ = book.navigator(nav, shouldNavigateToLink: ReadiumShared.Link(href: "OEBPS/chapter2.xhtml"))
-        try await wait { !tracker.hasPendingResolution }
-        try await Task.sleep(nanoseconds: 30_000_000)
-        #expect(turns == 0)
     }
 
     @Test func openWiresProductionDirectionalInputPathForAcceptedAndRejectedTurns() async throws {
@@ -345,7 +300,7 @@ struct ReaderChromeAutoHideTests {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         #expect(book.settledLocationCount >= 1)
-        #expect(book.committedGestureTracker.hasObservedGestures)
+        #expect(navigator.delegate === book)
 
         var turns = 0
         book.onUserPageTurn = { turns += 1 }
@@ -431,49 +386,6 @@ struct ReadiumPageTurnTeardownTests {
             #expect(await observer.didReceive(events[1]) == false)
         }
     }
-}
-
-/// Records the target/action pairs `addTarget` registers and lets a test fire them
-/// with a chosen state, so a pan reaches the tracker the way UIKit would deliver it.
-private class RecordingPan: UIPanGestureRecognizer {
-    private(set) var recordedTargets: [(target: AnyObject, action: Selector)] = []
-    weak var hostView: UIView?
-    private var forced: UIGestureRecognizer.State = .possible
-
-    override var state: UIGestureRecognizer.State {
-        get { forced }
-        set { forced = newValue }
-    }
-
-    override var view: UIView? { hostView ?? super.view }
-
-    override func addTarget(_ target: Any, action: Selector) {
-        super.addTarget(target, action: action)
-        if let object = target as? AnyObject { recordedTargets.append((object, action)) }
-    }
-
-    func markIndirect() {
-        allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
-    }
-
-    func fire(_ newState: UIGestureRecognizer.State) {
-        forced = newState
-        for (target, action) in recordedTargets {
-            _ = (target as? NSObject)?.perform(action, with: self)
-        }
-    }
-}
-
-private final class RecordingPageCurlPan: RecordingPan {}
-
-private final class RecordingPagedScrollView: UIScrollView {
-    let recorder = RecordingPan()
-    override var panGestureRecognizer: UIPanGestureRecognizer { recorder }
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        recorder.hostView = self
-    }
-    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 }
 
 private final class SyntheticTouch: UITouch {
