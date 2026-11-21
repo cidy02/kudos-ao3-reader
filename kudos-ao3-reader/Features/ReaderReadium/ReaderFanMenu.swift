@@ -46,11 +46,57 @@ struct ReaderFanMenu: View {
     /// The app control colour (`ThemeManager.effectiveTint`), kept independent
     /// of the work, fandom, queue, and reader paper colours.
     let accentColor: Color
+    /// Set when the button sits in the Duo action group (rail or top bar) at this
+    /// size: the group already holds Contents, Themes & Settings, Bookmark and Read
+    /// Aloud, so the menu drops them, and the button takes the group's glass.
+    var groupButtonSize: CGSize?
+
+    /// Items the Duo action group shows itself (T-562a, Duo boards).
+    static let groupItemIDs: Set<String> = ["contents", "settings", "bookmark", "readAloud"]
+
+    /// Resolved menu entries for either the standard menu or the Duo rail/top-bar
+    /// menu. Extracted so tests exercise the exact filtering `body` renders.
+    struct ResolvedItems {
+        let find: ReaderFanMenuPill?
+        let comments: ReaderFanMenuPill?
+        let readAloud: ReaderFanRoundAction?
+        let pillRows: [ReaderFanMenuPill]
+        let roundActionRows: [ReaderFanRoundAction]
+        let readAloudSettings: (() -> Void)?
+        let rebuild: ReaderFanMenuPill?
+    }
+
+    static func resolvedItems(
+        pills: [ReaderFanMenuPill],
+        roundActions: [ReaderFanRoundAction],
+        inGroup: Bool
+    ) -> ResolvedItems {
+        let shown: (String) -> Bool = { !inGroup || !Self.groupItemIDs.contains($0) }
+        let readAloudEntry = roundActions.first { $0.id == "readAloud" }
+        return ResolvedItems(
+            find: pills.first { $0.id == "find" },
+            comments: pills.first { $0.id == "comments" },
+            readAloud: shown("readAloud") ? readAloudEntry : nil,
+            pillRows: pills.filter {
+                $0.id != "find" && $0.id != "comments" && $0.id != "rebuild" && shown($0.id)
+            },
+            roundActionRows: roundActions.filter { $0.id != "readAloud" && shown($0.id) },
+            // Shown even while Read Aloud can't start: since T-562b this and the mini
+            // player are the reader's only ways to the voice settings (the Themes &
+            // Settings form no longer carries them), and a missing voice is exactly
+            // when they are needed.
+            readAloudSettings: readAloudEntry?.settingsAction,
+            rebuild: pills.first { $0.id == "rebuild" }
+        )
+    }
 
     var body: some View {
+        let resolved = Self.resolvedItems(
+            pills: pills, roundActions: roundActions, inGroup: groupButtonSize != nil
+        )
         Menu {
             MenuTopRow {
-                if let find = pills.first(where: { $0.id == "find" }) {
+                if let find = resolved.find {
                     Button(action: find.action) {
                         Label("Find", systemImage: find.systemImage)
                     }
@@ -58,14 +104,14 @@ struct ReaderFanMenu: View {
                     .accessibilityLabel(find.title)
                 }
 
-                if let comments = pills.first(where: { $0.id == "comments" }) {
+                if let comments = resolved.comments {
                     Button(action: comments.action) {
                         Label(comments.title, systemImage: comments.systemImage)
                     }
                     .disabled(!comments.isEnabled)
                 }
 
-                if let readAloud = roundActions.first(where: { $0.id == "readAloud" }) {
+                if let readAloud = resolved.readAloud {
                     Button(action: readAloud.action) {
                         Label(
                             readAloud.isEmphasized ? "Stop Read Aloud" : "Read Aloud",
@@ -87,16 +133,14 @@ struct ReaderFanMenu: View {
                 }
             }
 
-            ForEach(pills.filter {
-                $0.id != "find" && $0.id != "comments" && $0.id != "rebuild"
-            }) { pill in
+            ForEach(resolved.pillRows) { pill in
                 Button(action: pill.action) {
                     Label(pill.title, systemImage: pill.systemImage)
                 }
                 .disabled(!pill.isEnabled)
             }
 
-            ForEach(roundActions.filter { $0.id != "readAloud" }) { action in
+            ForEach(resolved.roundActionRows) { action in
                 Button(action: action.action) {
                     Label(rowTitle(for: action), systemImage: action.systemImage)
                 }
@@ -106,15 +150,13 @@ struct ReaderFanMenu: View {
                 .accessibilityAddTraits(action.isEmphasized ? [.isSelected] : [])
             }
 
-            if let readAloud = roundActions.first(where: { $0.id == "readAloud" }),
-               readAloud.isEnabled,
-               let settings = readAloud.settingsAction {
+            if let settings = resolved.readAloudSettings {
                 Button(action: settings) {
                     Label("Read Aloud Settings", systemImage: "gearshape")
                 }
             }
 
-            if let rebuild = pills.first(where: { $0.id == "rebuild" }) {
+            if let rebuild = resolved.rebuild {
                 Divider()
                 Button(action: rebuild.action) {
                     Label(rebuild.title, systemImage: rebuild.systemImage)
@@ -123,15 +165,23 @@ struct ReaderFanMenu: View {
             }
         } label: {
             Image(systemName: "ellipsis")
-                .font(.headline)
+                // Match `ReaderDuoActionGroup`'s fixed 18 pt glyphs inside the Duo
+                // rail/bar slot so AX5 does not spill past the 48×44 capsule.
+                .font(groupButtonSize == nil ? .headline : .system(size: 18, weight: .regular))
                 .foregroundStyle(Color.primary)
-                .frame(width: 44, height: 44)
-                .contentShape(Circle())
+                .frame(width: groupButtonSize?.width ?? 44, height: groupButtonSize?.height ?? 44)
+                .contentShape(groupButtonSize == nil ? AnyShape(Circle()) : AnyShape(Capsule()))
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular, in: Circle())
+        .glassEffect(groupButtonSize == nil ? .regular : .identity, in: Circle())
         .accessibilityLabel("More actions")
+        .accessibilityShowsLargeContentViewer {
+            Label("More actions", systemImage: "ellipsis")
+        }
         .tint(Color.primary)
+        // The rail's menu opens upward from low on the screen; keep the board's
+        // order (top row first) instead of the system's mirrored one.
+        .menuOrder(groupButtonSize == nil ? .automatic : .fixed)
     }
 
     private func rowTitle(for action: ReaderFanRoundAction) -> String {

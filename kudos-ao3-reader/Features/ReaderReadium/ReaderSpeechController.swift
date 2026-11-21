@@ -1359,12 +1359,13 @@ struct ReaderSpeechMiniPlayer: View {
     /// Tap on non-control chrome (caption, waveform, gutters) — typically shows
     /// the full reader chrome when only the mini player is visible.
     let onBackgroundTap: () -> Void
+    /// Opens the reader's shared Read Aloud settings sheet (with cast ranking,
+    /// pronunciation scan, and listening-rate log sync).
+    let onOpenSettings: () -> Void
 
     /// HIG minimum; matches the floating chrome round buttons so a near-miss
     /// doesn't fall through to the page and toggle chrome instead.
     private static let hitSize: CGFloat = 44
-
-    @State private var showingSpeechSettings = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1439,11 +1440,6 @@ struct ReaderSpeechMiniPlayer: View {
         // still win hit-testing over this gesture.
         .contentShape(Rectangle())
         .onTapGesture(perform: onBackgroundTap)
-        .sheet(isPresented: $showingSpeechSettings, onDismiss: {
-            controller.applyPreferences()
-        }) {
-            ReaderSpeechSettingsSheet()
-        }
     }
 
     /// Compact equalizer: still in silence, dramatic only while speech energy > 0.
@@ -1459,9 +1455,7 @@ struct ReaderSpeechMiniPlayer: View {
     /// both gutters still reveal chrome, so that gesture keeps most of its
     /// target.
     private var playingWaveform: some View {
-        Button {
-            showingSpeechSettings = true
-        } label: {
+        Button(action: onOpenSettings) {
             NowPlayingEqualizerBars(
                 isPlaying: controller.isPlaying,
                 spectrum: controller.speechSpectrum,
