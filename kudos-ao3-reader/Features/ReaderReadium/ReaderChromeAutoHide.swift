@@ -25,6 +25,9 @@ nonisolated enum ReaderChromeAutoHide {
     /// How long after an explicit directional user turn (edge tap, key, `goForward`/
     /// `goBackward`) its resulting settle is attributed as a committed user turn.
     static let explicitTurnWindow: TimeInterval = 1.2
+    /// How long after the reader follows an internal EPUB link (Readium jumps on its
+    /// own, bypassing `ReadiumBook.jump`) the destination's settles are echoes.
+    static let linkJumpLead: TimeInterval = 2.0
 
     /// Minimum scroll delta (fraction of one viewport height) in scrolled mode so
     /// a tiny accidental finger nudge does not hide controls.
@@ -86,7 +89,7 @@ nonisolated enum ReaderChromeAutoHide {
         // visible page's progression span (`scrollX/scrollW ... (scrollX+vw)/scrollW`),
         // so committed Slide swipes and Curl drags in the first ~450 ms still hide
         // while same-page wobbles and layout-width reflows stay silent.
-        if let visualMoved = viewportVisualPageMoved(from: old, to: new) {
+        if let visualMoved = viewportVisualPageMoved(from: old, to: new, explicitUserTurn: explicitUserTurn) {
             return visualMoved
         }
         // When neither `pageCount` nor a usable `viewportProgression` is available,
@@ -98,7 +101,9 @@ nonisolated enum ReaderChromeAutoHide {
     /// Classifies a same-resource paged move from Readium's `NavigatorViewport`
     /// progression span (`first...last`). Returns `nil` when neither settle has a
     /// usable span.
-    private static func viewportVisualPageMoved(from old: Place, to new: Place) -> Bool? {
+    private static func viewportVisualPageMoved(
+        from old: Place, to new: Place, explicitUserTurn: Bool
+    ) -> Bool? {
         func validSpan(_ range: ClosedRange<Double>?) -> Double? {
             guard let range,
                   range.lowerBound.isFinite, range.upperBound.isFinite else { return nil }
@@ -117,6 +122,12 @@ nonisolated enum ReaderChromeAutoHide {
         if let oldRange = old.viewportProgression, let oldSpan,
            let newRange = new.viewportProgression, let newSpan,
            oldRange.upperBound < 0.999, newRange.upperBound < 0.999 {
+            // A different span means the page count changed (async font/image reflow):
+            // the two column indices belong to different layouts and cannot be compared,
+            // so only a confirmed user turn may hide; otherwise it is a baseline update.
+            if abs(oldSpan - newSpan) / max(oldSpan, newSpan) > 0.005 {
+                return explicitUserTurn && old.progression != new.progression
+            }
             let oldCol = oldRange.lowerBound / oldSpan
             let newCol = newRange.lowerBound / newSpan
             return Int(oldCol.rounded()) != Int(newCol.rounded())
@@ -142,8 +153,10 @@ nonisolated enum ReaderChromeAutoHide {
     /// key): never one while a jump is in flight or just after it (scrubber,
     /// Contents, bookmarks, search, Read Aloud), during a scrub, while a paged
     /// scroll view is still dragging/bouncing, or just after a relayout or
-    /// rotation. Explicit user turns (edge tap / key / `goForward` / `goBackward`)
-    /// carry their own attribution so a prior jump's echo cannot mask them.
+    /// rotation. Explicit user turns (confirmed edge tap / key / `goForward` /
+    /// `goBackward`, or a committed swipe / curl drag) carry their own attribution,
+    /// scoped to a generation that started after the last jump or relayout, so
+    /// neither echo window can mask them; a locator-inferred settle never bypasses.
     /// The first settle after opening has no `previous`.
     static func isUserTurn(
         from previous: Place?, to next: Place,
@@ -157,8 +170,7 @@ nonisolated enum ReaderChromeAutoHide {
     ) -> Bool {
         guard let previous, !jumpInFlight, !isScrubbing,
               !(isPaged && isScrollInteracting),
-              now >= relayoutEchoUntil,
-              explicitUserTurn || now >= jumpEchoUntil else { return false }
+              explicitUserTurn || (now >= relayoutEchoUntil && now >= jumpEchoUntil) else { return false }
         return moved(
             from: previous, to: next,
             isPaged: isPaged, pageCount: pageCount,

@@ -141,6 +141,9 @@ private final class DirectionalTurnTrackingNavigator: VisualNavigator {
     private let onBeginTurn: @MainActor () -> UInt64
     private let onEndTurn: @MainActor (UInt64, Bool) -> Void
     private(set) var installedObservers: [(token: InputObservableToken, observer: any InputObserving)] = []
+    /// Directional moves begun so far; lets an observer wrapper see whether one call
+    /// matched an edge zone, whether or not Readium then accepted the move.
+    private(set) var beganTurnCount = 0
 
     init(
         base: any VisualNavigator,
@@ -172,8 +175,9 @@ private final class DirectionalTurnTrackingNavigator: VisualNavigator {
 
     @discardableResult
     func addObserver(_ observer: any InputObserving) -> InputObservableToken {
-        let token = base?.addObserver(observer) ?? InputObservableToken()
-        installedObservers.append((token, observer))
+        let wrapped = EdgeActivationObserver(inner: observer, proxy: self)
+        let token = base?.addObserver(wrapped) ?? InputObservableToken()
+        installedObservers.append((token, wrapped))
         return token
     }
 
@@ -221,10 +225,37 @@ private final class DirectionalTurnTrackingNavigator: VisualNavigator {
     }
 
     private func track(_ move: () async -> Bool) async -> Bool {
+        beganTurnCount += 1
         let token = onBeginTurn()
         let moved = await move()
         onEndTurn(token, moved)
         return moved
+    }
+}
+
+/// Wraps one of `DirectionalNavigationAdapter`'s observers. A pointer event that
+/// landed in an edge zone starts a directional move whether or not Readium accepts
+/// it; Readium reports only `moved`, so a rejected edge tap (first page, last page)
+/// would reach the later centre-tap observer and toggle the controls. Consuming the
+/// event here keeps an edge tap an edge tap. Keys pass through untouched.
+@MainActor
+private final class EdgeActivationObserver: InputObserving {
+    private let inner: any InputObserving
+    private unowned let proxy: DirectionalTurnTrackingNavigator
+
+    init(inner: any InputObserving, proxy: DirectionalTurnTrackingNavigator) {
+        self.inner = inner
+        self.proxy = proxy
+    }
+
+    func didReceive(_ event: PointerEvent) async -> Bool {
+        let before = proxy.beganTurnCount
+        let handled = await inner.didReceive(event)
+        return handled || proxy.beganTurnCount != before
+    }
+
+    func didReceive(_ event: KeyEvent) async -> Bool {
+        await inner.didReceive(event)
     }
 }
 

@@ -607,6 +607,150 @@ struct ReaderChromeAutoHideTests {
         #expect(turns == 2)
     }
 
+    // MARK: T-562e (Codex review of T-562d, round 2)
+
+    @Test func confirmedTurnBypassesRelayoutWindowButInferredSettleDoesNot() {
+        let later = now.addingTimeInterval(1)
+        #expect(turn(from: page4, to: page5, explicitUserTurn: true, relayoutEchoUntil: later))
+        #expect(!turn(from: page4, to: page5, explicitUserTurn: false, relayoutEchoUntil: later))
+    }
+
+    @Test func swipeOrKeyCommittedDuringRelayoutWindowHides() async throws {
+        // Finding 1: after a geometry change (pagination unmeasured, relayout window
+        // live) a navigator-confirmed key turn and a committed Slide swipe both hide.
+        let book = ReadiumBook()
+        let nav = DirectionalAutoHideTestNavigator()
+        var clock = Date(timeIntervalSinceReferenceDate: 60_000)
+        book.autoHideNow = { clock }
+        book.seedInitialPreferences(EPUBPreferences(scroll: false))
+        book.bindPageTurns(to: nav)
+        defer { book.cancelPageBoxRemeasure() }
+        let href = try #require(AnyURL(string: "OEBPS/chapter1.xhtml"))
+        func loc(_ progression: Double, _ position: Int) -> Locator {
+            Locator(href: href, mediaType: .xhtml, locations: .init(progression: progression, position: position))
+        }
+
+        let host = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let scroll = RecordingPagedScrollView(frame: host.bounds)
+        scroll.isPagingEnabled = true
+        scroll.contentSize = CGSize(width: 390 * 4, height: 844)
+        host.addSubview(scroll)
+        book.committedGestureTracker.attach(to: host)
+
+        var turns = 0
+        book.onUserPageTurn = { turns += 1 }
+        book.navigator(nav, locationDidChange: loc(0.0, 1))
+        book.updatePageBoxGeometry(size: CGSize(width: 402, height: 874), safeInsets: .zero)
+        #expect(!book.pageBarReady)
+        clock = clock.addingTimeInterval(0.3)
+
+        nav.goForwardResult = true
+        nav.onGoForward = {
+            book.navigator(nav, locationDidChange: loc(0.25, 2))
+            return true
+        }
+        #expect(await nav.sendKey(.arrowRight))
+        #expect(turns == 1)
+
+        scroll.recorder.fire(.began)
+        scroll.contentOffset = CGPoint(x: 390, y: 0)
+        scroll.recorder.fire(.ended)
+        book.navigator(nav, locationDidChange: loc(0.50, 3))
+        #expect(turns == 2)
+    }
+
+    @Test func reflowMovingTheAnchorToAnotherColumnIsNotATurn() {
+        // Finding 3: column 8 of 10 becomes column 7 of 9 when a late image or font
+        // changes the page count; no user input, no measured pagination.
+        let before = Place(href: "ch1", position: 5, progression: 0.80, viewportProgression: 0.80 ... 0.90)
+        let after = Place(
+            href: "ch1", position: 5, progression: 7.0 / 9.0,
+            viewportProgression: (7.0 / 9.0) ... (8.0 / 9.0)
+        )
+        #expect(!turn(from: before, to: after, isPaged: true, pageCount: nil, explicitUserTurn: false))
+        // A confirmed user turn that lands during the reflow still hides.
+        #expect(turn(from: before, to: after, isPaged: true, pageCount: nil, explicitUserTurn: true))
+    }
+
+    @Test func followingAnInternalLinkDoesNotHide() async throws {
+        // Finding 4: Readium follows internal links with its own `go(to:)`.
+        let book = ReadiumBook()
+        let nav = DirectionalAutoHideTestNavigator()
+        var clock = Date(timeIntervalSinceReferenceDate: 70_000)
+        book.autoHideNow = { clock }
+        book.seedInitialPreferences(EPUBPreferences(scroll: false))
+        let ch1 = try #require(AnyURL(string: "OEBPS/chapter1.xhtml"))
+        let ch2 = try #require(AnyURL(string: "OEBPS/chapter2.xhtml"))
+        let a = Locator(href: ch1, mediaType: .xhtml, locations: .init(progression: 0.0, position: 1))
+        let b = Locator(href: ch2, mediaType: .xhtml, locations: .init(progression: 0.0, position: 9))
+        let ch3 = try #require(AnyURL(string: "OEBPS/chapter3.xhtml"))
+        let c = Locator(href: ch3, mediaType: .xhtml, locations: .init(progression: 0.0, position: 17))
+
+        var turns = 0
+        book.onUserPageTurn = { turns += 1 }
+        book.navigator(nav, locationDidChange: a)
+        clock = clock.addingTimeInterval(5) // opening and relayout windows long gone
+
+        let link = ReadiumShared.Link(href: "OEBPS/chapter2.xhtml")
+        #expect(book.navigator(nav, shouldNavigateToLink: link))
+        clock = clock.addingTimeInterval(0.4)
+        book.navigator(nav, locationDidChange: b)
+        book.navigator(nav, didJumpTo: b)
+        #expect(turns == 0)
+
+        // Once the echo expires an ordinary page turn hides again.
+        clock = clock.addingTimeInterval(ReaderChromeAutoHide.linkJumpLead + 0.1)
+        book.navigator(nav, locationDidChange: c)
+        #expect(turns == 1)
+    }
+
+    @Test func slideAndCurlPansReachTheTrackerThroughTheirProductionActionTargets() async throws {
+        // Finding 5: deliver pans through the targets `attach` really registered (the
+        // test recognizers record `addTarget`); removing either `addTarget` fails this.
+        let book = ReadiumBook()
+        let nav = AutoHideTestNavigator()
+        var clock = Date(timeIntervalSinceReferenceDate: 80_000)
+        book.autoHideNow = { clock }
+        book.seedInitialPreferences(EPUBPreferences(scroll: false))
+        let href = try #require(AnyURL(string: "OEBPS/chapter1.xhtml"))
+        func loc(_ progression: Double, _ position: Int) -> Locator {
+            Locator(href: href, mediaType: .xhtml, locations: .init(progression: progression, position: position))
+        }
+
+        let host = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let scroll = RecordingPagedScrollView(frame: host.bounds)
+        scroll.isPagingEnabled = true
+        scroll.contentSize = CGSize(width: 390 * 4, height: 844)
+        host.addSubview(scroll)
+        let curl = RecordingPageCurlPan()
+        host.addGestureRecognizer(curl)
+        book.committedGestureTracker.attach(to: host)
+        #expect(!scroll.recorder.recordedTargets.isEmpty)
+        #expect(!curl.recordedTargets.isEmpty)
+
+        var turns = 0
+        book.onUserPageTurn = { turns += 1 }
+        book.navigator(nav, locationDidChange: loc(0.0, 1))
+        book.go(to: loc(0.0, 1))
+        await Task.yield()
+        clock = clock.addingTimeInterval(0.15)
+
+        scroll.recorder.fire(.began)
+        scroll.contentOffset = CGPoint(x: 390, y: 0)
+        scroll.recorder.fire(.ended)
+        book.navigator(nav, locationDidChange: loc(0.25, 2))
+        #expect(turns == 1)
+
+        book.go(to: loc(0.25, 2))
+        await Task.yield()
+        clock = clock.addingTimeInterval(0.15)
+        curl.fire(.began)
+        scroll.contentOffset = CGPoint(x: 780, y: 0)
+        curl.fire(.ended)
+        book.navigator(nav, locationDidChange: loc(0.50, 3))
+        #expect(turns == 2)
+    }
+
     @Test func openWiresProductionDirectionalInputPathForAcceptedAndRejectedTurns() async throws {
         // Finding 3 regression: opens a real local EPUB through `ReadiumBook.open`
         // (no manual `bindPageTurns`, no direct `beginExplicitUserTurn` calls).
@@ -662,7 +806,9 @@ struct ReaderChromeAutoHideTests {
         book.onUserPageTurn = { turns += 1 }
 
         // 1. Rejected left-edge tap AND key at start of chapter 1 (goLeft returns false)
-        // must NOT arm a hide that a subsequent same-page wobble consumes.
+        // must NOT arm a hide that a subsequent same-page wobble consumes, and the
+        // rejected edge tap must not fall through to the centre-tap chrome toggle.
+        book.chromeHidden = false
         let leftEdge = CGPoint(x: 24, y: navigator.view.bounds.height / 2)
         let leftTouch = SyntheticTouch(location: leftEdge)
         navigator.touchesBegan([leftTouch], with: nil)
@@ -680,6 +826,7 @@ struct ReaderChromeAutoHideTests {
         })
         book.navigator(AutoHideTestNavigator(), locationDidChange: wobble)
         #expect(turns == 0)
+        #expect(!book.chromeHidden)
 
         // 2. Arm a jump echo, then fire a REAL right-edge tap directly through
         // `EPUBNavigatorViewController.touchesBegan`/`touchesEnded` -> Readium's
@@ -721,6 +868,45 @@ struct ReaderChromeAutoHideTests {
         }
         #expect(turns == 2)
     }
+}
+
+/// Records the target/action pairs `addTarget` registers and lets a test fire them
+/// with a chosen state, so a pan reaches the tracker the way UIKit would deliver it.
+private class RecordingPan: UIPanGestureRecognizer {
+    private(set) var recordedTargets: [(target: AnyObject, action: Selector)] = []
+    weak var hostView: UIView?
+    private var forced: UIGestureRecognizer.State = .possible
+
+    override var state: UIGestureRecognizer.State {
+        get { forced }
+        set { forced = newValue }
+    }
+
+    override var view: UIView? { hostView ?? super.view }
+
+    override func addTarget(_ target: Any, action: Selector) {
+        super.addTarget(target, action: action)
+        if let object = target as? AnyObject { recordedTargets.append((object, action)) }
+    }
+
+    func fire(_ newState: UIGestureRecognizer.State) {
+        forced = newState
+        for (target, action) in recordedTargets {
+            _ = (target as? NSObject)?.perform(action, with: self)
+        }
+    }
+}
+
+private final class RecordingPageCurlPan: RecordingPan {}
+
+private final class RecordingPagedScrollView: UIScrollView {
+    let recorder = RecordingPan()
+    override var panGestureRecognizer: UIPanGestureRecognizer { recorder }
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        recorder.hostView = self
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 }
 
 private final class SyntheticTouch: UITouch {

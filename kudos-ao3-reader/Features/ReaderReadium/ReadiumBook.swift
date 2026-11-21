@@ -1194,6 +1194,17 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         }
     }
 
+    /// An internal EPUB link is about to move the reader: its settles are not turns.
+    func navigator(_: VisualNavigator, shouldNavigateToLink _: ReadiumShared.Link) -> Bool {
+        noteLinkJump(lead: ReaderChromeAutoHide.linkJumpLead)
+        return true
+    }
+
+    /// Readium finished an explicit jump (internal link, `go`): its echo window starts now.
+    func navigator(_: Navigator, didJumpTo _: Locator) {
+        noteLinkJump(lead: ReaderChromeAutoHide.jumpEchoWindow)
+    }
+
     /// The only delegate method without a default implementation.
     func navigator(_: Navigator, presentError error: NavigatorError) {
         phase = .failed(error.localizedDescription)
@@ -1805,6 +1816,16 @@ extension ReadiumBook {
         )
     }
 
+    /// Readium follows an internal EPUB link with its own `go(to:)`, bypassing `jump`:
+    /// treat the link tap (before the navigator moves) and its `didJumpTo` as a jump.
+    fileprivate func noteLinkJump(lead: TimeInterval) {
+        invalidatePendingTurnAttribution()
+        turnAutoHide.jumpEchoUntil = max(
+            turnAutoHide.jumpEchoUntil,
+            autoHideNow().addingTimeInterval(lead)
+        )
+    }
+
     fileprivate func noteRelayoutEcho(_ window: TimeInterval) {
         invalidatePendingTurnAttribution()
         turnAutoHide.relayoutEchoUntil = max(
@@ -1831,9 +1852,10 @@ extension ReadiumBook {
             for key in Array(turnAutoHide.inFlightAttempts.keys) {
                 turnAutoHide.inFlightAttempts[key]?.heldCandidate = false
             }
+            // No relayout check: the attempt's generation began after the last relayout
+            // (a relayout bumps it), so this is a navigator-confirmed turn.
             guard !isLocatorIngestionBlocked, !isScrubbing,
-                  turnAutoHide.jumpsInFlight == 0,
-                  autoHideNow() >= turnAutoHide.relayoutEchoUntil else { return }
+                  turnAutoHide.jumpsInFlight == 0 else { return }
             onUserPageTurn?()
             return
         }
