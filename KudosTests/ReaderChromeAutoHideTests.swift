@@ -85,8 +85,9 @@ struct ReaderChromeAutoHideTests {
         #expect(!turn(from: page4, to: page5, jumpEchoUntil: now.addingTimeInterval(0.3)))
         // An explicit committed user turn is not masked by a prior jump's echo.
         #expect(turn(from: page4, to: page5, explicitUserTurn: true, jumpEchoUntil: now.addingTimeInterval(0.3)))
-        // Relayout echoes still hold until they expire.
-        #expect(!turn(from: page4, to: page5, explicitUserTurn: true, relayoutEchoUntil: now.addingTimeInterval(0.3)))
+        // A relayout echo holds a settle inferred from locator movement alone (T-562e: a
+        // navigator-confirmed turn from after the relayout is not an echo; see below).
+        #expect(!turn(from: page4, to: page5, relayoutEchoUntil: now.addingTimeInterval(0.3)))
         // Once the echo window has passed, the reader's own turn hides again.
         #expect(turn(from: page4, to: page5, jumpEchoUntil: now.addingTimeInterval(-0.01)))
     }
