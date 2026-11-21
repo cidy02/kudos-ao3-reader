@@ -5,99 +5,21 @@ import SwiftUI
 /// How the reader's controls come and go (T-562b, owner 2026-11-20, after Apple Books):
 /// every show and hide fades, and turning a page hides them.
 ///
-/// Pure, so the rules are testable without a navigator. `ReadiumBook` classifies each
-/// settle (`isUserTurn`); the view decides whether that turn may hide the controls
-/// (`hidesControls`) and hides them through `ReadiumBook.setChromeHidden`, the one
-/// place the show/hide state changes.
+/// A turn hides the controls only when the reader's own input commits it, reported
+/// once at that moment by the input path (T-562f): an accepted edge tap, key,
+/// page-turner or `goForward`/`goBackward` (`ReadiumPageTurnController`), a Slide
+/// or Curl drag the release tracker commits, or a trackpad Slide turn
+/// (`ReaderCommittedGestureTracker`). Nothing is inferred from a locator or viewport
+/// change, so a reflow, a link, a jump, a scrub or Read Aloud can never hide them.
+/// The view decides whether a reported turn may hide the controls (`hidesControls`)
+/// and hides them through `ReadiumBook.setChromeHidden`, the one place the
+/// show/hide state changes.
 nonisolated enum ReaderChromeAutoHide {
     /// The fade every show and hide uses: the bars, the position bar and the status
     /// bar. Kept under Reduce Motion (a fade has no movement); it used to be dropped
     /// there, and the bars inside the peel host never had it at all, so they snapped.
     static let fadeDuration: TimeInterval = 0.25
     static var fade: Animation { .easeInOut(duration: fadeDuration) }
-
-    /// How long after a programmatic jump settles a location report is still its
-    /// echo rather than a turn.
-    static let jumpEchoWindow: TimeInterval = 0.6
-    /// The same after the page is laid out again (preferences, size, rotation),
-    /// which can take several settles.
-    static let relayoutEchoWindow: TimeInterval = 1.2
-    /// How long after an explicit directional user turn (edge tap, key, `goForward`/
-    /// `goBackward`) its resulting settle is attributed as a committed user turn.
-    static let explicitTurnWindow: TimeInterval = 1.2
-
-    /// Minimum scroll delta (fraction of one viewport height) in scrolled mode so
-    /// a tiny accidental finger nudge does not hide controls.
-    static let scrolledViewportFractionThreshold: Double = 0.15
-    /// Fallback progression delta in scrolled mode when page count has not been measured yet.
-    static let fallbackProgressionThreshold: Double = 0.01
-
-    /// The parts of a Readium locator that say which page is showing.
-    struct Place: Equatable {
-        var href: String
-        var position: Int?
-        var progression: Double?
-    }
-
-    /// Another resource, a committed visual page change in paged mode (or an
-    /// explicit committed turn before pagination is known), or a meaningful
-    /// scroll in scrolled mode (never a cancelled sub-page wobble or 1 px nudge).
-    static func moved(
-        from old: Place, to new: Place,
-        isPaged: Bool = true, pageCount: Int? = nil,
-        explicitUserTurn: Bool = false
-    ) -> Bool {
-        if old.href != new.href { return true }
-        if !isPaged {
-            guard let oldProgression = old.progression, let newProgression = new.progression,
-                  oldProgression.isFinite, newProgression.isFinite else { return false }
-            let threshold = if let pageCount, pageCount > 0 {
-                scrolledViewportFractionThreshold / Double(pageCount)
-            } else {
-                fallbackProgressionThreshold
-            }
-            return abs(oldProgression - newProgression) >= threshold
-        }
-        if let pageCount, pageCount >= 1,
-           let oldProgression = old.progression, let newProgression = new.progression,
-           oldProgression.isFinite, newProgression.isFinite {
-            return ReaderPageMetrics.pageFromLeadingProgression(oldProgression, pageCount: pageCount)
-                != ReaderPageMetrics.pageFromLeadingProgression(newProgression, pageCount: pageCount)
-        }
-        // Before pagination is known (`pageCount == nil`), Readium position boundaries
-        // and arbitrary progression deltas do not match visual pages. Only an explicit
-        // committed user turn that moved may hide on the same resource.
-        guard explicitUserTurn else { return false }
-        return old != new
-    }
-
-    /// A settle the reader caused by turning (swipe, curl drag, flick, edge tap,
-    /// key): never one while a jump is in flight or just after it (scrubber,
-    /// Contents, bookmarks, search, Read Aloud), during a scrub, while a paged
-    /// scroll view is still dragging/bouncing, or just after a relayout or
-    /// rotation. Explicit user turns (edge tap / key / `goForward` / `goBackward`)
-    /// carry their own attribution so a prior jump's echo cannot mask them.
-    /// The first settle after opening has no `previous`.
-    static func isUserTurn(
-        from previous: Place?, to next: Place,
-        jumpInFlight: Bool, isScrubbing: Bool,
-        isScrollInteracting: Bool = false,
-        isPaged: Bool = true, pageCount: Int? = nil,
-        explicitUserTurn: Bool = false,
-        jumpEchoUntil: Date = .distantPast,
-        relayoutEchoUntil: Date = .distantPast,
-        now: Date
-    ) -> Bool {
-        guard let previous, !jumpInFlight, !isScrubbing,
-              !(isPaged && isScrollInteracting),
-              now >= relayoutEchoUntil,
-              explicitUserTurn || now >= jumpEchoUntil else { return false }
-        return moved(
-            from: previous, to: next,
-            isPaged: isPaged, pageCount: pageCount,
-            explicitUserTurn: explicitUserTurn
-        )
-    }
 
     /// Whether a turn hides the controls: only while they show, never while a
     /// panel, sheet or Contents is open over the page, and never while VoiceOver
