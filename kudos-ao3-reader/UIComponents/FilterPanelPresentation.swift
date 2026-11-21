@@ -65,7 +65,13 @@ private struct FilterPanelPresentation<Panel: View>: ViewModifier {
                         .environment(\.filterPanelIsDocked, isDocked)
                 }
                     .onChange(of: isPresented) { _, presented in
-                        if !isDocked, !presented { onDismiss?() }
+                        if !presented { onDismiss?() }
+                    }
+                    .onChange(of: isDocked) { _, docked in
+                        if docked {
+                            if isPresented { isPresented = false }
+                            onDismiss?()
+                        }
                     }
             } else {
                 content.sheet(isPresented: $isPresented, onDismiss: onDismiss) {
@@ -79,7 +85,7 @@ private struct FilterPanelPresentation<Panel: View>: ViewModifier {
             }
         }
         .onChange(of: wide) { _, _ in
-            if !isDocked, !isPresented { onDismiss?() }
+            if !isPresented { onDismiss?() }
         }
         #else
         content.inspector(isPresented: $isPresented) {

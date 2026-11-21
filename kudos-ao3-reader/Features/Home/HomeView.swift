@@ -208,22 +208,17 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                             } trailing: {
                                 duoTrailingHomeSections
                             } fallback: {
-                                ScrollView {
-                                    // 26pt between sections (Rules; 1b drew 22).
-                                    VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
-                                        statsLine
-                                        resumeSection
-                                        newChaptersSection
-                                            .id("chapters")
-                                        readingQueuesSection
-                                            .id("queues")
-                                        pinnedCollectionShelves
-                                        subscriptionsSection
-                                            .id("subscriptions")
-                                    }
-                                    .padding(.vertical, 12)
-                                }
-                                .refreshable { await refreshHome() }
+                                statsLine
+                                    .duoScrollAnchor("stats")
+                                resumeSection
+                                    .duoScrollAnchor("resume")
+                                newChaptersSection
+                                    .duoScrollAnchor("chapters")
+                                readingQueuesSection
+                                    .duoScrollAnchor("queues")
+                                pinnedCollectionShelves
+                                subscriptionsSection
+                                    .duoScrollAnchor("subscriptions")
                             }
                             #if os(iOS)
                             .task { await mailDriver.refreshIfNeeded() }
@@ -543,8 +538,10 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @ViewBuilder
     private var duoLeadingHomeSections: some View {
         statsLine
+            .duoScrollAnchor("stats")
         if readingNow.isEmpty {
             resumeEmptySection
+                .duoScrollAnchor("resume")
         } else {
             let heroWork = readingNow[0]
             let carouselWorks = Array(readingNow.dropFirst().prefix(HomeReadingNowCount.carouselLimit))
@@ -560,6 +557,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             )
             .downloadDimmed(heroWork)
             .padding(.horizontal, 16)
+            .duoScrollAnchor("resume")
 
             if !carouselWorks.isEmpty {
                 WorkCarouselSection(
@@ -573,6 +571,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 } emptyState: {
                     EmptyView()
                 }
+                .duoScrollAnchor("readingNow")
             }
         }
         pinnedCollectionShelves
@@ -583,11 +582,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @ViewBuilder
     private var duoTrailingHomeSections: some View {
         newChaptersSection
-            .id("chapters")
+            .duoScrollAnchor("chapters")
         readingQueuesSection
-            .id("queues")
+            .duoScrollAnchor("queues")
         subscriptionsSection
-            .id("subscriptions")
+            .duoScrollAnchor("subscriptions")
     }
 
     @ViewBuilder
@@ -599,7 +598,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 works: HomeCollectionShelves.works(in: collection, visible: passesPrivacy),
                 onSeeAll: { path.append(collection) }
             )
-            .id(index == 0 ? "collections" : "collection:\(collection.id)")
+            .duoScrollAnchor(index == 0 ? "collections" : "collection:\(collection.id)")
         }
     }
 

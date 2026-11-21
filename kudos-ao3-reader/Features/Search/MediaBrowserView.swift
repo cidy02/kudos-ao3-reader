@@ -57,6 +57,9 @@ struct MediaBrowserView: View {
     /// Set once `cardsReady` has waited as long as it is willing to for counts
     /// (a warm cache beats it; a cold one does not) — see `load`.
     @State private var countsSettled = false
+    /// Preserves the visible Browse section/category when switching between split and non-split layouts.
+    @State private var scrollAnchors = DuoScrollAnchorStore()
+    @Namespace private var browseScrollSpace
     /// Shared, per-launch cache of each category's fandom list.
     private let catalog = FandomCatalog.shared
     #if os(macOS)
@@ -87,7 +90,7 @@ struct MediaBrowserView: View {
                 // with the categories (LOOP-v3, offline Browse).
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        jumpBackInSection
+                        jumpBackInSection()
                         loadFailure(message, systemImage: systemImage).padding(.top, 24)
                     }
                 }
@@ -150,7 +153,9 @@ struct MediaBrowserView: View {
             GeometryReader { proxy in
                 let regions = AdaptiveContentRegions(viewport: proxy)
                 let globalMinX = proxy.frame(in: .global).minX + regions.viewport.minX
-                let activeVertical = regions.divisionFrames.first { $0.height > $0.width }
+                let activeVertical = regions.divisionFrames
+                    .first { $0.height > $0.width }
+                    .map { $0.offsetBy(dx: -regions.viewport.minX, dy: 0) }
                 let panes = duoLayout.foldPanes(
                     viewportWidth: regions.viewport.width,
                     viewportMinX: globalMinX,
@@ -167,6 +172,7 @@ struct MediaBrowserView: View {
     private func categoryGridScroll(foldPanes: DuoFoldPanes?, viewportWidth: CGFloat?) -> some View {
         let rightToLeft = layoutDirection == .rightToLeft
         let ordered = foldPanes?.ordered(rightToLeft: rightToLeft)
+        let scrollMode: DuoScrollLayoutMode = foldPanes != nil ? .openSplit : .fallback
         let spans = foldPanes.map {
             Self.duoCategoryColumnSpans(
                 panes: $0,
@@ -175,53 +181,67 @@ struct MediaBrowserView: View {
                 rightToLeft: rightToLeft
             )
         }
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                if let ordered, let viewportWidth {
-                    DashboardRegionRow(panes: [ordered.leading], width: viewportWidth) {
-                        jumpBackInSection
-                            .padding(.trailing, -SubjectMetrics.gutter)
-                            .frame(width: ordered.leading.width, alignment: .leading)
-                            .environment(\.duoPaneFoldEdge, .trailing)
-                    }
-                } else {
-                    jumpBackInSection
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Categories")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, 16)
-                        .accessibilityAddTraits(.isHeader)
-
-                    let columns = dynamicTypeSize.isAccessibilitySize ? 1 : 2
-                    MasonryLayout(columns: columns, spacing: 10, rowSpacing: 8, columnSpans: spans) {
-                        ForEach(categories) { category in
-                            categoryCardView(category)
-                                .onAppear { visibleCategoryIDs.insert(category.id) }
-                                .onDisappear { visibleCategoryIDs.remove(category.id) }
+        return ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let ordered, let viewportWidth {
+                        DashboardRegionRow(panes: [ordered.leading], width: viewportWidth) {
+                            jumpBackInSection(foldPaneWidth: ordered.leading.width)
+                                .padding(.trailing, -SubjectMetrics.gutter)
+                                .frame(width: ordered.leading.width, alignment: .leading)
+                                .environment(\.duoPaneFoldEdge, .trailing)
                         }
+                        .duoScrollAnchor("jumpBackIn")
+                    } else {
+                        jumpBackInSection()
+                            .duoScrollAnchor("jumpBackIn")
                     }
-                    .padding(.horizontal, 16)
-                }
 
-                if let ordered, let viewportWidth {
-                    DashboardRegionRow(panes: [ordered.leading], width: viewportWidth) {
-                        openWebsiteRow
-                            .padding(.trailing, -SubjectMetrics.gutter)
-                            .frame(width: ordered.leading.width, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Categories")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 16)
+                            .accessibilityAddTraits(.isHeader)
+                            .duoScrollAnchor("categories")
+
+                        let columns = dynamicTypeSize.isAccessibilitySize ? 1 : 2
+                        MasonryLayout(columns: columns, spacing: 10, rowSpacing: 8, columnSpans: spans) {
+                            ForEach(categories) { category in
+                                categoryCardView(category)
+                                    .duoScrollAnchor("category:\(category.id)")
+                                    .onAppear { visibleCategoryIDs.insert(category.id) }
+                                    .onDisappear { visibleCategoryIDs.remove(category.id) }
+                            }
+                        }
+                        .padding(.horizontal, 16)
                     }
-                } else {
-                    openWebsiteRow
+
+                    if let ordered, let viewportWidth {
+                        DashboardRegionRow(panes: [ordered.leading], width: viewportWidth) {
+                            openWebsiteRow
+                                .padding(.trailing, -SubjectMetrics.gutter)
+                                .frame(width: ordered.leading.width, alignment: .leading)
+                        }
+                        .duoScrollAnchor("openWebsite")
+                    } else {
+                        openWebsiteRow
+                            .duoScrollAnchor("openWebsite")
+                    }
                 }
+                .padding(.top, 4)
+                .padding(.bottom, 12)
+                .coordinateSpace(name: browseScrollSpace)
+                .environment(
+                    \.duoScrollAnchorContext,
+                    DuoScrollAnchorContext(store: scrollAnchors, space: browseScrollSpace, pane: .shared)
+                )
             }
-            .padding(.top, 4)
-            .padding(.bottom, 12)
-        }
-        .refreshable {
-            await AO3Client.shared.invalidateCachedResponses()
-            await refresh()
+            .duoScrollRestoration(store: scrollAnchors, proxy: proxy, pane: .shared, mode: scrollMode)
+            .refreshable {
+                await AO3Client.shared.invalidateCachedResponses()
+                await refresh()
+            }
         }
     }
 
@@ -397,32 +417,6 @@ struct MediaBrowserView: View {
         .accessibilityLabel("Open AO3 Website")
     }
 
-    /// Board 13: Jump Back In — compact grey chips with a fandom swatch.
-    @ViewBuilder
-    private var jumpBackInSection: some View {
-        let recent = jumpBackInEntries
-        if !recent.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Jump Back In")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 16)
-                    .accessibilityAddTraits(.isHeader)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(recent, id: \.fandom) { entry in
-                            jumpBackInCard(entry)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 4)
-                }
-                .horizontalScrollViewport(preservesShadows: true, cardGutter: 16)
-            }
-        }
-    }
-
     private struct JumpBackInEntry {
         let fandom: String
         let category: AO3MediaCategory
@@ -452,75 +446,6 @@ struct MediaBrowserView: View {
         #else
         themeManager.appTheme.appElevatedBackground ?? Color(nsColor: .controlBackgroundColor)
         #endif
-    }
-
-    private var jumpBackInMaxWidth: CGFloat? {
-        dynamicTypeSize.isAccessibilitySize ? nil : 260
-    }
-
-    private func jumpBackInCard(_ entry: JumpBackInEntry) -> some View {
-        Button {
-            onSelectFandom([entry.fandom], entry.fandom)
-        } label: {
-            HStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(CoverArt.workGradient(fandoms: [entry.fandom], title: ""))
-                    .frame(width: 28, height: 40)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
-                    )
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(FandomDisplayName.bareTitle(entry.fandom, among: jumpBackInPicks.map(\.fandom)))
-                        .font(.system(size: jumpBackInTitleSize, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    HStack(spacing: 3) {
-                        Text(entry.category.name)
-                        if entry.isFavorite {
-                            Text("·")
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 9))
-                                .foregroundStyle(Color.subjectFavoriteGold)
-                            Text("favorite")
-                        } else if let visited = entry.lastVisitedAt, Calendar.current.isDateInToday(visited) {
-                            Text("· visited today")
-                        } else if let count = entry.workCount, count > 0 {
-                            Text("· \(compact(count)) works")
-                        }
-                    }
-                    .font(.system(size: jumpBackInDetailSize))
-                    .foregroundStyle(.secondaryInk)
-                    .lineLimit(1)
-                }
-            }
-            .padding(.leading, 8)
-            .padding(.trailing, 14)
-            .padding(.vertical, 8)
-            .frame(minHeight: 56)
-            .frame(maxWidth: jumpBackInMaxWidth, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(jumpBackInChipBackground)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(jumpBackInAccessibilityLabel(entry))
-    }
-
-    private func jumpBackInAccessibilityLabel(_ entry: JumpBackInEntry) -> String {
-        var parts = [entry.fandom, entry.category.name]
-        if entry.isFavorite {
-            parts.append("favorite")
-        } else if let visited = entry.lastVisitedAt, Calendar.current.isDateInToday(visited) {
-            parts.append("visited today")
-        } else if let count = entry.workCount, count > 0 {
-            parts.append("\(compact(count)) works")
-        }
-        return parts.joined(separator: ", ")
     }
 
     #if os(macOS)
@@ -1232,6 +1157,139 @@ struct BrowseCategoryFandomChipLabel: View {
         let count = workCount.formatted(.number.notation(.compactName))
         let familiarNote = isFamiliar ? ", you have read from this fandom" : ""
         return "\(title), \(count) works\(familiarNote)"
+    }
+}
+
+extension MediaBrowserView {
+    /// Board 13: Jump Back In — compact grey chips with a fandom swatch.
+    @ViewBuilder
+    private func jumpBackInSection(foldPaneWidth: CGFloat? = nil) -> some View {
+        let recent = jumpBackInEntries
+        if !recent.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Jump Back In")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 16)
+                    .accessibilityAddTraits(.isHeader)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(recent, id: \.fandom) { entry in
+                            jumpBackInCard(entry, foldPaneWidth: foldPaneWidth)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 4)
+                }
+                .horizontalScrollViewport(preservesShadows: true, cardGutter: 16)
+            }
+        }
+    }
+
+    /// At accessibility sizes inside a Duo fold pane, cap chips to the usable pane width
+    /// so titles and metadata wrap cleanly instead of clipping off the fold edge at rest.
+    nonisolated static func jumpBackInChipMaxWidth(
+        isAccessibilitySize: Bool,
+        foldPaneWidth: CGFloat?,
+        gutter: CGFloat = 16
+    ) -> CGFloat? {
+        guard isAccessibilitySize else { return 260 }
+        guard let foldPaneWidth else { return nil }
+        return max(160, foldPaneWidth - gutter)
+    }
+
+    private func jumpBackInCard(_ entry: JumpBackInEntry, foldPaneWidth: CGFloat? = nil) -> some View {
+        let wrapsInFoldPane = dynamicTypeSize.isAccessibilitySize && foldPaneWidth != nil
+        let maxWidth = Self.jumpBackInChipMaxWidth(
+            isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
+            foldPaneWidth: foldPaneWidth
+        )
+        return Button {
+            onSelectFandom([entry.fandom], entry.fandom)
+        } label: {
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(CoverArt.workGradient(fandoms: [entry.fandom], title: ""))
+                    .frame(width: 28, height: 40)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                    )
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(FandomDisplayName.bareTitle(entry.fandom, among: jumpBackInPicks.map(\.fandom)))
+                        .font(.system(size: jumpBackInTitleSize, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(wrapsInFoldPane ? nil : 1)
+                        .fixedSize(horizontal: false, vertical: wrapsInFoldPane)
+
+                    if wrapsInFoldPane {
+                        jumpBackInWrappedDetail(entry)
+                            .font(.system(size: jumpBackInDetailSize))
+                            .foregroundStyle(.secondaryInk)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        HStack(spacing: 3) {
+                            Text(entry.category.name)
+                            if entry.isFavorite {
+                                Text("·")
+                                Image(systemName: "star.fill")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(Color.subjectFavoriteGold)
+                                Text("favorite")
+                            } else if let visited = entry.lastVisitedAt, Calendar.current.isDateInToday(visited) {
+                                Text("· visited today")
+                            } else if let count = entry.workCount, count > 0 {
+                                Text("· \(compact(count)) works")
+                            }
+                        }
+                        .font(.system(size: jumpBackInDetailSize))
+                        .foregroundStyle(.secondaryInk)
+                        .lineLimit(1)
+                    }
+                }
+            }
+            .padding(.leading, 8)
+            .padding(.trailing, 14)
+            .padding(.vertical, 8)
+            .frame(minHeight: 56)
+            .frame(maxWidth: maxWidth, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(jumpBackInChipBackground)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(jumpBackInAccessibilityLabel(entry))
+    }
+
+    private func jumpBackInWrappedDetail(_ entry: JumpBackInEntry) -> Text {
+        let base = Text(entry.category.name)
+        if entry.isFavorite {
+            return base
+                + Text(" · ")
+                + Text(Image(systemName: "star.fill")).foregroundStyle(Color.subjectFavoriteGold)
+                + Text(" favorite")
+        } else if let visited = entry.lastVisitedAt, Calendar.current.isDateInToday(visited) {
+            return base + Text(" · visited today")
+        } else if let count = entry.workCount, count > 0 {
+            return base + Text(" · \(compact(count)) works")
+        }
+        return base
+    }
+
+    private func jumpBackInAccessibilityLabel(_ entry: JumpBackInEntry) -> String {
+        var parts = [entry.fandom, entry.category.name]
+        if entry.isFavorite {
+            parts.append("favorite")
+        } else if let visited = entry.lastVisitedAt, Calendar.current.isDateInToday(visited) {
+            parts.append("visited today")
+        } else if let count = entry.workCount, count > 0 {
+            parts.append("\(compact(count)) works")
+        }
+        return parts.joined(separator: ", ")
     }
 }
 

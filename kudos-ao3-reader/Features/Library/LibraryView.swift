@@ -15,6 +15,7 @@ import SwiftUI
 struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Environment(\.modelContext) private var context
     @Environment(\.duoLayout) private var duoLayout
+    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var gate
@@ -220,14 +221,15 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     // The lists are drawn from what the Library can show: not a work Hide
                     // mode hides (its fandoms and tags were offered here). A queue's
                     // entry stays: the Saved for Later shelf shows it.
+                    let inspectorWidth = duoLayout.inspectorWidth(rightToLeft: layoutDirection == .rightToLeft)
                     LibraryFilterPanel(
                         filters: $filters,
                         works: works.filter(passesPrivacy),
                         userTagNames: userTagNames
                     )
                         .inspectorColumnWidth(
-                            min: 280, ideal: duoLayout.inspectorWidth ?? 320,
-                            max: max(380, duoLayout.inspectorWidth ?? 0)
+                            min: 280, ideal: inspectorWidth ?? 320,
+                            max: max(380, inspectorWidth ?? 0)
                         )
                 }
                 .task {
@@ -428,15 +430,20 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     private var shelvesDashboard: some View {
         let duoSplit = pageArrangement.duoPaneSections()
+        let isDuoSplitLandscape = duoLayout.isFoldSplitLandscape(rightToLeft: layoutDirection == .rightToLeft)
         return DuoFoldAdaptiveScrollHost(onRefresh: { await refreshLibraryDashboard() }) {
             libraryHeaderLink
+                .duoScrollAnchor("libraryHeader")
             fandomFilterBar
+                .duoScrollAnchor("fandomFilterBar")
             ForEach(duoSplit.leading) { section in
                 arrangedSection(section)
+                    .duoScrollAnchor("section:\(section.id.rawValue)")
             }
         } trailing: {
             ForEach(duoSplit.trailing) { section in
                 arrangedSection(section)
+                    .duoScrollAnchor("section:\(section.id.rawValue)")
             }
             if !pageArrangement.buttons.isEmpty {
                 LibraryShelfButtonGrid(
@@ -446,37 +453,42 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     onEdit: { showingEditShelves = true },
                     onOpen: openShelf
                 )
+                .duoScrollAnchor("shelves")
             }
             onAO3Panel
+                .duoScrollAnchor("onAO3")
             if recentlyDeletedCount > 0 {
                 recentlyDeletedRow
+                    .duoScrollAnchor("recentlyDeleted")
             }
         } fallback: {
-            ScrollView {
-                // 26pt between sections (Rules; 1c drew 22), the chips' row included.
-                VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
-                    libraryHeaderLink
-                    fandomFilterBar
-                    ForEach(pageArrangement.sections) { section in
-                        arrangedSection(section)
-                    }
-                    if !pageArrangement.buttons.isEmpty {
-                        LibraryShelfButtonGrid(
-                            buttons: pageArrangement.buttons,
-                            counts: shelfCounts,
-                            onEdit: { showingEditShelves = true },
-                            onOpen: openShelf
-                        )
-                        .dashboardLeadingRegion()
-                    }
-                    onAO3Panel.dashboardLeadingRegion()
-                    if recentlyDeletedCount > 0 {
-                        recentlyDeletedRow.dashboardLeadingRegion()
-                    }
-                }
-                .padding(.vertical, 12)
+            libraryHeaderLink
+                .duoScrollAnchor("libraryHeader")
+            fandomFilterBar
+                .duoScrollAnchor("fandomFilterBar")
+            ForEach(pageArrangement.sections) { section in
+                arrangedSection(section)
+                    .duoScrollAnchor("section:\(section.id.rawValue)")
             }
-            .refreshable { await refreshLibraryDashboard() }
+            if !pageArrangement.buttons.isEmpty {
+                LibraryShelfButtonGrid(
+                    buttons: pageArrangement.buttons,
+                    counts: shelfCounts,
+                    forcesCompactColumns: isDuoSplitLandscape,
+                    onEdit: { showingEditShelves = true },
+                    onOpen: openShelf
+                )
+                .dashboardLeadingRegion()
+                .duoScrollAnchor("shelves")
+            }
+            onAO3Panel
+                .dashboardLeadingRegion()
+                .duoScrollAnchor("onAO3")
+            if recentlyDeletedCount > 0 {
+                recentlyDeletedRow
+                    .dashboardLeadingRegion()
+                    .duoScrollAnchor("recentlyDeleted")
+            }
         }
     }
 

@@ -23,6 +23,21 @@ nonisolated struct DuoFoldPanes: Equatable, Sendable {
     var foldClearance: CGFloat { right.minX - left.maxX }
 }
 
+/// Trailing inspector width and host fold clearance for the open/Book iPhone Duo,
+/// resolved from the physical pane corresponding to logical trailing (LTR and RTL,
+/// either rail side).
+nonisolated struct DuoInspectorSplitGeometry: Equatable, Sendable {
+    /// Width of the logical trailing pane occupied by `.inspector` (from the fold's
+    /// clear edge on the inspector side to the window/rail edge).
+    let inspectorWidth: CGFloat
+    /// Logical trailing inset the host content needs while `.inspector` is open so
+    /// content stops at the fold's clear edge (40 pt in Open, 56 pt in Book).
+    let leadingFoldClearance: CGFloat
+    /// Logical trailing inset the host content needs when `.inspector` is hidden
+    /// (e.g. Search bulk selection) to stay bounded to the logical leading pane.
+    var leadingPaneTrailingReserve: CGFloat { inspectorWidth + leadingFoldClearance }
+}
+
 /// What the screen's layout says about the iPhone Duo (T-562c/h), decided from traits and
 /// reserved regions, never from the device: the same signal the reader's Duo chrome uses
 /// (`ReaderChromeLayout`, `verticalBarEdge` + the fold region). Every other screen reads
@@ -74,28 +89,94 @@ nonisolated struct DuoLayoutSignal: Equatable, Sendable {
     /// (e.g. Library while its filter inspector occupies the trailing pane) stay single-column.
     static let minimumSplitPaneWidth: CGFloat = 240
 
-    var inspectorWidth: CGFloat? {
+    /// Resolves the logical trailing inspector column width and the host's logical
+    /// trailing fold clearance together from the physical pane matching `rightToLeft`
+    /// and the current rail edge. Returns `nil` without a vertical fold + rail or
+    /// when the trailing pane is narrower than 280 pt.
+    func inspectorSplit(rightToLeft: Bool = false) -> DuoInspectorSplitGeometry? {
         guard hasVerticalBar, let fold = verticalFold, width > 0 else { return nil }
-        let trailingReserve = isVerticalBarLeft ? 0 : Self.railReserve
-        let pane = width - fold.maxX - trailingReserve
-        return pane >= 280 ? pane : nil
+        let halfOpen = max(fold.width / 2, Self.openFoldClearance / 2)
+        let baseMinX = min(fold.minX, fold.midX - halfOpen)
+        let baseMaxX = max(fold.maxX, fold.midX + halfOpen)
+        let extraInset: CGFloat = isVerticalFoldActive ? Self.bookFoldInset : 0
+        let clearMinX = max(0, baseMinX - extraInset)
+        let clearMaxX = min(width, baseMaxX + extraInset)
+        let leftRailReserve: CGFloat = isVerticalBarLeft ? Self.railReserve : 0
+        let rightRailReserve: CGFloat = isVerticalBarLeft ? 0 : Self.railReserve
+
+        let paneWidth: CGFloat
+        let clearance: CGFloat
+        if rightToLeft {
+            // Logical trailing is physical left; host occupies baseMinX... to the right.
+            paneWidth = baseMinX - leftRailReserve
+            clearance = max(0, clearMaxX - baseMinX)
+        } else {
+            // Logical trailing is physical right; host occupies ...baseMaxX to the left.
+            paneWidth = width - baseMaxX - rightRailReserve
+            clearance = max(0, baseMaxX - clearMinX)
+        }
+        guard paneWidth >= 280 else { return nil }
+        return DuoInspectorSplitGeometry(inspectorWidth: paneWidth, leadingFoldClearance: clearance)
+    }
+
+    func inspectorWidth(rightToLeft: Bool) -> CGFloat? {
+        inspectorSplit(rightToLeft: rightToLeft)?.inspectorWidth
+    }
+
+    var inspectorWidth: CGFloat? {
+        inspectorWidth(rightToLeft: false)
     }
 
     /// True on the open or Book-pose inner landscape Duo where a vertical fold divides two
     /// side-by-side panes alongside the vertical rail. False on Cover, Upright, iPhone, iPad, Mac.
-    var isFoldSplitLandscape: Bool {
-        inspectorWidth != nil
+    func isFoldSplitLandscape(rightToLeft: Bool) -> Bool {
+        inspectorSplit(rightToLeft: rightToLeft) != nil
     }
 
-    /// Trailing inset on Search's leading pane while the Filters inspector occupies `fold.maxX...`,
-    /// keeping results, summaries and the pagination pill clear of the fold (40 pt in Open,
-    /// +16 pt from the fold shadow in Book).
+    var isFoldSplitLandscape: Bool {
+        isFoldSplitLandscape(rightToLeft: false)
+    }
+
+    /// Logical trailing inset on Search's leading pane so results, summaries and the
+    /// pagination pill stay clear of the fold both while Filters is docked and while
+    /// bulk selection hides the inspector.
+    func searchLeadingFoldClearance(rightToLeft: Bool, inspectorVisible: Bool = true) -> CGFloat {
+        guard let split = inspectorSplit(rightToLeft: rightToLeft) else { return 0 }
+        return inspectorVisible ? split.leadingFoldClearance : split.leadingPaneTrailingReserve
+    }
+
     var searchLeadingFoldClearance: CGFloat {
-        guard isFoldSplitLandscape, let fold = verticalFold else { return 0 }
-        let halfOpen = max(fold.width / 2, Self.openFoldClearance / 2)
-        let baseMinX = min(fold.minX, fold.midX - halfOpen)
-        let clearMinX = baseMinX - (isVerticalFoldActive ? Self.bookFoldInset : 0)
-        return max(0, fold.maxX - clearMinX)
+        searchLeadingFoldClearance(rightToLeft: false, inspectorVisible: true)
+    }
+
+    private struct LocalFoldClearBounds {
+        let clearMinX: CGFloat
+        let clearMaxX: CGFloat
+        let isBook: Bool
+    }
+
+    private func localFoldClearBounds(
+        viewportWidth: CGFloat,
+        viewportMinX: CGFloat,
+        activeDivision: CGRect?
+    ) -> LocalFoldClearBounds? {
+        guard hasVerticalBar, let windowFold = verticalFold, viewportWidth > 0 else { return nil }
+        let isBook: Bool
+        let localFold: CGRect
+        if let activeDivision, activeDivision.height > activeDivision.width {
+            isBook = true
+            localFold = activeDivision
+        } else {
+            isBook = isVerticalFoldActive
+            localFold = windowFold.offsetBy(dx: -viewportMinX, dy: 0)
+        }
+        let halfOpen = max(localFold.width / 2, Self.openFoldClearance / 2)
+        let baseMinX = min(localFold.minX, localFold.midX - halfOpen)
+        let baseMaxX = max(localFold.maxX, localFold.midX + halfOpen)
+        let extraInset: CGFloat = isBook ? Self.bookFoldInset : 0
+        let clearMinX = max(0, baseMinX - extraInset)
+        let clearMaxX = min(viewportWidth, baseMaxX + extraInset)
+        return LocalFoldClearBounds(clearMinX: clearMinX, clearMaxX: clearMaxX, isBook: isBook)
     }
 
     /// Splits a viewport into physical left and right panes across the vertical fold.
@@ -108,33 +189,50 @@ nonisolated struct DuoLayoutSignal: Equatable, Sendable {
         viewportHeight: CGFloat,
         activeDivision: CGRect? = nil
     ) -> DuoFoldPanes? {
-        guard hasVerticalBar, let windowFold = verticalFold,
-              viewportWidth > 0, viewportHeight > 0 else { return nil }
-        let isBook: Bool
-        let localFold: CGRect
-        if let activeDivision, activeDivision.height > activeDivision.width {
-            isBook = true
-            localFold = activeDivision
-        } else {
-            isBook = isVerticalFoldActive
-            localFold = windowFold.offsetBy(dx: -viewportMinX, dy: 0)
-        }
-        guard localFold.midX > 0, localFold.midX < viewportWidth else { return nil }
-        let halfOpen = max(localFold.width / 2, Self.openFoldClearance / 2)
-        let baseMinX = min(localFold.minX, localFold.midX - halfOpen)
-        let baseMaxX = max(localFold.maxX, localFold.midX + halfOpen)
-        let extraInset: CGFloat = isBook ? Self.bookFoldInset : 0
-        let clearMinX = max(0, baseMinX - extraInset)
-        let clearMaxX = min(viewportWidth, baseMaxX + extraInset)
-        let leftWidth = clearMinX
-        let rightWidth = viewportWidth - clearMaxX
+        guard viewportHeight > 0,
+              let bounds = localFoldClearBounds(
+                  viewportWidth: viewportWidth,
+                  viewportMinX: viewportMinX,
+                  activeDivision: activeDivision
+              ) else { return nil }
+        let leftWidth = bounds.clearMinX
+        let rightWidth = viewportWidth - bounds.clearMaxX
         guard leftWidth >= Self.minimumSplitPaneWidth,
               rightWidth >= Self.minimumSplitPaneWidth else { return nil }
         return DuoFoldPanes(
             left: CGRect(x: 0, y: 0, width: leftWidth, height: viewportHeight),
-            right: CGRect(x: clearMaxX, y: 0, width: rightWidth, height: viewportHeight),
-            isBookPose: isBook
+            right: CGRect(x: bounds.clearMaxX, y: 0, width: rightWidth, height: viewportHeight),
+            isBookPose: bounds.isBook
         )
+    }
+
+    /// When a Duo viewport cannot split into two panes (e.g. Library while its filter
+    /// inspector occupies the trailing pane), returns the logical trailing inset needed
+    /// to keep single-column content out of the fold clearance strip.
+    func singlePaneTrailingFoldClearance(
+        viewportWidth: CGFloat,
+        viewportMinX: CGFloat = 0,
+        rightToLeft: Bool = false,
+        activeDivision: CGRect? = nil
+    ) -> CGFloat {
+        guard let bounds = localFoldClearBounds(
+            viewportWidth: viewportWidth,
+            viewportMinX: viewportMinX,
+            activeDivision: activeDivision
+        ) else { return 0 }
+        let leftWidth = bounds.clearMinX
+        let rightWidth = viewportWidth - bounds.clearMaxX
+        // Two-pane split applies instead.
+        if leftWidth >= Self.minimumSplitPaneWidth && rightWidth >= Self.minimumSplitPaneWidth {
+            return 0
+        }
+        if rightToLeft {
+            guard bounds.clearMaxX > 0, rightWidth >= Self.minimumSplitPaneWidth else { return 0 }
+            return bounds.clearMaxX
+        } else {
+            guard leftWidth >= Self.minimumSplitPaneWidth, leftWidth < viewportWidth else { return 0 }
+            return viewportWidth - leftWidth
+        }
     }
 }
 

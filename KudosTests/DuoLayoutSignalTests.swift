@@ -205,5 +205,162 @@ struct DuoLayoutSignalTests {
         #expect(rtlLeading.minX == 16)
         #expect(rtlLeading.width == 455.5)
     }
+
+    @Test func inspectorSplitMatchesPhysicalTrailingPaneForBothDirectionsAndRailSides() throws {
+        // Asymmetric 951 pt window, fold at 455.5...495.5, 84 pt rail.
+        var railRight = ReaderHostRegions(verticalBar: .right)
+        railRight.fold = CGRect(x: 455.5, y: 0, width: 40, height: 669)
+        let openRight = DuoLayoutSignal(regions: railRight, width: 951, isVerticalFoldActive: false)
+        let bookRight = DuoLayoutSignal(regions: railRight, width: 951, isVerticalFoldActive: true)
+
+        // LTR + rail right: inspector on physical right (371.5), clearance 40 Open / 56 Book.
+        let ltrRightOpen = try #require(openRight.inspectorSplit(rightToLeft: false))
+        #expect(ltrRightOpen.inspectorWidth == 371.5)
+        #expect(ltrRightOpen.leadingFoldClearance == 40)
+        #expect(ltrRightOpen.leadingPaneTrailingReserve == 411.5)
+        let ltrRightBook = try #require(bookRight.inspectorSplit(rightToLeft: false))
+        #expect(ltrRightBook.inspectorWidth == 371.5)
+        #expect(ltrRightBook.leadingFoldClearance == 56)
+        #expect(ltrRightBook.leadingPaneTrailingReserve == 427.5)
+
+        // RTL + rail right: logical trailing inspector is physical left (0...455.5 = 455.5),
+        // clearance 40 Open / 56 Book so results start at x=495.5 / 511.5 (never before the fold).
+        let rtlRightOpen = try #require(openRight.inspectorSplit(rightToLeft: true))
+        #expect(rtlRightOpen.inspectorWidth == 455.5)
+        #expect(rtlRightOpen.leadingFoldClearance == 40)
+        #expect(rtlRightOpen.leadingPaneTrailingReserve == 495.5)
+        let rtlRightBook = try #require(bookRight.inspectorSplit(rightToLeft: true))
+        #expect(rtlRightBook.inspectorWidth == 455.5)
+        #expect(rtlRightBook.leadingFoldClearance == 56)
+        #expect(rtlRightBook.leadingPaneTrailingReserve == 511.5)
+
+        // 180° rotated: rail on physical left (0...84).
+        var railLeft = ReaderHostRegions(verticalBar: .left)
+        railLeft.fold = CGRect(x: 455.5, y: 0, width: 40, height: 669)
+        let openLeft = DuoLayoutSignal(regions: railLeft, width: 951, isVerticalFoldActive: false)
+
+        // LTR + rail left: inspector on physical right (495.5...951 = 455.5).
+        let ltrLeftOpen = try #require(openLeft.inspectorSplit(rightToLeft: false))
+        #expect(ltrLeftOpen.inspectorWidth == 455.5)
+        #expect(ltrLeftOpen.leadingFoldClearance == 40)
+        #expect(ltrLeftOpen.leadingPaneTrailingReserve == 495.5)
+
+        // RTL + rail left: inspector on physical left between rail and fold (84...455.5 = 371.5).
+        let rtlLeftOpen = try #require(openLeft.inspectorSplit(rightToLeft: true))
+        #expect(rtlLeftOpen.inspectorWidth == 371.5)
+        #expect(rtlLeftOpen.leadingFoldClearance == 40)
+        #expect(rtlLeftOpen.leadingPaneTrailingReserve == 411.5)
+    }
+
+    @Test func searchBulkSelectionKeepsLeadingPaneBoundWithoutInspector() {
+        var regions = ReaderHostRegions(verticalBar: .right)
+        regions.fold = CGRect(x: 455.5, y: 0, width: 40, height: 669)
+        let open = DuoLayoutSignal(regions: regions, width: 951, isVerticalFoldActive: false)
+        let book = DuoLayoutSignal(regions: regions, width: 951, isVerticalFoldActive: true)
+
+        // 867 pt viewport minus trailing reserve leaves exact leading pane width (455.5 Open / 439.5 Book LTR).
+        #expect(867 - open.searchLeadingFoldClearance(rightToLeft: false, inspectorVisible: false) == 455.5)
+        #expect(867 - book.searchLeadingFoldClearance(rightToLeft: false, inspectorVisible: false) == 439.5)
+        // RTL leading pane is physical right (371.5 Open / 355.5 Book).
+        #expect(867 - open.searchLeadingFoldClearance(rightToLeft: true, inspectorVisible: false) == 371.5)
+        #expect(867 - book.searchLeadingFoldClearance(rightToLeft: true, inspectorVisible: false) == 355.5)
+
+        // Ordinary screens keep zero inset.
+        #expect(DuoLayoutSignal().searchLeadingFoldClearance(rightToLeft: false, inspectorVisible: false) == 0)
+    }
+
+    @Test func libraryFilterFallbackClearsTheFoldInOpenAndBookForBothDirections() {
+        var railRight = ReaderHostRegions(verticalBar: .right)
+        railRight.fold = CGRect(x: 455.5, y: 0, width: 40, height: 669)
+        let openRight = DuoLayoutSignal(regions: railRight, width: 951, isVerticalFoldActive: false)
+        let bookRight = DuoLayoutSignal(regions: railRight, width: 951, isVerticalFoldActive: true)
+
+        // Open Duo LTR with Library Filters open: host is 0...495.5, needs 40 pt trailing clearance -> 455.5.
+        #expect(openRight.singlePaneTrailingFoldClearance(
+            viewportWidth: 495.5, viewportMinX: 0, rightToLeft: false
+        ) == 40)
+        // Open Duo RTL with Library Filters open (inspector 0...455.5): host is 455.5...867 (411.5), needs 40 pt.
+        #expect(openRight.singlePaneTrailingFoldClearance(
+            viewportWidth: 411.5, viewportMinX: 455.5, rightToLeft: true
+        ) == 40)
+        // Book Duo LTR where DashboardRegionHost already excluded the active 40 pt division (viewport 0...455.5):
+        // needs only the 16 pt Book inset, never double-subtracting 56 pt.
+        #expect(bookRight.singlePaneTrailingFoldClearance(
+            viewportWidth: 455.5,
+            viewportMinX: 0,
+            rightToLeft: false,
+            activeDivision: CGRect(x: 455.5, y: 0, width: 40, height: 669)
+        ) == 16)
+        // Book Duo RTL where viewport starts after the active division (495.5...867 = 371.5, local division -40...0):
+        // needs only the 16 pt Book inset.
+        #expect(bookRight.singlePaneTrailingFoldClearance(
+            viewportWidth: 371.5,
+            viewportMinX: 495.5,
+            rightToLeft: true,
+            activeDivision: CGRect(x: -40, y: 0, width: 40, height: 669)
+        ) == 16)
+        // Full split viewport returns 0 (two-pane split applies instead).
+        #expect(openRight.singlePaneTrailingFoldClearance(
+            viewportWidth: 867, viewportMinX: 0, rightToLeft: false
+        ) == 0)
+        // Ordinary phone returns 0.
+        #expect(DuoLayoutSignal().singlePaneTrailingFoldClearance(
+            viewportWidth: 393, viewportMinX: 0, rightToLeft: false
+        ) == 0)
+    }
+
+    @Test func scrollAnchorsSurviveOpenBookAndFallbackLayoutSwaps() {
+        var state = DuoScrollAnchorState()
+        // Initial mount never forces a scroll.
+        let initial = state.beginTransition(to: .openSplit)
+        #expect(initial.shared == nil && initial.leading == nil && initial.trailing == nil)
+
+        // Open flat: leading pane ends at y=520; trailing pane continues to Subscriptions (546...780).
+        state.recordFrame(DuoScrollAnchorRect(minY: 0, maxY: 20), for: "stats", pane: .leading)
+        state.recordFrame(DuoScrollAnchorRect(minY: 46, maxY: 280), for: "resume", pane: .leading)
+        state.recordFrame(DuoScrollAnchorRect(minY: 306, maxY: 520), for: "readingNow", pane: .leading)
+        state.recordFrame(DuoScrollAnchorRect(minY: 0, maxY: 220), for: "chapters", pane: .trailing)
+        state.recordFrame(DuoScrollAnchorRect(minY: 246, maxY: 520), for: "queues", pane: .trailing)
+        state.recordFrame(DuoScrollAnchorRect(minY: 546, maxY: 780), for: "subscriptions", pane: .trailing)
+
+        state.recordScroll(fromTop: 540, previousFromTop: 0, pane: .shared, mode: .openSplit)
+        #expect(state.trailingAnchor == "subscriptions")
+        #expect(state.leadingAnchor == "readingNow")
+        #expect(state.sharedAnchor == "subscriptions")
+
+        // Fold Open -> Book: each pane restores its own section.
+        let toBook = state.beginTransition(to: .bookSplit)
+        #expect(toBook.leading == "readingNow")
+        #expect(toBook.trailing == "subscriptions")
+
+        // In Book pose, register new frames and scroll trailing pane to "queues", then return to Open.
+        state.recordFrame(DuoScrollAnchorRect(minY: 0, maxY: 220), for: "chapters", pane: .trailing)
+        state.recordFrame(DuoScrollAnchorRect(minY: 246, maxY: 520), for: "queues", pane: .trailing)
+        state.recordFrame(DuoScrollAnchorRect(minY: 0, maxY: 280), for: "resume", pane: .leading)
+        state.recordFrame(DuoScrollAnchorRect(minY: 306, maxY: 520), for: "collections", pane: .leading)
+
+        // Zero-delta mount callback does not overwrite anchors or interaction order.
+        state.recordScroll(fromTop: 0, previousFromTop: 0, pane: .leading, mode: .bookSplit)
+        state.recordScroll(fromTop: 250, previousFromTop: 540, pane: .trailing, mode: .bookSplit)
+        #expect(state.lastInteractedBookPane == .trailing)
+
+        let bookToFallback = state.beginTransition(to: .fallback)
+        #expect(bookToFallback.shared == "queues")
+
+        // Browse/Library fallback -> Open split preserves the visible section/card.
+        state.recordFrame(DuoScrollAnchorRect(minY: 0, maxY: 100), for: "jumpBackIn", pane: .shared)
+        state.recordFrame(DuoScrollAnchorRect(minY: 420, maxY: 640), for: "category:Movies", pane: .shared)
+        state.recordScroll(fromTop: 430, previousFromTop: 0, pane: .shared, mode: .fallback)
+        let fallbackToOpen = state.beginTransition(to: .openSplit)
+        #expect(fallbackToOpen.shared == "category:Movies")
+    }
+
+    @Test func browseJumpBackInChipsCapToFoldPaneAtAccessibilitySizesOnly() {
+        #expect(MediaBrowserView.jumpBackInChipMaxWidth(isAccessibilitySize: false, foldPaneWidth: nil) == 260)
+        #expect(MediaBrowserView.jumpBackInChipMaxWidth(isAccessibilitySize: false, foldPaneWidth: 455.5) == 260)
+        #expect(MediaBrowserView.jumpBackInChipMaxWidth(isAccessibilitySize: true, foldPaneWidth: nil) == nil)
+        #expect(MediaBrowserView.jumpBackInChipMaxWidth(isAccessibilitySize: true, foldPaneWidth: 455.5) == 439.5)
+        #expect(MediaBrowserView.jumpBackInChipMaxWidth(isAccessibilitySize: true, foldPaneWidth: 439.5) == 423.5)
+    }
 }
 #endif
