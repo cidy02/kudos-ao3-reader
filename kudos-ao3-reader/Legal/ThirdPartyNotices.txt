@@ -328,7 +328,7 @@ fails the build if any pinned package identity has no entry here.
 6. Readium Swift Toolkit
    Package identity: swift-toolkit
    https://github.com/cidy02/swift-toolkit
-   Pinned revision: 9dffbe632a1fddceb4793516610cf6e83042da57 (branch kudos/page-transitions, Readium 3.9.0 + page transitions)
+   Pinned revision: 7253ef0bd0d02ddfb22e91327f93e6e912f99952 (branch kudos/page-transitions, Readium 3.9.0 + page transitions)
    License: BSD 3-Clause
 
    BSD 3-Clause License
