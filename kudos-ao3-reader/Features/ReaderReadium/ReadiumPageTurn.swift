@@ -137,7 +137,7 @@ final class ReadiumPageTurnController {
 /// or keyboard navigation reports both its start token and Readium's `moved: Bool`
 /// result back to `ReadiumBook`.
 @MainActor
-private final class DirectionalTurnTrackingNavigator: VisualNavigator {
+final class DirectionalTurnTrackingNavigator: VisualNavigator {
     private weak var base: (any VisualNavigator)?
     private let onBeginTurn: @MainActor () -> UInt64
     private let onEndTurn: @MainActor (UInt64, Bool) -> Void
@@ -239,10 +239,14 @@ private final class DirectionalTurnTrackingNavigator: VisualNavigator {
 /// it; Readium reports only `moved`, so a rejected edge tap (first page, last page)
 /// would reach the later centre-tap observer and toggle the controls. Consuming the
 /// event here keeps an edge tap an edge tap. Keys pass through untouched.
+///
+/// The proxy is weak: Readium's in-flight pointer dispatch holds these observers past
+/// the reader's close (an animated edge turn is still awaited), so a released binding
+/// must answer `false`, not trap.
 @MainActor
-private final class EdgeActivationObserver: InputObserving {
+final class EdgeActivationObserver: InputObserving {
     private let inner: any InputObserving
-    private unowned let proxy: DirectionalTurnTrackingNavigator
+    private weak var proxy: DirectionalTurnTrackingNavigator?
 
     init(inner: any InputObserving, proxy: DirectionalTurnTrackingNavigator) {
         self.inner = inner
@@ -250,6 +254,7 @@ private final class EdgeActivationObserver: InputObserving {
     }
 
     func didReceive(_ event: PointerEvent) async -> Bool {
+        guard let proxy else { return false }
         let before = proxy.beganTurnCount
         let handled = await inner.didReceive(event)
         return handled || proxy.beganTurnCount != before
@@ -260,15 +265,18 @@ private final class EdgeActivationObserver: InputObserving {
     }
 }
 
-/// Passively observes Readium's Slide paging scroll views and Curl pan recognizer
-/// so a committed interactive gesture hides controls even before `pageBarReady` or
-/// during a prior jump's 600 ms echo window, while cancelled drags (which snap or
-/// revert back to their starting page) stay silent.
+/// Passively observes the inputs Readium turns pages with other than edge taps and
+/// keys, and reports a turn exactly once when the input has committed one (T-562f):
+/// a Slide paging scroll view or Curl pan recognizer released onto another page or
+/// chapter, and a trackpad / scroll-wheel Slide turn (Readium's indirect-scroll pan).
+/// A drag that snaps back to its starting page reports nothing. A jump, scrub, link,
+/// relayout or close bumps `currentGeneration`, which drops every gesture in flight.
 @MainActor
 final class ReaderCommittedGestureTracker: NSObject {
-    /// Covers Slide deceleration + Readium's 0.3 s `notifyPagesDidChange` debounce,
-    /// and Curl's commit spring + 0.1 s `updateCurrentLocation` poll.
-    static let commitWindow: TimeInterval = 1.5
+    /// How often an ended gesture is checked, and for how many checks. Covers Slide
+    /// deceleration, Curl's commit spring and the animated trackpad turn.
+    var pollNanoseconds: UInt64 = 50_000_000
+    var maxPolls = 30
 
     private struct WeakBox<T: AnyObject> {
         weak var value: T?
@@ -283,6 +291,7 @@ final class ReaderCommittedGestureTracker: NSObject {
             startPaginationPage: Int?,
             startHref: String?
         )
+        case indirect(startPlace: String?)
     }
 
     private struct ActiveGesture {
@@ -290,25 +299,27 @@ final class ReaderCommittedGestureTracker: NSObject {
         var generation: UInt64
     }
 
-    private struct PendingGesture {
-        var origin: GestureOrigin
-        var generation: UInt64
-        var endedAt: Date
+    private enum Verdict {
+        case committed, cancelled, undecided
     }
 
     var isInteractionBlocked: () -> Bool = { false }
     var currentGeneration: () -> UInt64 = { 0 }
     var currentHref: () -> String? = { nil }
-    var nowProvider: () -> Date = Date.init
+    /// Chapter, position and progression of the settled locator, as one comparable key.
+    var currentPlaceKey: () -> String? = { nil }
+    var onCommit: () -> Void = {}
 
     private weak var rootView: UIView?
     private let observedPans = NSHashTable<UIPanGestureRecognizer>.weakObjects()
     private let curlPans = NSHashTable<UIPanGestureRecognizer>.weakObjects()
+    private let indirectPans = NSHashTable<UIPanGestureRecognizer>.weakObjects()
     private var activeGestures: [ObjectIdentifier: ActiveGesture] = [:]
-    private var pendingGesture: PendingGesture?
+    private var resolutions: [UInt64: Task<Void, Never>] = [:]
+    private var nextResolution: UInt64 = 0
 
-    /// Idempotently attaches passive targets to paged scroll views (Slide) and
-    /// Readium's `PageCurlPanRecognizer` (Curl) inside `rootView`.
+    /// Idempotently attaches passive targets to paged scroll views (Slide), Readium's
+    /// `PageCurlPanRecognizer` (Curl) and its indirect-scroll pan (trackpad Slide).
     func attach(to rootView: UIView) {
         self.rootView = rootView
         walkAndAttach(in: rootView)
@@ -316,69 +327,44 @@ final class ReaderCommittedGestureTracker: NSObject {
 
     /// Directly observes a paged `UIScrollView`'s pan recognizer (also used by tests).
     func observeSlideScrollView(_ scrollView: UIScrollView) {
-        let pan = scrollView.panGestureRecognizer
-        guard !observedPans.contains(pan) else { return }
-        observedPans.add(pan)
-        pan.addTarget(self, action: #selector(handlePan(_:)))
+        observe(scrollView.panGestureRecognizer)
     }
 
     /// Directly observes a Curl `UIPanGestureRecognizer` inside `rootView` (also used by tests).
     func observeCurlPan(_ pan: UIPanGestureRecognizer, in rootView: UIView) {
         self.rootView = rootView
         curlPans.add(pan)
+        observe(pan)
+    }
+
+    /// Directly observes the indirect-scroll (trackpad / mouse wheel) pan.
+    func observeIndirectPan(_ pan: UIPanGestureRecognizer) {
+        indirectPans.add(pan)
+        observe(pan)
+    }
+
+    private func observe(_ pan: UIPanGestureRecognizer) {
         guard !observedPans.contains(pan) else { return }
         observedPans.add(pan)
         pan.addTarget(self, action: #selector(handlePan(_:)))
     }
 
-    /// Records the start of a pan gesture (production action target + test entry point).
+    /// Records the state of a pan gesture (production action target + test entry point).
     func notePanStateChanged(_ pan: UIPanGestureRecognizer, state overrideState: UIGestureRecognizer.State? = nil) {
         let state = overrideState ?? pan.state
-        if curlPans.contains(pan) {
+        if indirectPans.contains(pan) {
+            handleIndirectPan(pan, state: state)
+        } else if curlPans.contains(pan) {
             handleCurlPan(pan, state: state)
         } else if let scrollView = pan.view as? UIScrollView {
             handleSlidePan(pan, scrollView: scrollView, state: state)
         }
     }
 
-    /// True when a recently ended Slide swipe or Curl drag of the current generation
-    /// actually landed on a different page or chapter (never a cancelled drag).
-    func hasCommittedTurn(to incomingHref: String, generation: UInt64, now: Date) -> Bool {
-        guard let pending = pendingGesture else { return false }
-        guard pending.generation == generation,
-              now <= pending.endedAt.addingTimeInterval(Self.commitWindow) else {
-            pendingGesture = nil
-            return false
-        }
-        switch pending.origin {
-        case let .pagedScroll(scrollBox, startPage, startHref):
-            if let startHref, startHref != incomingHref { return true }
-            guard let scrollView = scrollBox.value,
-                  let currentPage = Self.snappedPageIndex(of: scrollView) else { return false }
-            return currentPage != startPage
-        case let .curl(spreadBox, startSpreadPage, paginationBox, startPaginationPage, startHref):
-            if let startHref, startHref != incomingHref { return true }
-            if let pagination = paginationBox.value, let startPaginationPage,
-               let currentPaginationPage = Self.snappedPageIndex(of: pagination),
-               currentPaginationPage != startPaginationPage {
-                return true
-            }
-            if let spread = spreadBox.value, let startSpreadPage,
-               let currentSpreadPage = Self.snappedPageIndex(of: spread),
-               currentSpreadPage != startSpreadPage {
-                return true
-            }
-            return false
-        }
-    }
-
-    func consumeCommittedTurn() {
-        pendingGesture = nil
-    }
-
     func invalidate() {
         activeGestures.removeAll()
-        pendingGesture = nil
+        for task in resolutions.values { task.cancel() }
+        resolutions.removeAll()
     }
 
     /// True once at least one Slide scroll view or Curl pan recognizer has been attached.
@@ -386,8 +372,23 @@ final class ReaderCommittedGestureTracker: NSObject {
         observedPans.anyObject != nil
     }
 
+    /// True while an ended gesture is still waiting to be committed or dropped.
+    var hasPendingResolution: Bool {
+        !resolutions.isEmpty
+    }
+
+    /// True once Readium's indirect-scroll pan has been attached.
+    var hasObservedIndirectPan: Bool {
+        indirectPans.anyObject != nil
+    }
+
     @objc private func handlePan(_ pan: UIPanGestureRecognizer) {
         notePanStateChanged(pan)
+    }
+
+    private static func isIndirectScrollPan(_ pan: UIPanGestureRecognizer) -> Bool {
+        let types = pan.allowedTouchTypes.map(\.intValue)
+        return types == [UITouch.TouchType.indirect.rawValue]
     }
 
     private func walkAndAttach(in view: UIView) {
@@ -397,10 +398,12 @@ final class ReaderCommittedGestureTracker: NSObject {
         }
         if let recognizers = view.gestureRecognizers {
             for recognizer in recognizers {
-                guard let pan = recognizer as? UIPanGestureRecognizer,
-                      String(describing: type(of: pan)).contains("PageCurl"),
-                      let rootView else { continue }
-                observeCurlPan(pan, in: rootView)
+                guard let pan = recognizer as? UIPanGestureRecognizer else { continue }
+                if String(describing: type(of: pan)).contains("PageCurl"), let rootView {
+                    observeCurlPan(pan, in: rootView)
+                } else if Self.isIndirectScrollPan(pan) {
+                    observeIndirectPan(pan)
+                }
             }
         }
         for subview in view.subviews {
@@ -430,14 +433,7 @@ final class ReaderCommittedGestureTracker: NSObject {
                 generation: currentGeneration()
             )
         case .ended:
-            guard let active = activeGestures.removeValue(forKey: key),
-                  active.generation == currentGeneration(),
-                  !isInteractionBlocked() else { return }
-            pendingGesture = PendingGesture(
-                origin: active.origin,
-                generation: active.generation,
-                endedAt: nowProvider()
-            )
+            finish(key)
         case .cancelled, .failed:
             activeGestures.removeValue(forKey: key)
         default:
@@ -467,19 +463,94 @@ final class ReaderCommittedGestureTracker: NSObject {
             )
         case .ended, .cancelled:
             // Readium's `PageCurlPanStateMachine.release` can still commit a drag
-            // past `distanceCommit` when UIKit ends it via `.cancelled` (e.g. edge exit).
-            guard let active = activeGestures.removeValue(forKey: key),
-                  active.generation == currentGeneration(),
-                  !isInteractionBlocked() else { return }
-            pendingGesture = PendingGesture(
-                origin: active.origin,
-                generation: active.generation,
-                endedAt: nowProvider()
-            )
+            // past `distanceCommit` when UIKit ends it via `.cancelled` (e.g. edge exit),
+            // so the outcome is read from the pages, not from the state.
+            finish(key)
         case .failed:
             activeGestures.removeValue(forKey: key)
         default:
             break
+        }
+    }
+
+    private func handleIndirectPan(_ pan: UIPanGestureRecognizer, state: UIGestureRecognizer.State) {
+        let key = ObjectIdentifier(pan)
+        switch state {
+        case .began:
+            guard !isInteractionBlocked() else {
+                activeGestures.removeValue(forKey: key)
+                return
+            }
+            // Readium turns the page itself once the scroll passes its threshold;
+            // `began` fixes where the reader was.
+            activeGestures[key] = ActiveGesture(
+                origin: .indirect(startPlace: currentPlaceKey()),
+                generation: currentGeneration()
+            )
+        case .ended:
+            finish(key)
+        case .cancelled, .failed:
+            activeGestures.removeValue(forKey: key)
+        default:
+            break
+        }
+    }
+
+    /// Resolves an ended gesture at its own completion: reports at the moment the
+    /// pages show it committed, or drops it when it snapped back / never turned.
+    private func finish(_ key: ObjectIdentifier) {
+        guard let active = activeGestures.removeValue(forKey: key),
+              active.generation == currentGeneration(),
+              !isInteractionBlocked() else { return }
+        nextResolution &+= 1
+        let id = nextResolution
+        resolutions[id] = Task { @MainActor [weak self] in
+            var polls = 0
+            while let self, !Task.isCancelled {
+                guard active.generation == currentGeneration(), !isInteractionBlocked() else { break }
+                switch verdict(of: active.origin) {
+                case .committed:
+                    resolutions.removeValue(forKey: id)
+                    onCommit()
+                    return
+                case .cancelled:
+                    resolutions.removeValue(forKey: id)
+                    return
+                case .undecided:
+                    break
+                }
+                polls += 1
+                if polls >= maxPolls { break }
+                try? await Task.sleep(nanoseconds: pollNanoseconds)
+            }
+            self?.resolutions.removeValue(forKey: id)
+        }
+    }
+
+    private func verdict(of origin: GestureOrigin) -> Verdict {
+        switch origin {
+        case let .pagedScroll(scrollBox, startPage, startHref):
+            if let startHref, let href = currentHref(), href != startHref { return .committed }
+            guard let scrollView = scrollBox.value,
+                  let page = Self.snappedPageIndex(of: scrollView) else { return .cancelled }
+            if scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating {
+                return .undecided
+            }
+            return page != startPage ? .committed : .cancelled
+        case let .curl(spreadBox, startSpreadPage, paginationBox, startPaginationPage, startHref):
+            if let startHref, let href = currentHref(), href != startHref { return .committed }
+            if let pagination = paginationBox.value, let startPaginationPage,
+               let page = Self.snappedPageIndex(of: pagination), page != startPaginationPage {
+                return .committed
+            }
+            if let spread = spreadBox.value, let startSpreadPage,
+               let page = Self.snappedPageIndex(of: spread), page != startSpreadPage {
+                return .committed
+            }
+            return .undecided
+        case let .indirect(startPlace):
+            guard let startPlace, let place = currentPlaceKey() else { return .cancelled }
+            return place != startPlace ? .committed : .undecided
         }
     }
 
