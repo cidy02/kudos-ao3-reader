@@ -1057,9 +1057,14 @@ extension WorkResumeCard {
         } else {
             // One line, never broken inside the word: when a pane is too narrow the
             // layout above is what gives, not the label (T-562c N8).
+            // Work Detail's "Resume Chapter 123" is long and keeps wrapping to the card.
             HStack(spacing: 8) {
                 primaryIcon
-                title.lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                if variant == .detail {
+                    title
+                } else {
+                    title.lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                }
             }
         }
     }

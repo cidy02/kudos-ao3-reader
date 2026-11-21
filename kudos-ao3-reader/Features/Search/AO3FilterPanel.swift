@@ -123,12 +123,8 @@ struct AO3FilterPanel: View {
                 refineMatchLine
                 form
             }
-            .navigationTitle(worksSort == nil ? (mode == .refine ? "Refine" : "Filters") : "Sort and Filter")
-            #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .filterPanelChrome(title: worksSort == nil ? (mode == .refine ? "Refine" : "Filters") : "Sort and Filter")
                 .modifier(WorksFilterSheetGround())
-                .toolbar { actionButtons }
                 .safeAreaInset(edge: .bottom) {
                     FilterResultsBar(
                         buttonTitle: resultsButtonTitle,
@@ -166,19 +162,6 @@ struct AO3FilterPanel: View {
         let verb = matching == 1 ? "matches" : "match"
         let line = "\(matching) of the \(total) \(works) on this page \(verb)"
         return refinePendingCount > 0 ? "\(line) · \(refinePendingCount) not checked yet" : line
-    }
-
-    @ToolbarContentBuilder
-    private var actionButtons: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-            }
-            .accessibilityLabel("Close")
-        }
-        // No ✓ / magnifier (board 12): the results bar below is the sheet's one confirm.
     }
 
     private func confirm() {

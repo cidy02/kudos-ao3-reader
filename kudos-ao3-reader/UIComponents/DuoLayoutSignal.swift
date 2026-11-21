@@ -21,6 +21,21 @@ nonisolated struct DuoLayoutSignal: Equatable, Sendable {
 
     var isUprightFold: Bool { hasHorizontalFold && !hasVerticalBar }
 
+    init() {}
+
+    #if os(iOS)
+    /// From the reader's own classification (`ReaderChromeLayout.resolve`), so the app and the
+    /// reader cannot disagree on the same bar edge and fold: a fold with no rail is the upright
+    /// layout whatever its orientation.
+    init(regions: ReaderHostRegions, width: CGFloat) {
+        let layout = ReaderChromeLayout.resolve(regions)
+        if case .rail = layout { hasVerticalBar = true }
+        hasHorizontalFold = layout == .foldTopBar
+        verticalFold = regions.fold.flatMap { $0.height > $0.width ? $0 : nil }
+        self.width = width
+    }
+    #endif
+
     /// The trailing inspector's column on the rail layouts: from the fold to the rail
     /// (`Duo-Open-Library`), so it stands on the trailing pane and never crosses the
     /// crease. `nil` without a vertical fold, and for a pane too narrow to be that.
@@ -106,20 +121,17 @@ private struct DuoLayoutProbe: UIViewRepresentable {
         }
 
         private func current() -> DuoLayoutSignal {
-            var next = DuoLayoutSignal()
-            guard #available(iOS 27.1, *), let window else { return next }
-            next.hasVerticalBar = traitCollection.verticalBarEdge != .unspecified
-            let bounds = window.bounds
-            next.width = bounds.width
-            let divisions = window.reservedRegions(kind: .division, options: .includeInactive).map(\.frame)
-            if let fold = ReaderHostRegions.foldFrame(from: divisions, in: bounds) {
-                if fold.height > fold.width {
-                    next.verticalFold = fold
-                } else {
-                    next.hasHorizontalFold = true
-                }
+            guard #available(iOS 27.1, *), let window else { return DuoLayoutSignal() }
+            var regions = ReaderHostRegions()
+            switch traitCollection.verticalBarEdge {
+            case .leading: regions.verticalBar = effectiveUserInterfaceLayoutDirection == .leftToRight ? .left : .right
+            case .trailing: regions.verticalBar = effectiveUserInterfaceLayoutDirection == .leftToRight ? .right : .left
+            default: break
             }
-            return next
+            let bounds = window.bounds
+            let divisions = window.reservedRegions(kind: .division, options: .includeInactive).map(\.frame)
+            regions.fold = ReaderHostRegions.foldFrame(from: divisions, in: bounds)
+            return DuoLayoutSignal(regions: regions, width: bounds.width)
         }
     }
 }
