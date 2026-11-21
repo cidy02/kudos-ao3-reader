@@ -12,8 +12,9 @@ import UIKit
 /// A centre tap is not an edge, the adapter returns false, and the bars toggle.
 ///
 /// Scroll mode ignores edge taps (`ignoreWhileScrolling`, Readium's default).
-/// Keys still move. `animatedTransition` is false in scroll mode, with Reduce
-/// Motion, and for None. Slide, Fast Fade and Curl animate in paged mode.
+/// Keys still move. `animatedTransition` is false in scroll mode and for None
+/// (and, for Fast Fade and Curl, with Reduce Motion). Slide, Fast Fade and Curl
+/// animate in paged mode; Slide under Reduce Motion becomes a Fast Fade in the fork.
 /// Progress is not written here. Readium reports one `locationDidChange` when
 /// the turn settles, and that remains the only save.
 @MainActor

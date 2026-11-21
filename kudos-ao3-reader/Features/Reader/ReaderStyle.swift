@@ -61,7 +61,9 @@ enum ReaderPageTurnStyle: String, CaseIterable, Identifiable {
 ///
 /// `animated: false` forces `PageTransition.none` inside the fork, so Slide,
 /// Fast Fade and Curl have to ask for animation or the preference is ignored.
-/// Scroll mode and Reduce Motion are instant. Locator seeks are a different
+/// Scroll mode is instant. Reduce Motion keeps asking for Slide only: the fork
+/// resolves that request to Fast Fade, while Fast Fade and Curl stay instant.
+/// Locator seeks are a different
 /// path and stay unanimated at the call site — this helper is not consulted
 /// for them.
 enum ReaderPageTurnPolicy {
@@ -71,7 +73,9 @@ enum ReaderPageTurnPolicy {
         reduceMotion: Bool
     ) -> Bool {
         switch style {
-        case .slide, .fade, .curl:
+        case .slide:
+            readingMode == .paged
+        case .fade, .curl:
             readingMode == .paged && !reduceMotion
         case .none:
             false
