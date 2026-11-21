@@ -41,7 +41,7 @@ struct ReaderPageTurnTests {
         #expect(ReaderPageTurnStyle.curl.title == "Curl")
     }
 
-    @Test func animatedTransitionIsSlideFadeOrCurlInPagedModeOnly() {
+    @Test func animatedTransitionIsSlideFadeOrCurlInPagedModeAndSlideSurvivesReduceMotion() {
         for style in ReaderPageTurnStyle.allCases {
             for mode in ReadingMode.allCases {
                 for reduceMotion in [false, true] {
@@ -50,8 +50,11 @@ struct ReaderPageTurnTests {
                         readingMode: mode,
                         reduceMotion: reduceMotion
                     )
-                    let plays = style == .slide || style == .fade || style == .curl
-                    let expected = plays && mode == .paged && !reduceMotion
+                    // Reduce Motion: only Slide still asks to animate, because the
+                    // fork resolves it to Fast Fade. Curl and Fast Fade stay instant.
+                    let plays = style == .slide
+                        || ((style == .fade || style == .curl) && !reduceMotion)
+                    let expected = plays && mode == .paged
                     #expect(
                         animated == expected,
                         "style \(style.rawValue) mode \(mode.rawValue) reduceMotion \(reduceMotion)"
