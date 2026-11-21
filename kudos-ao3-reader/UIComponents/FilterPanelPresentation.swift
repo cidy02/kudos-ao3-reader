@@ -37,6 +37,14 @@ private struct FilterPanelPresentation<Panel: View>: ViewModifier {
     var onDismiss: (() -> Void)? = nil
     @ViewBuilder var panel: () -> Panel
 
+    /// The inspector's content lives in the host's view tree, so a panel built while
+    /// closed leaks its own navigation title and Close button into the host's toolbar
+    /// (Library and Search read "Filters" with a stray ✕, T-562c N1). Build it only
+    /// while presented.
+    @ViewBuilder private var inspectorPanel: some View {
+        if isPresented { panel() }
+    }
+
     func body(content: Content) -> some View {
         #if os(iOS)
         let wide = WideLayout.isAvailable(
@@ -44,7 +52,7 @@ private struct FilterPanelPresentation<Panel: View>: ViewModifier {
         )
         return Group {
             if wide {
-                content.inspector(isPresented: $isPresented) { panel() }
+                content.inspector(isPresented: $isPresented) { inspectorPanel }
                     .onChange(of: isPresented) { _, presented in
                         if !presented { onDismiss?() }
                     }
@@ -63,7 +71,7 @@ private struct FilterPanelPresentation<Panel: View>: ViewModifier {
             if !isPresented { onDismiss?() }
         }
         #else
-        content.inspector(isPresented: $isPresented) { panel() }
+        content.inspector(isPresented: $isPresented) { inspectorPanel }
             .onChange(of: isPresented) { _, presented in
                 if !presented { onDismiss?() }
             }

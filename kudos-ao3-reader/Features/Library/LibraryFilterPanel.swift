@@ -13,6 +13,7 @@ struct LibraryFilterPanel: View {
     let works: [SavedWork]
     /// The user's own tag names, for the "Your Tags" facet.
     let userTagNames: [String]
+    @State private var panelWidth: CGFloat = .infinity
     #if DEBUG
     @State private var debugFandomPicker = false
     #endif
@@ -28,6 +29,7 @@ struct LibraryFilterPanel: View {
     var body: some View {
         NavigationStack {
             form
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { panelWidth = $0 }
                 .navigationTitle("Filters")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
@@ -72,11 +74,16 @@ struct LibraryFilterPanel: View {
     }
 
     /// The six AO3 categories are a 3×2 grid, falling back to one column at accessibility sizes.
+    /// Two across when the panel is too narrow for three (a narrow inspector): a label
+    /// never breaks inside a word (T-562c N6).
     private var categoryColumns: [GridItem] {
         dynamicTypeSize.isAccessibilitySize
             ? [GridItem(.flexible())]
-            : Array(repeating: GridItem(.flexible()), count: 3)
+            : Array(repeating: GridItem(.flexible()), count: panelWidth < Self.threeAcrossWidth ? 2 : 3)
     }
+
+    /// The Form's own width below which three category cards cannot hold a one-word label.
+    static let threeAcrossWidth: CGFloat = 290
 
     /// Warnings: two columns (AO3 filter sheet), one at accessibility sizes.
     private var warningColumns: [GridItem] {

@@ -124,7 +124,10 @@ struct FilterSymbolChipCard: View {
                 // Boards 03/12 wrap long warnings ("Creator Chose Not To Use") instead of truncating.
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                    .lineLimit(3)
+                    // Dense (three across) labels are one short word: shrink rather than
+                    // break inside it ("Oth-er", T-562c N6).
+                    .lineLimit(dense ? 1 : 3)
+                    .minimumScaleFactor(dense ? 0.7 : 1)
                     .fixedSize(horizontal: false, vertical: true)
                     .foregroundStyle(foreground)
                     .strikethrough(state == .excluded, color: strokeColor)

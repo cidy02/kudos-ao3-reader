@@ -10,6 +10,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Environment(PrivacyGate.self) private var gate
     @Environment(\.modelContext) private var context
+    @Environment(\.duoLayout) private var duoLayout
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var themeManager
@@ -344,7 +345,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     // Width applies on iPad/macOS, where this is a real inspector;
                     // iPhone gets a sheet, and its grabber, from the modifier.
                     filterPanel
-                        .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+                        .inspectorColumnWidth(
+                            min: 280, ideal: duoLayout.inspectorWidth ?? 320,
+                            max: max(380, duoLayout.inspectorWidth ?? 0)
+                        )
                         // Artboard 1ax. The alert this replaced could take a name and
                         // nothing else, so it asked for a commitment to "the current
                         // search and its filters" while showing neither.
