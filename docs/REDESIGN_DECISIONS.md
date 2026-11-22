@@ -111,3 +111,15 @@ forbids; the row is left out rather than shown disabled.
 |---|---|
 | Reading-progress label | **Parity with iOS** (owner, 2026-09-25): T-264 computes Readium's whole-publication progression on the Mac. |
 | T-264 "quick open" write | Accept the residual (a quick open can record the percent on close only if the restored page lands measurably off the saved spot). |
+
+## Backup, Insights and Read Aloud — best-effort decisions (2026-11-22, for the owner's later review)
+
+The owner asked Claude to "make a best effort decision on the other two and document them in the owner decisions document for later review".
+These stand until the owner overrides them.
+
+| Question | Decision | Why |
+|---|---|---|
+| **Replace Library with an archive that omits `readingSessions` / `readingFavorites` / `fandomWatermarks`** (e.g. an Android re-export): today the decoder turns a missing key into `[]`, so Replace deletes and tombstones every local row the archive doesn't list. | **An absent key means "this archive says nothing about these rows" — Replace leaves them alone.** Only a key that is present (even as `[]`) replaces that collection. Writers keep emitting the key whenever they hold the data, so an iOS archive behaves as today. | Matches the rule the rest of backup already follows ("an omission never clears"); an older build or Android cannot silently erase reading history. Cost: a user who really wants to wipe sessions must use an archive that carries `readingSessions: []` (every current iOS export does). Android should write the keys it holds (A-541). Tracked as **T-563**. |
+| **Your own AO3 actions in Insights (D11: kudos, bookmarks, comments you made)** across several AO3 accounts on one device/sync set | **Record the AO3 account (username) with each action and show only the signed-in account's actions; a signed-out view shows none.** Older unattributed records stay visible under every account until the owner chooses otherwise. Private-bookmark observations are never shown under a different account. | Keeps one account's private bookmark history from appearing while another is signed in; cheapest change that respects privacy. Tracked inside T-536 (follow-up T-536b). |
+| **Read Aloud engine bugs found in the Insights rounds** (Kokoro/Core ML start, pause/skip races) | **Not split out** (owner, 2026-11-22: "do not split out the bugs just fix them"): fixed in the Read Aloud lane `claude/rd-t535c` until its review passes, then landed with the Insights follow-ups. | Owner instruction. |
+| **Android SDK on the build Mac** | **Installed** (owner: "install what you need"): command-line tools via Homebrew, SDK at `~/Library/Android/sdk` (platform 37, build-tools, platform-tools), Java from Android Studio's bundled JBR; Google's SDK licences accepted under that instruction. | Unblocks `android-check.sh` and the Android parity strand. |
