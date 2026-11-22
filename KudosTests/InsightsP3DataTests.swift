@@ -472,12 +472,24 @@ struct InsightsP3DataTests {
     }
 
     @Test func aFilteredOrFamilyFandomPageCarriesNoFandomSize() {
-        #expect(ReadingQueueMembershipOrigin.fandomTotal(12_000, filtered: false, fandomCount: 1) == 12_000)
-        #expect(ReadingQueueMembershipOrigin.fandomTotal(12_000, filtered: true, fandomCount: 1) == nil)
-        #expect(ReadingQueueMembershipOrigin.fandomTotal(12_000, filtered: false, fandomCount: 2) == nil)
+        let base = AO3SearchFilters()
+        var filtered = base
+        filtered.fandom = "Other"
+        func total(applied: AO3SearchFilters?, draft: AO3SearchFilters, count: Int = 1) -> Int? {
+            ReadingQueueMembershipOrigin.fandomTotal(
+                12_000, applied: applied, draft: draft, baseline: base, fandomCount: count
+            )
+        }
+        #expect(total(applied: base, draft: base) == 12_000)
+        #expect(total(applied: filtered, draft: filtered) == nil)
+        #expect(total(applied: base, draft: base, count: 2) == nil)
+        // Filters applied to the list, then cleared in the panel without Apply: still filtered.
+        #expect(total(applied: filtered, draft: base) == nil)
+        // The panel edited toward a filter that was not applied does not hide the full total.
+        #expect(total(applied: base, draft: filtered) == 12_000)
         // A filtered page keeps its .fandom source, only the size goes.
         var origin = ReadingQueueMembershipOrigin(kind: .search, label: "Fandom", importSourceHint: .fandom)
-        origin.fandomWorks = ReadingQueueMembershipOrigin.fandomTotal(12_000, filtered: true, fandomCount: 1)
+        origin.fandomWorks = total(applied: filtered, draft: filtered)
         #expect(WorkImportSource(origin: origin) == .fandom)
         #expect(WorkStatsAtSave(summary: summary(1, kudos: 3), origin: origin).fandomWorks == nil)
     }

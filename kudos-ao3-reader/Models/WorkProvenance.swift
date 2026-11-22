@@ -212,7 +212,12 @@ extension SavedWork {
 extension ReadingQueueMembershipOrigin {
     /// A fandom page's loaded total describes the fandom only while the list is that fandom's own:
     /// one fandom, no filter beyond it (D9). Anything else carries no size.
-    static func fandomTotal(_ total: Int?, filtered: Bool, fandomCount: Int) -> Int? {
-        filtered || fandomCount != 1 ? nil : total
+    /// `applied` are the filters the loaded list was fetched with; `draft` is what the filter panel
+    /// currently shows (unapplied edits on macOS and wide iPad), which says nothing about the list.
+    static func fandomTotal(
+        _ total: Int?, applied: AO3SearchFilters?, draft: AO3SearchFilters, baseline: AO3SearchFilters,
+        fandomCount: Int
+    ) -> Int? {
+        (applied ?? draft) != baseline || fandomCount != 1 ? nil : total
     }
 }

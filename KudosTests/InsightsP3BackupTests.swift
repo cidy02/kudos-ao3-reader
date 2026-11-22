@@ -272,20 +272,26 @@ extension PersistenceGateSuites {
                 _ = try KudosBackupService.restore(try reload(legacy), into: dest, defaults: try defaults())
                 let row = try #require(try dest.fetch(FetchDescriptor<ReadingSession>()).first)
                 #expect(row.chapterSecondsJSON == nil)
+                // The local sitting is strictly newer than the archive's, so Reconcile rejects the
+                // incoming row as older: only the missing timing may come in.
+                let newer = row.lastModifiedAt.addingTimeInterval(3_600)
+                row.lastModifiedAt = newer
+                row.durationSeconds = 999
                 _ = try KudosBackupService.restore(
                     try reload(current), into: dest, defaults: try defaults(), mode: mode
                 )
                 #expect(row.chapterSeconds == [3: 120.5, 4: 80], "mode \(mode)")
                 #expect(row.skimmedChapters == [4], "mode \(mode)")
                 #expect(row.endedAtChapterEnd == true, "mode \(mode)")
-                // Merge never overwrites timing the row already has (Reconcile follows the clock rule).
-                if mode == .merge {
-                    row.chapterSeconds = [9: 1]
-                    _ = try KudosBackupService.restore(
-                        try reload(current), into: dest, defaults: try defaults(), mode: mode
-                    )
-                    #expect(row.chapterSeconds == [9: 1])
-                }
+                #expect(row.durationSeconds == 999, "mode \(mode)")
+                #expect(row.lastModifiedAt == newer, "mode \(mode)")
+                // Timing the row already has is never overwritten by the fill.
+                row.chapterSeconds = [9: 1]
+                _ = try KudosBackupService.restore(
+                    try reload(current), into: dest, defaults: try defaults(), mode: mode
+                )
+                #expect(row.chapterSeconds == [9: 1], "mode \(mode)")
+                #expect(row.durationSeconds == 999, "mode \(mode)")
             }
         }
 

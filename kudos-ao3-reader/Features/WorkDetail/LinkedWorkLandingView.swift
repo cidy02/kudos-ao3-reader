@@ -59,7 +59,8 @@ struct LinkedWorkLandingView: View {
                              initialFocusesChapter: route.focusesChapter,
                              initialComposes: route.composes)
             }
-            .navigationDestination(for: AO3AuthorRoute.self) { AuthorProfileView(route: $0) }
+            .originAwareWorkDestinations()
+            .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
             .navigationDestination(for: AO3SeriesSummary.self) { AO3SeriesDetailView(series: $0) }
             .navigationDestination(for: RemoteWorkReaderRoute.self) {
                 RemoteWorkReaderDestination(summary: $0.work)

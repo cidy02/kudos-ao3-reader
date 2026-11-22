@@ -267,16 +267,7 @@ private struct AO3AuthorNavigationModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .navigationDestination(for: AO3AuthorRoute.self) { route in
-                // A work opened from an author page arrived through that author (D8).
-                AuthorProfileView(route: route).environment(
-                    \.queueMembershipOrigin,
-                    ReadingQueueMembershipOrigin(kind: .manual, importSourceHint: .author)
-                )
-            }
-            .navigationDestination(for: RemoteWorkRoute.self) { route in
-                WorkDetailView(remote: route.work).environment(\.queueMembershipOrigin, route.origin)
-            }
+            .originAwareWorkDestinations()
             .navigationDestination(for: AO3SeriesSummary.self) { series in
                 AO3SeriesDetailView(series: series)
             }
@@ -372,5 +363,22 @@ struct RemoteWorkLink<Label: View>: View {
 extension View {
     func remoteWorkNavigation(to work: AO3WorkSummary) -> some View {
         modifier(RemoteWorkNavigationModifier(work: work))
+    }
+}
+
+extension View {
+    /// The author-profile and origin-carrying work destinations, shared by every tab stack and the
+    /// linked-work sheet so a row's origin (D8) opens Work Detail in all of them. A work opened
+    /// from an author page arrived through that author.
+    func originAwareWorkDestinations() -> some View {
+        navigationDestination(for: AO3AuthorRoute.self) { route in
+            AuthorProfileView(route: route).environment(
+                \.queueMembershipOrigin,
+                ReadingQueueMembershipOrigin(kind: .manual, importSourceHint: .author)
+            )
+        }
+        .navigationDestination(for: RemoteWorkRoute.self) { route in
+            WorkDetailView(remote: route.work).environment(\.queueMembershipOrigin, route.origin)
+        }
     }
 }

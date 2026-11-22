@@ -407,7 +407,7 @@ struct FandomWorksView: View {
             // the list is the fandom's own (no extra filters), so the total describes it.
             // A reload clears the summary, so a filter change also clears a total loaded before it.
             .onChange(of: resultSummary?.total) { _, total in updateFandomTotal(total) }
-            .onChange(of: hasExtraFilters) { _, _ in updateFandomTotal(resultSummary?.total) }
+            .onChange(of: loadedFilters) { _, _ in updateFandomTotal(resultSummary?.total) }
             .task { await load(page: 1) }
             .task { await rankTop100.refreshAvailability() }
             .onChange(of: savedWorks.map(\.id), initial: true) { _, _ in
@@ -697,7 +697,8 @@ struct FandomWorksView: View {
     private func updateFandomTotal(_ total: Int?) {
         guard var origin = bulkSelection.origin else { return }
         origin.fandomWorks = ReadingQueueMembershipOrigin.fandomTotal(
-            total, filtered: hasExtraFilters, fandomCount: includedFandoms.count
+            total, applied: loadedFilters, draft: filters, baseline: Self.baseline(for: includedFandoms),
+            fandomCount: includedFandoms.count
         )
         bulkSelection.origin = origin
     }
