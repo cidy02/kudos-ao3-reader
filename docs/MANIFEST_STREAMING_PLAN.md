@@ -1,4 +1,4 @@
-# Streaming `manifest.json` on iOS and Android — plan v3
+# Streaming `manifest.json` on iOS and Android — plan v4
 
 Owner, 2026-11-22: "raise the limit and plan a change to stream the manifest on both platforms", then "once streaming is
 proven, no cap on either", then "once you are both satisfied [Claude and Codex], implement".
@@ -35,15 +35,16 @@ None of these rules needs the library **in RAM**; they need it **indexed**. So v
 ## Architecture
 
 ```
-manifest bytes ──► validating streaming parser ──► staging DB (private SQLite) ──► resolve (SQL, indexes) ──► apply (one store transaction, batches)
+manifest bytes ──► validating streaming parser ──► staging DB (private SQLite) ──► resolve (SQL, indexes) ──► apply (platform- and mode-specific commit boundaries, batches)
 store ──► batched fetch ──► streaming writer ──► temp file ──► platform publication protocol
 ```
 
 1. **Parser** (per platform): reads the document **to EOF and validates it before anything is applied or swept**, even when
    `version` / `exportedAt` come after the arrays. It enforces the decoder contract (§ Contract) with each existing route's behaviour as the
-   oracle (duplicate keys, escapes, UTF-8, trailing content and wrong kinds behave as the route does today). It decodes each record with the existing typed
-   decoder at record boundaries (iOS `JSONDecoder` on the record's bytes; Android `decodeFromJsonElement` on the record's
-   tree) so record-level semantics (defaults, timestamp clamping, unknown keys) stay the existing code's.
+   oracle (duplicate keys, escapes, UTF-8, trailing content and wrong kinds behave as the route does today). Use existing typed decoders for records that fit the memory budget (iOS
+   `JSONDecoder` on the record's bytes; Android `decodeFromJsonElement` on the record's tree), so record-level semantics
+   (defaults, timestamp clamping, unknown keys) stay the existing code's. Stream oversized supported records field by
+   field and process large base64 and opaque values in chunks or by file range, preserving route parity.
    - Parser choice is a P1 prototype decision: Android — the platform `android.util.JsonReader` (token stream, no new
      dependency) vs a hand-written byte scanner; iOS — no streaming JSON parser exists in Foundation or our package lockfile,
      so a hand-written tokenizer over a mapped / spooled file, **differentially tested against `JSONSerialization` and the
@@ -72,18 +73,16 @@ store ──► batched fetch ──► streaming writer ──► temp file ─
    **existing** protocol, kept as is:
    - **iOS Folder Sync**: assets first, manifest published atomically, prune only with a current view
      (`FolderSyncService.swift:410–488, 1014–1037`).
-   - **Android Folder Sync (SAF)**: copy the validated prior live bytes to `.bak`, write an existing live document in place,
-     temp-and-rename only for first publication (`SyncRepository.kt:491–572, 880–925`). Stream the precommit fingerprint and
-     the outgoing hash independently; spool the exact validated input for `.bak`; update digest bookkeeping only after
-     successful publication (Android digests the exact bytes it wrote, so a format change does not by itself cause a
-     spurious change).
-   - Hold the existing consistency gate or use a verified generation across paged export reads. Build prune membership
-     from the published view using an indexed keep table. On SAF, recheck live bytes and folder generation immediately
-     before publication, require a successful first-write rename result, and preserve the existing in-place write for an
-     existing live file. Treat the precommit reread as a change detector: an external writer can still race the
-     subsequent write. Only after successful publication retire pending overlays and folded conflicts, update the native
-     digest, and set the settled digest when the folder view is current and all required assets are settled. Exercise
-     rename failure as well as interrupted writes.
+   - **Android Folder Sync (SAF)**: copy the validated prior live bytes to `.bak` (spooling the exact validated input),
+     write an existing live document in place, temp-and-rename only for first publication and require a successful rename
+     result (`SyncRepository.kt:491–572, 880–925`). Recheck live bytes and folder generation immediately before
+     publication; the precommit reread is a change detector, and an external writer can still race the subsequent write.
+     Stream the precommit fingerprint and the outgoing hash independently. Only after successful publication retire
+     pending overlays and folded conflicts, update the native digest (Android digests the exact bytes it wrote, so a
+     format change does not by itself cause a spurious change), and set the settled digest when the folder view is
+     current and all required assets are settled. Exercise rename failure as well as interrupted writes.
+   - **Both**: hold the existing consistency gate or use a verified generation across paged export reads; build prune
+     membership from the published view using an indexed keep table.
 
 ## Contract (both platforms; written as a table in P2 and tested)
 
@@ -148,7 +147,8 @@ Measured per entry point above, on both platforms, growing **independently**: in
 opaque values, assets. Sizes 8 / 32 / 128 / 256 / 512 MiB manifests. Recorded: process footprint and managed heap, peak
 temporary disk and journal, elapsed time, cancellation latency. **Pass**: per § P1 feasibility thresholds (64 MiB incremental
 footprint ceiling; ≤ 8 MiB median growth 128→512 MiB per axis; 512 MiB run ≤ 5× the 128 MiB run; a measured and enforced
-per-component disk budget). Release thresholds are set from device and provider runs before P6.
+per-component disk budget). P1 thresholds apply to prototypes. P6 applies measured release thresholds, set from device and
+provider runs, to production entry points at every applicable scale.
 A-566's desktop-JVM `-Xmx` numbers establish the amplification on Android only; they are not the baseline.
 
 ## Limits after the change
@@ -176,9 +176,9 @@ A-566's desktop-JVM `-Xmx` numbers establish the amplification on Android only; 
 | P1 | both | **Baseline and feasibility** — see § P1 below. | Reproducible baseline tables; store prototypes pass or a SwiftData replacement design is opened; a parser chosen per platform by route parity, resource and large-value checks. |
 | P2 | both | Contract table; validating streaming parser into staging (no consumer change yet; existing decoders stay the oracle). | Differential tests pass on every fixture and the malformed corpus; staging equals today's decoded manifest on every fixture. |
 | P3 | Android | A-541a overlay staging schema. | Match the existing overlay implementation on source precedence and ties, work ID remapping, bookmark/font/watermark/favorite identity, ambiguous matches, stamped settings and pronunciation maps, unknown record fields and top-level values, folder scope, legacy migration, pending retirement, and Replace aside recovery. Compare winner selection and output values against the current implementation. Store opaque values as ranges or chunked payloads and exercise a value larger than the memory budget without materializing it. Measure managed heap and peak spill separately. Depends on A-541a and P2's payload interface; gates Android overlay-bearing export and Folder Sync. |
-| P4 | both | Resolve + apply from staging (restore, Merge, Reconcile, Replace) in dependency order, one outer transaction. | All merge/restore/Replace tests unchanged; budget met for import at 512 MiB. |
-| P5 | both | Streaming export and publication per platform protocol; MiniZip incremental entry I/O; Android ZIP/directory import incremental; coordinated local spool when the provider can't give a stable seekable source. | Budget met for export and Folder Sync at 512 MiB; interruption tests (`.bak` write, live write, external write during assets, incomplete conflicts, missing live manifest with surviving assets, failure before prune) pass; ENOSPC, cancellation, background expiry measured. |
-| P6 | both | **Release gate**: remove the manifest cap; document remaining container/picker limits and the older-client limit; rollback and restart tests. | Every § Budget row flat to 512 MiB on both; owner sign-off. |
+| P4 | both | Resolve + apply from staging (restore, Merge, Reconcile, Replace) in dependency order, with the commit boundaries of Architecture 4. | Existing merge, restore, and Replace tests pass. Apply from a validated staged source meets the applicable feasibility thresholds through 512 MiB. |
+| P5 | both | Streaming export and publication per platform protocol; MiniZip incremental entry I/O; Android ZIP/directory import incremental; coordinated local spool when the provider can't give a stable seekable source. | Integrates incremental input, P4, indexed export and provider publication (P3 required for Android overlay-bearing export and Folder Sync); interruption tests (`.bak` write, live write, external write during assets, incomplete conflicts, missing live manifest with surviving assets, failure before prune) pass; ENOSPC, cancellation, background expiry measured. |
+| P6 | both | **Release gate**: remove the manifest cap; document remaining container/picker limits and the older-client limit; rollback and restart tests. | Measured release thresholds met by production entry points at every applicable scale; intentional container-limit rejections recorded separately; owner sign-off. |
 
 **Dependencies.** P4 requires P1 store feasibility and P2 staging, and proves apply from a validated staged source. Run
 incremental archive and picker/provider input as a separate workstream after P2. P5 integrates that input workstream, P4,
@@ -241,7 +241,9 @@ and enforced component budget for concurrent input spools, staging and indexes, 
 staged assets and output. Fail any run that exceeds its disk budget, leaks staging after cleanup, or mutates or publishes
 after a resource failure invalidates the operation.
 
-## Review trace (Codex v1 review → v2)
+## Review trace
+
+*Historical — v1 → v2 (Codex review 1):*
 
 1 logical view needed → staging + indexed resolve (Architecture 2–3). 2 transactions → explicit atomic boundary, Room and
 SwiftData designs, SwiftData measured in P1 before anything depends on it. 3 inventory → § Entry-point inventory.
@@ -251,9 +253,13 @@ SwiftData designs, SwiftData measured in P1 before anything depends on it. 3 inv
 P1 prototypes (platform `JsonReader`, tokenizer), SQLite as private staging; v8 JSON stays the interchange (no shards).
 9 phasing/measurement → P1 measures first, budget per entry point with disk/time/cancellation; test inventory listed.
 
-**v3 (Codex review 2 → v3):** applied verbatim — staging/resolve with live projection and revalidation (1); per-platform
+**v3 (Codex review 2):** incorporated review 2 — staging/resolve with live projection and revalidation (1); per-platform
 commit and failure behaviour, disk-backed undo, durable commit discriminator, SwiftData gate (2); inventory additions (3);
 P3 operation-level criterion with chunked opaque values (4); route-specific outcomes, existing routes as oracle (5);
 consistent export view, SAF recheck, rename result, post-publication bookkeeping (6); limits incl. ZIP writer exemption,
 chunked large values, no new caps without a decision (7); parser comparison in P1 (8); phase dependencies, fixture
 additions, P1 with thresholds (9).
+
+**v4 (Codex review 3, `out/codex-streaming-plan-review3.md`: no HIGH issue, P1 may start):** consistency only — commit
+boundaries in the diagram and P4, oversized-record streaming in Architecture 1, P1-vs-release thresholds in Budget/P5/P6,
+SAF wording consolidated.
