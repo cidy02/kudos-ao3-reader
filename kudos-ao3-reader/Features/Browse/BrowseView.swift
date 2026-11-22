@@ -135,7 +135,7 @@ struct AO3WebBrowserView: View {
         model.onImport = { fileURL, source in
             Task {
                 do {
-                    let work = try await importEPUB(fileURL, source: source, into: context)
+                    let work = try await importEPUB(fileURL, source: source, importSource: .browse, into: context)
                     show("Saved “\(work.title)” to Library")
                 } catch {
                     show("Couldn't save EPUB.")

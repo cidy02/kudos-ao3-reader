@@ -639,9 +639,10 @@ struct ReplaceLibraryConfirmationView: View {
     private static let replaceFooterText = """
         Replace only changes this device. Removed works go to Recently Deleted and \
         can return through Merge; saved links, saved searches, reading history, stars, \
-        and fandom visits are deleted completely and remembered as deleted, so Merge \
-        will not bring them back. To restore everything, import the saved copy and \
-        choose Replace.
+        and fandom visits the backup does not list are deleted completely and \
+        remembered as deleted, so Merge will not bring them back; a kind of data an \
+        older backup leaves out entirely is kept. To restore everything, import the \
+        saved copy and choose Replace.
         """
 
     /// Whether this presentation actually produced an undo copy.

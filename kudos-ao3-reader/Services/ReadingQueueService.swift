@@ -708,6 +708,7 @@ enum ReadingQueueService {
         _ summary: AO3WorkSummary,
         state: ReadingQueueMembershipState = .inLine,
         origin: ReadingQueueMembershipOrigin? = nil,
+        importSource: WorkImportSource? = nil,
         in context: ModelContext,
         downloadEPUB: ((Int) async throws -> URL)? = nil
     ) async throws -> SavedWork {
@@ -730,6 +731,9 @@ enum ReadingQueueService {
             )
             saved.ao3WorkID = summary.id
             saved.knownChapterCount = SavedWork.postedChapterCount(from: summary.chapters)
+            saved.recordArrival(
+                source: importSource ?? WorkImportSource(origin: origin), summary: summary, origin: origin
+            )
             context.insert(saved)
             createdNewWork = true
         }
@@ -935,6 +939,7 @@ enum ReadingQueueService {
                         to: targetQueues,
                         state: state,
                         origin: origin,
+                        importSource: .series,
                         in: context
                     )
                 }
@@ -977,6 +982,7 @@ enum ReadingQueueService {
         to queues: [ReadingQueue],
         state: ReadingQueueMembershipState = .new,
         origin: ReadingQueueMembershipOrigin? = nil,
+        importSource: WorkImportSource? = nil,
         in context: ModelContext
     ) async throws -> SavedWork {
         let saved: SavedWork
@@ -999,6 +1005,9 @@ enum ReadingQueueService {
             )
             saved.ao3WorkID = summary.id
             saved.knownChapterCount = SavedWork.postedChapterCount(from: summary.chapters)
+            saved.recordArrival(
+                source: importSource ?? WorkImportSource(origin: origin), summary: summary, origin: origin
+            )
             context.insert(saved)
             createdNewWork = true
         }
@@ -1075,6 +1084,8 @@ enum ReadingQueueService {
     @discardableResult
     static func ensureLocalMetadata(
         for summary: AO3WorkSummary,
+        importSource: WorkImportSource? = nil,
+        origin: ReadingQueueMembershipOrigin? = nil,
         in context: ModelContext
     ) throws -> SavedWork {
         if let existing = existingWork(for: summary, in: context) {
@@ -1094,6 +1105,7 @@ enum ReadingQueueService {
         )
         saved.ao3WorkID = summary.id
         saved.knownChapterCount = SavedWork.postedChapterCount(from: summary.chapters)
+        saved.recordArrival(source: importSource, summary: summary, origin: origin)
         // No package on disk yet — preserve/Read will fetch later.
         saved.hasEPUB = false
         saved.isSaved = false
@@ -1123,7 +1135,12 @@ enum ReadingQueueService {
         context.saveBestEffort(reason: "Discarding unattached metadata stub failed")
     }
 
-    static func resolveLocalWork(for summary: AO3WorkSummary, in context: ModelContext) async throws -> SavedWork {
+    static func resolveLocalWork(
+        for summary: AO3WorkSummary,
+        importSource: WorkImportSource? = nil,
+        origin: ReadingQueueMembershipOrigin? = nil,
+        in context: ModelContext
+    ) async throws -> SavedWork {
         if let existing = existingWork(for: summary, in: context) {
             // Acting on a remote card whose local twin sits in Recently Deleted
             // revives it — otherwise the action would mutate a hidden record still
@@ -1141,6 +1158,8 @@ enum ReadingQueueService {
             isComplete: summary.isComplete ?? false,
             seriesURL: summary.seriesURL ?? "",
             knownChapterCount: SavedWork.postedChapterCount(from: summary.chapters),
+            importSource: importSource,
+            statsAtSave: WorkStatsAtSave(summary: summary, origin: origin),
             into: context
         )
         applyRemoteMetadata(summary, to: saved)

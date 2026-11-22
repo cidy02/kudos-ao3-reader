@@ -16,6 +16,9 @@ final class DownloadQueue {
         let isComplete: Bool
         let seriesURL: String
         var requiresOfflineQueue = false
+        /// Insights D8: how the reader asked for this work, recorded once if the download
+        /// creates the library copy. nil = the path does not know.
+        var importSource: WorkImportSource?
         var status: Status = .queued
         /// 0…1 from the download task, when AO3 says how big the file is.
         var fraction: Double = 0
@@ -287,6 +290,7 @@ final class DownloadQueue {
                 let saved = try await importEPUB(
                     temp, source: item.sourceURL,
                     isComplete: item.isComplete, seriesURL: item.seriesURL,
+                    importSource: item.importSource,
                     verifyAvailability: false,
                     canImport: {
                         guard let liveIndex = self.index(of: id) else { return false }

@@ -616,10 +616,20 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
     /// `BackupVersion.isSupported` is integers 1…8, so a v9 archive is a hard
     /// import failure there (T-211). Android will strip these keys until a
     /// passthrough lands, the same class of issue as T-210 pronunciations.
-    /// iOS→iOS round-trip must work; a missing key decodes as `[]`.
-    let readingSessions: [KudosBackupReadingSession]
-    let readingFavorites: [KudosBackupReadingFavorite]
-    let fandomReadWatermarks: [KudosBackupFandomReadWatermark]
+    /// iOS→iOS round-trip must work.
+    ///
+    /// **Absent is not empty (T-563).** `nil` means the archive has no such key (Android, an
+    /// older build): it says nothing about these rows, so Replace Library leaves local rows
+    /// alone and mints no tombstones. A present key, even `[]`, is the whole collection and
+    /// replaces it. Every writer here passes an array, so this app always emits the key.
+    let readingSessions: [KudosBackupReadingSession]?
+    let readingFavorites: [KudosBackupReadingFavorite]?
+    let fandomReadWatermarks: [KudosBackupFandomReadWatermark]?
+    /// Keys of the other top-level collections that the archive did not carry at all (decoded
+    /// as `[]` for the readers, T-563). Replace Library must not read an omitted key as "the
+    /// snapshot has none" and soft-delete or tombstone local rows. Not encoded; empty for a
+    /// manifest built in code, which always writes every key.
+    var omittedKeys: Set<String> = []
     /// Locally followed tags. Optional and omitted (`nil`) when empty so manifests
     /// match older iOS/Android golden archives verbatim.
     let followedTags: [KudosBackupFollowedTag]?
@@ -658,9 +668,9 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         readingQueueMemberships: [KudosBackupReadingQueueMembership] = [],
         annotations: [KudosBackupAnnotation] = [],
         savedSearches: [KudosBackupSavedSearch] = [],
-        readingSessions: [KudosBackupReadingSession] = [],
-        readingFavorites: [KudosBackupReadingFavorite] = [],
-        fandomReadWatermarks: [KudosBackupFandomReadWatermark] = [],
+        readingSessions: [KudosBackupReadingSession]? = [],
+        readingFavorites: [KudosBackupReadingFavorite]? = [],
+        fandomReadWatermarks: [KudosBackupFandomReadWatermark]? = [],
         followedTags: [KudosBackupFollowedTag]? = nil,
         tagAliases: [KudosBackupTagAlias]? = nil,
         settings: KudosBackupSettings,
@@ -740,15 +750,15 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         readingSessions = try container.decodeIfPresent(
             [KudosBackupReadingSession].self,
             forKey: .readingSessions
-        ) ?? []
+        )
         readingFavorites = try container.decodeIfPresent(
             [KudosBackupReadingFavorite].self,
             forKey: .readingFavorites
-        ) ?? []
+        )
         fandomReadWatermarks = try container.decodeIfPresent(
             [KudosBackupFandomReadWatermark].self,
             forKey: .fandomReadWatermarks
-        ) ?? []
+        )
         followedTags = try container.decodeIfPresent(
             [KudosBackupFollowedTag].self,
             forKey: .followedTags
@@ -766,6 +776,12 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
             [KudosBackupTombstone].self,
             forKey: .tombstones
         ) ?? []
+        omittedKeys = Set(
+            [CodingKeys.collections, .readingQueues, .annotations, .savedSearches]
+                // JSON `null` reads as an empty array above; it must not authorize a sweep either.
+                .filter { !container.contains($0) || ((try? container.decodeNil(forKey: $0)) == true) }
+                .map(\.stringValue)
+        )
         // Neither may stop the library itself from restoring, and one bad entry must not take
         // the good ones with it (`LossyArray`).
         writingRecovery = (try? container.decodeIfPresent(
@@ -1080,6 +1096,16 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     /// Additive D3 derived fields; omitted when empty so untouched works emit no key.
     let chapterWordCountsJSON: String?
     let wordUnitRaw: String?
+    /// Additive Insights provenance (T-536 D8, D9). Each key is written only when the work
+    /// recorded it, so an untouched work exports none and older builds and Android never see them.
+    let importSourceRaw: String?
+    let importSourceSince: Date?
+    let kudosAtSave: Int?
+    let hitsAtSave: Int?
+    let bookmarksAtSave: Int?
+    let statsSavedAt: Date?
+    let ageDaysAtSave: Int?
+    let fandomWorksAtSave: Int?
 
     @MainActor
     init(work: SavedWork) {
@@ -1168,6 +1194,14 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         coverRecipeJSON = work.coverRecipeJSON
         chapterWordCountsJSON = work.chapterWordCountsJSON.isEmpty ? nil : work.chapterWordCountsJSON
         wordUnitRaw = work.wordUnitRaw.isEmpty ? nil : work.wordUnitRaw
+        importSourceRaw = work.importSourceRaw
+        importSourceSince = work.importSourceSince
+        kudosAtSave = work.kudosAtSave
+        hitsAtSave = work.hitsAtSave
+        bookmarksAtSave = work.bookmarksAtSave
+        statsSavedAt = work.statsSavedAt
+        ageDaysAtSave = work.ageDaysAtSave
+        fandomWorksAtSave = work.fandomWorksAtSave
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1245,6 +1279,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case coverRecipeJSON
         case chapterWordCountsJSON
         case wordUnitRaw
+        case importSourceRaw, importSourceSince
+        case kudosAtSave, hitsAtSave, bookmarksAtSave, statsSavedAt, ageDaysAtSave, fandomWorksAtSave
     }
 
     init(from decoder: Decoder) throws {
@@ -1343,6 +1379,14 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         coverRecipeJSON = try container.decodeIfPresent(String.self, forKey: .coverRecipeJSON)
         chapterWordCountsJSON = try container.decodeIfPresent(String.self, forKey: .chapterWordCountsJSON)
         wordUnitRaw = try container.decodeIfPresent(String.self, forKey: .wordUnitRaw)
+        importSourceRaw = try container.decodeIfPresent(String.self, forKey: .importSourceRaw)
+        importSourceSince = try container.decodeIfPresent(Date.self, forKey: .importSourceSince)
+        kudosAtSave = try container.decodeIfPresent(Int.self, forKey: .kudosAtSave)
+        hitsAtSave = try container.decodeIfPresent(Int.self, forKey: .hitsAtSave)
+        bookmarksAtSave = try container.decodeIfPresent(Int.self, forKey: .bookmarksAtSave)
+        statsSavedAt = try container.decodeIfPresent(Date.self, forKey: .statsSavedAt)
+        ageDaysAtSave = try container.decodeIfPresent(Int.self, forKey: .ageDaysAtSave)
+        fandomWorksAtSave = try container.decodeIfPresent(Int.self, forKey: .fandomWorksAtSave)
     }
 }
 
@@ -1467,6 +1511,13 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
     let ao3SeriesID: Int??
     let seriesPosition: Int?
     let publishedYear: Int??
+    /// D7 (T-536), additive: omitted when the sitting recorded no chapter signal.
+    let chapterSecondsJSON: String?
+    let chapterWordsJSON: String?
+    let skimmedChaptersJSON: String?
+    let skimmedStoryChaptersJSON: String?
+    let endedAtChapterEnd: Bool?
+    let peekedAtEnding: Bool?
     let lastSpineIndex: Int
     let chapterTitle: String
     let endingProgress: Double
@@ -1494,6 +1545,7 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         case ao3SeriesID
         case seriesPosition
         case publishedYear
+        case chapterSecondsJSON, chapterWordsJSON, skimmedChaptersJSON, skimmedStoryChaptersJSON, endedAtChapterEnd, peekedAtEnding
         case wordCount, chapterCountAtVisit, didFinish, lastModifiedAt
     }
 
@@ -1533,6 +1585,12 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         ao3SeriesID = snapshot ? .some(session.ao3SeriesID) : nil
         seriesPosition = snapshot ? session.seriesPosition : nil
         publishedYear = snapshot ? .some(session.publishedYear) : nil
+        chapterSecondsJSON = session.chapterSecondsJSON
+        chapterWordsJSON = session.chapterWordsJSON
+        skimmedChaptersJSON = session.skimmedChaptersJSON
+        skimmedStoryChaptersJSON = session.skimmedStoryChaptersJSON
+        endedAtChapterEnd = session.endedAtChapterEnd
+        peekedAtEnding = session.peekedAtEnding
         lastSpineIndex = session.lastSpineIndex
         chapterTitle = session.chapterTitle
         endingProgress = session.endingProgress
@@ -1576,6 +1634,12 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         seriesPosition = try container.decodeIfPresent(Int.self, forKey: .seriesPosition)
         publishedYear = container.contains(.publishedYear)
             ? .some(try container.decode(Int?.self, forKey: .publishedYear)) : nil
+        chapterSecondsJSON = try container.decodeIfPresent(String.self, forKey: .chapterSecondsJSON)
+        chapterWordsJSON = try container.decodeIfPresent(String.self, forKey: .chapterWordsJSON)
+        skimmedChaptersJSON = try container.decodeIfPresent(String.self, forKey: .skimmedChaptersJSON)
+        skimmedStoryChaptersJSON = try container.decodeIfPresent(String.self, forKey: .skimmedStoryChaptersJSON)
+        endedAtChapterEnd = try container.decodeIfPresent(Bool.self, forKey: .endedAtChapterEnd)
+        peekedAtEnding = try container.decodeIfPresent(Bool.self, forKey: .peekedAtEnding)
         lastSpineIndex = try container.decodeIfPresent(Int.self, forKey: .lastSpineIndex) ?? 0
         chapterTitle = try container.decodeIfPresent(String.self, forKey: .chapterTitle) ?? ""
         endingProgress = try container.decodeIfPresent(Double.self, forKey: .endingProgress) ?? 0
@@ -4293,7 +4357,7 @@ enum KudosBackupService {
             tombstones.savedSearchResolution(id: $0.id, incomingModifiedAt: $0.dateAdded)
         }
 
-        if mode == .replaceLibrary {
+        if mode == .replaceLibrary, !contents.manifest.omittedKeys.contains("savedSearches") {
             let snapshotSearchIDs = Set(contents.manifest.savedSearches.map(\.id))
             for search in existingSavedSearches where !snapshotSearchIDs.contains(search.id) {
                 SyncTombstones.recordDeletion(of: search, in: context)
@@ -4614,8 +4678,11 @@ enum KudosBackupService {
                 removedWorks += 1
             }
 
+            // An omitted key says nothing about these rows (T-563): no sweep for it.
+            let omitted = contents.manifest.omittedKeys
             let snapshotCollectionIDs = Set(contents.manifest.collections.map(\.id))
-            for collection in existingCollections where !snapshotCollectionIDs.contains(collection.id) {
+            for collection in existingCollections
+            where !omitted.contains("collections") && !snapshotCollectionIDs.contains(collection.id) {
                 guard !collection.isPendingDeletion else { continue }
                 collection.isPendingDeletion = true
                 collection.deletedAt = now
@@ -4625,6 +4692,7 @@ enum KudosBackupService {
 
             let snapshotQueueIDs = Set(contents.manifest.readingQueues.map(\.id))
             for queue in existingQueues {
+                guard !omitted.contains("readingQueues") else { break }
                 guard queue.kind != .savedForLater else { continue }
                 guard !snapshotQueueIDs.contains(queue.id) else { continue }
                 guard !queue.isPendingDeletion else { continue }
@@ -4636,7 +4704,8 @@ enum KudosBackupService {
 
             let snapshotAnnotationIDs = Set(contents.manifest.annotations.map(\.id))
             let allAnnotations = (try? context.fetch(FetchDescriptor<ReadingAnnotation>())) ?? []
-            for annotation in allAnnotations where !snapshotAnnotationIDs.contains(annotation.id) {
+            for annotation in allAnnotations
+            where !omitted.contains("annotations") && !snapshotAnnotationIDs.contains(annotation.id) {
                 guard !annotation.isPendingDeletion else { continue }
                 annotation.isPendingDeletion = true
                 annotation.deletedAt = now
@@ -4725,7 +4794,7 @@ enum KudosBackupService {
         /// as "not in the archive's id list" once matching by anything but id is
         /// possible.
         var resolvedLocalIDs: Set<UUID> = []
-        for archived in contents.manifest.readingSessions {
+        for archived in contents.manifest.readingSessions ?? [] {
             if mode != .replaceLibrary {
                 switch tombstones.readingSessionResolution(
                     id: archived.id,
@@ -4745,6 +4814,7 @@ enum KudosBackupService {
             let resolvedWorkID = restoredWorksByArchivedID[archived.workID]?.id ?? archived.workID
             if let local = byID[archived.id] {
                 resolvedLocalIDs.insert(local.id)
+                applyChapterTiming(archived, to: local, fillOnly: true)
                 if mode == .merge { continue }
                 guard SyncMerge.shouldApplyIncoming(
                     localModifiedAt: local.lastModifiedAt,
@@ -4792,6 +4862,7 @@ enum KudosBackupService {
                 if let value = archived.ao3SeriesID { session.ao3SeriesID = value }
                 session.seriesPosition = archived.seriesPosition ?? session.seriesPosition
                 if let value = archived.publishedYear { session.publishedYear = value }
+                applyChapterTiming(archived, to: session)
                 context.insert(session)
                 byID[archived.id] = session
                 resolvedLocalIDs.insert(session.id)
@@ -4805,7 +4876,8 @@ enum KudosBackupService {
             tombstones.readingSessionResolution(id: $0.id, incomingModifiedAt: $0.lastModifiedAt)
         }
 
-        if mode == .replaceLibrary {
+        // An absent key leaves local rows alone and mints no tombstones (T-563).
+        if mode == .replaceLibrary, contents.manifest.readingSessions != nil {
             for session in existing where !resolvedLocalIDs.contains(session.id) {
                 SyncTombstones.recordDeletion(of: session, in: context)
                 context.delete(session)
@@ -4838,6 +4910,34 @@ enum KudosBackupService {
             if case .suppressStaleData = resolution(record) {
                 context.delete(record)
             }
+        }
+    }
+
+    /// D7 fields: an absent or malformed key leaves what the row has, so a sitting re-exported by
+    /// an older build or Android (which drop these keys) never wipes the chapter timing.
+    /// `fillOnly` writes just the members the row has none of (a matched sitting a legacy archive
+    /// restored without timing, met again in Merge or an older-clock Reconcile).
+    private static func applyChapterTiming(
+        _ archived: KudosBackupReadingSession, to session: ReadingSession, fillOnly: Bool = false
+    ) {
+        if ChapterTiming.isValidSeconds(archived.chapterSecondsJSON), !fillOnly || session.chapterSecondsJSON == nil {
+            session.chapterSecondsJSON = archived.chapterSecondsJSON
+        }
+        if ChapterTiming.isValidWords(archived.chapterWordsJSON), !fillOnly || session.chapterWordsJSON == nil {
+            session.chapterWordsJSON = archived.chapterWordsJSON
+        }
+        if ChapterTiming.isValidList(archived.skimmedChaptersJSON), !fillOnly || session.skimmedChaptersJSON == nil {
+            session.skimmedChaptersJSON = archived.skimmedChaptersJSON
+        }
+        if ChapterTiming.isValidList(archived.skimmedStoryChaptersJSON),
+           !fillOnly || session.skimmedStoryChaptersJSON == nil {
+            session.skimmedStoryChaptersJSON = archived.skimmedStoryChaptersJSON
+        }
+        if !fillOnly || session.endedAtChapterEnd == nil {
+            session.endedAtChapterEnd = archived.endedAtChapterEnd ?? session.endedAtChapterEnd
+        }
+        if !fillOnly || session.peekedAtEnding == nil {
+            session.peekedAtEnding = archived.peekedAtEnding ?? session.peekedAtEnding
         }
     }
 
@@ -4876,6 +4976,7 @@ enum KudosBackupService {
         if let value = archived.ao3SeriesID { session.ao3SeriesID = value }
         session.seriesPosition = archived.seriesPosition ?? session.seriesPosition
         if let value = archived.publishedYear { session.publishedYear = value }
+        applyChapterTiming(archived, to: session)
         session.lastSpineIndex = archived.lastSpineIndex
         session.chapterTitle = archived.chapterTitle
         session.endingProgress = min(1, max(0, archived.endingProgress))
@@ -4901,7 +5002,7 @@ enum KudosBackupService {
             existing.map { ("\($0.kindRaw)|\($0.targetKey)", $0) },
             uniquingKeysWith: { first, _ in first }
         )
-        for archived in contents.manifest.readingFavorites {
+        for archived in contents.manifest.readingFavorites ?? [] {
             if mode != .replaceLibrary {
                 switch tombstones.readingFavoriteResolution(
                     id: archived.id,
@@ -4955,7 +5056,7 @@ enum KudosBackupService {
             tombstones.readingFavoriteResolution(id: $0.id, incomingModifiedAt: $0.lastModifiedAt)
         }
 
-        if mode == .replaceLibrary {
+        if mode == .replaceLibrary, contents.manifest.readingFavorites != nil {
             // Not `snapshotIDs`: a favourite matched by *target* keeps its own
             // local UUID, which the archive has never heard of. Deleting on
             // id-absence therefore deleted the record that had just been matched
@@ -4994,7 +5095,7 @@ enum KudosBackupService {
             uniquingKeysWith: { first, _ in first }
         )
         var resolvedLocalIDs: Set<UUID> = []
-        for archived in contents.manifest.fandomReadWatermarks {
+        for archived in contents.manifest.fandomReadWatermarks ?? [] {
             if mode != .replaceLibrary {
                 switch tombstones.fandomReadWatermarkResolution(
                     id: archived.id,
@@ -5043,7 +5144,7 @@ enum KudosBackupService {
             )
         }
 
-        if mode == .replaceLibrary {
+        if mode == .replaceLibrary, contents.manifest.fandomReadWatermarks != nil {
             // Matched-by-name watermarks keep their local UUID, which the archive
             // does not contain — the same defect the favourites cleanup had.
             for watermark in existing where !resolvedLocalIDs.contains(watermark.id) {
@@ -5438,7 +5539,7 @@ enum KudosBackupService {
         // newer mark (which the dedupe then deleted and tombstoned), and be removed
         // itself: both marks gone, on both devices. Android has always swept first.
         var removed = removeDeletedElsewhere()
-        if mode == .replaceLibrary {
+        if mode == .replaceLibrary, !contents.manifest.omittedKeys.contains("annotations") {
             // Replace hides every mark the snapshot does not list (`restore`, after this).
             // One of those must not first win its passage over the snapshot's own mark:
             // the dedupe deleted and tombstoned that one, Replace then hid the winner, and
@@ -6057,6 +6158,32 @@ enum KudosBackupService {
         return (true, now.addingTimeInterval(PreservedWorkService.recoveryWindow))
     }
 
+    /// Insights provenance (T-536 D8, D9). These are facts about when something first happened,
+    /// so they merge by their own meaning and never by the work's sync clock: the at-save group and
+    /// the import source are set once (a local value stays; Replace Library adopts the archive's
+    /// when it carries one), A key the
+    /// archive lacks (older iOS, Android) leaves the local value, whatever the mode.
+    private static func mergeProvenance(
+        _ archived: KudosBackupWork,
+        into work: SavedWork,
+        mode: BackupImportMode
+    ) {
+        let replaces = mode == .replaceLibrary
+        if let raw = archived.importSourceRaw, !raw.isEmpty, work.importSourceRaw == nil || replaces {
+            work.importSourceRaw = raw
+            work.importSourceSince = archived.importSourceSince ?? work.importSourceSince
+        }
+        if let savedAt = archived.statsSavedAt, work.statsSavedAt == nil || replaces {
+            work.statsSavedAt = savedAt
+            // Member by member: a key the archive record omits never clears what is here.
+            if let value = archived.kudosAtSave { work.kudosAtSave = value }
+            if let value = archived.hitsAtSave { work.hitsAtSave = value }
+            if let value = archived.bookmarksAtSave { work.bookmarksAtSave = value }
+            if let value = archived.ageDaysAtSave { work.ageDaysAtSave = value }
+            if let value = archived.fandomWorksAtSave { work.fandomWorksAtSave = value }
+        }
+    }
+
     /// Returns whether the work's cover pin was reconciled (see `restore`).
     @discardableResult
     private static func apply(
@@ -6208,6 +6335,7 @@ enum KudosBackupService {
            work.wordUnitRaw.isEmpty || mode == .replaceLibrary || incomingWins {
             work.wordUnitRaw = incomingUnit
         }
+        mergeProvenance(archived, into: work, mode: mode)
         let coverPinReconciled = work.reconcileCoverMetadata(notifySync: false)
         work.workTagsFetched = work.workTagsFetched || archived.workTagsFetched
         work.ao3Unavailable = work.ao3Unavailable || archived.ao3Unavailable

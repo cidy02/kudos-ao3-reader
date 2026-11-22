@@ -174,6 +174,7 @@ struct RemoteWorkReaderDestination: View {
     let summary: AO3WorkSummary
 
     @Environment(\.modelContext) private var context
+    @Environment(\.queueMembershipOrigin) private var queueOrigin
     @State private var resolved: SavedWork?
     @State private var failure: String?
 
@@ -207,7 +208,9 @@ struct RemoteWorkReaderDestination: View {
             // Reuses the queue's importer, so a work opened this way is indexed,
             // deduplicated against an existing copy, and preserved exactly like one
             // added through any other path.
-            resolved = try await ReadingQueueService.resolveLocalWork(for: summary, in: context)
+            resolved = try await ReadingQueueService.resolveLocalWork(
+                for: summary, importSource: WorkImportSource(origin: queueOrigin), origin: queueOrigin, in: context
+            )
         } catch {
             failure = WorkCardActionError.message(for: error)
         }
@@ -994,9 +997,13 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
             do {
                 let saved: SavedWork
                 if requireEPUB {
-                    saved = try await ReadingQueueService.resolveLocalWork(for: work, in: context)
+                    saved = try await ReadingQueueService.resolveLocalWork(
+                        for: work, importSource: WorkImportSource(origin: queueOrigin), origin: queueOrigin, in: context
+                    )
                 } else {
-                    saved = try ReadingQueueService.ensureLocalMetadata(for: work, in: context)
+                    saved = try ReadingQueueService.ensureLocalMetadata(
+                        for: work, importSource: WorkImportSource(origin: queueOrigin), origin: queueOrigin, in: context
+                    )
                 }
                 try await action(saved)
             } catch {

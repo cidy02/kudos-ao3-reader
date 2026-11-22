@@ -489,7 +489,7 @@ struct AuthorProfileOverviewSections: View {
                         SensitiveWorkCoverCard(work: work)
                     } else if !gate.isHidden(work, enabled: hideMature, mode: matureMode) {
                         SensitiveWorkCoverCard(work: work)
-                            .cardNavigation(to: work, accessibilityLabel: work.title)
+                            .remoteWorkNavigation(to: work)
                     }
                 }
             }

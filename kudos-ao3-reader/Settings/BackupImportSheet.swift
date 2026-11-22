@@ -98,8 +98,9 @@ struct BackupImportSheet: View {
             Button("Replace Library…", role: .destructive) { step = .replace }
         } footer: {
             Text("Replace makes this device match the backup. Your works, reading positions, "
-                + "notes, collections, and queues change to match it, and anything missing from "
-                + "the backup is removed. You will confirm before it starts, and Kudos saves a "
+                + "notes, collections, and queues change to match it. Items the backup does not list "
+                + "are removed, but a kind of data the backup leaves out entirely is kept. You "
+                + "will confirm before it starts, and Kudos saves a "
                 + "copy of your current library first.")
         }
     }

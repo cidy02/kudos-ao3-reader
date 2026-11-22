@@ -1053,7 +1053,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         if !requireEPUB {
             // Instant path — mirrors Android `saveMetadataOnly` / card Add to Queue.
             do {
-                let saved = try ReadingQueueService.ensureLocalMetadata(for: summary, in: context)
+                let saved = try ReadingQueueService.ensureLocalMetadata(
+                    for: summary, importSource: WorkImportSource(origin: queueOrigin), origin: queueOrigin, in: context
+                )
                 localWork = saved
                 action(saved)
             } catch let error as AO3Error {
@@ -1068,7 +1070,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             working = true
             loadError = nil
             do {
-                let saved = try await ReadingQueueService.resolveLocalWork(for: summary, in: context)
+                let saved = try await ReadingQueueService.resolveLocalWork(
+                    for: summary, importSource: WorkImportSource(origin: queueOrigin), origin: queueOrigin, in: context
+                )
                 localWork = saved
                 working = false
                 action(saved)
@@ -1517,7 +1521,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             let items = works.map {
                 DownloadQueue.Item(
                     id: $0.id, title: $0.title, sourceURL: $0.workURL,
-                    isComplete: $0.isComplete ?? false, seriesURL: work.seriesURL
+                    isComplete: $0.isComplete ?? false, seriesURL: work.seriesURL,
+                    importSource: .series
                 )
             }
             downloadQueue.enqueue(items, into: context)

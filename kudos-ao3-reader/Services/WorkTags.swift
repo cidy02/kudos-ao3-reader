@@ -64,6 +64,8 @@ enum WorkTags {
             work.applyLanguageMetadata(groups.language)
             if let words = groups.words { work.wordCount = words }
             work.chapters = groups.chapters
+            // Insights D9: the first figures a just-saved work sees are its figures at save.
+            work.recordStatsAtSaveIfJustSaved(kudos: groups.kudos, hits: groups.hits, bookmarks: groups.bookmarks)
             if let kudos = groups.kudos { work.kudos = kudos }
             if let comments = groups.comments { work.comments = comments }
             if let bookmarks = groups.bookmarks { work.bookmarks = bookmarks }

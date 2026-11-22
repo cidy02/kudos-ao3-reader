@@ -168,9 +168,9 @@ struct ReadingLogBackupTests {
             defaults: try testDefaults()
         )
         #expect(contents.manifest.version == 8)
-        #expect(contents.manifest.readingSessions.count == 1)
-        #expect(contents.manifest.readingFavorites.count == 1)
-        #expect(contents.manifest.fandomReadWatermarks.count == 1)
+        #expect(contents.manifest.readingSessions?.count == 1)
+        #expect(contents.manifest.readingFavorites?.count == 1)
+        #expect(contents.manifest.fandomReadWatermarks?.count == 1)
         #expect(contents.manifest.works.first?.keepInProgressOverride == true)
 
         let target = try context(schema)
@@ -399,9 +399,9 @@ struct ReadingLogBackupTests {
         v7Object.removeValue(forKey: "fandomReadWatermarks")
         let strippedV7 = try JSONSerialization.data(withJSONObject: v7Object)
         let decodedV7 = try KudosBackupContents.decodeManifest(strippedV7)
-        #expect(decodedV7.readingSessions.isEmpty)
-        #expect(decodedV7.readingFavorites.isEmpty)
-        #expect(decodedV7.fandomReadWatermarks.isEmpty)
+        #expect(decodedV7.readingSessions == nil)
+        #expect(decodedV7.readingFavorites == nil)
+        #expect(decodedV7.fandomReadWatermarks == nil)
         #expect(decodedV7.version == 7)
 
         let v8 = KudosBackupManifest(
@@ -417,9 +417,9 @@ struct ReadingLogBackupTests {
         v8Object.removeValue(forKey: "fandomReadWatermarks")
         let strippedV8 = try JSONSerialization.data(withJSONObject: v8Object)
         let decodedV8 = try KudosBackupContents.decodeManifest(strippedV8)
-        #expect(decodedV8.readingSessions.isEmpty)
-        #expect(decodedV8.readingFavorites.isEmpty)
-        #expect(decodedV8.fandomReadWatermarks.isEmpty)
+        #expect(decodedV8.readingSessions == nil)
+        #expect(decodedV8.readingFavorites == nil)
+        #expect(decodedV8.fandomReadWatermarks == nil)
         #expect(KudosBackupManifest.currentVersion == 8)
     }
 

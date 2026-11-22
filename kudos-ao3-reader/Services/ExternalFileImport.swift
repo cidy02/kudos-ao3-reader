@@ -83,7 +83,7 @@ final class ExternalFileImport {
         defer { if scoped { selection.url.stopAccessingSecurityScopedResource() } }
         do {
             let result = try await UserDocumentImport.perform(
-                selection.url, downloadedAt: selection.downloadedAt, into: context
+                selection.url, downloadedAt: selection.downloadedAt, importSource: .shareSheet, into: context
             )
             notice = successNotice(for: result, fileName: selection.url.lastPathComponent)
         } catch {
