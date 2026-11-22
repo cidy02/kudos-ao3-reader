@@ -38,6 +38,13 @@ nonisolated enum SyncedSettingsClock {
         dates(defaults, stampsKey)
     }
 
+    /// Every setting or entry this device has stamped, learned from a copy, or looked at:
+    /// what a later removal has to be measured against.
+    static func knownIDs(in defaults: UserDefaults) -> [String] {
+        let baseline = (defaults.dictionary(forKey: baselineKey) as? [String: String]) ?? [:]
+        return Array(Set(baseline.keys).union(dates(defaults, stampsKey).keys).union(dates(defaults, inferredKey).keys))
+    }
+
     static func localStamps(in defaults: UserDefaults) -> [String: Stamp] {
         var all = dates(defaults, inferredKey).mapValues { Stamp(date: $0, inferred: true) }
         for (id, date) in dates(defaults, stampsKey) { all[id] = Stamp(date: date, inferred: false) }

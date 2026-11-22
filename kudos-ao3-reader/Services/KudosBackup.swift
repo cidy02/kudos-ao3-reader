@@ -2084,6 +2084,10 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     /// True when some entry of `extras` did not decode. Not encoded. A sync then removes no
     /// setting, since a missing value might be the one that failed.
     var extrasIncomplete = false
+    /// `UserDefaults` keys of named settings whose value was present in the copy but did not
+    /// decode (seventh T-541 review). Not encoded. Such a field is neither applied nor taken
+    /// for a reset, whatever its stamp: unreadable is not the same as removed.
+    var malformedNamed: Set<String> = []
 
     /// Settings a restore assigns by recency. The four privacy gates are not here: a restore
     /// may tighten them and never loosen them, whatever its date. `readerFontID` is local.
@@ -2183,6 +2187,14 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         ("library.readingQueueBrowser.arrangement.", "", .string)
     ]
 
+    private enum LegacyAlias { case discreetMode, hideReadingTime, voiceID }
+    /// Settings the lane carried as extras before the integration branch named them.
+    private static let legacyExtraAliases: [String: LegacyAlias] = [
+        "kudos.insights.discreetMode": .discreetMode,
+        "kudos.insights.hideReadingTime": .hideReadingTime,
+        "readerSpeechVoiceID": .voiceID
+    ]
+
     static func extraKind(for key: String) -> KudosBackupSettingValue.Kind? {
         if let kind = extraKeys[key] { return kind }
         guard key != "library.page.arrangement", key.count <= 200 else { return nil }
@@ -2198,9 +2210,10 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         let patterned = defaults.dictionaryRepresentation().keys.filter {
             extraKeys[$0] == nil && extraKind(for: $0) != nil
         }
-        // A patterned key this device once stamped but has since removed stays observed, so the
-        // clock can see it vanish and record the removal (sixth T-541 review).
-        let stamped = SyncedSettingsClock.stamps(in: defaults).keys.compactMap { id -> String? in
+        // A patterned key this device once knew (stamped, learned from a copy, or seen) but has
+        // since removed stays observed, so the clock can see it vanish and record the removal
+        // (sixth and seventh T-541 reviews).
+        let stamped = SyncedSettingsClock.knownIDs(in: defaults).compactMap { id -> String? in
             let key = SyncedSettingsClock.entry(from: id)?.key ?? id
             return extraKind(for: key) != nil ? key : nil
         }
@@ -2418,6 +2431,30 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         let decodedExtras = try? container.decodeIfPresent(LossyMap<KudosBackupSettingValue>.self, forKey: .extras)
         extras = decodedExtras?.values
         extrasIncomplete = decodedExtras.map(\.hadFailures) ?? container.contains(.extras)
+        let named: [(CodingKeys, String, Bool)] = [
+            (.accentColorHex, "accentColorHex", accentColorHex == nil),
+            (.libraryPageArrangement, LibraryPageArrangement.storageKey, libraryPageArrangement == nil),
+            (.workSymbolPlacement, WorkSymbolPlacement.storageKey, workSymbolPlacement == nil),
+            (.useEmbeddedCoverArt, "useEmbeddedCoverArt", useEmbeddedCoverArt == nil),
+            (.checksSavedSeriesWeekly, "checksSavedSeriesWeekly", checksSavedSeriesWeekly == nil),
+            (.readerPageTurn, ReaderPageTurnStyle.storageKey, readerPageTurn == nil),
+            (.readerSpeechVoiceID, ReaderSpeechPreferences.voiceIDKey, readerSpeechVoiceID == nil),
+            (.readerSpeechVoiceName, ReaderSpeechPreferences.voiceNameKey, readerSpeechVoiceName == nil),
+            (.lastAddedReadingQueueID, "lastAddedReadingQueueID", lastAddedReadingQueueID == nil),
+            (.discreetMode, InsightsOptions.Keys.discreetMode, discreetMode == nil),
+            (.hideReadingTime, InsightsOptions.Keys.hideReadingTime, hideReadingTime == nil),
+            (.countRereads, InsightsOptions.Keys.countRereads, countRereads == nil),
+            (.countReadAloud, InsightsOptions.Keys.countReadAloud, countReadAloud == nil),
+            (.askAboutUntouched, InsightsOptions.Keys.askAboutUntouched, askAboutUntouched == nil),
+            (.untouchedDays, InsightsOptions.Keys.untouchedDays, untouchedDays == nil),
+            (.excludedFandoms, InsightsOptions.Keys.excludedFandoms, excludedFandoms == nil),
+            (.excludedTags, InsightsOptions.Keys.excludedTags, excludedTags == nil),
+            (.excludedWorkIDs, InsightsOptions.Keys.excludedWorkIDs, excludedWorkIDs == nil)
+        ]
+        for (codingKey, defaultsKey, isNil) in named
+        where isNil && container.contains(codingKey) && ((try? container.decodeNil(forKey: codingKey)) != true) {
+            malformedNamed.insert(defaultsKey)
+        }
     }
 
     static func capture(defaults: UserDefaults = .standard) -> Self {
@@ -2533,6 +2570,22 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     }
 
     func apply(to defaults: UserDefaults = .standard, fromSync: Bool = false, archiveDate: Date? = nil) {
+        // A copy from the lane's earlier build carries three settings as extras that are named
+        // fields now (seventh review): fold them in once, then apply as usual.
+        if let legacy = extras?.keys.filter({ Self.legacyExtraAliases[$0] != nil }), !legacy.isEmpty {
+            var folded = self
+            for key in legacy {
+                guard let value = folded.extras?.removeValue(forKey: key) else { continue }
+                switch (Self.legacyExtraAliases[key], value) {
+                case (.discreetMode?, .bool(let flag)): folded.discreetMode = folded.discreetMode ?? flag
+                case (.hideReadingTime?, .bool(let flag)): folded.hideReadingTime = folded.hideReadingTime ?? flag
+                case (.voiceID?, .string(let id)): folded.readerSpeechVoiceID = folded.readerSpeechVoiceID ?? id
+                default: break
+                }
+            }
+            folded.apply(to: defaults, fromSync: fromSync, archiveDate: archiveDate)
+            return
+        }
         // Restored `ttsDev*` tuning must reach a reader that already read it (fifth review).
         defer { if defaults === UserDefaults.standard { ReaderSpeechTuning.invalidate() } }
         // T-541. Until now every restore assigned every setting, so each sync-down put the
@@ -2686,21 +2739,48 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         ]
         // The stamp is adopted even where the value was never set here, so this device's next
         // sync-up carries the reset on instead of dropping it (fifth review).
-        for named in namedOptional where named.absent {
+        for named in namedOptional where named.absent && !malformedNamed.contains(named.key) {
             guard let own = ownStamp(named.key), wins(named.key, own) else { continue }
             defaults.removeObject(forKey: named.key)
             SyncedSettingsClock.adopt(key: named.key, stamp: own, in: defaults)
         }
         // The integration's named fields are not part of `extras`, so an unreadable entry there
         // does not stop them.
+        // The voice id and its label are one setting: one stamp (the later of the two), applied
+        // together, and adopted into the clock so a cleanup made here by a sync is not
+        // mistaken for an edit made here (seventh review).
+        func applyVoice(_ voiceID: String) {
+            let idKey = ReaderSpeechPreferences.voiceIDKey
+            let nameKey = ReaderSpeechPreferences.voiceNameKey
+            func later(_ a: SyncedSettingsClock.Stamp?, _ b: SyncedSettingsClock.Stamp?) -> SyncedSettingsClock.Stamp? {
+                guard let a else { return b }
+                guard let b else { return a }
+                if a.inferred != b.inferred { return a.inferred ? b : a }
+                return a.date >= b.date ? a : b
+            }
+            let incoming = later(stamp(idKey), stamp(nameKey))
+            guard SyncedSettingsClock.incomingWins(
+                local: later(localStamps[idKey], localStamps[nameKey]), incoming: incoming, fromSync: fromSync
+            ) else { return }
+            let localID = Self.nonEmptyString(defaults, idKey)
+            defaults.set(voiceID, forKey: idKey)
+            if let name = Self.trimmedNonEmpty(readerSpeechVoiceName), !malformedNamed.contains(nameKey) {
+                defaults.set(name, forKey: nameKey)
+            } else if localID != voiceID {
+                defaults.removeObject(forKey: nameKey)
+            }
+            SyncedSettingsClock.adopt(key: idKey, stamp: incoming, in: defaults)
+            SyncedSettingsClock.adopt(key: nameKey, stamp: incoming, in: defaults)
+        }
         applyNamedByRecency(
             write: { write($0, $1) },
             reset: { key, absent in
-                guard absent, let own = ownStamp(key), wins(key, own) else { return }
+                // A field that was present but unreadable is never a reset.
+                guard absent, !malformedNamed.contains(key), let own = ownStamp(key), wins(key, own) else { return }
                 defaults.removeObject(forKey: key)
                 SyncedSettingsClock.adopt(key: key, stamp: own, in: defaults)
             },
-            defaults: defaults
+            applyVoice: applyVoice
         )
         guard !extrasIncomplete else { return }
         for key in observed.keys where !observed.maps.contains(key) && Self.extraKind(for: key) != nil
@@ -2714,7 +2794,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     /// The named fields the integration branch added: written by recency like every other
     /// setting, and reset when the sender's own stamp says it removed the value.
     private func applyNamedByRecency(
-        write: (Any, String) -> Bool, reset: (String, Bool) -> Void, defaults: UserDefaults
+        write: (Any, String) -> Bool, reset: (String, Bool) -> Void, applyVoice: (String) -> Void
     ) {
         @discardableResult func put(_ value: Any, _ key: String) -> Bool { write(value, key) }
         if let useEmbeddedCoverArt { put(useEmbeddedCoverArt, "useEmbeddedCoverArt") }
@@ -2724,17 +2804,12 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         if let readerPageTurn, ReaderPageTurnStyle(rawValue: readerPageTurn) != nil {
             put(readerPageTurn, ReaderPageTurnStyle.storageKey)
         }
-        // Apply the display name only together with its voice id; an archive
-        // with a name alone must never label a different local voice id.
-        if let voiceID = Self.trimmedNonEmpty(readerSpeechVoiceID) {
-            let localVoiceID = Self.nonEmptyString(defaults, ReaderSpeechPreferences.voiceIDKey)
-            if put(voiceID, ReaderSpeechPreferences.voiceIDKey) {
-                if let voiceName = Self.trimmedNonEmpty(readerSpeechVoiceName) {
-                    _ = put(voiceName, ReaderSpeechPreferences.voiceNameKey)
-                } else if localVoiceID != voiceID {
-                    defaults.removeObject(forKey: ReaderSpeechPreferences.voiceNameKey)
-                }
-            }
+        // The voice id and its display name are one setting: one stamp (the later of the two),
+        // applied together, and the result adopted into the clock so a cleanup made here by a
+        // sync is never mistaken for an edit made here (seventh review).
+        if let voiceID = Self.trimmedNonEmpty(readerSpeechVoiceID),
+           !malformedNamed.contains(ReaderSpeechPreferences.voiceIDKey) {
+            applyVoice(voiceID)
         }
         if let lastAddedReadingQueueID, UUID(uuidString: lastAddedReadingQueueID) != nil {
             put(lastAddedReadingQueueID, "lastAddedReadingQueueID")
@@ -2762,7 +2837,11 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         reset("checksSavedSeriesWeekly", checksSavedSeriesWeekly == nil)
         reset(ReaderPageTurnStyle.storageKey, readerPageTurn == nil)
         reset(ReaderSpeechPreferences.voiceIDKey, Self.trimmedNonEmpty(readerSpeechVoiceID) == nil)
-        reset(ReaderSpeechPreferences.voiceNameKey, Self.trimmedNonEmpty(readerSpeechVoiceName) == nil)
+        // The label alone is never reset while the voice stays.
+        reset(
+            ReaderSpeechPreferences.voiceNameKey,
+            Self.trimmedNonEmpty(readerSpeechVoiceName) == nil && Self.trimmedNonEmpty(readerSpeechVoiceID) == nil
+        )
         reset("lastAddedReadingQueueID", lastAddedReadingQueueID == nil)
         reset(InsightsOptions.Keys.discreetMode, discreetMode == nil)
         reset(InsightsOptions.Keys.hideReadingTime, hideReadingTime == nil)
