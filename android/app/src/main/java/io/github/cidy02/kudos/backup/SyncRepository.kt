@@ -210,6 +210,7 @@ class SyncRepository(
     private suspend fun runSyncLocked(): SyncResult {
         val generation = folderGeneration
         val uri = getSyncFolderUri() ?: return SyncResult.Error("No sync folder selected.")
+        backupRepository.backfillReadingSessionFacts()
         val root = DocumentFile.fromTreeUri(context, uri)
             ?: return SyncResult.Error("Could not access sync folder.")
 
@@ -509,12 +510,16 @@ class SyncRepository(
                 // What the folder's manifest held that this build does not know stays in the
                 // manifest this build writes. A folder whose own manifest is unreadable and
                 // has no usable .bak only falls back to the store if that store already
-                // belonged to this folder.
-                val canFallbackToStore = !hasUsableFolderManifest &&
-                    ((manifestBytesAtRead == null && backupManifest == null && conflicts.isEmpty()) ||
-                        lastManifestStore.belongsToFolder(uri.toString()))
-                val replacedJson = effectiveReadManifestJson
-                    ?: if (canFallbackToStore) lastManifestStore.load() else pendingImport
+                // belonged to this folder. An empty folder is no exception: the synced store
+                // is folder-scoped. The pending manual import is this device's own and still
+                // reaches every destination, folded over the store when there is one.
+                val storeBase = lastManifestStore.takeIf {
+                    !hasUsableFolderManifest && it.belongsToFolder(uri.toString())
+                }?.load()
+                val replacedJson = effectiveReadManifestJson ?: when {
+                    storeBase != null && pendingImport != null -> mergeImportedManifestJson(pendingImport, storeBase)
+                    else -> storeBase ?: pendingImport
+                }
                 val manifestBytes = BackupJson.encodeToString(
                     JsonObject.serializer(),
                     carryUnknownRecordKeys(manifestJson, replacedJson)

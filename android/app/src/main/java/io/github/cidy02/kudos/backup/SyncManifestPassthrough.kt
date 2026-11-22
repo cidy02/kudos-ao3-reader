@@ -739,7 +739,7 @@ internal class SyncLastManifestStore(
 
     fun load(): JsonObject? = synchronized(lock) { read()?.body }
 
-    fun taggedFolderUri(): String? = synchronized(lock) { read()?.folder ?: readLegacyTag() }
+    fun taggedFolderUri(): String? = synchronized(lock) { read()?.folder }
 
     fun belongsToFolder(folderUri: String): Boolean = synchronized(lock) {
         taggedFolderUri() == folderUri

@@ -1015,7 +1015,7 @@ class SyncManifestPassthroughTest {
     }
 
     @Test
-    fun changeFolderToEmptyFolderCarriesOpaqueFields() = runTest {
+    fun changeFolderToEmptyFolderKeepsFolderASyncedDataOutAndPendingImportIn() = runTest {
         val fixture = iosT541ManifestJson()
         writeChild(
             ensureKudosLibrary(),
@@ -1024,6 +1024,8 @@ class SyncManifestPassthroughTest {
             BackupJson.encodeToString(JsonObject.serializer(), fixture).toByteArray()
         )
         assertTrue(syncRepository.runSync() is SyncResult.Success)
+        val importedWorkId = "99999999-0000-4000-8000-000000000081"
+        backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(importedWorkId)), mode = BackupImportMode.MERGE)
 
         val other = DocumentFile.fromTreeUri(context, treeUri)!!.createDirectory("EmptyOther")!!
         val newFolder = android.provider.DocumentsContract.buildTreeDocumentUri(
@@ -1045,15 +1047,18 @@ class SyncManifestPassthroughTest {
         val written = Json.parseToJsonElement(
             readDocument(library.findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
         ).jsonObject
-        assertEquals(fixture["writingRecovery"], written["writingRecovery"])
-        assertEquals(fixture["documents"], written["documents"])
+        // Folder A's synced pass-through data is folder-scoped: it stays out of an empty Folder B.
+        assertNull(written["writingRecovery"])
+        assertNull(written.getValue("settings").jsonObject["extras"]?.jsonObject?.get("readerHighlightColor"))
+        assertNull(workJson(written, WORK_ONE)["authorIdentitiesJSON"])
+        // The manual import is this device's own and still reaches it.
         assertEquals(
-            fixture.getValue("settings").jsonObject["extras"],
-            written.getValue("settings").jsonObject["extras"]
+            listOf("notes/backup-one.json"),
+            written.getValue("documents").jsonArray.map { it.jsonObject.getValue("name").jsonPrimitive.content }
         )
         assertEquals(
-            fixture.getValue("works").jsonArray[0].jsonObject["authorIdentitiesJSON"],
-            workJson(written, WORK_ONE)["authorIdentitiesJSON"]
+            JsonPrimitive("[{\"username\":\"ada\"}]"),
+            workJson(written, importedWorkId)["authorIdentitiesJSON"]
         )
     }
 
@@ -1834,6 +1839,75 @@ class SyncManifestPassthroughTest {
     }
 
     @Test
+    fun replaceThatFailsPublishingItsOverlayLeavesLibraryAndOverlayTogether() = runTest {
+        val workId = "99999999-0000-4000-8000-000000000082"
+        backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
+        val pendingStore = SyncLastManifestStore(filesRoot, BackupRepository.PENDING_IMPORT_MANIFEST_FILE)
+        val before = pendingStore.load()
+        val librarySizeBefore = database.workDao().getAllIncludingDeleted().size
+        val replacement = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T13:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("replacement")
+            )
+        )
+        SyncLastManifestStore.beforeFilePublish = { path ->
+            if (path.fileName.toString() == BackupRepository.PENDING_IMPORT_MANIFEST_FILE) {
+                throw java.io.IOException("simulated death before the overlay publishes")
+            }
+        }
+        try {
+            runCatching {
+                backupRepository.importV2ZipBytes(zipManifest(replacement), mode = BackupImportMode.REPLACE_LIBRARY)
+            }
+        } finally {
+            SyncLastManifestStore.beforeFilePublish = null
+        }
+        // The Replace did not commit, so the library and the overlay are both still the old ones.
+        assertEquals(librarySizeBefore, database.workDao().getAllIncludingDeleted().size)
+        assertNotNull(database.workDao().getById(workId))
+        assertEquals(before, pendingStore.load())
+    }
+
+    @Test
+    fun upgradeBackfillsSessionFactsFromRetainedRawManifestBeforeExport() = runTest {
+        val fixture = iosT541ManifestJson()
+        val raw = fixture.getValue("readingSessions").jsonArray.single().jsonObject
+        backupRepository.importV2ZipBytes(zipManifest(fixture), mode = BackupImportMode.MERGE)
+        // Upgrade state: the retained raw manifest holds the facts; the Room row has only defaults.
+        val session = database.readingLogDao().getAllSessions().single { it.id.equals(SESSION_ONE, ignoreCase = true) }
+        database.readingLogDao().upsertSession(
+            session.copy(activeSeconds = null, modeRaw = "read", rulesVersion = 0, playbackRate = 2.0)
+        )
+
+        val out = exportedManifest().getValue("readingSessions").jsonArray
+            .single { it.jsonObject["id"]?.jsonPrimitive?.content.equals(SESSION_ONE, ignoreCase = true) }.jsonObject
+        assertEquals(raw["activeSeconds"], out["activeSeconds"])
+        assertEquals(raw["modeRaw"], out["modeRaw"])
+        assertEquals(raw["rulesVersion"], out["rulesVersion"])
+        // A value the device already holds is kept, not overwritten from the raw copy.
+        assertEquals(JsonPrimitive(2.0), out["playbackRate"])
+    }
+
+    @Test
+    fun leftoverLegacySidecarNeverRetagsAnUntaggedEnvelope() = runTest {
+        val dir = Files.createTempDirectory("kudos-a541-sidecar")
+        try {
+            val store = SyncLastManifestStore(dir)
+            store.save(JsonObject(mapOf("k" to JsonPrimitive("new"))), clearStaleFolderTag = true)
+            // The crash window: the new envelope moved in, the old sidecar was not deleted yet.
+            Files.write(dir.resolve("sync-last-manifest.json.folder"), "content://folder-a".toByteArray())
+            assertNull(store.taggedFolderUri())
+            assertFalse(store.belongsToFolder("content://folder-a"))
+            store.save(JsonObject(mapOf("k" to JsonPrimitive("newer"))))
+            assertNull("a default save must not copy the sidecar's tag in", store.taggedFolderUri())
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun legacyTaggedPendingOverlayIsAdoptedUntaggedByNextImportKeepingItsData() = runTest {
         val workId = "99999999-0000-4000-8000-000000000080"
         val pending = SyncLastManifestStore(filesRoot, BackupRepository.PENDING_IMPORT_MANIFEST_FILE)
@@ -1946,22 +2020,29 @@ class SyncManifestPassthroughTest {
         )
 
         // 4. Connected Replace followed by disconnect + disconnected Replace also drops the stale tag.
-        backupRepository.importV2ZipBytes(zipManifest(connectedAImport), mode = BackupImportMode.MERGE)
-        assertNull(pendingStore.taggedFolderUri())
-        syncRepository.disconnect()
         backupRepository.importV2ZipBytes(
             zipManifest(
                 JsonObject(
-                    mapOf(
-                        "version" to JsonPrimitive(8),
-                        "exportedAt" to JsonPrimitive("2026-06-26T13:00:00.000Z"),
-                        "writingRecovery" to JsonPrimitive("disconnected-replace")
+                    connectedAImport + mapOf(
+                        "documents" to JsonArray(listOf(JsonObject(mapOf("name" to JsonPrimitive("old-only")))))
                     )
                 )
             ),
-            mode = BackupImportMode.REPLACE_LIBRARY
+            mode = BackupImportMode.MERGE
         )
         assertNull(pendingStore.taggedFolderUri())
+        syncRepository.disconnect()
+        val replacement = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T13:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("disconnected-replace")
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(replacement), mode = BackupImportMode.REPLACE_LIBRARY)
+        assertNull(pendingStore.taggedFolderUri())
+        // Replace stores the replacement alone: a merge with the old overlay would keep old-only.
+        assertEquals(replacement, pendingStore.load())
     }
 
     @Test
@@ -2041,7 +2122,7 @@ class SyncManifestPassthroughTest {
         settingsRepository.updateSyncFolderUri(treeUri.toString())
         backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
         syncRepository.disconnect()
-        assertPendingBodySurvivesUntilSave(pendingFile, workId) {
+        assertPendingBodySurvivesUntilSave(pendingFile, workId, inUndoAside = true) {
             backupRepository.importV2ZipBytes(
                 zipManifest(
                     JsonObject(
@@ -2061,16 +2142,19 @@ class SyncManifestPassthroughTest {
     private suspend fun assertPendingBodySurvivesUntilSave(
         pendingFile: java.nio.file.Path,
         workId: String,
+        inUndoAside: Boolean = false,
         block: suspend () -> Unit
     ) {
         var publishes = 0
         SyncLastManifestStore.beforeFilePublish = { path ->
             if (path.fileName?.toString() == pendingFile.fileName?.toString()) {
+                // Replace sets the old overlay aside (restored if the Replace fails); Merge keeps it in place.
+                val held = if (inUndoAside) path.resolveSibling("${path.fileName}${BackupFileUndo.UNDO_SUFFIX}") else path
                 assertTrue(
                     "pending overlay must still hold Backup 1 when save begins",
-                    Files.isRegularFile(path) && Files.size(path) > 0L
+                    Files.isRegularFile(held) && Files.size(held) > 0L
                 )
-                val body = SyncLastManifestStore(path.parent, path.fileName.toString()).load()!!
+                val body = SyncLastManifestStore(held.parent, held.fileName.toString()).load()!!
                 assertEquals(
                     JsonPrimitive("[{\"username\":\"ada\"}]"),
                     workJson(body, workId)["authorIdentitiesJSON"]
