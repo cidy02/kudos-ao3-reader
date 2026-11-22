@@ -2,8 +2,13 @@ package io.github.cidy02.kudos.settings
 
 import android.app.Application
 import android.content.Context
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Density
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -24,6 +29,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -107,11 +113,11 @@ class SettingsA66ParityTest {
             }.value
             KudosTheme(KudosThemeMode.Light) { SettingsAppearancePage(repository, current) }
         }
-        compose.onNodeWithText("Under the Title").performScrollTo().performClick()
+        compose.onNodeWithText("Beside the Title").performScrollTo().performClick()
         compose.waitUntil(5_000) {
-            runBlocking { repository.snapshot().app.workSymbolPlacement == WorkSymbolPlacement.UnderTitle }
+            runBlocking { repository.snapshot().app.workSymbolPlacement == WorkSymbolPlacement.Beside }
         }
-        assertEquals(WorkSymbolPlacement.UnderTitle,
+        assertEquals(WorkSymbolPlacement.Beside,
             runBlocking { repository.snapshot().app.workSymbolPlacement })
     }
 
@@ -127,11 +133,26 @@ class SettingsA66ParityTest {
         Files.write(root.resolve("not-a-storage-category"), ByteArray(65536))
         val expected = LocalStorageFootprint.formatted(scanner.measure().totalBytes)
         compose.setContent {
-            KudosTheme(KudosThemeMode.Light) { SettingsDownloadsPage(repository, KudosSettings.Defaults, scanner) }
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
+                KudosTheme(KudosThemeMode.Light) { SettingsDownloadsPage(repository, KudosSettings.Defaults, scanner) }
+            }
         }
         compose.waitUntil(15_000) { compose.onAllNodesWithText(expected).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Storage").assertExists()
+        compose.onAllNodesWithText("Downloads").assertCountEquals(0)
         compose.onNodeWithText("Storage used").assertExists()
         compose.onNodeWithText(expected).assertExists()
+        for (label in listOf("Storage", "Keep works you read", "Download on subscribe")) {
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText(label).performScrollTo()
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertTrue(layouts.isNotEmpty())
+            layouts.forEach { result ->
+                assertFalse(result.didOverflowHeight)
+                assertFalse(result.multiParagraph.didExceedMaxLines)
+            }
+        }
         // The scan completed before closing the in-memory database.
         database.close()
     }

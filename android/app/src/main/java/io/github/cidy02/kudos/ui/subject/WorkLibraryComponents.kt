@@ -55,7 +55,10 @@ import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.core.model.WorkSymbolPlacement
 import io.github.cidy02.kudos.search.LocalTagSearch
+import io.github.cidy02.kudos.ui.components.ChapterBarLayout
 import io.github.cidy02.kudos.ui.components.LocalWorkSymbolPlacement
+import io.github.cidy02.kudos.ui.components.WORK_STATUS_TRAY_TAG
+import io.github.cidy02.kudos.ui.components.WorkChapterBarLine
 import kotlinx.coroutines.launch
 
 enum class WorkSectionLayout { Shelves, Ledger }
@@ -159,7 +162,9 @@ fun WorkLedgerRow(
     modifier: Modifier = Modifier,
     downloadFraction: Double? = null,
     selecting: Boolean = false,
-    muted: Boolean = false
+    muted: Boolean = false,
+    chapterBarLayout: ChapterBarLayout? = null,
+    chapterProgressLabel: String? = null
 ) {
     val tokens = LocalKudosTokens.current
     val fontScale = LocalDensity.current.fontScale
@@ -207,22 +212,48 @@ fun WorkLedgerRow(
                     ) {
                         WorkFandomKicker(fandoms, palette, openFandom, ruleSpacing = 4.dp)
                         WorkReadingOrDownloadRing(downloadFraction, progress, state = if (downloadFraction != null) "Downloading" else progressState, diameter = 44.dp * fontScale, showsZeroPercent = true)
-                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                title,
-                                color = tokens.primaryInk,
-                                fontSize = 16.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.weight(1f, fill = false)
-                            )
-                            if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
-                        }
-                        LedgerAuthorLine(author, wraps = true)
                         if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
-                            HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Row,
-                                tileSize = 24.dp, announces = true)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        title,
+                                        color = tokens.primaryInk,
+                                        fontSize = 16.5.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    HomeStatusTray(
+                                        rating, categories, warnings, isComplete, HomeStatusArrangement.Row,
+                                        tileSize = 24.dp, announces = true,
+                                        modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
+                                    )
+                                    LedgerAuthorLine(author, wraps = true)
+                                }
+                                if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
+                            }
+                        } else {
+                            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    title,
+                                    color = tokens.primaryInk,
+                                    fontSize = 16.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                                if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
+                            }
+                            LedgerAuthorLine(author, wraps = true)
                         }
                         if (metadata.isNotBlank()) Text(metadata, color = tokens.secondaryInk, fontSize = 11.5.sp)
+                        if (chapterBarLayout != null && !chapterBarLayout.isEmpty) {
+                            WorkChapterBarLine(layout = chapterBarLayout, label = chapterProgressLabel)
+                        }
                         if (symbolPlacement == WorkSymbolPlacement.Beside) {
                             HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid,
                                 tileSize = 24.dp, announces = true)
@@ -237,23 +268,50 @@ fun WorkLedgerRow(
                 ) {
                     WorkReadingOrDownloadRing(downloadFraction, progress, state = if (downloadFraction != null) "Downloading" else progressState, diameter = 44.dp * fontScale, showsZeroPercent = true)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        WorkFandomKicker(fandoms, palette, openFandom, ruleSpacing = 4.dp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                title,
-                                color = tokens.primaryInk,
-                                fontSize = 16.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false)
-                            )
-                            if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
-                        }
-                        LedgerAuthorLine(author, wraps = false)
                         if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
-                            HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Row,
-                                tileSize = 24.dp, announces = true)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                        WorkFandomKicker(fandoms, palette, openFandom, ruleSpacing = 4.dp)
+                                        Text(
+                                            title,
+                                            color = tokens.primaryInk,
+                                            fontSize = 16.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Spacer(Modifier.height(6.dp))
+                                    HomeStatusTray(
+                                        rating, categories, warnings, isComplete, HomeStatusArrangement.Row,
+                                        tileSize = 24.dp, announces = true,
+                                        modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    LedgerAuthorLine(author, wraps = false)
+                                }
+                                if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
+                            }
+                        } else {
+                            WorkFandomKicker(fandoms, palette, openFandom, ruleSpacing = 4.dp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    title,
+                                    color = tokens.primaryInk,
+                                    fontSize = 16.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                                if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
+                            }
+                            LedgerAuthorLine(author, wraps = false)
                         }
                         if (metadata.isNotBlank()) Text(
                             metadata,
@@ -262,6 +320,9 @@ fun WorkLedgerRow(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                        if (chapterBarLayout != null && !chapterBarLayout.isEmpty) {
+                            WorkChapterBarLine(layout = chapterBarLayout, label = chapterProgressLabel)
+                        }
                     }
                     if (symbolPlacement == WorkSymbolPlacement.Beside) {
                         HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid,

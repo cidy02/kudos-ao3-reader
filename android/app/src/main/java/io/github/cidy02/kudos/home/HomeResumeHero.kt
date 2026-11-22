@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.library.readingProgressFraction
+import io.github.cidy02.kudos.ui.components.ChapterBarScale
+import io.github.cidy02.kudos.ui.components.ChapterBars
 import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
 import io.github.cidy02.kudos.ui.subject.HomeStatusTray
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
@@ -39,6 +41,8 @@ import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.WorkReadingOrDownloadRing
 import io.github.cidy02.kudos.ui.subject.downloadDimmed
 import io.github.cidy02.kudos.ui.subject.withOpacity
+import io.github.cidy02.kudos.works.rememberChapterLengths
+import androidx.compose.runtime.remember
 import java.time.Instant
 
 /**
@@ -99,6 +103,13 @@ private fun HeroBody(
 ) {
     val tokens = LocalKudosTokens.current
     val fraction = (work.readingProgressFraction() ?: 0.0).coerceIn(0.0, 1.0)
+    val chapterLengths = rememberChapterLengths(work)
+    val resumeModel = remember(work, chapterLengths, now) {
+        ResumeCardModel.fromWork(work, chapterLengths?.positions, now)
+    }
+    val chapterBarLayout = remember(resumeModel, chapterLengths) {
+        resumeModel.chapterBarLayout(chapterLengths, ChapterBarScale.Card)
+    }
     val place = HomeFacts.locatorTitle(work.readiumLocator)
         ?: if (work.lastReadDate == null) "Ready to resume" else "Last opened"
     val whenText = work.lastReadDate?.let { HomeFacts.relativeNamed(it, now) }
@@ -186,6 +197,33 @@ private fun HeroBody(
                 modifier = Modifier.padding(end = trayReserve)
             )
             MetadataLine(author = work.author, figures = figures)
+            if (!chapterBarLayout.isEmpty) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ChapterBars(
+                        layout = chapterBarLayout,
+                        scale = ChapterBarScale.Card,
+                        onGradient = false,
+                        height = 52.dp
+                    )
+                    val chapterCaption = buildString {
+                        append(resumeModel.displayedChapterName)
+                        if (resumeModel.postedLabel.isNotBlank()) {
+                            append(" · ")
+                            append(resumeModel.postedLabel)
+                        }
+                        if (resumeModel.updated.isNotBlank()) {
+                            append(" · Updated ")
+                            append(resumeModel.updated)
+                        }
+                    }
+                    Text(
+                        text = chapterCaption,
+                        color = tokens.secondaryInk,
+                        fontSize = 12.sp,
+                        maxLines = if (large) Int.MAX_VALUE else 2
+                    )
+                }
+            }
             if (large) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

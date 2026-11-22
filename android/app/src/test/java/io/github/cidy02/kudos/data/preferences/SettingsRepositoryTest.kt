@@ -329,7 +329,7 @@ class SettingsRepositoryTest {
     @Test
     fun workSymbolPlacementDefaultsStoresAndRoundTripsWithoutResettingFromAbsentOrUnknown() = runBlocking {
         val key = stringPreferencesKey("workSymbolPlacement")
-        assertEquals(WorkSymbolPlacement.Beside, repository.snapshot().app.workSymbolPlacement)
+        assertEquals(WorkSymbolPlacement.UnderTitle, repository.snapshot().app.workSymbolPlacement)
         assertEquals(null, dataStore.data.first()[key])
         val unchosenJson = BackupJson.encodeToString(
             BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload()
@@ -337,23 +337,23 @@ class SettingsRepositoryTest {
         assertFalse(unchosenJson.contains("workSymbolPlacement"))
 
         dataStore.edit { it[key] = "sideways" }
-        assertEquals(WorkSymbolPlacement.Beside, repository.snapshot().app.workSymbolPlacement)
+        assertEquals(WorkSymbolPlacement.UnderTitle, repository.snapshot().app.workSymbolPlacement)
         assertEquals("sideways", BackupSettings.fromSettings(repository.snapshot()).workSymbolPlacement)
 
-        repository.updateWorkSymbolPlacement(WorkSymbolPlacement.UnderTitle)
-        assertEquals("underTitle", dataStore.data.first()[key])
+        repository.updateWorkSymbolPlacement(WorkSymbolPlacement.Beside)
+        assertEquals("beside", dataStore.data.first()[key])
         val encoded = BackupJson.encodeToString(
             BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload()
         )
         val decoded = BackupJson.decodeFromString<BackupSettingsPayload>(encoded)
-        assertEquals("underTitle", decoded.workSymbolPlacement)
+        assertEquals("beside", decoded.workSymbolPlacement)
 
         repository.replaceAll(BackupSettings(workSymbolPlacement = null).toSettings())
-        assertEquals(WorkSymbolPlacement.UnderTitle, repository.snapshot().app.workSymbolPlacement)
-        repository.replaceAll(BackupSettings(workSymbolPlacement = "sideways").toSettings())
-        assertEquals(WorkSymbolPlacement.UnderTitle, repository.snapshot().app.workSymbolPlacement)
-        repository.replaceAll(BackupSettings(workSymbolPlacement = "beside").toSettings())
         assertEquals(WorkSymbolPlacement.Beside, repository.snapshot().app.workSymbolPlacement)
+        repository.replaceAll(BackupSettings(workSymbolPlacement = "sideways").toSettings())
+        assertEquals(WorkSymbolPlacement.Beside, repository.snapshot().app.workSymbolPlacement)
+        repository.replaceAll(BackupSettings(workSymbolPlacement = "underTitle").toSettings())
+        assertEquals(WorkSymbolPlacement.UnderTitle, repository.snapshot().app.workSymbolPlacement)
     }
 
     @Test

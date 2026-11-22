@@ -1,15 +1,45 @@
 package io.github.cidy02.kudos.reader
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.emptyPreferences
+import androidx.lifecycle.viewModelScope
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import io.github.cidy02.kudos.backup.BackupJson
+import io.github.cidy02.kudos.backup.toBackupSettingsPayload
+import io.github.cidy02.kudos.core.model.BackupSettings
+import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.local.KudosDatabase
+import io.github.cidy02.kudos.data.local.entity.ReadingSessionMode
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import io.github.cidy02.kudos.files.WorkFileStore
+import io.github.cidy02.kudos.works.WorkRepository
+import java.nio.file.Files
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.util.UUID
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.encodeToString
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -57,6 +87,208 @@ class ReadingLogServiceTest {
         advance(60)
         io.github.cidy02.kudos.browse.FandomVisits.markVisited(dao, "The Untamed (TV)", now)
         assertEquals(99, dao.getAllWatermarks().single().newestWorkIDSeen)
+    }
+
+    @Test
+    fun activeGapsAndPauseResume() = runTest {
+        val t0 = Instant.parse("2026-06-26T12:00:00Z")
+        assertEquals(120.0, ReadingLogService.activeGap(t0, t0.plusSeconds(120)), 0.0)
+        assertEquals(300.0, ReadingLogService.activeGap(t0, t0.plusSeconds(300)), 0.0)
+        assertEquals(300.0, ReadingLogService.activeGap(t0, t0.plusSeconds(301)), 0.0)
+        assertEquals(300.0, ReadingLogService.activeGap(t0, t0.plusSeconds(480)), 0.0)
+        assertEquals(0.0, ReadingLogService.activeGap(t0, t0.minusSeconds(1)), 0.0)
+        assertEquals(0.0, ReadingLogService.activeGap(t0, t0), 0.0)
+
+        val work = work()
+        now = t0
+        service.startSession(work)
+        advance(120)
+        service.noteActivity(work.id)
+        advance(300)
+        service.noteActivity(work.id)
+        advance(480)
+        service.noteActivity(work.id)
+        // Out-of-order timestamp must be ignored without rewinding lastActivityAt.
+        now = t0.plusSeconds(890)
+        service.noteActivity(work.id)
+        now = t0.plusSeconds(930)
+        service.pauseSession(work)
+        // Paused activity marks count nothing.
+        now = t0.plusSeconds(1_100)
+        service.noteActivity(work.id)
+        now = t0.plusSeconds(2_000)
+        service.resumeSession(work.id)
+        advance(120)
+        service.noteActivity(work.id)
+        advance(80)
+        service.endSession(work)
+
+        val row = database.readingLogDao().getAllSessions().single()
+        assertEquals(950.0, requireNotNull(row.activeSeconds), 0.0)
+        assertEquals(1_130.0, row.durationSeconds, 0.0)
+    }
+
+    @Test
+    fun startProgressUsesOnlyStoredOverallProgress() = runTest {
+        val unreadId = "33333333-3333-4333-8333-333333333333"
+        val legacyId = "44444444-4444-4444-8444-444444444444"
+        val macId = "55555555-5555-4555-8555-555555555555"
+        val unread = work().copy(id = unreadId, chapters = "5/10", lastReadDate = now)
+        val legacy = work().copy(id = legacyId, chapters = "5/10", lastSpineIndex = 3)
+        val macPercent = work().copy(id = macId, legacyReaderProgress = 0.6)
+
+        service.startSession(unread)
+        advance(20)
+        service.endSession(unread)
+
+        service.startSession(legacy)
+        advance(20)
+        service.endSession(legacy)
+
+        service.startSession(macPercent)
+        advance(20)
+        service.endSession(macPercent)
+
+        val sessions = database.readingLogDao().getAllSessions().associateBy { it.workID }
+        assertEquals(0.0, requireNotNull(sessions.getValue(unreadId).startProgress), 0.0)
+        assertNull(sessions.getValue(legacyId).startProgress)
+        assertEquals(0.6, requireNotNull(sessions.getValue(macId).startProgress), 0.0)
+    }
+
+    @Test
+    fun startFactsKeepTheirOriginalValuesAndInstallID() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefsName = "reading-log-test-${UUID.randomUUID()}"
+        val prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        val firstID = ReadingLogService.deviceId(prefs)
+        val relaunchedPrefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        assertEquals(firstID, ReadingLogService.deviceId(relaunchedPrefs))
+
+        val zone = ZoneOffset.ofHoursMinutes(5, 30)
+        service = ReadingLogService(
+            dao = database.readingLogDao(),
+            clock = { now },
+            zoneIdProvider = { zone },
+            deviceIdProvider = { ReadingLogService.deviceId(prefs) }
+        )
+        val started = work().copy(readiumLocator = locator(0.25, "Chapter 1"), lastSpineIndex = 3)
+        service.startSession(started)
+        advance(60)
+        service.setMode(ReadingSessionMode.LISTEN, started.id, playbackRate = 1.25)
+        service.endSession(
+            started.copy(readiumLocator = locator(0.75, "Chapter 8"), lastSpineIndex = 8)
+        )
+
+        val row = database.readingLogDao().getAllSessions().single()
+        assertEquals(19_800, row.tzOffsetSeconds)
+        assertEquals(0.25, requireNotNull(row.startProgress), 0.0)
+        assertEquals(3, row.startSpineIndex)
+        assertEquals(ReadingSessionMode.LISTEN, row.mode)
+        assertEquals(1.25, requireNotNull(row.playbackRate), 0.0)
+        assertEquals(60.0, requireNotNull(row.activeSeconds), 0.0)
+        assertEquals(firstID, row.deviceID)
+        assertEquals(1, row.rulesVersion)
+
+        val settingsJson = BackupJson.encodeToString(
+            BackupSettings.fromSettings(KudosSettings.Defaults).toBackupSettingsPayload()
+        )
+        assertFalse(settingsJson.contains(firstID))
+        assertFalse(settingsJson.contains("readingLogDeviceID"))
+    }
+
+    @Test
+    fun oneModePerSittingAndClampedPlaybackRate() = runTest {
+        val w = work()
+        service.startSession(w)
+        service.setMode(ReadingSessionMode.LISTEN, w.id, playbackRate = 2.5)
+        advance(20)
+        service.pauseSession(w)
+        assertEquals(1.5, requireNotNull(database.readingLogDao().getAllSessions().single().playbackRate), 0.0)
+
+        service.resumeSession(w.id)
+        // Updating rate while playing clamps to 0.5..1.5; stopping Read Aloud cannot revert to read.
+        service.setMode(ReadingSessionMode.LISTEN, w.id, playbackRate = 1.35)
+        service.setMode(ReadingSessionMode.READ, w.id)
+        advance(10)
+        service.endSession(w)
+
+        val listenRow = database.readingLogDao().getAllSessions().single()
+        assertEquals("listen", listenRow.modeRaw)
+        assertEquals(1.35, requireNotNull(listenRow.playbackRate), 0.0)
+
+        val silentWork = work().copy(id = "66666666-6666-4666-8666-666666666666")
+        service.startSession(silentWork)
+        advance(20)
+        service.endSession(silentWork)
+        val readRow = database.readingLogDao().getAllSessions().first { it.workID == silentWork.id }
+        assertEquals("read", readRow.modeRaw)
+        assertNull(readRow.playbackRate)
+    }
+
+    @Test
+    fun laterCheckpointUpdatesListeningFactsOnTheSameRow() = runTest {
+        val work = work()
+        service.startSession(work)
+        advance(20)
+        service.pauseSession(work)
+        advance(10)
+        service.resumeSession(work.id)
+        service.setMode(ReadingSessionMode.LISTEN, work.id, playbackRate = 1.25)
+        advance(20)
+        service.endSession(work)
+
+        val row = database.readingLogDao().getAllSessions().single()
+        assertEquals(ReadingSessionMode.LISTEN, row.mode)
+        assertEquals(1.25, requireNotNull(row.playbackRate), 0.0)
+        assertEquals(40.0, requireNotNull(row.activeSeconds), 0.0)
+        assertEquals(40.0, row.durationSeconds, 0.0)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun readerViewModelRecordsLocatorActivityAndClampedListeningMode() = runBlocking {
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+        val directory = Files.createTempDirectory("kudos-reading-log-vm-test").toFile()
+        var model: ReaderViewModel? = null
+        try {
+            val files = WorkFileStore(directory.toPath())
+            val works = WorkRepository(database, files)
+            val seeded = works.upsert(work().copy(hasEpub = true))
+            files.writeWorkEpub(seeded.id, byteArrayOf(0x50, 0x4B, 0x03, 0x04))
+            val store = object : DataStore<Preferences> {
+                override val data = MutableStateFlow(emptyPreferences())
+                override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
+                    transform(data.value).also { data.value = it }
+            }
+            val vm = ReaderViewModel(
+                ReaderRepository(works, files, settingsProvider = { KudosSettings.Defaults }, clock = { now }),
+                service,
+                SettingsRepository(store),
+                AnnotationRepository(database.annotationDao(), database.syncTombstoneDao()),
+                seeded.id
+            )
+            model = vm
+            withTimeout(5_000) { vm.state.filterIsInstance<ReaderUiState.Reading>().first() }
+            vm.startReadingSession()
+            vm.onProgress(ReaderProgress(0, 0.0, locator(0.0, "Ch 1"), 0.0))
+            advance(100)
+            vm.onProgress(ReaderProgress(0, 0.0002, locator(0.0002, "Ch 1"), 0.0002))
+            advance(400)
+            vm.setListeningMode(2.0)
+            vm.close()
+
+            val row = withTimeout(5_000) {
+                while (database.readingLogDao().getAllSessions().isEmpty()) kotlinx.coroutines.delay(10)
+                database.readingLogDao().getAllSessions().single()
+            }
+            assertEquals("listen", row.modeRaw)
+            assertEquals(1.5, requireNotNull(row.playbackRate), 0.0)
+            assertEquals(400.0, requireNotNull(row.activeSeconds), 0.0)
+        } finally {
+            model?.viewModelScope?.coroutineContext?.get(Job)?.cancelAndJoin()
+            directory.deleteRecursively()
+            Dispatchers.resetMain()
+        }
     }
 
     @Test

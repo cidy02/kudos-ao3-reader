@@ -17,7 +17,9 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkSymbolPlacement
+import io.github.cidy02.kudos.library.QueueLedgerCard
 import io.github.cidy02.kudos.search.SearchSubjectField
+import io.github.cidy02.kudos.ui.subject.WorkLedgerRow
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import kotlin.math.abs
@@ -80,12 +82,14 @@ class SensitiveWorkRowFandomChipsAndTrayTest {
     @Test fun aLocalStandardRowDrawsTheTwoByTwoSymbolGridBesideTheTitle() {
         compose.setContent {
             KudosTheme(KudosThemeMode.Light) {
-                SensitiveWorkRow(
-                    work = SavedWork(id = "saved", title = "A saved work", author = "A writer",
-                        summary = "A short summary.", wordCount = 1200, chapters = "1/1", comments = 0,
-                        bookmarks = 0, workFandoms = listOf("Doctor Who"), rating = "Teen And Up Audiences"),
-                    onOpenWork = {}
-                )
+                CompositionLocalProvider(LocalWorkSymbolPlacement provides WorkSymbolPlacement.Beside) {
+                    SensitiveWorkRow(
+                        work = SavedWork(id = "saved", title = "A saved work", author = "A writer",
+                            summary = "A short summary.", wordCount = 1200, chapters = "1/1", comments = 0,
+                            bookmarks = 0, workFandoms = listOf("Doctor Who"), rating = "Teen And Up Audiences"),
+                        onOpenWork = {}
+                    )
+                }
             }
         }
         val tray = compose.onNodeWithTag(WORK_STATUS_TRAY_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
@@ -101,7 +105,10 @@ class SensitiveWorkRowFandomChipsAndTrayTest {
         compose.setContent {
             KudosTheme(KudosThemeMode.Light) {
                 val density = LocalDensity.current
-                CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
+                CompositionLocalProvider(
+                    LocalDensity provides Density(density.density, 2f),
+                    LocalWorkSymbolPlacement provides WorkSymbolPlacement.Beside
+                ) {
                     SensitiveWorkRow(
                         work = SavedWork(id = "saved", title = "A saved work", author = "A writer",
                             summary = "A short summary.", wordCount = 1200, chapters = "1/1", comments = 0,
@@ -146,11 +153,158 @@ class SensitiveWorkRowFandomChipsAndTrayTest {
                 }
             }
         }
+        val kicker = compose.onNodeWithText("DOCTOR WHO", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val title = compose.onNodeWithText("A saved work", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val tray = compose.onNodeWithTag(WORK_STATUS_TRAY_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val author = compose.onNodeWithText("A writer", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val summary = compose.onNodeWithText("A short summary.", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertTrue("expected 1x4 row (${tray.width}x${tray.height})", tray.width > tray.height * 2f)
-        assertTrue("row ${tray.top} not below author ${author.bottom}", tray.top >= author.bottom - 0.5f)
-        assertTrue("row ${tray.bottom} not above summary ${summary.top}", tray.bottom <= summary.top + 0.5f)
+        assertTrue("title ${title.top} not below kicker ${kicker.bottom}", title.top >= kicker.bottom - 0.5f)
+        assertTrue("row ${tray.top} not below title ${title.bottom}", tray.top >= title.bottom - 0.5f)
+        assertTrue("author ${author.top} not below row ${tray.bottom}", author.top >= tray.bottom - 0.5f)
+        assertTrue("summary ${summary.top} not below author ${author.bottom}", summary.top >= author.bottom - 0.5f)
+    }
+
+    @Test fun anUnchosenRowDefaultsToUnderTheTitleSymbolRow() {
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                SensitiveWorkRow(
+                    work = SavedWork(id = "default", title = "Default row", author = "Default writer",
+                        summary = "Default summary.", wordCount = 1200, chapters = "1/1",
+                        workFandoms = listOf("Doctor Who"), rating = "Teen And Up Audiences"),
+                    onOpenWork = {}
+                )
+            }
+        }
+        val title = compose.onNodeWithText("Default row", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val tray = compose.onNodeWithTag(WORK_STATUS_TRAY_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val author = compose.onNodeWithText("Default writer", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue("expected 1x4 row by default (${tray.width}x${tray.height})", tray.width > tray.height * 2f)
+        assertTrue("row ${tray.top} not below title ${title.bottom}", tray.top >= title.bottom - 0.5f)
+        assertTrue("author ${author.top} not below row ${tray.bottom}", author.top >= tray.bottom - 0.5f)
+    }
+
+    @Test fun underTitleStandardRowOrderIsFandomTitleSymbolsAuthorFigures() {
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                CompositionLocalProvider(LocalWorkSymbolPlacement provides WorkSymbolPlacement.UnderTitle) {
+                    SensitiveWorkRow(
+                        work = SavedWork(
+                            id = "std", title = "Standard work", author = "Standard writer",
+                            summary = "Short summary.", wordCount = 1200, chapters = "1/1",
+                            workFandoms = listOf("Doctor Who"), workFreeforms = listOf("Found Family"),
+                            rating = "Teen And Up Audiences", isFavorite = true
+                        ),
+                        onOpenWork = {}
+                    )
+                }
+            }
+        }
+        val kicker = compose.onNodeWithText("DOCTOR WHO", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val title = compose.onNodeWithText("Standard work", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val tray = compose.onNodeWithTag(WORK_STATUS_TRAY_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val author = compose.onNodeWithText("Standard writer", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val figures = compose.onNodeWithText("1,200", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(kicker.bottom <= title.top + 0.5f)
+        assertTrue(title.bottom <= tray.top + 0.5f)
+        assertTrue(tray.bottom <= author.top + 0.5f)
+        assertTrue(author.bottom <= figures.top + 0.5f)
+    }
+
+    @Test fun underTitleTrailingStarAndExpandDoNotPushTheStripDownFromTitle() {
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                CompositionLocalProvider(LocalWorkSymbolPlacement provides WorkSymbolPlacement.UnderTitle) {
+                    SensitiveWorkRow(
+                        work = SavedWork(
+                            id = "gap", title = "One line", author = "Gap writer",
+                            summary = "", wordCount = 1200, chapters = "1/1",
+                            workFandoms = emptyList(), workFreeforms = listOf("Found Family"),
+                            rating = "General Audiences", isFavorite = true
+                        ),
+                        onOpenWork = {}
+                    )
+                }
+            }
+        }
+        val title = compose.onNodeWithText("One line", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val tray = compose.onNodeWithTag(WORK_STATUS_TRAY_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val unfold = compose.onNodeWithContentDescription("Show more", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val star = compose.onNodeWithContentDescription("Favorite", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val gapPx = tray.top - title.bottom
+        val sixDp = with(compose.density) { 6.dp.toPx() }
+        assertTrue("strip gap $gapPx px should stay near 6 dp ($sixDp px)", abs(gapPx - sixDp) <= 2.5f)
+        assertTrue("star (${star.left}) should sit beside title (${title.right})", star.left >= title.right - 0.5f)
+        assertTrue("unfold (${unfold.left}) should sit beside title (${title.right})", unfold.left >= title.right - 0.5f)
+    }
+
+    @Test fun underTitleLedgerAndQueueRowsOrderFandomTitleSymbolsAuthorFigures() {
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                CompositionLocalProvider(LocalWorkSymbolPlacement provides WorkSymbolPlacement.UnderTitle) {
+                    androidx.compose.foundation.layout.Column {
+                        SensitiveWorkRow(
+                            id = "ao3-ledger", title = "AO3 ledger", author = "AO3 writer",
+                            fandoms = listOf("Torchwood"), summary = "",
+                            discoveryTags = emptyList(), warnings = emptyList(), categories = emptyList(),
+                            rating = "General Audiences", isComplete = true, wordCount = 1200, chapters = "1/1",
+                            kudos = 3, language = "English", showsZeroStats = false, ledger = true,
+                            onClick = {}
+                        )
+                        WorkLedgerRow(
+                            title = "Ledger work", author = "Ledger writer", fandoms = listOf("Sherlock"),
+                            metadata = "1.2K words · 1/1", progress = 0.25, progressState = "Reading",
+                            rating = "General Audiences", categories = emptyList(), warnings = emptyList(),
+                            isComplete = true, obscured = false, favorite = true, selected = false,
+                            onClick = {}, onLongClick = {}
+                        )
+                        QueueLedgerCard(
+                            work = SavedWork(
+                                id = "q", title = "Queued work", author = "Queued writer",
+                                summary = "", wordCount = 1200, chapters = "1/1",
+                                workFandoms = listOf("Good Omens"), rating = "General Audiences"
+                            ),
+                            downloadFraction = null, obscured = false
+                        )
+                    }
+                }
+            }
+        }
+        val trays = compose.onAllNodes(androidx.compose.ui.test.hasTestTag(WORK_STATUS_TRAY_TAG), useUnmergedTree = true)
+            .fetchSemanticsNodes().map { it.boundsInRoot }
+        assertEquals(3, trays.size)
+
+        val ao3Kicker = compose.onNodeWithText("TORCHWOOD", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val ao3Title = compose.onNodeWithText("AO3 ledger", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val ao3Tray = trays[0]
+        val ao3Author = compose.onNodeWithText("by AO3 writer", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val ao3Figures = compose.onNodeWithText("English  ·  1,200 words  ·  1/1  ·  3 kudos", useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(ao3Kicker.bottom <= ao3Title.top + 0.5f)
+        assertTrue(ao3Title.bottom <= ao3Tray.top + 0.5f)
+        assertTrue(ao3Tray.bottom <= ao3Author.top + 0.5f)
+        assertTrue(ao3Author.bottom <= ao3Figures.top + 0.5f)
+
+        val wlKicker = compose.onNodeWithText("SHERLOCK", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val wlTitle = compose.onNodeWithText("Ledger work", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val wlTray = trays[1]
+        val wlAuthor = compose.onNodeWithText("Ledger writer", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val wlFigures = compose.onNodeWithText("1.2K words · 1/1", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val wlStar = compose.onNodeWithText("★", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(wlKicker.bottom <= wlTitle.top + 0.5f)
+        assertTrue(wlTitle.bottom <= wlTray.top + 0.5f)
+        assertTrue(wlTray.bottom <= wlAuthor.top + 0.5f)
+        assertTrue(wlAuthor.bottom <= wlFigures.top + 0.5f)
+        assertTrue(wlStar.left >= wlTitle.right - 0.5f)
+
+        val qKicker = compose.onNodeWithText("GOOD OMENS", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val qTitle = compose.onNodeWithText("Queued work", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val qTray = trays[2]
+        val qAuthor = compose.onNodeWithText("Queued writer", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val qFigures = compose.onNodeWithText("1.2K words  ·  1/1", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(qKicker.bottom <= qTitle.top + 0.5f)
+        assertTrue(qTitle.bottom <= qTray.top + 0.5f)
+        assertTrue(qTray.bottom <= qAuthor.top + 0.5f)
+        assertTrue(qAuthor.bottom <= qFigures.top + 0.5f)
     }
 }

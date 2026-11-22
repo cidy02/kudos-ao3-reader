@@ -273,6 +273,92 @@ class ReadingStatisticsTest {
     }
 
     @Test
+    fun wipGrowthCreditsOnlyTheNewWordsAfterCatchingUp() {
+        val caughtUp = sitting("caught", day = 1, end = 1.0, words = 10_000)
+        val newChapters = sitting("grown", day = 2, end = 1.0, words = 14_000)
+
+        assertWordsAndStarts(
+            listOf(caughtUp, newChapters),
+            mapOf("caught" to 10_000, "grown" to 4_000),
+            listOf(0.0, 10_000.0 / 14_000.0)
+        )
+    }
+
+    @Test
+    fun wipGrowthCreditsOnlyTheNewWordsAfterAFinishedSitting() {
+        val finishedEarlier = sitting("finished", day = 1, end = 1.0, words = 10_000, didFinish = true)
+        val newChapters = sitting("grown", day = 2, end = 1.0, words = 14_000, didFinish = true)
+
+        assertWordsAndStarts(
+            listOf(finishedEarlier, newChapters),
+            mapOf("finished" to 10_000, "grown" to 4_000),
+            listOf(0.0, 10_000.0 / 14_000.0)
+        )
+    }
+
+    @Test
+    fun rereadAfterFinishStartsOverWhenTheWorkDidNotGrow() {
+        val finished = sitting("finished", day = 1, end = 1.0, words = 10_000, didFinish = true)
+        val reread = sitting("reread", day = 2, end = 0.20, words = 10_000)
+
+        assertWordsAndStarts(
+            listOf(finished, reread),
+            mapOf("finished" to 10_000, "reread" to 2_000),
+            listOf(0.0, 0.0)
+        )
+    }
+
+    @Test
+    fun sittingWithStartProgressUsesItAndWithoutFallsBackToPreviousEndInWords() {
+        val withExplicitStart = sitting("explicit", day = 1, end = 0.60, words = 10_000, start = 0.25)
+        val withoutExplicitStart = sitting("fallback", day = 2, end = 0.85, words = 10_000)
+        val jumpedAhead = sitting("jumped", day = 3, end = 1.0, words = 10_000, start = 0.90)
+
+        assertWordsAndStarts(
+            listOf(withExplicitStart, withoutExplicitStart, jumpedAhead),
+            mapOf("explicit" to 3_500, "fallback" to 2_500, "jumped" to 1_000),
+            listOf(0.25, 0.60, 0.90)
+        )
+    }
+
+    @Test
+    fun explicitStartAtTheOldEndFractionKeepsThePreviousEndInWordsWhenTheWorkGrew() {
+        val caughtUp = sitting("caught", day = 1, end = 1.0, words = 10_000)
+        val grown = sitting("grown", day = 2, end = 1.0, words = 14_000, start = 1.0)
+
+        assertWordsAndStarts(
+            listOf(caughtUp, grown),
+            mapOf("caught" to 10_000, "grown" to 4_000),
+            listOf(0.0, 10_000.0 / 14_000.0)
+        )
+    }
+
+    @Test
+    fun rereadMovingBackThenForwardNeverCreditsNegativeWords() {
+        val first = sitting("first", day = 1, end = 0.70, words = 10_000, start = 0.0)
+        val movedBack = sitting("back", day = 2, end = 0.20, words = 10_000, start = 0.70)
+        val movedForward = sitting("forward", day = 3, end = 0.50, words = 12_000)
+
+        assertWordsAndStarts(
+            listOf(first, movedBack, movedForward),
+            mapOf("first" to 7_000, "back" to 0, "forward" to 4_000),
+            listOf(0.0, 0.70, (0.20 * 10_000) / 12_000)
+        )
+    }
+
+    @Test
+    fun explicitStartFromEightyPercentToTheEndCreditsTwoThousandWords() {
+        val opened = sitting("opened", day = 1, end = 0.10, words = 10_000)
+        val resumed = sitting("resumed", day = 2, end = 1.0, words = 10_000, start = 0.80)
+
+        assertWordsAndStarts(
+            listOf(opened, resumed),
+            mapOf("opened" to 1_000, "resumed" to 2_000),
+            listOf(0.0, 0.80)
+        )
+    }
+
+    @Test
     fun aFirstPeriodHasNoDeltaRatherThanADeltaAgainstZero() {
         val insights = ReadingInsights.make(
             facts = listOf(fact(day = 1, minutes = 60.0)),
@@ -320,6 +406,40 @@ class ReadingStatisticsTest {
         for ((words, label) in listOf(999_950 to "1M", 999_999_500 to "1B")) {
             val statistics = ReadingStatistics.from(listOf(work("Finished", isFinished = true, wordCount = words)))
             assertEquals(label, statistics.wordsRead.compactCount())
+        }
+    }
+
+    private fun sitting(
+        id: String,
+        work: String = "w",
+        day: Int,
+        end: Double,
+        words: Int,
+        start: Double? = null,
+        didFinish: Boolean = false
+    ) = ReadingSessionEntity(
+        id = id,
+        workID = work,
+        startedAt = LocalDate.of(2026, 8, day).atTime(12, 0).toInstant(ZoneOffset.UTC),
+        endedAt = LocalDate.of(2026, 8, day).atTime(13, 0).toInstant(ZoneOffset.UTC),
+        durationSeconds = 3_600.0,
+        startProgress = start,
+        endingProgress = end,
+        wordCount = words,
+        didFinish = didFinish,
+        lastModifiedAt = Instant.EPOCH
+    )
+
+    private fun assertWordsAndStarts(
+        sessions: List<ReadingSessionEntity>,
+        words: Map<String, Int>,
+        starts: List<Double>
+    ) {
+        assertEquals(words, ReadingInsights.wordsRead(sessions))
+        val progress = ReadingInsights.startingProgress(ReadingInsights.facts(sessions, emptyList()))
+        assertEquals(starts.size, progress.size)
+        starts.forEachIndexed { index, expected ->
+            assertEquals(expected, progress[index], 1e-9)
         }
     }
 

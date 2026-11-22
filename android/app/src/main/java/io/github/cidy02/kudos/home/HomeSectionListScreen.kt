@@ -759,6 +759,7 @@ internal fun HomeSectionLedgerRow(
     val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
     var menuOpen by remember(work.id) { mutableStateOf(false) }
     val row: @Composable () -> Unit = {
+        val (chapterBarLayout, chapterProgressLabel) = io.github.cidy02.kudos.works.rememberWorkChapterBarState(work)
         WorkLedgerRow(
             downloadFraction = io.github.cidy02.kudos.ui.subject.rememberWorkDownloadFraction(work),
             title = work.title,
@@ -789,7 +790,9 @@ internal fun HomeSectionLedgerRow(
                 }
             },
             onLongClick = { if (!obscured && !selecting) menuOpen = true },
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            chapterBarLayout = chapterBarLayout,
+            chapterProgressLabel = chapterProgressLabel
         )
     }
     Box {

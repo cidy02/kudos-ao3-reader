@@ -330,6 +330,92 @@ class KudosDatabaseMigrationTest {
     fun schema13MigratesTo14AndPassesRoomValidation() = migrateFromExportedSchema(13)
 
     @Test
+    fun schema14MigratesToCurrentAndPassesRoomValidation() = migrateFromExportedSchema(14)
+
+    @Test
+    fun migrate14To15AddsSittingMetadataDefaultsAndKeepsExistingRows() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dbName = "kudos-migration-14-15"
+        context.deleteDatabase(dbName)
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name(dbName)
+                .callback(object : SupportSQLiteOpenHelper.Callback(14) {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        val schema = Json.parseToJsonElement(
+                            File("schemas/io.github.cidy02.kudos.data.local.KudosDatabase/14.json").readText()
+                        ).jsonObject.getValue("database").jsonObject
+                        val sessions = schema.getValue("entities").jsonArray.single {
+                            it.jsonObject.getValue("tableName").jsonPrimitive.content == "reading_sessions"
+                        }.jsonObject
+                        db.execSQL(
+                            sessions.getValue("createSql").jsonPrimitive.content
+                                .replace("\${TABLE_NAME}", "reading_sessions")
+                        )
+                    }
+
+                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+                })
+                .build()
+        )
+        val db = helper.writableDatabase
+        try {
+            db.execSQL(
+                """
+                INSERT INTO reading_sessions (
+                    id, workID, ao3WorkID, sourceURL, workTitle,
+                    startedAt, endedAt, durationSeconds, lastSpineIndex,
+                    chapterTitle, endingProgress, wordCount, chapterCountAtVisit,
+                    didFinish, lastModifiedAt
+                ) VALUES (
+                    'session-pre', 'work-1', 42, 'https://archiveofourown.org/works/42', 'Pre-migration work',
+                    1000, 1600, 600.0, 2,
+                    'Chapter 3', 0.5, 12000, 3,
+                    0, 1600
+                )
+                """.trimIndent()
+            )
+            val newColumns = listOf(
+                "tzOffsetSeconds", "startProgress", "startSpineIndex", "modeRaw",
+                "playbackRate", "activeSeconds", "deviceID", "rulesVersion"
+            )
+            val before = columnNames(db, "reading_sessions")
+            newColumns.forEach { assertFalse(before.contains(it)) }
+
+            KudosDatabaseMigrations.MIGRATION_14_15.migrate(db)
+            db.version = 15
+
+            val after = columnNames(db, "reading_sessions")
+            newColumns.forEach { assertTrue(after.contains(it)) }
+            db.query(
+                """
+                SELECT workID, durationSeconds, tzOffsetSeconds, startProgress, startSpineIndex,
+                       modeRaw, playbackRate, activeSeconds, deviceID, rulesVersion
+                FROM reading_sessions WHERE id = ?
+                """.trimIndent(),
+                arrayOf("session-pre")
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("work-1", cursor.getString(0))
+                assertEquals(600.0, cursor.getDouble(1), 0.0)
+                assertTrue(cursor.isNull(2))
+                assertTrue(cursor.isNull(3))
+                assertTrue(cursor.isNull(4))
+                assertEquals("read", cursor.getString(5))
+                assertTrue(cursor.isNull(6))
+                assertTrue(cursor.isNull(7))
+                assertEquals("", cursor.getString(8))
+                assertEquals(0, cursor.getInt(9))
+            }
+            assertEquals(15, db.version)
+        } finally {
+            db.close()
+            helper.close()
+            context.deleteDatabase(dbName)
+        }
+    }
+
+    @Test
     fun migrate13To14DefaultsRemoteEpubPendingToFalseAndKeepsExistingRows() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val helper = FrameworkSQLiteOpenHelperFactory().create(
@@ -447,11 +533,12 @@ class KudosDatabaseMigrationTest {
                 KudosDatabaseMigrations.MIGRATION_10_11,
                 KudosDatabaseMigrations.MIGRATION_11_12,
                 KudosDatabaseMigrations.MIGRATION_12_13,
-                KudosDatabaseMigrations.MIGRATION_13_14
+                KudosDatabaseMigrations.MIGRATION_13_14,
+                KudosDatabaseMigrations.MIGRATION_14_15
             )
             .build()
         try {
-            assertEquals(14, room.openHelper.writableDatabase.version)
+            assertEquals(15, room.openHelper.writableDatabase.version)
         } finally {
             room.close()
             context.deleteDatabase(name)
@@ -470,11 +557,12 @@ class KudosDatabaseMigrationTest {
                 KudosDatabaseMigrations.MIGRATION_10_11,
                 KudosDatabaseMigrations.MIGRATION_11_12,
                 KudosDatabaseMigrations.MIGRATION_12_13,
-                KudosDatabaseMigrations.MIGRATION_13_14
+                KudosDatabaseMigrations.MIGRATION_13_14,
+                KudosDatabaseMigrations.MIGRATION_14_15
             )
             .build()
         try {
-            assertEquals(14, db.openHelper.readableDatabase.version)
+            assertEquals(15, db.openHelper.readableDatabase.version)
         } finally {
             db.close()
         }
