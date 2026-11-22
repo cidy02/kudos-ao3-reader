@@ -2070,21 +2070,130 @@ class SyncManifestPassthroughTest {
         settingsRepository.updateSyncFolderUri(treeUri.toString())
         backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
         syncRepository.disconnect()
-        assertPendingBodySurvivesUntilSave(pendingFile, workId) {
-            backupRepository.importV2ZipBytes(
-                zipManifest(
-                    JsonObject(
-                        mapOf(
-                            "version" to JsonPrimitive(8),
-                            "exportedAt" to JsonPrimitive("2026-06-26T13:00:00.000Z"),
-                            "writingRecovery" to JsonPrimitive("disconnected-replace")
+        // Replace clears the old overlays before its transaction and writes the incoming manifest
+        // alone afterwards: nothing of the old pending body may be merged into it.
+        val replacement = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T13:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("disconnected-replace")
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(replacement), mode = BackupImportMode.REPLACE_LIBRARY)
+        assertEquals(replacement, pendingStore.load())
+        assertNull(pendingStore.taggedFolderUri())
+    }
+
+    private fun failOverlayPublishes(block: () -> Unit) {
+        SyncLastManifestStore.beforeFilePublish = { throw java.io.IOException("killed before the overlay is written") }
+        try { block() } finally { SyncLastManifestStore.beforeFilePublish = null }
+    }
+
+    @Test
+    fun replaceKilledBetweenCommitAndOverlayWriteExportsNoOldLibraryOpaqueData() = runTest {
+        val workId = "99999999-0000-4000-8000-000000000091"
+        backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
+        val replacement = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-28T00:00:00.000Z"),
+                "works" to JsonArray(
+                    listOf(
+                        JsonObject(
+                            backupOneOverlay(workId).getValue("works").jsonArray.single().jsonObject +
+                                mapOf("authorIdentitiesJSON" to JsonPrimitive("[{\"username\":\"bob\"}]"))
                         )
                     )
-                ),
-                mode = BackupImportMode.REPLACE_LIBRARY
+                )
             )
+        )
+        failOverlayPublishes {
+            runBlocking { backupRepository.importV2ZipBytes(zipManifest(replacement), mode = BackupImportMode.REPLACE_LIBRARY) }
         }
-        assertNull(pendingStore.taggedFolderUri())
+        val exported = exportedManifest()
+        assertNull("the old library's documents must not be exported", exported["documents"])
+        assertNull(workJson(exported, workId)["authorIdentitiesJSON"])
+    }
+
+    @Test
+    fun anOverlayWriteFailureAfterReplaceCommitsStillReportsTheReplace() = runTest {
+        val workId = "99999999-0000-4000-8000-000000000092"
+        backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
+        val empty = JsonObject(mapOf("version" to JsonPrimitive(8), "exportedAt" to JsonPrimitive("2026-06-28T00:00:00.000Z")))
+        failOverlayPublishes {
+            runBlocking { backupRepository.importV2ZipBytes(zipManifest(empty), mode = BackupImportMode.REPLACE_LIBRARY) }
+        }
+        assertEquals(true, database.workDao().getById(workId)!!.isDeleted)
+    }
+
+    @Test
+    fun aNewerPendingTypedEditKeepsAnOpaqueFieldOnlyTheLiveManifestHolds() = runTest {
+        val fixture = iosT541ManifestJson()
+        writeChild(
+            ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), fixture).toByteArray()
+        )
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        val work = fixture.getValue("works").jsonArray[0].jsonObject
+        val edited = JsonObject(
+            work.filterKeys { it != "authorIdentitiesJSON" } +
+                mapOf("title" to JsonPrimitive("Edited"), "lastModifiedAt" to JsonPrimitive("2026-06-27T11:00:00.000Z"))
+        )
+        val backup = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-27T12:00:00.000Z"),
+                "works" to JsonArray(listOf(edited))
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(backup), mode = BackupImportMode.MERGE)
+        clockInstant = FIXED_CLOCK.plusSeconds(600)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        val published = Json.parseToJsonElement(
+            readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
+        ).jsonObject
+        assertEquals(work["authorIdentitiesJSON"], workJson(published, WORK_ONE)["authorIdentitiesJSON"])
+    }
+
+    @Test
+    fun aSyncThatFailsItsFinalFolderCheckLeavesTheRawCacheAlone() = runTest {
+        val fixture = iosT541ManifestJson()
+        SyncLastManifestStore(filesRoot).save(JsonObject(mapOf("writingRecovery" to JsonPrimitive("cached"))))
+        writeChild(
+            ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), fixture).toByteArray()
+        )
+        val failing = SyncRepository(
+            context, settingsRepository, backupRepository, workFileStore,
+            fontFileStore, persistenceGate, clock = { clockInstant }, beforeManifestCommit = {
+                writeChild(ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json", "{}".toByteArray())
+            }
+        )
+        assertTrue(failing.runSync() is SyncResult.Error)
+        assertEquals(JsonPrimitive("cached"), SyncLastManifestStore(filesRoot).load()!!["writingRecovery"])
+    }
+
+    @Test
+    fun aPublishedManifestOverTheReadLimitIsRefusedAndKeepsTheFolderAndPendingImport() = runTest {
+        val big = { n: Int -> JsonPrimitive("x".repeat(n)) }
+        val half = (BackupLimits.MAX_MANIFEST_BYTES / 2).toInt()
+        val live = JsonObject(iosT541ManifestJson() + mapOf("liveOpaque" to big(half)))
+        writeChild(
+            ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), live).toByteArray()
+        )
+        val pending = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-27T12:00:00.000Z"),
+                "importOpaque" to big(half + 1024)
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(pending), mode = BackupImportMode.MERGE)
+        val before = readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!)
+        assertTrue(syncRepository.runSync() is SyncResult.Error)
+        assertArrayEquals(before, readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!))
+        assertNotNull(SyncLastManifestStore(filesRoot, BackupRepository.PENDING_IMPORT_MANIFEST_FILE).load())
     }
 
     private suspend fun assertPendingBodySurvivesUntilSave(

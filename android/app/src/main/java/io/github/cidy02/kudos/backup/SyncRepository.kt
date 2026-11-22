@@ -395,12 +395,12 @@ class SyncRepository(
                 val pendingImport = pendingImportManifestStore.load()
                 val effectiveReadManifestJson = when {
                     readManifestJson != null && pendingImport != null ->
-                        mergeImportedManifestJson(pendingImport, readManifestJson)
+                        // A newer import record that merely lacks an opaque field is not evidence
+                        // the folder dropped it: live opaque keys stay unless the import writes them.
+                        carryUnknownRecordKeys(mergeImportedManifestJson(pendingImport, readManifestJson), readManifestJson)
                     else -> readManifestJson
                 }
-                // A folder whose manifest we actually read becomes the store. An empty folder
-                // leaves the previous store in place, and the commit below is its first write.
-                effectiveReadManifestJson?.let { lastManifestStore.save(it, folderUri = uri.toString()) }
+                // The cache is written only after the publish below succeeds.
                 val snapshot = backupRepository.captureLibrarySnapshot()
                 // Same single-source rule as the User-Agent: a hardcoded version here
                 // drifts silently and lands in every archive the user exports.
@@ -523,6 +523,11 @@ class SyncRepository(
                     JsonObject.serializer(),
                     carryUnknownRecordKeys(manifestJson, replacedJson)
                 ).toByteArray(Charsets.UTF_8)
+                // Android must be able to read back what it publishes; refuse, keeping the live
+                // manifest and the pending import, rather than publish what a later sync rejects.
+                if (manifestBytes.size.toLong() > BackupLimits.MAX_MANIFEST_BYTES) {
+                    throw IOException("The sync manifest is too large to publish. The sync folder was kept.")
+                }
                 beforeManifestCommit()
                 if (!readLiveManifest(syncDir).contentEquals(manifestBytesAtRead)) {
                     throw IOException("Sync folder changed during sync. Try syncing again.")

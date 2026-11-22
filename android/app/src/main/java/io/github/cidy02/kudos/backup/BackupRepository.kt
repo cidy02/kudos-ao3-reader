@@ -165,8 +165,9 @@ class BackupRepository(
             prepareForImport(mode)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode)
+            clearOverlaysBeforeReplace(mode)
             applyMergeResultLocked(merge, pack.originalFilesByName).also {
-                recordImportedManifest(pack.rawManifestJson, mode, replacePassthroughStore, folderUri)
+                recordAfterCommit { recordImportedManifest(pack.rawManifestJson, mode, replacePassthroughStore, folderUri) }
             }
         }
     }
@@ -183,9 +184,32 @@ class BackupRepository(
             prepareForImport(mode)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode, normalizeQueuePreservation)
+            clearOverlaysBeforeReplace(mode)
             applyMergeResultLocked(merge, pack.originalFilesByName).also {
-                recordImportedManifest(pack.rawManifestJson, mode)
+                recordAfterCommit { recordImportedManifest(pack.rawManifestJson, mode) }
             }
+        }
+    }
+
+    /**
+     * Replace changes the whole library, so the old library's opaque data must not outlive it: both
+     * overlays go before the Room transaction, the new ones are written after it commits. A crash
+     * between the two loses opaque fields (as before A-541) and never pairs them with the wrong works.
+     */
+    private fun clearOverlaysBeforeReplace(mode: BackupImportMode) {
+        if (mode != BackupImportMode.REPLACE_LIBRARY) return
+        lastImportedManifestStore.clear()
+        pendingImportManifestStore.clear()
+    }
+
+    /** The library has committed: a failed overlay write must not read as a failed import. */
+    private suspend fun recordAfterCommit(record: suspend () -> Unit) {
+        try {
+            record()
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.w("BackupRepository", "Opaque manifest data was not saved after the import committed", error)
         }
     }
 
@@ -196,14 +220,8 @@ class BackupRepository(
         folderUri: String? = null
     ) {
         val connectedFolderUri = folderUri ?: settingsRepository.settings.first().sync.folderUri
-        if (replacePassthroughStore) {
-            if (rawJson != null) {
-                lastImportedManifestStore.save(rawJson, folderUri = connectedFolderUri)
-            } else {
-                lastImportedManifestStore.clear()
-            }
-            return
-        }
+        // A folder's Kudos.kudosbackup: the sync saves its cache itself, after it publishes.
+        if (replacePassthroughStore) return
         val keepFolderTag = connectedFolderUri?.takeIf { lastImportedManifestStore.belongsToFolder(it) }
         // A manual import belongs to this device's library: its pending overlay is never
         // tagged, and a tag left by an older build is dropped in the same save (data kept).
