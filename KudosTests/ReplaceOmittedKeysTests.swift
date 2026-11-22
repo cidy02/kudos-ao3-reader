@@ -34,13 +34,17 @@ struct ReplaceOmittedKeysTests {
 
     /// An empty iOS-style archive, with the named top-level keys removed from its JSON and decoded
     /// again, as an Android re-export or an older build would present it.
-    private func archive(removing keys: [String]) throws -> KudosBackupContents {
+    private func archive(
+        removing keys: [String], nulling nulled: [String] = [], works: [SavedWork] = []
+    ) throws -> KudosBackupContents {
         let manifest = KudosBackupManifest(
-            works: [], bookmarks: [], fonts: [], settings: .capture(defaults: try testDefaults())
+            works: works.map(KudosBackupWork.init(work:)), bookmarks: [], fonts: [],
+            settings: .capture(defaults: try testDefaults())
         )
         let data = try KudosBackupContents(manifest: manifest).manifestData()
         var object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
         for key in keys { object.removeValue(forKey: key) }
+        for key in nulled { object[key] = NSNull() }
         let stripped = try JSONSerialization.data(withJSONObject: object)
         return KudosBackupContents(manifest: try KudosBackupContents.decodeManifest(stripped))
     }
@@ -145,16 +149,44 @@ struct ReplaceOmittedKeysTests {
         target.insert(collection)
         target.insert(queue)
         target.insert(SavedSearch(name: "Comfort", filters: AO3SearchFilters()))
+        let kept = SavedWork(title: "Kept", author: "Writer")
+        target.insert(kept)
+        let highlight = ReadingAnnotation(
+            work: kept, kind: .highlight, locatorString: "{}", note: "n", color: .yellow,
+            createdAt: Date(timeIntervalSince1970: 1_000)
+        )
+        target.insert(highlight)
         try target.save()
 
+        // `kept` is in the archive, so only the annotation sweep can remove its highlight.
         _ = try KudosBackupService.restore(
-            try archive(removing: []), into: target,
+            try archive(removing: [], works: [kept]), into: target,
             defaults: try testDefaults(), mode: .replaceLibrary
         )
 
         #expect(collection.isPendingDeletion)
         #expect(queue.isPendingDeletion)
+        #expect(highlight.isPendingDeletion)
         #expect(try target.fetch(FetchDescriptor<SavedSearch>()).isEmpty)
+    }
+
+    @Test func nullCollectionsQueuesAnnotationsAndSearchesAreLeftAlone() throws {
+        let target = try context(schema())
+        target.insert(SavedSearch(name: "Comfort", filters: AO3SearchFilters()))
+        let collection = WorkCollection(name: "Keep me")
+        target.insert(collection)
+        try target.save()
+        let keys = ["collections", "readingQueues", "annotations", "savedSearches"]
+        let contents = try archive(removing: [], nulling: keys)
+        #expect(contents.manifest.omittedKeys == Set(keys))
+
+        _ = try KudosBackupService.restore(
+            contents, into: target, defaults: try testDefaults(), mode: .replaceLibrary
+        )
+
+        #expect(collection.isPendingDeletion == false)
+        #expect(try target.fetch(FetchDescriptor<SavedSearch>()).count == 1)
+        #expect(try target.fetch(FetchDescriptor<SyncTombstone>()).isEmpty)
     }
 
     @Test func writersAlwaysEmitTheLogKeysEvenWhenEmpty() throws {

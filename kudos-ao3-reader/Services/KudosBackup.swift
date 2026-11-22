@@ -778,7 +778,8 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         ) ?? []
         omittedKeys = Set(
             [CodingKeys.collections, .readingQueues, .annotations, .savedSearches]
-                .filter { !container.contains($0) }
+                // JSON `null` reads as an empty array above; it must not authorize a sweep either.
+                .filter { !container.contains($0) || ((try? container.decodeNil(forKey: $0)) == true) }
                 .map(\.stringValue)
         )
         // Neither may stop the library itself from restoring, and one bad entry must not take
