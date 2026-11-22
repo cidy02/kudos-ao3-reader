@@ -373,6 +373,7 @@ struct ReadAloudRacesAndInsightsDigestTests {
         // An unrelated reload (range change) lands first, and still sees the old
         // value of the other context's save: it records a baseline from before it.
         a.rating = "General Audiences"
+        a.title = "A (renamed by the unrelated change)"
         coordinator.tracker.recordBaseline(works: [a], context: context)
         // The save becomes visible to this context before the refresh fires.
         a.rating = "Explicit"
