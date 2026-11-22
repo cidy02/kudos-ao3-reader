@@ -623,6 +623,8 @@ extension QueueSortNewView {
         case .hidden:
             undoErrorMessage =
                 "That work is hidden by your mature content privacy settings. Show mature content to undo this step."
+        case .saveFailed:
+            undoErrorMessage = "Couldn’t save the Undo. Nothing was changed; try again."
         case .blocked:
             undoErrorMessage =
                 "That change couldn’t be undone because the work or queue was changed or deleted elsewhere."

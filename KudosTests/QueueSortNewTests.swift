@@ -388,6 +388,7 @@ extension QueueSortNewTests {
         // Keep then hide -> Undo reports .hidden without permanently blocking the step.
         #expect(QueueSortNew.apply(.keep, session: &session, queue: fixture.queue, context: fixture.context))
         fixture.queueOnly.rating = "Mature"
+        try fixture.context.save()
         let hiddenKeep = QueueSortNew.undo(
             session: &session, queue: fixture.queue, context: fixture.context
         ) { !$0.isAdult }
@@ -423,66 +424,110 @@ extension QueueSortNewTests {
         #expect(session.currentMembershipID == fixture.mQueueOnly.id)
     }
 
-    @Test func undoQueueOnlyDropRollsBackAtomicallyOnRealSaveFailure() throws {
-        let fixture = try makeFixture()
+    private static let schema = Schema([
+        SavedWork.self, Tag.self, Bookmark.self, CustomFont.self, WorkCollection.self,
+        ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self,
+        QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self,
+        ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self
+    ])
+
+    /// A queue-only work Dropped in a store on disk (writable), then the same store reopened
+    /// read-only: SwiftData itself refuses that context's save, with a thrown error.
+    @Test func undoQueueOnlyDropRollsBackOnARealThrowingSaveAndCanBeRetried() throws {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("sortnew-undo-\(UUID().uuidString).store")
+        let writable = ModelContext(try ModelContainer(
+            for: Self.schema, configurations: [ModelConfiguration(schema: Self.schema, url: url)]
+        ))
+        let queue = ReadingQueue(name: "Summer Reading")
+        writable.insert(queue)
+        let work = SavedWork(title: "Queue only", author: "Author")
+        writable.insert(work)
+        let membership = ReadingQueueService.add(work, to: queue, state: .new, in: writable)
+        try writable.save()
+        let queueID = queue.id
+        let workID = work.id
+        let membershipID = membership.id
+
+        var session = QueueSortSession(queueID: queueID, membershipIDs: [membershipID])
+        #expect(QueueSortNew.apply(.drop, session: &session, queue: queue, context: writable))
+        try writable.save()
         let syncSuite = "QueueSortNewTests.atomic.\(UUID().uuidString)"
         let syncDefaults = try #require(UserDefaults(suiteName: syncSuite))
-        syncDefaults.removePersistentDomain(forName: syncSuite)
         defer { syncDefaults.removePersistentDomain(forName: syncSuite) }
 
-        var session = newSession(fixture)
-        #expect(QueueSortNew.apply(.later, session: &session, queue: fixture.queue, context: fixture.context))
-        let beforeID = fixture.mQueueOnly.id
-        #expect(QueueSortNew.apply(.drop, session: &session, queue: fixture.queue, context: fixture.context))
-        let deletedAt = try #require(fixture.queueOnly.deletedAt)
-        let scheduledAt = try #require(fixture.queueOnly.permanentDeletionScheduledAt)
-        #expect(!FolderSyncService.snapshot(defaults: syncDefaults).isDirty)
-        try fixture.context.save()
+        let readOnly = ModelContext(try ModelContainer(
+            for: Self.schema,
+            configurations: [ModelConfiguration(schema: Self.schema, url: url, allowsSave: false)]
+        ))
+        let roQueue = try #require(try readOnly.fetch(FetchDescriptor<ReadingQueue>()).first { $0.id == queueID })
+        let roWork = try #require(try readOnly.fetch(FetchDescriptor<SavedWork>()).first { $0.id == workID })
+        #expect(roWork.isPendingDeletion)
 
-        // The real commit fails (the save budget is spent): neither the work restore nor
-        // the membership may stick.
-        let outcome = SaveBestEffortTesting.$budget.withValue(SaveBestEffortTesting.SaveBudget(0)) {
-            QueueSortNew.undo(
-                session: &session, queue: fixture.queue, context: fixture.context, syncDefaults: syncDefaults
-            )
-        }
-        if case .blocked = outcome {} else { Issue.record("Expected .blocked when Undo save fails") }
-        #expect(fixture.queueOnly.isPendingDeletion)
-        #expect(fixture.queueOnly.deletedAt == deletedAt)
-        #expect(fixture.queueOnly.permanentDeletionScheduledAt == scheduledAt)
-        #expect(!fixture.queueOnly.isQueuedForLater)
-        #expect(fixture.queueOnly.queueMemberships.isEmpty)
-        #expect(QueueSortNew.membership(beforeID, in: fixture.queue) == nil)
-        let tombstones = try fixture.context.fetch(FetchDescriptor<SyncTombstone>())
-        #expect(tombstones.contains { $0.recordType == .savedWork && $0.recordID == fixture.queueOnly.id })
-        #expect(tombstones.contains { $0.recordType == .readingQueueMembership && $0.recordID == beforeID })
+        let outcome = QueueSortNew.undo(
+            session: &session, queue: roQueue, context: readOnly, syncDefaults: syncDefaults
+        )
+        if case .saveFailed = outcome {} else { Issue.record("Expected .saveFailed, got \(outcome)") }
+        #expect(roWork.isPendingDeletion)
+        #expect(roWork.queueMemberships.isEmpty)
+        #expect(!readOnly.hasChanges)
+        #expect(QueueSortNew.membership(membershipID, in: roQueue) == nil)
+        let tombstones = try readOnly.fetch(FetchDescriptor<SyncTombstone>())
+        #expect(tombstones.contains { $0.recordType == .savedWork && $0.recordID == workID })
         #expect(!FolderSyncService.snapshot(defaults: syncDefaults).isDirty)
+
+        // Not burnt: the step is still undoable, and works once saving does.
+        #expect(session.canUndo)
+        #expect(session.unrevisitableIDs.isEmpty)
+        let retry = QueueSortNew.undo(session: &session, queue: queue, context: writable, syncDefaults: syncDefaults)
+        #expect(retry.undoneRecord?.action == .drop)
+        #expect(!work.isPendingDeletion)
     }
 
-    @Test func failedUndoKeepsTheUsersOtherUnsavedEdits() throws {
+    @Test func undoNeverCommitsOrDiscardsChangesThatAreNotItsOwn() throws {
         let fixture = try makeFixture()
         var session = newSession(fixture)
         #expect(QueueSortNew.apply(.keep, session: &session, queue: fixture.queue, context: fixture.context))
         try fixture.context.save()
 
-        // An edit nothing has saved yet, then an Undo whose own commit fails.
-        fixture.third.title = "Edited meanwhile"
+        // Something else left a change pending (say a Recently Deleted restore whose save failed).
+        fixture.third.title = "Pending elsewhere"
+        let refused = QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context)
+        if case .saveFailed = refused {} else { Issue.record("Expected .saveFailed, got \(refused)") }
+        #expect(fixture.third.title == "Pending elsewhere")
         #expect(fixture.context.hasChanges)
-        let outcome = SaveBestEffortTesting.$budget.withValue(SaveBestEffortTesting.SaveBudget(1)) {
-            QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context)
-        }
-        if case .blocked = outcome {} else { Issue.record("Expected .blocked when Undo save fails") }
-        #expect(fixture.third.title == "Edited meanwhile")
         #expect(fixture.mLibrary.state == .inLine)
+        #expect(session.canUndo)
 
-        // A successful Undo commits the edit along with itself instead of dropping it.
-        var again = newSession(fixture)
-        fixture.third.title = "Edited again"
-        #expect(QueueSortNew.apply(.keep, session: &again, queue: fixture.queue, context: fixture.context))
-        fixture.third.title = "Edited after Keep"
-        #expect(QueueSortNew.undo(session: &again, queue: fixture.queue, context: fixture.context).undoneRecord != nil)
-        #expect(fixture.third.title == "Edited after Keep")
-        #expect(!fixture.context.hasChanges)
+        // Once that is saved by whoever owns it, the same Undo goes through.
+        try fixture.context.save()
+        #expect(QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context)
+            .undoneRecord?.action == .keep)
+        #expect(fixture.mLibrary.state == .new)
+    }
+
+    @Test func aHiddenStepPassedOverStaysUndoableOnceRevealedInTheSameSession() throws {
+        let fixture = try makeFixture()
+        var session = newSession(fixture)
+        #expect(QueueSortNew.apply(.keep, session: &session, queue: fixture.queue, context: fixture.context))
+        #expect(QueueSortNew.apply(.drop, session: &session, queue: fixture.queue, context: fixture.context))
+        #expect(fixture.queueOnly.isPendingDeletion)
+
+        fixture.queueOnly.rating = "Explicit"
+        try fixture.context.save()
+        let first = QueueSortNew.undo(
+            session: &session, queue: fixture.queue, context: fixture.context
+        ) { !$0.isAdult }
+        guard case .undoneSkippingHidden = first else { Issue.record("got \(first)"); return }
+        #expect(fixture.mLibrary.state == .new)
+        #expect(fixture.queueOnly.isPendingDeletion)
+        #expect(session.canUndo)
+
+        // Revealed again: the Drop that was passed over can now be undone.
+        let second = QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context)
+        #expect(second.undoneRecord?.action == .drop)
+        #expect(!fixture.queueOnly.isPendingDeletion)
+        #expect(QueueSortNew.membership(fixture.mQueueOnly.id, in: fixture.queue) != nil)
     }
 
     @Test func undoPassesOverAHiddenNewestStepToUndoTheEarlierOne() throws {
@@ -495,6 +540,7 @@ extension QueueSortNewTests {
 
         // The newest step is on a work that is now hidden; the earlier one is not.
         fixture.queueOnly.rating = "Explicit"
+        try fixture.context.save()
         let result = QueueSortNew.undo(
             session: &session, queue: fixture.queue, context: fixture.context
         ) { !$0.isAdult }
@@ -515,6 +561,7 @@ extension QueueSortNewTests {
         QueueSortNew.skipMissing(session: &onlyHidden, queue: fixture.queue)
         #expect(QueueSortNew.apply(.later, session: &onlyHidden, queue: fixture.queue, context: fixture.context))
         fixture.library.rating = "Explicit"
+        try fixture.context.save()
         let allHidden = QueueSortNew.undo(
             session: &onlyHidden, queue: fixture.queue, context: fixture.context
         ) { !$0.isAdult }

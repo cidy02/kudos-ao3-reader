@@ -2881,6 +2881,11 @@ enum KudosBackupService {
             adopted.lastModifiedAt = min(adopted.lastModifiedAt, contents.manifest.exportedAt)
 
             if let held = tombstonesByKey[key] {
+                // A deletion that differs from the one held (another device's, whichever is
+                // newer) is remembered for Sort New's Undo before it can be dropped below.
+                if adopted.signature != held.signature || adopted.deletedOnDeviceID != held.deletedOnDeviceID {
+                    SyncDeletionWitness.record(recordTypeRaw: archived.recordTypeRaw, recordID: archived.recordID)
+                }
                 // Newest deletion wins. An older one is not evidence that the
                 // later one did not happen, and the record only stays deleted
                 // for as long as the widest tombstone says it does. Carried onto
