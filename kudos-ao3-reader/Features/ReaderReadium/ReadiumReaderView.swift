@@ -669,7 +669,8 @@ struct ReadiumReaderView: View {
     ///
     /// Must key off `isSessionActive` (playing/paused), not `status != .stopped`.
     private func toggleReadingAloud() {
-        if speech.isSessionActive {
+        // A start still preparing its first audio counts: the second tap cancels it.
+        if speech.isSessionActive || speech.isStartPending {
             stopReadingAloud()
         } else {
             speech.toggle(from: book.currentLocator)
@@ -1659,7 +1660,7 @@ struct ReadiumReaderView: View {
         // matched `.unavailable`, so a publication Readium can't speak got the
         // filled/emphasized "active" look and a "Stop reading aloud" a11y label
         // on a control that was simultaneously disabled below.
-        let speechActive = speech.isSessionActive
+        let speechActive = speech.isSessionActive || speech.isStartPending
         actions.append(ReaderFanRoundAction(
             id: "readAloud",
             // Active: a filled waveform in the app colour.

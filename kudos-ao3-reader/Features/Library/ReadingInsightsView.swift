@@ -76,25 +76,26 @@ struct ReadingInsightsView: View {
     /// moves the figures (an AO3 refresh marking a work Explicit, finishing a work,
     /// a sitting written) reloads them once; a reading-position save does not.
     @State private var libraryDigest = ""
-    @State private var reloadTracker = InsightsReloadTracker()
-    @State private var saveCoalescer = InsightsSaveCoalescer()
+    @State private var reloadCoordinator = InsightsReloadCoordinator()
     /// Saves arriving while another screen covers this one are ignored; `onAppear`
     /// reloads on return.
     @State private var isOnScreen = false
 
-    private var libraryWorksFingerprint: String {
-        "\(libraryWorks.count)-\(libraryDigest)"
-    }
-
     private var reloadKey: String {
-        [
-            range.rawValue,
-            "\(referenceDate.timeIntervalSince1970)",
-            "\(hideMature)-\(gate.revealAll)-\(scopeState.includeHidden)",
-            "\(countRereads)-\(countReadAloud)-\(askAboutUntouched)-\(untouchedDays)",
-            "\(optionsRevision)",
-            libraryWorksFingerprint
-        ].joined(separator: "|")
+        InsightsReloadKey.make(
+            range: range.rawValue,
+            referenceDate: referenceDate,
+            hideMature: hideMature,
+            revealAll: gate.revealAll,
+            includeHidden: scopeState.includeHidden,
+            countRereads: countRereads,
+            countReadAloud: countReadAloud,
+            askAboutUntouched: askAboutUntouched,
+            untouchedDays: untouchedDays,
+            optionsRevision: optionsRevision,
+            libraryCount: libraryWorks.count,
+            libraryDigest: libraryDigest
+        )
     }
 
     enum Tab: String, CaseIterable, Identifiable {
@@ -227,7 +228,7 @@ struct ReadingInsightsView: View {
         }
         .onDisappear {
             isOnScreen = false
-            saveCoalescer.cancel()
+            reloadCoordinator.cancel()
         }
         .onChange(of: gate.revealAll) { _, revealed in
             // Synchronously clear hidden state and recompute main figures on re-lock so
@@ -253,14 +254,13 @@ struct ReadingInsightsView: View {
                 .receive(on: DispatchQueue.main)
         ) { notification in
             guard isOnScreen else { return }
-            guard reloadTracker.shouldReload(afterSave: notification, works: libraryWorks, context: context) else {
-                return
-            }
-            saveCoalescer.schedule {
-                guard isOnScreen else { return }
-                let digest = reloadTracker.currentDigest(works: libraryWorks, context: context)
-                if digest != libraryDigest { libraryDigest = digest }
-            }
+            reloadCoordinator.noteSave(
+                notification,
+                works: { libraryWorks },
+                context: context,
+                isOnScreen: { isOnScreen },
+                reload: { snapshot in reload(baseline: snapshot) }
+            )
         }
         .refreshable {
             reload()
@@ -790,10 +790,13 @@ struct ReadingInsightsView: View {
         discreetMasker = .empty
     }
 
-    private func reload() {
+    /// - Parameter baseline: the digest snapshot a coalesced save refresh already took;
+    ///   adopted as-is so that refresh walks the library once.
+    private func reload(baseline: InsightsReloadDigest.Snapshot? = nil) {
         // Taken first, so `reloadKey` already holds it when `lastReloadKey` is
         // written below and a save this reload follows triggers no second one.
-        libraryDigest = reloadTracker.recordBaseline(works: libraryWorks, context: context)
+        libraryDigest = baseline.map { reloadCoordinator.tracker.adopt($0) }
+            ?? reloadCoordinator.tracker.recordBaseline(works: libraryWorks, context: context)
         let component = range.component
         guard let currentInterval = calendar.dateInterval(of: component, for: referenceDate),
               let earlierDate = calendar.date(byAdding: component, value: -1, to: referenceDate),

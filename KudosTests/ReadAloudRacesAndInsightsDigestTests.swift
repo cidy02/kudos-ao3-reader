@@ -211,6 +211,101 @@ struct ReadAloudRacesAndInsightsDigestTests {
         #expect(tracker.currentDigest(works: liveWorks, context: context, now: now) != afterDeleted)
     }
 
+    @Test func sameDayDateAddedCorrectionChangesSignatureAndDigest() throws {
+        let context = try makeContext()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let day = Date(timeIntervalSince1970: 1_699_920_000)
+        let work = SavedWork(title: "W", author: "A")
+        work.isSaved = true
+        work.dateAdded = day.addingTimeInterval(22 * 3_600)
+        context.insert(work)
+        try context.save()
+        let before = InsightsReloadDigest.workSignature(work, calendar: calendar)
+        let digestBefore = InsightsReloadDigest.make(works: [work], context: context, calendar: calendar)
+        work.dateAdded = day.addingTimeInterval(8 * 3_600)
+        try context.save()
+        #expect(calendar.isDate(work.dateAdded, inSameDayAs: day.addingTimeInterval(22 * 3_600)))
+        #expect(InsightsReloadDigest.workSignature(work, calendar: calendar) != before)
+        #expect(InsightsReloadDigest.make(works: [work], context: context, calendar: calendar) != digestBefore)
+    }
+
+    @Test func cancelledCoalescerTaskCannotEraseItsSuccessor() async {
+        let coalescer = InsightsSaveCoalescer(interval: .milliseconds(80))
+        var fired: [String] = []
+        coalescer.schedule { fired.append("A") }
+        coalescer.cancel()
+        coalescer.schedule { fired.append("B") }
+        // Let the cancelled A task wake and unwind; it must not clear B's handle.
+        try? await Task.sleep(for: .milliseconds(20))
+        #expect(coalescer.hasPendingRefresh)
+        coalescer.schedule { fired.append("C") }
+        try? await Task.sleep(for: .milliseconds(200))
+        #expect(fired == ["B"])
+        #expect(!coalescer.hasPendingRefresh)
+    }
+
+    @Test func coordinatorReloadsOnceWithOneSnapshotForSameCountEditAndNotForPositionSave() async throws {
+        let context = try makeContext()
+        let a = SavedWork(title: "A", author: "x")
+        a.isSaved = true
+        a.rating = "General Audiences"
+        a.readiumLocator = #"{"href":"c1.xhtml","locations":{"totalProgression":0.2}}"#
+        a.lastReadDate = Date()
+        let b = SavedWork(title: "B", author: "x")
+        b.isSaved = true
+        b.rating = "Explicit"
+        context.insert(a)
+        context.insert(b)
+        try context.save()
+        let works = [a, b]
+        let coordinator = InsightsReloadCoordinator(interval: .milliseconds(40))
+        coordinator.tracker.recordBaseline(works: works, context: context)
+
+        var notes: [Notification] = []
+        let observer = NotificationCenter.default.addObserver(
+            forName: ModelContext.didSave, object: context, queue: nil
+        ) { notes.append($0) }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        var snapshots: [InsightsReloadDigest.Snapshot] = []
+        func feed() {
+            coordinator.noteSave(
+                notes.last!, works: { works }, context: context,
+                isOnScreen: { true }, reload: { snapshots.append($0) }
+            )
+        }
+
+        a.applyDebouncedReadiumLocator(#"{"href":"c2.xhtml","locations":{"totalProgression":0.3}}"#, at: Date())
+        try context.save()
+        feed()
+        try await Task.sleep(for: .milliseconds(120))
+        #expect(snapshots.isEmpty)
+
+        // Same count, rating swap, two saves inside one window -> one reload.
+        a.rating = "Explicit"
+        b.rating = "General Audiences"
+        try context.save()
+        feed()
+        b.title = "B2"
+        try context.save()
+        feed()
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(snapshots.count == 1)
+        #expect(snapshots.first?.digest != coordinator.tracker.lastDigest)
+    }
+
+    @Test func reloadKeyChangesWithLibraryDigestAtSameCount() {
+        func key(_ digest: String) -> String {
+            InsightsReloadKey.make(
+                range: "month", referenceDate: Date(timeIntervalSince1970: 0), hideMature: false,
+                revealAll: false, includeHidden: false, countRereads: true, countReadAloud: true,
+                askAboutUntouched: true, untouchedDays: 30, optionsRevision: 0,
+                libraryCount: 2, libraryDigest: digest
+            )
+        }
+        #expect(key("a") != key("b"))
+    }
+
     @Test func saveCoalescerRefreshesWithinBoundedIntervalUnderContinuousSaves() async {
         let coalescer = InsightsSaveCoalescer(interval: .milliseconds(80))
         var fireCount = 0
@@ -299,6 +394,9 @@ extension ReadAloudRacesAndInsightsDigestTests {
 
         var speakGate: AsyncGate?
         var goesUnavailable = false
+        /// With `goesUnavailable`: also throws after publishing `.unavailable`
+        /// (Sherpa's `engine.start()` failure).
+        var throwsAfterUnavailable = false
         var returnsFalse = false
         var throwsOnSpeak = false
         var silentHrefs: Set<String> = []
@@ -324,6 +422,7 @@ extension ReadAloudRacesAndInsightsDigestTests {
             if goesUnavailable {
                 status = .unavailable
                 onStatusChange?(.unavailable)
+                if throwsAfterUnavailable { throw EngineTestError.audioSessionFailed }
                 return false
             }
             if returnsFalse {
@@ -1284,6 +1383,167 @@ extension ReadAloudRacesAndInsightsDigestTests {
         autoEngine.emitNaturalFinish()
         await autoController.waitForStartTaskForTests()
         #expect(autoHaptics == 0)
+    }
+
+    // MARK: - T-535f: engine races
+
+    private func startedController(
+        engine: ControllableTTSService,
+        locators: [Locator],
+        isReaderOpen: Bool = true
+    ) -> ReaderSpeechController {
+        let controller = ReaderSpeechController()
+        controller.seedSessionForTests(
+            workID: UUID(),
+            status: .stopped,
+            isReaderOpen: isReaderOpen,
+            ttsService: engine,
+            unitProvider: { [TTSSpeechUnit(text: "Prose in \($0?.href.string ?? "").", locator: $0)] },
+            resumeLocator: locators[0],
+            chapterStartLocators: locators
+        )
+        return controller
+    }
+
+    @Test func secondTapDuringPendingStartCancelsItAndLateOutputCannotMoveReader() async {
+        let locators = chapterLocators(count: 3)
+        let engine = ControllableTTSService(status: .stopped)
+        engine.autoEmitFirstUtterance = false
+        let controller = startedController(engine: engine, locators: locators)
+        var moves: [String] = []
+        controller.onAdvance = { moves.append($0.href.string) }
+
+        controller.toggle(from: locators[0])
+        await controller.waitForStartTaskForTests()
+        #expect(controller.isStartPending)
+
+        controller.toggle(from: locators[0])
+        #expect(!controller.isStartPending)
+        #expect(engine.stopCount >= 1)
+        engine.emitUtterance(text: "Late.", locator: locators[0])
+        #expect(moves.isEmpty)
+        #expect(controller.status == .stopped)
+    }
+
+    @Test func skipDuringPendingStartStopsTheUncommittedEngineEvenWhenScanFindsNothing() async {
+        let locators = chapterLocators(count: 3)
+        let engine = ControllableTTSService(status: .stopped)
+        engine.autoEmitFirstUtterance = false
+        let controller = ReaderSpeechController()
+        controller.seedSessionForTests(
+            workID: UUID(), status: .stopped, isReaderOpen: true, ttsService: engine,
+            unitProvider: { $0?.href.string == "ch1.xhtml" ? [TTSSpeechUnit(text: "One.", locator: $0)] : [] },
+            resumeLocator: locators[0], chapterStartLocators: locators
+        )
+        var moves: [String] = []
+        controller.onAdvance = { moves.append($0.href.string) }
+        controller.toggle(from: locators[0])
+        await controller.waitForStartTaskForTests()
+        let stopsBefore = engine.stopCount
+
+        controller.reanchor(to: locators[1], resumePlaying: true, direction: .forward)
+        #expect(engine.stopCount > stopsBefore)
+        await controller.waitForStartTaskForTests()
+        engine.emitUtterance(text: "Late one.", locator: locators[0])
+        #expect(moves.isEmpty)
+        #expect(controller.status == .stopped)
+    }
+
+    @Test func playAfterInterruptionBeforeFirstOutputResumesTheEngine() async {
+        let locators = chapterLocators(count: 3)
+        let engine = ControllableTTSService(status: .stopped)
+        engine.autoEmitFirstUtterance = false
+        let controller = startedController(engine: engine, locators: locators)
+        controller.toggle(from: locators[0])
+        await controller.waitForStartTaskForTests()
+
+        engine.pause() // audio interruption before the first utterance
+        #expect(engine.status == .paused)
+        #expect(controller.handleRemotePlayForTests() == .success)
+        #expect(engine.resumeCount == 1)
+        #expect(engine.status == .playing)
+    }
+
+    @Test func engineUnavailableBeforeThrowStillReportsStartupError() async {
+        let locators = chapterLocators(count: 3)
+        let engine = ControllableTTSService(status: .stopped)
+        engine.goesUnavailable = true
+        engine.throwsAfterUnavailable = true
+        let controller = startedController(engine: engine, locators: locators)
+        controller.toggle(from: locators[0])
+        await controller.waitForStartTaskForTests()
+        #expect(controller.status == .unavailable)
+        #expect(controller.speechErrorMessage == "Audio session unavailable")
+    }
+
+    // MARK: Core ML production startup path (seams replace only pack + audio hardware)
+
+    private func coreMLController(
+        _ coreML: CoreMLKokoroTTSService,
+        locators: [Locator]
+    ) -> ReaderSpeechController {
+        let controller = ReaderSpeechController()
+        controller.seedSessionForTests(
+            workID: UUID(), status: .stopped, isReaderOpen: true, ttsService: coreML,
+            unitProvider: { $0?.href.string == "ch2.xhtml" ? [TTSSpeechUnit(text: "Short last chapter.", locator: $0)] : [] },
+            resumeLocator: locators[0], chapterStartLocators: locators
+        )
+        return controller
+    }
+
+    @Test func coreMLAudioEngineFailureNeverAnnouncesOrMovesTheReader() async {
+        let locators = chapterLocators(count: 2)
+        let coreML = CoreMLKokoroTTSService()
+        coreML.testSetupOverride = {}
+        coreML.testSynthesize = { _ in [0.2, -0.2, 0.2] }
+        coreML.testStartAudioEngine = { throw EngineTestError.audioSessionFailed }
+        let controller = coreMLController(coreML, locators: locators)
+        var moves: [String] = []
+        controller.onAdvance = { moves.append($0.href.string) }
+        controller.toggle(from: locators[0])
+        await controller.waitForStartTaskForTests()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(moves.isEmpty)
+        #expect(controller.resumeLocator?.href.string == "ch1.xhtml")
+        #expect(controller.status == .unavailable)
+        #expect(controller.speechErrorMessage != nil)
+    }
+
+    @Test func coreMLAnnouncesOnlyAfterTheAudioEngineStarted() async {
+        let locators = chapterLocators(count: 2)
+        let coreML = CoreMLKokoroTTSService()
+        var order: [String] = []
+        coreML.testSetupOverride = {}
+        coreML.testSynthesize = { _ in [0.2, -0.2, 0.2] }
+        coreML.testStartAudioEngine = { order.append("start") }
+        coreML.testPlayBuffer = { _ in order.append("play") }
+        let controller = coreMLController(coreML, locators: locators)
+        controller.onAdvance = { order.append("advance:\($0.href.string)") }
+        controller.toggle(from: locators[0])
+        await controller.waitForStartTaskForTests()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(order.prefix(3) == ["start", "advance:ch2.xhtml", "play"])
+    }
+
+    @Test func coreMLSilentSynthesisCommitsNothing() async {
+        let locators = chapterLocators(count: 2)
+        let coreML = CoreMLKokoroTTSService()
+        coreML.testSetupOverride = {}
+        coreML.testSynthesize = { _ in [] }
+        coreML.testStartAudioEngine = {}
+        let controller = coreMLController(coreML, locators: locators)
+        var moves: [String] = []
+        controller.onAdvance = { moves.append($0.href.string) }
+        controller.toggle(from: locators[0])
+        await controller.waitForStartTaskForTests()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(moves.isEmpty)
+        #expect(controller.resumeLocator?.href.string == "ch1.xhtml")
+        #expect(controller.showsNothingToSpeakAlert)
+    }
+
+    @Test func pauseAssemblerDoesNotPadAnEmptySynthesis() {
+        #expect(KokoroPauseAssembler.assemble(samples: [], sampleRate: 24_000, pauseAfter: .paragraph).isEmpty)
     }
 }
 #endif

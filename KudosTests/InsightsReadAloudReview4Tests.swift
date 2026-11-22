@@ -155,22 +155,22 @@ struct InsightsReadAloudReview4Tests {
         ))
         #expect(saves.contains(".receive(on: DispatchQueue.main)"))
         #expect(saves.contains("guard isOnScreen else { return }"))
-        #expect(saves.contains(
-            "reloadTracker.shouldReload(afterSave: notification, works: libraryWorks, context: context)"
-        ))
-        #expect(saves.contains("saveCoalescer.schedule"))
-        #expect(saves.contains("let digest = reloadTracker.currentDigest(works: libraryWorks, context: context)"))
-        #expect(saves.contains("if digest != libraryDigest { libraryDigest = digest }"))
+        // The save -> classify -> coalesce -> single-snapshot reload chain itself is
+        // exercised behaviourally in `InsightsReloadCoordinatorTests`; this only pins
+        // that the screen routes `didSave` through it.
+        #expect(saves.contains("reloadCoordinator.noteSave("))
+        #expect(saves.contains("isOnScreen: { isOnScreen }"))
+        #expect(saves.contains("reload: { snapshot in reload(baseline: snapshot) }"))
         let disappear = try #require(slice(
             view, from: ".onDisappear {", to: ".onChange(of: gate.revealAll)"
         ))
         #expect(disappear.contains("isOnScreen = false"))
-        #expect(disappear.contains("saveCoalescer.cancel()"))
-        let fingerprint = try #require(slice(
-            view, from: "private var libraryWorksFingerprint: String", to: "private var reloadKey"
+        #expect(disappear.contains("reloadCoordinator.cancel()"))
+        let key = try #require(slice(
+            view, from: "private var reloadKey: String", to: "enum Tab: String"
         ))
-        #expect(fingerprint.contains("libraryDigest"))
-        #expect(!fingerprint.contains("InsightsReloadDigest"))
+        #expect(key.contains("InsightsReloadKey.make("))
+        #expect(key.contains("libraryDigest: libraryDigest"))
     }
 
     // MARK: - 5. What a save must change for Insights to reload

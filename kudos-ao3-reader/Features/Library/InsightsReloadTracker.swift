@@ -137,7 +137,10 @@ enum InsightsReloadDigest {
         // Metadata consumed by Taste, Habits, and Library insights.
         hasher.mix(work.title)
         hasher.mix(work.language.trimmingCharacters(in: .whitespacesAndNewlines))
-        hasher.mix(calendar.startOfDay(for: work.dateAdded).timeIntervalSince1970)
+        // The exact instant, not its day: "saved to opened" is a median over the
+        // exact gap, so a same-day correction (a sync merge moving `dateAdded`
+        // from 10 pm to 8 am) moves the figure while the calendar day is unchanged.
+        hasher.mix(work.dateAdded.timeIntervalSince1970)
         hasher.mix(work.datePublished)
         hasher.mix(work.dateUpdated)
         hasher.mix(work.downloadedAt.map { calendar.component(.year, from: $0) } ?? -1)
@@ -306,6 +309,17 @@ final class InsightsReloadTracker {
         return snap.digest
     }
 
+    /// Adopts a snapshot taken for a refresh as the new baseline, so that refresh
+    /// walks the library once instead of once to decide and once to record.
+    @discardableResult
+    func adopt(_ snapshot: InsightsReloadDigest.Snapshot) -> String {
+        liveWorkSignatures = snapshot.liveWorkSignatures
+        softDeletedAdultFlags = snapshot.softDeletedAdultFlags
+        lastDigest = snapshot.digest
+        hasBaseline = true
+        return snapshot.digest
+    }
+
     func currentDigest(
         works: [SavedWork],
         context: ModelContext,
@@ -444,10 +458,11 @@ final class InsightsSaveCoalescer {
         pendingTask = Task { @MainActor [weak self] in
             guard let self else { return }
             try? await Task.sleep(for: self.interval)
-            guard !Task.isCancelled else {
-                self.pendingTask = nil
-                return
-            }
+            // A cancelled task must not touch `pendingTask`: `cancel()` already
+            // cleared it, and by the time this wakes a *newer* refresh may own the
+            // slot. Clearing it here would orphan that one (it could no longer be
+            // cancelled, and the next save would schedule a duplicate).
+            guard !Task.isCancelled else { return }
             self.pendingTask = nil
             action()
         }
@@ -456,5 +471,76 @@ final class InsightsSaveCoalescer {
     func cancel() {
         pendingTask?.cancel()
         pendingTask = nil
+    }
+}
+
+/// Wires `ModelContext.didSave` to a coalesced Insights refresh, in one place the
+/// screen and its tests share: classify the save cheaply, schedule at most one
+/// refresh per window, and when it fires take **one** digest snapshot of the library
+/// and hand it to the reload (as its baseline) only if it differs from the last one.
+@MainActor
+final class InsightsReloadCoordinator {
+    let tracker: InsightsReloadTracker
+    private let coalescer: InsightsSaveCoalescer
+
+    init(
+        interval: Duration = .milliseconds(500),
+        tracker: InsightsReloadTracker? = nil
+    ) {
+        self.tracker = tracker ?? InsightsReloadTracker()
+        self.coalescer = InsightsSaveCoalescer(interval: interval)
+    }
+
+    var hasPendingRefresh: Bool { coalescer.hasPendingRefresh }
+
+    /// Call for every `didSave` while the screen is up. `works` is read when the
+    /// refresh fires, not when the save arrives.
+    func noteSave(
+        _ notification: Notification,
+        works: @escaping @MainActor () -> [SavedWork],
+        context: ModelContext,
+        isOnScreen: @escaping @MainActor () -> Bool,
+        reload: @escaping @MainActor (InsightsReloadDigest.Snapshot) -> Void
+    ) {
+        guard tracker.classifySave(notification, context: context) != .ignored else { return }
+        coalescer.schedule { [tracker] in
+            guard isOnScreen() else { return }
+            let snapshot = InsightsReloadDigest.snapshot(works: works(), context: context)
+            guard snapshot.digest != tracker.lastDigest else { return }
+            reload(snapshot)
+        }
+    }
+
+    func cancel() {
+        coalescer.cancel()
+    }
+}
+
+/// What makes the Insights screen reload. Every input that changes a displayed
+/// figure is a component, including the library digest: a same-count edit (a rating
+/// swap, a corrected save time) moves only that component.
+enum InsightsReloadKey {
+    static func make(
+        range: String,
+        referenceDate: Date,
+        hideMature: Bool,
+        revealAll: Bool,
+        includeHidden: Bool,
+        countRereads: Bool,
+        countReadAloud: Bool,
+        askAboutUntouched: Bool,
+        untouchedDays: Int,
+        optionsRevision: Int,
+        libraryCount: Int,
+        libraryDigest: String
+    ) -> String {
+        [
+            range,
+            "\(referenceDate.timeIntervalSince1970)",
+            "\(hideMature)-\(revealAll)-\(includeHidden)",
+            "\(countRereads)-\(countReadAloud)-\(askAboutUntouched)-\(untouchedDays)",
+            "\(optionsRevision)",
+            "\(libraryCount)-\(libraryDigest)"
+        ].joined(separator: "|")
     }
 }

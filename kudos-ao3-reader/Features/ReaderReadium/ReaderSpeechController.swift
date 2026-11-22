@@ -197,6 +197,9 @@ final class ReaderSpeechController {
 
     private var nextRequestToken: UInt64 = 0
     private var activeRequest: SpeechRequest?
+    /// Token of the request the engine ended with `.unavailable`, so a throw from
+    /// the same `speak` can still attach its detail to the error shown.
+    private var unavailableRequestToken: UInt64?
     private var currentAuditionToken: UInt64 = 0
     /// In-flight chapter extract + `speak` so a second tap can cancel it.
     private var startTask: Task<Void, Never>?
@@ -233,6 +236,10 @@ final class ReaderSpeechController {
     #endif
 
     var isAvailable: Bool { status != .unavailable }
+    /// A fresh Read Aloud start is in flight: the chapter is being found or the engine
+    /// is preparing its first output, but nothing is audible yet (`status` is still
+    /// `.stopped`). The fan shows Stop for it so the start can be cancelled.
+    var isStartPending: Bool { status == .stopped && activeRequest != nil }
     var isPlaying: Bool { status == .playing }
     /// Mini player / fan "session on" — playing or paused, not fully stopped.
     var isSessionActive: Bool { status == .playing || status == .paused }
@@ -592,11 +599,18 @@ final class ReaderSpeechController {
 
         service.onAdvance = { [weak self, weak service] locator in
             guard let self, let service, self.ttsService === service else { return }
-            if let request = self.activeRequest,
-               case .awaitingFirstOutput = request.stage {
-                self.commitPendingRequest(request, locator: locator)
-                return
+            if let request = self.activeRequest {
+                if case .awaitingFirstOutput = request.stage {
+                    self.commitPendingRequest(request, locator: locator)
+                    return
+                }
+                // A scan is in flight and this engine holds no committed audio: a
+                // late callback from a superseded start. It must neither move the
+                // page nor save a position nobody has heard.
+                if !self.enginePlaybackActive { return }
             }
+            // After Stop the engine can still deliver a callback it had queued.
+            guard self.isSessionActive else { return }
             self.resumeLocator = locator
             self.persistPosition(for: .utteranceBoundary)
             self.onAdvance?(locator)
@@ -604,6 +618,8 @@ final class ReaderSpeechController {
 
         service.onSpokenRange = { [weak self, weak service] locator in
             guard let self, let service, self.ttsService === service else { return }
+            if self.activeRequest != nil, !self.enginePlaybackActive { return }
+            guard self.isSessionActive else { return }
             self.persistPosition(for: .spokenRange, locator: locator)
             self.onSpokenRange?(locator)
         }
@@ -796,6 +812,15 @@ final class ReaderSpeechController {
             showsNothingToSpeakAlert = false
             speechErrorMessage = nil
         }
+        // The request being replaced already handed its chapter to the engine, which
+        // is still preparing its first output. That engine belongs to no request any
+        // more: left running it would speak, move the page and save the position
+        // behind the new request's back (and survive a failed scan). A request that
+        // already committed is audible playback, not this, and is left to carry on
+        // until the replacement commits.
+        if let previous = activeRequest, case .awaitingFirstOutput = previous.stage {
+            stopEngineSilently()
+        }
         SpeechOwnerRegistry.shared.claim(self)
         let startLoc = locator ?? resumeLocator
         #if DEBUG
@@ -865,6 +890,16 @@ final class ReaderSpeechController {
                 }
             } catch {
                 Log.tts.error("speak() failed: \(error.localizedDescription, privacy: .public)")
+                if unavailableRequestToken == token {
+                    // Engine went `.unavailable` and then threw: the controller has
+                    // already ended the request; only add the reason.
+                    unavailableRequestToken = nil
+                    if isReaderOpen, speechErrorMessage != nil {
+                        let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                        if !detail.isEmpty { speechErrorMessage = detail }
+                    }
+                    return
+                }
                 guard !Task.isCancelled, let current = activeRequest, current.token == token else { return }
                 handleSpeakFailure(for: current, error: error)
             }
@@ -924,6 +959,12 @@ final class ReaderSpeechController {
         enginePlaybackActive = false
         stopEngineSilently()
         endSessionAfterSilentStop()
+        if !isSessionActive {
+            // A fresh start never published Now Playing but did register the remote
+            // targets; nothing is left for them to control.
+            clearNowPlaying()
+            removeRemoteCommands()
+        }
         if request.isUserInitiated, isReaderOpen {
             let detail = (error as? LocalizedError)?.errorDescription ?? error?.localizedDescription
             speechErrorMessage = (detail?.isEmpty == false)
@@ -1036,6 +1077,14 @@ final class ReaderSpeechController {
         case .paused:
             resumeFromPaused(fallbackLocator: locator)
         case .stopped:
+            if activeRequest != nil {
+                // A start is already in flight. A paused engine (audio interruption
+                // before its first output) is resumed; otherwise a second tap is a
+                // cancel, never a second start racing the first.
+                if resumePendingRequestIfPaused() { return }
+                stop()
+                return
+            }
             startSpeechRequest(
                 from: locator ?? resumeLocator,
                 direction: .forward,
@@ -1046,6 +1095,21 @@ final class ReaderSpeechController {
         }
     }
 
+    /// Play for a request whose engine was paused (an audio interruption) before it
+    /// produced its first output. The engine's own `.playing` is held back until the
+    /// commit, so only the engine and the request's intent change here.
+    @discardableResult
+    private func resumePendingRequestIfPaused() -> Bool {
+        guard var request = activeRequest,
+              case .awaitingFirstOutput = request.stage,
+              ttsService?.status == .paused
+        else { return false }
+        request.desiredState = .playing
+        activeRequest = request
+        ttsService?.resume()
+        return true
+    }
+
     private func resumeFromPaused(fallbackLocator: Locator?) {
         if var request = activeRequest {
             request.desiredState = .playing
@@ -1053,6 +1117,10 @@ final class ReaderSpeechController {
             if enginePlaybackActive, case .scanning = request.stage {
                 ttsService?.resume()
             } else {
+                // An audio interruption can pause the replacement engine before its
+                // first output; flipping only the controller to `.playing` would
+                // leave it held at its pause gate under a Pause button.
+                resumePendingRequestIfPaused()
                 status = .playing
                 publishNowPlaying(playing: true)
             }
@@ -1450,6 +1518,7 @@ final class ReaderSpeechController {
 
         switch newStatus {
         case .unavailable:
+            let failed = activeRequest
             activeRequest = nil
             nextRequestToken &+= 1
             startTask?.cancel()
@@ -1458,6 +1527,19 @@ final class ReaderSpeechController {
             status = .unavailable
             persistPosition(for: .sessionEnd)
             onSessionEnded?()
+            // Attached or detached, there is no session left: drop the Lock Screen
+            // card and its remote targets (a detached release does it too).
+            clearNowPlaying()
+            removeRemoteCommands()
+            if let failed {
+                // The engine can report `.unavailable` and then throw from the same
+                // `speak`; that throw lands after the request is gone, so the reader
+                // is told here (and the throw's detail upgrades it).
+                unavailableRequestToken = failed.token
+                if failed.isUserInitiated, isReaderOpen {
+                    speechErrorMessage = "Read Aloud could not start audio playback."
+                }
+            }
             if publication != nil, !isReaderOpen {
                 releasePreparedSession()
             }
@@ -1769,6 +1851,15 @@ final class ReaderSpeechController {
             resumeFromPaused(fallbackLocator: resumeLocator)
             return .success
         case .stopped:
+            if activeRequest != nil {
+                // Already starting: resume it if an interruption paused it, else
+                // let it finish; never a second start over the first.
+                if !resumePendingRequestIfPaused(), var request = activeRequest {
+                    request.desiredState = .playing
+                    activeRequest = request
+                }
+                return .success
+            }
             startSpeechRequest(
                 from: resumeLocator,
                 direction: .forward,
