@@ -210,12 +210,20 @@ enum InsightsReloadDigest {
         let softDeletedAdultFlags: [UUID: Bool]
     }
 
+    #if DEBUG
+    /// Counts full library digest walks (tests prove a refresh walks once).
+    static var snapshotCountForTests = 0
+    #endif
+
     static func snapshot(
         works: [SavedWork],
         context: ModelContext,
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> Snapshot {
+        #if DEBUG
+        snapshotCountForTests += 1
+        #endif
         var liveBag = BagDigest()
         var liveSignatures: [UUID: UInt64] = Dictionary(minimumCapacity: works.count)
         for work in works {

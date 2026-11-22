@@ -243,6 +243,12 @@ struct ReadingInsightsView: View {
             if isHiding && !gate.revealAll { clearMainDisplayState() }
             reload()
         }
+        // The parent hands over a new library array when works are added, removed or
+        // replaced (a same-count swap changes no count in `reloadKey`): reload with the
+        // fresh array, which also cancels a pending refresh holding the old one.
+        .onChange(of: libraryWorks.map(\.id)) { _, _ in
+            if isOnScreen { reload() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .kudosSyncRelevantSettingChanged)) { _ in
             optionsRevision += 1
         }
@@ -793,6 +799,9 @@ struct ReadingInsightsView: View {
     /// - Parameter baseline: the digest snapshot a coalesced save refresh already took;
     ///   adopted as-is so that refresh walks the library once.
     private func reload(baseline: InsightsReloadDigest.Snapshot? = nil) {
+        // A full reload here already covers any save refresh still waiting out its
+        // window; letting that run later would replay an older library over these figures.
+        reloadCoordinator.cancel()
         // Taken first, so `reloadKey` already holds it when `lastReloadKey` is
         // written below and a save this reload follows triggers no second one.
         libraryDigest = baseline.map { reloadCoordinator.tracker.adopt($0) }

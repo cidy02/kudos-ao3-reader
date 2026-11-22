@@ -231,9 +231,12 @@ public final class SherpaKokoroTTSService: TTSService {
                 queued.append((chunk, playback))
             }
 
-            // First audible PCM is queued: announce the first unit before starting
-            // the player node so a paused skip commits and pauses without bleeding
-            // audio.
+            // Hold the whole queued lead while paused: a paused skip must not announce
+            // (move the page, save the position) until Play lets speech start.
+            await self.waitWhilePaused()
+            guard !Task.isCancelled, self.playbackGeneration == generation, self.status == .playing else { return }
+
+            // Announce immediately before the player node starts, no suspension between.
             let firstUnit = primed[0].unit
             if let locator = firstUnit.locator {
                 self.onAdvance?(locator)
@@ -243,9 +246,6 @@ public final class SherpaKokoroTTSService: TTSService {
             if let locator = firstUnit.locator {
                 self.onSpokenRange?(locator)
             }
-
-            // Nothing plays until the whole initial lead is ready. That keeps
-            // pause/resume from starting a lone first sentence mid-prime.
             await self.waitWhilePaused()
             guard !Task.isCancelled, self.playbackGeneration == generation, self.status == .playing else { return }
 
@@ -322,12 +322,37 @@ public final class SherpaKokoroTTSService: TTSService {
     public func resume() {
         guard status == .paused else { return }
         if !engine.isRunning {
-            try? engine.start()
+            do {
+                try restartAudioEngine()
+            } catch {
+                // An interruption or route change stopped the engine and it cannot
+                // come back: publishing `.playing` over a dead node would show Pause
+                // with no audio and a queue that never drains. End it instead.
+                Log.tts.error("Kokoro resume failed: \(error.localizedDescription, privacy: .public)")
+                resetPlayback(notifyStopped: false)
+                status = .unavailable
+                return
+            }
         }
         status = .playing
         startPlayerIfNeeded()
         resumePauseWaiters()
     }
+
+    private func restartAudioEngine() throws {
+        #if DEBUG
+        if let testRestartEngine { try testRestartEngine(); return }
+        #endif
+        try engine.start()
+    }
+
+    #if DEBUG
+    var testRestartEngine: (() throws -> Void)?
+    /// Puts a fresh (never-spoken) service into `.paused` so `resume()` can be driven.
+    func pauseForTests() {
+        status = .paused
+    }
+    #endif
 
     public func stop() {
         resetPlayback(notifyStopped: true)
@@ -670,7 +695,7 @@ public final class SherpaKokoroTTSService: TTSService {
     }
 
     private func startPlayerIfNeeded() {
-        guard hasScheduledPlayback, !playerNode.isPlaying, status == .playing else { return }
+        guard hasScheduledPlayback, !playerNode.isPlaying, status == .playing, engine.isRunning else { return }
         if playbackStartedAt == nil {
             playbackStartedAt = Date()
         }

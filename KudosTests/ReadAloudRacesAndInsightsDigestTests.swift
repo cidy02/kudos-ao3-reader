@@ -294,6 +294,99 @@ struct ReadAloudRacesAndInsightsDigestTests {
         #expect(snapshots.first?.digest != coordinator.tracker.lastDigest)
     }
 
+    @Test func refreshWalksTheLibraryOnceAndPositionSavesNeverWalk() async throws {
+        let context = try makeContext()
+        let a = SavedWork(title: "A", author: "x")
+        a.isSaved = true
+        a.rating = "General Audiences"
+        a.readiumLocator = #"{"href":"c1.xhtml","locations":{"totalProgression":0.2}}"#
+        a.lastReadDate = Date()
+        context.insert(a)
+        try context.save()
+        let coordinator = InsightsReloadCoordinator(interval: .milliseconds(30))
+        coordinator.tracker.recordBaseline(works: [a], context: context)
+        var notes: [Notification] = []
+        let observer = NotificationCenter.default.addObserver(
+            forName: ModelContext.didSave, object: context, queue: nil
+        ) { notes.append($0) }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        var adopted = 0
+        func feed(_ works: [SavedWork]) {
+            coordinator.noteSave(
+                notes.last!, works: { works }, context: context, isOnScreen: { true },
+                reload: { snapshot in
+                    coordinator.tracker.adopt(snapshot)
+                    adopted += 1
+                }
+            )
+        }
+        let before = InsightsReloadDigest.snapshotCountForTests
+        a.applyDebouncedReadiumLocator(#"{"href":"c2.xhtml","locations":{"totalProgression":0.3}}"#, at: Date())
+        try context.save()
+        feed([a])
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(InsightsReloadDigest.snapshotCountForTests == before)
+
+        // Membership grows while the refresh is pending: the refresh reads the array
+        // when it fires, so its figures include the newcomer.
+        a.rating = "Explicit"
+        try context.save()
+        var live = [a]
+        coordinator.noteSave(
+            notes.last!, works: { live }, context: context, isOnScreen: { true },
+            reload: { snapshot in
+                coordinator.tracker.adopt(snapshot)
+                adopted += 1
+            }
+        )
+        let b = SavedWork(title: "B", author: "x")
+        b.isSaved = true
+        context.insert(b)
+        live.append(b)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(adopted == 1)
+        #expect(InsightsReloadDigest.snapshotCountForTests == before + 1)
+        #expect(coordinator.tracker.lastDigest.hasPrefix("2:"))
+    }
+
+    @Test func fullReloadCancelsAPendingSaveRefresh() async throws {
+        let context = try makeContext()
+        let a = SavedWork(title: "A", author: "x")
+        a.isSaved = true
+        a.rating = "General Audiences"
+        context.insert(a)
+        try context.save()
+        let coordinator = InsightsReloadCoordinator(interval: .milliseconds(40))
+        coordinator.tracker.recordBaseline(works: [a], context: context)
+        var note: Notification?
+        let observer = NotificationCenter.default.addObserver(
+            forName: ModelContext.didSave, object: context, queue: nil
+        ) { note = $0 }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        a.rating = "Explicit"
+        try context.save()
+        var fired = 0
+        coordinator.noteSave(
+            note!, works: { [a] }, context: context, isOnScreen: { true }, reload: { _ in fired += 1 }
+        )
+        #expect(coordinator.hasPendingRefresh)
+        coordinator.cancel() // what the view's reload() does first
+        try await Task.sleep(for: .milliseconds(120))
+        #expect(fired == 0)
+    }
+
+    @Test func insightsViewCancelsPendingRefreshOnReloadAndReloadsOnMembershipChange() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("kudos-ao3-reader/Features/Library/ReadingInsightsView.swift")
+        let view = try String(contentsOf: url, encoding: .utf8)
+        let reload = try #require(view.range(of: "private func reload(baseline:"))
+        let head = String(view[reload.upperBound...].prefix(400))
+        #expect(head.contains("reloadCoordinator.cancel()"))
+        #expect(view.contains(".onChange(of: libraryWorks.map(\\.id))"))
+        #expect(view.contains("reloadCoordinator.tracker.adopt($0)"))
+    }
+
     @Test func reloadKeyChangesWithLibraryDigestAtSameCount() {
         func key(_ digest: String) -> String {
             InsightsReloadKey.make(
@@ -1310,19 +1403,24 @@ extension ReadAloudRacesAndInsightsDigestTests {
 
         controller.reanchor(to: locators[2], resumePlaying: false, direction: .forward)
         await controller.waitForStartTaskForTests()
-        // Let SystemTTSService's playback task reach its pause gate after committing chunk 0.
+        // Let SystemTTSService's playback task reach its pause gate.
         try? await Task.sleep(for: .milliseconds(30))
 
+        // Held before it announced: the page and saved position have NOT moved to
+        // text nobody has heard, and nothing was handed to the synthesizer.
         #expect(controller.status == .paused)
         #expect(systemTTS.status == .paused)
-        #expect(moves == ["ch3.xhtml"])
-        #expect(controller.resumeLocator?.href.string == "ch3.xhtml")
+        #expect(moves.isEmpty)
+        #expect(controller.resumeLocator?.href.string == "ch2.xhtml")
         #expect(enqueuedTexts.isEmpty)
 
-        // Pressing Play resumes the held first utterance immediately.
+        // Pressing Play resumes the held first utterance: now it commits and speaks.
         controller.toggle(from: nil)
         await spokenGate.enterAndWait()
         #expect(enqueuedTexts == ["First spoken sentence in chapter three."])
+        #expect(moves == ["ch3.xhtml"])
+        #expect(controller.resumeLocator?.href.string == "ch3.xhtml")
+        #expect(controller.status == .playing)
         controller.stop()
     }
 
@@ -1474,6 +1572,7 @@ extension ReadAloudRacesAndInsightsDigestTests {
         await controller.waitForStartTaskForTests()
         #expect(controller.status == .unavailable)
         #expect(controller.speechErrorMessage == "Audio session unavailable")
+        #expect(!controller.remoteCommandsInstalledForTests)
     }
 
     // MARK: Core ML production startup path (seams replace only pack + audio hardware)
@@ -1502,11 +1601,12 @@ extension ReadAloudRacesAndInsightsDigestTests {
         controller.onAdvance = { moves.append($0.href.string) }
         controller.toggle(from: locators[0])
         await controller.waitForStartTaskForTests()
-        for _ in 0..<20 { await Task.yield() }
+        await waitUntil { controller.status == .unavailable }
         #expect(moves.isEmpty)
         #expect(controller.resumeLocator?.href.string == "ch1.xhtml")
         #expect(controller.status == .unavailable)
         #expect(controller.speechErrorMessage != nil)
+        #expect(!controller.remoteCommandsInstalledForTests)
     }
 
     @Test func coreMLAnnouncesOnlyAfterTheAudioEngineStarted() async {
@@ -1521,7 +1621,7 @@ extension ReadAloudRacesAndInsightsDigestTests {
         controller.onAdvance = { order.append("advance:\($0.href.string)") }
         controller.toggle(from: locators[0])
         await controller.waitForStartTaskForTests()
-        for _ in 0..<20 { await Task.yield() }
+        await waitUntil { order.contains("play") }
         #expect(order.prefix(3) == ["start", "advance:ch2.xhtml", "play"])
     }
 
@@ -1536,10 +1636,154 @@ extension ReadAloudRacesAndInsightsDigestTests {
         controller.onAdvance = { moves.append($0.href.string) }
         controller.toggle(from: locators[0])
         await controller.waitForStartTaskForTests()
-        for _ in 0..<20 { await Task.yield() }
+        await waitUntil { controller.showsNothingToSpeakAlert }
         #expect(moves.isEmpty)
         #expect(controller.resumeLocator?.href.string == "ch1.xhtml")
         #expect(controller.showsNothingToSpeakAlert)
+        // Zero output ended the start: no remote Play target may stay registered.
+        #expect(!controller.remoteCommandsInstalledForTests)
+    }
+
+    /// Polls until `condition` holds (or 2 s), instead of guessing a number of yields.
+    private func waitUntil(_ condition: () -> Bool) async {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while !condition(), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+
+    private func seededCoreML(
+        _ coreML: CoreMLKokoroTTSService,
+        locators: [Locator],
+        status: ReaderSpeechController.Status
+    ) -> ReaderSpeechController {
+        let controller = ReaderSpeechController()
+        controller.seedSessionForTests(
+            workID: UUID(), status: status, isReaderOpen: true, ttsService: coreML,
+            unitProvider: { [TTSSpeechUnit(text: "Prose in \($0?.href.string ?? "").", locator: $0)] },
+            resumeLocator: locators[0], chapterStartLocators: locators
+        )
+        return controller
+    }
+
+    @Test func pausedCoreMLSkipHoldsUntilPlayThenCommits() async {
+        let locators = chapterLocators(count: 2)
+        let coreML = CoreMLKokoroTTSService()
+        var armed = false
+        var played = false
+        coreML.testSetupOverride = {}
+        coreML.testSynthesize = { _ in [0.2, -0.2, 0.2] }
+        coreML.testStartAudioEngine = { armed = true }
+        coreML.testPlayBuffer = { _ in played = true }
+        let controller = seededCoreML(coreML, locators: locators, status: .paused)
+        var moves: [String] = []
+        controller.onAdvance = { moves.append($0.href.string) }
+
+        controller.reanchor(to: locators[1], resumePlaying: false, direction: .forward)
+        await controller.waitForStartTaskForTests()
+        await waitUntil { coreML.status == .paused }
+        // Held by the engine, nobody pressed Play: nothing moved or saved.
+        try? await Task.sleep(for: .milliseconds(30))
+        #expect(coreML.status == .paused)
+        #expect(!armed)
+        #expect(moves.isEmpty)
+        #expect(!played)
+        #expect(controller.resumeLocator?.href.string == "ch1.xhtml")
+
+        controller.toggle(from: nil)
+        await waitUntil { played }
+        #expect(moves == ["ch2.xhtml"])
+        #expect(controller.resumeLocator?.href.string == "ch2.xhtml")
+    }
+
+    @Test func stopOnPausedCoreMLSkipNeverCommitsTheUnheardChapter() async {
+        let locators = chapterLocators(count: 2)
+        let coreML = CoreMLKokoroTTSService()
+        coreML.testSetupOverride = {}
+        coreML.testSynthesize = { _ in [0.2, -0.2, 0.2] }
+        coreML.testStartAudioEngine = {}
+        coreML.testPlayBuffer = { _ in }
+        let controller = seededCoreML(coreML, locators: locators, status: .paused)
+        var moves: [String] = []
+        var saves: [String] = []
+        controller.onAdvance = { moves.append($0.href.string) }
+        controller.onSavePosition = { _, loc, _, _, date, _ in
+            saves.append(loc)
+            return .wrote(progressStamp: date)
+        }
+        controller.reanchor(to: locators[1], resumePlaying: false, direction: .forward)
+        await controller.waitForStartTaskForTests()
+        await waitUntil { coreML.status == .paused }
+        controller.stop()
+        try? await Task.sleep(for: .milliseconds(30))
+        #expect(moves.isEmpty)
+        #expect(!saves.contains { $0.contains("ch2.xhtml") })
+        #expect(controller.resumeLocator?.href.string == "ch1.xhtml")
+    }
+
+    @Test func pauseDuringPendingCoreMLStartHoldsTheEngineAndPlayResumesIt() async {
+        let locators = chapterLocators(count: 2)
+        let coreML = CoreMLKokoroTTSService()
+        let synthGate = AsyncGate()
+        var armed = false
+        var played = false
+        coreML.testSetupOverride = {}
+        coreML.testSynthesize = { _ in
+            await synthGate.enterAndWait()
+            return [0.2, -0.2, 0.2]
+        }
+        coreML.testStartAudioEngine = { armed = true }
+        coreML.testPlayBuffer = { _ in played = true }
+        let controller = seededCoreML(coreML, locators: locators, status: .stopped)
+        var moves: [String] = []
+        controller.onAdvance = { moves.append($0.href.string) }
+        controller.toggle(from: locators[0])
+        await controller.waitForStartTaskForTests()
+        await synthGate.waitUntilEntered() // first output still being prepared
+        controller.pause()
+        #expect(coreML.status == .paused)
+        synthGate.release()
+        await waitUntil { armed }
+        try? await Task.sleep(for: .milliseconds(30))
+        #expect(moves.isEmpty)
+        #expect(!played)
+
+        #expect(controller.handleRemotePlayForTests() == .success)
+        await waitUntil { played }
+        #expect(moves.first == "ch1.xhtml")
+    }
+
+    @Test func coreMLStopDuringLexiconOrObserverStepNeverStartsPlayback() async {
+        let locators = chapterLocators(count: 2)
+        for stage in ["lexicon", "observer"] {
+            let gate = AsyncGate()
+            let coreML = CoreMLKokoroTTSService()
+            coreML.testSetupOverride = {}
+            if stage == "lexicon" {
+                coreML.testLexiconStep = { await gate.enterAndWait() }
+            } else {
+                coreML.testObserverStep = { await gate.enterAndWait() }
+            }
+            let controller = seededCoreML(coreML, locators: locators, status: .stopped)
+            controller.toggle(from: locators[0])
+            await gate.waitUntilEntered()
+            controller.stop()
+            gate.release()
+            try? await Task.sleep(for: .milliseconds(30))
+            #expect(!coreML.testDidStartPlaybackTask, "stage \(stage)")
+            #expect(coreML.status == .stopped, "stage \(stage)")
+        }
+    }
+
+    @Test func sherpaResumeFailureEndsInsteadOfPublishingPlaying() {
+        let sherpa = SherpaKokoroTTSService(modelDirectory: URL(fileURLWithPath: "/nonexistent-kudos-model"))
+        sherpa.pauseForTests()
+        var statuses: [TTSServiceStatus] = []
+        sherpa.onStatusChange = { statuses.append($0) }
+        sherpa.testRestartEngine = { throw EngineTestError.audioSessionFailed }
+        sherpa.resume()
+        #expect(sherpa.status == .unavailable)
+        #expect(!statuses.contains(.playing))
     }
 
     @Test func pauseAssemblerDoesNotPadAnEmptySynthesis() {

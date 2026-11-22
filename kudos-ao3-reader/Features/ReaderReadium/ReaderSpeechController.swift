@@ -887,6 +887,11 @@ final class ReaderSpeechController {
                 guard let latest = activeRequest, latest.token == token else { return }
                 if !started {
                     handleUnplayableCandidate(latest, candidate: candidate)
+                } else if latest.desiredState == .paused, service.status == .playing {
+                    // Paused skip: hold the engine *before* it announces anything, so
+                    // the page and the saved position only move once Play resumes it
+                    // and speech at the new position actually starts.
+                    service.pause()
                 }
             } catch {
                 Log.tts.error("speak() failed: \(error.localizedDescription, privacy: .public)")
@@ -1037,6 +1042,12 @@ final class ReaderSpeechController {
         activeRequest = nil
         if isSessionActive, !enginePlaybackActive {
             endSessionAfterSilentStop()
+        }
+        if !isSessionActive {
+            // Nothing is playing and nothing will: no card, no remote targets (a
+            // still-playing committed chapter keeps both).
+            clearNowPlaying()
+            removeRemoteCommands()
         }
         if request.isUserInitiated, isReaderOpen {
             nothingToSpeakDirection = request.direction
@@ -1227,9 +1238,16 @@ final class ReaderSpeechController {
             request.desiredState = .paused
             activeRequest = request
         }
-        if enginePlaybackActive {
+        var awaitingFirstOutput = false
+        if let request = activeRequest, case .awaitingFirstOutput = request.stage {
+            awaitingFirstOutput = true
+        }
+        if enginePlaybackActive || awaitingFirstOutput {
+            // An engine still preparing its first output must be held too, or it
+            // announces (moves the page, saves the position) under a paused UI.
             ttsService?.pause()
-        } else if activeRequest != nil, status == .playing {
+        }
+        if !enginePlaybackActive, activeRequest != nil, status == .playing {
             status = .paused
             publishNowPlaying(playing: false)
         }
@@ -1481,6 +1499,8 @@ final class ReaderSpeechController {
             }
         }
     }
+
+    var remoteCommandsInstalledForTests: Bool { remoteCommandsInstalled }
 
     /// Test seam: invokes the Lock Screen / Now Playing Play handler directly.
     @discardableResult
