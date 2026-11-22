@@ -87,6 +87,13 @@ final class AO3WorkActionsModel {
         }
     }
 
+    /// The subscribed state this model knows for `workID` under the current sign-in, or nil when
+    /// it knows nothing for that work and session (never another account's or another work's).
+    func knownSubscribed(workID: Int, generation: Int) -> Bool? {
+        guard workPageStatesWorkID == workID, workPageStatesGeneration == generation else { return nil }
+        return workPageStates?.isSubscribed
+    }
+
     func waitForCurrentTask() async {
         await activeTask?.value
     }

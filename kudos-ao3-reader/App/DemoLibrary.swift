@@ -788,6 +788,8 @@ enum DebugShots {
         ("libedit", DebugShot(route: "library", sheets: ["libedit"])),
         ("sortby", DebugShot(route: starSearch, pushes: ["sortby"])),
         ("readerend", DebugShot(route: readRiver, sheets: ["readerend"])),
+        ("readercaughtup", DebugShot(route: readRiver, sheets: ["readercaughtup"])),
+        ("readerchapterend", DebugShot(route: readRiver, sheets: ["readerchapterend"])),
         ("welcome", DebugShot(route: "welcome")),
         ("protectlibrary", DebugShot(route: "protectlibrary")),
         ("recentlydeleted", DebugShot(route: "recentlyDeleted", sheets: ["recentlydeleted"])),

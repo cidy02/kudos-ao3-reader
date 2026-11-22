@@ -67,6 +67,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// so scroll-driven viewport updates don't thrash `@Observable` dependents
     /// on every settle.
     private(set) var isAtPublicationEnd = false
+    /// The story chapter whose trailing edge is on screen, when another chapter follows
+    /// (Reader-ChapterEnd). Derived from the same viewport as `isAtPublicationEnd`; it only
+    /// drives a chrome card and never touches the saved position.
+    private(set) var chapterEnd: ReaderChapterEndFacts.ChapterEnd?
     private(set) var navigator: EPUBNavigatorViewController?
     /// Edge taps, keyboard turns, and whether those turns animate.
     let pageTurns = ReadiumPageTurnController()
@@ -707,6 +711,20 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         }
     }
 
+    /// The author's end note of one spine item, read from the EPUB (no network). Nil when the
+    /// chapter has none or cannot be read.
+    func endNote(forSpineIndex index: Int) async -> String? {
+        guard readingOrder.indices.contains(index),
+              let resource = publication?.get(readingOrder[index]),
+              let xhtml = try? await resource.readAsString().get(),
+              xhtml.utf8.count <= ReaderChapterEndFacts.maxNoteSourceBytes
+        else { return nil }
+        // The optional preview never parses on the main actor.
+        return await Task.detached(priority: .utility) {
+            ReaderChapterEndFacts.endNote(fromChapterXHTML: xhtml)
+        }.value
+    }
+
     /// Navigates to a spine position directly — needed for `ReaderSection`s (like
     /// AO3's synthesized Summary) that have no TOC `Link` of their own to pass to
     /// `go(to:)`.
@@ -717,6 +735,24 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
 
     #if DEBUG
     private var pendingDebugGoToEnd = false
+
+    /// `shot:readerchapterend`: the last page of the first story chapter, so the end-of-chapter
+    /// card shows. Navigates for real; the card appears only if the viewport reports the end.
+    func goToFirstChapterEndForDebug() {
+        chromeHidden = false
+        markFirstPagePresentedIfNeeded()
+        guard let first = readingOrder.first else { return }
+        Task { @MainActor in
+            if let base = await publication?.locate(first) {
+                let target = base.copy(locations: {
+                    $0.progression = 1.0
+                    $0.position = nil
+                })
+                await navigator?.go(to: target, options: NavigatorGoOptions())
+                chromeHidden = false
+            }
+        }
+    }
 
     func goToPublicationEndForDebug() {
         chromeHidden = false
@@ -1169,6 +1205,15 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         let wasAtEnd = isAtPublicationEnd
         if atEnd != wasAtEnd {
             isAtPublicationEnd = atEnd
+        }
+        let chapterEnd = atEnd ? nil : ReaderChapterEndFacts.chapterEnd(
+            endingSpineIndex: ReadiumReaderCompletion.endingSpineIndex(
+                viewport: viewport, readingOrder: readingOrder
+            ),
+            sections: sections
+        )
+        if chapterEnd != self.chapterEnd {
+            self.chapterEnd = chapterEnd
         }
         if atEnd, !wasAtEnd {
             onReachedPublicationEnd?()

@@ -203,6 +203,14 @@ struct ReadiumReaderView: View {
     /// Logged reading time for the end card, read once on arrival at the end
     /// (never fetched while the card renders).
     @State private var endCardDuration: Double = 0
+    /// The end-of-chapter card's author's note, read from the EPUB when a chapter's last page
+    /// arrives; keyed by spine index so a stale read never shows under another chapter.
+    @State private var chapterEndNotes: [Int: String?] = [:]
+    /// Chapter whose number the Comments sheet should open on (the chapter-end card's button),
+    /// instead of the leading resource's chapter.
+    @State private var commentsChapterOverride: Int?
+    /// Drives the caught-up card's Subscribe (the same handler Work Detail's menu uses).
+    @State private var ao3Actions = AO3WorkActionsModel()
     /// The next queued work, opened from the end card's Start.
     @State private var nextWorkDestination: LocalWorkDestination?
     @State private var isDismissingByDrag = false
@@ -303,7 +311,7 @@ struct ReadiumReaderView: View {
                 isPresented: $showingComments,
                 workID: ao3WorkID ?? 0,
                 context: .init(savedWork: work),
-                initialChapterPosition: currentAO3Chapter,
+                initialChapterPosition: commentsChapterOverride ?? currentAO3Chapter,
                 undimmed: true,
                 readerSections: book.sections,
                 onOpenReaderChapter: { book.go(toSpineIndex: $0) }
@@ -370,6 +378,25 @@ struct ReadiumReaderView: View {
                 if atEnd {
                     endCardDuration = ReadingLogService.currentTotalDuration(of: work.id, in: modelContext)
                 }
+            }
+            // Read only while the card is showing, and keyed by chapter: a slower read for an
+            // earlier chapter can neither overwrite nor cancel this chapter's note.
+            .task(id: chapterEndNoteKey) {
+                guard let spineIndex = chapterEndNoteKey, chapterEndNotes[spineIndex] == nil else { return }
+                let text = await book.endNote(forSpineIndex: spineIndex)
+                guard !Task.isCancelled else { return }
+                chapterEndNotes[spineIndex] = .some(text)
+            }
+            .onChange(of: showingComments) { _, showing in
+                if !showing { commentsChapterOverride = nil }
+            }
+            .alert("AO3", isPresented: Binding(
+                get: { ao3Actions.banner != nil },
+                set: { if !$0 { ao3Actions.banner = nil } }
+            )) {
+                Button("OK", role: .cancel) { ao3Actions.banner = nil }
+            } message: {
+                Text(ao3Actions.banner ?? "")
             }
             .navigationDestination(item: $nextWorkDestination) { destination in
                 LocalWorkDestinationView(destination: destination)
@@ -581,6 +608,17 @@ struct ReadiumReaderView: View {
             chapterStartLocators: book.positionsByReadingOrder.map(\.first)
         )
         #if DEBUG
+        if DebugLaunchRoute.takeSheet("readercaughtup") {
+            // Demo works carry no AO3 URL; give this one an id so the AO3 actions show.
+            if ao3WorkID == nil { work.sourceURL = "https://archiveofourown.org/works/9000001" }
+            if work.chapters.isEmpty || work.isComplete { work.chapters = "12/?"; work.isComplete = false }
+            // Outside the guard above: the demo store persists, so a second launch skips it.
+            work.isFinished = false
+            book.goToPublicationEndForDebug()
+        }
+        if DebugLaunchRoute.takeSheet("readerchapterend") {
+            book.goToFirstChapterEndForDebug()
+        }
         if DebugLaunchRoute.takeSheet("readerfind") {
             router.panel = .readerFind
         }
@@ -1296,10 +1334,18 @@ struct ReadiumReaderView: View {
                     .allowsHitTesting(chromeVisible)
                     .accessibilityHidden(!chromeVisible)
                 } else {
-                    positionCard(includeMiniPlayer: speechActive)
-                        .opacity(chromeVisible ? 1 : 0)
-                        .allowsHitTesting(chromeVisible)
-                        .accessibilityHidden(!chromeVisible)
+                    VStack(spacing: 10) {
+                        // Last page of a chapter another follows: the card sits above the
+                        // position card, which stays mounted so the scrubber is always there
+                        // (and is never swapped out mid-drag: the card just steps aside).
+                        if let chapterEnd = book.chapterEnd, !isEditingSlider, !book.isScrubbing {
+                            chapterEndCard(chapterEnd)
+                        }
+                        positionCard(includeMiniPlayer: speechActive)
+                    }
+                    .opacity(chromeVisible ? 1 : 0)
+                    .allowsHitTesting(chromeVisible)
+                    .accessibilityHidden(!chromeVisible)
                 }
             }
         }
@@ -1322,6 +1368,60 @@ struct ReadiumReaderView: View {
         .allowsHitTesting(chromeVisible || speechActive || colorBarAnnotationID != nil)
     }
 
+    private func chapterEndCard(_ end: ReaderChapterEndFacts.ChapterEnd) -> some View {
+        let total = SavedWork.totalChapterCount(from: work.chapters)
+        let nextTitle = ReaderChapterEndFacts.nextChapterTitle(
+            number: end.nextStoryChapter,
+            sectionTitle: book.sections.indices.contains(end.nextSpineIndex)
+                ? book.sections[end.nextSpineIndex].title : ""
+        )
+        let storyTotal = book.sections.filter { $0.kind == .chapter }.count
+        return ReaderChapterEndCard(
+            chapter: end.storyChapter,
+            nextChapterTitle: nextTitle,
+            nextChapterTime: ReaderChapterEndFacts.nextChapterTime(
+                chapterWordCounts: work.chapterWordCounts,
+                storyChapterTotal: storyTotal,
+                nextStoryChapter: end.nextStoryChapter
+            ),
+            endNote: chapterEndNotes[end.spineIndex] ?? nil,
+            footer: ReaderChapterEndFacts.footer(
+                chapter: end.storyChapter,
+                totalChapters: total ?? (work.isComplete ? storyTotal : nil),
+                postedChapters: work.postedChapterCount
+            ),
+            showsAO3Actions: ao3WorkID != nil,
+            kudosGiven: work.hasGivenKudos,
+            kudosEnabled: !kudosWorking && !work.hasGivenKudos,
+            maxHeight: verticalSizeClass == .compact ? 200 : 420,
+            onNextChapter: { book.go(toSpineIndex: end.nextSpineIndex) },
+            onComment: {
+                commentsChapterOverride = end.storyChapter
+                showingComments = true
+            },
+            onKudos: { if let ao3WorkID { giveKudos(workID: ao3WorkID) } }
+        )
+    }
+
+    /// Subscribed state for this work under the current sign-in, or nil when not known.
+    private var knownSubscribedState: Bool? {
+        guard let ao3WorkID else { return nil }
+        return ao3Actions.knownSubscribed(workID: ao3WorkID, generation: auth.sessionGeneration)
+    }
+
+    /// AO3 has posted more chapters than the loaded EPUB holds.
+    private var copyBehindAO3: Bool {
+        ReaderChapterEndFacts.isCopyBehind(
+            postedChapters: work.postedChapterCount,
+            epubStoryChapters: book.sections.filter { $0.kind == .chapter }.count
+        )
+    }
+
+    /// The chapter whose end note to read: only while its card is up (chrome showing).
+    private var chapterEndNoteKey: Int? {
+        chromeVisible ? book.chapterEnd?.spineIndex : nil
+    }
+
     private var endOfWorkCard: some View {
         ReaderEndCard(
             title: work.title,
@@ -1337,6 +1437,23 @@ struct ReadiumReaderView: View {
                 for: work,
                 isEligible: { !privacyGate.isConcealed($0, enabled: hideMature) }
             ),
+            latestChapterLine: work.isComplete ? nil : ReaderChapterEndFacts.latestChapterLine(
+                postedChapters: work.postedChapterCount,
+                totalChapters: SavedWork.totalChapterCount(from: work.chapters),
+                updated: work.dateUpdated,
+                copyBehind: copyBehindAO3
+            ),
+            copyBehind: !work.isComplete && copyBehindAO3,
+            maxHeight: verticalSizeClass == .compact ? 260 : 520,
+            offersSubscribe: !work.isComplete,
+            isSubscribed: knownSubscribedState == true,
+            subscribeEnabled: !ao3Actions.isWorking,
+            onSubscribe: {
+                guard let ao3WorkID else { return }
+                // Unknown state (a fresh reader, another account) subscribes: AO3 treats that as
+                // idempotent, and the answer then becomes known. No fetch happens on appearance.
+                ao3Actions.subscribe(workID: ao3WorkID, to: knownSubscribedState != true, auth: auth)
+            },
             onKudos: { if let ao3WorkID { giveKudos(workID: ao3WorkID) } },
             onComment: { showingComments = true },
             onBookmark: { toggleBookmarkAtCurrentPosition() },
@@ -1663,16 +1780,7 @@ struct ReadiumReaderView: View {
                 )
                 FolderSyncService.markDirty()
             }
-            guard work.isComplete, !work.isFinished else {
-                if !work.isComplete, work.knownChapterCount == 0, work.postedChapterCount > 0 {
-                    work.knownChapterCount = work.postedChapterCount
-                }
-                try? context.save()
-                return
-            }
-            work.isFinished = true
-            // Full stamp: Continue Reading + lastModifiedAt for folder-sync dirty.
-            work.markProgressModified(Date())
+            ReaderEndOfWorkFacts.applyPublicationEnd(to: work)
             try? context.save()
         }
         book.onOpenExternalURL = { url in
