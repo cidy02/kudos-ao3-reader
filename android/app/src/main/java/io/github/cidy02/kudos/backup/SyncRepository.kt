@@ -210,7 +210,7 @@ class SyncRepository(
     private suspend fun runSyncLocked(): SyncResult {
         val generation = folderGeneration
         val uri = getSyncFolderUri() ?: return SyncResult.Error("No sync folder selected.")
-        backupRepository.backfillReadingSessionFacts()
+        backupRepository.prepareOverlaysForRead()
         val root = DocumentFile.fromTreeUri(context, uri)
             ?: return SyncResult.Error("Could not access sync folder.")
 

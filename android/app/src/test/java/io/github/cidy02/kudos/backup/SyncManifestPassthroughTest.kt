@@ -1876,6 +1876,7 @@ class SyncManifestPassthroughTest {
         val raw = fixture.getValue("readingSessions").jsonArray.single().jsonObject
         backupRepository.importV2ZipBytes(zipManifest(fixture), mode = BackupImportMode.MERGE)
         // Upgrade state: the retained raw manifest holds the facts; the Room row has only defaults.
+        markBackfillPending()
         val session = database.readingLogDao().getAllSessions().single { it.id.equals(SESSION_ONE, ignoreCase = true) }
         database.readingLogDao().upsertSession(
             session.copy(activeSeconds = null, modeRaw = "read", rulesVersion = 0, playbackRate = 2.0)
@@ -1888,6 +1889,158 @@ class SyncManifestPassthroughTest {
         assertEquals(raw["rulesVersion"], out["rulesVersion"])
         // A value the device already holds is kept, not overwritten from the raw copy.
         assertEquals(JsonPrimitive(2.0), out["playbackRate"])
+
+        // Once per install: a row that is unrecorded again later is not refilled.
+        database.readingLogDao().upsertSession(
+            database.readingLogDao().getAllSessions().single {
+                it.id.equals(SESSION_ONE, ignoreCase = true)
+            }.copy(activeSeconds = null, modeRaw = "read", rulesVersion = 0)
+        )
+        val again = exportedManifest().getValue("readingSessions").jsonArray
+            .single { it.jsonObject["id"]?.jsonPrimitive?.content.equals(SESSION_ONE, ignoreCase = true) }.jsonObject
+        assertNull(again["activeSeconds"])
+    }
+
+    private fun sessionRecord(extra: Map<String, JsonElement>, drop: Set<String> = emptySet()): JsonObject {
+        val raw = iosT541ManifestJson().getValue("readingSessions").jsonArray.single().jsonObject
+        return JsonObject(raw.filterKeys { it !in drop } + extra)
+    }
+
+    private fun manifestWithSession(record: JsonObject, exportedAt: String = "2026-06-27T12:00:00.000Z"): JsonObject =
+        JsonObject(
+            iosT541ManifestJson() + mapOf(
+                "exportedAt" to JsonPrimitive(exportedAt),
+                "readingSessions" to JsonArray(listOf(record))
+            )
+        )
+
+    private suspend fun importUnrecordedSession() {
+        val v0 = sessionRecord(emptyMap(), drop = setOf("modeRaw", "activeSeconds", "rulesVersion"))
+        backupRepository.importV2ZipBytes(zipManifest(manifestWithSession(v0)), mode = BackupImportMode.MERGE)
+    }
+
+    private suspend fun exportedSession(): JsonObject = exportedManifest().getValue("readingSessions").jsonArray
+        .single { it.jsonObject["id"]?.jsonPrimitive?.content.equals(SESSION_ONE, ignoreCase = true) }.jsonObject
+
+    @Test
+    fun genuineUnrecordedSessionIsNotUpgradedByAnOlderBackupMergedLater() = runTest {
+        importUnrecordedSession()
+        val older = sessionRecord(
+            mapOf("lastModifiedAt" to JsonPrimitive("2026-06-20T09:00:00.000Z"))
+        )
+        backupRepository.importV2ZipBytes(
+            zipManifest(manifestWithSession(older, exportedAt = "2026-06-20T12:00:00.000Z")),
+            mode = BackupImportMode.MERGE
+        )
+        val out = exportedSession()
+        assertNull(out["activeSeconds"])
+        assertNull(out["rulesVersion"])
+    }
+
+    @Test
+    fun backfillTakesTheNewerRecordWhenBothStoresHoldTheSession() = runTest {
+        importUnrecordedSession()
+        markBackfillPending()
+        val full = sessionRecord(mapOf("lastModifiedAt" to JsonPrimitive("2026-06-27T09:00:00.000Z")))
+        val sparse = sessionRecord(
+            mapOf("lastModifiedAt" to JsonPrimitive("2026-06-26T08:00:00.000Z")),
+            drop = setOf("activeSeconds", "modeRaw")
+        )
+        SyncLastManifestStore(filesRoot).save(manifestWithSession(full))
+        SyncLastManifestStore(filesRoot, BackupRepository.PENDING_IMPORT_MANIFEST_FILE).save(manifestWithSession(sparse))
+
+        val out = exportedSession()
+        assertEquals(JsonPrimitive(1650.5), out["activeSeconds"])
+        assertEquals(JsonPrimitive("reading"), out["modeRaw"])
+        assertEquals(JsonPrimitive(2), out["rulesVersion"])
+    }
+
+    @Test
+    fun backfillIgnoresACacheTaggedToAnotherFolder() = runTest {
+        importUnrecordedSession()
+        markBackfillPending()
+        SyncLastManifestStore(filesRoot, BackupRepository.PENDING_IMPORT_MANIFEST_FILE).clear()
+        SyncLastManifestStore(filesRoot).save(
+            manifestWithSession(sessionRecord(emptyMap())),
+            folderUri = "content://some-other-folder"
+        )
+        val out = exportedSession()
+        assertNull(out["activeSeconds"])
+        assertNull(out["rulesVersion"])
+    }
+
+    private fun overlayEnvelope(generation: String, writingRecovery: String): String =
+        """{"kudosStoreGeneration":"$generation","kudosStoreManifest":{"version":8,""" +
+            """"exportedAt":"2026-06-28T00:00:00.000Z","writingRecovery":"$writingRecovery"}}"""
+
+    /** Puts the disk in the state a killed Replace leaves: new overlays published, asides kept. */
+    private suspend fun leaveDeadReplace(generation: String): Map<String, JsonObject?> {
+        backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay("99999999-0000-4000-8000-000000000083")), mode = BackupImportMode.MERGE)
+        val names = listOf("sync-last-manifest.json", BackupRepository.PENDING_IMPORT_MANIFEST_FILE)
+        val before = names.associateWith { SyncLastManifestStore(filesRoot, it).load() }
+        names.forEach { name ->
+            Files.copy(filesRoot.resolve(name), filesRoot.resolve("$name.kudos-replace-undo"))
+            Files.write(filesRoot.resolve(name), overlayEnvelope(generation, "from-dead-replace").toByteArray())
+        }
+        Files.write(filesRoot.resolve("sync-replace-generation"), generation.toByteArray())
+        return before
+    }
+
+    @Test
+    fun deadReplaceThatNeverCommittedRestoresTheOldOverlaysBeforeAnyExport() = runTest {
+        val before = leaveDeadReplace("dead-generation")
+        val exported = exportedManifest()
+        assertNull("the uncommitted Replace's draft must not reach an export", exported["writingRecovery"])
+        before.forEach { (name, body) ->
+            assertEquals(body, SyncLastManifestStore(filesRoot, name).load())
+            assertFalse(Files.exists(filesRoot.resolve("$name.kudos-replace-undo")))
+        }
+        assertFalse(Files.exists(filesRoot.resolve("sync-replace-generation")))
+    }
+
+    @Test
+    fun deadReplaceThatCommittedKeepsTheNewOverlaysAndDropsTheAsides() = runTest {
+        leaveDeadReplace("committed-generation")
+        val db = database.openHelper.writableDatabase
+        db.execSQL("CREATE TABLE IF NOT EXISTS kudos_replace_generation (id INTEGER PRIMARY KEY NOT NULL, generation TEXT NOT NULL)")
+        db.execSQL("INSERT OR REPLACE INTO kudos_replace_generation (id, generation) VALUES (0, 'committed-generation')")
+        exportedManifest()
+        listOf("sync-last-manifest.json", BackupRepository.PENDING_IMPORT_MANIFEST_FILE).forEach { name ->
+            assertEquals(
+                JsonPrimitive("from-dead-replace"),
+                SyncLastManifestStore(filesRoot, name).load()!!["writingRecovery"]
+            )
+            assertFalse(Files.exists(filesRoot.resolve("$name.kudos-replace-undo")))
+        }
+        assertFalse(Files.exists(filesRoot.resolve("sync-replace-generation")))
+    }
+
+    @Test
+    fun failedReplaceRestoresALegacyCacheWithItsFolderTag() = runTest {
+        Files.write(filesRoot.resolve("sync-last-manifest.json"), "{\"writingRecovery\":\"legacy\"}".toByteArray())
+        Files.write(filesRoot.resolve("sync-last-manifest.json.folder"), "content://folder-a".toByteArray())
+        val replacement = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T13:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("replacement")
+            )
+        )
+        SyncLastManifestStore.beforeFilePublish = { path ->
+            if (path.fileName.toString() == BackupRepository.PENDING_IMPORT_MANIFEST_FILE) {
+                throw java.io.IOException("simulated death before the overlay publishes")
+            }
+        }
+        try {
+            runCatching {
+                backupRepository.importV2ZipBytes(zipManifest(replacement), mode = BackupImportMode.REPLACE_LIBRARY)
+            }
+        } finally {
+            SyncLastManifestStore.beforeFilePublish = null
+        }
+        val cache = SyncLastManifestStore(filesRoot)
+        assertEquals(JsonPrimitive("legacy"), cache.load()!!["writingRecovery"])
+        assertTrue(cache.belongsToFolder("content://folder-a"))
     }
 
     @Test
@@ -2172,6 +2325,13 @@ class SyncManifestPassthroughTest {
             SyncLastManifestStore.beforeFilePublish = null
         }
         assertEquals(1, publishes)
+    }
+
+    /** Puts the install back in its upgrade state: the one-shot backfill has not run yet. */
+    private fun markBackfillPending() {
+        val db = database.openHelper.writableDatabase
+        db.execSQL("CREATE TABLE IF NOT EXISTS kudos_one_shot (name TEXT PRIMARY KEY NOT NULL)")
+        db.execSQL("DELETE FROM kudos_one_shot")
     }
 
     private fun backupOneOverlay(workId: String): JsonObject = JsonObject(

@@ -376,7 +376,7 @@ private enum class StampWinner { PRIMARY, FALLBACK, TIE }
 
 private data class EntryStamp(val stampKey: String, val owner: String, val entry: String)
 
-private fun instantOf(element: JsonElement?): Instant? {
+internal fun instantOf(element: JsonElement?): Instant? {
     val text = (element as? JsonPrimitive)?.contentOrNull ?: return null
     return runCatching { Instant.parse(text) }.getOrNull()
         ?: runCatching { OffsetDateTime.parse(text).toInstant() }.getOrNull()
@@ -721,15 +721,22 @@ internal class SyncLastManifestStore(
     private val legacyFolderFile: Path = directory.resolve("$fileName.folder")
 
     /** The body and the folder tag live in one file so one atomic move publishes both. */
-    private class Stored(val body: JsonObject, val folder: String?)
+    private class Stored(val body: JsonObject, val folder: String?, val enveloped: Boolean, val generation: String?)
 
     private fun read(): Stored? {
         if (!Files.isRegularFile(file)) return null
         val bytes = runCatching { Files.readAllBytes(file) }.getOrNull() ?: return null
         val obj = parseJsonObjectOrNull(bytes) ?: return null
         val body = obj[ENVELOPE_BODY] as? JsonObject
-        if (body != null) return Stored(body, (obj[ENVELOPE_FOLDER] as? JsonPrimitive)?.contentOrNull)
-        return Stored(obj, readLegacyTag())
+        if (body != null) {
+            return Stored(
+                body,
+                (obj[ENVELOPE_FOLDER] as? JsonPrimitive)?.contentOrNull,
+                enveloped = true,
+                generation = (obj[ENVELOPE_GENERATION] as? JsonPrimitive)?.contentOrNull
+            )
+        }
+        return Stored(obj, readLegacyTag(), enveloped = false, generation = null)
     }
 
     private fun readLegacyTag(): String? {
@@ -738,6 +745,15 @@ internal class SyncLastManifestStore(
     }
 
     fun load(): JsonObject? = synchronized(lock) { read()?.body }
+
+    /** The Replace generation this file was published under, if any. */
+    fun generation(): String? = synchronized(lock) { read()?.generation }
+
+    /** Rewrites a legacy body + `.folder` pair as one envelope, so a copy of the file carries its tag. */
+    fun normalizeLegacy() = synchronized(lock) {
+        val stored = read() ?: return@synchronized
+        if (!stored.enveloped) save(stored.body, folderUri = stored.folder)
+    }
 
     fun taggedFolderUri(): String? = synchronized(lock) { read()?.folder }
 
@@ -759,7 +775,12 @@ internal class SyncLastManifestStore(
      * [folderUri] non-null tags the file with it. Null keeps the tag already stored, unless
      * [clearStaleFolderTag] asks for it to be dropped in the same publish.
      */
-    fun save(json: JsonObject, folderUri: String? = null, clearStaleFolderTag: Boolean = false) = synchronized(lock) {
+    fun save(
+        json: JsonObject,
+        folderUri: String? = null,
+        clearStaleFolderTag: Boolean = false,
+        generation: String? = null
+    ) = synchronized(lock) {
         val tag = when {
             folderUri != null -> folderUri
             clearStaleFolderTag -> null
@@ -768,6 +789,7 @@ internal class SyncLastManifestStore(
         val envelope = JsonObject(
             buildMap {
                 if (tag != null) put(ENVELOPE_FOLDER, JsonPrimitive(tag))
+                if (generation != null) put(ENVELOPE_GENERATION, JsonPrimitive(generation))
                 put(ENVELOPE_BODY, json)
             }
         )
@@ -816,6 +838,7 @@ internal class SyncLastManifestStore(
         private val lock = Any()
         private const val ENVELOPE_FOLDER = "kudosStoreFolder"
         private const val ENVELOPE_BODY = "kudosStoreManifest"
+        private const val ENVELOPE_GENERATION = "kudosStoreGeneration"
 
         /** Test hook. Receives the file about to be published. Null in production. */
         internal var beforeFilePublish: ((Path) -> Unit)? = null
