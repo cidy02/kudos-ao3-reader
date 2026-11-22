@@ -116,7 +116,7 @@ final class SwiftDataStorePrototypeTests: XCTestCase {
         let result = sampler.stop()
         // Exact final state: counts through a fresh context.
         let check = ModelContext(container!)
-        let live = (try? check.fetchCount(FetchDescriptor<SavedWork>(predicate: #Predicate { $0.isDeleted == false }))) ?? -1
+        let live = (try? check.fetchCount(FetchDescriptor<SavedWork>(predicate: #Predicate { $0.deletedAt == nil }))) ?? -1
         let all = (try? check.fetchCount(FetchDescriptor<SavedWork>())) ?? -1
         contents = nil
         let afterReleaseContents = T567Memory.settledFootprint()

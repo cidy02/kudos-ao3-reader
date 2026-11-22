@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import SwiftData
+import XCTest
 @testable import Kudos
 
 /// T-567 P1 measurement plumbing (test target only). Everything here is opt-in via environment variables, which
@@ -145,6 +146,9 @@ enum T567Recorder {
         let dir = T567Config.outDir
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent(file)
+        if let line = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) {
+            print("T567JSON \(file) " + String(decoding: line, as: UTF8.self)) // so a device run's results are in the test log
+        }
         guard var data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return }
         data.append(0x0A)
         if let handle = try? FileHandle(forWritingTo: url) {
@@ -205,6 +209,9 @@ enum T567Fixtures {
                 .write(to: legacy.appendingPathComponent("Works/\(id.uuidString).epub"))
         }
         try Data().write(to: dir.appendingPathComponent("DONE"))
+        T567Recorder.append("fixtures.jsonl", [
+            "fixture": name(axis, mib), "dirBytes": T567Sampler.diskUse([dir]), "rootBytes": T567Sampler.diskUse([root])
+        ])
         return FixtureSet(output: out, zipURL: zipURL, directoryURL: legacy)
     }
 }
@@ -249,5 +256,17 @@ enum T567Store {
     static func recoveryNames(_ spec: ManifestFixtureSpec) -> [String] {
         let n = spec.recoveryCopies + (spec.bigRecoveryChars > 0 ? 1 : 0)
         return (0 ..< n).map { ManifestFixtureGenerator.recoveryFileName($0, seed: spec.seed) }
+    }
+}
+
+/// `KUDOS_T567_PURGE=1`: deletes every generated fixture (a device run must leave nothing in the app sandbox) and
+/// records how much storage they held.
+@MainActor
+final class T567FixturePurgeTests: XCTestCase {
+    func testPurgeFixtures() throws {
+        try XCTSkipUnless(T567Config.enabled && T567Config.env["KUDOS_T567_PURGE"] == "1", "opt-in")
+        let held = T567Sampler.diskUse([T567Fixtures.root])
+        try? FileManager.default.removeItem(at: T567Fixtures.root)
+        T567Recorder.append("fixtures.jsonl", ["purged": true, "heldBytesBeforePurge": held])
     }
 }
