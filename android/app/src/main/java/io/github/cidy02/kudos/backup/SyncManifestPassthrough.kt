@@ -41,6 +41,11 @@ private val knownPronunciationKeys: Set<String> by lazy {
 
 private val settingsMapKeys = setOf("modifiedAt", "extras")
 
+private val sessionFactKeys = setOf(
+    "tzOffsetSeconds", "startProgress", "startSpineIndex", "modeRaw", "playbackRate", "activeSeconds",
+    "deviceID", "rulesVersion"
+)
+
 @OptIn(ExperimentalSerializationApi::class)
 private val recordListDescriptors: Map<String, SerialDescriptor> by lazy {
     mapOf(
@@ -219,7 +224,14 @@ internal fun carryUnknownRecordKeys(outgoing: JsonObject, replaced: JsonObject?)
             newRecords.map { element ->
                 val record = element as? JsonObject ?: return@map element
                 val old = matcher.match(record) ?: return@map record
-                JsonObject(record + old.filterKeys { it !in known && it !in record })
+                // Sessions are immutable facts: a sitting fact the typed record leaves out (an older
+                // build held it only as an unknown key, so Room never got it) comes from the raw copy.
+                val carried = if (listName == "readingSessions") {
+                    old.filterKeys { it in sessionFactKeys && (record[it] == null || record[it] == JsonNull) && old[it] != JsonNull }
+                } else {
+                    emptyMap()
+                }
+                JsonObject(record + old.filterKeys { it !in known && it !in record } + carried)
             }
         )
     }
@@ -376,7 +388,7 @@ private enum class StampWinner { PRIMARY, FALLBACK, TIE }
 
 private data class EntryStamp(val stampKey: String, val owner: String, val entry: String)
 
-internal fun instantOf(element: JsonElement?): Instant? {
+private fun instantOf(element: JsonElement?): Instant? {
     val text = (element as? JsonPrimitive)?.contentOrNull ?: return null
     return runCatching { Instant.parse(text) }.getOrNull()
         ?: runCatching { OffsetDateTime.parse(text).toInstant() }.getOrNull()
@@ -721,7 +733,7 @@ internal class SyncLastManifestStore(
     private val legacyFolderFile: Path = directory.resolve("$fileName.folder")
 
     /** The body and the folder tag live in one file so one atomic move publishes both. */
-    private class Stored(val body: JsonObject, val folder: String?, val enveloped: Boolean, val generation: String?)
+    private class Stored(val body: JsonObject, val folder: String?, val enveloped: Boolean)
 
     private fun read(): Stored? {
         if (!Files.isRegularFile(file)) return null
@@ -729,14 +741,9 @@ internal class SyncLastManifestStore(
         val obj = parseJsonObjectOrNull(bytes) ?: return null
         val body = obj[ENVELOPE_BODY] as? JsonObject
         if (body != null) {
-            return Stored(
-                body,
-                (obj[ENVELOPE_FOLDER] as? JsonPrimitive)?.contentOrNull,
-                enveloped = true,
-                generation = (obj[ENVELOPE_GENERATION] as? JsonPrimitive)?.contentOrNull
-            )
+            return Stored(body, (obj[ENVELOPE_FOLDER] as? JsonPrimitive)?.contentOrNull, enveloped = true)
         }
-        return Stored(obj, readLegacyTag(), enveloped = false, generation = null)
+        return Stored(obj, readLegacyTag(), enveloped = false)
     }
 
     private fun readLegacyTag(): String? {
@@ -745,9 +752,6 @@ internal class SyncLastManifestStore(
     }
 
     fun load(): JsonObject? = synchronized(lock) { read()?.body }
-
-    /** The Replace generation this file was published under, if any. */
-    fun generation(): String? = synchronized(lock) { read()?.generation }
 
     /** Rewrites a legacy body + `.folder` pair as one envelope, so a copy of the file carries its tag. */
     fun normalizeLegacy() = synchronized(lock) {
@@ -775,12 +779,7 @@ internal class SyncLastManifestStore(
      * [folderUri] non-null tags the file with it. Null keeps the tag already stored, unless
      * [clearStaleFolderTag] asks for it to be dropped in the same publish.
      */
-    fun save(
-        json: JsonObject,
-        folderUri: String? = null,
-        clearStaleFolderTag: Boolean = false,
-        generation: String? = null
-    ) = synchronized(lock) {
+    fun save(json: JsonObject, folderUri: String? = null, clearStaleFolderTag: Boolean = false) = synchronized(lock) {
         val tag = when {
             folderUri != null -> folderUri
             clearStaleFolderTag -> null
@@ -789,7 +788,6 @@ internal class SyncLastManifestStore(
         val envelope = JsonObject(
             buildMap {
                 if (tag != null) put(ENVELOPE_FOLDER, JsonPrimitive(tag))
-                if (generation != null) put(ENVELOPE_GENERATION, JsonPrimitive(generation))
                 put(ENVELOPE_BODY, json)
             }
         )
@@ -838,7 +836,6 @@ internal class SyncLastManifestStore(
         private val lock = Any()
         private const val ENVELOPE_FOLDER = "kudosStoreFolder"
         private const val ENVELOPE_BODY = "kudosStoreManifest"
-        private const val ENVELOPE_GENERATION = "kudosStoreGeneration"
 
         /** Test hook. Receives the file about to be published. Null in production. */
         internal var beforeFilePublish: ((Path) -> Unit)? = null

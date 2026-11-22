@@ -210,7 +210,7 @@ class SyncRepository(
     private suspend fun runSyncLocked(): SyncResult {
         val generation = folderGeneration
         val uri = getSyncFolderUri() ?: return SyncResult.Error("No sync folder selected.")
-        backupRepository.prepareOverlaysForRead()
+        backupRepository.recoverInterruptedReplace()
         val root = DocumentFile.fromTreeUri(context, uri)
             ?: return SyncResult.Error("Could not access sync folder.")
 
@@ -393,6 +393,7 @@ class SyncRepository(
                 // Replace that paused sync meanwhile must not have its library published or the
                 // folder pruned by works it removed (review of 3fy, F7).
                 if (!folderImportStillAllowed()) throw ImportDeclined()
+                backupRepository.recoverInterruptedReplace()
                 val pendingImport = pendingImportManifestStore.load()
                 val effectiveReadManifestJson = when {
                     readManifestJson != null && pendingImport != null ->

@@ -7,16 +7,24 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 
 /** Replace-only undo for atomic replacements and newly created assets. Never serialized. */
-internal class BackupFileUndo {
+internal class BackupFileUndo(private val journal: Path? = null) {
     private val previous = linkedMapOf<Path, Path?>()
 
     fun beforeWrite(destination: Path) {
         if (destination in previous) return
-        val undo = destination.resolveSibling("${destination.fileName}$UNDO_SUFFIX")
+        val undo = asideOf(destination)
         if (Files.exists(undo, LinkOption.NOFOLLOW_LINKS)) {
             throw IOException("Unrecovered Replace file: ${undo.fileName}")
         }
-        if (!Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
+        val existed = Files.exists(destination, LinkOption.NOFOLLOW_LINKS)
+        // Written before the file is touched, so a process death can still undo or finish it.
+        journal?.let {
+            Files.write(
+                it, "${if (existed) "E" else "N"}\t$destination\n".toByteArray(),
+                java.nio.file.StandardOpenOption.APPEND
+            )
+        }
+        if (!existed) {
             previous[destination] = null
             return
         }
@@ -52,6 +60,8 @@ internal class BackupFileUndo {
 
     companion object {
         const val UNDO_SUFFIX = ".kudos-replace-undo"
+
+        fun asideOf(destination: Path): Path = destination.resolveSibling("${destination.fileName}$UNDO_SUFFIX")
 
         /** Caller holds the persistence gate; never sweep an active Replace's asides. */
         fun recover(vararg directories: Path) {

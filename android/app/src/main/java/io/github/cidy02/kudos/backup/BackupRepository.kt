@@ -67,7 +67,7 @@ class BackupRepository(
 
     internal fun lastImportedManifestJson(): JsonObject? = lastImportedManifestStore.load()
     val metadataCheck = SyncMetadataCheck(now = clock) {
-        persistenceGate.withLock {
+        gated {
             withContext(Dispatchers.IO) {
                 val manifest = captureLibrarySnapshot().toV2Manifest(exportedAt = clock(), appVersion = appVersion)
                 BackupValidator.validateManifest(manifest, now = clock())
@@ -86,8 +86,7 @@ class BackupRepository(
     // (SyncRepository.runSync -> this) writing the same local state.
     suspend fun exportV2ZipBytes(): ByteArray = exportV2Zip().bytes
 
-    suspend fun exportV2Zip(): BackupExportResult = persistenceGate.withLock {
-        prepareOverlaysForRead()
+    suspend fun exportV2Zip(): BackupExportResult = gated {
         withContext(Dispatchers.IO) {
             val snapshot = captureLibrarySnapshot()
             val epubFiles = linkedMapOf<String, ByteArray>()
@@ -159,15 +158,15 @@ class BackupRepository(
         admit: suspend () -> Boolean,
         replacePassthroughStore: Boolean,
         folderUri: String? = null
-    ): BackupRestoreSummary = persistenceGate.withLock {
+    ): BackupRestoreSummary = gated {
         if (!admit()) throw ImportDeclined()
         withContext(Dispatchers.IO) {
             val pack = BackupImporter.importV2Zip(bytes, cacheDirectory)
             prepareForImport(mode)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode)
-            applyMergeResultLocked(merge, pack.originalFilesByName) { undo, generation ->
-                recordImportedManifest(pack.rawManifestJson, mode, replacePassthroughStore, folderUri, undo, generation)
+            applyMergeResultLocked(merge, pack.originalFilesByName) { undo ->
+                recordImportedManifest(pack.rawManifestJson, mode, replacePassthroughStore, folderUri, undo)
             }
         }
     }
@@ -177,88 +176,17 @@ class BackupRepository(
         mode: BackupImportMode = BackupImportMode.RECONCILE,
         normalizeQueuePreservation: Boolean = true,
         admit: suspend () -> Boolean = { true }
-    ): BackupRestoreSummary = persistenceGate.withLock {
+    ): BackupRestoreSummary = gated {
         if (!admit()) throw ImportDeclined()
         withContext(Dispatchers.IO) {
             BackupFontValidator.validate(pack.fontFilesByFileName, cacheDirectory)
             prepareForImport(mode)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode, normalizeQueuePreservation)
-            applyMergeResultLocked(merge, pack.originalFilesByName) { undo, generation ->
-                recordImportedManifest(pack.rawManifestJson, mode, fileUndo = undo, generation = generation)
+            applyMergeResultLocked(merge, pack.originalFilesByName) { undo ->
+                recordImportedManifest(pack.rawManifestJson, mode, fileUndo = undo)
             }
         }
-    }
-
-    /**
-     * Makes the overlay stores trustworthy, then fills pre-upgrade sessions. Run before anything
-     * exports, syncs or imports.
-     */
-    internal suspend fun prepareOverlaysForRead() = persistenceGate.withLock {
-        recoverReplaceFiles()
-        backfillReadingSessionFactsOnce()
-    }
-
-    /**
-     * An older build kept a session's `activeSeconds`, `modeRaw` and `rulesVersion` (and the other
-     * sitting facts) only as unknown keys in the retained raw manifest. They are modeled now, so
-     * once per install, before any import or export can change a row, fill each still-unrecorded
-     * session from that raw record. Only the pending overlay (this device's own) and a cache
-     * that is untagged or tagged to the current folder are read, never another folder's cache.
-     * The newest record by its own timestamp wins each fact; a local value is never overwritten.
-     */
-    private suspend fun backfillReadingSessionFactsOnce() = withContext(Dispatchers.IO) {
-        if (oneShotDone(BACKFILL_ONE_SHOT)) return@withContext
-        val currentFolder = settingsRepository.settings.first().sync.folderUri
-        val cache = lastImportedManifestStore.takeIf {
-            val tag = it.taggedFolderUri()
-            tag == null || tag == currentFolder
-        }
-        val candidates = listOfNotNull(cache?.load(), pendingImportManifestStore.load())
-            .flatMap { (it["readingSessions"] as? kotlinx.serialization.json.JsonArray).orEmpty() }
-            .mapNotNull { it as? JsonObject }
-            .mapNotNull { record ->
-                val archived = runCatching {
-                    BackupJson.decodeFromJsonElement(BackupReadingSession.serializer(), record)
-                }.getOrNull() ?: return@mapNotNull null
-                val id = runCatching { BackupPaths.canonicalUuid(archived.id, "readingSession.id") }.getOrNull()
-                    ?: return@mapNotNull null
-                Triple(id, archived, instantOf(record["lastModifiedAt"]) ?: Instant.EPOCH)
-            }
-            .groupBy({ it.first }, { it.second to it.third })
-        val dao = database.readingLogDao()
-        database.withTransaction {
-            dao.getAllSessions().filter { it.rulesVersion == 0 }.forEach { session ->
-                val ranked = candidates[session.id]?.sortedByDescending { it.second }?.map { it.first } ?: return@forEach
-                fun <T : Any> first(pick: (BackupReadingSession) -> T?): T? = ranked.firstNotNullOfOrNull(pick)
-                val rules = first { it.rulesVersion?.takeIf { v -> v > 0 } } ?: return@forEach
-                dao.upsertSession(
-                    session.copy(
-                        tzOffsetSeconds = session.tzOffsetSeconds ?: first { it.tzOffsetSeconds },
-                        startProgress = session.startProgress ?: first { it.startProgress },
-                        startSpineIndex = session.startSpineIndex ?: first { it.startSpineIndex },
-                        modeRaw = if (session.modeRaw == "read") first { it.modeRaw } ?: session.modeRaw else session.modeRaw,
-                        playbackRate = session.playbackRate ?: first { it.playbackRate },
-                        activeSeconds = session.activeSeconds ?: first { it.activeSeconds },
-                        deviceID = session.deviceID.ifEmpty { first { it.deviceID } ?: "" },
-                        rulesVersion = rules
-                    )
-                )
-            }
-            markOneShotDone(BACKFILL_ONE_SHOT)
-        }
-    }
-
-    /** A flag row in Room's own file: it commits with the rows it guards and is not a stray file. */
-    private fun oneShotDone(name: String): Boolean = runCatching {
-        database.openHelper.readableDatabase.query("SELECT 1 FROM $ONE_SHOT_TABLE WHERE name = ?", arrayOf(name))
-            .use { it.moveToFirst() }
-    }.getOrDefault(false)
-
-    private fun markOneShotDone(name: String) {
-        val db = database.openHelper.writableDatabase
-        db.execSQL("CREATE TABLE IF NOT EXISTS $ONE_SHOT_TABLE (name TEXT PRIMARY KEY NOT NULL)")
-        db.execSQL("INSERT OR IGNORE INTO $ONE_SHOT_TABLE (name) VALUES (?)", arrayOf(name))
     }
 
     private suspend fun recordImportedManifest(
@@ -266,8 +194,7 @@ class BackupRepository(
         mode: BackupImportMode,
         replacePassthroughStore: Boolean = false,
         folderUri: String? = null,
-        fileUndo: BackupFileUndo? = null,
-        generation: String? = null
+        fileUndo: BackupFileUndo? = null
     ) {
         // Replace: the old overlay is set aside first, so a failed Replace puts it back. A legacy
         // body + `.folder` pair becomes one envelope first, so the aside carries its tag.
@@ -280,7 +207,7 @@ class BackupRepository(
         val connectedFolderUri = folderUri ?: settingsRepository.settings.first().sync.folderUri
         if (replacePassthroughStore) {
             if (rawJson != null) {
-                undoable(lastImportedManifestStore).save(rawJson, folderUri = connectedFolderUri, generation = generation)
+                undoable(lastImportedManifestStore).save(rawJson, folderUri = connectedFolderUri)
             } else {
                 undoable(lastImportedManifestStore).clear()
             }
@@ -291,8 +218,8 @@ class BackupRepository(
         // tagged, and a tag left by an older build is dropped in the same save (data kept).
         if (mode == BackupImportMode.REPLACE_LIBRARY) {
             if (rawJson != null) {
-                undoable(lastImportedManifestStore).save(rawJson, folderUri = keepFolderTag, generation = generation)
-                undoable(pendingImportManifestStore).save(rawJson, clearStaleFolderTag = true, generation = generation)
+                undoable(lastImportedManifestStore).save(rawJson, folderUri = keepFolderTag)
+                undoable(pendingImportManifestStore).save(rawJson, clearStaleFolderTag = true)
             } else {
                 undoable(lastImportedManifestStore).clear()
                 undoable(pendingImportManifestStore).clear()
@@ -307,33 +234,36 @@ class BackupRepository(
     internal companion object {
         internal const val PENDING_IMPORT_MANIFEST_FILE = "sync-pending-import-manifest.json"
         internal const val REPLACE_JOURNAL_FILE = "sync-replace-generation"
-        internal const val BACKFILL_ONE_SHOT = "reading-session-backfill"
-        private const val ONE_SHOT_TABLE = "kudos_one_shot"
         private const val REPLACE_GENERATION_TABLE = "kudos_replace_generation"
+
+        /** Test hook: skips Replace's cleanup, as a process death between commit and cleanup would. */
+        internal var skipReplaceCleanup = false
+    }
+
+    /** Recovery at the top of every gated section, except inside the Replace that owns the journal. */
+    private var replaceRunning = false
+
+    private suspend fun <T> gated(action: suspend () -> T): T = persistenceGate.withLock {
+        if (!replaceRunning) recoverReplaceFiles()
+        action()
     }
 
     private suspend fun prepareForImport(mode: BackupImportMode) {
         // Replace does not need signed local suppressors. Leave migration to launch or
         // reconcile so a failed Replace cannot change tombstones before its transaction.
-        if (mode == BackupImportMode.REPLACE_LIBRARY) {
-            recoverReplaceFiles()
-        } else {
+        if (mode != BackupImportMode.REPLACE_LIBRARY) {
             TombstoneLocalMigration.runIfNeeded(database, settingsRepository)
         }
-        // Before this import can change a row or an overlay, so only pre-upgrade rows are filled.
-        backfillReadingSessionFactsOnce()
     }
 
     internal fun applyPronunciations(corrections: io.github.cidy02.kudos.reader.speech.PronunciationCorrections) {
         pronunciationStore.apply(corrections)
     }
 
-    internal suspend fun recoverInterruptedReplace() = persistenceGate.withLock {
-        recoverReplaceFiles()
-    }
+    internal suspend fun recoverInterruptedReplace() = gated { }
 
     private suspend fun recoverReplaceFiles() = withContext(Dispatchers.IO) {
-        recoverReplaceOverlays()
+        recoverReplaceJournal()
         BackupFileUndo.recover(
             workFileStore.worksDirectory, fontFileStore.fontsDirectory, workFileStore.originalsDirectory,
             *listOfNotNull(workFileStore.worksDirectory.parent).toTypedArray()
@@ -367,7 +297,7 @@ class BackupRepository(
         manifest: KudosBackupManifest,
         files: Map<String, ByteArray>,
         admit: suspend () -> Boolean = { true }
-    ) = persistenceGate.withLock {
+    ) = gated {
         if (!admit()) throw ImportDeclined()
         val works = database.workDao().getAllIncludingDeleted().map { it.toDomain() }
         val identity = WorkIdentityIndex.snapshot(works)
@@ -573,8 +503,7 @@ class BackupRepository(
     internal suspend fun applyMergeResult(
         merge: BackupMergeResult,
         originalFiles: Map<String, ByteArray> = emptyMap()
-    ): BackupRestoreSummary = persistenceGate.withLock {
-        if (merge.mode == BackupImportMode.REPLACE_LIBRARY) recoverReplaceFiles()
+    ): BackupRestoreSummary = gated {
         applyMergeResultLocked(merge, originalFiles)
     }
 
@@ -582,35 +511,42 @@ class BackupRepository(
         get() = workFileStore.worksDirectory.parent?.resolve(REPLACE_JOURNAL_FILE)
 
     /**
-     * Replace writes its generation here before touching either overlay, and the same generation
-     * into Room's own transaction ([markReplaceCommitted]). After a process death the two
-     * overlays are kept only if Room committed that generation; otherwise the dead Replace's
-     * files are removed and the asides restored, so overlays never describe another library.
+     * Replace journals its generation, then every file it touches (works, originals, fonts and
+     * both overlays) as it goes, and writes the generation into Room's own transaction
+     * ([markReplaceCommitted]). The generation row alone decides: committed drops every aside,
+     * not committed restores every aside and removes every file the Replace created. A query that
+     * fails leaves the journal for the next try.
      */
-    private fun recoverReplaceOverlays() {
+    private fun recoverReplaceJournal() {
         val journal = replaceJournal ?: return
         if (!Files.isRegularFile(journal)) return
-        val generation = Files.readAllBytes(journal).toString(Charsets.UTF_8)
-        val committed = committedReplaceGeneration() == generation
-        listOf(lastImportedManifestStore, pendingImportManifestStore).forEach { store ->
-            val aside = store.file.resolveSibling("${store.file.fileName}${BackupFileUndo.UNDO_SUFFIX}")
-            if (committed) {
-                Files.deleteIfExists(aside)
-            } else if (Files.isRegularFile(aside)) {
-                Files.deleteIfExists(store.file)
-                Files.move(aside, store.file, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
-            } else if (store.generation() == generation) {
-                Files.deleteIfExists(store.file)
+        val lines = Files.readAllLines(journal)
+        val committed = committedReplaceGeneration() == lines.firstOrNull().orEmpty()
+        lines.drop(1).asReversed().forEach { line ->
+            val destination = runCatching { java.nio.file.Path.of(line.substringAfter('\t')) }.getOrNull() ?: return@forEach
+            val aside = BackupFileUndo.asideOf(destination)
+            when {
+                committed -> Files.deleteIfExists(aside)
+                line.startsWith("N") -> Files.deleteIfExists(destination)
+                Files.isRegularFile(aside) -> {
+                    Files.deleteIfExists(destination)
+                    Files.move(aside, destination, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+                }
             }
         }
         Files.deleteIfExists(journal)
     }
 
-    private fun committedReplaceGeneration(): String? = runCatching {
-        database.openHelper.readableDatabase.query(
-            "SELECT generation FROM $REPLACE_GENERATION_TABLE WHERE id = 0"
-        ).use { if (it.moveToFirst()) it.getString(0) else null }
-    }.getOrNull()
+    /** Null when no Replace ever committed (no table or row); a failing query is an error, not "absent". */
+    private fun committedReplaceGeneration(): String? {
+        val db = database.openHelper.readableDatabase
+        val tableExists = db.query(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", arrayOf(REPLACE_GENERATION_TABLE)
+        ).use { it.moveToFirst() }
+        if (!tableExists) return null
+        return db.query("SELECT generation FROM $REPLACE_GENERATION_TABLE WHERE id = 0")
+            .use { if (it.moveToFirst()) it.getString(0) else null }
+    }
 
     /** Inside the Replace transaction: this row commits, or rolls back, with the library. */
     private fun markReplaceCommitted(generation: String) {
@@ -626,46 +562,58 @@ class BackupRepository(
     private suspend fun applyMergeResultLocked(
         merge: BackupMergeResult,
         originalFiles: Map<String, ByteArray>,
-        recordManifest: suspend (BackupFileUndo?, String?) -> Unit = { _, _ -> }
+        recordManifest: suspend (BackupFileUndo?) -> Unit = {}
     ): BackupRestoreSummary {
         if (merge.mode != BackupImportMode.REPLACE_LIBRARY) {
             val summary = applyMergeResultWithFiles(merge, originalFiles)
-            recordManifest(null, null)
+            recordManifest(null)
             return restorePronunciations(summary, merge)
         }
-        val fileUndo = BackupFileUndo()
-        val generation = uuidFactory()
+        val generation = UUID.randomUUID().toString()
         val journal = replaceJournal
-        if (journal != null) Files.write(journal, generation.toByteArray(Charsets.UTF_8))
-        val summary = try {
-            // Nested per-file transactions join this transaction: no rows commit until
-            // every required asset is installed. A failed commit also undoes the files.
-            database.withTransaction {
-                try {
-                    // The overlay publishes inside the transaction, right before it commits: a
-                    // failure here rolls the library back, so library and overlay never differ.
+        if (journal != null) Files.write(journal, "$generation\n".toByteArray(Charsets.UTF_8))
+        val fileUndo = BackupFileUndo(journal)
+        replaceRunning = true
+        try {
+            val summary = try {
+                // Nested per-file transactions join this transaction: no rows commit until every
+                // required asset is installed. The overlays publish inside it too, so library and
+                // overlays commit together.
+                database.withTransaction {
                     applyMergeResultWithFiles(merge, originalFiles, fileUndo).also {
-                        recordManifest(fileUndo, generation)
+                        recordManifest(fileUndo)
                         markReplaceCommitted(generation)
                     }
-                } catch (error: Throwable) {
-                    fileUndo.rollback(error)
-                    throw error
+                }
+            } catch (error: Throwable) {
+                if (skipReplaceCleanup) throw error
+                // Cancellation can land after the commit: the generation row, not the exception,
+                // says whether the files go forward or back. Unreadable means leave it all for recovery.
+                withContext(kotlinx.coroutines.NonCancellable) {
+                    when (runCatching { committedReplaceGeneration() == generation }.getOrNull()) {
+                        true -> fileUndo.discard()
+                        false -> fileUndo.rollback(error)
+                        null -> return@withContext
+                    }
+                    // The screen promises "not replaced" only when that is so (A53 F1).
+                    if (!fileUndo.isUndone && error !is kotlinx.coroutines.CancellationException) {
+                        throw BackupError.ReplaceNotUndone(error)
+                    }
+                    if (journal != null) runCatching { Files.deleteIfExists(journal) }
+                }
+                throw error
+            }
+            if (!skipReplaceCleanup) {
+                withContext(kotlinx.coroutines.NonCancellable) {
+                    fileUndo.discard()
+                    if (journal != null) runCatching { Files.deleteIfExists(journal) }
                 }
             }
-        } catch (error: Throwable) {
-            fileUndo.rollback(error)
-            // The screen promises "not replaced" only when that is so (A53 F1).
-            if (!fileUndo.isUndone && error !is kotlinx.coroutines.CancellationException) {
-                throw BackupError.ReplaceNotUndone(error)
-            }
-            if (journal != null) runCatching { Files.deleteIfExists(journal) }
-            throw error
+            // iOS merges corrections even for Replace; never sweep local-only words.
+            return restorePronunciations(summary, merge)
+        } finally {
+            replaceRunning = false
         }
-        fileUndo.discard()
-        if (journal != null) runCatching { Files.deleteIfExists(journal) }
-        // iOS merges corrections even for Replace; never sweep local-only words.
-        return restorePronunciations(summary, merge)
     }
 
     private fun restorePronunciations(summary: BackupRestoreSummary, merge: BackupMergeResult): BackupRestoreSummary =
