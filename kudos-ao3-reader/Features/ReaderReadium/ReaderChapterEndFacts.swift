@@ -70,22 +70,35 @@ enum ReaderChapterEndFacts {
     /// "Chapter 15 of 30 is the latest · updated Nov 3, 2026". AO3 gives a date, not a time, so
     /// the line says "updated <date>" and never invents "2 h ago". Nil with no posted count.
     static func latestChapterLine(
-        postedChapters: Int, totalChapters: Int?, updated: String
+        postedChapters: Int, totalChapters: Int?, updated: String, copyBehind: Bool = false
     ) -> String? {
         guard postedChapters > 0 else { return nil }
         var line = totalChapters.map { "Chapter \(postedChapters) of \($0) is the latest" }
             ?? "Chapter \(postedChapters) is the latest"
+        if copyBehind { line = "New chapters on AO3 · " + line }
         let date = updated.trimmingCharacters(in: .whitespacesAndNewlines)
         if !date.isEmpty { line += " · updated \(WorkStat.displayDate(date))" }
         return line
     }
 
+    /// True when AO3 has posted more chapters than the downloaded EPUB holds, so the end of
+    /// the book is the end of this copy, not "caught up". Unknown counts never claim it.
+    static func isCopyBehind(postedChapters: Int, epubStoryChapters: Int) -> Bool {
+        epubStoryChapters > 0 && postedChapters > epubStoryChapters
+    }
+
+    /// Largest chapter source the optional note preview will parse.
+    nonisolated static let maxNoteSourceBytes = 2_000_000
+
     /// The author's end note from one chapter's XHTML, or nil when the chapter has none (the
     /// card then leaves the note out). Same AO3 markers the word counter strips as apparatus.
-    static func endNote(fromChapterXHTML xhtml: String) -> String? {
-        guard !xhtml.isEmpty, let doc = try? SwiftSoup.parse(xhtml) else { return nil }
+    nonisolated static func endNote(fromChapterXHTML xhtml: String) -> String? {
+        guard !xhtml.isEmpty, xhtml.utf8.count <= maxNoteSourceBytes,
+              let doc = try? SwiftSoup.parse(xhtml) else { return nil }
         let selector = "[id^=endnotes], div.end.notes, div.endnotes"
-        guard let container = try? doc.select(selector).first() else { return nil }
+        guard let container = (try? doc.select(selector).first()) ?? convertedTrailingNote(in: doc) else {
+            return nil
+        }
         let quote = (try? container.select("blockquote.userstuff, blockquote").first()) ?? nil
         let source = quote ?? container
         guard let text = try? source.text() else { return nil }
@@ -93,5 +106,14 @@ enum ReaderChapterEndFacts {
         // A bare "End Notes:" heading with no body is not a note.
         let heading = cleaned.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ": "))
         return cleaned.isEmpty || ["notes", "end notes", "endnotes"].contains(heading) ? nil : cleaned
+    }
+
+    /// A converted (imported) work's author note sits in `<aside class="author-note">`. Only one
+    /// that trails the text counts as an end note: a leading note is the chapter's opening note.
+    nonisolated private static func convertedTrailingNote(in doc: Document) -> Element? {
+        guard let last = (try? doc.select("aside.author-note"))?.last(),
+              let parent = last.parent(), parent.children().count > 1 else { return nil }
+        let next: Element? = (try? last.nextElementSibling()) ?? nil
+        return next == nil ? last : nil
     }
 }

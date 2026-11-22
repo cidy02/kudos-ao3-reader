@@ -4,14 +4,31 @@ import SwiftData
 /// Pure logic and formatting for the Reader's End of Work screen (board 34, T-496).
 enum ReaderEndOfWorkFacts {
     /// Heading: "The End" for completed works, "You're caught up" for WIPs.
-    static func heading(isComplete: Bool) -> String {
-        isComplete ? "The End" : "You're caught up"
+    static func heading(isComplete: Bool, copyBehind: Bool = false) -> String {
+        if isComplete { return "The End" }
+        return copyBehind ? "End of this copy" : "You're caught up"
     }
 
     /// Reaching the end of the book finishes only a completed work. A work in progress stays
     /// Reading (caught up) until the reader moves it themselves.
     static func shouldAutoFinish(isComplete: Bool, isFinished: Bool) -> Bool {
         isComplete && !isFinished
+    }
+
+    /// What reaching the end of the publication does to the work. A completed work is finished
+    /// (stamped like any progress change); a work in progress is left as it is, except that a
+    /// never-seen chapter count is learned. Never touches the saved locator.
+    @MainActor
+    static func applyPublicationEnd(to work: SavedWork, at date: Date = Date()) {
+        guard shouldAutoFinish(isComplete: work.isComplete, isFinished: work.isFinished) else {
+            if !work.isComplete, work.knownChapterCount == 0, work.postedChapterCount > 0 {
+                work.knownChapterCount = work.postedChapterCount
+            }
+            return
+        }
+        work.isFinished = true
+        // Full stamp: Continue Reading + lastModifiedAt for folder-sync dirty.
+        work.markProgressModified(date)
     }
 
     /// Formats logged reading time in minutes or hours and minutes: e.g. "1 h 20 min", "45 min".

@@ -86,4 +86,39 @@ struct ReaderChapterEndFactsTests {
         #expect(ReaderChapterEndFacts.endNote(
             fromChapterXHTML: "<div id=\"endnotes\"><h3>End Notes:</h3></div>") == nil)
     }
+
+    @Test func caughtUpIsNeverClaimedByACopyThatIsBehindAO3() {
+        #expect(ReaderChapterEndFacts.isCopyBehind(postedChapters: 13, epubStoryChapters: 12))
+        #expect(!ReaderChapterEndFacts.isCopyBehind(postedChapters: 12, epubStoryChapters: 12))
+        // Unknown counts never claim a gap.
+        #expect(!ReaderChapterEndFacts.isCopyBehind(postedChapters: 13, epubStoryChapters: 0))
+        #expect(!ReaderChapterEndFacts.isCopyBehind(postedChapters: 0, epubStoryChapters: 12))
+        #expect(ReaderEndOfWorkFacts.heading(isComplete: false, copyBehind: true) == "End of this copy")
+        #expect(ReaderEndOfWorkFacts.heading(isComplete: false, copyBehind: false) == "You're caught up")
+        #expect(ReaderEndOfWorkFacts.heading(isComplete: true, copyBehind: true) == "The End")
+        #expect(ReaderChapterEndFacts.latestChapterLine(
+            postedChapters: 13, totalChapters: 20, updated: "", copyBehind: true)
+            == "New chapters on AO3 · Chapter 13 of 20 is the latest")
+    }
+
+    @Test func convertedEndNotesCountOnlyWhenTheyTrailTheText() {
+        let trailing = "<html><body><p>Story.</p><aside class=\"author-note\"><p>Thanks all.</p></aside></body></html>"
+        #expect(ReaderChapterEndFacts.endNote(fromChapterXHTML: trailing) == "Thanks all.")
+        let leading = "<html><body><aside class=\"author-note\"><p>Opening note.</p></aside><p>Story.</p></body></html>"
+        #expect(ReaderChapterEndFacts.endNote(fromChapterXHTML: leading) == nil)
+        let alone = "<html><body><aside class=\"author-note\"><p>Only.</p></aside></body></html>"
+        #expect(ReaderChapterEndFacts.endNote(fromChapterXHTML: alone) == nil)
+    }
+
+    @Test func anOversizedChapterIsNotParsedForANote() {
+        let big = "<div id=\"endnotes\"><p>Note</p></div>" + String(repeating: "x", count: ReaderChapterEndFacts.maxNoteSourceBytes)
+        #expect(ReaderChapterEndFacts.endNote(fromChapterXHTML: big) == nil)
+    }
+
+    @Test func switchingAccountsNeverInheritsASubscribedAnswer() {
+        // Nothing is known for a fresh model, whichever work or sign-in is asked about.
+        let model = AO3WorkActionsModel()
+        #expect(model.knownSubscribed(workID: 1, generation: 0) == nil)
+        #expect(model.knownSubscribed(workID: 1, generation: 1) == nil)
+    }
 }

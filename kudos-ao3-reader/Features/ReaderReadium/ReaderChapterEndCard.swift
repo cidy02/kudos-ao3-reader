@@ -18,13 +18,19 @@ struct ReaderChapterEndCard: View {
     var showsAO3Actions: Bool = true
     var kudosGiven: Bool = false
     var kudosEnabled: Bool = true
+    /// Cap on the card's height; taller content scrolls inside it.
+    var maxHeight: CGFloat = 420
     var onNextChapter: () -> Void = {}
     var onComment: () -> Void = {}
     var onKudos: () -> Void = {}
 
     @Environment(\.accentFill) private var fill
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var noteExpanded = false
+    @State private var noteIsTruncated = false
+    @State private var clampedNoteHeight: CGFloat = 0
+    @State private var fullNoteHeight: CGFloat = 0
 
     var body: some View {
         // The card is taller than the page's spare room at the largest text sizes, so it
@@ -34,6 +40,7 @@ struct ReaderChapterEndCard: View {
             ScrollView { content }
                 .scrollBounceBehavior(.basedOnSize)
         }
+        .frame(maxHeight: maxHeight)
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .frame(maxWidth: 480)
@@ -91,8 +98,35 @@ struct ReaderChapterEndCard: View {
                 .lineLimit(noteExpanded ? nil : 4)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { clampedNoteHeight = $0 }
+                // An unclamped twin, never drawn, tells whether four lines cut the note short.
+                .background(
+                    Text(note)
+                        .font(.subheadline)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .hidden()
+                        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { fullNoteHeight = $0 }
+                )
+                .onChange(of: clampedNoteHeight) { updateTruncation() }
+                .onChange(of: fullNoteHeight) { updateTruncation() }
+            if noteIsTruncated {
+                moreButton
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func updateTruncation() {
+        // Judged only while collapsed; once expanded the button stays so Less is reachable.
+        if !noteExpanded { noteIsTruncated = fullNoteHeight > clampedNoteHeight + 1 }
+    }
+
+    private var moreButton: some View {
+        VStack {
             Button(noteExpanded ? "Less" : "More") {
-                withAnimation(.snappy) { noteExpanded.toggle() }
+                withAnimation(reduceMotion ? nil : .snappy) { noteExpanded.toggle() }
             }
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.accentInk)
@@ -101,9 +135,7 @@ struct ReaderChapterEndCard: View {
             .minimumHitTarget()
             .accessibilityLabel(noteExpanded ? "Show less of the author's note" : "Show all of the author's note")
         }
-        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var nextChapterButton: some View {

@@ -32,13 +32,26 @@ enum ReadiumReaderCompletion {
         return visibleLast.progression.upperBound == 1.0
     }
 
+    /// How close to its end a resource's trailing edge counts as "at the chapter end". WebKit's
+    /// fractional scroll offset against integer DOM sizes can leave the true bottom just under 1.0
+    /// (for example 0.999667); the publication's auto-finish keeps the exact rule above.
+    static let chapterEndTolerance = 0.0005
+
     /// The reading-order index of the visible resource whose trailing edge rests at its own
-    /// end, or nil. The chapter-end card's trigger; the same `== 1.0` rule as `isAtEnd`.
+    /// end (within `chapterEndTolerance`), or nil. The chapter-end card's trigger.
     static func endingSpineIndex(viewport: NavigatorViewport?, readingOrder: [ReadiumShared.Link]) -> Int? {
-        guard let viewport, let visibleLast = viewport.resources.last,
-              visibleLast.progression.upperBound == 1.0 else { return nil }
-        let href = visibleLast.href.normalized.string
-        return readingOrder.firstIndex { $0.url().normalized.string == href }
+        guard let viewport else { return nil }
+        return endingSpineIndex(
+            visible: viewport.resources.map { ($0.href.normalized.string, $0.progression.upperBound) },
+            readingOrderHrefs: readingOrder.map { $0.url().normalized.string }
+        )
+    }
+
+    /// Pure core of the above: `visible` is the viewport's resources in order as (href, trailing
+    /// progression); the last one decides.
+    static func endingSpineIndex(visible: [(href: String, upperBound: Double)], readingOrderHrefs: [String]) -> Int? {
+        guard let last = visible.last, last.upperBound >= 1.0 - chapterEndTolerance else { return nil }
+        return readingOrderHrefs.firstIndex(of: last.href)
     }
 }
 #endif

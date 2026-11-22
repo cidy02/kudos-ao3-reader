@@ -716,9 +716,13 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     func endNote(forSpineIndex index: Int) async -> String? {
         guard readingOrder.indices.contains(index),
               let resource = publication?.get(readingOrder[index]),
-              let xhtml = try? await resource.readAsString().get()
+              let xhtml = try? await resource.readAsString().get(),
+              xhtml.utf8.count <= ReaderChapterEndFacts.maxNoteSourceBytes
         else { return nil }
-        return ReaderChapterEndFacts.endNote(fromChapterXHTML: xhtml)
+        // The optional preview never parses on the main actor.
+        return await Task.detached(priority: .utility) {
+            ReaderChapterEndFacts.endNote(fromChapterXHTML: xhtml)
+        }.value
     }
 
     /// Navigates to a spine position directly — needed for `ReaderSection`s (like

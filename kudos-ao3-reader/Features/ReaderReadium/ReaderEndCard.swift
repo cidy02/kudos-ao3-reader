@@ -21,6 +21,11 @@ struct ReaderEndCard: View {
     var upNext: (queueName: String, nextWork: SavedWork)? = nil
     /// "Chapter 15 of 30 is the latest · updated Nov 3, 2026": WIP only (Reader-CaughtUp).
     var latestChapterLine: String? = nil
+    /// The downloaded EPUB holds fewer chapters than AO3 has posted: its end is not "caught up".
+    var copyBehind: Bool = false
+    /// Cap on the card's height (the reader passes what the screen can spare). Past it the content
+    /// scrolls inside the card, so no action is ever off-screen at a large text size.
+    var maxHeight: CGFloat? = nil
     /// Offers Subscribe on a WIP (needs an AO3 page, like Kudos). Once subscribed the filled
     /// button becomes Give Kudos and Subscribe moves into the row as "Subscribed".
     var offersSubscribe: Bool = false
@@ -36,7 +41,7 @@ struct ReaderEndCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .title) private var headingSize: CGFloat = 30
 
-    var body: some View {
+    private var content: some View {
         VStack(spacing: 14) {
             headerBlock
 
@@ -47,6 +52,21 @@ struct ReaderEndCard: View {
                     .padding(.vertical, 2)
 
                 upNextBlock(upNext)
+            }
+        }
+    }
+
+    var body: some View {
+        Group {
+            if let maxHeight {
+                // Content that fits shows as is; anything taller scrolls inside the card.
+                ViewThatFits(in: .vertical) {
+                    content
+                    ScrollView { content }.scrollBounceBehavior(.basedOnSize)
+                }
+                .frame(maxHeight: maxHeight)
+            } else {
+                content
             }
         }
         .padding(.horizontal, 18)
@@ -60,14 +80,14 @@ struct ReaderEndCard: View {
         )
         .shadow(color: Color.black.opacity(0.12), radius: 18, x: 0, y: 6)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(ReaderEndOfWorkFacts.heading(isComplete: isComplete))
+        .accessibilityLabel(ReaderEndOfWorkFacts.heading(isComplete: isComplete, copyBehind: copyBehind))
     }
 
     // MARK: - Header
 
     private var headerBlock: some View {
         VStack(alignment: .center, spacing: 4) {
-            Text(ReaderEndOfWorkFacts.heading(isComplete: isComplete))
+            Text(ReaderEndOfWorkFacts.heading(isComplete: isComplete, copyBehind: copyBehind))
                 .font(.system(size: headingSize, weight: .semibold, design: .serif))
                 .foregroundStyle(.primary)
                 .accessibilityAddTraits(.isHeader)
