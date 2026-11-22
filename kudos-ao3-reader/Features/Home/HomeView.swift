@@ -116,8 +116,12 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     }
 
     private func enterSelectMode(selecting work: SavedWork? = nil) {
+        if isShowingAccountInspector {
+            router.isPresentingAccount = false
+        }
         if let work { selection.insert(work.id) }
         isSelecting = true
+        syncHomeInspectorReadiness()
     }
 
     private func selectAction(for work: SavedWork) -> (() -> Void)? {
@@ -127,6 +131,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     private func exitSelectMode() {
         isSelecting = false
         selection = []
+        syncHomeInspectorReadiness()
+    }
+
+    private func syncHomeInspectorReadiness() {
+        router.isHomeReadyForAccountInspector = path.isEmpty && !isSelecting
     }
 
     private var allLocalSelected: Bool {
@@ -204,7 +213,10 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     }
 
     private var isShowingAccountInspector: Bool {
-        accountInspectorGeometry != nil && router.selection == .home && router.isPresentingAccount
+        accountInspectorGeometry != nil
+            && router.selection == .home
+            && router.isHomeReadyForAccountInspector
+            && router.isPresentingAccount
     }
 
     var body: some View {
@@ -238,7 +250,10 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 .transition(.move(edge: .trailing))
             }
         }
-        .animation(.snappy(duration: 0.25), value: isShowingAccountInspector)
+        .animation(
+            accountInspectorGeometry != nil ? .snappy(duration: 0.25) : nil,
+            value: isShowingAccountInspector
+        )
         #else
         homeNavigationStack
         #endif
@@ -385,7 +400,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         cancelHomeTagCheck()
                     }
                 }
-                .onChange(of: path.isEmpty) { _, isEmpty in
+                .onChange(of: path.isEmpty, initial: true) { _, isEmpty in
+                    if !isEmpty, isShowingAccountInspector {
+                        router.isPresentingAccount = false
+                    }
+                    syncHomeInspectorReadiness()
                     if isEmpty {
                         startHomeTagCheckIfNeeded()
                     } else {

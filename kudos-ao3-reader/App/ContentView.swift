@@ -77,12 +77,11 @@ struct ContentView: View {
                 }
             }
             // Account sheet presentation lives inside `duoLayoutProbe()` (in
-            // `RootAccountSheetHost` on iOS, or directly below on macOS) so it reads
+            // `IOSTabShell` on iOS, or directly below on macOS/visionOS) so iOS reads
             // `\.duoLayout` and yields to HomeView's trailing inspector on Open/Book Duo.
-            #if os(macOS)
+            #if !os(iOS)
             .sheet(isPresented: $router.isPresentingAccount, onDismiss: {
-                router.accountDidDismiss()
-                if router.pendingWorkLink != nil { router.isPresentingLinkedWork = true }
+                router.finalizeAccountDismissal()
             }) {
                 AccountView()
             }
@@ -447,12 +446,14 @@ struct ContentView: View {
     private var content: some View {
         #if os(macOS)
         sidebarSplit
-        #else
+        #elseif os(iOS)
         IOSTabShell(
             destination: destination(for:),
             speechAccessory: { readerSpeechAccessory }
         )
         .duoLayoutProbe()
+        #else
+        visionTabs
         #endif
     }
 
@@ -542,6 +543,27 @@ struct ContentView: View {
             set: { if let new = $0 { router.selection = new } }
         )
     }
+
+    #if !os(macOS) && !os(iOS)
+    // MARK: visionOS — adaptive tab bar / sidebar with Search accessory
+
+    private var visionTabs: some View {
+        @Bindable var router = router
+        return TabView(selection: $router.selection) {
+            ForEach(router.mainTabs) { tab in
+                Tab(tab.title, systemImage: tab.symbol, value: tab) {
+                    destination(for: tab)
+                }
+            }
+        }
+        .tabViewStyle(.sidebarAdaptable)
+        #if os(visionOS)
+        .tabViewBottomAccessory {
+            searchButton
+        }
+        #endif
+    }
+    #endif
 
     // MARK: iOS — adaptive tab bar / sidebar (hosted in IOSTabShell inside duoLayoutProbe)
 
@@ -704,19 +726,27 @@ struct ContentView: View {
 }
 
 #if os(iOS)
-/// Reference-backed handoff flag so `.sheet`'s `Binding.set` always reads the live
-/// inspector mode rather than a value-captured `IOSTabShell` from frame 0.
+/// Reference-backed handoff state so `.sheet`'s `Binding.set`, `onDismiss`, and
+/// `.onChange` always mutate the same live presenter state rather than stale copies.
 private final class DuoAccountPresentationBox {
     var usesInspector = false
+    var presenterState = DuoAccountPresenterState()
 }
 
 /// Hosts the iOS `TabView` and non-inspector Account sheet inside `duoLayoutProbe()`
 /// so both the tab bar (N3/N7) and Account presentation (N5) observe `\.duoLayout`.
 private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
+    private struct AccountPresenterInputs: Equatable {
+        let isPresentingAccount: Bool
+        let presentsAsSheet: Bool
+        let usesInspector: Bool
+    }
+
     @Environment(AppRouter.self) private var router
     @Environment(ReaderSpeechController.self) private var speech
     @Environment(\.duoLayout) private var duoLayout
     @Environment(\.layoutDirection) private var layoutDirection
+    @Environment(\.displayScale) private var displayScale
     /// Once Duo has been observed, stay on `role: .prominent` across fold/rotation
     /// transitions so a single transient layout tick never rebuilds the `TabView`.
     @State private var latchedSeparatesSearchTab = false
@@ -730,9 +760,29 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
     }
 
     /// On Open/Book landscape Duo, HomeView hosts Account as a trailing inspector
-    /// while Home is selected; every other pose/device presents Account as a `.sheet`.
+    /// while Home is at its root and out of Select mode; every other pose/state
+    /// presents Account as a `.sheet` with its own Done button.
     private var usesAccountInspector: Bool {
-        accountPresentation.isInspector && router.selection == .home
+        accountPresentation.isInspector
+            && router.selection == .home
+            && router.isHomeReadyForAccountInspector
+    }
+
+    private var presentsAccountAsSheet: Bool {
+        duoLayout.presentsAccountAsSheet(
+            isPresentingAccount: router.isPresentingAccount,
+            onHome: router.selection == .home,
+            homeCanHostInspector: router.isHomeReadyForAccountInspector,
+            rightToLeft: layoutDirection == .rightToLeft
+        )
+    }
+
+    private var accountPresenterInputs: AccountPresenterInputs {
+        AccountPresenterInputs(
+            isPresentingAccount: router.isPresentingAccount,
+            presentsAsSheet: presentsAccountAsSheet,
+            usesInspector: usesAccountInspector
+        )
     }
 
     private var usesProminentSearchTab: Bool {
@@ -743,13 +793,7 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
         presentationBox.usesInspector = usesAccountInspector
         let box = presentationBox
         return Binding<Bool>(
-            get: {
-                duoLayout.presentsAccountAsSheet(
-                    isPresentingAccount: router.isPresentingAccount,
-                    onHome: router.selection == .home,
-                    rightToLeft: layoutDirection == .rightToLeft
-                )
-            },
+            get: { presentsAccountAsSheet },
             set: { isPresented in
                 // Only clear `isPresentingAccount` when the sheet itself dismissed while
                 // in sheet mode — never when a pose/probe update hands off to the inspector.
@@ -760,13 +804,46 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
         )
     }
 
+    private func tabSelectionBinding() -> Binding<AppTab> {
+        Binding(
+            get: { router.selection },
+            set: { next in
+                // Close Account's inspector before changing tabs so `presentsAccountAsSheet`
+                // never flashes a modal sheet for one frame on the destination tab.
+                if next != .home,
+                   router.isPresentingAccount,
+                   presentationBox.presenterState.owner == .inspector || accountPresentation.isInspector {
+                    router.isPresentingAccount = false
+                }
+                router.selection = next
+            }
+        )
+    }
+
     var body: some View {
-        @Bindable var router = router
         let accountSheetPresented = accountSheetBinding()
-        TabView(selection: $router.selection) {
+        TabView(selection: tabSelectionBinding()) {
             ForEach(router.mainTabs) { tab in
-                Tab(tab.title, systemImage: tab.symbol, value: tab) {
+                Tab(value: tab) {
                     destination(tab)
+                } label: {
+                    if duoLayout.hasVerticalBar {
+                        Label {
+                            Text(tab.title)
+                        } icon: {
+                            Image(uiImage: DuoRailTabArtwork.image(
+                                title: tab.title,
+                                systemImage: router.selection == tab ? tab.selectedSymbol : tab.symbol,
+                                scale: displayScale
+                            ))
+                            .renderingMode(.template)
+                        }
+                        .accessibilityShowsLargeContentViewer {
+                            Label(tab.title, systemImage: tab.symbol)
+                        }
+                    } else {
+                        Label(tab.title, systemImage: tab.symbol)
+                    }
                 }
             }
             if #available(iOS 27.0, *), usesProminentSearchTab {
@@ -803,12 +880,11 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
             if separates { latchedSeparatesSearchTab = true }
         }
         .sheet(isPresented: accountSheetPresented, onDismiss: {
-            // Only finalize dismissal if Account actually closed — rotating from
-            // Portrait (formSheet) into Open (inspector) closes the sheet while
-            // `router.isPresentingAccount` stays true.
-            guard !router.isPresentingAccount else { return }
-            router.accountDidDismiss()
-            if router.pendingWorkLink != nil { router.isPresentingLinkedWork = true }
+            if presentationBox.presenterState.sheetDidDismiss(
+                isPresentingAccount: router.isPresentingAccount
+            ) {
+                router.finalizeAccountDismissal()
+            }
         }) {
             AccountView()
                 .duoAccountSheetSizing(isFormSheet: accountPresentation == .formSheet)
@@ -816,14 +892,19 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
         .onChange(of: router.selection) { _, selection in
             // Switching tabs from the live rail while Account's inspector is open
             // closes the inspector cleanly instead of popping a modal sheet.
-            if selection != .home, router.isPresentingAccount, accountPresentation.isInspector {
+            if selection != .home,
+               router.isPresentingAccount,
+               presentationBox.presenterState.owner == .inspector || accountPresentation.isInspector {
                 router.isPresentingAccount = false
             }
         }
-        .onChange(of: router.isPresentingAccount) { wasPresented, isPresented in
-            if wasPresented, !isPresented, usesAccountInspector {
-                router.accountDidDismiss()
-                if router.pendingWorkLink != nil { router.isPresentingLinkedWork = true }
+        .onChange(of: accountPresenterInputs, initial: true) { _, inputs in
+            if presentationBox.presenterState.sync(
+                isPresentingAccount: inputs.isPresentingAccount,
+                presentsAsSheet: inputs.presentsAsSheet,
+                usesInspector: inputs.usesInspector
+            ) {
+                router.finalizeAccountDismissal()
             }
         }
     }

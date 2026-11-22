@@ -20,7 +20,10 @@ struct AccountView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Query private var localWorks: [SavedWork]
 
-    @State private var path = NavigationPath()
+    private var path: NavigationPath {
+        get { router.accountNavigationPath }
+        nonmutating set { router.accountNavigationPath = newValue }
+    }
     @State private var showingLogin = false
     @State private var selectedTab: AccountTab = .overview
     @ScaledMetric(relativeTo: .body) private var scopeRowTitleSize: CGFloat = 15
@@ -149,7 +152,8 @@ struct AccountView: View {
     @State private var chromeScrolledAway = false
 
     var body: some View {
-        NavigationStack(path: $path) {
+        @Bindable var router = router
+        NavigationStack(path: $router.accountNavigationPath) {
             Group { standardListRoot }
                 .navigationTitle("Account")
                 #if os(iOS)
@@ -159,7 +163,9 @@ struct AccountView: View {
                 #if DEBUG
                 .task {
                     try? await Task.sleep(for: .seconds(1.5))
-                    DebugLaunchRoute.applyAccount(to: &path)
+                    if router.accountNavigationPath.isEmpty {
+                        DebugLaunchRoute.applyAccount(to: &router.accountNavigationPath)
+                    }
                     editingWorkID = DebugLaunchRoute.accountEditWorkID
                     if DebugLaunchRoute.takeSheet("inboxfilter") { showingInboxFilters = true }
                 }
@@ -202,7 +208,7 @@ struct AccountView: View {
                         onResolveWorkContext: { inboxModel.cacheWorkContext($0, for: destination, auth: auth) }
                     )
                 }
-                .ao3AuthorNavigation(path: $path, tab: .account)
+                .ao3AuthorNavigation(path: $router.accountNavigationPath, tab: .account)
                 .toolbar {
                     if !inInspector {
                         // `.primaryAction`, not `.confirmationAction`: iOS 26 fills a
@@ -770,7 +776,7 @@ struct AccountView: View {
 
     private func dismissAccount() {
         router.isPresentingAccount = false
-        dismiss()
+        if !inInspector { dismiss() }
     }
 
     private func openAO3FromAccount() {

@@ -465,6 +465,93 @@ struct DuoLayoutSignalTests {
         #expect(rtlLeft.foldHalfWidth == 391.5)
         #expect(rtlLeft.trailingRailReserve == DuoLayoutSignal.railReserve)
         #expect(rtlLeft.fullFoldHalfWidth == 475.5)
+
+        // When Home has pushed a detail screen or entered Select mode, Open/Book falls
+        // back to presenting Account as a sheet so Close/Done is never missing.
+        #expect(openRight.presentsAccountAsSheet(
+            isPresentingAccount: true, onHome: true, homeCanHostInspector: false
+        ))
+    }
+
+    @Test func accountPresenterDeliversWorkLinkAcrossSimultaneousInspectorToSheetClose() {
+        let router = AppRouter()
+        var presenter = DuoAccountPresenterState()
+
+        // Open Account as the Open Flat inspector and push a destination.
+        router.showAccount(.inbox)
+        _ = router.consumePendingAccountRoute()
+        router.accountNavigationPath.append(AccountView.Route.inbox)
+        let openSync = presenter.sync(isPresentingAccount: true, presentsAsSheet: false, usesInspector: true)
+        #expect(!openSync)
+        #expect(presenter.owner == .inspector)
+
+        // Simultaneously open an AO3 work link AND rotate upright into sheet geometry:
+        // no sheet was ever on screen to call `onDismiss`, so sync must finalize now.
+        router.openAO3Link(URL(string: "https://archiveofourown.org/works/4242")!)
+        #expect(!router.isPresentingAccount)
+        let shouldFinalize = presenter.sync(
+            isPresentingAccount: router.isPresentingAccount,
+            presentsAsSheet: false,
+            usesInspector: false
+        )
+        #expect(shouldFinalize)
+        if shouldFinalize { router.finalizeAccountDismissal() }
+        #expect(router.isPresentingLinkedWork)
+        #expect(router.pendingWorkLink?.id == 4242)
+        #expect(router.accountNavigationPath.isEmpty)
+    }
+
+    @Test func accountPresenterWaitsForLiveSheetDismissAcrossPoseChanges() {
+        let router = AppRouter()
+        var presenter = DuoAccountPresenterState()
+
+        // 1. Open Account as a modal sheet (Upright/Cover) and push a destination.
+        router.showAccount()
+        router.accountNavigationPath.append(AccountView.Route.settings)
+        let openSheet = presenter.sync(isPresentingAccount: true, presentsAsSheet: true, usesInspector: false)
+        #expect(!openSheet)
+        #expect(presenter.owner == .sheet)
+        #expect(presenter.sheetAwaitingDismiss)
+
+        // 2. Rotate into Open Flat while keeping Account open (sheet -> inspector handoff).
+        let handoffToInspector = presenter.sync(isPresentingAccount: true, presentsAsSheet: false, usesInspector: true)
+        #expect(!handoffToInspector)
+        #expect(presenter.owner == .inspector)
+        // Outgoing sheet finishes dismissing while inspector stays open: must NOT finalize.
+        let dismissedDuringHandoff = presenter.sheetDidDismiss(isPresentingAccount: true)
+        #expect(!dismissedDuringHandoff)
+        #expect(router.accountNavigationPath.count == 1)
+
+        // 3. Rotate back to sheet, then simultaneously rotate to inspector AND open a work link.
+        let handoffToSheet = presenter.sync(isPresentingAccount: true, presentsAsSheet: true, usesInspector: false)
+        #expect(!handoffToSheet)
+        router.openAO3Link(URL(string: "https://archiveofourown.org/works/5555")!)
+        // Must wait for the dismissing sheet's `onDismiss` rather than colliding modals.
+        let prematureFinalize = presenter.sync(
+            isPresentingAccount: false,
+            presentsAsSheet: false,
+            usesInspector: true
+        )
+        #expect(!prematureFinalize)
+        #expect(!router.isPresentingLinkedWork)
+
+        let finalizedOnDismiss = presenter.sheetDidDismiss(isPresentingAccount: false)
+        #expect(finalizedOnDismiss)
+        if finalizedOnDismiss { router.finalizeAccountDismissal() }
+        #expect(router.isPresentingLinkedWork)
+        #expect(router.pendingWorkLink?.id == 5555)
+        #expect(router.accountNavigationPath.isEmpty)
+    }
+
+    @Test func railTabArtworkRendersTemplateLabelsThatFitTheRail() {
+        for tab in AppTab.mainTabs(showsWriting: true) {
+            let image = DuoRailTabArtwork.image(title: tab.title, systemImage: tab.symbol, scale: 3)
+            #expect(image.size == DuoRailTabArtwork.canvasSize)
+            #expect(image.renderingMode == .alwaysTemplate)
+            #expect(DuoRailTabArtwork.fittedFontSize(for: tab.title) == DuoRailTabArtwork.baseLabelFontSize)
+        }
+        // Extra-long titles shrink to fit inside the rail width without overflowing.
+        #expect(DuoRailTabArtwork.fittedFontSize(for: "Subscriptions") < DuoRailTabArtwork.baseLabelFontSize)
     }
 }
 #endif

@@ -123,9 +123,15 @@ nonisolated struct DuoLayoutSignal: Equatable, Sendable {
     /// True when the Account sheet binding should present a modal `.sheet` (wait for the
     /// first real window measurement so Open/Book never flashes a sheet before handing off
     /// to HomeView's trailing inspector).
-    func presentsAccountAsSheet(isPresentingAccount: Bool, onHome: Bool, rightToLeft: Bool = false) -> Bool {
+    func presentsAccountAsSheet(
+        isPresentingAccount: Bool,
+        onHome: Bool,
+        homeCanHostInspector: Bool = true,
+        rightToLeft: Bool = false
+    ) -> Bool {
         guard isPresentingAccount, isMeasured else { return false }
-        let usesInspector = accountPresentation(rightToLeft: rightToLeft).isInspector && onHome
+        let usesInspector = accountPresentation(rightToLeft: rightToLeft).isInspector
+            && onHome && homeCanHostInspector
         return !usesInspector
     }
 
@@ -316,6 +322,71 @@ nonisolated struct DuoLayoutSignal: Equatable, Sendable {
     }
 }
 
+/// Tracks which presenter actually owned Account (inspector vs modal sheet) when
+/// dismissal began so router cleanup and queued AO3 work links always fire exactly
+/// once — even when Account closes in the same SwiftUI update as a Duo pose change.
+nonisolated struct DuoAccountPresenterState: Equatable, Sendable {
+    enum Owner: Equatable, Sendable {
+        case none
+        case pending
+        case inspector
+        case sheet
+    }
+
+    private(set) var owner: Owner = .none
+    /// True while a modal `.sheet` has been presented and has not yet delivered `onDismiss`.
+    private(set) var sheetAwaitingDismiss = false
+    /// True when Account closed while a sheet was still dismissing; `sheetDidDismiss` finalizes.
+    private(set) var pendingFinalization = false
+
+    /// Syncs the live presentation flags and returns `true` when dismissal must finalize
+    /// immediately (no modal `.sheet` is on screen to deliver `onDismiss`).
+    mutating func sync(
+        isPresentingAccount: Bool,
+        presentsAsSheet: Bool,
+        usesInspector: Bool
+    ) -> Bool {
+        if isPresentingAccount {
+            pendingFinalization = false
+            if presentsAsSheet {
+                owner = .sheet
+                sheetAwaitingDismiss = true
+            } else if usesInspector {
+                owner = .inspector
+            } else {
+                owner = .pending
+            }
+            return false
+        }
+
+        let previousOwner = owner
+        owner = .none
+        guard previousOwner != .none || sheetAwaitingDismiss else {
+            return false
+        }
+        if sheetAwaitingDismiss {
+            pendingFinalization = true
+            return false
+        }
+        pendingFinalization = false
+        return true
+    }
+
+    /// Called from the Account `.sheet`'s `onDismiss`. Returns `true` when dismissal
+    /// should finalize now (never during a sheet → inspector pose handoff).
+    mutating func sheetDidDismiss(isPresentingAccount: Bool) -> Bool {
+        sheetAwaitingDismiss = false
+        guard !isPresentingAccount else {
+            pendingFinalization = false
+            return false
+        }
+        let shouldFinalize = pendingFinalization || owner == .sheet
+        pendingFinalization = false
+        if owner == .sheet { owner = .none }
+        return shouldFinalize
+    }
+}
+
 extension EnvironmentValues {
     @Entry var duoLayout = DuoLayoutSignal()
 }
@@ -332,6 +403,89 @@ extension View {
 }
 
 #if os(iOS)
+/// Renders a template icon+caption image for the iOS 27.1 vertical rail `UITabBar`
+/// (which otherwise hides `UITab.title` visually, N3 / `DuoSideBar.dc.html`).
+/// Fixed rail-sized typography keeps the label inside the ~50 pt pill; accessibility
+/// text sizes use the Large Content Viewer via the tab's `Label`.
+@MainActor
+enum DuoRailTabArtwork {
+    static let canvasSize = CGSize(width: 44, height: 33)
+    static let baseLabelFontSize: CGFloat = 9.0
+    static let minimumLabelFontSize: CGFloat = 7.5
+    static let symbolPointSize: CGFloat = 17
+
+    private struct CacheKey: Hashable {
+        let title: String
+        let systemImage: String
+        let scale: Int
+    }
+
+    private static var cache: [CacheKey: UIImage] = [:]
+
+    static func fittedFontSize(for title: String, maxWidth: CGFloat = canvasSize.width) -> CGFloat {
+        var size = baseLabelFontSize
+        while size > minimumLabelFontSize {
+            let font = UIFont.systemFont(ofSize: size, weight: .semibold)
+            let width = (title as NSString).size(withAttributes: [.font: font]).width
+            if width <= maxWidth { return size }
+            size -= 0.5
+        }
+        return minimumLabelFontSize
+    }
+
+    static func image(title: String, systemImage: String, scale: CGFloat) -> UIImage {
+        let clampedScale = max(1, scale)
+        let key = CacheKey(title: title, systemImage: systemImage, scale: Int((clampedScale * 10).rounded()))
+        if let cached = cache[key] { return cached }
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = clampedScale
+        format.opaque = false
+
+        let rendered = UIGraphicsImageRenderer(size: canvasSize, format: format).image { _ in
+            let symbolConfig = UIImage.SymbolConfiguration(pointSize: symbolPointSize, weight: .medium)
+            if let symbol = UIImage(systemName: systemImage, withConfiguration: symbolConfig)?
+                .withTintColor(.black, renderingMode: .alwaysOriginal) {
+                let symbolBoxHeight: CGFloat = 19
+                let symbolSize = symbol.size
+                let symbolOrigin = CGPoint(
+                    x: (canvasSize.width - symbolSize.width) / 2,
+                    y: (symbolBoxHeight - symbolSize.height) / 2
+                )
+                symbol.draw(in: CGRect(origin: symbolOrigin, size: symbolSize))
+            }
+
+            let fontSize = fittedFontSize(for: title)
+            let font = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.alignment = .center
+            paragraph.lineBreakMode = .byTruncatingTail
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: UIColor.black,
+                .paragraphStyle: paragraph
+            ]
+            let textHeight = ceil(font.lineHeight)
+            let textRect = CGRect(
+                x: 0,
+                y: canvasSize.height - textHeight,
+                width: canvasSize.width,
+                height: textHeight
+            )
+            (title as NSString).draw(
+                with: textRect,
+                options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine],
+                attributes: attributes,
+                context: nil
+            )
+        }
+        .withRenderingMode(.alwaysTemplate)
+
+        cache[key] = rendered
+        return rendered
+    }
+}
+
 extension DuoLayoutSignal {
     @MainActor
     static func from(window: UIWindow) -> DuoLayoutSignal {

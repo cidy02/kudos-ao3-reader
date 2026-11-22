@@ -1111,6 +1111,32 @@ struct AppRouterTests {
         #expect(router.showsWritingTab == true)
         #expect(store.lastKnownWrites(for: "saltwindow") == false)
     }
+
+    @Test func accountNavigationPathSurvivesHandoffAndClearsOnDismissal() {
+        let router = AppRouter()
+        router.openLegacyAccountRoute(.inbox)
+        #expect(router.isPresentingAccount)
+        #expect(router.consumePendingAccountRoute() == .inbox)
+
+        // First host (e.g. Duo inspector) pushes Inbox and later Settings -> Appearance.
+        router.accountNavigationPath.append(AccountView.Route.inbox)
+        router.accountNavigationPath.append(AccountView.Route.settings)
+        router.accountNavigationPath.append(SettingsRoute.appearance)
+        #expect(router.accountNavigationPath.count == 3)
+
+        // Switching hosts while `isPresentingAccount` stays true keeps the stack intact.
+        #expect(router.isPresentingAccount)
+        #expect(router.accountNavigationPath.count == 3)
+
+        // Real dismissal resets Account's navigation path and delivers any queued work link.
+        router.openAO3Link(URL(string: "https://archiveofourown.org/works/9876")!)
+        #expect(!router.isPresentingAccount)
+        #expect(!router.isPresentingLinkedWork)
+        router.finalizeAccountDismissal()
+        #expect(router.accountNavigationPath.isEmpty)
+        #expect(router.isPresentingLinkedWork)
+        #expect(router.pendingWorkLink?.id == 9876)
+    }
 }
 
 private final class PreviewOnlyStubURLProtocol: URLProtocol, @unchecked Sendable {
