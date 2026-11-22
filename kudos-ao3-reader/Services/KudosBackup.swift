@@ -1867,7 +1867,13 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         let patterned = defaults.dictionaryRepresentation().keys.filter {
             extraKeys[$0] == nil && extraKind(for: $0) != nil
         }
-        let all = Set(recencyKeys + extraKeys.keys + patterned + incoming.filter { extraKind(for: $0) != nil })
+        // A patterned key this device once stamped but has since removed stays observed, so the
+        // clock can see it vanish and record the removal (sixth T-541 review).
+        let stamped = SyncedSettingsClock.stamps(in: defaults).keys.compactMap { id -> String? in
+            let key = SyncedSettingsClock.entry(from: id)?.key ?? id
+            return extraKind(for: key) != nil ? key : nil
+        }
+        let all = Set(recencyKeys + extraKeys.keys + patterned + stamped + incoming.filter { extraKind(for: $0) != nil })
         let maps = Set(all.filter { extraKind(for: $0) == .stringMap })
         return (all.sorted(), maps)
     }
