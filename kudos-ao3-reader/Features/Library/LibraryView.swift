@@ -145,6 +145,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)
             #endif
+                .duoVerticalCompressionPrefersTabBar(duoLayout.hasVerticalBar)
                 .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
                 .navigationDestination(for: LocalWorkDestination.self) { LocalWorkDestinationView(destination: $0) }
                 .navigationDestination(for: LibrarySectionRoute.self, destination: sectionList)
@@ -1085,51 +1086,74 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             // New Collection is always there — it was the collections shelf's
             // first card (owner, 2026-10-01). Edit Shelves, Privacy and Reading
             // Insights live behind "...".
-            // Board 01: the filter, then + and ••• as one pill (adjacent items in one placement
-            // share a glass pill; the spacer keeps the filter out of it). Select lives in •••
-            // (owner, 2026-11-09), in the app's menu order: Mature · Select · page items.
-            if !works.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
-                    FilterButton(filtersActive: filters.hasActiveFilters,
-                                 showingFilters: router.isShowing(.libraryFilters),
-                                 onClearFilters: { filters = LibraryFilters() })
-                        .labelStyle(.iconOnly)
-                }
-                ToolbarSpacer(.fixed, placement: .primaryAction)
-            }
-            ToolbarItemGroup(placement: .primaryAction) {
-                ToolbarIconButton(title: "New Collection", systemImage: "plus") {
-                    showingNewCollection = true
-                }
-                .labelStyle(.iconOnly)
-                if showsMoreMenu {
-                    WorkListMoreMenu {
-                        Button {
-                            showingEditShelves = true
-                        } label: {
-                            Label("Edit Shelves", systemImage: "square.grid.2x2")
-                        }
-                        if showsMature {
-                            MatureRevealToggle()
-                        }
-                        if showsSelect {
-                            Button {
-                                enterSelectMode()
-                            } label: {
-                                Label("Select", systemImage: "checklist")
-                            }
-                        }
-                        // A page item, so after the shelf controls (pass2-2).
-                        if showsStatistics {
-                            NavigationLink(value: ReadingInsightsDestination()) {
-                                Label("Reading Insights", systemImage: "chart.bar.xaxis")
-                            }
-                        }
+            if duoLayout.usesSingleRailActionGroup {
+                // Duo vertical rail (N9): all actions sit in one glass group (no spacer split).
+                ToolbarItemGroup(placement: .primaryAction) {
+                    if !works.isEmpty {
+                        FilterButton(filtersActive: filters.hasActiveFilters,
+                                     showingFilters: router.isShowing(.libraryFilters),
+                                     onClearFilters: { filters = LibraryFilters() })
+                            .labelStyle(.iconOnly)
+                    }
+                    ToolbarIconButton(title: "New Collection", systemImage: "plus") {
+                        showingNewCollection = true
                     }
                     .labelStyle(.iconOnly)
+                    if showsMoreMenu {
+                        libraryMoreMenu(showsMature: showsMature, showsSelect: showsSelect, showsStatistics: showsStatistics)
+                    }
+                }
+            } else {
+                // Board 01: the filter, then + and ••• as one pill (adjacent items in one placement
+                // share a glass pill; the spacer keeps the filter out of it). Select lives in •••
+                // (owner, 2026-11-09), in the app's menu order: Mature · Select · page items.
+                if !works.isEmpty {
+                    ToolbarItem(placement: .primaryAction) {
+                        FilterButton(filtersActive: filters.hasActiveFilters,
+                                     showingFilters: router.isShowing(.libraryFilters),
+                                     onClearFilters: { filters = LibraryFilters() })
+                            .labelStyle(.iconOnly)
+                    }
+                    ToolbarSpacer(.fixed, placement: .primaryAction)
+                }
+                ToolbarItemGroup(placement: .primaryAction) {
+                    ToolbarIconButton(title: "New Collection", systemImage: "plus") {
+                        showingNewCollection = true
+                    }
+                    .labelStyle(.iconOnly)
+                    if showsMoreMenu {
+                        libraryMoreMenu(showsMature: showsMature, showsSelect: showsSelect, showsStatistics: showsStatistics)
+                    }
                 }
             }
         }
+    }
+
+    private func libraryMoreMenu(showsMature: Bool, showsSelect: Bool, showsStatistics: Bool) -> some View {
+        WorkListMoreMenu {
+            Button {
+                showingEditShelves = true
+            } label: {
+                Label("Edit Shelves", systemImage: "square.grid.2x2")
+            }
+            if showsMature {
+                MatureRevealToggle()
+            }
+            if showsSelect {
+                Button {
+                    enterSelectMode()
+                } label: {
+                    Label("Select", systemImage: "checklist")
+                }
+            }
+            // A page item, so after the shelf controls (pass2-2).
+            if showsStatistics {
+                NavigationLink(value: ReadingInsightsDestination()) {
+                    Label("Reading Insights", systemImage: "chart.bar.xaxis")
+                }
+            }
+        }
+        .labelStyle(.iconOnly)
     }
 
     // MARK: Loading

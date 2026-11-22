@@ -30,15 +30,46 @@ nonisolated struct DuoInspectorSplitGeometry: Equatable, Sendable {
     /// Width of the logical trailing pane occupied by `.inspector` (from the fold's
     /// clear edge on the inspector side to the window/rail edge).
     let inspectorWidth: CGFloat
+    /// Safe width from the vertical fold's centre line to the trailing safe edge (for
+    /// fold-anchored trailing panes like Account, whose content clears the rail).
+    let foldHalfWidth: CGFloat
+    /// Rail width sitting on the logical trailing edge (`railReserve` when the vertical
+    /// rail stands on the same side as the trailing pane, `0` when it stands on the
+    /// leading side). Allows a trailing pane's backdrop/wash to bleed seamlessly behind
+    /// the rail while safe-area-padding its content clear of it.
+    let trailingRailReserve: CGFloat
     /// Logical trailing inset the host content needs while `.inspector` is open so
     /// content stops at the fold's clear edge (40 pt in Open, 56 pt in Book).
     let leadingFoldClearance: CGFloat
     /// Logical trailing inset the host content needs when `.inspector` is hidden
     /// (e.g. Search bulk selection) to stay bounded to the logical leading pane.
     var leadingPaneTrailingReserve: CGFloat { inspectorWidth + leadingFoldClearance }
+    /// Total width from the fold centre line to the physical trailing window edge.
+    var fullFoldHalfWidth: CGFloat { foldHalfWidth + trailingRailReserve }
 }
 
-/// What the screen's layout says about the iPhone Duo (T-562c/h), decided from traits and
+/// How the Account screen should be presented for the current display geometry (T-562j N5).
+/// - `.inspector`: Open flat and Book-pose landscape Duo — trailing pane from fold to rail
+///   while Home stays live on the leading pane (`Duo-Open-Account`).
+/// - `.formSheet`: Upright portrait Duo — ~541 pt form sheet over Home (`Duo-Portrait-Account`).
+/// - `.sheet`: iPhone, iPad, Mac, and Duo Cover (no vertical fold).
+nonisolated enum DuoAccountPresentation: Equatable, Sendable {
+    case sheet
+    case inspector(DuoInspectorSplitGeometry)
+    case formSheet
+
+    var isInspector: Bool {
+        if case .inspector = self { return true }
+        return false
+    }
+
+    var inspectorGeometry: DuoInspectorSplitGeometry? {
+        if case let .inspector(geometry) = self { return geometry }
+        return nil
+    }
+}
+
+/// What the screen's layout says about the iPhone Duo (T-562c/h/j), decided from traits and
 /// reserved regions, never from the device: the same signal the reader's Duo chrome uses
 /// (`ReaderChromeLayout`, `verticalBarEdge` + the fold region). Every other screen reads
 /// `\.duoLayout`; on an iPhone, iPad or Mac it stays at its default (all false).
@@ -58,7 +89,51 @@ nonisolated struct DuoLayoutSignal: Equatable, Sendable {
     /// The probe's width, in the same coordinates as `verticalFold`.
     var width: CGFloat = 0
 
+    /// True once `DuoLayoutProbe` has measured a real window (`width > 0`), so callers can
+    /// avoid flashing a modal sheet on frame 0 before a Duo inspector layout is known.
+    var isMeasured: Bool { width > 0 }
+
     var isUprightFold: Bool { hasHorizontalFold && !hasVerticalBar }
+
+    /// True on any iPhone Duo pose (Cover, Open, Book, Upright), false on iPhone/iPad/Mac.
+    var isDuo: Bool { hasVerticalBar || isUprightFold }
+
+    /// On the vertical rail, actions follow one Back/Close circle in a single glass group (N9).
+    var usesSingleRailActionGroup: Bool { hasVerticalBar }
+
+    /// Duo Home boards keep only the profile button in the chrome; secondary actions stay
+    /// reachable in-page (Reading Queues Organise/New Queue, card context Select, inline reveal).
+    var hidesHomeSecondaryToolbarActions: Bool { isDuo }
+
+    /// Duo rail and upright tab bar detach Search into its own circle beside the core tabs (N3/N7).
+    var separatesSearchTab: Bool { isDuo }
+
+    /// Presentation mode for Account: trailing inspector on Open/Book, form sheet upright,
+    /// ordinary sheet on iPhone/iPad/Mac/Cover (N5).
+    func accountPresentation(rightToLeft: Bool = false) -> DuoAccountPresentation {
+        if let split = inspectorSplit(rightToLeft: rightToLeft) {
+            return .inspector(split)
+        }
+        if isUprightFold {
+            return .formSheet
+        }
+        return .sheet
+    }
+
+    /// True when the Account sheet binding should present a modal `.sheet` (wait for the
+    /// first real window measurement so Open/Book never flashes a sheet before handing off
+    /// to HomeView's trailing inspector).
+    func presentsAccountAsSheet(
+        isPresentingAccount: Bool,
+        onHome: Bool,
+        homeCanHostInspector: Bool = true,
+        rightToLeft: Bool = false
+    ) -> Bool {
+        guard isPresentingAccount, isMeasured else { return false }
+        let usesInspector = accountPresentation(rightToLeft: rightToLeft).isInspector
+            && onHome && homeCanHostInspector
+        return !usesInspector
+    }
 
     init() {}
 
@@ -105,18 +180,29 @@ nonisolated struct DuoLayoutSignal: Equatable, Sendable {
         let rightRailReserve: CGFloat = isVerticalBarLeft ? 0 : Self.railReserve
 
         let paneWidth: CGFloat
+        let foldHalfWidth: CGFloat
+        let trailingRail: CGFloat
         let clearance: CGFloat
         if rightToLeft {
             // Logical trailing is physical left; host occupies baseMinX... to the right.
             paneWidth = baseMinX - leftRailReserve
+            foldHalfWidth = fold.midX - leftRailReserve
+            trailingRail = leftRailReserve
             clearance = max(0, clearMaxX - baseMinX)
         } else {
             // Logical trailing is physical right; host occupies ...baseMaxX to the left.
             paneWidth = width - baseMaxX - rightRailReserve
+            foldHalfWidth = width - fold.midX - rightRailReserve
+            trailingRail = rightRailReserve
             clearance = max(0, baseMaxX - clearMinX)
         }
         guard paneWidth >= 280 else { return nil }
-        return DuoInspectorSplitGeometry(inspectorWidth: paneWidth, leadingFoldClearance: clearance)
+        return DuoInspectorSplitGeometry(
+            inspectorWidth: paneWidth,
+            foldHalfWidth: foldHalfWidth,
+            trailingRailReserve: trailingRail,
+            leadingFoldClearance: clearance
+        )
     }
 
     func inspectorWidth(rightToLeft: Bool) -> CGFloat? {
@@ -236,6 +322,71 @@ nonisolated struct DuoLayoutSignal: Equatable, Sendable {
     }
 }
 
+/// Tracks which presenter actually owned Account (inspector vs modal sheet) when
+/// dismissal began so router cleanup and queued AO3 work links always fire exactly
+/// once — even when Account closes in the same SwiftUI update as a Duo pose change.
+nonisolated struct DuoAccountPresenterState: Equatable, Sendable {
+    enum Owner: Equatable, Sendable {
+        case none
+        case pending
+        case inspector
+        case sheet
+    }
+
+    private(set) var owner: Owner = .none
+    /// True while a modal `.sheet` has been presented and has not yet delivered `onDismiss`.
+    private(set) var sheetAwaitingDismiss = false
+    /// True when Account closed while a sheet was still dismissing; `sheetDidDismiss` finalizes.
+    private(set) var pendingFinalization = false
+
+    /// Syncs the live presentation flags and returns `true` when dismissal must finalize
+    /// immediately (no modal `.sheet` is on screen to deliver `onDismiss`).
+    mutating func sync(
+        isPresentingAccount: Bool,
+        presentsAsSheet: Bool,
+        usesInspector: Bool
+    ) -> Bool {
+        if isPresentingAccount {
+            pendingFinalization = false
+            if presentsAsSheet {
+                owner = .sheet
+                sheetAwaitingDismiss = true
+            } else if usesInspector {
+                owner = .inspector
+            } else {
+                owner = .pending
+            }
+            return false
+        }
+
+        let previousOwner = owner
+        owner = .none
+        guard previousOwner != .none || sheetAwaitingDismiss else {
+            return false
+        }
+        if sheetAwaitingDismiss {
+            pendingFinalization = true
+            return false
+        }
+        pendingFinalization = false
+        return true
+    }
+
+    /// Called from the Account `.sheet`'s `onDismiss`. Returns `true` when dismissal
+    /// should finalize now (never during a sheet → inspector pose handoff).
+    mutating func sheetDidDismiss(isPresentingAccount: Bool) -> Bool {
+        sheetAwaitingDismiss = false
+        guard !isPresentingAccount else {
+            pendingFinalization = false
+            return false
+        }
+        let shouldFinalize = pendingFinalization || owner == .sheet
+        pendingFinalization = false
+        if owner == .sheet { owner = .none }
+        return shouldFinalize
+    }
+}
+
 extension EnvironmentValues {
     @Entry var duoLayout = DuoLayoutSignal()
 }
@@ -252,8 +403,130 @@ extension View {
 }
 
 #if os(iOS)
+/// Renders a template icon+caption image for the iOS 27.1 vertical rail `UITabBar`
+/// (which otherwise hides `UITab.title` visually, N3 / `DuoSideBar.dc.html`).
+/// Fixed rail-sized typography keeps the label inside the ~50 pt pill; accessibility
+/// text sizes use the Large Content Viewer via the tab's `Label`.
+@MainActor
+enum DuoRailTabArtwork {
+    static let canvasSize = CGSize(width: 44, height: 33)
+    static let baseLabelFontSize: CGFloat = 9.0
+    static let minimumLabelFontSize: CGFloat = 7.5
+    static let symbolPointSize: CGFloat = 17
+
+    private struct CacheKey: Hashable {
+        let title: String
+        let systemImage: String
+        let scale: Int
+    }
+
+    private static var cache: [CacheKey: UIImage] = [:]
+
+    static func fittedFontSize(for title: String, maxWidth: CGFloat = canvasSize.width) -> CGFloat {
+        var size = baseLabelFontSize
+        while size > minimumLabelFontSize {
+            let font = UIFont.systemFont(ofSize: size, weight: .semibold)
+            let width = (title as NSString).size(withAttributes: [.font: font]).width
+            if width <= maxWidth { return size }
+            size -= 0.5
+        }
+        return minimumLabelFontSize
+    }
+
+    static func image(title: String, systemImage: String, scale: CGFloat) -> UIImage {
+        let clampedScale = max(1, scale)
+        let key = CacheKey(title: title, systemImage: systemImage, scale: Int((clampedScale * 10).rounded()))
+        if let cached = cache[key] { return cached }
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = clampedScale
+        format.opaque = false
+
+        let rendered = UIGraphicsImageRenderer(size: canvasSize, format: format).image { _ in
+            let symbolConfig = UIImage.SymbolConfiguration(pointSize: symbolPointSize, weight: .medium)
+            if let symbol = UIImage(systemName: systemImage, withConfiguration: symbolConfig)?
+                .withTintColor(.black, renderingMode: .alwaysOriginal) {
+                let symbolBoxHeight: CGFloat = 19
+                let symbolSize = symbol.size
+                let symbolOrigin = CGPoint(
+                    x: (canvasSize.width - symbolSize.width) / 2,
+                    y: (symbolBoxHeight - symbolSize.height) / 2
+                )
+                symbol.draw(in: CGRect(origin: symbolOrigin, size: symbolSize))
+            }
+
+            let fontSize = fittedFontSize(for: title)
+            let font = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.alignment = .center
+            paragraph.lineBreakMode = .byTruncatingTail
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: UIColor.black,
+                .paragraphStyle: paragraph
+            ]
+            let textHeight = ceil(font.lineHeight)
+            let textRect = CGRect(
+                x: 0,
+                y: canvasSize.height - textHeight,
+                width: canvasSize.width,
+                height: textHeight
+            )
+            (title as NSString).draw(
+                with: textRect,
+                options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine],
+                attributes: attributes,
+                context: nil
+            )
+        }
+        .withRenderingMode(.alwaysTemplate)
+
+        cache[key] = rendered
+        return rendered
+    }
+}
+
+extension DuoLayoutSignal {
+    @MainActor
+    static func from(window: UIWindow) -> DuoLayoutSignal {
+        let bounds = window.bounds
+        guard #available(iOS 27.1, *) else {
+            var signal = DuoLayoutSignal()
+            signal.width = bounds.width
+            return signal
+        }
+        var regions = ReaderHostRegions()
+        switch window.traitCollection.verticalBarEdge {
+        case .leading:
+            regions.verticalBar = window.effectiveUserInterfaceLayoutDirection == .leftToRight ? .left : .right
+        case .trailing:
+            regions.verticalBar = window.effectiveUserInterfaceLayoutDirection == .leftToRight ? .right : .left
+        default: break
+        }
+        let divisionRegions = window.reservedRegions(kind: .division, options: .includeInactive)
+        let divisions = divisionRegions.map(\.frame)
+        regions.fold = ReaderHostRegions.foldFrame(from: divisions, in: bounds)
+        let isFoldActive = regions.fold.flatMap { fold in
+            divisionRegions.first { $0.frame == fold }?.isActive
+        } ?? false
+        return DuoLayoutSignal(
+            regions: regions, width: bounds.width, isVerticalFoldActive: isFoldActive
+        )
+    }
+
+    @MainActor
+    static func initialFromActiveWindow() -> DuoLayoutSignal {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let activeScene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first
+        guard let window = activeScene?.keyWindow ?? activeScene?.windows.first else {
+            return DuoLayoutSignal()
+        }
+        return from(window: window)
+    }
+}
+
 private struct DuoLayoutProbeModifier: ViewModifier {
-    @State private var signal = DuoLayoutSignal()
+    @State private var signal = DuoLayoutSignal.initialFromActiveWindow()
 
     func body(content: Content) -> some View {
         content
@@ -297,6 +570,11 @@ private struct DuoLayoutProbe: UIViewRepresentable {
         @available(*, unavailable)
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            report()
+        }
+
         override func layoutSubviews() {
             super.layoutSubviews()
             report()
@@ -310,23 +588,8 @@ private struct DuoLayoutProbe: UIViewRepresentable {
         }
 
         private func current() -> DuoLayoutSignal {
-            guard #available(iOS 27.1, *), let window else { return DuoLayoutSignal() }
-            var regions = ReaderHostRegions()
-            switch traitCollection.verticalBarEdge {
-            case .leading: regions.verticalBar = effectiveUserInterfaceLayoutDirection == .leftToRight ? .left : .right
-            case .trailing: regions.verticalBar = effectiveUserInterfaceLayoutDirection == .leftToRight ? .right : .left
-            default: break
-            }
-            let bounds = window.bounds
-            let divisionRegions = window.reservedRegions(kind: .division, options: .includeInactive)
-            let divisions = divisionRegions.map(\.frame)
-            regions.fold = ReaderHostRegions.foldFrame(from: divisions, in: bounds)
-            let isFoldActive = regions.fold.flatMap { fold in
-                divisionRegions.first { $0.frame == fold }?.isActive
-            } ?? false
-            return DuoLayoutSignal(
-                regions: regions, width: bounds.width, isVerticalFoldActive: isFoldActive
-            )
+            guard let window else { return DuoLayoutSignal() }
+            return DuoLayoutSignal.from(window: window)
         }
     }
 }

@@ -362,5 +362,196 @@ struct DuoLayoutSignalTests {
         #expect(MediaBrowserView.jumpBackInChipMaxWidth(isAccessibilitySize: true, foldPaneWidth: 455.5) == 439.5)
         #expect(MediaBrowserView.jumpBackInChipMaxWidth(isAccessibilitySize: true, foldPaneWidth: 439.5) == 423.5)
     }
+
+    @Test func navigationSignalsDistinguishEveryDuoPoseFromOrdinaryScreens() {
+        let phone = DuoLayoutSignal()
+        #expect(!phone.isMeasured)
+        #expect(!phone.isDuo)
+        #expect(!phone.usesSingleRailActionGroup)
+        #expect(!phone.hidesHomeSecondaryToolbarActions)
+        #expect(!phone.separatesSearchTab)
+
+        var measuredPhone = DuoLayoutSignal()
+        measuredPhone.width = 393
+        #expect(measuredPhone.isMeasured)
+        #expect(!measuredPhone.isDuo)
+        #expect(!measuredPhone.usesSingleRailActionGroup)
+        #expect(!measuredPhone.hidesHomeSecondaryToolbarActions)
+        #expect(!measuredPhone.separatesSearchTab)
+
+        let cover = DuoLayoutSignal(regions: ReaderHostRegions(verticalBar: .right), width: 466)
+        #expect(cover.isMeasured)
+        #expect(cover.isDuo)
+        #expect(cover.usesSingleRailActionGroup)
+        #expect(cover.hidesHomeSecondaryToolbarActions)
+        #expect(cover.separatesSearchTab)
+
+        var openRegions = ReaderHostRegions(verticalBar: .right)
+        openRegions.fold = CGRect(x: 455.5, y: 0, width: 40, height: 669)
+        let open = DuoLayoutSignal(regions: openRegions, width: 951, isVerticalFoldActive: false)
+        let book = DuoLayoutSignal(regions: openRegions, width: 951, isVerticalFoldActive: true)
+        for pose in [open, book] {
+            #expect(pose.isDuo)
+            #expect(pose.usesSingleRailActionGroup)
+            #expect(pose.hidesHomeSecondaryToolbarActions)
+            #expect(pose.separatesSearchTab)
+        }
+
+        var uprightRegions = ReaderHostRegions(verticalBar: .none)
+        uprightRegions.fold = CGRect(x: 0, y: 455.5, width: 669, height: 40)
+        let upright = DuoLayoutSignal(regions: uprightRegions, width: 669)
+        #expect(upright.isDuo)
+        #expect(!upright.usesSingleRailActionGroup)
+        #expect(upright.hidesHomeSecondaryToolbarActions)
+        #expect(upright.separatesSearchTab)
+    }
+
+    @Test func accountPresentationMatchesBoardAcrossEveryPoseAndDirection() throws {
+        // Unmeasured default never flashes a modal sheet before DuoLayoutProbe measures.
+        let unmeasured = DuoLayoutSignal()
+        #expect(unmeasured.accountPresentation() == .sheet)
+        #expect(!unmeasured.presentsAccountAsSheet(isPresentingAccount: true, onHome: true))
+
+        // Measured ordinary iPhone/iPad presents standard sheet.
+        var phone = DuoLayoutSignal()
+        phone.width = 393
+        #expect(phone.accountPresentation() == .sheet)
+        #expect(phone.presentsAccountAsSheet(isPresentingAccount: true, onHome: true))
+        #expect(!phone.presentsAccountAsSheet(isPresentingAccount: false, onHome: true))
+
+        // Duo Cover (vertical rail, no vertical fold): standard sheet.
+        let cover = DuoLayoutSignal(regions: ReaderHostRegions(verticalBar: .right), width: 466)
+        #expect(cover.accountPresentation() == .sheet)
+        #expect(cover.presentsAccountAsSheet(isPresentingAccount: true, onHome: true))
+
+        // Duo Upright portrait (horizontal fold, no rail): form sheet (~541 pt).
+        var uprightRegions = ReaderHostRegions(verticalBar: .none)
+        uprightRegions.fold = CGRect(x: 0, y: 455.5, width: 669, height: 40)
+        let upright = DuoLayoutSignal(regions: uprightRegions, width: 669)
+        #expect(upright.accountPresentation() == .formSheet)
+        #expect(upright.presentsAccountAsSheet(isPresentingAccount: true, onHome: true))
+
+        // Duo Open & Book landscape: trailing inspector from fold centre to screen edge.
+        var railRight = ReaderHostRegions(verticalBar: .right)
+        railRight.fold = CGRect(x: 455.5, y: 0, width: 40, height: 669)
+        let openRight = DuoLayoutSignal(regions: railRight, width: 951, isVerticalFoldActive: false)
+        let bookRight = DuoLayoutSignal(regions: railRight, width: 951, isVerticalFoldActive: true)
+
+        let ltrOpen = try #require(openRight.accountPresentation(rightToLeft: false).inspectorGeometry)
+        #expect(ltrOpen.foldHalfWidth == 391.5)
+        #expect(ltrOpen.trailingRailReserve == DuoLayoutSignal.railReserve)
+        #expect(ltrOpen.fullFoldHalfWidth == 475.5)
+        #expect(!openRight.presentsAccountAsSheet(isPresentingAccount: true, onHome: true))
+        #expect(openRight.presentsAccountAsSheet(isPresentingAccount: true, onHome: false))
+
+        let rtlOpen = try #require(openRight.accountPresentation(rightToLeft: true).inspectorGeometry)
+        #expect(rtlOpen.foldHalfWidth == 475.5)
+        #expect(rtlOpen.trailingRailReserve == 0)
+        #expect(rtlOpen.fullFoldHalfWidth == 475.5)
+
+        let ltrBook = try #require(bookRight.accountPresentation(rightToLeft: false).inspectorGeometry)
+        #expect(ltrBook.fullFoldHalfWidth == 475.5)
+        #expect(ltrBook.leadingFoldClearance == 56)
+
+        // 180° left-rail landscape: LTR has no rail on the trailing pane; RTL does.
+        var railLeft = ReaderHostRegions(verticalBar: .left)
+        railLeft.fold = CGRect(x: 455.5, y: 0, width: 40, height: 669)
+        let openLeft = DuoLayoutSignal(regions: railLeft, width: 951, isVerticalFoldActive: false)
+        let ltrLeft = try #require(openLeft.accountPresentation(rightToLeft: false).inspectorGeometry)
+        #expect(ltrLeft.foldHalfWidth == 475.5)
+        #expect(ltrLeft.trailingRailReserve == 0)
+        #expect(ltrLeft.fullFoldHalfWidth == 475.5)
+        let rtlLeft = try #require(openLeft.accountPresentation(rightToLeft: true).inspectorGeometry)
+        #expect(rtlLeft.foldHalfWidth == 391.5)
+        #expect(rtlLeft.trailingRailReserve == DuoLayoutSignal.railReserve)
+        #expect(rtlLeft.fullFoldHalfWidth == 475.5)
+
+        // When Home has pushed a detail screen or entered Select mode, Open/Book falls
+        // back to presenting Account as a sheet so Close/Done is never missing.
+        #expect(openRight.presentsAccountAsSheet(
+            isPresentingAccount: true, onHome: true, homeCanHostInspector: false
+        ))
+    }
+
+    @Test func accountPresenterDeliversWorkLinkAcrossSimultaneousInspectorToSheetClose() {
+        let router = AppRouter()
+        var presenter = DuoAccountPresenterState()
+
+        // Open Account as the Open Flat inspector and push a destination.
+        router.showAccount(.inbox)
+        _ = router.consumePendingAccountRoute()
+        router.accountNavigationPath.append(AccountView.Route.inbox)
+        let openSync = presenter.sync(isPresentingAccount: true, presentsAsSheet: false, usesInspector: true)
+        #expect(!openSync)
+        #expect(presenter.owner == .inspector)
+
+        // Simultaneously open an AO3 work link AND rotate upright into sheet geometry:
+        // no sheet was ever on screen to call `onDismiss`, so sync must finalize now.
+        router.openAO3Link(URL(string: "https://archiveofourown.org/works/4242")!)
+        #expect(!router.isPresentingAccount)
+        let shouldFinalize = presenter.sync(
+            isPresentingAccount: router.isPresentingAccount,
+            presentsAsSheet: false,
+            usesInspector: false
+        )
+        #expect(shouldFinalize)
+        if shouldFinalize { router.finalizeAccountDismissal() }
+        #expect(router.isPresentingLinkedWork)
+        #expect(router.pendingWorkLink?.id == 4242)
+        #expect(router.accountNavigationPath.isEmpty)
+    }
+
+    @Test func accountPresenterWaitsForLiveSheetDismissAcrossPoseChanges() {
+        let router = AppRouter()
+        var presenter = DuoAccountPresenterState()
+
+        // 1. Open Account as a modal sheet (Upright/Cover) and push a destination.
+        router.showAccount()
+        router.accountNavigationPath.append(AccountView.Route.settings)
+        let openSheet = presenter.sync(isPresentingAccount: true, presentsAsSheet: true, usesInspector: false)
+        #expect(!openSheet)
+        #expect(presenter.owner == .sheet)
+        #expect(presenter.sheetAwaitingDismiss)
+
+        // 2. Rotate into Open Flat while keeping Account open (sheet -> inspector handoff).
+        let handoffToInspector = presenter.sync(isPresentingAccount: true, presentsAsSheet: false, usesInspector: true)
+        #expect(!handoffToInspector)
+        #expect(presenter.owner == .inspector)
+        // Outgoing sheet finishes dismissing while inspector stays open: must NOT finalize.
+        let dismissedDuringHandoff = presenter.sheetDidDismiss(isPresentingAccount: true)
+        #expect(!dismissedDuringHandoff)
+        #expect(router.accountNavigationPath.count == 1)
+
+        // 3. Rotate back to sheet, then simultaneously rotate to inspector AND open a work link.
+        let handoffToSheet = presenter.sync(isPresentingAccount: true, presentsAsSheet: true, usesInspector: false)
+        #expect(!handoffToSheet)
+        router.openAO3Link(URL(string: "https://archiveofourown.org/works/5555")!)
+        // Must wait for the dismissing sheet's `onDismiss` rather than colliding modals.
+        let prematureFinalize = presenter.sync(
+            isPresentingAccount: false,
+            presentsAsSheet: false,
+            usesInspector: true
+        )
+        #expect(!prematureFinalize)
+        #expect(!router.isPresentingLinkedWork)
+
+        let finalizedOnDismiss = presenter.sheetDidDismiss(isPresentingAccount: false)
+        #expect(finalizedOnDismiss)
+        if finalizedOnDismiss { router.finalizeAccountDismissal() }
+        #expect(router.isPresentingLinkedWork)
+        #expect(router.pendingWorkLink?.id == 5555)
+        #expect(router.accountNavigationPath.isEmpty)
+    }
+
+    @Test func railTabArtworkRendersTemplateLabelsThatFitTheRail() {
+        for tab in AppTab.mainTabs(showsWriting: true) {
+            let image = DuoRailTabArtwork.image(title: tab.title, systemImage: tab.symbol, scale: 3)
+            #expect(image.size == DuoRailTabArtwork.canvasSize)
+            #expect(image.renderingMode == .alwaysTemplate)
+            #expect(DuoRailTabArtwork.fittedFontSize(for: tab.title) == DuoRailTabArtwork.baseLabelFontSize)
+        }
+        // Extra-long titles shrink to fit inside the rail width without overflowing.
+        #expect(DuoRailTabArtwork.fittedFontSize(for: "Subscriptions") < DuoRailTabArtwork.baseLabelFontSize)
+    }
 }
 #endif

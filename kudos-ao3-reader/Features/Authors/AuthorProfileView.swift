@@ -24,6 +24,7 @@ struct AuthorProfileView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.duoLayout) private var duoLayout
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var model: AO3AuthorProfileModel
@@ -1030,11 +1031,13 @@ private extension AuthorProfileView {
             }
         } else {
             ActionToolbar(items: leadingToolbarItems)
-            if !leadingToolbarItems.isEmpty {
+            if !leadingToolbarItems.isEmpty, !duoLayout.usesSingleRailActionGroup {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
             }
             // Board 23: Share and "…" are one glass pill (one group shares a pill).
             // Your own works/series list (board 41) keeps Share in the menu, so the title fits.
+            // On the Duo rail (N9), New Work joins this single action group instead of
+            // breaking out into its own circle after a spacer.
             ToolbarItemGroup(placement: .primaryAction) {
                 if !isOwnWorksOrSeries {
                     ShareLink(item: model.route.dashboardURL) {
@@ -1042,9 +1045,15 @@ private extension AuthorProfileView {
                     }
                     .labelStyle(.iconOnly)
                 }
+                if showsNewWork, duoLayout.usesSingleRailActionGroup {
+                    ToolbarIconButton(title: "New Work", systemImage: "plus") {
+                        isCreatingWork = true
+                    }
+                    .labelStyle(.iconOnly)
+                }
                 profileMenu.labelStyle(.iconOnly)
             }
-            if showsNewWork {
+            if showsNewWork, !duoLayout.usesSingleRailActionGroup {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
                 ToolbarItem(placement: .primaryAction) {
                     Button {
