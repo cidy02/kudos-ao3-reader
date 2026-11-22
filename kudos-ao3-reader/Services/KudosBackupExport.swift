@@ -88,7 +88,6 @@ extension KudosBackupService {
         fandomReadWatermarks: [FandomReadWatermark] = [],
         followedTags: [FollowedTag] = [],
         tagAliases: [TagAlias] = [],
-        chapterUpdateEvents: [ChapterUpdateEvent] = [],
         tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupExportPlan {
@@ -110,7 +109,6 @@ extension KudosBackupService {
             fandomReadWatermarks: fandomReadWatermarks.map(KudosBackupFandomReadWatermark.init),
             followedTags: followedTags.map(KudosBackupFollowedTag.init),
             tagAliases: tagAliases.map(KudosBackupTagAlias.init),
-            chapterUpdateEvents: chapterUpdateEvents.map(KudosBackupChapterUpdateEvent.init),
             settings: .capture(defaults: defaults),
             pronunciations: .capture(),
             tombstones: tombstones.map(KudosBackupTombstone.init)

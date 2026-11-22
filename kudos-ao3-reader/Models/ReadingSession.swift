@@ -70,9 +70,6 @@ import SwiftData
     var endedAtChapterEnd: Bool? = nil
     /// D7: whether the sitting jumped to the work's last chapter before the halfway mark.
     var peekedAtEnding: Bool? = nil
-    /// D10: the highest AO3 story chapter (1-based) the reader was in during the sitting, from the
-    /// locator. nil = no reliable chapter signal (older rows, macOS, a sitting that reported none).
-    var highestStoryChapter: Int? = nil
 
     /// D7: the same judgement by AO3 story chapter (1-based), so the words-read calculator, which
     /// knows chapters and not spine items, can leave a skimmed chapter's coverage uncredited.

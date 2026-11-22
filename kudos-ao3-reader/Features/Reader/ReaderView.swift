@@ -289,7 +289,7 @@ struct ReaderView: View {
 
     private func markKudosGiven() {
         guard work.modelContext != nil else { return }
-        work.recordKudosGiven()
+        work.hasGivenKudos = true
         work.markModified()
         modelContext.saveBestEffort(reason: "Saving kudos state failed")
     }

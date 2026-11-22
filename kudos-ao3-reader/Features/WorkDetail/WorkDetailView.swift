@@ -729,7 +729,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     private func markKudosGiven() {
         guard let work = localWork, work.modelContext != nil else { return }
-        work.recordKudosGiven()
+        work.hasGivenKudos = true
         work.markModified()
         context.saveBestEffort(reason: "Saving kudos state failed")
     }

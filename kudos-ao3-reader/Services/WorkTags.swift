@@ -63,13 +63,7 @@ enum WorkTags {
                 + work.workCharacters + work.workFreeforms)
             work.applyLanguageMetadata(groups.language)
             if let words = groups.words { work.wordCount = words }
-            let previousPosted = work.postedChapterCount
             work.chapters = groups.chapters
-            // Insights D10: a rise in posted chapters is an update event (no extra request).
-            ChapterUpdateRecorder.recordRise(
-                for: work, previousPosted: previousPosted, newPosted: work.postedChapterCount,
-                postedDate: groups.dateUpdated, in: context
-            )
             // Insights D9: the first figures a just-saved work sees are its figures at save.
             work.recordStatsAtSaveIfJustSaved(kudos: groups.kudos, hits: groups.hits, bookmarks: groups.bookmarks)
             if let kudos = groups.kudos { work.kudos = kudos }

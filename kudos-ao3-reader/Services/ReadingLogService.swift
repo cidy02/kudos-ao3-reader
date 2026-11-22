@@ -73,7 +73,6 @@ enum ReadingLogService {
         var leftForNext: Set<Int> = []
         var peekedAtEnding = false
         var sawChapterSignal = false
-        var highestStoryChapter: Int?
 
         /// Credits `seconds` to the chapter the reader has been in, then moves to `chapter`.
         /// The first report only establishes where the reader is (the stored start spine can be
@@ -83,10 +82,7 @@ enum ReadingLogService {
                 pendingSeconds += seconds
                 guard let chapter else { return }
                 currentSpine = chapter.spineIndex
-                if let story = chapter.storyChapter {
-                    storyChapterBySpine[chapter.spineIndex] = story
-                    highestStoryChapter = max(highestStoryChapter ?? 0, story)
-                }
+                if let story = chapter.storyChapter { storyChapterBySpine[chapter.spineIndex] = story }
                 if pendingSeconds > 0 { chapterSeconds[chapter.spineIndex, default: 0] += pendingSeconds }
                 pendingSeconds = 0
                 sawChapterSignal = true
@@ -94,10 +90,7 @@ enum ReadingLogService {
             }
             if seconds > 0 { chapterSeconds[spine, default: 0] += seconds }
             guard let chapter else { return }
-            if let story = chapter.storyChapter {
-                storyChapterBySpine[chapter.spineIndex] = story
-                highestStoryChapter = max(highestStoryChapter ?? 0, story)
-            }
+            if let story = chapter.storyChapter { storyChapterBySpine[chapter.spineIndex] = story }
             guard chapter.spineIndex != spine else { return }
             if chapter.spineIndex == spine + 1 {
                 leftForNext.insert(spine)
@@ -412,8 +405,6 @@ enum ReadingLogService {
         guard session.sawChapterSignal else { return }
         row.chapterSeconds = session.chapterSeconds
         row.peekedAtEnding = (row.peekedAtEnding ?? false) || session.peekedAtEnding
-        let highest = max(row.highestStoryChapter ?? 0, session.highestStoryChapter ?? 0)
-        row.highestStoryChapter = highest == 0 ? nil : highest
         row.endedAtChapterEnd = ChapterTiming.endedAtChapterEnd(chapterFraction: finalChapterFraction(of: work))
         guard session.mode == .read, work.wordUnit == .words else { return }
 
@@ -600,7 +591,6 @@ enum ReadingLogService {
             session.enteredFromPrevious = []
             session.leftForNext = []
             session.peekedAtEnding = false
-            session.highestStoryChapter = nil
             session.sawChapterSignal = false
             openSessions[workID] = session
         }

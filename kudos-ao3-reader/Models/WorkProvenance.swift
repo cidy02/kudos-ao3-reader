@@ -97,13 +97,6 @@ nonisolated struct WorkStatsAtSave: Equatable, Sendable {
     }
 }
 
-/// One own-action on AO3 as Kudos saw it (Insights D11).
-nonisolated enum OwnAO3Action: Equatable, Sendable {
-    case bookmarked(isPrivate: Bool)
-    case commented
-    case gaveKudos
-}
-
 extension SavedWork {
     /// How long a work counts as "just saved" for the first stats a metadata fetch brings
     /// (D9). The import itself carries no kudos or hits, so the refresh that follows seconds
@@ -213,51 +206,5 @@ extension SavedWork {
         else { return false }
         ageDaysAtSave = max(0, days)
         return true
-    }
-
-    // MARK: D11
-
-    /// Records an own AO3 action. Timestamps only move forward, except `kudosGivenAt`,
-    /// which keeps the first time (kudos cannot be taken back). A bookmark edit moves
-    /// `bookmarkedAt` and the public/private flag to the latest. Returns whether anything
-    /// changed, so callers save only when needed.
-    @discardableResult
-    func recordOwnAction(_ action: OwnAO3Action, at date: Date = Date()) -> Bool {
-        switch action {
-        case let .bookmarked(isPrivate):
-            if let current = bookmarkedAt, current > date { return false }
-            bookmarkedAt = date
-            bookmarkIsPrivate = isPrivate
-            return true
-        case .commented:
-            if let current = lastCommentedAt, current >= date { return false }
-            lastCommentedAt = date
-            return true
-        case .gaveKudos:
-            var changed = !hasGivenKudos
-            hasGivenKudos = true
-            if kudosGivenAt.map({ date < $0 }) ?? true {
-                kudosGivenAt = date
-                changed = true
-            }
-            return changed
-        }
-    }
-
-    /// A bookmark seen on a fetched work page rather than saved from Kudos: an earlier
-    /// bound on `bookmarkedAt` is unknowable, so only a work with none recorded takes the
-    /// time it was seen.
-    @discardableResult
-    func recordSeenBookmark(isPrivate: Bool, at date: Date = Date()) -> Bool {
-        guard bookmarkedAt == nil else { return false }
-        bookmarkedAt = date
-        bookmarkIsPrivate = isPrivate
-        return true
-    }
-
-    /// Kudos seen on a fetched work page (`kudosGivenByCurrentUser`) or given in the app.
-    @discardableResult
-    func recordKudosGiven(at date: Date = Date()) -> Bool {
-        recordOwnAction(.gaveKudos, at: date)
     }
 }

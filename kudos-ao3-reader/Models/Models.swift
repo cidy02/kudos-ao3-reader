@@ -231,7 +231,7 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var stackBaselineChapterCount: Int = 0
     var statusWasRecorded: Bool = false
 
-    // MARK: Insights provenance (T-536 D8, D9, D11)
+    // MARK: Insights provenance (T-536 D8, D9)
     // Every field is optional or defaulted (lightweight migration) and set once or only
     // ever moved forward by `WorkProvenance` (Models/WorkProvenance.swift); a metadata
     // refresh never touches them. A value that was never recorded is nil, never a guess.
@@ -250,12 +250,6 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var ageDaysAtSave: Int?
     /// D9: size of the work's first fandom when Kudos had seen that fandom's tag page.
     var fandomWorksAtSave: Int?
-    /// D11: the reader's own AO3 actions, as seen from Kudos (lower bounds: an action taken
-    /// in a browser stays invisible until a fetched work page shows it).
-    var bookmarkedAt: Date?
-    var bookmarkIsPrivate: Bool = false
-    var lastCommentedAt: Date?
-    var kudosGivenAt: Date?
 
     var hasRecordedStatus: Bool {
         statusWasRecorded || !readingStatusRaw.isEmpty || statusChangedAt != nil

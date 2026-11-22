@@ -197,18 +197,6 @@ enum WorkLifecycle {
             SyncTombstones.recordDeletion(of: annotation, in: context)
             context.delete(annotation)
         }
-        // Chapter update events (Insights D10) are keyed by work id, not a relationship: a
-        // permanent delete on THIS device takes them too. This is the only place they are
-        // physically deleted; sync only ever hides them (`ChapterUpdateRecorder.visible`),
-        // because nothing a tombstone's signature does not cover may erase data.
-        // (Soft delete keeps them: Restore must find them again.)
-        if ChapterUpdateRecorder.isStored(in: context) {
-            for event in (try? context.fetch(FetchDescriptor<ChapterUpdateEvent>(
-                predicate: #Predicate { $0.workID == workID }
-            ))) ?? [] {
-                context.delete(event)
-            }
-        }
         #if os(iOS)
         NotificationCenter.default.post(name: .kudosWorkEPUBWillChange, object: work.id)
         #endif

@@ -86,16 +86,7 @@ enum WorkMetadataRefresh {
 
         // Safety rule: all network/parse failures throw before this point. From here
         // onward we merge a fully parsed value and never delete/unlink local records.
-        let previousPosted = work.postedChapterCount
         apply(metadata, to: work)
-        // Insights D10: a rise in posted chapters is an update event (no extra request).
-        ChapterUpdateRecorder.recordRise(
-            for: work,
-            previousPosted: previousPosted,
-            newPosted: work.postedChapterCount,
-            postedDate: metadata.dateUpdated,
-            in: context
-        )
         WorkSearchIndex.reindex(work)
         try context.save()
         return metadata
@@ -172,7 +163,7 @@ enum WorkMetadataRefresh {
         // kudos wasn't given, AO3 truncates this list on popular works, so this
         // can only ever confirm a kudos-given the app didn't already know about,
         // never clear one it already recorded from the user's own in-app tap.
-        if metadata.kudosGivenByCurrentUser { work.recordKudosGiven() }
+        if metadata.kudosGivenByCurrentUser { work.hasGivenKudos = true }
         if let comments = metadata.comments { work.comments = comments }
         if let bookmarks = metadata.bookmarks { work.bookmarks = bookmarks }
         if let hits = metadata.hits { work.hits = hits }

@@ -2365,7 +2365,7 @@ extension ReadiumReaderView {
                 let message = try await auth.giveKudos(workID: workID)
                 // Reached on both "Kudos left." and the benign "already left kudos
                 // here" outcome — either way it's confirmed given, so persist it.
-                work.recordKudosGiven()
+                work.hasGivenKudos = true
                 try? modelContext.save()
                 kudosSuccesses += 1
                 AccessibilityNotification.Announcement(message).post()

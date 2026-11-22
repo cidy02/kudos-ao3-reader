@@ -1098,8 +1098,6 @@ final class CommentsModel {
             submissionGuard.succeed()
             if editTarget == nil {
                 drafts.clearVariants(for: context, identity: expected.identity)
-                // Insights D11: a comment or reply the reader posted from here.
-                OwnAO3ActionLog.record(.commented, ao3WorkID: context.workID)
             }
         } catch {
             guard isCurrent(expected, auth), submissionGuard.pendingKey == key else { return }
@@ -1186,10 +1184,6 @@ final class CommentsModel {
         guard isCurrent(expected, auth), submissionGuard.pendingKey == pendingKey else { return }
         if case .found = verification {
             drafts.clearVariants(for: target.context, identity: pendingKey.identity)
-            // Insights D11: AO3 has the comment, even though the reply to the post was lost.
-            OwnAO3ActionLog.record(
-                .commented, ao3WorkID: target.context.workID, at: submittedAt ?? Date()
-            )
         }
         submissionGuard.resolveAmbiguity(verification)
     }

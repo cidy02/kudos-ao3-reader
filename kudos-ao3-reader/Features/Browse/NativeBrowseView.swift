@@ -33,6 +33,10 @@ struct BrowseView: View {
     /// The works that page lists: its origin applies to those only, never to a work reached
     /// through an author profile or a tag list pushed on top of it.
     @State private var fandomOriginWorkIDs: Set<Int> = []
+    /// `path.count` once the fandom page was pushed. Only a work detail created directly on top of
+    /// it (one level deeper) was saved from that page; the same work reached later through an
+    /// author profile or tag list is saved from there and takes no fandom origin.
+    @State private var fandomDepth = -1
     @Namespace private var cardZoomNamespace
 
     /// A pushed fandom (or sibling family) → its native work results.
@@ -55,6 +59,23 @@ struct BrowseView: View {
             ReadingLogService.markVisited(fandom: first, newestWork: nil, in: modelContext)
         }
         path.append(FandomRoute(names: names, title: title, previousVisit: previousVisit))
+        fandomDepth = path.count
+    }
+
+    /// A pushed work's detail, with the save origin fixed when it is created (a later push on top
+    /// of it must not change where this one was opened from).
+    private struct OriginScopedDetail: View {
+        let work: AO3WorkSummary
+        @State private var origin: ReadingQueueMembershipOrigin?
+
+        init(work: AO3WorkSummary, origin: ReadingQueueMembershipOrigin?) {
+            self.work = work
+            _origin = State(initialValue: origin)
+        }
+
+        var body: some View {
+            WorkDetailView(remote: work).environment(\.queueMembershipOrigin, origin)
+        }
     }
 
     var body: some View {
@@ -79,8 +100,11 @@ struct BrowseView: View {
                     )
                 }
                 .navigationDestination(for: AO3WorkSummary.self) { work in
-                    WorkDetailView(remote: work)
-                        .environment(\.queueMembershipOrigin, fandomOriginWorkIDs.contains(work.id) ? fandomOrigin : nil)
+                    OriginScopedDetail(
+                        work: work,
+                        origin: path.count == fandomDepth + 1 && fandomOriginWorkIDs.contains(work.id)
+                            ? fandomOrigin : nil
+                    )
                 }
                 .ao3AuthorNavigation(path: $path, tab: .browse)
                 // A tapped AO3 tag link (e.g. in a work's preface) → native tag works.
