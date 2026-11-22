@@ -1802,7 +1802,7 @@ extension ReadAloudRacesAndInsightsDigestTests {
         #expect(controller.status == .unavailable)
         #expect(controller.transportForTests == "none")
         #expect(!controller.remoteCommandsInstalledForTests)
-        #expect(controller.sessionWorkID == nil)
+        #expect(!controller.isSessionActive)
     }
 
     // MARK: - T-535h: one commit point (`onAudible`) and one transport state
@@ -1916,7 +1916,7 @@ extension ReadAloudRacesAndInsightsDigestTests {
             #expect(controller.status == .unavailable, "detached \(detached)")
             #expect(controller.transportForTests == "none", "detached \(detached)")
             #expect(!controller.remoteCommandsInstalledForTests, "detached \(detached)")
-            if detached { #expect(controller.sessionWorkID == nil) }
+            #expect(!controller.isSessionActive, "detached \(detached)")
         }
     }
 
