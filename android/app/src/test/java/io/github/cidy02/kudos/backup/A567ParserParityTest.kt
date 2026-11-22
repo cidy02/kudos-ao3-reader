@@ -259,7 +259,6 @@ class A567ParserParityTest {
         "double comma in array" to lenientSuperset,
         "semicolon separator" to lenientSuperset,
         "equals as colon" to lenientSuperset,
-        "lenient: unquoted keys" to "JsonReader sniffs true on the lenient tree; the picker's strict parse says false",
         "lenient: single-quoted strings" to lenientSuperset,
         "lenient: block comment" to lenientSuperset,
         "lenient: line comment" to lenientSuperset,
