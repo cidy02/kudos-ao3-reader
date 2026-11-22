@@ -32,7 +32,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /** One device: Room, stores, repositories and a fake SAF folder, every directory a measured disk root. */
-class A567Rig : AutoCloseable {
+class A567Rig(workFactory: (java.nio.file.Path) -> WorkFileStore = ::WorkFileStore) : AutoCloseable {
     val context: Context = ApplicationProvider.getApplicationContext()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     var clock: Instant = Instant.parse("2026-06-26T12:00:00Z")
@@ -45,7 +45,7 @@ class A567Rig : AutoCloseable {
     val settings = SettingsRepository(PreferenceDataStoreFactory.create(
         scope = scope, produceFile = { File(settingsRoot, "settings.preferences_pb") }
     ))
-    val workFiles = WorkFileStore(filesRoot.toPath())
+    val workFiles: WorkFileStore = workFactory(filesRoot.toPath())
     val fontFiles = FontFileStore(filesRoot.toPath())
     val gate = PersistenceGate()
     val repository = BackupRepository(

@@ -73,6 +73,11 @@ android {
     }
 
     buildTypes {
+        // A-567 P1 device benchmarks only: -PkudosAppIdSuffix=.bench installs beside, never over, the real app.
+        // Unset (the default) changes nothing.
+        (project.findProperty("kudosAppIdSuffix") as String?)?.let { suffix ->
+            getByName("debug") { applicationIdSuffix = suffix }
+        }
         release {
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
