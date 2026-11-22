@@ -60,11 +60,7 @@ struct ReaderEndCard: View {
         Group {
             if let maxHeight {
                 // Content that fits shows as is; anything taller scrolls inside the card.
-                ViewThatFits(in: .vertical) {
-                    content
-                    ScrollView { content }.scrollBounceBehavior(.basedOnSize)
-                }
-                .frame(maxHeight: maxHeight)
+                ReaderContentCappedScroll(maxHeight: maxHeight) { content }
             } else {
                 content
             }
@@ -336,5 +332,23 @@ struct ReaderEndSecondaryButton: View {
         .minimumHitTarget()
         .accessibilityLabel(label)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+/// Sizes itself to its content up to `maxHeight`, then scrolls. (`ViewThatFits` picked its
+/// greedy scrolling branch here and filled the cap, so the height is measured instead.)
+struct ReaderContentCappedScroll<Content: View>: View {
+    let maxHeight: CGFloat
+    @ViewBuilder var content: Content
+    @State private var contentHeight: CGFloat = 0
+
+    var body: some View {
+        ScrollView {
+            content
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(height: contentHeight > 0 ? min(contentHeight, maxHeight) : maxHeight)
+        .opacity(contentHeight > 0 ? 1 : 0)
     }
 }

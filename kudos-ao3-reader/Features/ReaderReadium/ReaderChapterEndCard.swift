@@ -35,12 +35,7 @@ struct ReaderChapterEndCard: View {
     var body: some View {
         // The card is taller than the page's spare room at the largest text sizes, so it
         // scrolls inside itself rather than clipping its buttons.
-        ViewThatFits(in: .vertical) {
-            content
-            ScrollView { content }
-                .scrollBounceBehavior(.basedOnSize)
-        }
-        .frame(maxHeight: maxHeight)
+        ReaderContentCappedScroll(maxHeight: maxHeight) { content }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .frame(maxWidth: 480)
