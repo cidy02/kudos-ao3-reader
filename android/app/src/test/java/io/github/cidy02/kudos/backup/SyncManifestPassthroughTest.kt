@@ -1914,9 +1914,9 @@ class SyncManifestPassthroughTest {
             )
         )
 
-    private suspend fun importUnrecordedSession() {
+    private suspend fun importUnrecordedSession(exportedAt: String = "2026-06-27T12:00:00.000Z") {
         val v0 = sessionRecord(emptyMap(), drop = setOf("modeRaw", "activeSeconds", "rulesVersion"))
-        backupRepository.importV2ZipBytes(zipManifest(manifestWithSession(v0)), mode = BackupImportMode.MERGE)
+        backupRepository.importV2ZipBytes(zipManifest(manifestWithSession(v0, exportedAt)), mode = BackupImportMode.MERGE)
     }
 
     private suspend fun exportedSession(): JsonObject = exportedManifest().getValue("readingSessions").jsonArray
@@ -1924,12 +1924,12 @@ class SyncManifestPassthroughTest {
 
     @Test
     fun genuineUnrecordedSessionIsNotUpgradedByAnOlderBackupMergedLater() = runTest {
-        importUnrecordedSession()
+        importUnrecordedSession(exportedAt = "2026-06-19T12:00:00.000Z")
         val older = sessionRecord(
-            mapOf("lastModifiedAt" to JsonPrimitive("2026-06-20T09:00:00.000Z"))
+            mapOf("lastModifiedAt" to JsonPrimitive("2026-06-29T09:00:00.000Z"))
         )
         backupRepository.importV2ZipBytes(
-            zipManifest(manifestWithSession(older, exportedAt = "2026-06-20T12:00:00.000Z")),
+            zipManifest(manifestWithSession(older, exportedAt = "2026-06-27T12:00:00.000Z")),
             mode = BackupImportMode.MERGE
         )
         val out = exportedSession()
