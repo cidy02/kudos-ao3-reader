@@ -19,6 +19,14 @@ struct ReaderEndCard: View {
     var isBookmarked: Bool = false
     var bookmarkEnabled: Bool = true
     var upNext: (queueName: String, nextWork: SavedWork)? = nil
+    /// "Chapter 15 of 30 is the latest · updated Nov 3, 2026": WIP only (Reader-CaughtUp).
+    var latestChapterLine: String? = nil
+    /// Offers Subscribe on a WIP (needs an AO3 page, like Kudos). Once subscribed the filled
+    /// button becomes Give Kudos and Subscribe moves into the row as "Subscribed".
+    var offersSubscribe: Bool = false
+    var isSubscribed: Bool = false
+    var subscribeEnabled: Bool = true
+    var onSubscribe: () -> Void = {}
     var onKudos: () -> Void = {}
     var onComment: () -> Void = {}
     var onBookmark: () -> Void = {}
@@ -71,6 +79,13 @@ struct ReaderEndCard: View {
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
                 .fixedSize(horizontal: false, vertical: true)
 
+            if let latestChapterLine {
+                Text(latestChapterLine)
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .multilineTextAlignment(.center)
+            }
+
             if let subtitle = ReaderEndOfWorkFacts.subtitle(
                 durationSeconds: durationSeconds,
                 isFinished: isFinished
@@ -86,14 +101,46 @@ struct ReaderEndCard: View {
 
     // MARK: - Actions
 
+    /// Subscribe is the one filled button until it is done; then Give Kudos takes its place.
+    private var showsSubscribeButton: Bool { offersSubscribe && showsAO3Actions && !isSubscribed }
+
     private var actionsBlock: some View {
         VStack(spacing: 10) {
-            if showsAO3Actions {
+            if showsSubscribeButton {
+                subscribeButton
+            } else if showsAO3Actions {
                 kudosButton
             }
 
             secondaryActions
+
+            if showsSubscribeButton {
+                Text("Subscribed works show new chapters on Home.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .multilineTextAlignment(.center)
+            }
         }
+    }
+
+    private var subscribeButton: some View {
+        Button(action: onSubscribe) {
+            HStack(spacing: 8) {
+                Image(systemName: "bell")
+                    .font(.system(size: 18, weight: .semibold))
+                Text("Subscribe")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .frame(minHeight: 50)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(ThemeManager.label(on: fill))
+        .background(fill, in: SubjectMetrics.controlShape(dynamicTypeSize))
+        .disabled(!subscribeEnabled)
+        .minimumHitTarget()
+        .accessibilityLabel("Subscribe")
     }
 
     private var kudosButton: some View {
@@ -119,53 +166,53 @@ struct ReaderEndCard: View {
     @ViewBuilder
     private var secondaryActions: some View {
         let isAccessibility = dynamicTypeSize.isAccessibilitySize
+        // Three across (Kudos, Comment, Bookmark / Subscribed, Comment, Bookmark) is tighter:
+        // the board drops those labels a step.
+        let threeAcross = offersSubscribe && showsAO3Actions
         let laidOut = isAccessibility
             ? AnyLayout(VStackLayout(spacing: 10))
-            : AnyLayout(HStackLayout(spacing: 10))
+            : AnyLayout(HStackLayout(spacing: threeAcross ? 8 : 10))
+        let font: Font = threeAcross ? .footnote.weight(.semibold) : .subheadline.weight(.semibold)
 
         laidOut {
+            if showsSubscribeButton {
+                ReaderEndSecondaryButton(
+                    title: "Kudos",
+                    systemImage: kudosGiven ? "heart.fill" : "heart",
+                    label: kudosGiven ? "Kudos given" : "Give Kudos",
+                    font: font,
+                    isEnabled: kudosEnabled && !kudosGiven,
+                    action: onKudos
+                )
+            } else if offersSubscribe && showsAO3Actions && isSubscribed {
+                ReaderEndSecondaryButton(
+                    title: "Subscribed",
+                    systemImage: "bell.fill",
+                    label: "Subscribed. Double tap to unsubscribe",
+                    font: font,
+                    isEnabled: subscribeEnabled,
+                    isSelected: true,
+                    action: onSubscribe
+                )
+            }
             if showsAO3Actions {
-                secondaryButton(
+                ReaderEndSecondaryButton(
                     title: "Comment",
                     systemImage: "bubble.left",
                     label: "Comment",
+                    font: font,
                     action: onComment
                 )
             }
-            secondaryButton(
+            ReaderEndSecondaryButton(
                 title: isBookmarked ? "Bookmarked" : "Bookmark",
                 systemImage: isBookmarked ? "bookmark.fill" : "bookmark",
                 label: isBookmarked ? "Remove bookmark" : "Add bookmark",
-                enabled: bookmarkEnabled,
+                font: font,
+                isEnabled: bookmarkEnabled,
                 action: onBookmark
             )
         }
-    }
-
-    private func secondaryButton(
-        title: String,
-        systemImage: String,
-        label: String,
-        enabled: Bool = true,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 7) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 16, weight: .semibold))
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .frame(minHeight: 44)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.accentInk)
-        .background(Color.primary.opacity(0.06), in: SubjectMetrics.controlShape(dynamicTypeSize))
-        .disabled(!enabled)
-        .minimumHitTarget()
-        .accessibilityLabel(label)
     }
 
     // MARK: - Up next in queue
@@ -232,5 +279,42 @@ struct ReaderEndCard: View {
             .padding(.vertical, 8)
             .frame(minHeight: 36)
             .background(Color.primary.opacity(0.06), in: SubjectMetrics.controlShape(dynamicTypeSize))
+    }
+}
+
+/// The tinted pill under an end card's filled button (Comment, Bookmark, Subscribed, Kudos).
+/// Shared by the end-of-work and end-of-chapter cards so the two cannot drift.
+struct ReaderEndSecondaryButton: View {
+    let title: String
+    let systemImage: String
+    let label: String
+    var font: Font = .subheadline.weight(.semibold)
+    var isEnabled: Bool = true
+    var isSelected: Bool = false
+    let action: () -> Void
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 16, weight: .semibold))
+                Text(title)
+                    .font(font)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.8)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .frame(minHeight: 44)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.accentInk)
+        .background(Color.primary.opacity(0.06), in: SubjectMetrics.controlShape(dynamicTypeSize))
+        .disabled(!isEnabled)
+        .minimumHitTarget()
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

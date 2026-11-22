@@ -31,5 +31,14 @@ enum ReadiumReaderCompletion {
         }) else { return false }
         return visibleLast.progression.upperBound == 1.0
     }
+
+    /// The reading-order index of the visible resource whose trailing edge rests at its own
+    /// end, or nil. The chapter-end card's trigger; the same `== 1.0` rule as `isAtEnd`.
+    static func endingSpineIndex(viewport: NavigatorViewport?, readingOrder: [ReadiumShared.Link]) -> Int? {
+        guard let viewport, let visibleLast = viewport.resources.last,
+              visibleLast.progression.upperBound == 1.0 else { return nil }
+        let href = visibleLast.href.normalized.string
+        return readingOrder.firstIndex { $0.url().normalized.string == href }
+    }
 }
 #endif
