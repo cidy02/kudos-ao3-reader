@@ -3,8 +3,8 @@ import SwiftData
 import Testing
 @testable import Kudos
 
-/// T-536 (Insights data P3): D7 time on each chapter, D8 where a work came from, D9 kudos and
-/// hits when saved, D10 chapter update events, D11 your own AO3 actions. Backup round trips are
+/// T-536a (Insights data P3): D7 time on each chapter, D8 where a work came from, D9 kudos and
+/// hits when saved. Backup round trips are
 /// in `InsightsP3BackupTests` (PersistenceGateSuites).
 @MainActor
 @Suite(.serialized)
@@ -14,8 +14,7 @@ struct InsightsP3DataTests {
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
             SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self,
-            ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self,
-            ChapterUpdateEvent.self
+            ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self
         ])
         return ModelContext(try ModelContainer(
             for: schema,
@@ -366,237 +365,7 @@ struct InsightsP3DataTests {
         #expect(work.ageDaysAtSave == 30)
     }
 
-    // MARK: D10
-
-    @Test func aRiseInPostedChaptersWritesOneEventAndNothingElseDoes() throws {
-        let context = try context()
-        let work = SavedWork(title: "WIP", author: "A")
-        work.chapters = "3/?"
-        work.rating = "Mature"
-        context.insert(work)
-        // First sight is a baseline, and a count that did not rise is nothing.
-        #expect(ChapterUpdateRecorder.recordRise(for: work, previousPosted: 0, newPosted: 3, in: context) == nil)
-        #expect(ChapterUpdateRecorder.recordRise(for: work, previousPosted: 3, newPosted: 3, in: context) == nil)
-        #expect(ChapterUpdateRecorder.recordRise(for: work, previousPosted: 4, newPosted: 3, in: context) == nil)
-
-        let event = try #require(ChapterUpdateRecorder.recordRise(
-            for: work, previousPosted: 3, newPosted: 6, postedDate: " 2026-11-12 ", at: t0, in: context
-        ))
-        #expect(event.firstNewChapter == 4)
-        #expect(event.chapterCount == 6)
-        #expect(event.postedDate == "2026-11-12")
-        #expect(event.rating == "Mature")
-        // The same chapters seen by a second check are not a second event.
-        #expect(ChapterUpdateRecorder.recordRise(for: work, previousPosted: 3, newPosted: 6, in: context) == nil)
-        // A later rise adds only its own tail.
-        let tail = try #require(ChapterUpdateRecorder.recordRise(
-            for: work, previousPosted: 3, newPosted: 8, at: t0.addingTimeInterval(86_400), in: context
-        ))
-        #expect(tail.previousChapterCount == 6)
-        #expect(try context.fetch(FetchDescriptor<ChapterUpdateEvent>()).count == 2)
-    }
-
-    @Test func theUpdateCheckWritesTheEventFromItsOwnFetchOnly() async throws {
-        let context = try context()
-        let work = SavedWork(title: "WIP", author: "A", sourceURL: "https://archiveofourown.org/works/77")
-        work.ao3WorkID = 77
-        work.isSaved = true
-        work.chapters = "3/?"
-        work.knownChapterCount = 3
-        context.insert(work)
-        var requested: [Int] = []
-        await WorkUpdateChecker.checkForUpdates(among: [work], in: context, fetchTags: { id in
-            await MainActor.run { requested.append(id) }
-            var groups = AO3WorkTagGroups()
-            groups.fandoms = ["Fandom"]
-            groups.chapters = "5/?"
-            return groups
-        })
-        #expect(requested == [77])
-        let events = try context.fetch(FetchDescriptor<ChapterUpdateEvent>())
-        #expect(events.count == 1)
-        #expect(events.first?.previousChapterCount == 3)
-        #expect(events.first?.chapterCount == 5)
-        #expect(events.first?.workID == work.id)
-        #expect(events.first?.postedDate == "")
-    }
-
-    private func posting(_ day: String) throws -> Date {
-        try #require(WorkStat.date(from: day))
-    }
-
-    private func reading(
-        _ workID: UUID, at start: Date, highest: Int?, visit: Int, mode: String = "read"
-    ) -> ReadingSession {
-        let session = ReadingSession(
-            workID: workID, startedAt: start, endedAt: start.addingTimeInterval(1_800),
-            durationSeconds: 1_800, modeRaw: mode, chapterCountAtVisit: visit
-        )
-        session.highestStoryChapter = highest
-        return session
-    }
-
-    @Test func eachNewChapterIsResolvedOnItsOwnFromTheHighestChapterReached() throws {
-        let workID = UUID()
-        let posted = try posting("2026-11-10")
-        let event = ChapterUpdateEvent(
-            workID: workID, chapterCount: 6, previousChapterCount: 3,
-            detectedAt: posted.addingTimeInterval(20 * 3_600), postedDate: "2026-11-10"
-        )
-        // Reaches chapter 4 two days later; chapters 5 and 6 are still unread.
-        let sittings = [reading(workID, at: posted.addingTimeInterval(2 * 86_400), highest: 4, visit: 6)]
-        let figure = InsightsProvenance.newChapters(events: [event], sessions: sittings)
-        #expect(figure.entries.map(\.chapter) == [4, 5, 6])
-        #expect(abs((figure.entries[0].delay ?? 0) - 2 * 86_400) < 1)
-        #expect(figure.entries[1].state == .unread)
-        #expect(figure.entries[2].state == .unread)
-        #expect(figure.unreadChapters == 2)
-        #expect(figure.unknownChapters == 0)
-        #expect(abs((figure.medianDelay ?? 0) - 2 * 86_400) < 1)
-    }
-
-    @Test func aLongFirstChapterIsNotMistakenForReachingALaterOne() throws {
-        let workID = UUID()
-        let posted = try posting("2026-11-10")
-        let event = ChapterUpdateEvent(
-            workID: workID, chapterCount: 6, previousChapterCount: 3, detectedAt: posted, postedDate: "2026-11-10"
-        )
-        // 60% through the work, but the highest chapter recorded is 1.
-        let sitting = reading(workID, at: posted.addingTimeInterval(3_600), highest: 1, visit: 6)
-        sitting.endingProgress = 0.6
-        let figure = InsightsProvenance.newChapters(events: [event], sessions: [sitting])
-        #expect(figure.unreadChapters == 3)
-        #expect(figure.entries.allSatisfy { $0.delay == nil })
-    }
-
-    @Test func aSittingWithNoChapterSignalLeavesTheChapterUnknownNotUnread() throws {
-        let workID = UUID()
-        let posted = try posting("2026-11-10")
-        let event = ChapterUpdateEvent(
-            workID: workID, chapterCount: 5, previousChapterCount: 4, detectedAt: posted, postedDate: "2026-11-10"
-        )
-        let figure = InsightsProvenance.newChapters(
-            events: [event], sessions: [reading(workID, at: posted.addingTimeInterval(60), highest: nil, visit: 5)]
-        )
-        #expect(figure.unknownChapters == 1)
-        #expect(figure.unreadChapters == 0)
-        #expect(figure.entries.first?.state == .unknown)
-        #expect(InsightsProvenance.newChapters(events: [event], sessions: []).unreadChapters == 1)
-    }
-
-    @Test func overlappingEventsFromTwoDevicesCountEachChapterOnce() throws {
-        let workID = UUID()
-        let first = ChapterUpdateEvent(
-            workID: workID, chapterCount: 5, previousChapterCount: 3, detectedAt: t0
-        )
-        let second = ChapterUpdateEvent(
-            workID: workID, chapterCount: 6, previousChapterCount: 3, detectedAt: t0.addingTimeInterval(60)
-        )
-        let narrower = ChapterUpdateEvent(
-            workID: workID, chapterCount: 6, previousChapterCount: 5, detectedAt: t0.addingTimeInterval(120)
-        )
-        for order in [[first, second, narrower], [narrower, second, first]] {
-            let figure = InsightsProvenance.newChapters(events: order, sessions: [])
-            #expect(figure.entries.map(\.chapter) == [4, 5, 6])
-            #expect(figure.unreadChapters == 3)
-            // Chapters 4 and 5 belong to the earliest sighting, whichever order they arrived in.
-            #expect(figure.entries[0].eventID == first.id)
-            #expect(figure.entries[2].eventID == second.id)
-        }
-    }
-
-    @Test func listenedSittingsDoNotCountAsReadingANewChapter() throws {
-        let workID = UUID()
-        let posted = try posting("2026-11-10")
-        let event = ChapterUpdateEvent(
-            workID: workID, chapterCount: 5, previousChapterCount: 4, detectedAt: posted, postedDate: "2026-11-10"
-        )
-        let heard = reading(workID, at: posted.addingTimeInterval(60), highest: 5, visit: 5, mode: "listen")
-        #expect(InsightsProvenance.newChapters(events: [event], sessions: [heard]).unreadChapters == 1)
-    }
-
-    @Test func aDamagedEventCannotOverflowTheFigure() {
-        let workID = UUID()
-        let damaged = ChapterUpdateEvent(
-            workID: workID, chapterCount: 1, previousChapterCount: Int.min, detectedAt: t0
-        )
-        let huge = ChapterUpdateEvent(
-            workID: workID, chapterCount: Int.max, previousChapterCount: 1, detectedAt: t0
-        )
-        let figure = InsightsProvenance.newChapters(events: [damaged, huge], sessions: [])
-        #expect(figure.entries.isEmpty)
-        let sitting = ReadingSession(workID: workID, startedAt: t0, endedAt: t0.addingTimeInterval(60), durationSeconds: 60)
-        sitting.chapterWordsJSON = "{\"1\":9223372036854775807,\"2\":1}"
-        sitting.skimmedChaptersJSON = "[1,2,2,1]"
-        // Out-of-range words are dropped on decode, so the sum cannot overflow.
-        let timing = InsightsProvenance.chapterTiming(sessions: [sitting])
-        #expect(timing.skimmedChapters == 2)
-        #expect(timing.skimmedWords == 1)
-    }
-
-    @Test func eventsForAPermanentlyDeletedWorkGoWithIt() throws {
-        let context = try context()
-        let work = SavedWork(title: "Gone", author: "A")
-        work.chapters = "3/?"
-        context.insert(work)
-        let other = SavedWork(title: "Kept", author: "A")
-        other.chapters = "3/?"
-        context.insert(other)
-        ChapterUpdateRecorder.recordRise(for: work, previousPosted: 3, newPosted: 5, in: context)
-        ChapterUpdateRecorder.recordRise(for: other, previousPosted: 3, newPosted: 5, in: context)
-        #expect(try context.fetch(FetchDescriptor<ChapterUpdateEvent>()).count == 2)
-        // Recently Deleted keeps them so Restore finds them again.
-        PreservedWorkService.softDelete(work, in: context)
-        #expect(try context.fetch(FetchDescriptor<ChapterUpdateEvent>()).count == 2)
-        WorkLifecycle.hardDelete(work, in: context)
-        let left = try context.fetch(FetchDescriptor<ChapterUpdateEvent>())
-        #expect(left.map(\.workID) == [other.id])
-    }
-
-    @Test func aSecondSightingOfTheSameChaptersOnlyAddsThePostingDay() throws {
-        let context = try context()
-        let work = SavedWork(title: "WIP", author: "A")
-        work.chapters = "3/?"
-        context.insert(work)
-        let first = try #require(ChapterUpdateRecorder.recordRise(
-            for: work, previousPosted: 3, newPosted: 5, at: t0, in: context
-        ))
-        #expect(first.postedDate.isEmpty)
-        #expect(ChapterUpdateRecorder.recordRise(
-            for: work, previousPosted: 3, newPosted: 5, postedDate: "2026-11-09", at: t0.addingTimeInterval(60), in: context
-        ) == nil)
-        #expect(first.postedDate == "2026-11-09")
-        #expect(first.detectedAt == t0)
-        #expect(try context.fetch(FetchDescriptor<ChapterUpdateEvent>()).count == 1)
-    }
-
-    @Test func theUpdateCheckCarriesThePostingDayFromItsOwnPage() async throws {
-        let context = try context()
-        let work = SavedWork(title: "WIP", author: "A", sourceURL: "https://archiveofourown.org/works/78")
-        work.ao3WorkID = 78
-        work.isSaved = true
-        work.chapters = "3/?"
-        context.insert(work)
-        await WorkUpdateChecker.checkForUpdates(among: [work], in: context, fetchTags: { _ in
-            var groups = AO3WorkTagGroups()
-            groups.fandoms = ["Fandom"]
-            groups.chapters = "4/?"
-            groups.dateUpdated = "2026-11-12"
-            return groups
-        })
-        #expect(try context.fetch(FetchDescriptor<ChapterUpdateEvent>()).first?.postedDate == "2026-11-12")
-    }
-
-    @Test func aWorksUnratedEarlierEventStaysHiddenOnceALaterOneIsAdult() throws {
-        let context = try context()
-        let gone = UUID()
-        let early = ChapterUpdateEvent(workID: gone, chapterCount: 4, previousChapterCount: 3, detectedAt: t0, rating: "")
-        let late = ChapterUpdateEvent(workID: gone, chapterCount: 5, previousChapterCount: 4, detectedAt: t0, rating: "Explicit")
-        let locked = HomeReadingStats.insightsScope(.main, from: [], hideMature: true, revealed: false)
-        #expect(locked.events([early, late], in: context).isEmpty)
-        let revealed = HomeReadingStats.insightsScope(.hidden, from: [], hideMature: true, revealed: true)
-        #expect(revealed.events([early, late], in: context).count == 2)
-    }
+    // MARK: D7 skim deduction
 
     @Test func skimmedWordsLeaveTheWordsReadTotal() {
         let work = SavedWork(title: "W", author: "A")
@@ -650,7 +419,6 @@ struct InsightsP3DataTests {
         ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(501))
         #expect(row.skimmedChapters.contains(3))
         #expect(row.skimmedChapters.contains(4))
-        #expect(row.highestStoryChapter == 5)
     }
 
     @Test func aWorkSavedBeforeRecordingBeganNeverGainsAnAtSaveSnapshot() {
@@ -688,62 +456,6 @@ struct InsightsP3DataTests {
         #expect(work.fandomWorksAtSave == 12_000)
     }
 
-    // MARK: D11
-
-    @Test func ownActionsMoveForwardAndKudosKeepsTheFirstTime() {
-        let work = SavedWork(title: "A", author: "B")
-        #expect(work.recordOwnAction(.bookmarked(isPrivate: false), at: t0))
-        #expect(!work.bookmarkIsPrivate)
-        // A later edit moves the time and the flag; an older report cannot move it back.
-        #expect(work.recordOwnAction(.bookmarked(isPrivate: true), at: t0.addingTimeInterval(60)))
-        #expect(work.bookmarkIsPrivate)
-        #expect(!work.recordOwnAction(.bookmarked(isPrivate: false), at: t0))
-        #expect(work.bookmarkedAt == t0.addingTimeInterval(60))
-
-        #expect(work.recordOwnAction(.commented, at: t0))
-        #expect(!work.recordOwnAction(.commented, at: t0))
-        #expect(work.recordOwnAction(.commented, at: t0.addingTimeInterval(5)))
-        #expect(work.lastCommentedAt == t0.addingTimeInterval(5))
-
-        #expect(work.recordKudosGiven(at: t0.addingTimeInterval(30)))
-        #expect(work.hasGivenKudos)
-        // Kudos cannot be taken back: a later sighting never moves the first time.
-        #expect(!work.recordKudosGiven(at: t0.addingTimeInterval(900)))
-        #expect(work.kudosGivenAt == t0.addingTimeInterval(30))
-        #expect(work.recordKudosGiven(at: t0))
-        #expect(work.kudosGivenAt == t0)
-    }
-
-    @Test func aBookmarkSeenOnAFetchedPageOnlyFillsAnEmptyOne() {
-        let work = SavedWork(title: "A", author: "B")
-        #expect(work.recordSeenBookmark(isPrivate: true, at: t0))
-        #expect(work.bookmarkIsPrivate)
-        #expect(!work.recordSeenBookmark(isPrivate: false, at: t0.addingTimeInterval(60)))
-        #expect(work.bookmarkedAt == t0)
-        #expect(work.bookmarkIsPrivate)
-    }
-
-    @Test func theActionLogFindsTheSavedWorkAndSkipsOneItDoesNotHold() throws {
-        let context = try context()
-        let work = SavedWork(title: "A", author: "B")
-        work.ao3WorkID = 41
-        context.insert(work)
-        let deleted = SavedWork(title: "Gone", author: "B")
-        deleted.ao3WorkID = 42
-        deleted.isPendingDeletion = true
-        context.insert(deleted)
-        #expect(OwnAO3ActionLog.record(.commented, ao3WorkID: 41, at: t0, in: context))
-        #expect(OwnAO3ActionLog.record(.bookmarked(isPrivate: true), ao3WorkID: 41, at: t0, in: context))
-        #expect(work.lastCommentedAt == t0)
-        #expect(work.bookmarkIsPrivate)
-        #expect(!OwnAO3ActionLog.record(.commented, ao3WorkID: 999, at: t0, in: context))
-        #expect(!OwnAO3ActionLog.record(.commented, ao3WorkID: 42, at: t0, in: context))
-        #expect(deleted.lastCommentedAt == nil)
-        // With no context installed or given, nothing is recorded.
-        OwnAO3ActionLog.install(nil)
-        #expect(!OwnAO3ActionLog.record(.commented, ao3WorkID: 41))
-    }
-
     // MARK: figures
 
     @Test func figuresCountOnlyWhatWasRecorded() {
@@ -773,16 +485,6 @@ struct InsightsP3DataTests {
         #expect(found.map(\.title) == ["Early", "Flat"])
         #expect(found.first?.kudosAtSave == 310)
         #expect(found.first?.kudosNow == 1_530)
-
-        let bookmarked = SavedWork(title: "B", author: "A")
-        bookmarked.recordOwnAction(.bookmarked(isPrivate: true), at: t0)
-        let both = SavedWork(title: "C", author: "A")
-        both.recordOwnAction(.bookmarked(isPrivate: false), at: t0)
-        both.recordOwnAction(.commented, at: t0)
-        let actions = InsightsProvenance.ownActions(works: [bookmarked, both, SavedWork(title: "D", author: "A")])
-        #expect(actions == InsightsProvenance.OwnActionsFigure(
-            works: 3, bookmarked: 2, bookmarkedPublic: 1, bookmarkedPrivate: 1, commented: 1, gaveKudos: 0
-        ))
     }
 
     @Test func chapterTimingFigureSumsStoredJudgementsAndCountsPeekedWorksOnce() {
@@ -824,37 +526,15 @@ struct InsightsP3DataTests {
         context.insert(adult)
         plain.recordImportSource(.search, at: t0)
         adult.recordImportSource(.series, at: t0)
-        plain.recordOwnAction(.commented, at: t0)
-        adult.recordOwnAction(.commented, at: t0)
-
-        let plainEvent = ChapterUpdateEvent(workID: plain.id, chapterCount: 4, previousChapterCount: 3, detectedAt: t0, rating: "General Audiences")
-        // The adult work's event keeps its own rating, so it stays hidden after the work is gone.
-        let adultEvent = ChapterUpdateEvent(workID: adult.id, chapterCount: 4, previousChapterCount: 3, detectedAt: t0, rating: "Explicit")
-        let orphanAdultEvent = ChapterUpdateEvent(workID: UUID(), chapterCount: 4, previousChapterCount: 3, detectedAt: t0, rating: "Mature")
-        context.insert(plainEvent)
-        context.insert(adultEvent)
-        context.insert(orphanAdultEvent)
-        let allEvents = [plainEvent, adultEvent, orphanAdultEvent]
 
         let library = [plain, adult]
         let locked = HomeReadingStats.insightsScope(.main, from: library, hideMature: true, revealed: false)
         #expect(InsightsProvenance.arrival(works: locked.readingWorks).counts == [.search: 1])
-        #expect(InsightsProvenance.ownActions(works: locked.readingWorks).commented == 1)
-        #expect(locked.events(allEvents, in: context).map(\.id) == [plainEvent.id])
         let lockedHidden = HomeReadingStats.insightsScope(.hidden, from: library, hideMature: true, revealed: false)
-        #expect(lockedHidden.events(allEvents, in: context).isEmpty)
         #expect(lockedHidden.readingWorks.isEmpty)
 
         let revealedHidden = HomeReadingStats.insightsScope(.hidden, from: library, hideMature: true, revealed: true)
-        #expect(Set(revealedHidden.events(allEvents, in: context).map(\.id)) == [adultEvent.id, orphanAdultEvent.id])
         #expect(InsightsProvenance.arrival(works: revealedHidden.readingWorks).counts == [.series: 1])
-        let combined = HomeReadingStats.insightsScope(.combined, from: library, hideMature: true, revealed: true)
-        #expect(combined.events(allEvents, in: context).count == 3)
-        #expect(InsightsProvenance.ownActions(works: combined.readingWorks).commented == 2)
-
-        // With Hide Mature off every event is in the main view.
-        let open = HomeReadingStats.insightsScope(.main, from: library, hideMature: false, revealed: false)
-        #expect(open.events(allEvents, in: context).count == 3)
     }
 
     @Test func aHiddenWorksSittingsStayOutOfTheChapterTimingFigureWhileLocked() throws {
@@ -879,45 +559,6 @@ struct InsightsP3DataTests {
     }
 
     // MARK: review 2
-
-    @Test func aChapterATooShortSittingCouldNotHaveReachedIsNotUnknown() throws {
-        let workID = UUID()
-        let posted = try posting("2026-11-10")
-        let event = ChapterUpdateEvent(
-            workID: workID, chapterCount: 6, previousChapterCount: 5, detectedAt: posted, postedDate: "2026-11-10"
-        )
-        // A five-chapter copy read after chapter 6 posted, with no locator signal (macOS).
-        let short = reading(workID, at: posted.addingTimeInterval(86_400), highest: nil, visit: 5)
-        #expect(InsightsProvenance.newChapters(events: [event], sessions: [short]).unreadChapters == 1)
-        // A sitting that recorded no count at all stays genuinely unknown.
-        let blank = reading(workID, at: posted.addingTimeInterval(86_400), highest: nil, visit: 0)
-        #expect(InsightsProvenance.newChapters(events: [event], sessions: [blank]).unknownChapters == 1)
-    }
-
-    @Test func aSameCountRecheckFillsTheMissingPostingDayOnTheMatchingEvent() async throws {
-        let context = try context()
-        let work = SavedWork(title: "WIP", author: "A", sourceURL: "https://archiveofourown.org/works/79")
-        work.ao3WorkID = 79
-        work.isSaved = true
-        work.chapters = "3/?"
-        context.insert(work)
-        func groups(_ day: String) -> @Sendable (Int) async throws -> AO3WorkTagGroups {
-            { _ in
-                var groups = AO3WorkTagGroups()
-                groups.fandoms = ["Fandom"]
-                groups.chapters = "5/?"
-                groups.dateUpdated = day
-                return groups
-            }
-        }
-        await WorkUpdateChecker.checkForUpdates(among: [work], in: context, fetchTags: groups(""))
-        #expect(try context.fetch(FetchDescriptor<ChapterUpdateEvent>()).first?.postedDate == "")
-        work.lastUpdateCheck = nil
-        await WorkUpdateChecker.checkForUpdates(among: [work], in: context, fetchTags: groups("2026-11-12"))
-        let events = try context.fetch(FetchDescriptor<ChapterUpdateEvent>())
-        #expect(events.count == 1)
-        #expect(events.first?.postedDate == "2026-11-12")
-    }
 
     @Test func aWindowThatCrossesMidnightStillCountsTheAgeOnTheSaveDay() throws {
         let work = SavedWork(title: "A", author: "B")
@@ -965,49 +606,7 @@ struct InsightsP3DataTests {
         #expect(read[second.id] == 1_000)
     }
 
-    @Test func aMidnightFreeLegacyRefreshAlsoKeepsTheEventRatingEvidence() {
-        #expect(ChapterUpdateRecorder.strongerRating("", "Explicit") == "Explicit")
-        #expect(ChapterUpdateRecorder.strongerRating("Mature", "") == "Mature")
-        #expect(ChapterUpdateRecorder.strongerRating("General Audiences", "Explicit") == "Explicit")
-        #expect(ChapterUpdateRecorder.earlierPostingDay("", "2026-11-09") == "2026-11-09")
-        #expect(ChapterUpdateRecorder.earlierPostingDay("2026-11-12", "2026-11-09") == "2026-11-09")
-        #expect(ChapterUpdateRecorder.earlierPostingDay("2026-11-09", "2026-11-12") == "2026-11-09")
-    }
-
     // MARK: review 3
-
-    @Test func tiedOverlappingObservationsGiveTheSameStatesWhateverTheirIdsAre() throws {
-        let workID = UUID()
-        // Detected after both posting days, so neither day is clamped to the detection time.
-        let detected = try posting("2026-11-20")
-        // A sitting reaches chapter 6 on the 10th: after the narrow observation's posting day
-        // (the 9th), before the wide one's (the 12th).
-        let sitting = reading(workID, at: try posting("2026-11-10"), highest: 6, visit: 6)
-        func chapterSix(wideID: UUID, narrowID: UUID, reversed: Bool) throws -> InsightsProvenance.NewChapterEntry {
-            let wide = ChapterUpdateEvent(
-                id: wideID, workID: workID, chapterCount: 6, previousChapterCount: 3,
-                detectedAt: detected, postedDate: "2026-11-12"
-            )
-            let narrow = ChapterUpdateEvent(
-                id: narrowID, workID: workID, chapterCount: 6, previousChapterCount: 5,
-                detectedAt: detected, postedDate: "2026-11-09"
-            )
-            let figure = InsightsProvenance.newChapters(
-                events: reversed ? [narrow, wide] : [wide, narrow], sessions: [sitting]
-            )
-            return try #require(figure.entries.first { $0.chapter == 6 })
-        }
-        let low = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
-        let high = try #require(UUID(uuidString: "FFFFFFFF-0000-0000-0000-000000000001"))
-        for (wideID, narrowID) in [(low, high), (high, low)] {
-            for reversed in [false, true] {
-                let entry = try chapterSix(wideID: wideID, narrowID: narrowID, reversed: reversed)
-                // The earlier posting day claims the tied chapter, so the sitting is read evidence.
-                #expect(entry.postedAt == (try posting("2026-11-09")))
-                if case .read = entry.state {} else { Issue.record("chapter 6 should be read, got \(entry.state)") }
-            }
-        }
-    }
 
     @Test func aSkimmedChapterIsDeductedByTheWordsTheSittingRecordedNotTodaysCounts() {
         let work = SavedWork(title: "W", author: "A")
@@ -1043,22 +642,4 @@ struct InsightsP3DataTests {
         #expect(work.kudosAtSave == 40)
     }
 
-    @Test func aHiddenMatureSnapshotStillProtectsALaterUnratedEventInLockedInsights() throws {
-        let context = try context()
-        let gone = UUID()
-        let mature = ChapterUpdateEvent(
-            workID: gone, chapterCount: 4, previousChapterCount: 3, detectedAt: t0, rating: "Explicit"
-        )
-        // A tombstone dated after the Mature sighting hides it; a later observation is unrated.
-        context.insert(SyncTombstone(recordID: gone, recordType: .savedWork, createdAt: t0.addingTimeInterval(86_400)))
-        let later = ChapterUpdateEvent(
-            workID: gone, chapterCount: 5, previousChapterCount: 4,
-            detectedAt: t0.addingTimeInterval(2 * 86_400), rating: ""
-        )
-        context.insert(mature)
-        context.insert(later)
-        try context.save()
-        let locked = HomeReadingStats.insightsScope(.main, from: [], hideMature: true, revealed: false)
-        #expect(locked.events([mature, later], in: context).isEmpty)
-    }
 }
