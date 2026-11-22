@@ -32,7 +32,7 @@ struct DebugShotRouteTests {
             // T-529 Sort New; not in A82's list.
             "sortnew",
         ]
-        #expect(names.count == 87)
+        #expect(names.count == 89)
         for name in names {
             #expect(DebugShots.byName[name] != nil)
             #expect(!DebugShots.byName[name]!.route.isEmpty)
