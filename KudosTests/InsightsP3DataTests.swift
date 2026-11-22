@@ -147,7 +147,7 @@ struct InsightsP3DataTests {
         let work = longWork(in: context)
         ReadingLogService.startSession(for: work, now: t0)
         ReadingLogService.noteActivity(for: work, chapter: chapter(2), now: t0.addingTimeInterval(1))
-        ReadingLogService.resetOpenSessionsAfterLogReset(now: t0.addingTimeInterval(100))
+        ReadingLogService.resetOpenSessionsAfterLogReset(in: context, now: t0.addingTimeInterval(100))
         ReadingLogService.noteActivity(for: work, chapter: chapter(3), now: t0.addingTimeInterval(101))
         ReadingLogService.noteActivity(for: work, chapter: chapter(4), now: t0.addingTimeInterval(301))
         ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(302))
