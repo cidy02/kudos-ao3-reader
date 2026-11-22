@@ -118,12 +118,25 @@ object A567Corpus {
         w.flush()
     }
 
+    private fun generate(units: Int, opaqueBytes: Long, version: Int) = java.io.ByteArrayOutputStream().also {
+        writeManifest(it, works = units, sessionsPerWork = 4, annotations = units, opaqueBytes = opaqueBytes, version = version)
+    }.toByteArray()
+
+    /** The largest generated manifest not over [targetBytes] (rows scaled to fit, as A-566's probe does). */
     fun manifestBytesOfSize(targetBytes: Long, opaqueBytes: Long = 0, version: Int = 8): ByteArray {
         val rowTarget = (targetBytes - opaqueBytes).coerceAtLeast(2000)
-        val units = unitsFor(rowTarget)
-        return java.io.ByteArrayOutputStream().also {
-            writeManifest(it, works = units, sessionsPerWork = 4, annotations = units, opaqueBytes = opaqueBytes, version = version)
-        }.toByteArray()
+        var units = unitsFor(rowTarget)
+        var bytes = generate(units, opaqueBytes, version)
+        repeat(4) {
+            if (bytes.size <= targetBytes && bytes.size > targetBytes * 0.99) return bytes
+            units = (units * (targetBytes.toDouble() / bytes.size) * 0.995).toInt().coerceAtLeast(1)
+            bytes = generate(units, opaqueBytes, version)
+        }
+        while (bytes.size > targetBytes && units > 1) {
+            units = (units * 0.99).toInt().coerceAtLeast(1)
+            bytes = generate(units, opaqueBytes, version)
+        }
+        return bytes
     }
 
     fun manifestFileOfSize(file: File, targetBytes: Long, opaqueBytes: Long = 0) {
