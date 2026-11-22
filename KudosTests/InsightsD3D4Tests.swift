@@ -871,7 +871,7 @@ extension InsightsD3D4Tests {
         var onSpokenTextChange: ((String) -> Void)?
         var onSpeechEnergyPulse: ((Double, Double) -> Void)?
         var onSpeechSpectrum: ((SpeechSpectrum) -> Void)?
-        var onAdvance: ((Locator) -> Void)?
+        var onAudible: ((Locator) -> Void)?
         var onSpokenRange: ((Locator) -> Void)?
 
         var speakHandler: ([TTSSpeechUnit]) -> Bool = { _ in true }
@@ -889,7 +889,7 @@ extension InsightsD3D4Tests {
                 onStatusChange?(.playing)
                 if let first = units.first(where: \.hasSpeakableText) ?? units.first {
                     if let locator = first.locator {
-                        onAdvance?(locator)
+                        onAudible?(locator)
                     }
                     spokenText = first.text
                     onSpokenTextChange?(first.text)

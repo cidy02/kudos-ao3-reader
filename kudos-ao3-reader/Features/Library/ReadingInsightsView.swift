@@ -36,7 +36,7 @@ struct ReadingInsightsView: View {
     }
 
     private func selection(_ scope: InsightsScope) -> InsightsScopeSelection {
-        HomeReadingStats.insightsScope(scope, from: libraryWorks, hideMature: hideMature, revealed: gate.revealAll)
+        HomeReadingStats.insightsScope(scope, from: libraryMirror.works, hideMature: hideMature, revealed: gate.revealAll)
     }
 
     @State private var selectedTab: Tab = .overview
@@ -77,6 +77,10 @@ struct ReadingInsightsView: View {
     /// a sitting written) reloads them once; a reading-position save does not.
     @State private var libraryDigest = ""
     @State private var reloadCoordinator = InsightsReloadCoordinator()
+    /// Always the library the parent last handed over, so a refresh that waited out
+    /// its window reads the *current* works, never the array its save arrived with.
+    @State private var libraryMirror = LibraryMirror()
+    private final class LibraryMirror { var works: [SavedWork] = [] }
     /// Saves arriving while another screen covers this one are ignored; `onAppear`
     /// reloads on return.
     @State private var isOnScreen = false
@@ -138,6 +142,7 @@ struct ReadingInsightsView: View {
     }
 
     var body: some View {
+        let _ = libraryMirror.works = libraryWorks // refreshed on every body pass
         VStack(spacing: 0) {
             // Pinned header with tabs and period controls
             headerView
@@ -243,12 +248,6 @@ struct ReadingInsightsView: View {
             if isHiding && !gate.revealAll { clearMainDisplayState() }
             reload()
         }
-        // The parent hands over a new library array when works are added, removed or
-        // replaced (a same-count swap changes no count in `reloadKey`): reload with the
-        // fresh array, which also cancels a pending refresh holding the old one.
-        .onChange(of: libraryWorks.map(\.id)) { _, _ in
-            if isOnScreen { reload() }
-        }
         .onReceive(NotificationCenter.default.publisher(for: .kudosSyncRelevantSettingChanged)) { _ in
             optionsRevision += 1
         }
@@ -262,7 +261,7 @@ struct ReadingInsightsView: View {
             guard isOnScreen else { return }
             reloadCoordinator.noteSave(
                 notification,
-                works: { libraryWorks },
+                works: { [libraryMirror] in libraryMirror.works },
                 context: context,
                 isOnScreen: { isOnScreen },
                 reload: { snapshot in reload(baseline: snapshot) }
@@ -799,13 +798,10 @@ struct ReadingInsightsView: View {
     /// - Parameter baseline: the digest snapshot a coalesced save refresh already took;
     ///   adopted as-is so that refresh walks the library once.
     private func reload(baseline: InsightsReloadDigest.Snapshot? = nil) {
-        // A full reload here already covers any save refresh still waiting out its
-        // window; letting that run later would replay an older library over these figures.
-        reloadCoordinator.cancel()
         // Taken first, so `reloadKey` already holds it when `lastReloadKey` is
         // written below and a save this reload follows triggers no second one.
         libraryDigest = baseline.map { reloadCoordinator.tracker.adopt($0) }
-            ?? reloadCoordinator.tracker.recordBaseline(works: libraryWorks, context: context)
+            ?? reloadCoordinator.tracker.recordBaseline(works: libraryMirror.works, context: context)
         let component = range.component
         guard let currentInterval = calendar.dateInterval(of: component, for: referenceDate),
               let earlierDate = calendar.date(byAdding: component, value: -1, to: referenceDate),

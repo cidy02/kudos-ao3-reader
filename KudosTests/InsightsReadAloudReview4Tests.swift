@@ -394,7 +394,7 @@ extension InsightsReadAloudReview4Tests {
         var onSpokenTextChange: ((String) -> Void)?
         var onSpeechEnergyPulse: ((Double, Double) -> Void)?
         var onSpeechSpectrum: ((SpeechSpectrum) -> Void)?
-        var onAdvance: ((Locator) -> Void)?
+        var onAudible: ((Locator) -> Void)?
         var onSpokenRange: ((Locator) -> Void)?
 
         var silentHrefs: Set<String> = []
@@ -419,6 +419,7 @@ extension InsightsReadAloudReview4Tests {
             status = .playing
             onStatusChange?(.playing)
             if !silentHrefs.contains(first.locator?.href.string ?? "") {
+                if let locator = first.locator { onAudible?(locator) }
                 onSpokenTextChange?(first.text)
             }
             return true

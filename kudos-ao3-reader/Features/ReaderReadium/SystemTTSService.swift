@@ -45,7 +45,7 @@ public final class SystemTTSService: TTSService {
     public var onSpokenTextChange: ((String) -> Void)?
     public var onSpeechEnergyPulse: ((Double, Double) -> Void)?
     public var onSpeechSpectrum: ((SpeechSpectrum) -> Void)?
-    public var onAdvance: ((Locator) -> Void)?
+    public var onAudible: ((Locator) -> Void)?
     public var onSpokenRange: ((Locator) -> Void)?
 
     private let synthesizer = AVSpeechSynthesizer()
@@ -172,19 +172,14 @@ public final class SystemTTSService: TTSService {
 
             currentIndex = index
             let chunk = chunks[index]
-            if let locator = chunk.locator {
-                onAdvance?(locator)
-            }
-            guard !Task.isCancelled, playbackGeneration == generation, status != .stopped else { return }
-            spokenText = chunk.text
-            // A paused skip pauses from `onAdvance` / `onSpokenTextChange` before
-            // the synthesizer has started; hold this chunk until Resume instead of
-            // enqueuing an utterance while `.paused`.
-            await waitWhilePaused()
-            guard !Task.isCancelled, playbackGeneration == generation, status == .playing else { return }
-
+            // Nothing is announced here: the reader moves on `didStart` (see
+            // `handleUtteranceStarted`), when the synthesizer is really speaking it.
             #if DEBUG
             if let testSpeakUtterance {
+                // Stands in for the synthesizer: "started" is the moment it is handed
+                // the utterance.
+                activeUtteranceUnit = chunk
+                handleUtteranceStarted(utteranceID: nil)
                 await testSpeakUtterance(chunk)
                 continue
             }
@@ -236,6 +231,14 @@ public final class SystemTTSService: TTSService {
         // spelling tracks what is actually being said, where the random level
         // above never could.
         onSpeechSpectrum?(SpeechSpectrum.forSpoken(word: trimmed))
+    }
+
+    /// `didStart`: the utterance is audible. The single place Apple speech commits.
+    fileprivate func handleUtteranceStarted(utteranceID: ObjectIdentifier?) {
+        if let utteranceID, utteranceID != activeUtteranceID { return }
+        guard let unit = activeUtteranceUnit, status != .stopped, status != .unavailable else { return }
+        if let locator = unit.locator { onAudible?(locator) }
+        spokenText = unit.text
     }
 
     fileprivate func handleUtteranceEnded(utteranceID: ObjectIdentifier? = nil) {
@@ -360,6 +363,16 @@ public final class SystemTTSService: TTSService {
     /// controller; same thin-proxy pattern as the pre-Kokoro `DelegateProxy`.
     private final class DelegateProxy: NSObject, AVSpeechSynthesizerDelegate, @unchecked Sendable {
         weak var owner: SystemTTSService?
+
+        func speechSynthesizer(
+            _ synthesizer: AVSpeechSynthesizer,
+            didStart utterance: AVSpeechUtterance
+        ) {
+            let utteranceID = ObjectIdentifier(utterance)
+            Task { @MainActor [weak owner] in
+                owner?.handleUtteranceStarted(utteranceID: utteranceID)
+            }
+        }
 
         func speechSynthesizer(
             _ synthesizer: AVSpeechSynthesizer,

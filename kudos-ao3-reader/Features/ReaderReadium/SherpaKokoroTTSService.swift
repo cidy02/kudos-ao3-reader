@@ -43,7 +43,7 @@ public final class SherpaKokoroTTSService: TTSService {
     public var onSpokenTextChange: ((String) -> Void)?
     public var onSpeechEnergyPulse: ((Double, Double) -> Void)?
     public var onSpeechSpectrum: ((SpeechSpectrum) -> Void)?
-    public var onAdvance: ((Locator) -> Void)?
+    public var onAudible: ((Locator) -> Void)?
     public var onSpokenRange: ((Locator) -> Void)?
 
     private var activeTask: Task<Void, Never>?
@@ -215,14 +215,13 @@ public final class SherpaKokoroTTSService: TTSService {
             // Nothing plays yet (the player node is started below), so a paused
             // skip can still hold the whole initial lead for Resume.
             var queued: [(chunk: GeneratedTextChunk, playback: ScheduledPlayback)] = []
-            for (offset, chunk) in primed.enumerated() {
+            for chunk in primed {
                 guard let playback = self.enqueue(
                     unit: chunk.unit,
                     samples: chunk.generated.samples,
                     energyEnvelope: chunk.generated.energyEnvelope,
                     seed: Double.random(in: 0...1),
                     startsPlayback: false,
-                    skipInitialAdvance: offset == 0,
                     allowsPaused: true
                 ) else {
                     self.failStartup()
@@ -231,21 +230,9 @@ public final class SherpaKokoroTTSService: TTSService {
                 queued.append((chunk, playback))
             }
 
-            // Hold the whole queued lead while paused: a paused skip must not announce
-            // (move the page, save the position) until Play lets speech start.
-            await self.waitWhilePaused()
-            guard !Task.isCancelled, self.playbackGeneration == generation, self.status == .playing else { return }
-
-            // Announce immediately before the player node starts, no suspension between.
-            let firstUnit = primed[0].unit
-            if let locator = firstUnit.locator {
-                self.onAdvance?(locator)
-            }
-            guard !Task.isCancelled, self.playbackGeneration == generation, self.status != .stopped else { return }
-            self.spokenText = firstUnit.text
-            if let locator = firstUnit.locator {
-                self.onSpokenRange?(locator)
-            }
+            // Hold the whole queued lead while paused. Nothing is announced here: the
+            // reader moves when the energy pump (below) reaches this unit, i.e. once
+            // the player node is really playing it (`onAudible`).
             await self.waitWhilePaused()
             guard !Task.isCancelled, self.playbackGeneration == generation, self.status == .playing else { return }
 
@@ -594,7 +581,6 @@ public final class SherpaKokoroTTSService: TTSService {
         let levels: [Double]
         let seed: Double
         let unit: TTSSpeechUnit
-        let skipInitialAdvance: Bool
     }
 
     private struct ScheduledPlayback {
@@ -612,7 +598,6 @@ public final class SherpaKokoroTTSService: TTSService {
         energyEnvelope: [Double],
         seed: Double,
         startsPlayback: Bool = true,
-        skipInitialAdvance: Bool = false,
         allowsPaused: Bool = false
     ) -> ScheduledPlayback? {
         guard status == .playing || (allowsPaused && status == .paused), !Task.isCancelled else {
@@ -681,8 +666,7 @@ public final class SherpaKokoroTTSService: TTSService {
         enqueueSpeechEnergy(
             energyEnvelope,
             seed: seed,
-            unit: unit,
-            skipInitialAdvance: skipInitialAdvance
+            unit: unit
         )
         if startsPlayback {
             startPlayerIfNeeded()
@@ -816,16 +800,14 @@ private extension SherpaKokoroTTSService {
     private func enqueueSpeechEnergy(
         _ envelope: [Double],
         seed: Double,
-        unit: TTSSpeechUnit,
-        skipInitialAdvance: Bool = false
+        unit: TTSSpeechUnit
     ) {
-        guard !envelope.isEmpty else { return }
-
+        // Even a clip with no energy windows is queued: this pump is what announces a
+        // unit as audible, so skipping it would leave that unit uncommitted.
         let nextEnvelope = SpeechEnergyEnvelope(
             levels: envelope,
             seed: seed,
-            unit: unit,
-            skipInitialAdvance: skipInitialAdvance
+            unit: unit
         )
         if let waiter = speechEnergyWaiter {
             speechEnergyWaiter = nil
@@ -854,9 +836,7 @@ private extension SherpaKokoroTTSService {
 
                 self.spokenText = envelope.unit.text
                 if let locator = envelope.unit.locator {
-                    if !envelope.skipInitialAdvance {
-                        self.onAdvance?(locator)
-                    }
+                    self.onAudible?(locator)
                     self.onSpokenRange?(locator)
                 }
                 self.speechEnergySeed = envelope.seed

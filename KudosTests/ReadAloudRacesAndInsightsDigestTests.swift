@@ -482,7 +482,7 @@ extension ReadAloudRacesAndInsightsDigestTests {
         var onSpokenTextChange: ((String) -> Void)?
         var onSpeechEnergyPulse: ((Double, Double) -> Void)?
         var onSpeechSpectrum: ((SpeechSpectrum) -> Void)?
-        var onAdvance: ((Locator) -> Void)?
+        var onAudible: ((Locator) -> Void)?
         var onSpokenRange: ((Locator) -> Void)?
 
         var speakGate: AsyncGate?
@@ -537,7 +537,7 @@ extension ReadAloudRacesAndInsightsDigestTests {
             onStatusChange?(.playing)
             if autoEmitFirstUtterance, !silentHrefs.contains(href) {
                 if let locator = first.locator {
-                    onAdvance?(locator)
+                    onAudible?(locator)
                 }
                 spokenText = first.text
                 onSpokenTextChange?(first.text)
@@ -551,7 +551,7 @@ extension ReadAloudRacesAndInsightsDigestTests {
         }
 
         func emitUtterance(text: String, locator: Locator) {
-            onAdvance?(locator)
+            onAudible?(locator)
             spokenText = text
             onSpokenTextChange?(text)
         }

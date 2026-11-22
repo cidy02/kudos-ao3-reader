@@ -431,7 +431,7 @@ final class ReaderSpeechController {
         guard concealsNowPlayingMetadata != concealed else { return }
         concealsNowPlayingMetadata = concealed
         if isSessionActive {
-            publishNowPlaying(playing: isPlaying)
+            reconcileTransport()
         }
     }
 
@@ -546,7 +546,7 @@ final class ReaderSpeechController {
         service.onSpokenTextChange = nil
         service.onSpeechEnergyPulse = nil
         service.onSpeechSpectrum = nil
-        service.onAdvance = nil
+        service.onAudible = nil
         service.onSpokenRange = nil
         if stop {
             service.stop()
@@ -568,16 +568,7 @@ final class ReaderSpeechController {
 
         service.onSpokenTextChange = { [weak self, weak service] text in
             guard let self, let service, self.ttsService === service else { return }
-            let cleaned = ReaderSpeechPreferences.cleanUtteranceText(text)
-            self.spokenText = cleaned
-            if !cleaned.isEmpty,
-               let request = self.activeRequest,
-               case .awaitingFirstOutput(let candidate) = request.stage {
-                self.commitPendingRequest(
-                    request,
-                    locator: candidate.firstLocator ?? candidate.chapterStart
-                )
-            }
+            self.spokenText = ReaderSpeechPreferences.cleanUtteranceText(text)
         }
 
         service.onSpeechEnergyPulse = { [weak self, weak service] energy, seed in
@@ -597,23 +588,9 @@ final class ReaderSpeechController {
             self.startSpeechEnergySmoothingIfNeeded()
         }
 
-        service.onAdvance = { [weak self, weak service] locator in
+        service.onAudible = { [weak self, weak service] locator in
             guard let self, let service, self.ttsService === service else { return }
-            if let request = self.activeRequest {
-                if case .awaitingFirstOutput = request.stage {
-                    self.commitPendingRequest(request, locator: locator)
-                    return
-                }
-                // A scan is in flight and this engine holds no committed audio: a
-                // late callback from a superseded start. It must neither move the
-                // page nor save a position nobody has heard.
-                if !self.enginePlaybackActive { return }
-            }
-            // After Stop the engine can still deliver a callback it had queued.
-            guard self.isSessionActive else { return }
-            self.resumeLocator = locator
-            self.persistPosition(for: .utteranceBoundary)
-            self.onAdvance?(locator)
+            self.handleAudible(locator)
         }
 
         service.onSpokenRange = { [weak self, weak service] locator in
@@ -845,6 +822,7 @@ final class ReaderSpeechController {
 
     private func launchSpeechRequest(_ request: SpeechRequest, from startLoc: Locator?) {
         activeRequest = request
+        reconcileTransport() // starting: remote targets live so Pause/Play reach it
         startTask?.cancel()
         let token = request.token
         startTask = Task {
@@ -857,7 +835,6 @@ final class ReaderSpeechController {
                 }
                 guard !Task.isCancelled, var current = activeRequest, current.token == token else { return }
 
-                installRemoteCommandsIfNeeded()
                 stoppedManually = false
                 // Re-check after chapter extract so a download that finished
                 // while we were walking the spine is used for this tap.
@@ -911,6 +888,25 @@ final class ReaderSpeechController {
         }
     }
 
+    /// THE commit point. The engine reports that audio for `locator` is audible now;
+    /// this is the only place the page moves and the reading position is saved. A
+    /// pending request is promoted here; later ranges of committed playback move the
+    /// page the same way. Anything from an engine with no committed audio (a
+    /// superseded start, a stopped session) is ignored.
+    private func handleAudible(_ locator: Locator) {
+        if let request = activeRequest {
+            if case .awaitingFirstOutput = request.stage {
+                commitPendingRequest(request, locator: locator)
+                return
+            }
+            if !enginePlaybackActive { return }
+        }
+        guard isSessionActive else { return }
+        resumeLocator = locator
+        persistPosition(for: .utteranceBoundary)
+        onAdvance?(locator)
+    }
+
     private func commitPendingRequest(_ request: SpeechRequest, locator: Locator?) {
         guard activeRequest?.token == request.token else { return }
         activeRequest = nil
@@ -928,7 +924,7 @@ final class ReaderSpeechController {
         switch request.desiredState {
         case .playing:
             status = .playing
-            publishNowPlaying(playing: true)
+            reconcileTransport()
         case .paused:
             if ttsService?.status == .playing {
                 ttsService?.pause()
@@ -936,7 +932,7 @@ final class ReaderSpeechController {
             if status != .paused {
                 status = .paused
                 clearSpeechEnergy()
-                publishNowPlaying(playing: false)
+                reconcileTransport()
             }
         }
     }
@@ -967,8 +963,7 @@ final class ReaderSpeechController {
         if !isSessionActive {
             // A fresh start never published Now Playing but did register the remote
             // targets; nothing is left for them to control.
-            clearNowPlaying()
-            removeRemoteCommands()
+            reconcileTransport()
         }
         if request.isUserInitiated, isReaderOpen {
             let detail = (error as? LocalizedError)?.errorDescription ?? error?.localizedDescription
@@ -1046,8 +1041,7 @@ final class ReaderSpeechController {
         if !isSessionActive {
             // Nothing is playing and nothing will: no card, no remote targets (a
             // still-playing committed chapter keeps both).
-            clearNowPlaying()
-            removeRemoteCommands()
+            reconcileTransport()
         }
         if request.isUserInitiated, isReaderOpen {
             nothingToSpeakDirection = request.direction
@@ -1072,7 +1066,7 @@ final class ReaderSpeechController {
             onSessionEnded?()
             status = ttsService == nil ? .unavailable : .stopped
             clearSpeechEnergy()
-            clearNowPlaying()
+            reconcileTransport()
         }
         if !isReaderOpen { releasePreparedSession() }
     }
@@ -1132,8 +1126,12 @@ final class ReaderSpeechController {
                 // first output; flipping only the controller to `.playing` would
                 // leave it held at its pause gate under a Pause button.
                 resumePendingRequestIfPaused()
+                // Resuming can end the session synchronously (the engine failed to
+                // restart and reported `.unavailable`, which also released a detached
+                // session): never write `.playing` over that.
+                guard status != .unavailable, ttsService != nil else { return }
                 status = .playing
-                publishNowPlaying(playing: true)
+                reconcileTransport()
             }
             return
         }
@@ -1219,13 +1217,9 @@ final class ReaderSpeechController {
         status = ttsService == nil ? .unavailable : .stopped
         spokenText = ""
         clearSpeechEnergy()
-        clearNowPlaying()
-        // Once Now Playing info is cleared there's no Lock Screen / Control
-        // Center widget left to show transport on, so leaving the remote
-        // commands registered only risked a ghost Play/Skip target aimed at a
-        // dead session. `installRemoteCommandsIfNeeded()` re-adds them the next
-        // time playback actually starts.
-        removeRemoteCommands()
+        // Stopped: `reconcileTransport` drops the card and the remote targets (no
+        // ghost Play/Skip aimed at a dead session); the next start re-adds them.
+        reconcileTransport()
         if releasesPublication {
             releasePreparedSession()
         }
@@ -1249,7 +1243,7 @@ final class ReaderSpeechController {
         }
         if !enginePlaybackActive, activeRequest != nil, status == .playing {
             status = .paused
-            publishNowPlaying(playing: false)
+            reconcileTransport()
         }
         clearSpeechEnergy()
     }
@@ -1320,8 +1314,7 @@ final class ReaderSpeechController {
         onSkipNext = nil
         unbindTTSService(ttsService, stop: true)
         releasePreparedSession()
-        clearNowPlaying()
-        removeRemoteCommands()
+        reconcileTransport()
     }
 
     private func detachReaderCallbacks() {
@@ -1340,8 +1333,6 @@ final class ReaderSpeechController {
         nextRequestToken &+= 1
         enginePlaybackActive = false
         clearSpeechEnergy()
-        clearNowPlaying()
-        removeRemoteCommands()
         unbindTTSService(ttsService, stop: status != .unavailable)
         ttsService = nil
         ttsServiceKind = nil
@@ -1358,6 +1349,7 @@ final class ReaderSpeechController {
         spokenText = ""
         resetDetachedPositionSaving()
         status = .unavailable
+        reconcileTransport()
         if !isReaderOpen, let releasedWorkID {
             onReleaseDetachedWork?(releasedWorkID)
         }
@@ -1549,8 +1541,7 @@ final class ReaderSpeechController {
             onSessionEnded?()
             // Attached or detached, there is no session left: drop the Lock Screen
             // card and its remote targets (a detached release does it too).
-            clearNowPlaying()
-            removeRemoteCommands()
+            reconcileTransport()
             if let failed {
                 // The engine can report `.unavailable` and then throw from the same
                 // `speak`; that throw lands after the request is gone, so the reader
@@ -1604,7 +1595,7 @@ final class ReaderSpeechController {
             }
             status = .stopped
             clearSpeechEnergy()
-            clearNowPlaying()
+            reconcileTransport()
             if !isReaderOpen {
                 releasePreparedSession()
             }
@@ -1616,7 +1607,7 @@ final class ReaderSpeechController {
             }
             enginePlaybackActive = true
             status = .playing
-            publishNowPlaying(playing: true)
+            reconcileTransport()
         case .paused:
             if var request = activeRequest {
                 request.desiredState = .paused
@@ -1625,7 +1616,7 @@ final class ReaderSpeechController {
                     if status == .playing {
                         status = .paused
                         clearSpeechEnergy()
-                        publishNowPlaying(playing: false)
+                        reconcileTransport()
                     }
                     return
                 }
@@ -1633,7 +1624,7 @@ final class ReaderSpeechController {
             enginePlaybackActive = true
             status = .paused
             clearSpeechEnergy()
-            publishNowPlaying(playing: false)
+            reconcileTransport()
         }
     }
 
@@ -1784,6 +1775,42 @@ final class ReaderSpeechController {
         )
     }
 
+    #if DEBUG
+    /// What the last `reconcileTransport` decided, for tests.
+    private(set) var transportForTests = "none"
+    #endif
+
+    /// The ONE place the Lock Screen card and remote targets are decided, derived
+    /// from session state (`status`, a pending request). Nothing else installs,
+    /// removes, publishes or clears them.
+    private func reconcileTransport() {
+        guard !isAuditioning else { return }
+        switch status {
+        case .playing:
+            publishNowPlaying(playing: true)
+            #if DEBUG
+            transportForTests = "playing"
+            #endif
+        case .paused:
+            publishNowPlaying(playing: false)
+            #if DEBUG
+            transportForTests = "paused"
+            #endif
+        case .stopped where activeRequest != nil:
+            installRemoteCommandsIfNeeded()
+            clearNowPlaying()
+            #if DEBUG
+            transportForTests = "starting"
+            #endif
+        case .stopped, .unavailable:
+            clearNowPlaying()
+            removeRemoteCommands()
+            #if DEBUG
+            transportForTests = "none"
+            #endif
+        }
+    }
+
     private func clearNowPlaying() {
         NowPlayingInfo.shared.clear()
     }
@@ -1897,9 +1924,10 @@ final class ReaderSpeechController {
         case .unavailable:
             return .noActionableNowPlayingItem
         case .stopped:
-            if var request = activeRequest {
-                request.desiredState = .paused
-                activeRequest = request
+            // Starting (nothing audible yet): Pause holds the engine like the in-app
+            // button, so the start cannot commit a position nobody hears.
+            if activeRequest != nil {
+                pause()
                 return .success
             }
             return .noActionableNowPlayingItem

@@ -33,7 +33,7 @@ public final class CoreMLKokoroTTSService: TTSService {
     public var onSpokenTextChange: ((String) -> Void)?
     public var onSpeechEnergyPulse: ((Double, Double) -> Void)?
     public var onSpeechSpectrum: ((SpeechSpectrum) -> Void)?
-    public var onAdvance: ((Locator) -> Void)?
+    public var onAudible: ((Locator) -> Void)?
     public var onSpokenRange: ((Locator) -> Void)?
 
     private var activeTask: Task<Void, Never>?
@@ -189,7 +189,7 @@ public final class CoreMLKokoroTTSService: TTSService {
     }
 
     /// Publishes `.playing` and launches the loop. The loop itself announces nothing
-    /// (`onAdvance` / caption) until the first clip is synthesized *and* the audio
+    /// (`onAudible` / caption) until the first clip is synthesized *and* the audio
     /// engine has started, so a controller commit always means audio is imminent.
     private func beginPlayback(
         utterances: [KokoroUtterance],
@@ -266,21 +266,8 @@ public final class CoreMLKokoroTTSService: TTSService {
             }
             guard isCurrentStart(generation), status != .stopped else { return }
 
-            // Hold the armed clip while paused: a paused skip must not announce (move
-            // the page, save the position) until Play lets speech at it start.
-            await waitWhilePaused()
-            guard isCurrentStart(generation), status == .playing else { return }
-
-            // Announce immediately before scheduling, with no suspension between.
-            if let locator = utterance.locator {
-                onAdvance?(locator)
-            }
-            guard isCurrentStart(generation), status != .stopped else { return }
-            spokenText = utterance.text
-            if let locator = utterance.locator {
-                onSpokenRange?(locator)
-            }
-            // The announcement itself may pause (a request that wanted it).
+            // Hold the armed clip while paused. Nothing is announced: the reader moves
+            // when `play` sees the clip start rendering (`onAudible`).
             await waitWhilePaused()
             guard isCurrentStart(generation), status == .playing else { return }
 
@@ -300,7 +287,7 @@ public final class CoreMLKokoroTTSService: TTSService {
             Log.tts.info(
                 "Kokoro ANE \(clip.timingsMs, privacy: .public)ms phonemes=\(clip.phonemeCount, privacy: .public)"
             )
-            await play(armed)
+            await play(armed, utterance: utterance, generation: generation)
 
             if let prefetch {
                 do {
@@ -453,26 +440,36 @@ public final class CoreMLKokoroTTSService: TTSService {
         engine.pause()
     }
 
+    /// Set once a clip has configured the graph (`arm`). Before that the player node
+    /// is not connected to the mixer, so starting the engine would raise.
+    private var graphConfigured = false
+
     public func resume() {
         guard status == .paused else { return }
-        status = .playing
-        do {
-            #if DEBUG
-            if let testStartAudioEngine {
-                try testStartAudioEngine()
-            } else {
+        if graphConfigured {
+            do {
+                #if DEBUG
+                if let testStartAudioEngine {
+                    try testStartAudioEngine()
+                } else {
+                    try engine.start()
+                    playerNode.play()
+                }
+                #else
                 try engine.start()
                 playerNode.play()
+                #endif
+            } catch {
+                // The restart failed with a clip held at the pause gate: end the
+                // task and release its waiters *before* reporting, so nothing stays
+                // suspended in a service the controller is about to drop.
+                Log.tts.error("Kokoro ANE resume failed: \(error.localizedDescription, privacy: .public)")
+                resetPlayback(notifyStopped: false)
+                status = .unavailable
+                return
             }
-            #else
-            try engine.start()
-            playerNode.play()
-            #endif
-        } catch {
-            Log.tts.error("Kokoro ANE resume failed: \(error.localizedDescription, privacy: .public)")
-            status = .unavailable
-            return
         }
+        status = .playing
         let waiters = pauseWaiters
         pauseWaiters.removeAll()
         waiters.forEach { $0.resume() }
@@ -580,10 +577,12 @@ public final class CoreMLKokoroTTSService: TTSService {
                 status = .unavailable
                 return nil
             }
+            graphConfigured = true
             return ArmedClip(clip: clip, buffer: nil)
         }
         #endif
         configureEngineGraph(sampleRate: clip.sampleRate)
+        graphConfigured = true
         do {
             if !engine.isRunning { try engine.start() }
         } catch {
@@ -609,13 +608,19 @@ public final class CoreMLKokoroTTSService: TTSService {
         return ArmedClip(clip: clip, buffer: buffer)
     }
 
-    private func play(_ armed: ArmedClip) async {
+    private func play(_ armed: ArmedClip, utterance: KokoroUtterance, generation: UInt64) async {
         let clip = armed.clip
         let samples = clip.samples
         let sampleRate = clip.sampleRate
         guard status == .playing, !samples.isEmpty else { return }
+        // The one announcement: this clip is audible now. Emitted once, from whichever
+        // comes first — the player node reporting rendered frames, or the clip ending
+        // (a clip too short for the poll still was heard).
+        clipAnnounced = false
         #if DEBUG
         if let testPlayBuffer {
+            // Stands in for the player node rendering the clip.
+            announceAudible(utterance, generation: generation)
             await testPlayBuffer(samples.count)
             return
         }
@@ -646,12 +651,40 @@ public final class CoreMLKokoroTTSService: TTSService {
         }
         defer { ticker.cancel() }
 
+        // `playerTime.sampleTime > 0` after `play()` means frames have been rendered.
+        let renderWatcher = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 10_000_000)
+                guard let self, !Task.isCancelled else { return }
+                if self.playerNode.isPlaying,
+                   let last = self.playerNode.lastRenderTime,
+                   let time = self.playerNode.playerTime(forNodeTime: last),
+                   time.sampleTime > 0 {
+                    self.announceAudible(utterance, generation: generation)
+                    return
+                }
+            }
+        }
+        defer { renderWatcher.cancel() }
+
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             playerNode.scheduleBuffer(buffer) {
                 continuation.resume()
             }
             if !playerNode.isPlaying { playerNode.play() }
         }
+        announceAudible(utterance, generation: generation)
+    }
+
+    /// Whether the current clip has already announced itself (`onAudible` fires once).
+    private var clipAnnounced = false
+
+    private func announceAudible(_ utterance: KokoroUtterance, generation: UInt64) {
+        guard !clipAnnounced, isCurrentStart(generation), status != .stopped, status != .unavailable else { return }
+        clipAnnounced = true
+        if let locator = utterance.locator { onAudible?(locator) }
+        spokenText = utterance.text
+        if let locator = utterance.locator { onSpokenRange?(locator) }
     }
 
     private func attachPlayerNodeIfNeeded() {
