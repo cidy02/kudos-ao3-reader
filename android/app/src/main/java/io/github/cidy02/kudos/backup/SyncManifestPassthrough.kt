@@ -808,10 +808,27 @@ internal class SyncLastManifestStore(
         Unit
     }
 
-    /** Like [clear], but a body that cannot be removed is an error. */
-    fun clearOrThrow() = synchronized(lock) {
-        Files.deleteIfExists(file)
-        Files.deleteIfExists(legacyFolderFile)
+    private val aside: Path get() = file.resolveSibling("${file.fileName}.replace-aside")
+    private val asideFolder: Path get() = file.resolveSibling("${file.fileName}.folder.replace-aside")
+
+    /** Replace sets the overlay aside by atomic rename; [restoreAside] or [dropAside] settles it. */
+    fun setAside() = synchronized(lock) {
+        if (Files.exists(file)) Files.move(file, aside, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        if (Files.exists(legacyFolderFile)) {
+            Files.move(legacyFolderFile, asideFolder, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
+
+    fun restoreAside() = synchronized(lock) {
+        if (Files.exists(aside)) Files.move(aside, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        if (Files.exists(asideFolder)) {
+            Files.move(asideFolder, legacyFolderFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
+
+    fun dropAside() = synchronized(lock) {
+        runCatching { Files.deleteIfExists(aside) }
+        runCatching { Files.deleteIfExists(asideFolder) }
         Unit
     }
 

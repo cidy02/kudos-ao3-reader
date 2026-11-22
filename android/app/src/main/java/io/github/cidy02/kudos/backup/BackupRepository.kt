@@ -165,8 +165,7 @@ class BackupRepository(
             prepareForImport(mode)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode)
-            clearOverlaysBeforeReplace(mode)
-            applyMergeResultLocked(merge, pack.originalFilesByName).let { summary ->
+            withOverlaysAside(mode) { applyMergeResultLocked(merge, pack.originalFilesByName) }.let { summary ->
                 recordAfterCommit(summary) { recordImportedManifest(pack.rawManifestJson, mode, replacePassthroughStore, folderUri) }
             }
         }
@@ -184,23 +183,32 @@ class BackupRepository(
             prepareForImport(mode)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode, normalizeQueuePreservation)
-            clearOverlaysBeforeReplace(mode)
-            applyMergeResultLocked(merge, pack.originalFilesByName).let { summary ->
+            withOverlaysAside(mode) { applyMergeResultLocked(merge, pack.originalFilesByName) }.let { summary ->
                 recordAfterCommit(summary) { recordImportedManifest(pack.rawManifestJson, mode) }
             }
         }
     }
 
     /**
-     * Replace changes the whole library, so the old library's opaque data must not outlive it: both
-     * overlays go before the Room transaction, the new ones are written after it commits. A crash
-     * between the two loses opaque fields (as before A-541) and never pairs them with the wrong works.
+     * Replace changes the whole library, so the old library's opaque data must not outlive it. Both
+     * overlays are set aside by rename before the Room transaction; once it commits the asides are
+     * deleted and the new overlays written, and if it fails the asides go back. A crash in between
+     * leaves only asides, which the next start deletes (opaque fields lost, as before A-541, never
+     * paired with the wrong works).
      */
-    private fun clearOverlaysBeforeReplace(mode: BackupImportMode) {
-        if (mode != BackupImportMode.REPLACE_LIBRARY) return
-        // Checked: if an overlay cannot be removed the Replace has not started, nothing changed.
-        lastImportedManifestStore.clearOrThrow()
-        pendingImportManifestStore.clearOrThrow()
+    private suspend fun <T> withOverlaysAside(mode: BackupImportMode, apply: suspend () -> T): T {
+        if (mode != BackupImportMode.REPLACE_LIBRARY) return apply()
+        val stores = listOf(lastImportedManifestStore, pendingImportManifestStore)
+        val staged = mutableListOf<SyncLastManifestStore>()
+        try {
+            stores.forEach { it.setAside(); staged += it }
+            afterOverlaysStaged?.invoke()
+            return apply().also { stores.forEach { it.dropAside() } }
+        } catch (error: Throwable) {
+            // Safe to put back only if the new overlays were never written; they are written after this.
+            staged.forEach { runCatching { it.restoreAside() } }
+            throw error
+        }
     }
 
     /** The library has committed: a failed overlay write must not read as a failed import. */
@@ -244,6 +252,9 @@ class BackupRepository(
     }
 
     internal companion object {
+        /** Test hook: runs after the overlays are set aside and before the Room transaction. */
+        internal var afterOverlaysStaged: (() -> Unit)? = null
+
         internal const val PENDING_IMPORT_MANIFEST_FILE = "sync-pending-import-manifest.json"
     }
 
@@ -269,6 +280,9 @@ class BackupRepository(
         BackupFileUndo.recover(
             workFileStore.worksDirectory, fontFileStore.fontsDirectory, workFileStore.originalsDirectory
         )
+        // Asides left by a Replace that died: Room's state is not cheaply known, so they are dropped.
+        lastImportedManifestStore.dropAside()
+        pendingImportManifestStore.dropAside()
     }
 
     /**
