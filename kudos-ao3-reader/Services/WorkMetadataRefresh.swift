@@ -152,6 +152,11 @@ enum WorkMetadataRefresh {
         work.applyLanguageMetadata(metadata.language)
         if let words = metadata.words { work.wordCount = words }
         if !metadata.chapters.isEmpty { work.chapters = metadata.chapters }
+        // Insights D9: only while the work is new, and before the live figures overwrite
+        // anything; a later refresh never touches the at-save fields.
+        work.recordStatsAtSaveIfJustSaved(
+            kudos: metadata.kudos, hits: metadata.hits, bookmarks: metadata.bookmarks
+        )
         if let kudos = metadata.kudos { work.kudos = kudos }
         // OR, never assigned outright: metadata.kudosGivenByCurrentUser is a
         // positive-only signal (see its own doc comment) — a miss doesn't mean
@@ -162,7 +167,10 @@ enum WorkMetadataRefresh {
         if let comments = metadata.comments { work.comments = comments }
         if let bookmarks = metadata.bookmarks { work.bookmarks = bookmarks }
         if let hits = metadata.hits { work.hits = hits }
-        if !metadata.datePublished.isEmpty { work.datePublished = metadata.datePublished }
+        if !metadata.datePublished.isEmpty {
+            work.datePublished = metadata.datePublished
+            work.completeAgeAtSave()
+        }
         if !metadata.dateUpdated.isEmpty { work.dateUpdated = metadata.dateUpdated }
         if let complete = metadata.isComplete { work.isComplete = complete }
         if let title = metadata.seriesTitle, !title.isEmpty { work.seriesTitle = title }

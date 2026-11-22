@@ -58,6 +58,67 @@ enum ReadingLogService {
         /// — which meant `pauseSession`, having no such flag, hard-coded `false`
         /// and silently dropped the finish on every backgrounded session.
         var wasFinishedAtStart: Bool
+        /// D7: active seconds credited to each spine item, gathered in memory from locator
+        /// changes and written with the sitting (the debounced locator path never writes one).
+        var chapterSeconds: [Int: Double] = [:]
+        /// The spine item the reader is in; nil until the reader first reports one.
+        var currentSpine: Int?
+        /// Active seconds before that first report, credited to it when it arrives.
+        var pendingSeconds: Double = 0
+        /// AO3 story chapter (1-based) of each spine item seen, for word counts and peeks.
+        var storyChapterBySpine: [Int: Int] = [:]
+        /// Spine items entered from the one before and left for the one after: the chapters
+        /// this sitting read whole, the only ones judged for skimming and pace.
+        var enteredFromPrevious: Set<Int> = []
+        var leftForNext: Set<Int> = []
+        var peekedAtEnding = false
+        var sawChapterSignal = false
+
+        /// Credits `seconds` to the chapter the reader has been in, then moves to `chapter`.
+        /// The first report only establishes where the reader is (the stored start spine can be
+        /// stale), so no move is counted before it and the seconds before it wait for it.
+        mutating func note(seconds: Double, chapter: ChapterPosition?, work: SavedWork) {
+            guard let spine = currentSpine else {
+                pendingSeconds += seconds
+                guard let chapter else { return }
+                currentSpine = chapter.spineIndex
+                if let story = chapter.storyChapter { storyChapterBySpine[chapter.spineIndex] = story }
+                if pendingSeconds > 0 { chapterSeconds[chapter.spineIndex, default: 0] += pendingSeconds }
+                pendingSeconds = 0
+                sawChapterSignal = true
+                return
+            }
+            if seconds > 0 { chapterSeconds[spine, default: 0] += seconds }
+            guard let chapter else { return }
+            if let story = chapter.storyChapter { storyChapterBySpine[chapter.spineIndex] = story }
+            guard chapter.spineIndex != spine else { return }
+            if chapter.spineIndex == spine + 1 {
+                leftForNext.insert(spine)
+                enteredFromPrevious.insert(chapter.spineIndex)
+            }
+            if !wasFinishedAtStart, let to = chapter.storyChapter,
+               ChapterTiming.isPeek(
+                   toStoryChapter: to,
+                   fromStoryChapter: storyChapterBySpine[spine],
+                   totalStoryChapters: work.postedChapterCount,
+                   startProgress: startProgress
+               ) {
+                peekedAtEnding = true
+            }
+            currentSpine = chapter.spineIndex
+        }
+    }
+
+    /// Where the reader is, as the reader reports it: the spine item and, when the book's
+    /// sections say so, which AO3 story chapter it is (front and back matter have none).
+    struct ChapterPosition: Equatable, Sendable {
+        var spineIndex: Int
+        var storyChapter: Int?
+
+        init(spineIndex: Int, storyChapter: Int? = nil) {
+            self.spineIndex = spineIndex
+            self.storyChapter = storyChapter
+        }
     }
 
     private static var openSessions: [UUID: OpenSession] = [:]
@@ -101,11 +162,16 @@ enum ReadingLogService {
         )
     }
 
-    static func noteActivity(for work: SavedWork, now: Date = Date()) {
+    /// Marks activity (a page turn, a scroll, a spoken sentence). The gap since the last mark
+    /// (at most 5 minutes) counts as active time, credited to the chapter the reader was in
+    /// *before* this call; `chapter` is where they are now (D7).
+    static func noteActivity(for work: SavedWork, chapter: ChapterPosition? = nil, now: Date = Date()) {
         guard var session = openSessions[work.id], !session.isPaused,
               now >= session.lastActivityAt else { return }
-        session.activeSeconds += activeGap(from: session.lastActivityAt, to: now)
+        let gap = activeGap(from: session.lastActivityAt, to: now)
+        session.activeSeconds += gap
         session.lastActivityAt = now
+        session.note(seconds: gap, chapter: chapter, work: work)
         openSessions[work.id] = session
     }
 
@@ -286,6 +352,7 @@ enum ReadingLogService {
             // close reports false for the same visit.
             existing.didFinish = existing.didFinish || didFinish
             existing.lastModifiedAt = now
+            applyChapterTiming(session, to: existing, work: work, in: context)
         } else {
             let newSession = ReadingSession(
                 id: recordID,
@@ -313,10 +380,82 @@ enum ReadingLogService {
                 lastModifiedAt: now
             )
             newSession.snapshot(from: work)
+            applyChapterTiming(session, to: newSession, work: work, in: context)
             context.insert(newSession)
         }
         FolderSyncService.markDirty()
         context.saveBestEffort(reason: "Saving reading session failed")
+    }
+
+    /// D7: writes the sitting's chapter timing onto its row, every time the row is saved. Only
+    /// a sitting the reader reported chapters for writes anything (the macOS reader does not
+    /// yet), so such rows keep nil and export no keys.
+    ///
+    /// The skim judgement runs here, from the pace of the *other* read-mode sittings already
+    /// saved, and is stored: a later change of pace never re-judges a past sitting. It covers
+    /// only chapters the sitting read whole, and only a `.read` sitting of a work counted in
+    /// words (a listened chapter's time says nothing about reading speed, and characters
+    /// are never mixed into words).
+    private static func applyChapterTiming(
+        _ session: OpenSession,
+        to row: ReadingSession,
+        work: SavedWork,
+        in context: ModelContext
+    ) {
+        guard session.sawChapterSignal else { return }
+        row.chapterSeconds = session.chapterSeconds
+        row.peekedAtEnding = (row.peekedAtEnding ?? false) || session.peekedAtEnding
+        row.endedAtChapterEnd = ChapterTiming.endedAtChapterEnd(chapterFraction: finalChapterFraction(of: work))
+        guard session.mode == .read, work.wordUnit == .words else { return }
+
+        // A chapter judged by an earlier save of this sitting (a pause, then a resume) keeps that
+        // judgement: only chapters not yet judged are judged now, so a pace that moved in between
+        // never rewrites it.
+        let judgedBefore = row.chapterWords
+        let counts = work.chapterWordCounts
+        var wholeWords = judgedBefore
+        for spine in session.enteredFromPrevious.intersection(session.leftForNext)
+        where judgedBefore[spine] == nil {
+            guard let story = session.storyChapterBySpine[spine], counts.indices.contains(story - 1),
+                  counts[story - 1] > 0 else { continue }
+            wholeWords[spine] = counts[story - 1]
+        }
+        row.chapterWords = wholeWords
+        let fresh = wholeWords.filter { judgedBefore[$0.key] == nil }
+        var skimmed = Set(row.skimmedChapters)
+        if fresh.values.contains(where: { $0 >= ChapterTiming.skimMinimumWords }) {
+            let ownID = row.id
+            let others = (try? context.fetch(FetchDescriptor<ReadingSession>(
+                predicate: #Predicate { $0.id != ownID && $0.modeRaw == "read" }
+            ))) ?? []
+            let samples = others.flatMap {
+                ChapterTiming.paceSamples(
+                    seconds: $0.chapterSeconds,
+                    words: $0.chapterWords,
+                    skimmed: $0.skimmedChapters
+                )
+            }
+            skimmed.formUnion(ChapterTiming.skimmedChapters(
+                seconds: session.chapterSeconds,
+                words: fresh,
+                medianWordsPerSecond: ChapterTiming.medianWordsPerSecond(samples)
+            ))
+        }
+        row.skimmedChapters = skimmed.sorted()
+        var skimmedStory = Set(row.skimmedStoryChapters)
+        for spine in skimmed {
+            if let story = session.storyChapterBySpine[spine] { skimmedStory.insert(story) }
+        }
+        row.skimmedStoryChapters = skimmedStory.sorted()
+    }
+
+    /// How far through its chapter the work's saved position is: Readium's fraction of the
+    /// current resource, or the legacy reader's scroll fraction; nil when neither exists.
+    private static func finalChapterFraction(of work: SavedWork) -> Double? {
+        if let fraction = WorkReadingPosition.chapterProgress(from: work.readiumLocator) { return fraction }
+        guard work.readiumLocator.isEmpty, work.lastSpineIndex > 0 || work.lastScrollFraction > 0
+        else { return nil }
+        return min(1, max(0, work.lastScrollFraction))
     }
 
     /// Closes or keeps the open sitting when the reader disappears.
@@ -447,6 +586,14 @@ enum ReadingLogService {
             session.lastActivityAt = now
             session.accumulatedSeconds = 0
             session.activeSeconds = 0
+            session.chapterSeconds = [:]
+            session.pendingSeconds = 0
+            session.enteredFromPrevious = []
+            session.leftForNext = []
+            session.peekedAtEnding = false
+            session.sawChapterSignal = false
+            session.currentSpine = nil
+            session.storyChapterBySpine = [:]
             openSessions[workID] = session
         }
     }
@@ -610,12 +757,14 @@ enum ReadingLogService {
             works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
         )
         var read: [UUID: Int] = [:]
+        var chapterPathSessions: Set<UUID> = []
         for (workID, group) in Dictionary(grouping: sessions, by: \.workID) {
             let sorted = group.sorted {
                 ($0.startedAt, $0.id.uuidString) < ($1.startedAt, $1.id.uuidString)
             }
             let work = worksByID[workID]
             if let work, canUseChapterWordCounts(work.chapterWordCounts, for: work, sessions: sorted) {
+                chapterPathSessions.formUnion(sorted.map(\.id))
                 chapterWordsRead(
                     sortedSessions: sorted,
                     chapterCounts: work.chapterWordCounts,
@@ -623,6 +772,17 @@ enum ReadingLogService {
                 )
             } else {
                 legacyWordsRead(sortedSessions: sorted, into: &read)
+            }
+        }
+        // D7: chapters judged skimmed when their sitting was saved leave the totals. The stored
+        // judgement is used as is (never re-derived), and a sitting cannot go below zero.
+        // On the chapter path a skimmed chapter's coverage was left uncredited while it was being
+        // attributed (so a later full read still earns it); only the legacy path deducts here.
+        for session in sessions where !chapterPathSessions.contains(session.id) {
+            let words = session.chapterWords
+            let skimmedWords = session.skimmedChapters.reduce(0) { $0 + (words[$1] ?? 0) }
+            if skimmedWords > 0, let credited = read[session.id] {
+                read[session.id] = max(0, credited - skimmedWords)
             }
         }
         return read
@@ -702,6 +862,7 @@ enum ReadingLogService {
             } else {
                 activeCount = inferredChapterCount(forWordCount: session.wordCount, in: chapterCounts)
             }
+            let skipped = Set(session.skimmedStoryChapters.map { $0 - 1 })
             let activeCounts = Array(chapterCounts.prefix(activeCount))
             let prefixSum = activeCounts.reduce(0, +)
 
@@ -772,9 +933,14 @@ enum ReadingLogService {
                     activeCounts.count,
                     max(0, Int(floor(endFraction * Double(activeCounts.count))))
                 )
-                for index in 0..<completedWholeChapters {
+                // The words this sitting itself recorded as skimmed, not today's chapter sizes
+                // (the work's chapter counts may have changed since).
+                let recordedWords = session.chapterWords
+                let skimmedWords = session.skimmedChapters.reduce(0) { $0 + (recordedWords[$1] ?? 0) }
+                for index in 0..<completedWholeChapters where !skipped.contains(index) {
                     chapterHighWater[index] = 1.0
                 }
+                read[session.id] = max(0, (read[session.id] ?? 0) - skimmedWords)
                 previousEndFraction = endFraction
                 previousWords = session.wordCount
                 previousChapterCount = activeCount
@@ -793,6 +959,9 @@ enum ReadingLogService {
                 let chapterEnd = cumulative + count
                 cumulative = chapterEnd
                 guard count > 0, endPos > chapterStart, startPos < chapterEnd else { continue }
+                // Skimmed in this sitting: no credit, and no high-water mark, so reading it
+                // properly in a later sitting of the same read-through still counts.
+                if skipped.contains(index) { continue }
 
                 let coveredStart = max(0.0, min(1.0, (startPos - chapterStart) / count))
                 let coveredEnd = max(0.0, min(1.0, (endPos - chapterStart) / count))

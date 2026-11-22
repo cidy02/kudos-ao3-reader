@@ -18,6 +18,8 @@ func importEPUB(
     isComplete: Bool = false,
     seriesURL: String = "",
     knownChapterCount: Int = 0,
+    importSource: WorkImportSource? = nil,
+    statsAtSave: WorkStatsAtSave? = nil,
     verifyAvailability: Bool = true,
     canImport: (@MainActor () -> Bool)? = nil,
     into context: ModelContext
@@ -123,6 +125,10 @@ func importEPUB(
     // pass it from the AO3 work page; web imports baseline on the first update check.
     work.knownChapterCount = knownChapterCount
     work.downloadedAt = downloadedAt
+    // Insights D8/D9: how it arrived, and AO3's figures when the caller already had them
+    // (a metadata fetch right after the import brings them otherwise).
+    work.recordImportSource(importSource, at: downloadedAt)
+    if let statsAtSave { work.recordStatsAtSave(statsAtSave, at: downloadedAt) }
 
     do {
         try ReadingQueueService.replaceEPUB(for: work, with: tempURL)
@@ -281,6 +287,7 @@ private nonisolated struct UserEPUBInspection {
 func importUserEPUB(
     _ url: URL,
     downloadedAt: Date = Date(),
+    importSource: WorkImportSource = .fileImport,
     into context: ModelContext
 ) async throws -> UserEPUBImportOutcome {
     guard url.isFileURL else { throw UserEPUBImportError.notLocalFile }
@@ -330,6 +337,7 @@ func importUserEPUB(
     )
     applyUserImportMetadata(inspection, to: work, fillOnly: false)
     work.downloadedAt = downloadedAt
+    work.recordImportSource(importSource, at: downloadedAt)
     work.ao3WorkID = WorkTags.ao3WorkID(from: work.sourceURL)
     work.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: work.seriesURL)
     work.markModified()

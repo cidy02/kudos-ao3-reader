@@ -171,7 +171,11 @@ struct FandomWorksView: View {
 
     private enum Phase: Equatable { case loading, loaded, failed(String) }
 
-    init(fandom: String, includedFandoms: [String]? = nil, previousVisit: Date? = nil) {
+    init(
+        fandom: String,
+        includedFandoms: [String]? = nil,
+        previousVisit: Date? = nil
+    ) {
         self.fandom = fandom
         self.previousVisit = previousVisit
         let names = includedFandoms ?? [fandom]
@@ -394,9 +398,16 @@ struct FandomWorksView: View {
             .environment(\.queueMembershipOrigin, bulkSelection.origin)
             .onAppear {
                 if bulkSelection.origin == nil {
-                    bulkSelection.origin = ReadingQueueMembershipOrigin(kind: .search, searchID: nil, label: fandom)
+                    bulkSelection.origin = ReadingQueueMembershipOrigin(
+                        kind: .search, searchID: nil, label: fandom, importSourceHint: .fandom
+                    )
                 }
             }
+            // Insights D9: the fandom's size, already loaded, travels with the save. Only while
+            // the list is the fandom's own (no extra filters), so the total describes it.
+            // A reload clears the summary, so a filter change also clears a total loaded before it.
+            .onChange(of: resultSummary?.total) { _, total in updateFandomTotal(total) }
+            .onChange(of: loadedFilters) { _, _ in updateFandomTotal(resultSummary?.total) }
             .task { await load(page: 1) }
             .task { await rankTop100.refreshAvailability() }
             .onChange(of: savedWorks.map(\.id), initial: true) { _, _ in
@@ -567,6 +578,8 @@ struct FandomWorksView: View {
         failedPage = nil
         requestedPage = page
         if loadedFilters == nil { loadedFilters = filters }
+        // Pagination fetches with the applied filters, never the inspector's unapplied draft (D9 eligibility reads `loadedFilters`).
+        let requestFilters = loadedFilters ?? filters
         loadToken += 1
         let token = loadToken
         do {
@@ -578,11 +591,11 @@ struct FandomWorksView: View {
             var unionApplied = false
             let source: RankTop100URLSource
             if includedFandoms.count == 1 {
-                source = .fandom(includedFandoms[0], filters: filters)
+                source = .fandom(includedFandoms[0], filters: requestFilters)
                 result = try await AO3RequestCoordinator.shared.withSlot {
                     try await AO3Client.shared.fandomWorksPage(
                         fandom: includedFandoms[0],
-                        filters: filters,
+                        filters: requestFilters,
                         page: page,
                         request: authenticatedRequest
                     )
@@ -591,7 +604,7 @@ struct FandomWorksView: View {
                 // `fandom` is cleared for this request: left in, AO3 would AND
                 // `fandom_names` against the union and hand back the
                 // intersection again, which is the bug this replaces.
-                var unionFilters = filters
+                var unionFilters = requestFilters
                 unionFilters.fandom = ""
                 unionApplied = true
                 source = .search(filters: unionFilters, additionalQueryClause: clause)
@@ -604,10 +617,10 @@ struct FandomWorksView: View {
                     )
                 }
             } else {
-                source = .search(filters: filters, additionalQueryClause: nil)
+                source = .search(filters: requestFilters, additionalQueryClause: nil)
                 result = try await AO3RequestCoordinator.shared.withSlot {
                     try await AO3Client.shared.search(
-                        filters: filters,
+                        filters: requestFilters,
                         page: page,
                         request: authenticatedRequest
                     )
@@ -650,7 +663,7 @@ struct FandomWorksView: View {
             if unionApplied,
                Self.exactCountIsTrustworthy,
                includedFandoms.count > 1,
-               filters == Self.baseline(for: includedFandoms),
+               requestFilters == Self.baseline(for: includedFandoms),
                let total = result.summary?.total {
                 FandomFamilyExactCountCache.shared.store(
                     total,
@@ -681,6 +694,15 @@ struct FandomWorksView: View {
             }
             requestedPage = nil
         }
+    }
+
+    private func updateFandomTotal(_ total: Int?) {
+        guard var origin = bulkSelection.origin else { return }
+        origin.fandomWorks = ReadingQueueMembershipOrigin.fandomTotal(
+            total, applied: loadedFilters, draft: filters, baseline: Self.baseline(for: includedFandoms),
+            fandomCount: includedFandoms.count
+        )
+        bulkSelection.origin = origin
     }
 
     /// Clear the current page (so the first-load skeleton shows) and re-run the fandom
@@ -1050,7 +1072,8 @@ struct TagWorksView: View {
                     bulkSelection.origin = ReadingQueueMembershipOrigin(
                         kind: .search,
                         searchID: nil,
-                        label: request.title
+                        label: request.title,
+                        importSourceHint: .browse
                     )
                 }
             }

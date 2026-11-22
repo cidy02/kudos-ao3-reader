@@ -56,6 +56,44 @@ import SwiftData
     var ao3SeriesID: Int? = nil
     var seriesPosition: Int = 0
     var publishedYear: Int? = nil
+    /// D7: seconds of active reading in each chapter this sitting, `{"<spineIndex>": seconds}`.
+    /// nil = not recorded (older rows, Android, a sitting with no chapter signal).
+    var chapterSecondsJSON: String? = nil
+    /// D7: words in each chapter the sitting read whole (entered from the one before and
+    /// left for the one after), `{"<spineIndex>": words}`. Only chapters whose count was
+    /// known in words; the pace and skim judgements read these.
+    var chapterWordsJSON: String? = nil
+    /// D7: spine indexes judged skimmed when the sitting was saved (`ChapterTiming`), as a JSON
+    /// `[Int]`. Stored, so a later change of pace never re-judges a past sitting. nil = not judged.
+    var skimmedChaptersJSON: String? = nil
+    /// D7: whether the sitting stopped at the end of a chapter. nil = not recorded.
+    var endedAtChapterEnd: Bool? = nil
+    /// D7: whether the sitting jumped to the work's last chapter before the halfway mark.
+    var peekedAtEnding: Bool? = nil
+
+    /// D7: the same judgement by AO3 story chapter (1-based), so the words-read calculator, which
+    /// knows chapters and not spine items, can leave a skimmed chapter's coverage uncredited.
+    var skimmedStoryChaptersJSON: String? = nil
+
+    var skimmedStoryChapters: [Int] {
+        get { ChapterTiming.decodeList(skimmedStoryChaptersJSON) }
+        set { skimmedStoryChaptersJSON = ChapterTiming.encode(list: newValue) }
+    }
+
+    var chapterSeconds: [Int: Double] {
+        get { ChapterTiming.decodeDoubles(chapterSecondsJSON) }
+        set { chapterSecondsJSON = ChapterTiming.encode(newValue) }
+    }
+
+    var chapterWords: [Int: Int] {
+        get { ChapterTiming.decodeInts(chapterWordsJSON) }
+        set { chapterWordsJSON = ChapterTiming.encode(newValue) }
+    }
+
+    var skimmedChapters: [Int] {
+        get { ChapterTiming.decodeList(skimmedChaptersJSON) }
+        set { skimmedChaptersJSON = ChapterTiming.encode(list: newValue) }
+    }
 
     var hasMetadataSnapshot: Bool {
         metadataSnapshotRecorded || !fandoms.isEmpty || !relationships.isEmpty || !characters.isEmpty

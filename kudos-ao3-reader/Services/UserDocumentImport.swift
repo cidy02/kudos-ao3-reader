@@ -45,6 +45,7 @@ enum UserDocumentImport {
     static func perform(
         _ url: URL,
         downloadedAt: Date = Date(),
+        importSource: WorkImportSource = .fileImport,
         into context: ModelContext
     ) async throws -> (outcome: UserEPUBImportOutcome, convertedFrom: ImportedFileFormat?) {
         guard url.isFileURL else { throw UserEPUBImportError.notLocalFile }
@@ -61,10 +62,14 @@ enum UserDocumentImport {
 
         switch conversion {
         case .alreadyEPUB:
-            return (try await importUserEPUB(url, downloadedAt: downloadedAt, into: context), nil)
+            let imported = try await importUserEPUB(
+                url, downloadedAt: downloadedAt, importSource: importSource, into: context
+            )
+            return (imported, nil)
         case let .converted(data, format):
             let outcome = try await importConverted(
-                data, from: url, format: format, downloadedAt: downloadedAt, into: context
+                data, from: url, format: format, downloadedAt: downloadedAt,
+                importSource: importSource, into: context
             )
             return (outcome, format)
         }
@@ -77,13 +82,16 @@ enum UserDocumentImport {
         from source: URL,
         format: ImportedFileFormat,
         downloadedAt: Date,
+        importSource: WorkImportSource,
         into context: ModelContext
     ) async throws -> UserEPUBImportOutcome {
         let staged = Storage.tempDownloadURL(suggestedName: "\(UUID().uuidString).epub")
         try epub.write(to: staged, options: .atomic)
         defer { try? FileManager.default.removeItem(at: staged) }
 
-        let outcome = try await importUserEPUB(staged, downloadedAt: downloadedAt, into: context)
+        let outcome = try await importUserEPUB(
+            staged, downloadedAt: downloadedAt, importSource: importSource, into: context
+        )
         preserveOriginal(at: source, for: outcome.work, format: format)
         Log.library.info(
             "Imported “\(outcome.work.title)” converted from \(format.rawValue, privacy: .public)"

@@ -120,6 +120,8 @@ struct ReadiumReaderView: View {
     @AppStorage("readerTwoPage") private var twoPageEnabled = false
     /// Book pose (vertical fold) and tabletop (horizontal fold). Measured by
     /// `AdaptiveContentRegions`; neither writes `readerTwoPage`.
+    /// Section href -> chapter, rebuilt only when the section list changes (reading-log hot path).
+    @State private var chapterLookup = ChapterHrefLookup()
     @State private var bookPose = false
     @State private var tabletopPose = false
     @AppStorage("readerFontID") private var fontID: String = "system"
@@ -956,6 +958,24 @@ struct ReadiumReaderView: View {
         return book.sections.first { ReaderSectionBuilder.hrefKey($0.href) == key }?.spineIndex
     }
 
+    /// The chapter a locator is in, for the reading log's time per chapter (D7): its spine index
+    /// and AO3 story chapter, matched by href like `spineIndex(for:)`.
+    private func readingLogChapter(for locator: Locator) -> ReadingLogService.ChapterPosition? {
+        // Normalized hrefs are indexed once per section list (keyed by its generation, so a revised
+        // copy with the same section count rebuilds), not walked on every locator update.
+        if chapterLookup.generation != book.sectionsGeneration {
+            chapterLookup.generation = book.sectionsGeneration
+            chapterLookup.positions = Dictionary(
+                book.sections.map {
+                    (ReaderSectionBuilder.hrefKey($0.href),
+                     ReadingLogService.ChapterPosition(spineIndex: $0.spineIndex, storyChapter: $0.storyChapterIndex))
+                },
+                uniquingKeysWith: { first, _ in first }
+            )
+        }
+        return chapterLookup.positions[ReaderSectionBuilder.hrefKey(locator.href.string)]
+    }
+
     /// Every position write. Beside the locator it stores the chapter and the
     /// place in it (`lastSpineIndex`, `lastScrollFraction`): the Mac reader opens
     /// from that pair and never reads the locator, so a work read on the iPhone
@@ -1757,7 +1777,7 @@ struct ReadiumReaderView: View {
         book.onLocatorChange = { locator in
             guard let string = locator.persistenceString else { return }
             guard initialPositionPersistence.allowsPersistence else { return }
-            ReadingLogService.noteActivity(for: work)
+            ReadingLogService.noteActivity(for: work, chapter: readingLogChapter(for: locator))
             // note() may call onDebouncedWrite immediately or schedule a trailing write.
             progressPersistence.note(
                 locatorString: string,
@@ -2746,3 +2766,9 @@ private struct HingeStatusRefresh: View {
 }
 
 #endif
+
+/// Reference-typed cache for `ReadiumReaderView.readingLogChapter`: mutating it never re-renders.
+private final class ChapterHrefLookup {
+    var generation = -1
+    var positions: [String: ReadingLogService.ChapterPosition] = [:]
+}

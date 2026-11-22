@@ -1096,6 +1096,16 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     /// Additive D3 derived fields; omitted when empty so untouched works emit no key.
     let chapterWordCountsJSON: String?
     let wordUnitRaw: String?
+    /// Additive Insights provenance (T-536 D8, D9). Each key is written only when the work
+    /// recorded it, so an untouched work exports none and older builds and Android never see them.
+    let importSourceRaw: String?
+    let importSourceSince: Date?
+    let kudosAtSave: Int?
+    let hitsAtSave: Int?
+    let bookmarksAtSave: Int?
+    let statsSavedAt: Date?
+    let ageDaysAtSave: Int?
+    let fandomWorksAtSave: Int?
 
     @MainActor
     init(work: SavedWork) {
@@ -1184,6 +1194,14 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         coverRecipeJSON = work.coverRecipeJSON
         chapterWordCountsJSON = work.chapterWordCountsJSON.isEmpty ? nil : work.chapterWordCountsJSON
         wordUnitRaw = work.wordUnitRaw.isEmpty ? nil : work.wordUnitRaw
+        importSourceRaw = work.importSourceRaw
+        importSourceSince = work.importSourceSince
+        kudosAtSave = work.kudosAtSave
+        hitsAtSave = work.hitsAtSave
+        bookmarksAtSave = work.bookmarksAtSave
+        statsSavedAt = work.statsSavedAt
+        ageDaysAtSave = work.ageDaysAtSave
+        fandomWorksAtSave = work.fandomWorksAtSave
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1261,6 +1279,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case coverRecipeJSON
         case chapterWordCountsJSON
         case wordUnitRaw
+        case importSourceRaw, importSourceSince
+        case kudosAtSave, hitsAtSave, bookmarksAtSave, statsSavedAt, ageDaysAtSave, fandomWorksAtSave
     }
 
     init(from decoder: Decoder) throws {
@@ -1359,6 +1379,14 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         coverRecipeJSON = try container.decodeIfPresent(String.self, forKey: .coverRecipeJSON)
         chapterWordCountsJSON = try container.decodeIfPresent(String.self, forKey: .chapterWordCountsJSON)
         wordUnitRaw = try container.decodeIfPresent(String.self, forKey: .wordUnitRaw)
+        importSourceRaw = try container.decodeIfPresent(String.self, forKey: .importSourceRaw)
+        importSourceSince = try container.decodeIfPresent(Date.self, forKey: .importSourceSince)
+        kudosAtSave = try container.decodeIfPresent(Int.self, forKey: .kudosAtSave)
+        hitsAtSave = try container.decodeIfPresent(Int.self, forKey: .hitsAtSave)
+        bookmarksAtSave = try container.decodeIfPresent(Int.self, forKey: .bookmarksAtSave)
+        statsSavedAt = try container.decodeIfPresent(Date.self, forKey: .statsSavedAt)
+        ageDaysAtSave = try container.decodeIfPresent(Int.self, forKey: .ageDaysAtSave)
+        fandomWorksAtSave = try container.decodeIfPresent(Int.self, forKey: .fandomWorksAtSave)
     }
 }
 
@@ -1483,6 +1511,13 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
     let ao3SeriesID: Int??
     let seriesPosition: Int?
     let publishedYear: Int??
+    /// D7 (T-536), additive: omitted when the sitting recorded no chapter signal.
+    let chapterSecondsJSON: String?
+    let chapterWordsJSON: String?
+    let skimmedChaptersJSON: String?
+    let skimmedStoryChaptersJSON: String?
+    let endedAtChapterEnd: Bool?
+    let peekedAtEnding: Bool?
     let lastSpineIndex: Int
     let chapterTitle: String
     let endingProgress: Double
@@ -1510,6 +1545,7 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         case ao3SeriesID
         case seriesPosition
         case publishedYear
+        case chapterSecondsJSON, chapterWordsJSON, skimmedChaptersJSON, skimmedStoryChaptersJSON, endedAtChapterEnd, peekedAtEnding
         case wordCount, chapterCountAtVisit, didFinish, lastModifiedAt
     }
 
@@ -1549,6 +1585,12 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         ao3SeriesID = snapshot ? .some(session.ao3SeriesID) : nil
         seriesPosition = snapshot ? session.seriesPosition : nil
         publishedYear = snapshot ? .some(session.publishedYear) : nil
+        chapterSecondsJSON = session.chapterSecondsJSON
+        chapterWordsJSON = session.chapterWordsJSON
+        skimmedChaptersJSON = session.skimmedChaptersJSON
+        skimmedStoryChaptersJSON = session.skimmedStoryChaptersJSON
+        endedAtChapterEnd = session.endedAtChapterEnd
+        peekedAtEnding = session.peekedAtEnding
         lastSpineIndex = session.lastSpineIndex
         chapterTitle = session.chapterTitle
         endingProgress = session.endingProgress
@@ -1592,6 +1634,12 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         seriesPosition = try container.decodeIfPresent(Int.self, forKey: .seriesPosition)
         publishedYear = container.contains(.publishedYear)
             ? .some(try container.decode(Int?.self, forKey: .publishedYear)) : nil
+        chapterSecondsJSON = try container.decodeIfPresent(String.self, forKey: .chapterSecondsJSON)
+        chapterWordsJSON = try container.decodeIfPresent(String.self, forKey: .chapterWordsJSON)
+        skimmedChaptersJSON = try container.decodeIfPresent(String.self, forKey: .skimmedChaptersJSON)
+        skimmedStoryChaptersJSON = try container.decodeIfPresent(String.self, forKey: .skimmedStoryChaptersJSON)
+        endedAtChapterEnd = try container.decodeIfPresent(Bool.self, forKey: .endedAtChapterEnd)
+        peekedAtEnding = try container.decodeIfPresent(Bool.self, forKey: .peekedAtEnding)
         lastSpineIndex = try container.decodeIfPresent(Int.self, forKey: .lastSpineIndex) ?? 0
         chapterTitle = try container.decodeIfPresent(String.self, forKey: .chapterTitle) ?? ""
         endingProgress = try container.decodeIfPresent(Double.self, forKey: .endingProgress) ?? 0
@@ -4766,6 +4814,7 @@ enum KudosBackupService {
             let resolvedWorkID = restoredWorksByArchivedID[archived.workID]?.id ?? archived.workID
             if let local = byID[archived.id] {
                 resolvedLocalIDs.insert(local.id)
+                applyChapterTiming(archived, to: local, fillOnly: true)
                 if mode == .merge { continue }
                 guard SyncMerge.shouldApplyIncoming(
                     localModifiedAt: local.lastModifiedAt,
@@ -4813,6 +4862,7 @@ enum KudosBackupService {
                 if let value = archived.ao3SeriesID { session.ao3SeriesID = value }
                 session.seriesPosition = archived.seriesPosition ?? session.seriesPosition
                 if let value = archived.publishedYear { session.publishedYear = value }
+                applyChapterTiming(archived, to: session)
                 context.insert(session)
                 byID[archived.id] = session
                 resolvedLocalIDs.insert(session.id)
@@ -4863,6 +4913,34 @@ enum KudosBackupService {
         }
     }
 
+    /// D7 fields: an absent or malformed key leaves what the row has, so a sitting re-exported by
+    /// an older build or Android (which drop these keys) never wipes the chapter timing.
+    /// `fillOnly` writes just the members the row has none of (a matched sitting a legacy archive
+    /// restored without timing, met again in Merge or an older-clock Reconcile).
+    private static func applyChapterTiming(
+        _ archived: KudosBackupReadingSession, to session: ReadingSession, fillOnly: Bool = false
+    ) {
+        if ChapterTiming.isValidSeconds(archived.chapterSecondsJSON), !fillOnly || session.chapterSecondsJSON == nil {
+            session.chapterSecondsJSON = archived.chapterSecondsJSON
+        }
+        if ChapterTiming.isValidWords(archived.chapterWordsJSON), !fillOnly || session.chapterWordsJSON == nil {
+            session.chapterWordsJSON = archived.chapterWordsJSON
+        }
+        if ChapterTiming.isValidList(archived.skimmedChaptersJSON), !fillOnly || session.skimmedChaptersJSON == nil {
+            session.skimmedChaptersJSON = archived.skimmedChaptersJSON
+        }
+        if ChapterTiming.isValidList(archived.skimmedStoryChaptersJSON),
+           !fillOnly || session.skimmedStoryChaptersJSON == nil {
+            session.skimmedStoryChaptersJSON = archived.skimmedStoryChaptersJSON
+        }
+        if !fillOnly || session.endedAtChapterEnd == nil {
+            session.endedAtChapterEnd = archived.endedAtChapterEnd ?? session.endedAtChapterEnd
+        }
+        if !fillOnly || session.peekedAtEnding == nil {
+            session.peekedAtEnding = archived.peekedAtEnding ?? session.peekedAtEnding
+        }
+    }
+
     private static func apply(
         _ archived: KudosBackupReadingSession,
         to session: ReadingSession,
@@ -4898,6 +4976,7 @@ enum KudosBackupService {
         if let value = archived.ao3SeriesID { session.ao3SeriesID = value }
         session.seriesPosition = archived.seriesPosition ?? session.seriesPosition
         if let value = archived.publishedYear { session.publishedYear = value }
+        applyChapterTiming(archived, to: session)
         session.lastSpineIndex = archived.lastSpineIndex
         session.chapterTitle = archived.chapterTitle
         session.endingProgress = min(1, max(0, archived.endingProgress))
@@ -6079,6 +6158,32 @@ enum KudosBackupService {
         return (true, now.addingTimeInterval(PreservedWorkService.recoveryWindow))
     }
 
+    /// Insights provenance (T-536 D8, D9). These are facts about when something first happened,
+    /// so they merge by their own meaning and never by the work's sync clock: the at-save group and
+    /// the import source are set once (a local value stays; Replace Library adopts the archive's
+    /// when it carries one), A key the
+    /// archive lacks (older iOS, Android) leaves the local value, whatever the mode.
+    private static func mergeProvenance(
+        _ archived: KudosBackupWork,
+        into work: SavedWork,
+        mode: BackupImportMode
+    ) {
+        let replaces = mode == .replaceLibrary
+        if let raw = archived.importSourceRaw, !raw.isEmpty, work.importSourceRaw == nil || replaces {
+            work.importSourceRaw = raw
+            work.importSourceSince = archived.importSourceSince ?? work.importSourceSince
+        }
+        if let savedAt = archived.statsSavedAt, work.statsSavedAt == nil || replaces {
+            work.statsSavedAt = savedAt
+            // Member by member: a key the archive record omits never clears what is here.
+            if let value = archived.kudosAtSave { work.kudosAtSave = value }
+            if let value = archived.hitsAtSave { work.hitsAtSave = value }
+            if let value = archived.bookmarksAtSave { work.bookmarksAtSave = value }
+            if let value = archived.ageDaysAtSave { work.ageDaysAtSave = value }
+            if let value = archived.fandomWorksAtSave { work.fandomWorksAtSave = value }
+        }
+    }
+
     /// Returns whether the work's cover pin was reconciled (see `restore`).
     @discardableResult
     private static func apply(
@@ -6230,6 +6335,7 @@ enum KudosBackupService {
            work.wordUnitRaw.isEmpty || mode == .replaceLibrary || incomingWins {
             work.wordUnitRaw = incomingUnit
         }
+        mergeProvenance(archived, into: work, mode: mode)
         let coverPinReconciled = work.reconcileCoverMetadata(notifySync: false)
         work.workTagsFetched = work.workTagsFetched || archived.workTagsFetched
         work.ao3Unavailable = work.ao3Unavailable || archived.ao3Unavailable

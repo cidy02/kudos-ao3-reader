@@ -127,7 +127,10 @@ enum NewToYouLibrary {
     ) async throws -> SavedWork {
         let download = downloadEPUB ?? { try await AO3Client.shared.downloadEPUB(workID: $0) }
         let file = try await download(summary.id)
-        let work = try await importEPUB(file, source: summary.workURL, into: context)
+        let work = try await importEPUB(
+            file, source: summary.workURL, importSource: .subscription,
+            statsAtSave: WorkStatsAtSave(summary: summary), into: context
+        )
         let queue = ReadingQueueService.ensureSavedForLaterQueue(in: context)
         _ = ReadingQueueService.add(
             work,
