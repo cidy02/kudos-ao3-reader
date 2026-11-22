@@ -231,6 +231,32 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var stackBaselineChapterCount: Int = 0
     var statusWasRecorded: Bool = false
 
+    // MARK: Insights provenance (T-536 D8, D9, D11)
+    // Every field is optional or defaulted (lightweight migration) and set once or only
+    // ever moved forward by `WorkProvenance` (Models/WorkProvenance.swift); a metadata
+    // refresh never touches them. A value that was never recorded is nil, never a guess.
+
+    /// D8: how this copy first reached the library (`WorkImportSource.rawValue`). nil = a
+    /// work saved before recording began, or by a build that did not know the path.
+    var importSourceRaw: String?
+    /// D8: when `importSourceRaw` was recorded (the date recording began for this work).
+    var importSourceSince: Date?
+    /// D9: AO3's own figures when the work was first saved. Never refreshed.
+    var kudosAtSave: Int?
+    var hitsAtSave: Int?
+    var bookmarksAtSave: Int?
+    var statsSavedAt: Date?
+    /// D9: days between the posting date and the save, when the posting date was known.
+    var ageDaysAtSave: Int?
+    /// D9: size of the work's first fandom when Kudos had seen that fandom's tag page.
+    var fandomWorksAtSave: Int?
+    /// D11: the reader's own AO3 actions, as seen from Kudos (lower bounds: an action taken
+    /// in a browser stays invisible until a fetched work page shows it).
+    var bookmarkedAt: Date?
+    var bookmarkIsPrivate: Bool = false
+    var lastCommentedAt: Date?
+    var kudosGivenAt: Date?
+
     var hasRecordedStatus: Bool {
         statusWasRecorded || !readingStatusRaw.isEmpty || statusChangedAt != nil
             || stoppedAt != nil || !stopReasonRaw.isEmpty || !stopTag.isEmpty
@@ -1205,8 +1231,22 @@ nonisolated struct ReadingQueueMembershipOrigin: Equatable, Hashable, Codable, S
     var kind: ReadingQueueMembershipOriginKind
     var searchID: UUID?
     var label: String?
+    /// Context a screen knows that the four kinds cannot say (Insights D8/D9). Never stored on
+    /// the membership: it only travels with the save so the work's own arrival is recorded.
+    /// `importSourceHint` names the entry point (a fandom page is `.fandom`, not `.search`);
+    /// `fandomWorks` is the work total that page had already loaded for the fandom in `label`.
+    var importSourceHint: WorkImportSource?
+    var fandomWorks: Int?
 
-    init(kind: ReadingQueueMembershipOriginKind, searchID: UUID? = nil, label: String? = nil) {
+    init(
+        kind: ReadingQueueMembershipOriginKind,
+        searchID: UUID? = nil,
+        label: String? = nil,
+        importSourceHint: WorkImportSource? = nil,
+        fandomWorks: Int? = nil
+    ) {
+        self.importSourceHint = importSourceHint
+        self.fandomWorks = fandomWorks
         self.kind = kind
         self.searchID = searchID
         let trimmed = label?.trimmingCharacters(in: .whitespacesAndNewlines)

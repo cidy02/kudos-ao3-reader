@@ -154,6 +154,10 @@ final class AO3WorkActionsModel {
             if let states {
                 workPageStates = states
                 hasSyncedWorkPageStates = true
+                // Insights D11: a bookmark this page already shows (made on AO3, say).
+                if let bookmark = states.existingBookmark {
+                    OwnAO3ActionLog.recordSeenBookmark(isPrivate: bookmark.input.isPrivate, ao3WorkID: workID)
+                }
             }
         }
     }
@@ -371,6 +375,8 @@ final class AO3WorkActionsModel {
                 guard auth.sessionGeneration == expectedGeneration else { return }
                 bookmarkedWorkID = workID
                 bookmarkedWorkGeneration = expectedGeneration
+                // Insights D11: when, and whether public or private.
+                OwnAO3ActionLog.record(.bookmarked(isPrivate: input.isPrivate), ao3WorkID: workID)
                 AccessibilityNotification.Announcement(message).post()
                 writeSuccesses += 1
                 refreshWorkPageStates(workID: workID, auth: auth, force: true)

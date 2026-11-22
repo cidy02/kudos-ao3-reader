@@ -55,7 +55,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     private(set) var readingOrder: [ReadiumShared.Link] = []
     /// `toc`/`readingOrder` reconciled into AO3-aware sections (Preface/Summary/
     /// Chapter/Afterword), one per spine item. See `ReaderSection`.
-    private(set) var sections: [ReaderSection] = []
+    private(set) var sections: [ReaderSection] = [] {
+        didSet { sectionsGeneration &+= 1 }
+    }
+    /// Advances at every assignment of `sections` (a reopen, a revised copy): caches keyed by the
+    /// section list use it, since the count alone cannot tell two copies apart.
+    private(set) var sectionsGeneration = 0
     private(set) var currentLocator: Locator?
     /// Bumped on every navigator-resolved `locationDidChange` that passes the
     /// ingestion gate; 0 until the first real settle after open (the seeded

@@ -1341,6 +1341,9 @@ nonisolated struct AO3WorkTagGroups {
     var comments: Int?
     var bookmarks: Int?
     var hits: Int?
+    /// AO3's "Updated"/"Completed" day as the page printed it; "" when it had none. Read by the
+    /// update check so a chapter event carries the posting day (Insights D10).
+    var dateUpdated: String = ""
 
     /// Whether the page yielded no *tags* — the signal for a locked/empty work
     /// page, where the caller keeps the EPUB tags and retries later. (Warnings,
@@ -1450,7 +1453,8 @@ nonisolated struct AO3WorkMetadata {
             kudos: kudos,
             comments: comments,
             bookmarks: bookmarks,
-            hits: hits
+            hits: hits,
+            dateUpdated: dateUpdated
         )
     }
 

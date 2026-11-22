@@ -27,6 +27,12 @@ struct BrowseView: View {
     @Environment(\.duoLayout) private var duoLayout
 
     @State private var path = NavigationPath()
+    /// The open fandom page's save context (Insights D8/D9). A stack-level detail destination
+    /// does not inherit the page's environment, so the page reports it here.
+    @State private var fandomOrigin: ReadingQueueMembershipOrigin?
+    /// The works that page lists: its origin applies to those only, never to a work reached
+    /// through an author profile or a tag list pushed on top of it.
+    @State private var fandomOriginWorkIDs: Set<Int> = []
     @Namespace private var cardZoomNamespace
 
     /// A pushed fandom (or sibling family) → its native work results.
@@ -65,11 +71,16 @@ struct BrowseView: View {
                 }
                 .navigationDestination(for: FandomRoute.self) { route in
                     FandomWorksView(
-                        fandom: route.title, includedFandoms: route.names, previousVisit: route.previousVisit
+                        fandom: route.title, includedFandoms: route.names, previousVisit: route.previousVisit,
+                        onOriginChange: { origin, ids in
+                            fandomOrigin = origin
+                            fandomOriginWorkIDs = ids
+                        }
                     )
                 }
                 .navigationDestination(for: AO3WorkSummary.self) { work in
                     WorkDetailView(remote: work)
+                        .environment(\.queueMembershipOrigin, fandomOriginWorkIDs.contains(work.id) ? fandomOrigin : nil)
                 }
                 .ao3AuthorNavigation(path: $path, tab: .browse)
                 // A tapped AO3 tag link (e.g. in a work's preface) → native tag works.
@@ -120,6 +131,8 @@ struct FandomWorksView: View {
     let includedFandoms: [String]
     /// When the reader last opened this fandom, read before this visit overwrote it.
     let previousVisit: Date?
+    /// Reports this page's save context to the stack that hosts its work details.
+    var onOriginChange: ((ReadingQueueMembershipOrigin?, Set<Int>) -> Void)?
 
     /// The other half of the fandom-row zoom — set by BrowseView on the stack.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
@@ -171,7 +184,13 @@ struct FandomWorksView: View {
 
     private enum Phase: Equatable { case loading, loaded, failed(String) }
 
-    init(fandom: String, includedFandoms: [String]? = nil, previousVisit: Date? = nil) {
+    init(
+        fandom: String,
+        includedFandoms: [String]? = nil,
+        previousVisit: Date? = nil,
+        onOriginChange: ((ReadingQueueMembershipOrigin?, Set<Int>) -> Void)? = nil
+    ) {
+        self.onOriginChange = onOriginChange
         self.fandom = fandom
         self.previousVisit = previousVisit
         let names = includedFandoms ?? [fandom]
@@ -394,8 +413,21 @@ struct FandomWorksView: View {
             .environment(\.queueMembershipOrigin, bulkSelection.origin)
             .onAppear {
                 if bulkSelection.origin == nil {
-                    bulkSelection.origin = ReadingQueueMembershipOrigin(kind: .search, searchID: nil, label: fandom)
+                    bulkSelection.origin = ReadingQueueMembershipOrigin(
+                        kind: .search, searchID: nil, label: fandom, importSourceHint: .fandom
+                    )
                 }
+            }
+            // Insights D9: the fandom's size, already loaded, travels with the save. Only while
+            // the list is the fandom's own (no extra filters), so the total describes it.
+            .onChange(of: bulkSelection.origin, initial: true) { _, origin in
+                onOriginChange?(origin, Set(results.map(\.id)))
+            }
+            .onChange(of: results.map(\.id)) { _, ids in onOriginChange?(bulkSelection.origin, Set(ids)) }
+            .onChange(of: resultSummary?.total) { _, total in
+                guard !hasExtraFilters, includedFandoms.count == 1, var origin = bulkSelection.origin else { return }
+                origin.fandomWorks = total
+                bulkSelection.origin = origin
             }
             .task { await load(page: 1) }
             .task { await rankTop100.refreshAvailability() }
@@ -1050,7 +1082,8 @@ struct TagWorksView: View {
                     bulkSelection.origin = ReadingQueueMembershipOrigin(
                         kind: .search,
                         searchID: nil,
-                        label: request.title
+                        label: request.title,
+                        importSourceHint: .browse
                     )
                 }
             }

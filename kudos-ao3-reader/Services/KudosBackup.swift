@@ -636,6 +636,9 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
     /// Canonical tag aliases learned passively from AO3 redirects. Optional and
     /// omitted (`nil`) when empty so manifests match older iOS/Android golden archives.
     let tagAliases: [KudosBackupTagAlias]?
+    /// Chapter update events (T-536 D10). Optional and omitted (`nil`) when empty, like
+    /// `tagAliases`, so a manifest with none matches older golden archives verbatim.
+    let chapterUpdateEvents: [KudosBackupChapterUpdateEvent]?
     let settings: KudosBackupSettings
     /// Read-aloud pronunciation corrections. Hand-made, unreconstructible, and
     /// small, so they travel with the reader rather than being stranded on one
@@ -673,6 +676,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         fandomReadWatermarks: [KudosBackupFandomReadWatermark]? = [],
         followedTags: [KudosBackupFollowedTag]? = nil,
         tagAliases: [KudosBackupTagAlias]? = nil,
+        chapterUpdateEvents: [KudosBackupChapterUpdateEvent]? = nil,
         settings: KudosBackupSettings,
         pronunciations: KudosBackupPronunciations = .empty,
         tombstones: [KudosBackupTombstone] = []
@@ -692,6 +696,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         self.fandomReadWatermarks = fandomReadWatermarks
         self.followedTags = followedTags.flatMap { $0.isEmpty ? nil : $0 }
         self.tagAliases = tagAliases.flatMap { $0.isEmpty ? nil : $0 }
+        self.chapterUpdateEvents = chapterUpdateEvents.flatMap { $0.isEmpty ? nil : $0 }
         self.pronunciations = pronunciations
         self.settings = settings
         self.tombstones = tombstones
@@ -713,6 +718,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         case fandomReadWatermarks
         case followedTags
         case tagAliases
+        case chapterUpdateEvents
         case settings
         case pronunciations
         case tombstones
@@ -766,6 +772,10 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         tagAliases = try container.decodeIfPresent(
             [KudosBackupTagAlias].self,
             forKey: .tagAliases
+        )
+        chapterUpdateEvents = try container.decodeIfPresent(
+            [KudosBackupChapterUpdateEvent].self,
+            forKey: .chapterUpdateEvents
         )
         settings = try container.decode(KudosBackupSettings.self, forKey: .settings)
         pronunciations = try container.decodeIfPresent(
@@ -1096,6 +1106,20 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     /// Additive D3 derived fields; omitted when empty so untouched works emit no key.
     let chapterWordCountsJSON: String?
     let wordUnitRaw: String?
+    /// Additive Insights provenance (T-536 D8, D9, D11). Each key is written only when the work
+    /// recorded it, so an untouched work exports none and older builds and Android never see them.
+    let importSourceRaw: String?
+    let importSourceSince: Date?
+    let kudosAtSave: Int?
+    let hitsAtSave: Int?
+    let bookmarksAtSave: Int?
+    let statsSavedAt: Date?
+    let ageDaysAtSave: Int?
+    let fandomWorksAtSave: Int?
+    let bookmarkedAt: Date?
+    let bookmarkIsPrivate: Bool?
+    let lastCommentedAt: Date?
+    let kudosGivenAt: Date?
 
     @MainActor
     init(work: SavedWork) {
@@ -1184,6 +1208,19 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         coverRecipeJSON = work.coverRecipeJSON
         chapterWordCountsJSON = work.chapterWordCountsJSON.isEmpty ? nil : work.chapterWordCountsJSON
         wordUnitRaw = work.wordUnitRaw.isEmpty ? nil : work.wordUnitRaw
+        importSourceRaw = work.importSourceRaw
+        importSourceSince = work.importSourceSince
+        kudosAtSave = work.kudosAtSave
+        hitsAtSave = work.hitsAtSave
+        bookmarksAtSave = work.bookmarksAtSave
+        statsSavedAt = work.statsSavedAt
+        ageDaysAtSave = work.ageDaysAtSave
+        fandomWorksAtSave = work.fandomWorksAtSave
+        bookmarkedAt = work.bookmarkedAt
+        // The flag only means something beside a bookmark time.
+        bookmarkIsPrivate = work.bookmarkedAt == nil ? nil : work.bookmarkIsPrivate
+        lastCommentedAt = work.lastCommentedAt
+        kudosGivenAt = work.kudosGivenAt
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1261,6 +1298,9 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case coverRecipeJSON
         case chapterWordCountsJSON
         case wordUnitRaw
+        case importSourceRaw, importSourceSince
+        case kudosAtSave, hitsAtSave, bookmarksAtSave, statsSavedAt, ageDaysAtSave, fandomWorksAtSave
+        case bookmarkedAt, bookmarkIsPrivate, lastCommentedAt, kudosGivenAt
     }
 
     init(from decoder: Decoder) throws {
@@ -1359,6 +1399,18 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         coverRecipeJSON = try container.decodeIfPresent(String.self, forKey: .coverRecipeJSON)
         chapterWordCountsJSON = try container.decodeIfPresent(String.self, forKey: .chapterWordCountsJSON)
         wordUnitRaw = try container.decodeIfPresent(String.self, forKey: .wordUnitRaw)
+        importSourceRaw = try container.decodeIfPresent(String.self, forKey: .importSourceRaw)
+        importSourceSince = try container.decodeIfPresent(Date.self, forKey: .importSourceSince)
+        kudosAtSave = try container.decodeIfPresent(Int.self, forKey: .kudosAtSave)
+        hitsAtSave = try container.decodeIfPresent(Int.self, forKey: .hitsAtSave)
+        bookmarksAtSave = try container.decodeIfPresent(Int.self, forKey: .bookmarksAtSave)
+        statsSavedAt = try container.decodeIfPresent(Date.self, forKey: .statsSavedAt)
+        ageDaysAtSave = try container.decodeIfPresent(Int.self, forKey: .ageDaysAtSave)
+        fandomWorksAtSave = try container.decodeIfPresent(Int.self, forKey: .fandomWorksAtSave)
+        bookmarkedAt = try container.decodeIfPresent(Date.self, forKey: .bookmarkedAt)
+        bookmarkIsPrivate = try container.decodeIfPresent(Bool.self, forKey: .bookmarkIsPrivate)
+        lastCommentedAt = try container.decodeIfPresent(Date.self, forKey: .lastCommentedAt)
+        kudosGivenAt = try container.decodeIfPresent(Date.self, forKey: .kudosGivenAt)
     }
 }
 
@@ -1483,6 +1535,14 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
     let ao3SeriesID: Int??
     let seriesPosition: Int?
     let publishedYear: Int??
+    /// D7 (T-536), additive: omitted when the sitting recorded no chapter signal.
+    let chapterSecondsJSON: String?
+    let chapterWordsJSON: String?
+    let skimmedChaptersJSON: String?
+    let skimmedStoryChaptersJSON: String?
+    let endedAtChapterEnd: Bool?
+    let peekedAtEnding: Bool?
+    let highestStoryChapter: Int?
     let lastSpineIndex: Int
     let chapterTitle: String
     let endingProgress: Double
@@ -1510,6 +1570,8 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         case ao3SeriesID
         case seriesPosition
         case publishedYear
+        case chapterSecondsJSON, chapterWordsJSON, skimmedChaptersJSON, skimmedStoryChaptersJSON, endedAtChapterEnd, peekedAtEnding
+        case highestStoryChapter
         case wordCount, chapterCountAtVisit, didFinish, lastModifiedAt
     }
 
@@ -1549,6 +1611,13 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         ao3SeriesID = snapshot ? .some(session.ao3SeriesID) : nil
         seriesPosition = snapshot ? session.seriesPosition : nil
         publishedYear = snapshot ? .some(session.publishedYear) : nil
+        chapterSecondsJSON = session.chapterSecondsJSON
+        chapterWordsJSON = session.chapterWordsJSON
+        skimmedChaptersJSON = session.skimmedChaptersJSON
+        skimmedStoryChaptersJSON = session.skimmedStoryChaptersJSON
+        endedAtChapterEnd = session.endedAtChapterEnd
+        peekedAtEnding = session.peekedAtEnding
+        highestStoryChapter = session.highestStoryChapter
         lastSpineIndex = session.lastSpineIndex
         chapterTitle = session.chapterTitle
         endingProgress = session.endingProgress
@@ -1592,6 +1661,13 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         seriesPosition = try container.decodeIfPresent(Int.self, forKey: .seriesPosition)
         publishedYear = container.contains(.publishedYear)
             ? .some(try container.decode(Int?.self, forKey: .publishedYear)) : nil
+        chapterSecondsJSON = try container.decodeIfPresent(String.self, forKey: .chapterSecondsJSON)
+        chapterWordsJSON = try container.decodeIfPresent(String.self, forKey: .chapterWordsJSON)
+        skimmedChaptersJSON = try container.decodeIfPresent(String.self, forKey: .skimmedChaptersJSON)
+        skimmedStoryChaptersJSON = try container.decodeIfPresent(String.self, forKey: .skimmedStoryChaptersJSON)
+        endedAtChapterEnd = try container.decodeIfPresent(Bool.self, forKey: .endedAtChapterEnd)
+        peekedAtEnding = try container.decodeIfPresent(Bool.self, forKey: .peekedAtEnding)
+        highestStoryChapter = try container.decodeIfPresent(Int.self, forKey: .highestStoryChapter)
         lastSpineIndex = try container.decodeIfPresent(Int.self, forKey: .lastSpineIndex) ?? 0
         chapterTitle = try container.decodeIfPresent(String.self, forKey: .chapterTitle) ?? ""
         endingProgress = try container.decodeIfPresent(Double.self, forKey: .endingProgress) ?? 0
@@ -1778,6 +1854,51 @@ nonisolated struct KudosBackupTagAlias: Codable, Equatable {
         learnedAt = try container.decodeIfPresent(Date.self, forKey: .learnedAt) ?? Date()
         lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt)
             ?? learnedAt
+    }
+}
+
+/// Transport form of one `ChapterUpdateEvent` (T-536 D10). Additive on v8; a missing key
+/// decodes to its default, and an archive without the array leaves local events alone.
+nonisolated struct KudosBackupChapterUpdateEvent: Codable, Equatable {
+    let id: UUID
+    let workID: UUID
+    let ao3WorkID: Int?
+    let chapterCount: Int
+    let previousChapterCount: Int
+    let detectedAt: Date
+    let postedDate: String?
+    let rating: String?
+    let lastModifiedAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case id, workID, ao3WorkID, chapterCount, previousChapterCount
+        case detectedAt, postedDate, rating, lastModifiedAt
+    }
+
+    @MainActor
+    init(event: ChapterUpdateEvent) {
+        id = event.id
+        workID = event.workID
+        ao3WorkID = event.ao3WorkID
+        chapterCount = event.chapterCount
+        previousChapterCount = event.previousChapterCount
+        detectedAt = event.detectedAt
+        postedDate = event.postedDate.isEmpty ? nil : event.postedDate
+        rating = event.rating.isEmpty ? nil : event.rating
+        lastModifiedAt = event.lastModifiedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        workID = try container.decodeIfPresent(UUID.self, forKey: .workID) ?? UUID()
+        ao3WorkID = try container.decodeIfPresent(Int.self, forKey: .ao3WorkID)
+        chapterCount = try container.decodeIfPresent(Int.self, forKey: .chapterCount) ?? 0
+        previousChapterCount = try container.decodeIfPresent(Int.self, forKey: .previousChapterCount) ?? 0
+        detectedAt = try container.decodeIfPresent(Date.self, forKey: .detectedAt) ?? Date()
+        postedDate = try container.decodeIfPresent(String.self, forKey: .postedDate)
+        rating = try container.decodeIfPresent(String.self, forKey: .rating)
+        lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt) ?? detectedAt
     }
 }
 
@@ -3058,6 +3179,7 @@ enum KudosBackupService {
         fandomReadWatermarks: [FandomReadWatermark] = [],
         followedTags: [FollowedTag] = [],
         tagAliases: [TagAlias] = [],
+        chapterUpdateEvents: [ChapterUpdateEvent] = [],
         tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupContents {
@@ -3111,6 +3233,7 @@ enum KudosBackupService {
             fandomReadWatermarks: fandomReadWatermarks.map(KudosBackupFandomReadWatermark.init),
             followedTags: followedTags.map(KudosBackupFollowedTag.init),
             tagAliases: tagAliases.map(KudosBackupTagAlias.init),
+            chapterUpdateEvents: chapterUpdateEvents.map(KudosBackupChapterUpdateEvent.init),
             settings: .capture(defaults: defaults),
             pronunciations: .capture(),
             tombstones: tombstones.map(KudosBackupTombstone.init)
@@ -4334,6 +4457,11 @@ enum KudosBackupService {
         restoreTagAliases(
             contents: contents, context: context, tombstones: tombstones, mode: mode
         )
+        restoreChapterUpdateEvents(
+            contents: contents, context: context, mode: mode,
+            restoredWorksByArchivedID: restoredWorksByArchivedID
+        )
+        rehomeChapterEvents(in: context)
 
         let existingBookmarks = try context.fetch(FetchDescriptor<Bookmark>())
         var bookmarksByURL = Dictionary(
@@ -4813,6 +4941,7 @@ enum KudosBackupService {
                 if let value = archived.ao3SeriesID { session.ao3SeriesID = value }
                 session.seriesPosition = archived.seriesPosition ?? session.seriesPosition
                 if let value = archived.publishedYear { session.publishedYear = value }
+                applyChapterTiming(archived, to: session)
                 context.insert(session)
                 byID[archived.id] = session
                 resolvedLocalIDs.insert(session.id)
@@ -4863,6 +4992,29 @@ enum KudosBackupService {
         }
     }
 
+    /// D7 fields: an absent or malformed key leaves what the row has, so a sitting re-exported by
+    /// an older build or Android (which drop these keys) never wipes the chapter timing.
+    private static func applyChapterTiming(_ archived: KudosBackupReadingSession, to session: ReadingSession) {
+        if ChapterTiming.isValidSeconds(archived.chapterSecondsJSON) {
+            session.chapterSecondsJSON = archived.chapterSecondsJSON
+        }
+        if ChapterTiming.isValidWords(archived.chapterWordsJSON) {
+            session.chapterWordsJSON = archived.chapterWordsJSON
+        }
+        if ChapterTiming.isValidList(archived.skimmedChaptersJSON) {
+            session.skimmedChaptersJSON = archived.skimmedChaptersJSON
+        }
+        if ChapterTiming.isValidList(archived.skimmedStoryChaptersJSON) {
+            session.skimmedStoryChaptersJSON = archived.skimmedStoryChaptersJSON
+        }
+        session.endedAtChapterEnd = archived.endedAtChapterEnd ?? session.endedAtChapterEnd
+        session.peekedAtEnding = archived.peekedAtEnding ?? session.peekedAtEnding
+        if let highest = archived.highestStoryChapter,
+           (1 ... ChapterUpdateRecorder.maximumChapterCount).contains(highest) {
+            session.highestStoryChapter = highest
+        }
+    }
+
     private static func apply(
         _ archived: KudosBackupReadingSession,
         to session: ReadingSession,
@@ -4898,6 +5050,7 @@ enum KudosBackupService {
         if let value = archived.ao3SeriesID { session.ao3SeriesID = value }
         session.seriesPosition = archived.seriesPosition ?? session.seriesPosition
         if let value = archived.publishedYear { session.publishedYear = value }
+        applyChapterTiming(archived, to: session)
         session.lastSpineIndex = archived.lastSpineIndex
         session.chapterTitle = archived.chapterTitle
         session.endingProgress = min(1, max(0, archived.endingProgress))
@@ -5195,6 +5348,105 @@ enum KudosBackupService {
             local.seenWorkIDs += archivedSeen
         }
         local.lastModifiedAt = archived.lastModifiedAt
+    }
+
+    /// Restores chapter update events (T-536 D10) when `manifest.chapterUpdateEvents` is present.
+    ///
+    /// Events are append-only observations, so there is no tombstone and no "newer wins": an
+    /// archived event is added unless the same work already has one for that chapter count
+    /// (two devices that both saw chapters 4...6 post keep the earlier detection). A merged
+    /// work kept the local UUID, so the archived `workID` is remapped like a session's.
+    /// Replace Library drops local events the archive does not carry, but only when the archive
+    /// carries the array; an older iOS or Android archive leaves local events alone.
+    private static func restoreChapterUpdateEvents(
+        contents: KudosBackupContents,
+        context: ModelContext,
+        mode: BackupImportMode,
+        restoredWorksByArchivedID: [UUID: SavedWork]
+    ) {
+        guard ChapterUpdateRecorder.isStored(in: context) else { return }
+        guard let archivedEvents = contents.manifest.chapterUpdateEvents else { return }
+        let existing = (try? context.fetch(FetchDescriptor<ChapterUpdateEvent>())) ?? []
+        var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        // One observation is (work, range): two devices that saw the same range are the same
+        // sighting, but 5 to 6 and 3 to 6 are different evidence and both stay. The figure
+        // resolves each chapter once, so keeping both costs nothing.
+        func rangeKey(_ workID: UUID, _ previous: Int, _ count: Int) -> String {
+            "\(workID.uuidString)|\(previous)|\(count)"
+        }
+        var byRange = Dictionary(
+            existing.map { (rangeKey($0.workID, $0.previousChapterCount, $0.chapterCount), $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        // Counts outside what the recorder could have written are damage: skip the row rather
+        // than let an absurd number reach the figures' arithmetic.
+        for archived in archivedEvents
+        where archived.previousChapterCount >= 1
+            && archived.chapterCount > archived.previousChapterCount
+            && archived.chapterCount <= ChapterUpdateRecorder.maximumChapterCount {
+            let resolvedWorkID = restoredWorksByArchivedID[archived.workID]?.id ?? archived.workID
+            let key = rangeKey(resolvedWorkID, archived.previousChapterCount, archived.chapterCount)
+            if let local = byID[archived.id] ?? byRange[key] {
+                if mode == .replaceLibrary {
+                    local.workID = resolvedWorkID
+                    local.ao3WorkID = archived.ao3WorkID
+                    local.chapterCount = archived.chapterCount
+                    local.previousChapterCount = archived.previousChapterCount
+                    local.detectedAt = archived.detectedAt
+                    local.postedDate = archived.postedDate ?? ""
+                    local.rating = archived.rating ?? ""
+                    local.lastModifiedAt = archived.lastModifiedAt
+                } else {
+                    // Order-independent union of the two observations of one range: the
+                    // earlier sighting, the earlier posting day, and any adult rating wins.
+                    local.detectedAt = min(local.detectedAt, archived.detectedAt)
+                    local.postedDate = ChapterUpdateRecorder.earlierPostingDay(
+                        local.postedDate, archived.postedDate ?? ""
+                    )
+                    local.rating = ChapterUpdateRecorder.strongerRating(local.rating, archived.rating ?? "")
+                    local.lastModifiedAt = max(local.lastModifiedAt, archived.lastModifiedAt)
+                }
+                continue
+            }
+            let event = ChapterUpdateEvent(
+                id: archived.id,
+                workID: resolvedWorkID,
+                ao3WorkID: archived.ao3WorkID,
+                chapterCount: archived.chapterCount,
+                previousChapterCount: archived.previousChapterCount,
+                detectedAt: archived.detectedAt,
+                postedDate: archived.postedDate ?? "",
+                rating: archived.rating ?? "",
+                lastModifiedAt: archived.lastModifiedAt
+            )
+            context.insert(event)
+            byID[event.id] = event
+            byRange[key] = event
+        }
+    }
+
+    /// Events keyed to a work row that is not here follow the same AO3 work when it is: a work
+    /// restored under another local UUID owns the history it earned before. A range the target
+    /// already has is left alone (nothing is merged away or deleted).
+    private static func rehomeChapterEvents(in context: ModelContext) {
+        guard ChapterUpdateRecorder.isStored(in: context) else { return }
+        let works = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
+        let events = (try? context.fetch(FetchDescriptor<ChapterUpdateEvent>())) ?? []
+        guard !events.isEmpty else { return }
+        let localIDs = Set(works.map(\.id))
+        var byAO3: [Int: SavedWork] = [:]
+        for work in works {
+            guard let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) else { continue }
+            if let current = byAO3[id], !current.isPendingDeletion || work.isPendingDeletion { continue }
+            byAO3[id] = work
+        }
+        var ranges = Set(events.map { "\($0.workID.uuidString)|\($0.previousChapterCount)|\($0.chapterCount)" })
+        for event in events where !localIDs.contains(event.workID) {
+            guard let ao3 = event.ao3WorkID, let target = byAO3[ao3] else { continue }
+            let key = "\(target.id.uuidString)|\(event.previousChapterCount)|\(event.chapterCount)"
+            guard ranges.insert(key).inserted else { continue }
+            event.workID = target.id
+        }
     }
 
     /// Restores learned canonical tag aliases when `manifest.tagAliases` is present.
@@ -6079,6 +6331,46 @@ enum KudosBackupService {
         return (true, now.addingTimeInterval(PreservedWorkService.recoveryWindow))
     }
 
+    /// Insights provenance (T-536 D8, D9, D11). These are facts about when something first happened,
+    /// so they merge by their own meaning and never by the work's sync clock: the at-save group and
+    /// the import source are set once (a local value stays; Replace Library adopts the archive's
+    /// when it carries one), a bookmark and a comment keep the later time, kudos the first. A key the
+    /// archive lacks (older iOS, Android) leaves the local value, whatever the mode.
+    private static func mergeProvenance(
+        _ archived: KudosBackupWork,
+        into work: SavedWork,
+        mode: BackupImportMode
+    ) {
+        let replaces = mode == .replaceLibrary
+        if let raw = archived.importSourceRaw, !raw.isEmpty, work.importSourceRaw == nil || replaces {
+            work.importSourceRaw = raw
+            work.importSourceSince = archived.importSourceSince ?? work.importSourceSince
+        }
+        if let savedAt = archived.statsSavedAt, work.statsSavedAt == nil || replaces {
+            work.statsSavedAt = savedAt
+            // Member by member: a key the archive record omits never clears what is here.
+            if let value = archived.kudosAtSave { work.kudosAtSave = value }
+            if let value = archived.hitsAtSave { work.hitsAtSave = value }
+            if let value = archived.bookmarksAtSave { work.bookmarksAtSave = value }
+            if let value = archived.ageDaysAtSave { work.ageDaysAtSave = value }
+            if let value = archived.fandomWorksAtSave { work.fandomWorksAtSave = value }
+        }
+        if let bookmarkedAt = archived.bookmarkedAt,
+           replaces || work.bookmarkedAt.map({ bookmarkedAt > $0 }) ?? true {
+            work.bookmarkedAt = bookmarkedAt
+            // An unknown privacy flag is not an observation of "public": keep what is here.
+            if let isPrivate = archived.bookmarkIsPrivate { work.bookmarkIsPrivate = isPrivate }
+        }
+        if let commentedAt = archived.lastCommentedAt,
+           replaces || work.lastCommentedAt.map({ commentedAt > $0 }) ?? true {
+            work.lastCommentedAt = commentedAt
+        }
+        if let kudosAt = archived.kudosGivenAt,
+           replaces || work.kudosGivenAt.map({ kudosAt < $0 }) ?? true {
+            work.kudosGivenAt = kudosAt
+        }
+    }
+
     /// Returns whether the work's cover pin was reconciled (see `restore`).
     @discardableResult
     private static func apply(
@@ -6230,6 +6522,7 @@ enum KudosBackupService {
            work.wordUnitRaw.isEmpty || mode == .replaceLibrary || incomingWins {
             work.wordUnitRaw = incomingUnit
         }
+        mergeProvenance(archived, into: work, mode: mode)
         let coverPinReconciled = work.reconcileCoverMetadata(notifySync: false)
         work.workTagsFetched = work.workTagsFetched || archived.workTagsFetched
         work.ao3Unavailable = work.ao3Unavailable || archived.ao3Unavailable

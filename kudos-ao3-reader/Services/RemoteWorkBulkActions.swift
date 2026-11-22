@@ -23,6 +23,7 @@ func resolveSelectedRemoteWorks(
     _ selected: [AO3WorkSummary],
     in context: ModelContext,
     mode: RemoteWorkResolveMode = .metadataOnly,
+    origin: ReadingQueueMembershipOrigin? = nil,
     perform: ([SavedWork]) async -> Void
 ) async -> String? {
     var resolved: [SavedWork] = []
@@ -31,9 +32,13 @@ func resolveSelectedRemoteWorks(
         do {
             switch mode {
             case .metadataOnly:
-                resolved.append(try ReadingQueueService.ensureLocalMetadata(for: summary, in: context))
+                resolved.append(try ReadingQueueService.ensureLocalMetadata(
+                    for: summary, importSource: WorkImportSource(origin: origin), origin: origin, in: context
+                ))
             case .withEPUB:
-                resolved.append(try await ReadingQueueService.resolveLocalWork(for: summary, in: context))
+                resolved.append(try await ReadingQueueService.resolveLocalWork(
+                    for: summary, importSource: WorkImportSource(origin: origin), origin: origin, in: context
+                ))
             }
         } catch is CancellationError {
             return nil

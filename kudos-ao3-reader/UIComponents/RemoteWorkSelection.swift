@@ -378,7 +378,9 @@ final class RemoteWorkSelectionController {
                 prior = .inserted
                 baseline = nil
             }
-            let work = try ReadingQueueService.ensureLocalMetadata(for: summary, in: context)
+            let work = try ReadingQueueService.ensureLocalMetadata(
+                for: summary, importSource: WorkImportSource(origin: origin), origin: origin, in: context
+            )
             if let membership = work.queueMemberships.first(where: { $0.queue?.id == queue.id }) {
                 if inFlightToast(for: work) != nil || !isRevived(prior) {
                     AccessibilityNotification.Announcement("Already in \(queue.displayName)").post()
@@ -483,7 +485,7 @@ final class RemoteWorkSelectionController {
         isProcessingBatch = true
         defer { isProcessingBatch = false }
         // "Download" fetches each EPUB (owner, 2026-09-28), not just the flag.
-        batchActionError = await resolveSelectedRemoteWorks(selected, in: context, mode: .withEPUB) { works in
+        batchActionError = await resolveSelectedRemoteWorks(selected, in: context, mode: .withEPUB, origin: origin) { works in
             for work in works {
                 WorkLifecycle.setSaved(work, true, in: context)
             }
@@ -505,7 +507,7 @@ final class RemoteWorkSelectionController {
         guard !isProcessingBatch else { return }
         isProcessingBatch = true
         defer { isProcessingBatch = false }
-        batchActionError = await resolveSelectedRemoteWorks(selected, in: context) { works in
+        batchActionError = await resolveSelectedRemoteWorks(selected, in: context, origin: origin) { works in
             resolvedCollectionWorks = works
             showingAddToCollection = true
         }
@@ -515,7 +517,7 @@ final class RemoteWorkSelectionController {
         guard !isProcessingBatch else { return }
         isProcessingBatch = true
         defer { isProcessingBatch = false }
-        batchActionError = await resolveSelectedRemoteWorks(selected, in: context) { works in
+        batchActionError = await resolveSelectedRemoteWorks(selected, in: context, origin: origin) { works in
             resolvedQueueWorks = works
             showingAddToQueue = true
         }

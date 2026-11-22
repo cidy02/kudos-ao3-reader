@@ -153,6 +153,8 @@ struct ContentView: View {
                 }
             }
             #endif
+            // Both platforms: the macOS app posts comments and bookmarks too (Insights D11).
+            .onAppear { OwnAO3ActionLog.install(modelContext) }
             .onChange(of: auth.username, initial: true) { _, username in
                 privacyGate.noteSignedInAccount(username)
                 subscriptionScan.adopt(
@@ -975,6 +977,6 @@ private struct WebKitPrewarmView: View {
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
             SavedSearch.self, QueueSavedSearchLink.self, ReadingAnnotation.self,
             ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self,
-            FollowedTag.self, TagAlias.self, SavedSeries.self
+            FollowedTag.self, TagAlias.self, SavedSeries.self, ChapterUpdateEvent.self
         ], inMemory: true)
 }

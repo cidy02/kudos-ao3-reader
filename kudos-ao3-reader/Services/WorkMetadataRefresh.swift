@@ -86,7 +86,16 @@ enum WorkMetadataRefresh {
 
         // Safety rule: all network/parse failures throw before this point. From here
         // onward we merge a fully parsed value and never delete/unlink local records.
+        let previousPosted = work.postedChapterCount
         apply(metadata, to: work)
+        // Insights D10: a rise in posted chapters is an update event (no extra request).
+        ChapterUpdateRecorder.recordRise(
+            for: work,
+            previousPosted: previousPosted,
+            newPosted: work.postedChapterCount,
+            postedDate: metadata.dateUpdated,
+            in: context
+        )
         WorkSearchIndex.reindex(work)
         try context.save()
         return metadata
@@ -152,17 +161,25 @@ enum WorkMetadataRefresh {
         work.applyLanguageMetadata(metadata.language)
         if let words = metadata.words { work.wordCount = words }
         if !metadata.chapters.isEmpty { work.chapters = metadata.chapters }
+        // Insights D9: only while the work is new, and before the live figures overwrite
+        // anything; a later refresh never touches the at-save fields.
+        work.recordStatsAtSaveIfJustSaved(
+            kudos: metadata.kudos, hits: metadata.hits, bookmarks: metadata.bookmarks
+        )
         if let kudos = metadata.kudos { work.kudos = kudos }
         // OR, never assigned outright: metadata.kudosGivenByCurrentUser is a
         // positive-only signal (see its own doc comment) — a miss doesn't mean
         // kudos wasn't given, AO3 truncates this list on popular works, so this
         // can only ever confirm a kudos-given the app didn't already know about,
         // never clear one it already recorded from the user's own in-app tap.
-        if metadata.kudosGivenByCurrentUser { work.hasGivenKudos = true }
+        if metadata.kudosGivenByCurrentUser { work.recordKudosGiven() }
         if let comments = metadata.comments { work.comments = comments }
         if let bookmarks = metadata.bookmarks { work.bookmarks = bookmarks }
         if let hits = metadata.hits { work.hits = hits }
-        if !metadata.datePublished.isEmpty { work.datePublished = metadata.datePublished }
+        if !metadata.datePublished.isEmpty {
+            work.datePublished = metadata.datePublished
+            work.completeAgeAtSave()
+        }
         if !metadata.dateUpdated.isEmpty { work.dateUpdated = metadata.dateUpdated }
         if let complete = metadata.isComplete { work.isComplete = complete }
         if let title = metadata.seriesTitle, !title.isEmpty { work.seriesTitle = title }

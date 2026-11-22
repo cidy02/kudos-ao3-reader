@@ -41,7 +41,14 @@ enum WorkUpdateChecker {
                 if work.shouldResumeStacking(postedChapters: posted) {
                     work.setReadingStatus(.reading)
                 }
+                let previousPosted = work.postedChapterCount
                 work.chapters = groups.chapters
+                // Insights D10: written from this check, with no further request. AO3's day comes
+                // from the same page (empty only when the page printed none).
+                ChapterUpdateRecorder.recordRise(
+                    for: work, previousPosted: previousPosted, newPosted: posted,
+                    postedDate: groups.dateUpdated, in: context
+                )
                 // Baseline on first sight (native imports seed this at download time).
                 if work.knownChapterCount == 0 {
                     work.knownChapterCount = work.postedChapterCount
