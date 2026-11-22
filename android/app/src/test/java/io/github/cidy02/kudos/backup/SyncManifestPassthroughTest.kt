@@ -2213,13 +2213,20 @@ class SyncManifestPassthroughTest {
         assertTrue(syncRepository.runSync() is SyncResult.Success)
         workFileStore.writeWorkEpub(WORK_ONE, byteArrayOf(1, 2, 3))
         val stored = checkNotNull(database.workDao().getById(WORK_ONE)).toDomain()
-        database.workDao().upsert(
-            stored.copy(
-                hasEpub = true,
-                title = "x".repeat(BackupLimits.MAX_MANIFEST_BYTES.toInt() + 1024),
-                lastModifiedAt = FIXED_CLOCK.plusSeconds(60)
-            ).toEntity()
-        )
+        database.workDao().upsert(stored.copy(hasEpub = true, lastModifiedAt = FIXED_CLOCK.plusSeconds(60)).toEntity())
+        // A row must stay under the cursor window, so many ~1 MB works make the typed manifest too big.
+        repeat(10) { i ->
+            database.workDao().upsert(
+                stored.copy(
+                    id = "99999999-0000-4000-8000-0000000001%02d".format(i),
+                    ao3WorkID = 830000 + i,
+                    sourceUrl = "https://archiveofourown.org/works/${830000 + i}",
+                    title = "x".repeat(900_000),
+                    hasEpub = false,
+                    lastModifiedAt = FIXED_CLOCK.plusSeconds(60)
+                ).toEntity()
+            )
+        }
         val before = readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!)
         clockInstant = FIXED_CLOCK.plusSeconds(600)
         assertTrue(syncRepository.runSync() is SyncResult.Error)
