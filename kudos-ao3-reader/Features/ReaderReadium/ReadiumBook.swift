@@ -732,6 +732,24 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     #if DEBUG
     private var pendingDebugGoToEnd = false
 
+    /// `shot:readerchapterend`: the last page of the first story chapter, so the end-of-chapter
+    /// card shows. Navigates for real; the card appears only if the viewport reports the end.
+    func goToFirstChapterEndForDebug() {
+        chromeHidden = false
+        markFirstPagePresentedIfNeeded()
+        guard let first = readingOrder.first else { return }
+        Task { @MainActor in
+            if let base = await publication?.locate(first) {
+                let target = base.copy(locations: {
+                    $0.progression = 1.0
+                    $0.position = nil
+                })
+                await navigator?.go(to: target, options: NavigatorGoOptions())
+                chromeHidden = false
+            }
+        }
+    }
+
     func goToPublicationEndForDebug() {
         chromeHidden = false
         markFirstPagePresentedIfNeeded()

@@ -602,6 +602,9 @@ struct ReadiumReaderView: View {
             chapterStartLocators: book.positionsByReadingOrder.map(\.first)
         )
         #if DEBUG
+        if DebugLaunchRoute.takeSheet("readerchapterend") {
+            book.goToFirstChapterEndForDebug()
+        }
         if DebugLaunchRoute.takeSheet("readerfind") {
             router.panel = .readerFind
         }
