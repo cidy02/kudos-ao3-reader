@@ -2,7 +2,7 @@
 
 Owner, 2026-11-22: "raise the limit and plan a change to stream the manifest on both platforms".
 Status: **plan only** (tasks T-567 iOS, A-567 Android). **Goal (owner, 2026-11-22): both platforms accept a manifest up to
-256 MiB (2^28 bytes; the owner chose 2^8 MiB over iOS's 200 MB), with memory that does not grow with the manifest.** A-566 measured that the limit cannot rise before
+256 MiB (2^28 bytes, owner's choice), with memory that does not grow with the manifest.** A-566 measured that the limit cannot rise before
 this lands.
 
 ## Why
@@ -13,7 +13,7 @@ tombstones (`docs/KUDOSBACKUP_FORMAT.md`). Both apps hold the entire document in
 
 | Platform | Read today | Write today |
 |---|---|---|
-| iOS | `FolderSyncService.swift:742/763` and `KudosBackup.swift:233/349/357` load the file into one `Data` (`.mappedIfSafe`), then `KudosBackupContents.decodeManifest` (`KudosBackup.swift:478`) runs one `JSONDecoder` over it, which builds a tree of the whole document before the typed structs. Cap: ZIP entry 200 MB (`MiniZip.swift:76`). | `manifestData()` (`KudosBackup.swift:472`) encodes the whole manifest to one `Data`; `FolderSyncService.swift:1014` and `KudosBackupExport.swift:176` write it. |
+| iOS | `FolderSyncService.swift:742/763` and `KudosBackup.swift:233/349/357` load the file into one `Data` (`.mappedIfSafe`), then `KudosBackupContents.decodeManifest` (`KudosBackup.swift:478`) runs one `JSONDecoder` over it, which builds a tree of the whole document before the typed structs. Cap: none in Folder Sync (read straight from disk, `FolderSyncService.swift:133`); 1 GB per entry in a `.kudosbackup` (`MiniZip.Limits.backup`, `MiniZip.swift:98`). The 200 MB at `MiniZip.swift:76` is the EPUB profile, not the manifest. | `manifestData()` (`KudosBackup.swift:472`) encodes the whole manifest to one `Data`; `FolderSyncService.swift:1014` and `KudosBackupExport.swift:176` write it. |
 | Android | `SyncRepository.readLimitedBytes` → `String` (UTF-16, 2× the bytes) → `parseToJsonElement` for the pass-through (`SyncManifestPassthrough.kt:66`) **and** `decodeFromString<KudosBackupManifest>` (`BackupValidator.kt:31`): two full parses. Cap: `BackupLimits.MAX_MANIFEST_BYTES` = 8 MiB (`BackupVersion.kt:39`). | `BackupJson.encodeToString(manifest)` → `toByteArray` (`BackupExporter.kt:38`, `SyncRepository.kt:437`). |
 
 Peak memory grows with the file. Android's 8 MiB cap exists for that reason, and a large enough library would hit a
@@ -51,8 +51,9 @@ iOS has not been measured yet; P2 starts by measuring it the same way.
    reads as "changed" once — harmless, note it in the PR.)
 6. **Limits change meaning** once memory no longer scales with the file: a per-record cap (e.g. 1 MiB per element,
    catches a single absurd record) plus **one total cap of 256 MiB (268,435,456 bytes) on both platforms**. Android's `MAX_MANIFEST_BYTES` rises from
-   8 MiB to 256 MiB, and iOS gets a manifest-specific 256 MiB cap (today the manifest falls under the general 200 MB
-   ZIP entry cap, `MiniZip.swift:76`, which also covers EPUBs and stays as it is), **in the same change that proves flat
+   8 MiB to 256 MiB, and iOS gets a manifest-specific 256 MiB cap — a **tightening** on iOS (today: no cap in Folder Sync, 1 GB per entry
+   in backups via `MiniZip.Limits.backup`), harmless in practice since a manifest that large would exhaust memory first;
+   the EPUB profile's 200 MB per entry (`MiniZip.swift:76`, zip-bomb protection for single books) is unrelated and stays, **in the same change that proves flat
    memory** (below), never before.
 7. **Streaming the parse is not enough on its own.** A-566 found the typed records cost about as much as the JSON trees,
    and import, merge and export each hold the whole library as typed objects. For a 256 MiB manifest the consumers must
