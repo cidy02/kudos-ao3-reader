@@ -616,10 +616,20 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
     /// `BackupVersion.isSupported` is integers 1…8, so a v9 archive is a hard
     /// import failure there (T-211). Android will strip these keys until a
     /// passthrough lands, the same class of issue as T-210 pronunciations.
-    /// iOS→iOS round-trip must work; a missing key decodes as `[]`.
-    let readingSessions: [KudosBackupReadingSession]
-    let readingFavorites: [KudosBackupReadingFavorite]
-    let fandomReadWatermarks: [KudosBackupFandomReadWatermark]
+    /// iOS→iOS round-trip must work.
+    ///
+    /// **Absent is not empty (T-563).** `nil` means the archive has no such key (Android, an
+    /// older build): it says nothing about these rows, so Replace Library leaves local rows
+    /// alone and mints no tombstones. A present key, even `[]`, is the whole collection and
+    /// replaces it. Every writer here passes an array, so this app always emits the key.
+    let readingSessions: [KudosBackupReadingSession]?
+    let readingFavorites: [KudosBackupReadingFavorite]?
+    let fandomReadWatermarks: [KudosBackupFandomReadWatermark]?
+    /// Keys of the other top-level collections that the archive did not carry at all (decoded
+    /// as `[]` for the readers, T-563). Replace Library must not read an omitted key as "the
+    /// snapshot has none" and soft-delete or tombstone local rows. Not encoded; empty for a
+    /// manifest built in code, which always writes every key.
+    var omittedKeys: Set<String> = []
     /// Locally followed tags. Optional and omitted (`nil`) when empty so manifests
     /// match older iOS/Android golden archives verbatim.
     let followedTags: [KudosBackupFollowedTag]?
@@ -658,9 +668,9 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         readingQueueMemberships: [KudosBackupReadingQueueMembership] = [],
         annotations: [KudosBackupAnnotation] = [],
         savedSearches: [KudosBackupSavedSearch] = [],
-        readingSessions: [KudosBackupReadingSession] = [],
-        readingFavorites: [KudosBackupReadingFavorite] = [],
-        fandomReadWatermarks: [KudosBackupFandomReadWatermark] = [],
+        readingSessions: [KudosBackupReadingSession]? = [],
+        readingFavorites: [KudosBackupReadingFavorite]? = [],
+        fandomReadWatermarks: [KudosBackupFandomReadWatermark]? = [],
         followedTags: [KudosBackupFollowedTag]? = nil,
         tagAliases: [KudosBackupTagAlias]? = nil,
         settings: KudosBackupSettings,
@@ -740,15 +750,15 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         readingSessions = try container.decodeIfPresent(
             [KudosBackupReadingSession].self,
             forKey: .readingSessions
-        ) ?? []
+        )
         readingFavorites = try container.decodeIfPresent(
             [KudosBackupReadingFavorite].self,
             forKey: .readingFavorites
-        ) ?? []
+        )
         fandomReadWatermarks = try container.decodeIfPresent(
             [KudosBackupFandomReadWatermark].self,
             forKey: .fandomReadWatermarks
-        ) ?? []
+        )
         followedTags = try container.decodeIfPresent(
             [KudosBackupFollowedTag].self,
             forKey: .followedTags
@@ -766,6 +776,11 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
             [KudosBackupTombstone].self,
             forKey: .tombstones
         ) ?? []
+        omittedKeys = Set(
+            [CodingKeys.collections, .readingQueues, .annotations, .savedSearches]
+                .filter { !container.contains($0) }
+                .map(\.stringValue)
+        )
         // Neither may stop the library itself from restoring, and one bad entry must not take
         // the good ones with it (`LossyArray`).
         writingRecovery = (try? container.decodeIfPresent(
@@ -4293,7 +4308,7 @@ enum KudosBackupService {
             tombstones.savedSearchResolution(id: $0.id, incomingModifiedAt: $0.dateAdded)
         }
 
-        if mode == .replaceLibrary {
+        if mode == .replaceLibrary, !contents.manifest.omittedKeys.contains("savedSearches") {
             let snapshotSearchIDs = Set(contents.manifest.savedSearches.map(\.id))
             for search in existingSavedSearches where !snapshotSearchIDs.contains(search.id) {
                 SyncTombstones.recordDeletion(of: search, in: context)
@@ -4614,8 +4629,11 @@ enum KudosBackupService {
                 removedWorks += 1
             }
 
+            // An omitted key says nothing about these rows (T-563): no sweep for it.
+            let omitted = contents.manifest.omittedKeys
             let snapshotCollectionIDs = Set(contents.manifest.collections.map(\.id))
-            for collection in existingCollections where !snapshotCollectionIDs.contains(collection.id) {
+            for collection in existingCollections
+            where !omitted.contains("collections") && !snapshotCollectionIDs.contains(collection.id) {
                 guard !collection.isPendingDeletion else { continue }
                 collection.isPendingDeletion = true
                 collection.deletedAt = now
@@ -4625,6 +4643,7 @@ enum KudosBackupService {
 
             let snapshotQueueIDs = Set(contents.manifest.readingQueues.map(\.id))
             for queue in existingQueues {
+                guard !omitted.contains("readingQueues") else { break }
                 guard queue.kind != .savedForLater else { continue }
                 guard !snapshotQueueIDs.contains(queue.id) else { continue }
                 guard !queue.isPendingDeletion else { continue }
@@ -4636,7 +4655,8 @@ enum KudosBackupService {
 
             let snapshotAnnotationIDs = Set(contents.manifest.annotations.map(\.id))
             let allAnnotations = (try? context.fetch(FetchDescriptor<ReadingAnnotation>())) ?? []
-            for annotation in allAnnotations where !snapshotAnnotationIDs.contains(annotation.id) {
+            for annotation in allAnnotations
+            where !omitted.contains("annotations") && !snapshotAnnotationIDs.contains(annotation.id) {
                 guard !annotation.isPendingDeletion else { continue }
                 annotation.isPendingDeletion = true
                 annotation.deletedAt = now
@@ -4725,7 +4745,7 @@ enum KudosBackupService {
         /// as "not in the archive's id list" once matching by anything but id is
         /// possible.
         var resolvedLocalIDs: Set<UUID> = []
-        for archived in contents.manifest.readingSessions {
+        for archived in contents.manifest.readingSessions ?? [] {
             if mode != .replaceLibrary {
                 switch tombstones.readingSessionResolution(
                     id: archived.id,
@@ -4805,7 +4825,8 @@ enum KudosBackupService {
             tombstones.readingSessionResolution(id: $0.id, incomingModifiedAt: $0.lastModifiedAt)
         }
 
-        if mode == .replaceLibrary {
+        // An absent key leaves local rows alone and mints no tombstones (T-563).
+        if mode == .replaceLibrary, contents.manifest.readingSessions != nil {
             for session in existing where !resolvedLocalIDs.contains(session.id) {
                 SyncTombstones.recordDeletion(of: session, in: context)
                 context.delete(session)
@@ -4901,7 +4922,7 @@ enum KudosBackupService {
             existing.map { ("\($0.kindRaw)|\($0.targetKey)", $0) },
             uniquingKeysWith: { first, _ in first }
         )
-        for archived in contents.manifest.readingFavorites {
+        for archived in contents.manifest.readingFavorites ?? [] {
             if mode != .replaceLibrary {
                 switch tombstones.readingFavoriteResolution(
                     id: archived.id,
@@ -4955,7 +4976,7 @@ enum KudosBackupService {
             tombstones.readingFavoriteResolution(id: $0.id, incomingModifiedAt: $0.lastModifiedAt)
         }
 
-        if mode == .replaceLibrary {
+        if mode == .replaceLibrary, contents.manifest.readingFavorites != nil {
             // Not `snapshotIDs`: a favourite matched by *target* keeps its own
             // local UUID, which the archive has never heard of. Deleting on
             // id-absence therefore deleted the record that had just been matched
@@ -4994,7 +5015,7 @@ enum KudosBackupService {
             uniquingKeysWith: { first, _ in first }
         )
         var resolvedLocalIDs: Set<UUID> = []
-        for archived in contents.manifest.fandomReadWatermarks {
+        for archived in contents.manifest.fandomReadWatermarks ?? [] {
             if mode != .replaceLibrary {
                 switch tombstones.fandomReadWatermarkResolution(
                     id: archived.id,
@@ -5043,7 +5064,7 @@ enum KudosBackupService {
             )
         }
 
-        if mode == .replaceLibrary {
+        if mode == .replaceLibrary, contents.manifest.fandomReadWatermarks != nil {
             // Matched-by-name watermarks keep their local UUID, which the archive
             // does not contain — the same defect the favourites cleanup had.
             for watermark in existing where !resolvedLocalIDs.contains(watermark.id) {
@@ -5438,7 +5459,7 @@ enum KudosBackupService {
         // newer mark (which the dedupe then deleted and tombstoned), and be removed
         // itself: both marks gone, on both devices. Android has always swept first.
         var removed = removeDeletedElsewhere()
-        if mode == .replaceLibrary {
+        if mode == .replaceLibrary, !contents.manifest.omittedKeys.contains("annotations") {
             // Replace hides every mark the snapshot does not list (`restore`, after this).
             // One of those must not first win its passage over the snapshot's own mark:
             // the dedupe deleted and tombstoned that one, Replace then hid the winner, and
