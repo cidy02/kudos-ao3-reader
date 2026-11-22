@@ -210,7 +210,6 @@ class SyncRepository(
     private suspend fun runSyncLocked(): SyncResult {
         val generation = folderGeneration
         val uri = getSyncFolderUri() ?: return SyncResult.Error("No sync folder selected.")
-        backupRepository.recoverInterruptedReplace()
         val root = DocumentFile.fromTreeUri(context, uri)
             ?: return SyncResult.Error("Could not access sync folder.")
 
@@ -387,13 +386,13 @@ class SyncRepository(
             }
 
             // 2. Export incrementally
+            var priorFolderCache: JsonObject? = null
             val pronunciationsUnreadable = persistenceGate.withLock {
                 // iOS holds its gate for the whole run, so a Replace can never come between a
                 // run's check and its write-up. Here the gate is taken again for the export: a
                 // Replace that paused sync meanwhile must not have its library published or the
                 // folder pruned by works it removed (review of 3fy, F7).
                 if (!folderImportStillAllowed()) throw ImportDeclined()
-                backupRepository.recoverInterruptedReplace()
                 val pendingImport = pendingImportManifestStore.load()
                 val effectiveReadManifestJson = when {
                     readManifestJson != null && pendingImport != null ->
@@ -402,6 +401,9 @@ class SyncRepository(
                 }
                 // A folder whose manifest we actually read becomes the store. An empty folder
                 // leaves the previous store in place, and the commit below is its first write.
+                // The cache this folder already owns, read before the folder's own manifest replaces it:
+                // its sitting facts may be the only copy an older Android left.
+                priorFolderCache = lastManifestStore.takeIf { it.belongsToFolder(uri.toString()) }?.load()
                 effectiveReadManifestJson?.let { lastManifestStore.save(it, folderUri = uri.toString()) }
                 val snapshot = backupRepository.captureLibrarySnapshot()
                 // Same single-source rule as the User-Agent: a hardcoded version here
@@ -523,7 +525,7 @@ class SyncRepository(
                 }
                 val manifestBytes = BackupJson.encodeToString(
                     JsonObject.serializer(),
-                    carryUnknownRecordKeys(manifestJson, replacedJson)
+                    carryUnknownRecordKeys(manifestJson, replacedJson, priorFolderCache)
                 ).toByteArray(Charsets.UTF_8)
                 beforeManifestCommit()
                 if (!readLiveManifest(syncDir).contentEquals(manifestBytesAtRead)) {

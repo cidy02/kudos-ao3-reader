@@ -5,57 +5,54 @@ import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
-/** Replace-only undo for atomic replacements and newly created assets. Never serialized. */
-internal class BackupFileUndo(private val journal: Path? = null) {
-    private val previous = linkedMapOf<Path, Path?>()
+/**
+ * Replace's journal: every asset a Replace touches, and the generation that decides its fate.
+ * It is one JSON document, rewritten whole through a temp file and an atomic move before each
+ * asset is touched, so a process death never leaves a torn or half-written record.
+ * [BackupRepository] replays it for success, failure, cancellation and recovery alike.
+ */
+internal class BackupFileUndo(private val journal: Path, private val generation: String) {
+    private val entries = linkedMapOf<Path, Boolean>()
+
+    init {
+        writeJournal()
+    }
 
     fun beforeWrite(destination: Path) {
-        if (destination in previous) return
-        val undo = asideOf(destination)
-        if (Files.exists(undo, LinkOption.NOFOLLOW_LINKS)) {
-            throw IOException("Unrecovered Replace file: ${undo.fileName}")
+        if (destination in entries) return
+        if (Files.exists(asideOf(destination), LinkOption.NOFOLLOW_LINKS)) {
+            throw IOException("Unrecovered Replace file: ${asideOf(destination).fileName}")
         }
         val existed = Files.exists(destination, LinkOption.NOFOLLOW_LINKS)
-        // Written before the file is touched, so a process death can still undo or finish it.
-        journal?.let {
-            Files.write(
-                it, "${if (existed) "E" else "N"}\t$destination\n".toByteArray(),
-                java.nio.file.StandardOpenOption.APPEND
-            )
-        }
-        if (!existed) {
-            previous[destination] = null
-            return
-        }
-        if (!Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS)) {
+        if (existed && !Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS)) {
             throw IOException("Cannot replace a non-file: ${destination.fileName}")
         }
+        entries[destination] = existed
+        writeJournal()
         // Android disallows hard links; a deterministic sibling survives process death.
-        Files.move(destination, undo, StandardCopyOption.ATOMIC_MOVE)
-        previous[destination] = undo
+        if (existed) Files.move(destination, asideOf(destination), StandardCopyOption.ATOMIC_MOVE)
     }
 
-    fun rollback(error: Throwable) {
-        // Synchronous I/O also runs when the import coroutine was cancelled. Attempt every
-        // undo; retain the aside if an exceptional filesystem error blocks undo.
-        previous.entries.toList().asReversed().forEach { (destination, undo) ->
-            try {
-                Files.deleteIfExists(destination)
-                if (undo != null) Files.move(undo, destination, StandardCopyOption.ATOMIC_MOVE)
-                previous.remove(destination)
-            } catch (failure: Throwable) {
-                error.addSuppressed(failure)
+    private fun writeJournal() {
+        val document = buildJsonObject {
+            put("generation", generation)
+            putJsonArray("entries") {
+                entries.forEach { (path, existed) ->
+                    add(buildJsonObject { put("path", path.toString()); put("existed", existed) })
+                }
             }
         }
-    }
-
-    /** True once every file this Replace touched is back as it was (or none were touched). */
-    val isUndone: Boolean get() = previous.isEmpty()
-
-    fun discard() {
-        // Once Room commits, cleanup cannot turn a successful Replace into an error.
-        previous.values.filterNotNull().forEach { runCatching { Files.deleteIfExists(it) } }
+        val temp = journal.resolveSibling("${journal.fileName}.tmp")
+        java.io.FileOutputStream(temp.toFile()).use {
+            it.write(document.toString().toByteArray(Charsets.UTF_8))
+            it.fd.sync()
+        }
+        Files.move(temp, journal, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
     }
 
     companion object {

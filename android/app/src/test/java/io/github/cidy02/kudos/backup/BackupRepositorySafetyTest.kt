@@ -192,7 +192,7 @@ class BackupRepositorySafetyTest {
     fun interruptedReplaceRestoresAsidesWithoutDestinations() = runTest {
         val device = device()
         val paths = recoveryPaths(device)
-        val undo = BackupFileUndo()
+        val undo = BackupFileUndo(device.root.resolve(BackupRepository.REPLACE_JOURNAL_FILE), "dead-generation")
         paths.forEach { path ->
             Files.createDirectories(path.parent)
             Files.write(path, LOCAL_EPUB)
@@ -216,7 +216,7 @@ class BackupRepositorySafetyTest {
     fun interruptedReplaceDiscardsAsidesBesideDestinations() = runTest {
         val device = device()
         val paths = recoveryPaths(device)
-        val undo = BackupFileUndo()
+        val undo = BackupFileUndo(Files.createTempDirectory("scratch").resolve("journal"), "g")
         paths.forEach { path ->
             Files.createDirectories(path.parent)
             Files.write(path, LOCAL_EPUB)
@@ -246,7 +246,7 @@ class BackupRepositorySafetyTest {
             val filesBefore = device.assetFiles()
             val pack = packageOf(listOf(work(A, "Archive first")))
             val merge = BackupMergeService.merge(before, pack, BackupImportMode.REPLACE_LIBRARY, now = NOW)
-            BackupFileUndo().beforeWrite(device.workFiles.workEpubPath(A))
+            BackupFileUndo(Files.createTempDirectory("scratch").resolve("journal"), "g").beforeWrite(device.workFiles.workEpubPath(A))
             device.workFiles.failAtWrite = 1
             try {
                 when (entry) {

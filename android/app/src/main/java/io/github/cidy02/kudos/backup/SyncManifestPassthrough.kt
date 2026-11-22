@@ -19,6 +19,8 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.longOrNull
 
 @OptIn(ExperimentalSerializationApi::class)
 private fun SerialDescriptor.elementNameSet(): Set<String> =
@@ -40,6 +42,39 @@ private val knownPronunciationKeys: Set<String> by lazy {
 }
 
 private val settingsMapKeys = setOf("modifiedAt", "extras")
+
+/**
+ * Sitting facts a typed session lacks, taken from the first raw copy that is not older than the
+ * typed record (by `lastModifiedAt`, else `endedAt`; with either side undated only a null typed
+ * value is filled) and whose value has the type iOS writes. Invalid ones are dropped one by one.
+ */
+private fun carriedSessionFacts(record: JsonObject, sources: List<JsonObject>): Map<String, JsonElement> {
+    fun revision(r: JsonObject) = instantOf(r["lastModifiedAt"]) ?: instantOf(r["endedAt"])
+    val typedAt = revision(record)
+    return sessionFactKeys.mapNotNull { key ->
+        if (record[key].let { it != null && it != JsonNull }) return@mapNotNull null
+        val value = sources.firstNotNullOfOrNull { old ->
+            val oldAt = revision(old)
+            old[key]?.takeIf { (oldAt == null || typedAt == null || oldAt >= typedAt) && isValidSessionFact(key, it) }
+        }
+        value?.let { key to it }
+    }.toMap()
+}
+
+private fun isValidSessionFact(key: String, value: JsonElement): Boolean {
+    val p = value as? JsonPrimitive ?: return false
+    if (p is JsonNull) return false
+    val int = if (p.isString) null else p.longOrNull
+    val number = if (p.isString) null else p.doubleOrNull?.takeIf { it.isFinite() }
+    return when (key) {
+        "modeRaw", "deviceID" -> p.isString
+        "rulesVersion", "startSpineIndex" -> int != null && int in 0..Int.MAX_VALUE
+        "tzOffsetSeconds" -> int != null && int in -86_400..86_400
+        "startProgress" -> number != null && number in 0.0..1.0
+        "playbackRate" -> number != null && number > 0.0
+        else -> number != null && number >= 0.0 // activeSeconds
+    }
+}
 
 private val sessionFactKeys = setOf(
     "tzOffsetSeconds", "startProgress", "startSpineIndex", "modeRaw", "playbackRate", "activeSeconds",
@@ -187,8 +222,14 @@ private fun mergeJsonObjectWithMaps(
  * Records absent from [outgoing] (deleted) are never resurrected.
  */
 @OptIn(ExperimentalSerializationApi::class)
-internal fun carryUnknownRecordKeys(outgoing: JsonObject, replaced: JsonObject?): JsonObject {
-    if (replaced == null) return outgoing
+internal fun carryUnknownRecordKeys(
+    outgoing: JsonObject,
+    replacedOrNull: JsonObject?,
+    /** Another raw copy (the folder's own cache) consulted only for validated sitting facts. */
+    factFallback: JsonObject? = null
+): JsonObject {
+    if (replacedOrNull == null && factFallback == null) return outgoing
+    val replaced = replacedOrNull ?: JsonObject(emptyMap())
 
     val result = outgoing.toMutableMap()
 
@@ -215,22 +256,27 @@ internal fun carryUnknownRecordKeys(outgoing: JsonObject, replaced: JsonObject?)
     }
 
     recordListDescriptors.forEach { (listName, descriptor) ->
-        val oldRecords = (replaced[listName] as? JsonArray)?.mapNotNull { it as? JsonObject }
-            ?: return@forEach
+        val oldRecords = (replaced[listName] as? JsonArray)?.mapNotNull { it as? JsonObject } ?: emptyList()
         val newRecords = outgoing[listName] as? JsonArray ?: return@forEach
         val known = descriptor.elementNameSet()
         val matcher = RecordMatcher(listName, oldRecords)
+        val fallbackMatcher = if (listName == "readingSessions" && factFallback != null) {
+            RecordMatcher(listName, (factFallback[listName] as? JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty())
+        } else {
+            null
+        }
         result[listName] = JsonArray(
             newRecords.map { element ->
                 val record = element as? JsonObject ?: return@map element
-                val old = matcher.match(record) ?: return@map record
+                val old = matcher.match(record)
                 // Sessions are immutable facts: a sitting fact the typed record leaves out (an older
-                // build held it only as an unknown key, so Room never got it) comes from the raw copy.
+                // build held it only as an unknown key, so Room never got it) comes from a raw copy.
                 val carried = if (listName == "readingSessions") {
-                    old.filterKeys { it in sessionFactKeys && (record[it] == null || record[it] == JsonNull) && old[it] != JsonNull }
+                    carriedSessionFacts(record, listOfNotNull(old, fallbackMatcher?.match(record)))
                 } else {
                     emptyMap()
                 }
+                if (old == null) return@map JsonObject(record + carried)
                 JsonObject(record + old.filterKeys { it !in known && it !in record } + carried)
             }
         )

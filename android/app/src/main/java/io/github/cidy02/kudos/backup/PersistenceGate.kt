@@ -21,10 +21,20 @@ import kotlinx.coroutines.withContext
 open class PersistenceGate {
     private val mutex = Mutex()
 
+    /**
+     * Runs once per outermost acquisition, before the operation is admitted, so no caller can skip
+     * it. If it throws, the operation does not run. Reentrant acquisitions do not repeat it.
+     */
+    @Volatile
+    var beforeOperation: (suspend () -> Unit)? = null
+
     open suspend fun <T> withLock(action: suspend () -> T): T {
         if (currentCoroutineContext()[GatePermit] != null) return action()
         return mutex.withLock {
-            withContext(GatePermit()) { action() }
+            withContext(GatePermit()) {
+                beforeOperation?.invoke()
+                action()
+            }
         }
     }
 }

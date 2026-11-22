@@ -29,6 +29,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 
 /**
  * Captures the local library into a `.kudosbackup` ZIP and restores
@@ -55,6 +58,8 @@ class BackupRepository(
         fileName = PENDING_IMPORT_MANIFEST_FILE
     )
     init {
+        // Every gated operation, in any class, starts from a recovered Replace.
+        persistenceGate.beforeOperation = { recoverReplaceFiles() }
         val legacy = SyncLastManifestStore(
             workFileStore.worksDirectory.parent ?: workFileStore.worksDirectory,
             fileName = "backup-last-manifest.json"
@@ -67,7 +72,7 @@ class BackupRepository(
 
     internal fun lastImportedManifestJson(): JsonObject? = lastImportedManifestStore.load()
     val metadataCheck = SyncMetadataCheck(now = clock) {
-        gated {
+        persistenceGate.withLock {
             withContext(Dispatchers.IO) {
                 val manifest = captureLibrarySnapshot().toV2Manifest(exportedAt = clock(), appVersion = appVersion)
                 BackupValidator.validateManifest(manifest, now = clock())
@@ -86,7 +91,7 @@ class BackupRepository(
     // (SyncRepository.runSync -> this) writing the same local state.
     suspend fun exportV2ZipBytes(): ByteArray = exportV2Zip().bytes
 
-    suspend fun exportV2Zip(): BackupExportResult = gated {
+    suspend fun exportV2Zip(): BackupExportResult = persistenceGate.withLock {
         withContext(Dispatchers.IO) {
             val snapshot = captureLibrarySnapshot()
             val epubFiles = linkedMapOf<String, ByteArray>()
@@ -158,7 +163,7 @@ class BackupRepository(
         admit: suspend () -> Boolean,
         replacePassthroughStore: Boolean,
         folderUri: String? = null
-    ): BackupRestoreSummary = gated {
+    ): BackupRestoreSummary = persistenceGate.withLock {
         if (!admit()) throw ImportDeclined()
         withContext(Dispatchers.IO) {
             val pack = BackupImporter.importV2Zip(bytes, cacheDirectory)
@@ -176,7 +181,7 @@ class BackupRepository(
         mode: BackupImportMode = BackupImportMode.RECONCILE,
         normalizeQueuePreservation: Boolean = true,
         admit: suspend () -> Boolean = { true }
-    ): BackupRestoreSummary = gated {
+    ): BackupRestoreSummary = persistenceGate.withLock {
         if (!admit()) throw ImportDeclined()
         withContext(Dispatchers.IO) {
             BackupFontValidator.validate(pack.fontFilesByFileName, cacheDirectory)
@@ -238,15 +243,11 @@ class BackupRepository(
 
         /** Test hook: skips Replace's cleanup, as a process death between commit and cleanup would. */
         internal var skipReplaceCleanup = false
+
+        /** Test hook: runs inside the Replace transaction once the generation row is written. */
+        internal var afterReplaceMarked: (() -> Unit)? = null
     }
 
-    /** Recovery at the top of every gated section, except inside the Replace that owns the journal. */
-    private var replaceRunning = false
-
-    private suspend fun <T> gated(action: suspend () -> T): T = persistenceGate.withLock {
-        if (!replaceRunning) recoverReplaceFiles()
-        action()
-    }
 
     private suspend fun prepareForImport(mode: BackupImportMode) {
         // Replace does not need signed local suppressors. Leave migration to launch or
@@ -260,7 +261,7 @@ class BackupRepository(
         pronunciationStore.apply(corrections)
     }
 
-    internal suspend fun recoverInterruptedReplace() = gated { }
+    internal suspend fun recoverInterruptedReplace() = persistenceGate.withLock { }
 
     private suspend fun recoverReplaceFiles() = withContext(Dispatchers.IO) {
         recoverReplaceJournal()
@@ -297,7 +298,7 @@ class BackupRepository(
         manifest: KudosBackupManifest,
         files: Map<String, ByteArray>,
         admit: suspend () -> Boolean = { true }
-    ) = gated {
+    ) = persistenceGate.withLock {
         if (!admit()) throw ImportDeclined()
         val works = database.workDao().getAllIncludingDeleted().map { it.toDomain() }
         val identity = WorkIdentityIndex.snapshot(works)
@@ -503,7 +504,7 @@ class BackupRepository(
     internal suspend fun applyMergeResult(
         merge: BackupMergeResult,
         originalFiles: Map<String, ByteArray> = emptyMap()
-    ): BackupRestoreSummary = gated {
+    ): BackupRestoreSummary = persistenceGate.withLock {
         applyMergeResultLocked(merge, originalFiles)
     }
 
@@ -520,14 +521,27 @@ class BackupRepository(
     private fun recoverReplaceJournal() {
         val journal = replaceJournal ?: return
         if (!Files.isRegularFile(journal)) return
-        val lines = Files.readAllLines(journal)
-        val committed = committedReplaceGeneration() == lines.firstOrNull().orEmpty()
-        lines.drop(1).asReversed().forEach { line ->
-            val destination = runCatching { java.nio.file.Path.of(line.substringAfter('\t')) }.getOrNull() ?: return@forEach
+        val root = journal.toAbsolutePath().normalize().parent
+        val document = runCatching {
+            kotlinx.serialization.json.Json.parseToJsonElement(Files.readAllBytes(journal).decodeToString()).jsonObject
+        }.getOrNull()
+        val generation = (document?.get("generation") as? JsonPrimitive)?.contentOrNull
+        val entries = (document?.get("entries") as? kotlinx.serialization.json.JsonArray)?.map { it.jsonObject }
+        if (generation == null || entries == null) {
+            // Never guess at a journal this build cannot read: change nothing.
+            android.util.Log.w("BackupRepository", "Unreadable Replace journal left in place")
+            return
+        }
+        val committed = committedReplaceGeneration() == generation
+        entries.asReversed().forEach { entry ->
+            val destination = (entry["path"] as? JsonPrimitive)?.contentOrNull
+                ?.let { runCatching { java.nio.file.Path.of(it).toAbsolutePath().normalize() }.getOrNull() }
+            // Only paths inside the app's files directory are ours to touch.
+            if (destination == null || !destination.startsWith(root)) return@forEach
             val aside = BackupFileUndo.asideOf(destination)
             when {
                 committed -> Files.deleteIfExists(aside)
-                line.startsWith("N") -> Files.deleteIfExists(destination)
+                (entry["existed"] as? JsonPrimitive)?.contentOrNull != "true" -> Files.deleteIfExists(destination)
                 Files.isRegularFile(aside) -> {
                     Files.deleteIfExists(destination)
                     Files.move(aside, destination, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
@@ -570,50 +584,33 @@ class BackupRepository(
             return restorePronunciations(summary, merge)
         }
         val generation = UUID.randomUUID().toString()
-        val journal = replaceJournal
-        if (journal != null) Files.write(journal, "$generation\n".toByteArray(Charsets.UTF_8))
-        val fileUndo = BackupFileUndo(journal)
-        replaceRunning = true
-        try {
-            val summary = try {
-                // Nested per-file transactions join this transaction: no rows commit until every
-                // required asset is installed. The overlays publish inside it too, so library and
-                // overlays commit together.
-                database.withTransaction {
-                    applyMergeResultWithFiles(merge, originalFiles, fileUndo).also {
-                        recordManifest(fileUndo)
-                        markReplaceCommitted(generation)
-                    }
-                }
-            } catch (error: Throwable) {
-                if (skipReplaceCleanup) throw error
-                // Cancellation can land after the commit: the generation row, not the exception,
-                // says whether the files go forward or back. Unreadable means leave it all for recovery.
-                withContext(kotlinx.coroutines.NonCancellable) {
-                    when (runCatching { committedReplaceGeneration() == generation }.getOrNull()) {
-                        true -> fileUndo.discard()
-                        false -> fileUndo.rollback(error)
-                        null -> return@withContext
-                    }
-                    // The screen promises "not replaced" only when that is so (A53 F1).
-                    if (!fileUndo.isUndone && error !is kotlinx.coroutines.CancellationException) {
-                        throw BackupError.ReplaceNotUndone(error)
-                    }
-                    if (journal != null) runCatching { Files.deleteIfExists(journal) }
-                }
-                throw error
-            }
-            if (!skipReplaceCleanup) {
-                withContext(kotlinx.coroutines.NonCancellable) {
-                    fileUndo.discard()
-                    if (journal != null) runCatching { Files.deleteIfExists(journal) }
+        val fileUndo = BackupFileUndo(requireNotNull(replaceJournal), generation)
+        val summary = try {
+            // Nested per-file transactions join this transaction: no rows commit until every
+            // required asset is installed. The overlays publish inside it too, so library and
+            // overlays commit together.
+            database.withTransaction {
+                applyMergeResultWithFiles(merge, originalFiles, fileUndo).also {
+                    recordManifest(fileUndo)
+                    markReplaceCommitted(generation)
+                    afterReplaceMarked?.invoke()
                 }
             }
-            // iOS merges corrections even for Replace; never sweep local-only words.
-            return restorePronunciations(summary, merge)
-        } finally {
-            replaceRunning = false
+        } catch (error: Throwable) {
+            if (skipReplaceCleanup) throw error
+            // Cancellation can land after the commit: the journal replay reads the generation row
+            // rather than the exception. An unreadable row leaves the journal for the next try.
+            withContext(kotlinx.coroutines.NonCancellable) {
+                // The screen promises "not replaced" only when that is so (A53 F1).
+                runCatching { recoverReplaceJournal() }.onFailure {
+                    if (error !is kotlinx.coroutines.CancellationException) throw BackupError.ReplaceNotUndone(error)
+                }
+            }
+            throw error
         }
+        if (!skipReplaceCleanup) withContext(kotlinx.coroutines.NonCancellable) { recoverReplaceJournal() }
+        // iOS merges corrections even for Replace; never sweep local-only words.
+        return restorePronunciations(summary, merge)
     }
 
     private fun restorePronunciations(summary: BackupRestoreSummary, merge: BackupMergeResult): BackupRestoreSummary =

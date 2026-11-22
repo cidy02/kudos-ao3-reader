@@ -1955,6 +1955,178 @@ class SyncManifestPassthroughTest {
         assertNoReplaceLeftovers()
     }
 
+    private suspend fun killReplaceBeforeCommit(workId: String) {
+        backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
+        BackupRepository.skipReplaceCleanup = true
+        SyncLastManifestStore.beforeFilePublish = { path ->
+            if (path.fileName.toString() == BackupRepository.PENDING_IMPORT_MANIFEST_FILE) {
+                throw java.io.IOException("killed before commit")
+            }
+        }
+        try {
+            runCatching {
+                backupRepository.importV2ZipBytes(zipManifest(replacementManifest()), mode = BackupImportMode.REPLACE_LIBRARY)
+            }
+        } finally {
+            BackupRepository.skipReplaceCleanup = false
+            SyncLastManifestStore.beforeFilePublish = null
+        }
+    }
+
+    @Test
+    fun anyGateAcquisitionRecoversADeadReplaceBeforeItsOperationRuns() = runTest {
+        killReplaceBeforeCommit("99999999-0000-4000-8000-000000000086")
+        var sawJournal: Boolean? = null
+        // Not a BackupRepository entry point: any holder of the gate (a file writer, the sweep).
+        persistenceGate.withLock { sawJournal = Files.exists(filesRoot.resolve(BackupRepository.REPLACE_JOURNAL_FILE)) }
+        assertEquals(false, sawJournal)
+        assertNoReplaceLeftovers()
+    }
+
+    @Test
+    fun anUnreadableJournalChangesNothing() = runTest {
+        backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay("99999999-0000-4000-8000-000000000087")), mode = BackupImportMode.MERGE)
+        val before = storeNames.associateWith { SyncLastManifestStore(filesRoot, it).load() }
+        Files.write(filesRoot.resolve(BackupRepository.REPLACE_JOURNAL_FILE), "{\"generation\":\"x\",\"entr".toByteArray())
+        persistenceGate.withLock { }
+        assertTrue(Files.exists(filesRoot.resolve(BackupRepository.REPLACE_JOURNAL_FILE)))
+        before.forEach { (name, body) -> assertEquals(body, SyncLastManifestStore(filesRoot, name).load()) }
+    }
+
+    @Test
+    fun aJournalPathOutsideTheFilesDirectoryIsNeverTouched() = runTest {
+        val outside = Files.createTempFile("kudos-outside", ".txt")
+        try {
+            Files.write(filesRoot.resolve(BackupRepository.REPLACE_JOURNAL_FILE), (
+                "{\"generation\":\"g\",\"entries\":[{\"path\":\"" + outside.toString().replace("\\", "\\\\") +
+                    "\",\"existed\":false}]}"
+                ).toByteArray())
+            persistenceGate.withLock { }
+            assertTrue("a path outside the app's files is not ours to delete", Files.exists(outside))
+            assertFalse(Files.exists(filesRoot.resolve(BackupRepository.REPLACE_JOURNAL_FILE)))
+        } finally {
+            Files.deleteIfExists(outside)
+        }
+    }
+
+    @Test
+    fun aGenerationWrittenOutsideTheRoomTransactionIsCaught() = runTest {
+        val workId = "99999999-0000-4000-8000-000000000088"
+        backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
+        var visibleInsideTransaction = false
+        BackupRepository.skipReplaceCleanup = true
+        BackupRepository.afterReplaceMarked = {
+            visibleInsideTransaction = database.openHelper.writableDatabase
+                .query("SELECT COUNT(*) FROM kudos_replace_generation").use { it.moveToFirst() && it.getInt(0) == 1 }
+            throw java.io.IOException("killed inside the transaction")
+        }
+        try {
+            runCatching {
+                backupRepository.importV2ZipBytes(zipManifest(replacementManifest()), mode = BackupImportMode.REPLACE_LIBRARY)
+            }
+        } finally {
+            BackupRepository.skipReplaceCleanup = false
+            BackupRepository.afterReplaceMarked = null
+        }
+        assertTrue("the generation row must be written inside the Replace transaction", visibleInsideTransaction)
+        // Room rolled the row back with the library, and recovery restores the assets.
+        persistenceGate.withLock { }
+        // The table was created in the same transaction, so it rolled back too.
+        val rows = runCatching {
+            database.openHelper.readableDatabase.query("SELECT COUNT(*) FROM kudos_replace_generation")
+                .use { it.moveToFirst() && it.getInt(0) > 0 }
+        }.getOrDefault(false)
+        assertFalse("the generation row rolled back with the library", rows)
+        assertEquals(false, database.workDao().getById(workId)!!.isDeleted)
+        assertNull(exportedManifest()["writingRecovery"])
+        assertNoReplaceLeftovers()
+    }
+
+    private fun sessionIn(vararg extra: Pair<String, JsonElement>, drop: Set<String> = emptySet()): JsonObject {
+        val raw = iosT541ManifestJson().getValue("readingSessions").jsonArray.single().jsonObject
+        return JsonObject(raw.filterKeys { it !in drop } + extra)
+    }
+
+    private fun manifestOf(session: JsonObject) = JsonObject(
+        mapOf("version" to JsonPrimitive(8), "readingSessions" to JsonArray(listOf(session)))
+    )
+
+    private fun carriedSession(typed: JsonObject, raw: JsonObject, fallback: JsonObject? = null): JsonObject =
+        carryUnknownRecordKeys(manifestOf(typed), raw.let(::manifestOf), fallback?.let(::manifestOf))
+            .getValue("readingSessions").jsonArray.single().jsonObject
+
+    @Test
+    fun aRawSittingFactOlderThanTheTypedSessionIsNotCarried() {
+        val typed = sessionIn("lastModifiedAt" to JsonPrimitive("2026-06-26T10:00:00.000Z"), drop = setOf("activeSeconds"))
+        val older = sessionIn("lastModifiedAt" to JsonPrimitive("2026-06-26T09:31:00.000Z"))
+        assertNull(carriedSession(typed, older)["activeSeconds"])
+        val notOlder = sessionIn("lastModifiedAt" to JsonPrimitive("2026-06-26T10:00:00.000Z"))
+        assertEquals(JsonPrimitive(1650.5), carriedSession(typed, notOlder)["activeSeconds"])
+        // A typed value is never replaced, whatever the raw copy says.
+        val typedWithValue = sessionIn("activeSeconds" to JsonPrimitive(7.0), "lastModifiedAt" to JsonPrimitive("2026-06-26T10:00:00.000Z"))
+        assertEquals(JsonPrimitive(7.0), carriedSession(typedWithValue, notOlder)["activeSeconds"])
+    }
+
+    @Test
+    fun invalidRawSittingFactsAreDroppedAndTheExportStillDecodes() = runTest {
+        val fixture = iosT541ManifestJson()
+        backupRepository.importV2ZipBytes(zipManifest(fixture), mode = BackupImportMode.MERGE)
+        val session = database.readingLogDao().getAllSessions().single { it.id.equals(SESSION_ONE, ignoreCase = true) }
+        database.readingLogDao().upsertSession(
+            session.copy(activeSeconds = null, modeRaw = "read", rulesVersion = 0, startProgress = null, tzOffsetSeconds = null)
+        )
+        val bad = sessionIn(
+            "activeSeconds" to Json.parseToJsonElement("{}"),
+            "startProgress" to JsonPrimitive(7.5),
+            "tzOffsetSeconds" to JsonPrimitive("soon"),
+            "modeRaw" to JsonPrimitive("listen")
+        )
+        SyncLastManifestStore(filesRoot).save(
+            JsonObject(fixture + mapOf("readingSessions" to JsonArray(listOf(bad))))
+        )
+        val bytes = BackupJson.encodeToString(JsonObject.serializer(), exportedManifest()).toByteArray()
+        val decoded = BackupValidator.decodeManifest(bytes).readingSessions.single()
+        assertNull(decoded.activeSeconds)
+        assertNull(decoded.startProgress)
+        assertNull(decoded.tzOffsetSeconds)
+        assertEquals("listen", decoded.modeRaw)
+    }
+
+    @Test
+    fun aSyncKeepsTheSittingFactsItsFolderCacheHeldWhenTheFolderManifestLacksThem() = runTest {
+        val fixture = iosT541ManifestJson()
+        writeChild(
+            ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), fixture).toByteArray()
+        )
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        val session = database.readingLogDao().getAllSessions().single { it.id.equals(SESSION_ONE, ignoreCase = true) }
+        database.readingLogDao().upsertSession(session.copy(activeSeconds = null, modeRaw = "read", rulesVersion = 0))
+        // The folder is restored to an older, readable manifest that predates the session.
+        writeChild(
+            ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json",
+            BackupJson.encodeToString(
+                JsonObject.serializer(),
+                JsonObject(
+                    fixture + mapOf(
+                        "exportedAt" to JsonPrimitive("2026-06-01T00:00:00.000Z"),
+                        "readingSessions" to JsonArray(emptyList())
+                    )
+                )
+            ).toByteArray()
+        )
+        clockInstant = FIXED_CLOCK.plusSeconds(600)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val published = Json.parseToJsonElement(
+            readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
+        ).jsonObject
+        val out = published.getValue("readingSessions").jsonArray.single().jsonObject
+        assertEquals(JsonPrimitive(1650.5), out["activeSeconds"])
+        val cached = SyncLastManifestStore(filesRoot).load()!!.getValue("readingSessions").jsonArray.single().jsonObject
+        assertEquals(JsonPrimitive(1650.5), cached["activeSeconds"])
+    }
+
     @Test
     fun mergeThatWinsTheGateBeforeStartupRecoveryDoesNotLoseItsOpaqueFields() = runTest {
         backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay("99999999-0000-4000-8000-000000000085")), mode = BackupImportMode.MERGE)
