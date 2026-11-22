@@ -152,7 +152,8 @@ struct InsightsP3DataTests {
         ReadingLogService.noteActivity(for: work, chapter: chapter(4), now: t0.addingTimeInterval(301))
         ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(302))
         let session = try #require(try context.fetch(FetchDescriptor<ReadingSession>()).first)
-        #expect(session.chapterSeconds[3] == 200)
+        // 1 s before the new baseline plus the 200 s spent there.
+        #expect(session.chapterSeconds[3] == 201)
     }
 
     @Test func aSittingWithNoChapterSignalStoresNothing() throws {

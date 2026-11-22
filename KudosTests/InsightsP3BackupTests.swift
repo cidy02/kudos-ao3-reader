@@ -278,12 +278,14 @@ extension PersistenceGateSuites {
                 #expect(row.chapterSeconds == [3: 120.5, 4: 80], "mode \(mode)")
                 #expect(row.skimmedChapters == [4], "mode \(mode)")
                 #expect(row.endedAtChapterEnd == true, "mode \(mode)")
-                // Existing timing is never overwritten by a fill.
-                row.chapterSeconds = [9: 1]
-                _ = try KudosBackupService.restore(
-                    try reload(current), into: dest, defaults: try defaults(), mode: mode
-                )
-                #expect(row.chapterSeconds == [9: 1], "mode \(mode)")
+                // Merge never overwrites timing the row already has (Reconcile follows the clock rule).
+                if mode == .merge {
+                    row.chapterSeconds = [9: 1]
+                    _ = try KudosBackupService.restore(
+                        try reload(current), into: dest, defaults: try defaults(), mode: mode
+                    )
+                    #expect(row.chapterSeconds == [9: 1])
+                }
             }
         }
 
