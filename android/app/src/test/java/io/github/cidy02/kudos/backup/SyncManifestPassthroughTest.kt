@@ -2120,10 +2120,13 @@ class SyncManifestPassthroughTest {
         val workId = "99999999-0000-4000-8000-000000000092"
         backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
         val empty = JsonObject(mapOf("version" to JsonPrimitive(8), "exportedAt" to JsonPrimitive("2026-06-28T00:00:00.000Z")))
+        var summary: BackupRestoreSummary? = null
         failOverlayPublishes {
-            runBlocking { backupRepository.importV2ZipBytes(zipManifest(empty), mode = BackupImportMode.REPLACE_LIBRARY) }
+            summary = runBlocking { backupRepository.importV2ZipBytes(zipManifest(empty), mode = BackupImportMode.REPLACE_LIBRARY) }
         }
         assertEquals(true, database.workDao().getById(workId)!!.isDeleted)
+        assertTrue(summary!!.opaqueDataNotSaved)
+        assertTrue(summary!!.toUserMessage().contains("some extra iOS data could not be kept"))
     }
 
     @Test
@@ -2174,7 +2177,7 @@ class SyncManifestPassthroughTest {
     }
 
     @Test
-    fun aPublishedManifestOverTheReadLimitIsRefusedAndKeepsTheFolderAndPendingImport() = runTest {
+    fun pendingOpaqueDataOverTheReadLimitIsLeftOutOfThatPublishAndKeptForLater() = runTest {
         val big = { n: Int -> JsonPrimitive("x".repeat(n)) }
         val half = (BackupLimits.MAX_MANIFEST_BYTES / 2).toInt()
         val live = JsonObject(iosT541ManifestJson() + mapOf("liveOpaque" to big(half)))
@@ -2190,10 +2193,56 @@ class SyncManifestPassthroughTest {
             )
         )
         backupRepository.importV2ZipBytes(zipManifest(pending), mode = BackupImportMode.MERGE)
+        val result = syncRepository.runSync()
+        assertTrue(result is SyncResult.Success)
+        assertNotNull((result as SyncResult.Success).warning)
+        val published = readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!)
+        assertTrue(published.size <= BackupLimits.MAX_MANIFEST_BYTES)
+        val json = Json.parseToJsonElement(published.toString(Charsets.UTF_8)).jsonObject
+        assertNotNull(json["liveOpaque"])
+        assertNull(json["importOpaque"])
+        assertNotNull(SyncLastManifestStore(filesRoot, BackupRepository.PENDING_IMPORT_MANIFEST_FILE).load())
+    }
+
+    @Test
+    fun aManifestThatCannotFitIsRefusedBeforeAnyAssetIsWritten() = runTest {
+        writeChild(
+            ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), iosT541ManifestJson()).toByteArray()
+        )
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        workFileStore.writeWorkEpub(WORK_ONE, byteArrayOf(1, 2, 3))
+        val stored = checkNotNull(database.workDao().getById(WORK_ONE)).toDomain()
+        database.workDao().upsert(
+            stored.copy(
+                hasEpub = true,
+                title = "x".repeat(BackupLimits.MAX_MANIFEST_BYTES.toInt() + 1024),
+                lastModifiedAt = FIXED_CLOCK.plusSeconds(60)
+            ).toEntity()
+        )
         val before = readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!)
+        clockInstant = FIXED_CLOCK.plusSeconds(600)
         assertTrue(syncRepository.runSync() is SyncResult.Error)
         assertArrayEquals(before, readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!))
-        assertNotNull(SyncLastManifestStore(filesRoot, BackupRepository.PENDING_IMPORT_MANIFEST_FILE).load())
+        assertTrue(
+            "no EPUB may be uploaded when the manifest cannot be published",
+            requireKudosLibrary().findFile("Works")?.listFiles().orEmpty().isEmpty()
+        )
+    }
+
+    @Test
+    fun aReplaceWhoseOverlayCannotBeClearedNeverStarts() = runTest {
+        val workId = "99999999-0000-4000-8000-000000000093"
+        backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
+        val pending = filesRoot.resolve(BackupRepository.PENDING_IMPORT_MANIFEST_FILE)
+        Files.delete(pending)
+        Files.createDirectories(pending.resolve("blocked")).also { Files.write(it.resolve("x"), byteArrayOf(0)) }
+        val empty = JsonObject(mapOf("version" to JsonPrimitive(8), "exportedAt" to JsonPrimitive("2026-06-28T00:00:00.000Z")))
+        val failed = runCatching {
+            backupRepository.importV2ZipBytes(zipManifest(empty), mode = BackupImportMode.REPLACE_LIBRARY)
+        }.isFailure
+        assertTrue(failed)
+        assertEquals(false, database.workDao().getById(workId)!!.isDeleted)
     }
 
     private suspend fun assertPendingBodySurvivesUntilSave(

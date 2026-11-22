@@ -39,3 +39,6 @@ data class BackupExportResult(
 
 internal const val PRONUNCIATIONS_EXPORT_WARNING =
     "Pronunciation corrections could not be read. Their file was kept; no local corrections were exported."
+
+internal const val OPAQUE_PENDING_WARNING =
+    "Some extra data from an imported backup is waiting: it did not fit in the sync manifest this time."

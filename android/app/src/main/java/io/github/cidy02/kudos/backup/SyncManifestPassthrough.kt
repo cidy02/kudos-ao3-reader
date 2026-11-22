@@ -808,6 +808,13 @@ internal class SyncLastManifestStore(
         Unit
     }
 
+    /** Like [clear], but a body that cannot be removed is an error. */
+    fun clearOrThrow() = synchronized(lock) {
+        Files.deleteIfExists(file)
+        Files.deleteIfExists(legacyFolderFile)
+        Unit
+    }
+
     fun clear() = synchronized(lock) {
         runCatching { Files.deleteIfExists(file) }
         runCatching { Files.deleteIfExists(legacyFolderFile) }

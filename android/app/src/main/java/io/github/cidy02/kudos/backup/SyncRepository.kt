@@ -386,6 +386,7 @@ class SyncRepository(
             }
 
             // 2. Export incrementally
+            var pendingImportDeferred = false
             val pronunciationsUnreadable = persistenceGate.withLock {
                 // iOS holds its gate for the whole run, so a Replace can never come between a
                 // run's check and its write-up. Here the gate is taken again for the export: a
@@ -409,6 +410,63 @@ class SyncRepository(
                     appVersion = BuildConfig.VERSION_NAME
                 )
                 
+                // Settled first: nothing in the folder is touched if the manifest cannot be published.
+                val epubDigests = mutableMapOf<String, String>()
+                // The digest of the bytes this device uploads (iOS `Storage.fileDigest`). Android
+                // keeps none of its own, and the one it carries from another device's manifest can
+                // describe an older copy: a sync-down that trusted it would skip a changed book.
+                snapshot.works.filter { it.hasEpub }.forEach { work ->
+                    val localPath = workFileStore.workEpubPath(work.id)
+                    if (Files.isRegularFile(localPath)) {
+                        epubDigests[BackupPaths.normalizeIdForComparison(work.id)] =
+                            BackupPaths.sha256(Files.readAllBytes(localPath))
+                    }
+                }
+                val localFontKeys = manifestOut.fonts.mapTo(HashSet()) { BackupPaths.fontFileNameKey(it.fileName) }
+                val manifestJson = BackupJson.encodeToJsonElement(
+                    KudosBackupManifest.serializer(),
+                    manifestOut.copy(
+                        works = manifestOut.works.map { work ->
+                            epubDigests[BackupPaths.normalizeIdForComparison(work.id)]
+                                ?.let { work.copy(epubDigest = it) } ?: work
+                        },
+                        fonts = manifestOut.fonts + pendingFonts.values.filter {
+                            BackupPaths.fontFileNameKey(it.fileName) !in localFontKeys
+                        }
+                    )
+                ).jsonObject
+                // What the folder's manifest held that this build does not know stays in the
+                // manifest this build writes. A folder whose own manifest is unreadable and
+                // has no usable .bak only falls back to the store if that store already
+                // belonged to this folder. An empty folder is no exception: the synced store
+                // is folder-scoped. The pending manual import is this device's own and still
+                // reaches every destination, folded over the store when there is one.
+                val storeBase = lastManifestStore.takeIf {
+                    !hasUsableFolderManifest && it.belongsToFolder(uri.toString())
+                }?.load()
+                val replacedJson = effectiveReadManifestJson ?: when {
+                    storeBase != null && pendingImport != null -> mergeImportedManifestJson(pendingImport, storeBase)
+                    else -> storeBase ?: pendingImport
+                }
+                fun encode(replaced: JsonObject?) = BackupJson.encodeToString(
+                    JsonObject.serializer(),
+                    carryUnknownRecordKeys(manifestJson, replaced)
+                ).toByteArray(Charsets.UTF_8)
+                // Android must be able to read back what it publishes. If the pending import's
+                // opaque data pushes the manifest over the read limit, publish what the folder
+                // already held (then, failing that, typed fields only, as before A-541) and keep
+                // the pending import for a later sync. The size is settled before any asset is written.
+                var manifestBytes = encode(replacedJson)
+                if (manifestBytes.size.toLong() > BackupLimits.MAX_MANIFEST_BYTES) {
+                    pendingImportDeferred = pendingImport != null
+                    manifestBytes = encode(effectiveReadManifestJson.takeIf { pendingImport == null } ?: readManifestJson)
+                    if (manifestBytes.size.toLong() > BackupLimits.MAX_MANIFEST_BYTES) manifestBytes = encode(null)
+                    if (manifestBytes.size.toLong() > BackupLimits.MAX_MANIFEST_BYTES) {
+                        throw IOException("The sync manifest is too large to publish. The sync folder was kept.")
+                    }
+                    android.util.Log.w("SyncRepository", "Opaque manifest data left out of this publish: over the read limit")
+                }
+
                 var worksDir = syncDir.findFile("Works")
                 if (worksDir == null) worksDir = syncDir.createDirectory("Works")
                 
@@ -417,7 +475,6 @@ class SyncRepository(
 
                 val expectedWorks = mutableSetOf<String>()
                 val expectedFonts = mutableSetOf<String>()
-                val epubDigests = mutableMapOf<String, String>()
 
                 // Assets first, manifest last: the manifest is the commit point, so
                 // it can never reference an asset file that was not already written.
@@ -433,11 +490,6 @@ class SyncRepository(
                             // iOS's name: the UUID in capitals.
                             val epubName = BackupPaths.iosEpubAssetIdentifier(work.id)
                             val bytes = Files.readAllBytes(localPath)
-                            // The digest of the bytes this device uploads (iOS
-                            // `Storage.fileDigest`). Android keeps none of its own, and the
-                            // one it carries from another device's manifest can describe an
-                            // older copy: a sync-down that trusted it would skip a changed book.
-                            epubDigests[BackupPaths.normalizeIdForComparison(work.id)] = BackupPaths.sha256(bytes)
                             writeIfChanged(
                                 worksDir, epubName, "application/epub+zip", bytes,
                                 existing = remoteWorks[epubName.lowercase(Locale.ROOT)],
@@ -493,41 +545,6 @@ class SyncRepository(
                 // records from the folder's only index. This run stops, and the next reads
                 // the new manifest first.
                 // The commit point.
-                val localFontKeys = manifestOut.fonts.mapTo(HashSet()) { BackupPaths.fontFileNameKey(it.fileName) }
-                val manifestJson = BackupJson.encodeToJsonElement(
-                    KudosBackupManifest.serializer(),
-                    manifestOut.copy(
-                        works = manifestOut.works.map { work ->
-                            epubDigests[BackupPaths.normalizeIdForComparison(work.id)]
-                                ?.let { work.copy(epubDigest = it) } ?: work
-                        },
-                        fonts = manifestOut.fonts + pendingFonts.values.filter {
-                            BackupPaths.fontFileNameKey(it.fileName) !in localFontKeys
-                        }
-                    )
-                ).jsonObject
-                // What the folder's manifest held that this build does not know stays in the
-                // manifest this build writes. A folder whose own manifest is unreadable and
-                // has no usable .bak only falls back to the store if that store already
-                // belonged to this folder. An empty folder is no exception: the synced store
-                // is folder-scoped. The pending manual import is this device's own and still
-                // reaches every destination, folded over the store when there is one.
-                val storeBase = lastManifestStore.takeIf {
-                    !hasUsableFolderManifest && it.belongsToFolder(uri.toString())
-                }?.load()
-                val replacedJson = effectiveReadManifestJson ?: when {
-                    storeBase != null && pendingImport != null -> mergeImportedManifestJson(pendingImport, storeBase)
-                    else -> storeBase ?: pendingImport
-                }
-                val manifestBytes = BackupJson.encodeToString(
-                    JsonObject.serializer(),
-                    carryUnknownRecordKeys(manifestJson, replacedJson)
-                ).toByteArray(Charsets.UTF_8)
-                // Android must be able to read back what it publishes; refuse, keeping the live
-                // manifest and the pending import, rather than publish what a later sync rejects.
-                if (manifestBytes.size.toLong() > BackupLimits.MAX_MANIFEST_BYTES) {
-                    throw IOException("The sync manifest is too large to publish. The sync folder was kept.")
-                }
                 beforeManifestCommit()
                 if (!readLiveManifest(syncDir).contentEquals(manifestBytesAtRead)) {
                     throw IOException("Sync folder changed during sync. Try syncing again.")
@@ -540,7 +557,7 @@ class SyncRepository(
                     throw IOException("Sync folder changed during sync. Try syncing again.")
                 }
                 lastManifestStore.save(manifestBytes, folderUri = uri.toString())
-                pendingImportManifestStore.clear()
+                if (!pendingImportDeferred) pendingImportManifestStore.clear()
                 foldedConflicts.forEach { it.delete() }
                 // Remembered only when nothing is outstanding (iOS withholds its stamp the same
                 // way): a work still owed an EPUB, or one whose file has gone missing from this
@@ -579,7 +596,10 @@ class SyncRepository(
             settingsRepository.updateSyncHasPendingChanges(false)
             return absorbed.copy(
                 foldedConflicts = foldedConflicts.size,
-                warning = PRONUNCIATIONS_EXPORT_WARNING.takeIf { pronunciationsUnreadable }
+                warning = listOfNotNull(
+                    PRONUNCIATIONS_EXPORT_WARNING.takeIf { pronunciationsUnreadable },
+                    OPAQUE_PENDING_WARNING.takeIf { pendingImportDeferred }
+                ).joinToString(" ").ifEmpty { null }
             )
         } catch (e: CancellationException) {
             throw e

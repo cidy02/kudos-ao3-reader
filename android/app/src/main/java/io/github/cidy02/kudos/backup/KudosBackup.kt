@@ -120,6 +120,8 @@ data class BackupRestoreSummary(
     /** Library import succeeded, but the separate corrections file could not be saved. */
     val pronunciationsRestoreFailed: Boolean = false,
     val pronunciationsUnreadable: Boolean = false,
+    /** The library committed, but extra iOS data (the opaque manifest overlay) could not be kept. */
+    val opaqueDataNotSaved: Boolean = false,
     /**
      * Archived works this restore kept (iOS `restoredWorksByArchivedID.count`).
      * A tombstone that suppressed the work is not included. Created plus updated

@@ -166,8 +166,8 @@ class BackupRepository(
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode)
             clearOverlaysBeforeReplace(mode)
-            applyMergeResultLocked(merge, pack.originalFilesByName).also {
-                recordAfterCommit { recordImportedManifest(pack.rawManifestJson, mode, replacePassthroughStore, folderUri) }
+            applyMergeResultLocked(merge, pack.originalFilesByName).let { summary ->
+                recordAfterCommit(summary) { recordImportedManifest(pack.rawManifestJson, mode, replacePassthroughStore, folderUri) }
             }
         }
     }
@@ -185,8 +185,8 @@ class BackupRepository(
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode, normalizeQueuePreservation)
             clearOverlaysBeforeReplace(mode)
-            applyMergeResultLocked(merge, pack.originalFilesByName).also {
-                recordAfterCommit { recordImportedManifest(pack.rawManifestJson, mode) }
+            applyMergeResultLocked(merge, pack.originalFilesByName).let { summary ->
+                recordAfterCommit(summary) { recordImportedManifest(pack.rawManifestJson, mode) }
             }
         }
     }
@@ -198,18 +198,21 @@ class BackupRepository(
      */
     private fun clearOverlaysBeforeReplace(mode: BackupImportMode) {
         if (mode != BackupImportMode.REPLACE_LIBRARY) return
-        lastImportedManifestStore.clear()
-        pendingImportManifestStore.clear()
+        // Checked: if an overlay cannot be removed the Replace has not started, nothing changed.
+        lastImportedManifestStore.clearOrThrow()
+        pendingImportManifestStore.clearOrThrow()
     }
 
     /** The library has committed: a failed overlay write must not read as a failed import. */
-    private suspend fun recordAfterCommit(record: suspend () -> Unit) {
+    private suspend fun recordAfterCommit(summary: BackupRestoreSummary, record: suspend () -> Unit): BackupRestoreSummary {
         try {
             record()
+            return summary
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (error: Exception) {
             android.util.Log.w("BackupRepository", "Opaque manifest data was not saved after the import committed", error)
+            return summary.copy(opaqueDataNotSaved = true)
         }
     }
 
@@ -923,6 +926,9 @@ fun BackupRestoreSummary.toUserMessage(): String {
         }
         if (pronunciationsRestoreFailed) {
             add("pronunciation corrections could not be saved; import again to retry them")
+        }
+        if (opaqueDataNotSaved) {
+            add("some extra iOS data could not be kept; import again to retry it")
         }
         if (worksCreated > 0) add("$worksCreated work(s) added")
         if (worksUpdated > 0) add("$worksUpdated work(s) updated")
