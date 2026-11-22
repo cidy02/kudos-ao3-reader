@@ -104,12 +104,50 @@ struct AO3AuthorProfileOverviewTests {
     @Test func aboutIgnoresLocationMetadata() throws {
         let route = try #require(AO3AuthorRoute(username: "Avery_Archive"))
         let html = try fixture("ao3_author_profile").replacingOccurrences(
-            of: "<dt>Joined</dt>",
-            with: "<dt>Location</dt><dd>London</dd><dt>Joined</dt>"
+            of: "<dt>I joined on:</dt>",
+            with: "<dt>Location</dt><dd>London</dd><dt>I joined on:</dt>"
         )
         let about = try AO3Client.parseAuthorAbout(html, route: route)
-        #expect(about.joinedDate == "12 March 2014")
+        #expect(about.joinedDate == "2014-03-12")
         #expect(!about.bio.plainText.contains("London"))
+    }
+
+    @Test func overviewSubtitleFormatsJoinedDateInAppStyleAndFallsBack() throws {
+        let route = try #require(AO3AuthorRoute(username: "Avery_Archive"))
+        let about = try AO3Client.parseAuthorAbout(fixture("ao3_author_profile"), route: route)
+        let us = Locale(identifier: "en_US")
+        #expect(
+            AuthorProfileOverviewHeader.identitySubtitle(
+                about: about,
+                pseudCount: 2,
+                route: route,
+                locale: us
+            ) == "Joined Mar 12, 2014 · 2 pseuds"
+        )
+        #expect(
+            AuthorProfileOverviewHeader.identitySubtitle(
+                about: about,
+                pseudCount: 2,
+                route: route,
+                locale: Locale(identifier: "en_US@tz=ushnl")
+            ) == "Joined Mar 12, 2014 · 2 pseuds"
+        )
+        #expect(
+            AuthorProfileOverviewHeader.identitySubtitle(
+                about: AO3AuthorAbout(joinedDate: "Spring 2014"),
+                pseudCount: 2,
+                route: route,
+                locale: us
+            ) == "Joined Spring 2014 · 2 pseuds"
+        )
+        #expect(
+            AuthorProfileOverviewHeader.identitySubtitle(
+                about: AO3AuthorAbout(joinedDate: "   "),
+                pseudCount: 1,
+                route: route,
+                locale: us
+            ) == nil
+        )
     }
 
     @Test func overviewActivateLoadsDashboardAndAboutOnly() async throws {
@@ -135,7 +173,7 @@ struct AO3AuthorProfileOverviewTests {
             "/users/Avery_Archive",
             "/users/Avery_Archive/profile"
         ])
-        #expect(model.about?.joinedDate == "12 March 2014")
+        #expect(model.about?.joinedDate == "2014-03-12")
         #expect(model.works.isEmpty)
         #expect(model.popularWorks.isEmpty)
         #expect(model.series.isEmpty)

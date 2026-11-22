@@ -65,7 +65,7 @@ struct DownloadDateImportConfirmation: View {
                             }
                             Text(Self.explanation(for: item.detection))
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                         if imports.count == 1 {
                             DatePicker(
@@ -112,7 +112,7 @@ struct DownloadDateImportConfirmation: View {
     }
 
     static func explanation(for detection: DownloadDateDetection) -> String {
-        let date = detection.date.formatted(date: .abbreviated, time: .omitted)
+        let date = WorkStat.displayDate(detection.date)
         return switch detection.source {
         case .file: "Downloaded \(date) · from the file"
         case .ao3Generated: "AO3 generated this copy \(date)"

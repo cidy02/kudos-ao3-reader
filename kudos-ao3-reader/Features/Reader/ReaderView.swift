@@ -15,6 +15,7 @@ struct ReaderView: View {
     var initialSpineIndex: Int? = nil
 
     @Environment(AppRouter.self) private var router
+    @Environment(\.readerPanelSuppressed) private var readerPanelSuppressed
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var privacyGate
@@ -131,10 +132,7 @@ struct ReaderView: View {
     /// The reader's chapters/display panels share the app-wide inspector (via
     /// `AppRouter.panel`) so only one inspector is ever open at a time.
     private var readerInspectorBinding: Binding<Bool> {
-        Binding(
-            get: { router.panel == .readerChapters || router.panel == .readerDisplay },
-            set: { if !$0 { router.panel = .none } }
-        )
+        router.readerPanelBinding(includesFind: false, suppressed: readerPanelSuppressed)
     }
 
     var body: some View {
@@ -167,7 +165,7 @@ struct ReaderView: View {
         .preferredColorScheme(pageColors.colorScheme)
         .ao3WorkActions(
             workActions,
-            workID: WorkTags.ao3WorkID(from: work.sourceURL) ?? 0,
+            workID: WorkTags.ao3WorkID(from: work.sourceURL),
             auth: auth,
             readerSections: sections,
             onOpenReaderChapter: { jump(to: $0) }
@@ -233,7 +231,12 @@ struct ReaderView: View {
                 // re-populates every callback `teardown()` clears.
                 controller.teardown()
                 // Leaving the reader closes its panel so it doesn't linger as state.
-                if router.panel == .readerChapters || router.panel == .readerDisplay {
+                if AppRouter.readerClearsSharedPanel(
+                    router.panel,
+                    ownsPanel: AppRouter.readerOwnsSharedPanel(
+                        landingCoversReader: readerPanelSuppressed
+                    )
+                ) {
                     router.panel = .none
                 }
             }
@@ -383,10 +386,7 @@ struct ReaderView: View {
             showsAO3Actions: ao3ID != nil,
             kudosGiven: work.hasGivenKudos,
             kudosEnabled: !workActions.isWorking && !work.hasGivenKudos,
-            isBookmarked: ao3ID.map {
-                workActions.bookmarkedWorkID == $0
-                    || workActions.workPageStates?.existingBookmark != nil
-            } ?? false,
+            isBookmarked: ao3ID.map { workActions.isBookmarked(workID: $0, auth: auth) } ?? false,
             bookmarkEnabled: !workActions.isWorking,
             upNext: ReaderEndOfWorkFacts.findUpNext(
                 for: work,
@@ -404,8 +404,8 @@ struct ReaderView: View {
                 )
             },
             onBookmark: {
-                if ao3ID != nil {
-                    workActions.startBookmark()
+                if let ao3ID {
+                    workActions.startBookmark(workID: ao3ID, auth: auth)
                 }
             },
             onStartNextWork: { nextWorkDestination = .reader($0) }
@@ -596,7 +596,13 @@ struct ReaderView: View {
     /// an ongoing read isn't deleted out from under the user. The EPUB itself is
     /// freed on `.onDisappear` (if unprotected), not while the page is on screen.
     private func autoFinishIfComplete() {
-        guard work.isComplete, !work.isFinished else { return }
+        guard work.isComplete, !work.isFinished else {
+            if !work.isComplete, work.knownChapterCount == 0, work.postedChapterCount > 0 {
+                work.knownChapterCount = work.postedChapterCount
+                try? modelContext.save()
+            }
+            return
+        }
         work.isFinished = true
         // Without a stamp a sync could not tell this from the older copy in the folder (T-541).
         work.markModified()
@@ -631,6 +637,10 @@ struct ReaderView: View {
                 // starts at the target chapter and keeps this saved pair untouched
                 // until the reader actually moves.
                 progressBridge.seed(spine: currentIndex, fraction: work.lastScrollFraction)
+            }
+            if work.modelContext != nil, !work.isPendingDeletion {
+                work.markProgressModified(Date())
+                try? modelContext.save()
             }
             Log.epub.info("Opened EPUB: \(parsed.chapters.count) chapters")
         } catch {

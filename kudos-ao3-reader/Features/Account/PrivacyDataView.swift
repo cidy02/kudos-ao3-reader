@@ -157,7 +157,7 @@ struct PrivacyDataView: View {
                 + "connects to the service providing the pack. Your library, reading positions, "
                 + "tags, collections, and AO3 sign-in stay on this device.")
                 .font(.system(size: promiseBodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -367,7 +367,7 @@ struct PrivacyDataView: View {
                 + "details about the connection. Kudos tells you this before downloading a "
                 + "Voice Pack, and the installed voices stay on this device.")
                 .font(.system(size: voicePackBodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -397,7 +397,7 @@ struct PrivacyDataView: View {
     private func footnote(_ text: String) -> some View {
         Text(text)
             .font(.system(size: voicePackBodySize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
     }

@@ -15,7 +15,7 @@ struct WorkLeadingSelectionCheck: View {
             } else {
                 Image(systemName: "circle")
                     .font(.system(size: 22))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
         }
         .frame(width: 24, height: 24)
@@ -88,6 +88,7 @@ struct WorkRow: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.workTagSearchEnabled) private var tagSearchEnabled
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
     @State private var internalExpanded = false
@@ -235,15 +236,19 @@ struct WorkRow: View {
         return WorkPlainRow(
             wide: wide || summaryRunsFullWidth,
             showsSeparator: showsSeparator,
-            separatorInset: Self.separatorInset(isSelecting: isSelecting)
+            separatorInset: Self.separatorInset(isSelecting: isSelecting),
+            showsUnderTitleTrailing: showsLedgerTrailing
         ) {
             selectionCheck
         } symbols: { arrangement in
             symbols(arrangement)
-        } heading: { includesByline in
+        } heading: { includesTrailing in
             // The author already leads the remainder unless the summary runs full
             // width, which is Beside the Title only. Leave it there.
-            ledgerHeading(includesByline: includesByline && summaryRunsFullWidth)
+            ledgerHeading(
+                includesByline: includesTrailing && summaryRunsFullWidth,
+                includesTrailing: includesTrailing
+            )
         } byline: {
             EmptyView()
         } remainder: {
@@ -252,7 +257,7 @@ struct WorkRow: View {
                 if !ledgerSummaryText.isEmpty {
                     Text(ledgerSummaryText)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -260,7 +265,17 @@ struct WorkRow: View {
                 WorkLedgerStatsLine(figures: ledgerFigures)
                 WorkChapterBarLine(layout: chapterBarLayout, label: chapterProgressLabel)
             }
+        } trailing: {
+            if showsLedgerTrailing {
+                favoriteMark(tint: .subjectFavoriteGold)
+            }
         }
+    }
+
+    /// Under the Title the favourite star leaves the title line, so the strip
+    /// stays 6 pt under the title. Beside the Title it stays in the line.
+    private var showsLedgerTrailing: Bool {
+        !symbolPlacement.keepsTrailingControlsInTitleLine && showsFavoriteStar && work.isFavorite
     }
 
     /// The fandom above the title, on every row (owner, 2026-11-09): the first fandom, "+N" for the rest.
@@ -271,15 +286,18 @@ struct WorkRow: View {
                 title: FandomDisplayName.bareTitle(fandom),
                 palette: subjectPalette,
                 additionalCount: max(0, nonemptyFandomNames.count - 1),
-                action: { router.searchAO3(.fandom, fandom) }
+                action: tagSearchEnabled ? { router.searchAO3(.fandom, fandom) } : nil
             )
         }
     }
 
     @ViewBuilder
-    private func ledgerHeading(includesByline: Bool) -> some View {
+    private func ledgerHeading(includesByline: Bool, includesTrailing: Bool) -> some View {
         fandomLabel
-        titleLine(showsFavorite: showsFavoriteStar && work.isFavorite, favoriteTint: .subjectFavoriteGold)
+        titleLine(
+            showsFavorite: includesTrailing && showsFavoriteStar && work.isFavorite,
+            favoriteTint: .subjectFavoriteGold
+        )
         if includesByline { ledgerByline }
     }
 
@@ -319,20 +337,33 @@ struct WorkRow: View {
             wide: wide || summaryRunsFullWidth,
             showsSeparator: showsSeparator,
             separatorInset: Self.separatorInset(isSelecting: isSelecting),
-            insertsByline: hasStandardByline
+            insertsByline: hasStandardByline,
+            showsUnderTitleTrailing: showsStandardTrailing(isExpandable: isExpandable)
         ) {
             selectionCheck
         } symbols: { arrangement in
             symbols(arrangement)
-        } heading: { includesByline in
-            standardHeading(isExpandable: isExpandable, includesByline: includesByline)
+        } heading: { includesTrailing in
+            standardHeading(
+                isExpandable: isExpandable,
+                includesByline: includesTrailing,
+                includesTrailing: includesTrailing
+            )
         } byline: {
             authorAndFandoms
         } remainder: {
             fullWidthSummaryRemainder(enabled: summaryRunsFullWidth) {
                 standardRemainder(summaryText: summaryText)
             }
+        } trailing: {
+            standardTrailing(isExpandable: isExpandable)
         }
+    }
+
+    /// Under the Title the star and the expand control leave the title line.
+    private func showsStandardTrailing(isExpandable: Bool) -> Bool {
+        !symbolPlacement.keepsTrailingControlsInTitleLine
+            && (work.isFavorite || (isExpandable && showsExpandButton && showsTags))
     }
 
     private func fullWidthSummaryRemainder<Content: View>(
@@ -351,16 +382,28 @@ struct WorkRow: View {
     }
 
     @ViewBuilder
-    private func standardHeading(isExpandable: Bool, includesByline: Bool) -> some View {
+    private func standardHeading(isExpandable: Bool, includesByline: Bool, includesTrailing: Bool) -> some View {
         fandomLabel
         titleLine(
-            showsFavorite: work.isFavorite,
+            showsFavorite: includesTrailing && work.isFavorite,
             favoriteTint: theme.appTheme.favoriteColor,
             dateUpdated: work.dateUpdated,
             datePublished: work.datePublished,
-            showsExpand: isExpandable && showsExpandButton && showsTags
+            showsExpand: includesTrailing && isExpandable && showsExpandButton && showsTags
         )
         if includesByline { authorAndFandoms }
+    }
+
+    /// The star and the expand control, at the top trailing edge. Same marks the
+    /// title line draws Beside the Title, including the chevron's 44 pt target.
+    @ViewBuilder
+    private func standardTrailing(isExpandable: Bool) -> some View {
+        if showsStandardTrailing(isExpandable: isExpandable) {
+            HStack(alignment: .top, spacing: 6) {
+                if work.isFavorite { favoriteMark(tint: theme.appTheme.favoriteColor) }
+                if isExpandable && showsExpandButton && showsTags { expandButton }
+            }
+        }
     }
 
     @ViewBuilder
@@ -370,13 +413,13 @@ struct WorkRow: View {
                 relationships: work.workRelationships,
                 characters: work.workCharacters,
                 freeforms: work.hasCategorizedWorkTags ? work.workFreeforms : work.workTags,
-                onTap: { tag, field in router.searchAO3(field, tag) }
+                onTap: tagSearchEnabled ? { tag, field in router.searchAO3(field, tag) } : nil
             )
         }
         if !summaryText.isEmpty {
             Text(summaryText)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(expandedBinding.wrappedValue || dynamicTypeSize.isAccessibilitySize ? nil : 3)
                 .multilineTextAlignment(.leading)
                 .animation(nil, value: expandedBinding.wrappedValue)
@@ -453,17 +496,19 @@ struct WorkRow: View {
                 .layoutPriority(1)
             WorkPlusBadge(count: badgeCount)
             Spacer(minLength: 4)
-            if showsFavorite {
-                Image(systemName: "star.fill")
-                    .font(.caption)
-                    .foregroundStyle(favoriteTint)
-                    .accessibilityHidden(true)
-            }
+            if showsFavorite { favoriteMark(tint: favoriteTint) }
             if let dateUpdated {
                 WorkUpdatedDateBadge(dateUpdated: dateUpdated, datePublished: datePublished)
             }
             if showsExpand { expandButton }
         }
+    }
+
+    private func favoriteMark(tint: Color) -> some View {
+        Image(systemName: "star.fill")
+            .font(.caption)
+            .foregroundStyle(tint)
+            .accessibilityHidden(true)
     }
 
     /// The author; the fandoms are the label above the title. An expanded row
@@ -477,11 +522,12 @@ struct WorkRow: View {
                 font: .subheadline,
                 compact: !dynamicTypeSize.isAccessibilitySize
             )
+            .fixedSize(horizontal: false, vertical: true)
         }
         if expandedBinding.wrappedValue, nonemptyFandomNames.count > 1 {
             Text(nonemptyFandomNames.joined(separator: ", "))
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -499,12 +545,22 @@ struct WorkRow: View {
                 Text(label)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
-                FlowLayout(spacing: 6, rowSpacing: 6) {
-                    ForEach(tags, id: \.self) { tag in
-                        Button { router.searchAO3(field, tag) } label: { TagChip(text: tag, symbol: field.symbol) }
-                            .buttonStyle(.borderless)
-                            .minimumHitTarget(28)
+                if tagSearchEnabled {
+                    FlowLayout(spacing: 6, rowSpacing: 6) {
+                        ForEach(tags, id: \.self) { tag in
+                            Button { router.searchAO3(field, tag) } label: { TagChip(text: tag, symbol: field.symbol) }
+                                .buttonStyle(.borderless)
+                                .minimumHitTarget(28)
+                        }
                     }
+                } else {
+                    Text(tags.joined(separator: ", "))
+                        .font(.caption)
+                        .foregroundStyle(
+                            field == .relationship ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondaryInk)
+                        )
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(.top, 2)

@@ -149,7 +149,7 @@ enum WorkMetadataRefresh {
             work.workFandoms + work.workRelationships + work.workCharacters + work.workFreeforms
         )
 
-        if !metadata.language.isEmpty { work.language = metadata.language }
+        work.applyLanguageMetadata(metadata.language)
         if let words = metadata.words { work.wordCount = words }
         if !metadata.chapters.isEmpty { work.chapters = metadata.chapters }
         if let kudos = metadata.kudos { work.kudos = kudos }
@@ -172,6 +172,7 @@ enum WorkMetadataRefresh {
         }
         if let position = metadata.seriesPosition, position > 0 { work.seriesPosition = position }
         if !metadata.tagGroups.isEmpty { work.workTagsFetched = true }
+        work.refreshCoverIfNeeded()
         work.lastUpdateCheck = Date()
         work.markModified()
     }

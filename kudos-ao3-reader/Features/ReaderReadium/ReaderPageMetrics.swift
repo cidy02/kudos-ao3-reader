@@ -73,6 +73,15 @@ nonisolated enum ReaderPageMetrics {
         return min(pageCount, max(1, page))
     }
 
+    /// 1-based page from Readium's leading-edge locator progression (`scrollX / scrollWidth`
+    /// or `scrollY / scrollHeight`), where page `p` of `N` sits at `(p - 1) / N`.
+    static func pageFromLeadingProgression(_ progression: Double, pageCount: Int) -> Int {
+        guard pageCount > 1, progression.isFinite else { return 1 }
+        let prog = min(1, max(0, progression))
+        let page = Int((prog * Double(pageCount)).rounded()) + 1
+        return min(pageCount, max(1, page))
+    }
+
     /// Whole-work positions still ahead from a 1-based global Readium position.
     static func workRemainingPositions(
         globalPosition: Int?,

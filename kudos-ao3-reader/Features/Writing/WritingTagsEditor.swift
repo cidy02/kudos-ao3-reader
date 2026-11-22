@@ -142,14 +142,14 @@ struct WritingTagsEditor: View {
         GlassFieldBar(text: $term, placeholder: "Add a tag", onSubmit: { add(term) }) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 13))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         } trailing: {
             if !term.isEmpty {
                 Button { term = "" } label: {
                     Image(systemName: "xmark.circle.fill").font(.system(size: 14))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .accessibilityLabel("Clear")
             }
         }
@@ -272,7 +272,7 @@ struct WritingTagsEditor: View {
             if let errorMessage {
                 Text(errorMessage)
                     .font(.system(size: footnoteSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 11)
@@ -324,7 +324,7 @@ struct WritingTagsEditor: View {
                 if let workCount {
                     Text(workCount.formatted())
                         .font(.system(size: workCountSize, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
 
                 Image(systemName: "plus")

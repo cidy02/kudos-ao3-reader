@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Kudos
 
@@ -67,5 +68,70 @@ struct SearchPanelRulesTests {
         oneFandomAndQuery.fandom = "Fandom A"
         oneFandomAndQuery.query = "slow burn"
         #expect(SearchView.defaultSavedSearchName(for: oneFandomAndQuery) == "Fandom A")
+    }
+
+    /// Docked filter edits stay in the draft until Show Works commits them, so results
+    /// summaries, pagination, and Show Works counts reflect the applied query.
+    @Test func dockedDraftEditsStayIsolatedUntilShowWorks() {
+        var applied = AO3SearchFilters(query: "lighthouse")
+        applied.completion = .complete
+
+        var draft = applied
+        draft.rating = .mature
+
+        // Draft diverged from applied: Show Works drops the stale count; applied is untouched.
+        #expect(AO3FilterPanel.resultsButtonTitle(
+            mode: .search, filters: applied, referenceFilters: applied, totalWorks: 42, refineCount: 0
+        ) == "Show 42 Works")
+        #expect(AO3FilterPanel.resultsButtonTitle(
+            mode: .search, filters: draft, referenceFilters: applied, totalWorks: 42, refineCount: 0
+        ) == "Show Works")
+
+        // Typing a new query syncs into the draft without discarding unapplied facets.
+        let synced = SearchDockedFilterDraft.syncedDraft(draft, query: "sherlock")
+        #expect(synced.query == "sherlock")
+        #expect(synced.rating == .mature)
+        #expect(applied.rating == .any)
+
+        // Show Works commits the draft with the live search-bar query.
+        let committed = SearchDockedFilterDraft.committed(draft: draft, query: "sherlock")
+        #expect(committed.query == "sherlock")
+        #expect(committed.rating == .mature)
+        #expect(committed.completion == .complete)
+
+        // Reset in docked mode clears facets in the draft while keeping the query.
+        let reset = SearchDockedFilterDraft.resetDraft(query: "sherlock")
+        #expect(reset.query == "sherlock")
+        #expect(!reset.hasActiveFilters)
+    }
+
+    /// Tapping a result filter chip while Filters is docked never claims `.searchFilters`
+    /// on the router, so an AO3 link submitted right after opens immediately rather than
+    /// waiting for a dismissal callback that never comes.
+    @Test func dockedFilterChipNeverStrandsAO3LinkInRouter() throws {
+        #expect(!SearchDockedFilterDraft.shouldOpenRouterPanel(isFiltersDocked: true))
+        #expect(SearchDockedFilterDraft.shouldOpenRouterPanel(isFiltersDocked: false))
+
+        let workURL = try #require(URL(string: "https://archiveofourown.org/works/12345"))
+        let router = AppRouter()
+        router.selection = .search
+        if SearchDockedFilterDraft.shouldOpenRouterPanel(isFiltersDocked: true) {
+            router.panel = .searchFilters
+        }
+        router.openAO3Link(workURL)
+        #expect(router.isPresentingLinkedWork)
+        #expect(router.pendingWorkLink?.id == 12345)
+
+        // If stale `.searchFilters` ownership was held before entering docked mode,
+        // clearing it and invoking `panelDidDismiss()` delivers any queued link.
+        let staleRouter = AppRouter()
+        staleRouter.selection = .search
+        staleRouter.panel = .searchFilters
+        staleRouter.openAO3Link(workURL)
+        #expect(!staleRouter.isPresentingLinkedWork)
+        staleRouter.panel = .none
+        staleRouter.panelDidDismiss()
+        #expect(staleRouter.isPresentingLinkedWork)
+        #expect(staleRouter.pendingWorkLink?.id == 12345)
     }
 }

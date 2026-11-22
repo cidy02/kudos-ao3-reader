@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 #if os(iOS)
 import UIKit
 #elseif os(macOS)
@@ -10,14 +11,19 @@ import AppKit
 // (`ReaderOptionsForm`), so the two can never drift apart.
 
 /// App-wide theme, accent colour, and text size. The reader's own theme picker
-/// stays in the reader's sheet. Sepia keeps its warm brown for controls.
+/// stays in the reader's sheet. Sepia defaults to Sepia Brown until another
+/// accent is chosen.
 struct SettingsAppearancePage: View {
+    @Environment(\.modelContext) private var modelContext
     @Environment(ThemeManager.self) private var themeManager
     @State private var showCustomize = false
     @State private var showCustomWarning = false
     @State private var customPick: Task<Void, Never>?
+    @State private var updateCoversTask: Task<Void, Never>?
+    @State private var updateCoversStatus: String?
     @State private var pickerBridge = AccentColorPickerBridge()
     @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
+    @AppStorage("useEmbeddedCoverArt") private var useEmbeddedCoverArt = true
 
     /// Bindings into the central ThemeManager (an @Observable in the environment).
     private var appThemeBinding: Binding<ReaderTheme> {
@@ -39,14 +45,14 @@ struct SettingsAppearancePage: View {
                 if !themeManager.matchAppAndReader {
                     Text("App Theme")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 ThemePreviewTilePicker(selection: appThemeBinding)
                 Toggle("Match App & Reader Theme", isOn: matchThemeBinding).accentFill()
                 if !themeManager.matchAppAndReader {
                     Text("Reader Theme")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                     ThemePreviewTilePicker(selection: readerThemeBinding)
                 }
                 #if os(iOS)
@@ -55,7 +61,7 @@ struct SettingsAppearancePage: View {
                 // Unlabelled under a "Theme" header it read as app-wide.
                 Text("Reader Text Size")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 TextSizeSlider()
                 #endif
             } header: {
@@ -76,7 +82,7 @@ struct SettingsAppearancePage: View {
                 Text("Accent colour")
             } footer: {
                 Text("Delete and other destructive actions stay system red with every colour. "
-                    + "Sepia keeps its warm tint.")
+                    + "Sepia follows the chosen colour, defaulting to Sepia Brown.")
             }
 
             Section {
@@ -94,6 +100,50 @@ struct SettingsAppearancePage: View {
             // Backed up like the Library layout (UserDefaults, which the folder-sync
             // observer does not query), so it marks the sync folder dirty the same way.
             .onChange(of: symbolPlacement) { _, _ in
+                NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+            }
+
+            Section {
+                Toggle("Use art from the work when there is some", isOn: $useEmbeddedCoverArt)
+                    .accentFill()
+                Button("Update Covers") {
+                    guard updateCoversTask == nil else { return }
+                    updateCoversStatus = "Updating covers…"
+                    updateCoversTask = Task { @MainActor in
+                        defer { updateCoversTask = nil }
+                        guard let works = try? modelContext.fetch(FetchDescriptor<SavedWork>()) else {
+                            updateCoversStatus = nil
+                            return
+                        }
+                        var updatedCount = 0
+                        var processed = 0
+                        for work in works {
+                            if Task.isCancelled { break }
+                            guard work.modelContext != nil, !work.isPendingDeletion else { continue }
+                            let oldJSON = work.coverRecipeJSON
+                            work.pinCover()
+                            if work.coverRecipeJSON != oldJSON { updatedCount += 1 }
+                            processed += 1
+                            if processed.isMultiple(of: 50) { await Task.yield() }
+                        }
+                        if updatedCount > 0 { modelContext.saveBestEffort(reason: "Updating covers failed") }
+                        if Task.isCancelled {
+                            updateCoversStatus = "Stopped updating covers."
+                        } else if updatedCount == 0 {
+                            updateCoversStatus = "All covers are up to date."
+                        } else {
+                            let noun = updatedCount == 1 ? "cover" : "covers"
+                            updateCoversStatus = "Updated \(updatedCount) \(noun)."
+                        }
+                    }
+                }
+                .disabled(updateCoversTask != nil)
+            } header: {
+                Text("Covers")
+            } footer: {
+                if let updateCoversStatus { Text(updateCoversStatus) }
+            }
+            .onChange(of: useEmbeddedCoverArt) { _, _ in
                 NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
             }
 
@@ -134,12 +184,13 @@ struct SettingsAppearancePage: View {
             }
             Button("Keep AO3 Red", role: .cancel) {}
         } message: {
-            Text("Kudos is designed around its six accent colours. They keep text readable in Light, "
+            Text("Kudos is designed around its seven accent colours. They keep text readable in Light, "
                 + "Sepia, Dark and OLED, and stay clear of the red used for Delete. A custom colour "
                 + "may make some buttons and links harder to read.")
         }
         .onDisappear {
             customPick?.cancel()
+            updateCoversTask?.cancel()
             pickerBridge.close()
         }
         #if DEBUG
@@ -281,7 +332,7 @@ struct SettingsFontPage: View {
     }
 }
 
-/// Reading mode, two-page spread and keep screen awake.
+/// Reading mode, page turn (iOS), two-page spread and keep screen awake.
 struct SettingsReaderPage: View {
     var body: some View {
         SettingsPageForm(route: .reader) {
@@ -315,17 +366,20 @@ struct SettingsListeningPage: View {
 }
 #endif
 
-/// The six named swatches plus a custom well. Each swatch is its own button,
+/// The seven named swatches plus a custom well. Each swatch is its own button,
 /// with the colour's name and a selected trait, the way `SubjectChip` marks a
 /// chosen pill. The custom well says "Custom colour" and never a raw hex.
 private struct AccentColourPicker: View {
+    @Environment(ThemeManager.self) private var themeManager
     let accentHex: String
     let onSelectNamed: (String) -> Void
     let onCustom: () -> Void
 
-    /// A stored string that is not a colour is AO3 Red here. The stored string
-    /// is left unchanged.
-    private var shownHex: String { AppAccent.pickerHex(for: accentHex) }
+    /// A stored string that is not a colour falls back to the theme's default
+    /// here. The stored string is left unchanged.
+    private var shownHex: String {
+        AppAccent.pickerHex(for: accentHex, on: themeManager.appTheme)
+    }
 
     private var selectedFill: String? {
         AppAccent.named(hex: shownHex)?.fillHex
@@ -341,7 +395,9 @@ private struct AccentColourPicker: View {
                 Text(AppAccent.named(hex: shownHex)?.name ?? "Custom")
                     .font(.body)
                 Spacer()
-                if shownHex.caseInsensitiveCompare(ThemeManager.ao3Red) == .orderedSame {
+                if shownHex.caseInsensitiveCompare(
+                    ThemeManager.defaultAccentHex(for: themeManager.appTheme)
+                ) == .orderedSame {
                     Text("Default")
                         .font(.subheadline)
                         .foregroundStyle(Color(hex: "#8E8E93") ?? .secondary)
@@ -349,30 +405,43 @@ private struct AccentColourPicker: View {
             }
             .accessibilityHidden(true)
 
-            HStack(spacing: 0) {
-                ForEach(AppAccent.all) { accent in
-                    let selected = selectedFill == accent.fillHex
-                    Button {
-                        onSelectNamed(accent.fillHex)
-                    } label: {
-                        AccentSwatch(fillHex: accent.fillHex, selected: selected)
-                    }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .contentShape(Rectangle())
-                    .accessibilityLabel(accent.name)
-                    .accessibilityAddTraits(selected ? .isSelected : [])
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 0) {
+                    swatchButtons
                 }
-                Button(action: onCustom) {
-                    AccentCustomWell(selectedHex: customHex)
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
+                    spacing: 10
+                ) {
+                    swatchButtons
                 }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .contentShape(Rectangle())
-                .accessibilityLabel("Custom colour")
-                .accessibilityAddTraits(customHex == nil ? [] : .isSelected)
             }
         }
+    }
+
+    @ViewBuilder
+    private var swatchButtons: some View {
+        ForEach(AppAccent.all) { accent in
+            let selected = selectedFill == accent.fillHex
+            Button {
+                onSelectNamed(accent.fillHex)
+            } label: {
+                AccentSwatch(fillHex: accent.fillHex, selected: selected)
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .contentShape(Rectangle())
+            .accessibilityLabel(accent.name)
+            .accessibilityAddTraits(selected ? .isSelected : [])
+        }
+        Button(action: onCustom) {
+            AccentCustomWell(selectedHex: customHex)
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .contentShape(Rectangle())
+        .accessibilityLabel("Custom colour")
+        .accessibilityAddTraits(customHex == nil ? [] : .isSelected)
     }
 }
 

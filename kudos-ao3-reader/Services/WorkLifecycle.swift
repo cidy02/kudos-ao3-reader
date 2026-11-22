@@ -144,6 +144,7 @@ enum WorkLifecycle {
     @MainActor
     static func setSaved(_ work: SavedWork, _ saved: Bool, in context: ModelContext) {
         work.isSaved = saved
+        if saved && work.coverRecipeJSON == nil { work.pinCover(salt: 0, automatic: true) }
         if saved { work.freedAt = nil }
         work.markModified()
         context.saveBestEffort(reason: "Saving saved state failed")

@@ -22,6 +22,7 @@ struct ContentView: View {
     @AppStorage("hideMatureContent") private var hideMature = true
     #endif
     @State private var subscriptionScan = SubscriptionScanService.shared
+    @State private var followedTagUpdates = FollowedTagUpdateStore.shared
     #if os(iOS)
     @State private var mailSubscriptionDriver = MailSubscriptionDriver()
     #endif
@@ -61,6 +62,9 @@ struct ContentView: View {
     var body: some View {
         @Bindable var router = router
         content
+            // Readers under the link-landing sheet must not present or clear the
+            // shared panel. The sheet itself opts back in.
+            .environment(\.readerPanelSuppressed, router.isPresentingLinkedWork)
             // Warms WebKit at launch instead of on first real use (the AO3 login
             // sheet, or Browse) — see WebKitPrewarmView.
             .background { WebKitPrewarmView() }
@@ -72,15 +76,49 @@ struct ContentView: View {
                     DownloadQueueBanner()
                 }
             }
-            // Home's profile control opens Account as a self-contained sheet.
-            // Root-hosting also gives restored/deep-linked Account routes one sink.
-            .sheet(isPresented: $router.isPresentingAccount, onDismiss: router.accountDidDismiss) {
+            // Account sheet presentation lives inside `duoLayoutProbe()` (in
+            // `IOSTabShell` on iOS, or directly below on macOS/visionOS) so iOS reads
+            // `\.duoLayout` and yields to HomeView's trailing inspector on Open/Book Duo.
+            #if !os(iOS)
+            .sheet(isPresented: $router.isPresentingAccount, onDismiss: {
+                router.finalizeAccountDismissal()
+            }) {
                 AccountView()
             }
+            #endif
             // AO3 website sheet is root-hosted so `router.open` never switches the
             // user into Browse — Done returns them to the tab they left.
-            .sheet(isPresented: $router.isPresentingWebBrowser) {
+            .sheet(isPresented: router.webBrowserPresentation, onDismiss: {
+                router.webBrowserDidDismiss()
+            }) {
                 AO3WebBrowserView()
+            }
+            .sheet(isPresented: Binding(
+                get: {
+                    router.isPresentingLinkedWork && !router.isPresentingAccount
+                        && router.canPresentLinkedWorkOverPanel && !showingBugReport
+                        && whatsNewEntries.isEmpty && externalImport.pendingImport == nil
+                        && !onboardingPresented.wrappedValue && !syncFolderOnboardingPresented.wrappedValue
+                },
+                set: { router.isPresentingLinkedWork = $0 }
+            ), onDismiss: {
+                router.linkedWorkDidDismiss()
+            }) {
+                if let link = router.pendingWorkLink {
+                    LinkedWorkLandingView(workID: link.id, chapterID: link.chapterID)
+                        .id(router.workLinkEpoch)
+                }
+            }
+            .sheet(isPresented: $router.isPresentingLinkedWorkLogin, onDismiss: {
+                router.linkedWorkLoginSheetDidDismiss(
+                    isLoggedIn: auth.isLoggedIn,
+                    sessionGeneration: auth.sessionGeneration
+                )
+            }) {
+                if let link = router.pendingLoginWorkLink {
+                    AO3LoginView(contextMessage: "Restricted work",
+                                 contextURL: AO3Client.workURL(workID: link.id))
+                }
             }
             #if DEBUG
             .overlay {
@@ -101,6 +139,7 @@ struct ContentView: View {
             .environment(inboxModel)
             .environment(downloadQueue)
             .environment(subscriptionScan)
+            .environment(followedTagUpdates)
             #if os(iOS)
             .environment(speech)
             .environment(mailSubscriptionDriver)
@@ -176,7 +215,11 @@ struct ContentView: View {
             // community-redistributed copy actually reaches the app. Converts
             // non-EPUB formats on the way in; see ExternalFileImport.
             .onOpenURL { url in
-                Task { await externalImport.handle(url) }
+                if AO3Link(url).kind != .notAO3 {
+                    router.openAO3Link(url)
+                } else {
+                    Task { await externalImport.handle(url) }
+                }
             }
             .sheet(isPresented: Binding(
                 get: { externalImport.pendingImport != nil },
@@ -403,8 +446,14 @@ struct ContentView: View {
     private var content: some View {
         #if os(macOS)
         sidebarSplit
+        #elseif os(iOS)
+        IOSTabShell(
+            destination: destination(for:),
+            speechAccessory: { readerSpeechAccessory }
+        )
+        .duoLayoutProbe()
         #else
-        tabs
+        visionTabs
         #endif
     }
 
@@ -495,46 +544,28 @@ struct ContentView: View {
         )
     }
 
-    // MARK: iOS — adaptive tab bar / sidebar
+    #if !os(macOS) && !os(iOS)
+    // MARK: visionOS — adaptive tab bar / sidebar with Search accessory
 
-    private var tabs: some View {
-        TabView(selection: $router.selection) {
+    private var visionTabs: some View {
+        @Bindable var router = router
+        return TabView(selection: $router.selection) {
             ForEach(router.mainTabs) { tab in
                 Tab(tab.title, systemImage: tab.symbol, value: tab) {
                     destination(for: tab)
                 }
             }
-            #if os(iOS)
-            // Global Search uses iOS 26's search-role slot so the system lays it out
-            // as a separate circular button beside the tab bar (the same relationship
-            // Apple Books gives its Search button), distinct from the four core tabs.
-            Tab(AppTab.search.title, systemImage: AppTab.search.symbol,
-                value: AppTab.search, role: .search) {
-                    destination(for: .search)
-                }
-            #endif
         }
         .tabViewStyle(.sidebarAdaptable)
-        #if os(iOS)
-        // Owner, 2026-10-01: the tab bar shrinks while you scroll down.
-        .tabBarMinimizeBehavior(.onScrollDown)
-        .tabViewBottomAccessory(
-            isEnabled: ReaderSpeechSessionPolicy.showsMiniPlayer(
-                sessionActive: speech.isSessionActive,
-                readerOpen: speech.isReaderOpen,
-                commentAccessoryTab: router.commentAccessoryTab,
-                selectedTab: router.selection
-            )
-        ) {
-            readerSpeechAccessory
+        #if os(visionOS)
+        .tabViewBottomAccessory {
+            searchButton
         }
         #endif
-        #if os(visionOS)
-            .tabViewBottomAccessory {
-                searchButton
-            }
-        #endif
     }
+    #endif
+
+    // MARK: iOS — adaptive tab bar / sidebar (hosted in IOSTabShell inside duoLayoutProbe)
 
     #if os(iOS)
     private var readerSpeechAccessory: some View {
@@ -616,14 +647,45 @@ struct ContentView: View {
             return .wrote(progressStamp: work.progressModifiedAt ?? date)
         }
         speech.onReleaseDetachedWork = { workID in
-            let targetID = workID
-            var descriptor = FetchDescriptor<SavedWork>(
-                predicate: #Predicate { $0.id == targetID }
+            guard let work = savedWork(id: workID, in: context) else { return }
+            ReadingLogService.handleDetachedSpeech(
+                .stopped,
+                for: work,
+                playbackRate: ReaderSpeechPreferences.rateMultiplier,
+                now: Date()
             )
-            descriptor.fetchLimit = 1
-            guard let works = try? context.fetch(descriptor), let work = works.first else { return }
             WorkLifecycle.freeEPUBIfFinished(work, in: context)
         }
+        speech.onStatusTransition = { workID, status, isReaderOpen in
+            guard let work = savedWork(id: workID, in: context) else { return }
+            let mapped: ReadingLogService.DetachedSpeechState = switch status {
+            case .playing: .playing
+            case .paused: .paused
+            case .stopped, .unavailable: .stopped
+            }
+            let isBackgrounded = UIApplication.shared.applicationState == .background
+            ReadingLogService.handleSpeechStatusChange(
+                mapped,
+                isReaderOpen: isReaderOpen,
+                isBackgrounded: isBackgrounded,
+                for: work,
+                playbackRate: ReaderSpeechPreferences.rateMultiplier,
+                now: Date()
+            )
+        }
+        speech.onPlaybackActivity = { workID, date in
+            guard let work = savedWork(id: workID, in: context) else { return }
+            ReadingLogService.noteActivity(for: work, now: date)
+        }
+    }
+
+    private func savedWork(id workID: UUID, in context: ModelContext) -> SavedWork? {
+        let targetID = workID
+        var descriptor = FetchDescriptor<SavedWork>(
+            predicate: #Predicate { $0.id == targetID }
+        )
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first
     }
 
     private var speechMetadataIsConcealed: Bool {
@@ -662,6 +724,203 @@ struct ContentView: View {
     }
     #endif
 }
+
+#if os(iOS)
+/// Reference-backed handoff state so `.sheet`'s `Binding.set`, `onDismiss`, and
+/// `.onChange` always mutate the same live presenter state rather than stale copies.
+private final class DuoAccountPresentationBox {
+    var usesInspector = false
+    var presenterState = DuoAccountPresenterState()
+}
+
+/// Hosts the iOS `TabView` and non-inspector Account sheet inside `duoLayoutProbe()`
+/// so both the tab bar (N3/N7) and Account presentation (N5) observe `\.duoLayout`.
+private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
+    private struct AccountPresenterInputs: Equatable {
+        let isPresentingAccount: Bool
+        let presentsAsSheet: Bool
+        let usesInspector: Bool
+    }
+
+    @Environment(AppRouter.self) private var router
+    @Environment(ReaderSpeechController.self) private var speech
+    @Environment(\.duoLayout) private var duoLayout
+    @Environment(\.layoutDirection) private var layoutDirection
+    @Environment(\.displayScale) private var displayScale
+    /// Once Duo has been observed, stay on `role: .prominent` across fold/rotation
+    /// transitions so a single transient layout tick never rebuilds the `TabView`.
+    @State private var latchedSeparatesSearchTab = false
+    @State private var presentationBox = DuoAccountPresentationBox()
+
+    let destination: (AppTab) -> Destination
+    @ViewBuilder let speechAccessory: () -> SpeechAccessory
+
+    private var accountPresentation: DuoAccountPresentation {
+        duoLayout.accountPresentation(rightToLeft: layoutDirection == .rightToLeft)
+    }
+
+    /// On Open/Book landscape Duo, HomeView hosts Account as a trailing inspector
+    /// while Home is at its root and out of Select mode; every other pose/state
+    /// presents Account as a `.sheet` with its own Done button.
+    private var usesAccountInspector: Bool {
+        accountPresentation.isInspector
+            && router.selection == .home
+            && router.isHomeReadyForAccountInspector
+    }
+
+    private var presentsAccountAsSheet: Bool {
+        duoLayout.presentsAccountAsSheet(
+            isPresentingAccount: router.isPresentingAccount,
+            onHome: router.selection == .home,
+            homeCanHostInspector: router.isHomeReadyForAccountInspector,
+            rightToLeft: layoutDirection == .rightToLeft
+        )
+    }
+
+    private var accountPresenterInputs: AccountPresenterInputs {
+        AccountPresenterInputs(
+            isPresentingAccount: router.isPresentingAccount,
+            presentsAsSheet: presentsAccountAsSheet,
+            usesInspector: usesAccountInspector
+        )
+    }
+
+    private var usesProminentSearchTab: Bool {
+        latchedSeparatesSearchTab || duoLayout.separatesSearchTab
+    }
+
+    private func accountSheetBinding() -> Binding<Bool> {
+        presentationBox.usesInspector = usesAccountInspector
+        let box = presentationBox
+        return Binding<Bool>(
+            get: { presentsAccountAsSheet },
+            set: { isPresented in
+                // Only clear `isPresentingAccount` when the sheet itself dismissed while
+                // in sheet mode — never when a pose/probe update hands off to the inspector.
+                if !isPresented, !box.usesInspector {
+                    router.isPresentingAccount = false
+                }
+            }
+        )
+    }
+
+    private func tabSelectionBinding() -> Binding<AppTab> {
+        Binding(
+            get: { router.selection },
+            set: { next in
+                // Close Account's inspector before changing tabs so `presentsAccountAsSheet`
+                // never flashes a modal sheet for one frame on the destination tab.
+                if next != .home,
+                   router.isPresentingAccount,
+                   presentationBox.presenterState.owner == .inspector || accountPresentation.isInspector {
+                    router.isPresentingAccount = false
+                }
+                router.selection = next
+            }
+        )
+    }
+
+    var body: some View {
+        let accountSheetPresented = accountSheetBinding()
+        TabView(selection: tabSelectionBinding()) {
+            ForEach(router.mainTabs) { tab in
+                Tab(value: tab) {
+                    destination(tab)
+                } label: {
+                    if duoLayout.hasVerticalBar {
+                        Label {
+                            Text(tab.title)
+                        } icon: {
+                            Image(uiImage: DuoRailTabArtwork.image(
+                                title: tab.title,
+                                systemImage: router.selection == tab ? tab.selectedSymbol : tab.symbol,
+                                scale: displayScale
+                            ))
+                            .renderingMode(.template)
+                        }
+                        .accessibilityShowsLargeContentViewer {
+                            Label(tab.title, systemImage: tab.symbol)
+                        }
+                    } else {
+                        Label(tab.title, systemImage: tab.symbol)
+                    }
+                }
+            }
+            if #available(iOS 27.0, *), usesProminentSearchTab {
+                // Duo rail & upright tab bar (N3/N7): detach Search into its own circle
+                // beside the core tab group. Using `.prominent` from the TabView's initial
+                // build (see `.id(usesProminentSearchTab)`) avoids UIKit mutating a
+                // `UISearchTab` into a prominent `UITab` in place.
+                Tab(AppTab.search.title, systemImage: AppTab.search.symbol,
+                    value: AppTab.search, role: .prominent) {
+                    destination(.search)
+                }
+            } else {
+                Tab(AppTab.search.title, systemImage: AppTab.search.symbol,
+                    value: AppTab.search, role: .search) {
+                    destination(.search)
+                }
+            }
+        }
+        .id(usesProminentSearchTab)
+        .tabViewStyle(.sidebarAdaptable)
+        // Owner, 2026-10-01: the tab bar shrinks while you scroll down.
+        .tabBarMinimizeBehavior(.onScrollDown)
+        .tabViewBottomAccessory(
+            isEnabled: ReaderSpeechSessionPolicy.showsMiniPlayer(
+                sessionActive: speech.isSessionActive,
+                readerOpen: speech.isReaderOpen,
+                commentAccessoryTab: router.commentAccessoryTab,
+                selectedTab: router.selection
+            )
+        ) {
+            speechAccessory()
+        }
+        .onChange(of: duoLayout.separatesSearchTab, initial: true) { _, separates in
+            if separates { latchedSeparatesSearchTab = true }
+        }
+        .sheet(isPresented: accountSheetPresented, onDismiss: {
+            if presentationBox.presenterState.sheetDidDismiss(
+                isPresentingAccount: router.isPresentingAccount
+            ) {
+                router.finalizeAccountDismissal()
+            }
+        }) {
+            AccountView()
+                .duoAccountSheetSizing(isFormSheet: accountPresentation == .formSheet)
+        }
+        .onChange(of: router.selection) { _, selection in
+            // Switching tabs from the live rail while Account's inspector is open
+            // closes the inspector cleanly instead of popping a modal sheet.
+            if selection != .home,
+               router.isPresentingAccount,
+               presentationBox.presenterState.owner == .inspector || accountPresentation.isInspector {
+                router.isPresentingAccount = false
+            }
+        }
+        .onChange(of: accountPresenterInputs, initial: true) { _, inputs in
+            if presentationBox.presenterState.sync(
+                isPresentingAccount: inputs.isPresentingAccount,
+                presentsAsSheet: inputs.presentsAsSheet,
+                usesInspector: inputs.usesInspector
+            ) {
+                router.finalizeAccountDismissal()
+            }
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func duoAccountSheetSizing(isFormSheet: Bool) -> some View {
+        if isFormSheet {
+            presentationSizing(.form)
+        } else {
+            self
+        }
+    }
+}
+#endif
 
 /// Warms WebKit's shared WebContent/Networking process pool at launch instead of
 /// on first real use. The very first `WKWebView` load in a process incurs a
@@ -714,7 +973,8 @@ private struct WebKitPrewarmView: View {
         .modelContainer(for: [
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, ReadingAnnotation.self,
-            ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self
+            SavedSearch.self, QueueSavedSearchLink.self, ReadingAnnotation.self,
+            ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self,
+            FollowedTag.self, TagAlias.self, SavedSeries.self
         ], inMemory: true)
 }

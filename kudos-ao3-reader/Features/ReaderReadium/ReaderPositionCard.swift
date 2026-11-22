@@ -13,6 +13,13 @@ import SwiftUI
 /// can return to that point to cancel. The thumb magnets to the origin when
 /// nearby; the page digit and chapter duration ("8 min") use `tint` when the
 /// preview page differs from the scrub origin.
+/// The compact position bar of the Duo boards: the work's title and "Ch 7 of 20"
+/// in one row, the slider, then "Page 4 of 18 · 21 min left" (T-562a).
+struct ReaderPositionCardCompact: Equatable {
+    let title: String
+    let chapter: String
+}
+
 struct ReaderPositionCard<MiniPlayer: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accentInk) private var ink
@@ -33,6 +40,11 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
     /// When true, page **number** and chapter duration use theme tint (not suffixes).
     let scrubValuesEmphasized: Bool
     let onEditingChanged: (Bool) -> Void
+    /// Non-nil draws the compact bar instead of the three-line card.
+    let compact: ReaderPositionCardCompact?
+    /// Disabled on a committed turn that will hide the controls, so the page digit
+    /// and remaining time update in lockstep with the slider before the fade.
+    let animatesNumericChanges: Bool
     /// Optional read-aloud strip. Pass `EmptyView` (the default) when speech is
     /// stopped — the separator only appears when a real mini player is provided.
     @ViewBuilder private var miniPlayer: () -> MiniPlayer
@@ -47,6 +59,8 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
         sliderEnabled: Bool,
         scrubOrigin: Double? = nil,
         scrubValuesEmphasized: Bool = false,
+        compact: ReaderPositionCardCompact? = nil,
+        animatesNumericChanges: Bool = true,
         onEditingChanged: @escaping (Bool) -> Void,
         @ViewBuilder miniPlayer: @escaping () -> MiniPlayer = { EmptyView() }
     ) {
@@ -60,6 +74,8 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
         self.scrubOrigin = scrubOrigin
         self.scrubValuesEmphasized = scrubValuesEmphasized
         self.onEditingChanged = onEditingChanged
+        self.compact = compact
+        self.animatesNumericChanges = animatesNumericChanges
         self.miniPlayer = miniPlayer
     }
 
@@ -107,48 +123,143 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
                     .padding(.horizontal, SubjectMetrics.gutter)
             }
 
-            VStack(spacing: 8) {
-                if dynamicTypeSize.isAccessibilitySize {
-                    // At the accessibility sizes the row broke every piece apart ("Pa / ge",
-                    // "98 / 0", "chap- / ter", seen at AX5): the page, then the time, each one
-                    // string that wraps between words.
-                    VStack(alignment: .leading, spacing: 2) {
-                        pageTitleLabel
-                        chapterTimeLabel
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            Group {
+                if let compact {
+                    compactBody(compact)
                 } else {
-                    HStack(alignment: .firstTextBaseline) {
-                        // Page digit + duration tint when scrubbing away from origin;
-                        // "Page" / "of M" / "left in chapter" stay unemphasized.
-                        pageTitleLabel
-                        Spacer(minLength: 8)
-                        chapterTimeLabel
-                    }
+                    standardBody
                 }
-
-                scrubSlider
-                    .disabled(!sliderEnabled)
-                    .accessibilityLabel("Seek within chapter")
-                    .accessibilityValue(pageAccessibilityLabel)
-
-                Text(workLine)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
-                    // Shrink a little before truncating, so the longest reading stays
-                    // legible at large Dynamic Type sizes. Carried over from the
-                    // progress pill this card replaced (HIG wave, A-F: position
-                    // readout must not clip or truncate as text scales).
-                    .minimumScaleFactor(0.75)
             }
-            .padding(.horizontal, SubjectMetrics.gutter)
-            .padding(.top, showsMiniPlayer ? 12 : 13)
-            .padding(.bottom, 15)
+            // Keep the card's page digit, slider thumb and work line in lockstep
+            // when a committed turn hides chrome: do not inherit the chrome fade
+            // transaction onto the card's content (the card's outer opacity still fades).
+            .transaction { transaction in
+                if !animatesNumericChanges {
+                    transaction.animation = nil
+                    transaction.disablesAnimations = true
+                }
+            }
         }
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+        .glassEffect(
+            .regular,
+            in: RoundedRectangle(
+                cornerRadius: compact == nil ? SubjectMetrics.cornerRadius : Self.compactCornerRadius,
+                style: .continuous
+            )
+        )
+    }
+
+    /// The Duo boards' bar radius (26 pt), against the iPhone card's 16 pt.
+    static var compactCornerRadius: CGFloat { 26 }
+
+    private var standardBody: some View {
+        VStack(spacing: 8) {
+            if dynamicTypeSize.isAccessibilitySize {
+                // At the accessibility sizes the row broke every piece apart ("Pa / ge",
+                // "98 / 0", "chap- / ter", seen at AX5): the page, then the time, each one
+                // string that wraps between words.
+                VStack(alignment: .leading, spacing: 2) {
+                    pageTitleLabel
+                    chapterTimeLabel
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(alignment: .firstTextBaseline) {
+                    // Page digit + duration tint when scrubbing away from origin;
+                    // "Page" / "of M" / "left in chapter" stay unemphasized.
+                    pageTitleLabel
+                    Spacer(minLength: 8)
+                    chapterTimeLabel
+                }
+            }
+
+            scrubSlider
+                .disabled(!sliderEnabled)
+                .animation(nil, value: sliderValue)
+                .accessibilityLabel("Seek within chapter")
+                .accessibilityValue(pageAccessibilityLabel)
+
+            Text(workLine)
+                .font(.footnote)
+                .foregroundStyle(.secondaryInk)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .multilineTextAlignment(.center)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                // Shrink a little before truncating, so the longest reading stays
+                // legible at large Dynamic Type sizes. Carried over from the
+                // progress pill this card replaced (HIG wave, A-F: position
+                // readout must not clip or truncate as text scales).
+                .minimumScaleFactor(0.75)
+                .animation(nil, value: workLine)
+        }
+        .padding(.horizontal, SubjectMetrics.gutter)
+        .padding(.top, showsMiniPlayer ? 12 : 13)
+        .padding(.bottom, 15)
+    }
+
+    private func compactBody(_ compact: ReaderPositionCardCompact) -> some View {
+        VStack(spacing: 8) {
+            if dynamicTypeSize.isAccessibilitySize {
+                // Same reason as the card: at AX sizes a one-line row cuts the title to a word.
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(compact.title)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(3)
+                    Text(compact.chapter)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(compact.title)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 0)
+                    Text(compact.chapter)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                }
+            }
+
+            scrubSlider
+                .disabled(!sliderEnabled)
+                .animation(nil, value: sliderValue)
+                .accessibilityLabel("Seek within chapter")
+                .accessibilityValue(pageAccessibilityLabel)
+
+            compactPositionLine
+                .animation(nil, value: page)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, showsMiniPlayer ? 12 : 10)
+        .padding(.bottom, 10)
+    }
+
+    /// "Page 4 of 18 · 21 min left": the digit and duration tint while scrubbing,
+    /// as on the card.
+    private var compactPositionLine: some View {
+        let pageReady = page >= 1 && pageCount >= 1
+        let digit = Text(pageReady ? "\(page)" : "…")
+            .foregroundStyle(scrubValuesEmphasized ? AnyShapeStyle(ink) : AnyShapeStyle(.secondaryInk))
+        let page = pageReady ? Text("Page ") + digit + Text(" of \(pageCount)") : Text("Page ") + digit
+        let line = chapterRemainingMinutes.map { minutes in
+            page + Text(" · ")
+                + Text(ReaderTimeEstimate.durationLabel(minutes: minutes))
+                    .foregroundStyle(scrubValuesEmphasized ? AnyShapeStyle(ink) : AnyShapeStyle(.secondaryInk))
+                + Text(" left")
+        } ?? page
+        return line
+            .font(.caption)
+            .monospacedDigit()
+            .foregroundStyle(.secondaryInk)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+            .minimumScaleFactor(0.75)
     }
 
     @ViewBuilder
@@ -157,7 +268,7 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
         if page < 1 || pageCount < 1 {
             Text("Page …")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .monospacedDigit()
         } else if dynamicTypeSize.isAccessibilitySize {
             // One string, so it wraps between words. The digit keeps its tint; it gives up
@@ -174,8 +285,8 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
                     .foregroundStyle(.primary)
                 Text("\(page)")
                     .foregroundStyle(scrubValuesEmphasized ? ink : Color.primary)
-                    .contentTransition(.numericText())
-                    .animation(.default, value: page)
+                    .contentTransition(animatesNumericChanges ? .numericText() : .identity)
+                    .animation(animatesNumericChanges ? .default : nil, value: page)
                     .animation(.easeInOut(duration: 0.15), value: scrubValuesEmphasized)
                 Text(" of \(pageCount)")
                     .foregroundStyle(.primary)
@@ -190,20 +301,20 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
     private var chapterTimeLabel: some View {
         if let minutes = chapterRemainingMinutes, dynamicTypeSize.isAccessibilitySize {
             (Text(ReaderTimeEstimate.durationLabel(minutes: minutes))
-                .foregroundStyle(scrubValuesEmphasized ? ink : Color.secondary)
-                + Text(" left in chapter").foregroundStyle(.secondary))
+                .foregroundStyle(scrubValuesEmphasized ? AnyShapeStyle(ink) : AnyShapeStyle(.secondaryInk))
+                + Text(" left in chapter").foregroundStyle(.secondaryInk))
                 .font(.footnote)
                 .monospacedDigit()
                 .fixedSize(horizontal: false, vertical: true)
         } else if let minutes = chapterRemainingMinutes {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 Text(ReaderTimeEstimate.durationLabel(minutes: minutes))
-                    .foregroundStyle(scrubValuesEmphasized ? ink : Color.secondary)
-                    .contentTransition(.numericText())
-                    .animation(.default, value: minutes)
+                    .foregroundStyle(scrubValuesEmphasized ? AnyShapeStyle(ink) : AnyShapeStyle(.secondaryInk))
+                    .contentTransition(animatesNumericChanges ? .numericText() : .identity)
+                    .animation(animatesNumericChanges ? .default : nil, value: minutes)
                     .animation(.easeInOut(duration: 0.15), value: scrubValuesEmphasized)
                 Text(" left in chapter")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             .font(.footnote)
             .monospacedDigit()

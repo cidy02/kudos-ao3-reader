@@ -45,14 +45,13 @@ struct QualityResponseSheet: View {
     }
 
     private var confidenceSubtitle: String {
-        switch confidenceWord {
-        case "Steady":
-            "Thousands of readers; the figure is unlikely to move much"
-        case "Settling":
-            "Hundreds of readers; the figure is settling"
-        default:
-            "Few readers yet; early figure"
-        }
+        ReaderResponseCopy.confidenceSubtitle(forKudos: figures.kudos ?? 0)
+    }
+
+    /// Kudos per hit is the only rank whose prior is a kudos-per-hit rate.
+    /// A saves prior, or momentum's growth ratio, is not this comparison.
+    private var comparesKudosPerHit: Bool {
+        rankedEntry?.rankTitle == LoadedWorksRank.kudosPerHitAdjusted.title
     }
 
     var body: some View {
@@ -93,7 +92,7 @@ struct QualityResponseSheet: View {
 
     private var contextCard: some View {
         HStack(alignment: .center, spacing: 12) {
-            CompactWorkCover(title: work.title, fandoms: work.fandoms)
+            CompactWorkCover(recipe: work.generatedCoverRecipe)
 
             VStack(alignment: .leading, spacing: 2) {
                 if let kickerText = contextKicker {
@@ -112,7 +111,7 @@ struct QualityResponseSheet: View {
 
                 Text(contextMeta)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -165,15 +164,13 @@ struct QualityResponseSheet: View {
     // MARK: - Stats Strip
 
     private var statStrip: some View {
-        let multiplierStr: String = {
-            if let score = rankedEntry?.score {
-                return "\(QualitySignalTones.decimal(score))×"
-            }
-            if let own = ownKudosPerHit, let prior = rankedEntry?.prior, prior > 0 {
-                return "\(QualitySignalTones.decimal(own / prior))×"
-            }
-            return "—"
-        }()
+        let highlighted = ReaderResponseCopy.highlightedStat(
+            rankTitle: rankedEntry?.rankTitle,
+            ownKudosPerHit: ownKudosPerHit,
+            prior: comparesKudosPerHit ? rankedEntry?.prior : nil,
+            cautiousScore: rankedEntry?.score,
+            signal: signal
+        )
 
         let kudosStr = figures.kudos?.formatted() ?? "0"
         let hitsStr = figures.hits?.compactCount ?? "0"
@@ -182,11 +179,11 @@ struct QualityResponseSheet: View {
         return SubjectStatStrip(
             cells: [
                 SubjectStatStrip.Cell(
-                    value: multiplierStr,
-                    label: "vs similar",
+                    value: highlighted.value,
+                    label: highlighted.label,
                     isHighlighted: true,
                     tint: themeManager.accentInk,
-                    accessibilityText: "Kudos per hit versus similar: \(multiplierStr)"
+                    accessibilityText: highlighted.accessibilityText
                 ),
                 SubjectStatStrip.Cell(
                     value: kudosStr,
@@ -231,8 +228,8 @@ struct QualityResponseSheet: View {
                     barColor: themeManager.accentInk
                 )
 
-                // Row 2: Similar works (if prior exists)
-                if let prior = rankedEntry?.prior, prior > 0 {
+                // Row 2: Similar works, only when the prior is a kudos-per-hit rate.
+                if comparesKudosPerHit, let prior = rankedEntry?.prior, prior > 0 {
                     Divider().padding(.leading, 16)
 
                     let priorDetail = "\(QualitySignalTones.decimal(prior * 100))%"
@@ -253,32 +250,20 @@ struct QualityResponseSheet: View {
                     .strokeBorder(theme.cardBorder, lineWidth: 0.5)
             )
 
-            sectionFooter("AO3 counts one hit per reader per day, so long and serialized works collect more hits for each reader. Similar works are the loaded works of this one’s length and age; with too few of those, of its length, then all loaded works.")
+            sectionFooter(ReaderResponseCopy.kudosPerHitFooter)
         }
     }
 
+    /// §4.1 shape of this work. Posting year stays off: the work-number clock
+    /// is not shipped, and the updated date is not a posting year.
     private var similarWorksSubtitle: String {
-        var parts: [String] = []
-        if let words = figures.words {
-            if words < 10_000 {
-                parts.append("Under 10,000 words")
-            } else if words < 50_000 {
-                parts.append("10,000 to 50,000 words")
-            } else {
-                parts.append("50,000+ words")
-            }
-        }
-        if let age = figures.ageGroup {
-            switch age {
-            case 0: parts.append("updated within a year")
-            case 1: parts.append("updated 1 to 3 years ago")
-            default: parts.append("updated 3+ years ago")
-            }
-        }
-        let status = (work.isComplete == true) ? "complete" : "in progress"
-        parts.append(status)
-        parts.append("loaded works median")
-        return parts.joined(separator: " · ")
+        let counts = SubscriptionScanWorkFacts.chapterCounts(work.chapters)
+        return ReaderResponseBands.similarWorksLine(
+            chaptersPosted: counts.posted,
+            words: figures.words,
+            isComplete: work.isComplete,
+            postedYear: nil
+        )
     }
 
     // MARK: - How Sure Section
@@ -312,13 +297,16 @@ struct QualityResponseSheet: View {
                     badgeFg: badgeFg
                 )
 
-                if let score = rankedEntry?.score {
+                if let detail = ReaderResponseCopy.cautiousDetail(
+                    rankTitle: rankedEntry?.rankTitle,
+                    score: rankedEntry?.score
+                ) {
                     Divider().padding(.leading, 16)
 
                     QualityResponseRow(
                         label: "Cautious estimate",
                         subtitle: "What the ranking uses",
-                        detail: "\(QualitySignalTones.decimal(score))×"
+                        detail: detail
                     )
                 }
             }
@@ -336,16 +324,25 @@ struct QualityResponseSheet: View {
     private var otherSignalsSection: some View {
         let hasSaves = ownSavesPerKudos != nil
         let hasComments = ownCommentsPerKudos != nil
+        let momentumDetail: String? = rankedEntry?.rankTitle == LoadedWorksRank.momentum.title
+            ? signal?.label
+            : nil
 
-        if hasSaves || hasComments {
+        if hasSaves || hasComments || momentumDetail != nil {
             VStack(alignment: .leading, spacing: 6) {
                 sectionHeader("Other Signals")
 
                 VStack(spacing: 0) {
                     if let saves = ownSavesPerKudos {
+                        let similar = rankedEntry?.rankTitle == LoadedWorksRank.savesPerKudos.title
+                            ? rankedEntry?.prior
+                            : nil
                         QualityResponseRow(
                             label: "Saves per kudos",
-                            subtitle: "public bookmarks only",
+                            subtitle: ReaderResponseCopy.rateSubtitle(
+                                similar: similar,
+                                footnote: "public bookmarks only"
+                            ),
                             detail: "\(QualitySignalTones.decimal(saves * 100))%"
                         )
                     }
@@ -353,10 +350,25 @@ struct QualityResponseSheet: View {
                     if let comments = ownCommentsPerKudos {
                         if hasSaves { Divider().padding(.leading, 16) }
 
+                        let similar = rankedEntry?.rankTitle == LoadedWorksRank.commentsPerKudos.title
+                            ? rankedEntry?.prior
+                            : nil
                         QualityResponseRow(
                             label: "Comments per kudos",
-                            subtitle: "replies included",
+                            subtitle: ReaderResponseCopy.commentsSubtitle(
+                                similar: similar,
+                                readersOnly: nil
+                            ),
                             detail: "\(QualitySignalTones.decimal(comments * 100))%"
+                        )
+                    }
+
+                    if let momentumDetail {
+                        if hasSaves || hasComments { Divider().padding(.leading, 16) }
+                        QualityResponseRow(
+                            label: "Momentum",
+                            subtitle: signal?.note ?? "Since you last saw it",
+                            detail: momentumDetail
                         )
                     }
                 }
@@ -380,7 +392,7 @@ struct QualityResponseSheet: View {
                 VStack(spacing: 0) {
                     QualityResponseRow(
                         label: "Last chapter",
-                        detail: work.dateUpdated
+                        detail: WorkStat.displayDate(work.dateUpdated)
                     )
                 }
                 .background(theme.cardSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -415,14 +427,14 @@ struct QualityResponseSheet: View {
     private func sectionHeader(_ text: String) -> some View {
         Text(text)
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .padding(.horizontal, 16)
     }
 
     private func sectionFooter(_ text: String) -> some View {
         Text(text)
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .padding(.horizontal, 16)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -468,8 +480,10 @@ struct QualityResponseRow: View {
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .foregroundStyle(.secondaryInk)
+                        // Four lines holds a full shape band. AX5 drops the limit:
+                        // two lines clipped "6 to 20 chapters · … · posted 2025 or later".
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 4)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -492,7 +506,7 @@ struct QualityResponseRow: View {
             if let detail, !detail.isEmpty {
                 Text(detail)
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .layoutPriority(1)
             }
 
@@ -567,7 +581,7 @@ struct HowReaderResponseWorksSheet: View {
                         symbol: "scale.3d",
                         paragraphs: [
                             "With Rank Cautiously on, works with few readers need more evidence to rank high: their rates are pulled toward the loaded median until more readers arrive.",
-                            "Confidence bands (Steady, Settling, Early) reflect the volume of reader feedback."
+                            ReaderResponseCopy.confidenceExplainer
                         ]
                     )
 
@@ -584,7 +598,7 @@ struct HowReaderResponseWorksSheet: View {
                         title: "Unusual Stats",
                         symbol: "exclamationmark.triangle",
                         paragraphs: [
-                            "Works with unexpected statistics (such as more kudos than hits, or thousands of kudos with almost no bookmarks) are set aside into “Not ranked” rather than assigned an artificial score."
+                            ReaderResponseCopy.unusualStatsExplainer
                         ]
                     )
                 }
@@ -619,7 +633,7 @@ struct HowReaderResponseWorksSheet: View {
             ForEach(paragraphs, id: \.self) { paragraph in
                 Text(paragraph)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

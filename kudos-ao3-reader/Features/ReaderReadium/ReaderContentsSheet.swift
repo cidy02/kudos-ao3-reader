@@ -177,7 +177,7 @@ struct ReaderContentsSheet: View {
             if let progressLabel {
                 Text(progressLabel)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 20)
                     .padding(.bottom, 8)
@@ -284,7 +284,7 @@ struct ReaderContentsSheet: View {
                     if !presentation.number.isEmpty {
                         Text(presentation.number)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     Text(section.title)
                         .font(.body.weight(presentation.isCurrent ? .semibold : .regular))
@@ -294,7 +294,7 @@ struct ReaderContentsSheet: View {
                 if !presentation.state.isEmpty {
                     Text(presentation.state)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .monospacedDigit()
                 }
             }
@@ -306,7 +306,7 @@ struct ReaderContentsSheet: View {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(presentation.number.isEmpty ? " " : presentation.number)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .monospacedDigit()
                     .frame(minWidth: 26, alignment: .leading)
 
@@ -320,7 +320,7 @@ struct ReaderContentsSheet: View {
                 if !presentation.state.isEmpty {
                     Text(presentation.state)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .monospacedDigit()
                 }
             }
@@ -386,13 +386,13 @@ private struct ReaderAnnotationRow: View {
                     // a hierarchy. Colour in these rows now means one thing —
                     // the highlight's own swatch on the quote bar below.
                     .font(isBookmark ? .body : .caption)
-                    .foregroundStyle(isBookmark ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(isBookmark ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondaryInk))
                     .lineLimit(2)
                 Spacer(minLength: 8)
                 Text("\(Int((annotation.progression * 100).rounded()))%")
                     .font(.caption)
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
 
             if !annotation.selectedText.isEmpty {
@@ -411,7 +411,7 @@ private struct ReaderAnnotationRow: View {
             if annotation.hasNote {
                 Text(annotation.note)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(3)
             }
         }

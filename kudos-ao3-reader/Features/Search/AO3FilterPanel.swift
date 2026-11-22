@@ -30,6 +30,8 @@ struct AO3FilterPanel: View {
     enum Mode { case search, refine }
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.filterPanelIsDocked) private var isDocked
+    @Environment(\.duoLayout) private var duoLayout
     @Environment(ThemeManager.self) var theme
     @ScaledMetric(relativeTo: .footnote) private var refineMatchSize: CGFloat = 12.5
     @ScaledMetric(relativeTo: .caption) var sortHintSize: CGFloat = 12
@@ -49,9 +51,20 @@ struct AO3FilterPanel: View {
     var onApplyWorksSort: ((AO3WorksSort) -> Void)?
     var ranking: Binding<LoadedWorksRanking>?
     var totalWorks: Int?
+    /// Applied search filters currently driving the results screen (when persistent/docked),
+    /// so the confirm button only prints `totalWorks` while the draft still matches them.
+    var appliedFilters: AO3SearchFilters?
+    /// Incrementing this pops a docked subpage (Sort By / Language) back to the root Filters pane.
+    var revealRootTrigger = 0
     /// The filters the loaded results were fetched with; the count only describes those.
     @State private var openedFilters: AO3SearchFilters
 
+    enum DockedSubpage: Equatable {
+        case sortBy
+        case language
+    }
+
+    @State private var dockedSubpage: DockedSubpage?
     @State var sortPresentation: WorksSortPresentation
     #if DEBUG
     @State private var debugLanguage = false
@@ -74,7 +87,9 @@ struct AO3FilterPanel: View {
         worksSort: AO3WorksSort? = nil,
         onApplyWorksSort: ((AO3WorksSort) -> Void)? = nil,
         ranking: Binding<LoadedWorksRanking>? = nil,
-        totalWorks: Int? = nil
+        totalWorks: Int? = nil,
+        appliedFilters: AO3SearchFilters? = nil,
+        revealRootTrigger: Int = 0
     ) {
         _filters = filters
         self.mode = mode
@@ -91,6 +106,8 @@ struct AO3FilterPanel: View {
         self.onApplyWorksSort = onApplyWorksSort
         self.ranking = ranking
         self.totalWorks = totalWorks
+        self.appliedFilters = appliedFilters
+        self.revealRootTrigger = revealRootTrigger
         _openedFilters = State(initialValue: filters.wrappedValue)
         _sortPresentation = State(initialValue: WorksSortPresentation(applied: worksSort))
     }
@@ -106,43 +123,133 @@ struct AO3FilterPanel: View {
         dynamicTypeSize.isAccessibilitySize ? [GridItem(.flexible())] : [GridItem(.flexible()), GridItem(.flexible())]
     }
 
-    private var resultsButtonTitle: String {
+    static func resultsButtonTitle(
+        mode: Mode,
+        filters: AO3SearchFilters,
+        referenceFilters: AO3SearchFilters,
+        totalWorks: Int?,
+        refineCount: Int
+    ) -> String {
         if mode == .refine {
-            let matching = refineMatchCount ?? filters.apply(to: refineSource).count
-            return "Show \(matching.formatted()) \(matching == 1 ? "Work" : "Works")"
+            return "Show \(refineCount.formatted()) \(refineCount == 1 ? "Work" : "Works")"
         }
-        if let total = totalWorks, filters == openedFilters {
+        if let total = totalWorks, filters == referenceFilters {
             return "Show \(total.formatted()) \(total == 1 ? "Work" : "Works")"
         }
         return "Show Works"
     }
 
+    private var resultsButtonTitle: String {
+        let refineCount = mode == .refine ? (refineMatchCount ?? filters.apply(to: refineSource).count) : 0
+        return Self.resultsButtonTitle(
+            mode: mode,
+            filters: filters,
+            referenceFilters: appliedFilters ?? openedFilters,
+            totalWorks: totalWorks,
+            refineCount: refineCount
+        )
+    }
+
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                refineMatchLine
-                form
-            }
-            .navigationTitle(worksSort == nil ? (mode == .refine ? "Refine" : "Filters") : "Sort and Filter")
-            #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-            #endif
-                .modifier(WorksFilterSheetGround())
-                .toolbar { actionButtons }
-                .safeAreaInset(edge: .bottom) {
-                    FilterResultsBar(
-                        buttonTitle: resultsButtonTitle,
-                        isConfirmDisabled: mode == .search && !filters.isSearchable,
-                        onSave: onSave,
-                        isSaveDisabled: !filters.isSearchable,
-                        onConfirm: confirm
-                    )
+        let bookLeadingInset: CGFloat = (isDocked && duoLayout.isVerticalFoldActive)
+            ? DuoLayoutSignal.bookFoldInset
+            : 0
+        Group {
+            if isDocked {
+                dockedPaneBody(bookLeadingInset: bookLeadingInset)
+            } else {
+                NavigationStack {
+                    rootPanelContent(bookLeadingInset: bookLeadingInset)
+                    #if DEBUG
+                        .navigationDestination(isPresented: $debugLanguage) {
+                            FilterLanguagePicker(selection: $filters.language)
+                        }
+                        .navigationDestination(isPresented: $debugSortBy) {
+                            SearchSortByView(
+                                filters: $filters,
+                                ranking: ranking,
+                                allowsRelevanceSort: allowsRelevanceSort
+                            )
+                        }
+                    #endif
                 }
+            }
         }
         #if os(iOS)
             .modifier(ScopeSurfaceAccent())
         #endif
         .onAppear { sortPresentation.appear(applied: worksSort) }
+        .onChange(of: isDocked) { _, docked in
+            if !docked { dockedSubpage = nil }
+        }
+        .onChange(of: revealRootTrigger) { _, _ in
+            dockedSubpage = nil
+        }
+    }
+
+    @ViewBuilder
+    private func dockedPaneBody(bookLeadingInset: CGFloat) -> some View {
+        if let subpage = dockedSubpage {
+            Group {
+                switch subpage {
+                case .sortBy:
+                    SearchSortByView(
+                        filters: $filters,
+                        ranking: ranking,
+                        allowsRelevanceSort: allowsRelevanceSort,
+                        showsNavigationTitle: false
+                    )
+                case .language:
+                    FilterLanguagePicker(selection: $filters.language, isInlinePane: true)
+                }
+            }
+            .padding(.leading, bookLeadingInset)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                HStack {
+                    Button { dockedSubpage = nil } label: {
+                        Image(systemName: "chevron.backward")
+                            .font(.body.weight(.semibold))
+                            .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel("Back to Filters")
+                    Spacer(minLength: 0)
+                    Text(subpage == .sortBy ? "Sort By" : "Language")
+                        .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer(minLength: 0)
+                    Color.clear
+                        .frame(width: 44, height: 44)
+                        .accessibilityHidden(true)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .padding(.leading, bookLeadingInset)
+            }
+            .modifier(WorksFilterSheetGround())
+        } else {
+            rootPanelContent(bookLeadingInset: bookLeadingInset)
+        }
+    }
+
+    private func rootPanelContent(bookLeadingInset: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            refineMatchLine
+            form
+        }
+        .padding(.leading, bookLeadingInset)
+        .filterPanelChrome(title: worksSort == nil ? (mode == .refine ? "Refine" : "Filters") : "Sort and Filter")
+        .modifier(WorksFilterSheetGround())
+        .safeAreaInset(edge: .bottom) {
+            FilterResultsBar(
+                buttonTitle: resultsButtonTitle,
+                isConfirmDisabled: mode == .search && !filters.isSearchable,
+                onSave: onSave,
+                isSaveDisabled: !filters.isSearchable,
+                onConfirm: confirm
+            )
+            .padding(.leading, bookLeadingInset)
+        }
     }
 
     @ViewBuilder
@@ -150,7 +257,7 @@ struct AO3FilterPanel: View {
         if mode == .refine, !refineSource.isEmpty {
             Text(refineMatchText)
                 .font(.system(size: refineMatchSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .monospacedDigit()
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
@@ -168,25 +275,12 @@ struct AO3FilterPanel: View {
         return refinePendingCount > 0 ? "\(line) · \(refinePendingCount) not checked yet" : line
     }
 
-    @ToolbarContentBuilder
-    private var actionButtons: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-            }
-            .accessibilityLabel("Close")
-        }
-        // No ✓ / magnifier (board 12): the results bar below is the sheet's one confirm.
-    }
-
     private func confirm() {
         if worksSort != nil, let sort = sortPresentation.sortToCommit {
             onApplyWorksSort?(sort)
         }
         onApply()
-        dismiss()
+        if !isDocked { dismiss() }
     }
 
     static func showsPageCompletionFacet(worksSort: AO3WorksSort?) -> Bool {
@@ -242,22 +336,16 @@ struct AO3FilterPanel: View {
         .appThemedScroll()
         #if DEBUG
         .task {
-            if DebugLaunchRoute.takePush("languagepicker") { debugLanguage = true }
-            if DebugLaunchRoute.takePush("sortby") { debugSortBy = true }
+            if DebugLaunchRoute.takePush("languagepicker") {
+                if isDocked { dockedSubpage = .language } else { debugLanguage = true }
+            }
+            if DebugLaunchRoute.takePush("sortby") {
+                if isDocked { dockedSubpage = .sortBy } else { debugSortBy = true }
+            }
             if DebugLaunchRoute.takeSheet("tagpicker") {
                 try? await Task.sleep(for: .seconds(1))
                 debugTagPicker = true
             }
-        }
-        .navigationDestination(isPresented: $debugLanguage) {
-            FilterLanguagePicker(selection: $filters.language)
-        }
-        .navigationDestination(isPresented: $debugSortBy) {
-            SearchSortByView(
-                filters: $filters,
-                ranking: ranking,
-                allowsRelevanceSort: allowsRelevanceSort
-            )
         }
         .sheet(isPresented: $debugTagPicker) {
             TagPickerView(
@@ -290,7 +378,7 @@ extension AO3FilterPanel {
                         .minimumScaleFactor(0.6)
                 }
                 Text(value)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(value.contains(where: \.isWhitespace) ? nil : 1)
                     .minimumScaleFactor(value.contains(where: \.isWhitespace) ? 1 : 0.6)
                     .fixedSize(horizontal: false, vertical: true)
@@ -301,25 +389,40 @@ extension AO3FilterPanel {
                 Text("Sort By")
                 Spacer()
                 Text(value)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
         }
     }
 
     private var sortSection: some View {
         Section {
-            NavigationLink {
-                SearchSortByView(
-                    filters: $filters,
-                    ranking: ranking,
-                    allowsRelevanceSort: allowsRelevanceSort
-                )
-            } label: {
-                sortByLabel
+            if isDocked {
+                Button { dockedSubpage = .sortBy } label: {
+                    HStack(spacing: 8) {
+                        sortByLabel
+                        if dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } else {
+                NavigationLink {
+                    SearchSortByView(
+                        filters: $filters,
+                        ranking: ranking,
+                        allowsRelevanceSort: allowsRelevanceSort
+                    )
+                } label: {
+                    sortByLabel
+                }
             }
-            .onChange(of: filters.sort) { _, newValue in
-                filters.sortDirection = newValue.naturalDirection
-            }
+        }
+        .onChange(of: filters.sort) { _, newValue in
+            filters.sortDirection = newValue.naturalDirection
         }
     }
 
@@ -394,7 +497,7 @@ extension AO3FilterPanel {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Overall")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .textCase(.uppercase)
                         .padding(.horizontal, 4)
 
@@ -407,7 +510,7 @@ extension AO3FilterPanel {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Content")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .textCase(.uppercase)
                         .padding(.horizontal, 4)
 
@@ -468,7 +571,7 @@ extension AO3FilterPanel {
                         Text("Title & Creator")
                         Spacer()
                         Text(titleAndCreatorSummary)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                 }
             }
@@ -515,24 +618,42 @@ extension AO3FilterPanel {
                 dateBound("Before", date: $filters.dateTo)
             }
 
-            NavigationLink {
-                FilterLanguagePicker(selection: $filters.language)
-            } label: {
-                HStack(spacing: 12) {
-                    SettingsIconTile(
-                        color: Color(red: 0x1E / 255.0, green: 0x63 / 255.0, blue: 0xC8 / 255.0),
-                        systemImage: "globe"
-                    )
-                    Text("Language")
-                    Spacer()
-                    Text(filters.language.title)
-                        .foregroundStyle(.secondary)
+            if isDocked {
+                Button { dockedSubpage = .language } label: {
+                    HStack(spacing: 12) {
+                        languageRowLabel
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } else {
+                NavigationLink {
+                    FilterLanguagePicker(selection: $filters.language)
+                } label: {
+                    languageRowLabel
                 }
             }
 
             FilterLengthSection(wordsFrom: $filters.wordsFrom, wordsTo: $filters.wordsTo)
         } header: {
             groupLabel("Length and Status")
+        }
+    }
+
+    private var languageRowLabel: some View {
+        HStack(spacing: 12) {
+            SettingsIconTile(
+                color: Color(red: 0x1E / 255.0, green: 0x63 / 255.0, blue: 0xC8 / 255.0),
+                systemImage: "globe"
+            )
+            Text("Language")
+            Spacer()
+            Text(filters.language.title)
+                .foregroundStyle(.secondaryInk)
         }
     }
 
@@ -553,7 +674,7 @@ extension AO3FilterPanel {
                     Text("Kudos")
                     Spacer()
                     Text(rangeSummary(from: filters.kudosFrom, to: filters.kudosTo))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
 
@@ -572,7 +693,7 @@ extension AO3FilterPanel {
                     Text("Hits")
                     Spacer()
                     Text(rangeSummary(from: filters.hitsFrom, to: filters.hitsTo))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
 
@@ -591,7 +712,7 @@ extension AO3FilterPanel {
                     Text("Comments")
                     Spacer()
                     Text(rangeSummary(from: filters.commentsFrom, to: filters.commentsTo))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
 
@@ -610,7 +731,7 @@ extension AO3FilterPanel {
                     Text("Bookmarks")
                     Spacer()
                     Text(rangeSummary(from: filters.bookmarksFrom, to: filters.bookmarksTo))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
         } header: {
@@ -626,8 +747,8 @@ extension AO3FilterPanel {
                     Text("Reset All Filters")
                         .foregroundStyle(
                             canReset
-                                ? theme.appTheme.errorColor
-                                : Color.secondary
+                                ? AnyShapeStyle(theme.appTheme.errorColor)
+                                : AnyShapeStyle(.secondaryInk)
                         )
                     Spacer()
                 }
@@ -1058,7 +1179,7 @@ extension AO3FilterPanel {
                             Text(sortPresentation.draft.column.title)
                             Text(AO3WorksSort.fieldsHint)
                                 .font(.system(size: sortHintSize))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                     }
                 }

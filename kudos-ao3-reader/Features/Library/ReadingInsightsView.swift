@@ -14,12 +14,28 @@ struct ReadingInsightsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.dismiss) private var dismiss
     @Environment(PrivacyGate.self) private var gate
-    @AppStorage("hideMature") private var hideMature: Bool = false
+    // The app-wide key (Settings, Home, Library); "hideMature" was never written, so the
+    // gate here was always off.
+    @AppStorage("hideMatureContent") private var hideMature = true
 
-    let works: [SavedWork]
+    /// The UNFILTERED library (every non-deleted work). The view applies the
+    /// queue-only / Hide Mature gate itself: given an already-filtered list it
+    /// could not tell which sessions belong to hidden works.
+    let libraryWorks: [SavedWork]
 
-    private var effectiveWorks: [SavedWork] {
-        HomeReadingStats.insightsWorks(from: works, gate: gate, hideMature: hideMature)
+    /// View-level scope, re-lock, subtitle and Hidden cache state.
+    @State private var scopeState = ReadingInsightsScopeState()
+    @State private var lastReloadKey = ""
+    @State private var hasLoadedOnce = false
+
+    /// What the figures and exports on screen count: everything but hidden works, or
+    /// (revealed, Include Hidden on) everything.
+    private var screenScope: InsightsScope {
+        scopeState.screenScope(hideMature: hideMature, revealed: gate.revealAll)
+    }
+
+    private func selection(_ scope: InsightsScope) -> InsightsScopeSelection {
+        HomeReadingStats.insightsScope(scope, from: libraryWorks, hideMature: hideMature, revealed: gate.revealAll)
     }
 
     @State private var selectedTab: Tab = .overview
@@ -36,9 +52,53 @@ struct ReadingInsightsView: View {
     @State private var showingOptionsSheet: Bool = false
     @State private var showingHowCountedSheet: Bool = false
     @State private var finishedWorksInPeriod: [SavedWork] = []
+    @State private var discreetMasker: InsightsDiscreetMasker = .empty
+    @State private var optionsRevision: Int = 0
+    @State private var exportedShareItem: InsightsShareItem?
+    @State private var exportFailure: String?
+    #if os(macOS)
+    @State private var macExportDocument: InsightsExportFileDocument?
+    @State private var macExportFormat: InsightsExportFormat = .csv
+    @State private var showingMacExporter = false
+    #endif
 
-    @AppStorage("kudos.insights.discreetMode") private var discreetMode: Bool = false
-    @AppStorage("kudos.insights.hideReadingTime") private var hideReadingTime: Bool = false
+    @AppStorage(InsightsOptions.Keys.discreetMode) private var discreetMode: Bool = false
+    @AppStorage(InsightsOptions.Keys.hideReadingTime) private var hideReadingTime: Bool = false
+    @AppStorage(InsightsOptions.Keys.countRereads) private var countRereads: Bool = true
+    @AppStorage(InsightsOptions.Keys.countReadAloud) private var countReadAloud: Bool = true
+    @AppStorage(InsightsOptions.Keys.askAboutUntouched) private var askAboutUntouched: Bool = true
+    @AppStorage(InsightsOptions.Keys.untouchedDays)
+    private var untouchedDays: Int = InsightsOptions.defaultUntouchedDays
+
+    /// Lightweight scalar fingerprint so mutations to `libraryWorks` while mounted
+    /// (e.g. AO3 refresh marking a work Explicit, or finishing a work) trigger a reload.
+    private var libraryWorksFingerprint: String {
+        var adultCount = 0
+        var finishedCount = 0
+        var newestModified: TimeInterval = 0
+        var newestProgress: TimeInterval = 0
+        for work in libraryWorks {
+            if work.isAdult { adultCount += 1 }
+            if work.isFinished { finishedCount += 1 }
+            let mod = work.lastModifiedAt.timeIntervalSince1970
+            if mod > newestModified { newestModified = mod }
+            if let prog = work.progressModifiedAt?.timeIntervalSince1970, prog > newestProgress {
+                newestProgress = prog
+            }
+        }
+        return "\(libraryWorks.count)-\(adultCount)-\(finishedCount)-\(newestModified)-\(newestProgress)"
+    }
+
+    private var reloadKey: String {
+        [
+            range.rawValue,
+            "\(referenceDate.timeIntervalSince1970)",
+            "\(hideMature)-\(gate.revealAll)-\(scopeState.includeHidden)",
+            "\(countRereads)-\(countReadAloud)-\(askAboutUntouched)-\(untouchedDays)",
+            "\(optionsRevision)",
+            libraryWorksFingerprint
+        ].joined(separator: "|")
+    }
 
     enum Tab: String, CaseIterable, Identifiable {
         case overview
@@ -85,24 +145,35 @@ struct ReadingInsightsView: View {
             headerView
 
             // Main scrollable content
-            ScrollView {
-                VStack(spacing: 14) {
-                    switch selectedTab {
-                    case .overview:
-                        overviewContent
-                    case .taste:
-                        tasteContent
-                    case .habits:
-                        habitsContent
-                    case .library:
-                        libraryContent
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 14) {
+                        if scopeState.mayDisplayLoadedData(hideMature: hideMature, revealed: gate.revealAll) {
+                            switch selectedTab {
+                            case .overview:
+                                overviewContent
+                            case .taste:
+                                tasteContent
+                            case .habits:
+                                habitsContent
+                            case .library:
+                                libraryContent
+                            }
+                        }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 32)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 32)
+                .appThemedScroll()
+                #if DEBUG
+                .task {
+                    guard DebugLaunchRoute.opensInsightsHidden else { return }
+                    try? await Task.sleep(for: .seconds(2))
+                    proxy.scrollTo(Self.hiddenSectionID, anchor: .center)
+                }
+                #endif
             }
-            .appThemedScroll()
         }
         .background(theme.appTheme.cardBackdrop.ignoresSafeArea())
         .navigationTitle("Reading Insights")
@@ -124,11 +195,19 @@ struct ReadingInsightsView: View {
                         Label("How Reading Insights Are Counted", systemImage: "info.circle")
                     }
 
-                    ShareLink(
-                        item: exportHistoryText(),
-                        subject: Text("Reading Insights Export"),
-                        message: Text("Export of Reading Insights from Kudos")
-                    ) {
+                    Menu {
+                        Button {
+                            exportReadingHistory(format: .csv)
+                        } label: {
+                            Label("Export as CSV", systemImage: "tablecells")
+                        }
+
+                        Button {
+                            exportReadingHistory(format: .json)
+                        } label: {
+                            Label("Export as JSON", systemImage: "curlybraces")
+                        }
+                    } label: {
                         Label("Export Reading History…", systemImage: "square.and.arrow.up")
                     }
                 } label: {
@@ -141,25 +220,80 @@ struct ReadingInsightsView: View {
                 .accessibilityLabel("More: options, export, how this is counted")
             }
         }
-        .task(id: "\(range.rawValue)-\(referenceDate.timeIntervalSince1970)-\(hideMature)-\(gate.revealAll)-\(gate.revealedIDs.count)") {
+        .task(id: reloadKey) {
+            guard lastReloadKey != reloadKey else { return }
             reload()
+        }
+        .onAppear {
+            if hasLoadedOnce { reload() }
+        }
+        .onChange(of: gate.revealAll) { _, revealed in
+            // Synchronously clear hidden state and recompute main figures on re-lock so
+            // stale combined mature titles/figures are never painted while waiting for `.task`.
+            if scopeState.handleRevealChange(revealed: revealed, hideMature: hideMature) {
+                if !revealed { clearMainDisplayState() }
+                reload()
+            }
+        }
+        .onChange(of: hideMature) { _, isHiding in
+            scopeState.handleHideMatureChange(hideMature: isHiding, revealed: gate.revealAll)
+            if isHiding && !gate.revealAll { clearMainDisplayState() }
+            reload()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .kudosSyncRelevantSettingChanged)) { _ in
+            optionsRevision += 1
         }
         .refreshable {
             reload()
         }
         .sheet(isPresented: $showingOptionsSheet) {
             InsightsOptionsSheet(
-                exportText: exportHistoryText(),
+                // Exclusion choices never list hidden works' names: what is chosen is
+                // stored, and would still show after the gate re-locks.
+                exclusionsScope: selection(.main),
+                exportScope: selection(screenScope),
+                includeHidden: $scopeState.includeHidden,
+                canIncludeHidden: scopeState.canIncludeHidden(hideMature: hideMature, revealed: gate.revealAll),
                 onShowHowCounted: {
                     showingOptionsSheet = false
                     showingHowCountedSheet = true
                 },
-                onReset: reload
+                onOptionsChanged: {
+                    optionsRevision += 1
+                }
             )
         }
         .sheet(isPresented: $showingHowCountedSheet) {
             HowInsightsAreCountedSheet()
         }
+        .alert("Couldn’t Export Reading History", isPresented: Binding(
+            get: { exportFailure != nil },
+            set: { if !$0 { exportFailure = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(exportFailure ?? "")
+        }
+        #if os(iOS)
+        .sheet(item: $exportedShareItem) { item in
+            InsightsExportActivitySheet(url: item.url) {
+                InsightsShareItem.cleanUp(item.url)
+                exportedShareItem = nil
+            }
+        }
+        #else
+        .fileExporter(
+            isPresented: $showingMacExporter,
+            document: macExportDocument,
+            contentType: macExportFormat.contentType,
+            defaultFilename: "Kudos-Reading-History.\(macExportFormat.fileExtension)"
+        ) { result in
+            if case .failure(let error) = result {
+                exportFailure = error.localizedDescription
+            }
+            macExportDocument = nil
+        }
+        #endif
     }
 
     // MARK: - Header View (`InsightsTop`)
@@ -175,7 +309,7 @@ struct ReadingInsightsView: View {
                     } label: {
                         Text(tab.title)
                             .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                            .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                            .foregroundStyle(isSelected ? AnyShapeStyle(Color.primary) : AnyShapeStyle(.secondaryInk))
                             .frame(maxWidth: .infinity)
                             .frame(minHeight: 28)
                             .background(
@@ -209,8 +343,9 @@ struct ReadingInsightsView: View {
 
                     Text(periodSubtitle)
                         .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .foregroundStyle(.secondaryInk)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -290,7 +425,8 @@ struct ReadingInsightsView: View {
 
         WhereTheWordsWentCard(
             fandoms: insights.fandomWordsShares,
-            discreetMode: discreetMode
+            discreetMode: discreetMode,
+            discreetMasker: discreetMasker
         )
 
         ReadingAndListeningCard(
@@ -311,8 +447,13 @@ struct ReadingInsightsView: View {
         if !finishedWorksInPeriod.isEmpty {
             FinishedInPeriodSection(
                 works: finishedWorksInPeriod,
-                discreetMode: discreetMode
+                discreetMode: discreetMode,
+                discreetMasker: discreetMasker
             )
+        }
+
+        if hideMature {
+            hiddenSection
         }
 
         // How Reading Insights Are Counted button
@@ -322,7 +463,7 @@ struct ReadingInsightsView: View {
             HStack(spacing: 10) {
                 Image(systemName: "info.circle")
                     .font(.system(size: 18))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
 
                 Text("How Reading Insights Are Counted")
                     .font(.subheadline)
@@ -345,30 +486,69 @@ struct ReadingInsightsView: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: - Hidden Section
+
+    /// Only the hidden (mature, Hide Mature) works' reading, with the Overview's own cards.
+    /// Locked, it is one row offering the reveal control and shows nothing about them.
+    private static let hiddenSectionID = "insightsHiddenSection"
+
+    @ViewBuilder
+    private var hiddenSection: some View {
+        if gate.revealAll, let hidden = scopeState.hiddenInsights {
+            InsightsHiddenHeader(isRevealed: true, includesHidden: screenScope == .combined)
+                .id(Self.hiddenSectionID)
+
+            WordsReadHeroCard(
+                insights: hidden,
+                periodName: periodTitle,
+                previousPeriodName: previousPeriodShortName,
+                hideReadingTime: hideReadingTime,
+                totalDaysElapsed: totalDaysElapsedInPeriod,
+                palette: theme.scopePalette
+            )
+
+            WhereTheWordsWentCard(
+                fandoms: hidden.fandomWordsShares,
+                discreetMode: discreetMode,
+                discreetMasker: scopeState.hiddenSectionMasker(
+                    mainMasker: discreetMasker,
+                    hideMature: hideMature,
+                    revealed: gate.revealAll
+                )
+            )
+        } else {
+            InsightsHiddenHeader(isRevealed: false, includesHidden: false)
+                .id(Self.hiddenSectionID)
+        }
+    }
+
     // MARK: - Taste Tab Content
 
     @ViewBuilder
     private var tasteContent: some View {
         if let taste = tasteInsights {
-            YourUsualFicCard(taste: taste, discreetMode: discreetMode)
+            YourUsualFicCard(taste: taste, discreetMode: discreetMode, discreetMasker: discreetMasker)
 
             TasteFandomsCard(
                 fandoms: taste.fandoms,
                 rankByWorks: rankTasteByWorks,
                 onToggleRank: { rankTasteByWorks.toggle() },
-                discreetMode: discreetMode
+                discreetMode: discreetMode,
+                discreetMasker: discreetMasker
             )
 
             TasteRelationshipsCard(
                 relationships: taste.relationships,
                 shipConcentrations: taste.shipConcentrations,
-                discreetMode: discreetMode
+                discreetMode: discreetMode,
+                discreetMasker: discreetMasker
             )
 
             if !taste.characters.isEmpty {
                 TasteCharactersCard(
                     characters: taste.characters,
-                    discreetMode: discreetMode
+                    discreetMode: discreetMode,
+                    discreetMasker: discreetMasker
                 )
             }
 
@@ -376,7 +556,8 @@ struct ReadingInsightsView: View {
                 TasteTagsCard(
                     tags: taste.tags,
                     oftenTogether: taste.oftenTogether,
-                    discreetMode: discreetMode
+                    discreetMode: discreetMode,
+                    discreetMasker: discreetMasker
                 )
             }
 
@@ -401,7 +582,7 @@ struct ReadingInsightsView: View {
         } else {
             Text("Nothing read in \(periodTitle) yet, so there is no taste to show.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 24)
         }
@@ -415,7 +596,8 @@ struct ReadingInsightsView: View {
             HabitsTimeOfDayCard(
                 hourly: habits.hourlyDuration,
                 lateNightDuration: habits.lateNightDuration,
-                lateNightSharePercent: habits.lateNightSharePercent
+                lateNightSharePercent: habits.lateNightSharePercent,
+                hideReadingTime: hideReadingTime
             )
 
             HabitsCalendarCard(
@@ -425,7 +607,8 @@ struct ReadingInsightsView: View {
 
             HabitsSittingsCard(
                 sittings: habits.sittingBuckets,
-                typicalSeconds: habits.typicalSittingSeconds
+                typicalSeconds: habits.typicalSittingSeconds,
+                hideReadingTime: hideReadingTime
             )
 
             if habits.savedToOpenedMedianDays != nil || habits.openedToFinishedMedianDays != nil {
@@ -435,10 +618,10 @@ struct ReadingInsightsView: View {
                 )
             }
 
-            HabitsRereadsCard(rereads: habits.rereads, discreetMode: discreetMode)
+            HabitsRereadsCard(rereads: habits.rereads, discreetMode: discreetMode, discreetMasker: discreetMasker)
 
             if !habits.fandomTimeline.isEmpty {
-                HabitsFandomTimelineCard(lanes: habits.fandomTimeline, discreetMode: discreetMode)
+                HabitsFandomTimelineCard(lanes: habits.fandomTimeline, discreetMode: discreetMode, discreetMasker: discreetMasker)
             }
 
             if habits.stoppedCount > 0 {
@@ -446,7 +629,8 @@ struct ReadingInsightsView: View {
                     stoppedCount: habits.stoppedCount,
                     medianProgress: habits.stoppedMedianProgress,
                     commonTags: habits.commonStopTags,
-                    discreetMode: discreetMode
+                    discreetMode: discreetMode,
+                    discreetMasker: discreetMasker
                 )
             }
         }
@@ -471,6 +655,7 @@ struct ReadingInsightsView: View {
                 LibraryStillReadingCard(
                     candidate: candidate,
                     discreetMode: discreetMode,
+                    discreetMasker: discreetMasker,
                     onStillReading: {
                         WorkLifecycle.keepInProgress(candidate.work, in: context)
                         reload()
@@ -492,7 +677,7 @@ struct ReadingInsightsView: View {
                 LibraryFeedbackCard(kudosLeftPercent: kudos, bookmarkedPercent: bookmarked)
             }
 
-            LibraryPreservedStatsCard(stats: stats, discreetMode: discreetMode)
+            LibraryPreservedStatsCard(stats: stats, discreetMode: discreetMode, discreetMasker: discreetMasker)
         }
     }
 
@@ -519,13 +704,18 @@ struct ReadingInsightsView: View {
             let monthName = Self.shortMonthFormatter.string(from: referenceDate)
             let prevDate = calendar.date(byAdding: .month, value: -1, to: referenceDate) ?? referenceDate
             let prevMonthName = Self.shortMonthFormatter.string(from: prevDate)
-            return "1–\(endDay) \(monthName) · vs \(prevMonthName)"
+            return "1–\(endDay) \(monthName) · vs \(prevMonthName)\(scopeSuffix)"
         case .year:
             let yr = Self.yearFormatter.string(from: referenceDate)
             let prevDate = calendar.date(byAdding: .year, value: -1, to: referenceDate) ?? referenceDate
             let prevYr = Self.yearFormatter.string(from: prevDate)
-            return "\(yr) · vs \(prevYr)"
+            return "\(yr) · vs \(prevYr)\(scopeSuffix)"
         }
+    }
+
+    /// Says on screen when the figures include hidden works.
+    private var scopeSuffix: String {
+        scopeState.scopeSuffix(hideMature: hideMature, revealed: gate.revealAll)
     }
 
     private var previousPeriodShortName: String {
@@ -571,6 +761,16 @@ struct ReadingInsightsView: View {
 
     // MARK: - Reload Data
 
+    private func clearMainDisplayState() {
+        insights = ReadingInsights()
+        tasteInsights = nil
+        habitsInsights = nil
+        libraryInsights = nil
+        libraryStats = nil
+        finishedWorksInPeriod = []
+        discreetMasker = .empty
+    }
+
     private func reload() {
         let component = range.component
         guard let currentInterval = calendar.dateInterval(of: component, for: referenceDate),
@@ -578,64 +778,102 @@ struct ReadingInsightsView: View {
               let previousInterval = calendar.dateInterval(of: component, for: earlierDate)
         else { return }
 
-        let figures = ReadingLogService.insights(
+        let periodMonths: Double = range == .year ? 12 : 1
+        let options = InsightsOptions.load()
+        let activeScope = screenScope
+        let gathered = ReadingLogService.gatherInsights(
             for: currentInterval,
             previousPeriod: previousInterval,
-            works: effectiveWorks,
+            scope: selection(activeScope),
+            periodMonths: periodMonths,
             calendar: calendar,
-            context: context
+            context: context,
+            options: options
         )
-
-        insights = figures
-
-        let allHistory = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
-        let allFacts = ReadingLogService.facts(from: allHistory, works: effectiveWorks, history: allHistory)
-        let periodFacts = allFacts.filter { currentInterval.contains($0.startedAt) }
-
-        let readWorkIDs = Set(periodFacts.map(\.workID))
-        let worksInPeriod = effectiveWorks.filter { readWorkIDs.contains($0.id) }
-
-        // An empty period has no taste; the Taste tab shows its empty state
-        // rather than all-time rankings under the period title.
-        tasteInsights = worksInPeriod.isEmpty ? nil : ReadingTasteInsights.make(
-            works: worksInPeriod,
-            facts: periodFacts
-        )
-
-        habitsInsights = ReadingHabitsInsights.make(
-            works: effectiveWorks,
-            facts: periodFacts,
-            allFacts: allFacts,
-            calendar: calendar
-        )
-
-        libraryInsights = ReadingLibraryInsights.make(
-            works: effectiveWorks,
-            facts: periodFacts,
-            periodInterval: currentInterval,
-            periodMonths: range == .year ? 12 : 1,
-            calendar: calendar
-        )
-
-        libraryStats = ReadingStatistics(works: effectiveWorks, now: Date(), calendar: calendar)
-
-        finishedWorksInPeriod = effectiveWorks.filter { w in
-            w.isFinished && periodFacts.contains { $0.workID == w.id && $0.didFinish }
+        if hideMature && gate.revealAll {
+            let hidden = ReadingLogService.gatherInsights(
+                for: currentInterval,
+                previousPeriod: previousInterval,
+                scope: selection(.hidden),
+                periodMonths: periodMonths,
+                calendar: calendar,
+                context: context,
+                options: options
+            )
+            scopeState.recordGather(
+                scope: activeScope,
+                hiddenInsights: hidden.insights,
+                hiddenMasker: hidden.discreetMasker
+            )
+        } else {
+            scopeState.recordGather(
+                scope: activeScope,
+                hiddenInsights: nil,
+                hiddenMasker: .empty
+            )
         }
+        insights = gathered.insights
+        tasteInsights = gathered.taste
+        habitsInsights = gathered.habits
+        libraryInsights = gathered.library
+        libraryStats = gathered.libraryStats
+        finishedWorksInPeriod = gathered.finishedWorksInPeriod
+        discreetMasker = gathered.discreetMasker
+        lastReloadKey = reloadKey
+        hasLoadedOnce = true
     }
 
     // MARK: - Actions
 
-    /// The period's aggregate lines; no work is named.
-    private func exportHistoryText() -> String {
-        """
-        Kudos Reading Insights Export
-        Period: \(periodTitle) (\(periodSubtitle))
-        Words read: \(insights.totalWordsRead)
-        Hours read: \(ReadingInsights.hoursLabel(insights.totalSeconds))
-        Works finished: \(insights.finishedWorksCount)
-        Reading days: \(insights.readingDaysCount)
-        """
+    private func exportReadingHistory(format: InsightsExportFormat) {
+        // Follows what is on screen; while locked that is never the hidden works.
+        let scope = selection(screenScope)
+        let exportWorks = scope.libraryWorks
+        let exportReadingWorks = scope.readingWorks
+        let sessions = scope.sessions(
+            (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? [],
+            in: context
+        )
+        let options = InsightsOptions.load()
+        let aliases = TagAliasStore.resolver(in: context)
+        do {
+            #if os(iOS)
+            let url = try InsightsExportService.writeTemporaryExportFile(
+                format: format,
+                works: exportWorks,
+                readingWorks: exportReadingWorks,
+                sessions: sessions,
+                options: options,
+                aliases: aliases
+            )
+            exportedShareItem = InsightsShareItem(url: url)
+            #else
+            let data: Data
+            switch format {
+            case .csv:
+                data = Data(InsightsExportService.csvString(
+                    works: exportWorks,
+                    readingWorks: exportReadingWorks,
+                    sessions: sessions,
+                    options: options,
+                    aliases: aliases
+                ).utf8)
+            case .json:
+                data = try InsightsExportService.jsonData(
+                    works: exportWorks,
+                    readingWorks: exportReadingWorks,
+                    sessions: sessions,
+                    options: options,
+                    aliases: aliases
+                )
+            }
+            macExportFormat = format
+            macExportDocument = InsightsExportFileDocument(data: data, contentType: format.contentType)
+            showingMacExporter = true
+            #endif
+        } catch {
+            exportFailure = error.localizedDescription
+        }
     }
 
     // MARK: - Date Formatters

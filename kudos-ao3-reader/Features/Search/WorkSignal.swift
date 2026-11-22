@@ -159,6 +159,300 @@ enum QualitySignalTones {
         if late <= 4 { return "Slower than usual" }
         return "Long pause"
     }
+
+    /// The grey note beside a schedule word (Quality-WIPs). The word is
+    /// `wipScheduleWord`; this only formats the figures that word was chosen from.
+    /// Nil when there is no schedule word. "Running late" is not a note.
+    static func wipScheduleNote(
+        chaptersPosted: Int,
+        chaptersExpected: Int?,
+        daysSinceUpdate: Int,
+        cadenceDays: Double?
+    ) -> String? {
+        guard let word = wipScheduleWord(
+            chaptersPosted: chaptersPosted,
+            chaptersExpected: chaptersExpected,
+            daysSinceUpdate: daysSinceUpdate,
+            cadenceDays: cadenceDays
+        ) else { return nil }
+        switch word {
+        case "Just started":
+            let chapters = chaptersPosted == 1 ? "1 chapter" : "\(chaptersPosted) chapters"
+            return "\(chapters) · \(ago(daysSinceUpdate))"
+        case "Nearly done":
+            let progress: String
+            if let chaptersExpected, chaptersExpected > 0 {
+                progress = "\(chaptersPosted) of \(chaptersExpected)"
+            } else {
+                progress = "\(chaptersPosted) chapters"
+            }
+            guard let cadenceDays else { return progress }
+            return "\(progress) · \(cadencePhrase(cadenceDays, capitalized: false))"
+        case "On schedule":
+            guard let cadenceDays else { return word }
+            return cadencePhrase(cadenceDays, capitalized: true)
+        case "Slower than usual":
+            guard let cadenceDays else { return since(daysSinceUpdate) }
+            return "\(usualPhrase(cadenceDays)) · \(since(daysSinceUpdate))"
+        case "Long pause":
+            if daysSinceUpdate > 365 { return "Over a year since the last chapter" }
+            return since(daysSinceUpdate)
+        default:
+            return nil
+        }
+    }
+
+    /// 14 days is "every 2 weeks", 7 is "every week". Other counts stay in days,
+    /// because the board's 9 and 12 are not rounded onto a week.
+    private static func everySpan(_ days: Double) -> String {
+        switch Int(round(days)) {
+        case ...1: "every day"
+        case 7: "every week"
+        case 14: "every 2 weeks"
+        case let rounded: "every \(rounded) days"
+        }
+    }
+
+    private static func cadencePhrase(_ days: Double, capitalized: Bool) -> String {
+        let span = everySpan(days)
+        return capitalized ? "About \(span)" : "about \(span)"
+    }
+
+    private static func usualPhrase(_ days: Double) -> String {
+        "Usually \(everySpan(days))"
+    }
+
+    private static func ago(_ days: Int) -> String {
+        if days <= 0 { return "today" }
+        if days == 1 { return "1 day ago" }
+        return "\(days) days ago"
+    }
+
+    private static func since(_ days: Int) -> String {
+        if days == 1 { return "1 day since" }
+        return "\(days) days since"
+    }
+}
+
+/// Reader-facing Reader Response copy. One source for the sheet, Sort By, and
+/// the results line, so a wording change has a test that fails when it reverts.
+enum ReaderResponseCopy {
+    /// Sort By › Set Aside Unusual Stats. Names the margin Appendix D added.
+    /// The Search-Sort board still says "More kudos than hits" with no margin;
+    /// that sentence describes the rule from before 13 Nov 2026.
+    static let unusualStatsSubtitle =
+        "At least 20 more kudos than hits, with at least 20 hits, or thousands of kudos and almost no bookmarks"
+
+    /// How Reader Response Works › Unusual Stats.
+    static let unusualStatsExplainer =
+        "A work is set aside when its kudos are at least 20 above its hits and it has at least 20 hits, or when it has 1,000 kudos and almost no bookmarks. Downloads and apps add kudos and no hits, so a smaller gap is not unusual. Set-aside works are listed under “Not ranked”. Kudos makes no claim about why."
+
+    /// How Reader Response Works › confidence. Steady, Settling, and Early are
+    /// the only bands §4.2 names.
+    static let confidenceExplainer =
+        "Confidence is Steady at 200 kudos or more, Settling from 50 to 199, and Early under 50. Those are the only bands. A difference under 10% is a tie."
+
+    /// Under the kudos-per-hit bars. The first sentence is the board's. The
+    /// percentage is not yet the §4.1 cell: the ranker compares loaded works by
+    /// length and updated-age, and this says so.
+    static let kudosPerHitFooter =
+        "AO3 counts one hit per reader per day, so long and serialized works collect more hits for each reader. The line under Similar works names this work’s shape: chapters, length, status and posting year. The percentage is the median of the loaded works of similar length and age."
+
+    /// Steady is 200 kudos, not "thousands of readers". The Quality-Response
+    /// board still has the older sentence under the Steady badge.
+    static func confidenceSubtitle(forKudos kudos: Int) -> String {
+        switch QualitySignalTones.confidenceWord(forKudos: kudos) {
+        case "Steady":
+            "200 or more kudos; the figure is unlikely to move much"
+        case "Settling":
+            "50 to 199 kudos; the figure is still settling"
+        default:
+            "Under 50 kudos; few readers yet"
+        }
+    }
+
+    struct HighlightedStat: Equatable {
+        let value: String
+        let label: String
+        let accessibilityText: String
+    }
+
+    /// The sheet's first figure. A "×" is kudos per hit against its own prior.
+    /// Momentum's score is growth relative to the earlier count; printing it as
+    /// "1.0×" was the old sheet. `cautiousScore` is accepted so a caller cannot
+    /// pass it in and have it become the figure: it is never read.
+    static func highlightedStat(
+        rankTitle: String?,
+        ownKudosPerHit: Double?,
+        prior: Double?,
+        cautiousScore: Double?,
+        signal: WorkSignal?
+    ) -> HighlightedStat {
+        _ = cautiousScore
+        if rankTitle == LoadedWorksRank.momentum.title {
+            let value = signal?.label ?? "—"
+            return HighlightedStat(
+                value: value,
+                label: "Momentum",
+                accessibilityText: signal?.accessibilityText ?? "Momentum unavailable"
+            )
+        }
+        if rankTitle == nil || rankTitle == LoadedWorksRank.kudosPerHitAdjusted.title,
+           let text = kudosPerHitMultiplier(own: ownKudosPerHit, prior: prior) {
+            return HighlightedStat(
+                value: text,
+                label: "Kudos per hit vs similar",
+                accessibilityText: "Kudos per hit versus similar: \(text)"
+            )
+        }
+        return HighlightedStat(
+            value: "—",
+            label: "Kudos per hit vs similar",
+            accessibilityText: "Kudos per hit versus similar is unavailable"
+        )
+    }
+
+    /// Shown multiplier, own rate ÷ prior. Not the cautious score.
+    static func kudosPerHitMultiplier(own: Double?, prior: Double?) -> String? {
+        guard let own, let prior, prior > 0, own.isFinite else { return nil }
+        return "\(QualitySignalTones.decimal(own / prior))×"
+    }
+
+    /// "What the ranking uses", and only for kudos per hit. Other scores are
+    /// not multipliers.
+    static func cautiousDetail(rankTitle: String?, score: Double?) -> String? {
+        guard rankTitle == LoadedWorksRank.kudosPerHitAdjusted.title,
+              let score, score.isFinite else { return nil }
+        return "\(QualitySignalTones.decimal(score))×"
+    }
+
+    /// "Similar works 14% · public bookmarks only", or the footnote alone when
+    /// this ranking has no such prior.
+    static func rateSubtitle(similar: Double?, footnote: String) -> String {
+        guard let similar, similar > 0, similar.isFinite else { return footnote }
+        return "Similar works \(QualitySignalTones.decimal(similar * 100))% · \(footnote)"
+    }
+
+    /// Comments row. Readers-only is appended only when the thread was opened
+    /// and the rate is known; it is never guessed from the blurb total.
+    static func commentsSubtitle(similar: Double?, readersOnly: Double?) -> String {
+        var parts: [String] = []
+        if let similar, similar > 0, similar.isFinite {
+            parts.append("Similar works \(QualitySignalTones.decimal(similar * 100))%")
+        }
+        parts.append("replies included")
+        if let readersOnly, readersOnly >= 0, readersOnly.isFinite {
+            parts.append("readers only \(QualitySignalTones.decimal(readersOnly * 100))%")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Quality-Results / Quality-WIPs order line. Nil while AO3's own order is on.
+    /// Momentum appends "N of 40 seen before" when the partition has one.
+    /// Does not say "on schedule first": the ranker does not order by schedule.
+    static func rankedWorksLine(
+        loaded: Int,
+        rank: LoadedWorksRank,
+        seenBeforeLine: String?
+    ) -> String? {
+        guard rank != .ao3Order, loaded > 0 else { return nil }
+        let count = loaded.formatted()
+        let noun = loaded == 1 ? "work" : "works"
+        let by: String
+        switch rank {
+        case .ao3Order:
+            return nil
+        case .kudosPerHitAdjusted:
+            by = "by kudos per hit against similar works"
+        case .savesPerKudos:
+            by = "by saves per kudos"
+        case .commentsPerKudos:
+            by = "by comments per kudos"
+        case .momentum:
+            by = "by kudos growth since you last saw them"
+        case .kudosPerThousandWords:
+            by = "by kudos per 1,000 words"
+        }
+        var line = "Ranked \(count) loaded \(noun) \(by)"
+        if let seenBeforeLine, !seenBeforeLine.isEmpty {
+            line += ". \(seenBeforeLine)"
+        }
+        return line
+    }
+}
+
+/// §4.1 shape, and no other. The sheet used to name "Under 10,000 words" and
+/// "updated within a year", which this list does not contain.
+enum ReaderResponseBands {
+    static func chaptersPhrase(posted: Int) -> String? {
+        guard posted > 0 else { return nil }
+        return switch posted {
+        case 1: "1 chapter"
+        case 2 ... 5: "2 to 5 chapters"
+        case 6 ... 20: "6 to 20 chapters"
+        default: "21 or more chapters"
+        }
+    }
+
+    static func lengthPhrase(words: Int) -> String? {
+        guard words >= 0 else { return nil }
+        return switch words {
+        case ..<5_000: "Under 5,000 words"
+        case ..<20_000: "5,000 to 20,000 words"
+        case ..<60_000: "20,000 to 60,000 words"
+        case ..<150_000: "60,000 to 150,000 words"
+        default: "150,000 or more words"
+        }
+    }
+
+    static func statusPhrase(isComplete: Bool?) -> String? {
+        switch isComplete {
+        case true: "complete"
+        case false: "WIP"
+        case nil: nil
+        }
+    }
+
+    /// Posting year, not the updated date. 2020 is its own band.
+    static func yearPhrase(_ year: Int) -> String {
+        switch year {
+        case ...2014: "posted 2014 or earlier"
+        case 2015 ... 2017: "posted 2015 to 2017"
+        case 2018 ... 2019: "posted 2018 to 2019"
+        case 2020: "posted 2020"
+        case 2021 ... 2022: "posted 2021 to 2022"
+        case 2023 ... 2024: "posted 2023 to 2024"
+        default: "posted 2025 or later"
+        }
+    }
+
+    /// "6 to 20 chapters · 20,000 to 60,000 words · complete · posted 2025 or later".
+    /// A missing part is left out. With nothing known, the comparison the ranker
+    /// actually makes, which is not a shape band.
+    static func similarWorksLine(
+        chaptersPosted: Int?,
+        words: Int?,
+        isComplete: Bool?,
+        postedYear: Int?
+    ) -> String {
+        var parts: [String] = []
+        if let chaptersPosted, let phrase = chaptersPhrase(posted: chaptersPosted) {
+            parts.append(phrase)
+        }
+        if let words, let phrase = lengthPhrase(words: words) {
+            parts.append(phrase)
+        }
+        if let status = statusPhrase(isComplete: isComplete) {
+            parts.append(status)
+        }
+        if let postedYear {
+            parts.append(yearPhrase(postedYear))
+        }
+        if parts.isEmpty {
+            return "Loaded works of similar length and age"
+        }
+        return parts.joined(separator: " · ")
+    }
 }
 
 extension LoadedWorksRanker {

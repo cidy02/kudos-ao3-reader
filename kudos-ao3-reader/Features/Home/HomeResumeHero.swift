@@ -11,6 +11,7 @@ enum ResumeCardVariant: Equatable {
 }
 
 struct ResumeCardModel {
+    let coverRecipe: GeneratedCoverRecipe
     let title: String
     let authors: [String]
     let authorIdentities: [AO3AuthorIdentity]
@@ -45,7 +46,8 @@ struct ResumeCardModel {
     /// agrees with the bars (`ChapterLengthCache`). Nil counts chapters as equal.
     var chapterPositions: [Int]?
 
-    init(work: SavedWork) {
+    @MainActor init(work: SavedWork) {
+        coverRecipe = work.generatedCoverRecipe
         title = work.title
         authors = work.verifiedAuthorIdentities.isEmpty
             ? (work.author.isEmpty ? [] : [work.author])
@@ -79,6 +81,7 @@ struct ResumeCardModel {
     }
 
     init(
+        coverRecipe: GeneratedCoverRecipe,
         title: String,
         authors: [String],
         authorIdentities: [AO3AuthorIdentity],
@@ -107,6 +110,7 @@ struct ResumeCardModel {
         extraFandomCount: Int = 0,
         primaryFandomFull: String? = nil
     ) {
+        self.coverRecipe = coverRecipe
         self.title = title
         self.authors = authors
         self.authorIdentities = authorIdentities
@@ -135,8 +139,6 @@ struct ResumeCardModel {
         self.extraFandomCount = max(0, extraFandomCount)
         self.primaryFandomFull = primaryFandomFull
     }
-
-    var art: CoverArt.WorkArt { CoverArt.workArt(fandoms: fandoms, title: title) }
 
     var primaryFandom: String? {
         fandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -287,7 +289,7 @@ struct HomeResumeHero: View {
     var body: some View {
         if blurred {
             ZStack {
-                resumeCard(interactive: false, showsInitial: false)
+                resumeCard(interactive: false, showsContent: false)
                     .environment(\.ao3AuthorNavigationEnabled, false)
                     .blur(radius: 6)
                     .allowsHitTesting(false)
@@ -359,7 +361,7 @@ struct HomeResumeHero: View {
         }
     }
 
-    private func resumeCard(interactive: Bool, showsInitial: Bool = true) -> some View {
+    private func resumeCard(interactive: Bool, showsContent: Bool = true) -> some View {
         WorkResumeCard(
             model: ResumeCardModel(work: work),
             localWork: work,
@@ -367,7 +369,7 @@ struct HomeResumeHero: View {
             primaryLabel: variant == .next ? "Start" : "Resume",
             isBusy: false,
             isInteractive: interactive,
-            showsInitial: showsInitial,
+            showsContent: showsContent,
             showsVariantLabel: showsVariantLabel,
             onPrimary: { onPrimary?() },
             onReadAloud: { onReadAloud?() }
@@ -376,24 +378,25 @@ struct HomeResumeHero: View {
     }
 }
 
-struct WorkIdentityCardBackground: View {
-    let art: CoverArt.WorkArt
-    let title: String
-    var showsInitial = true
+struct WorkCoverCardBackground: View {
+    let recipe: GeneratedCoverRecipe
+    var epubURL: URL?
+    var epubWorkID: UUID?
+    var showsArt = true
+
+    static let ink = 0.4
+    static let scrimOpacity = 0.6
 
     @Environment(ThemeManager.self) private var themeManager
 
     var body: some View {
-        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-            .fill(CoverArt.workGradient(for: art))
-            .overlay(alignment: .bottomTrailing) {
-                if showsInitial {
-                    Text(title.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "")
-                        .font(.system(size: 250, weight: .semibold, design: .serif))
-                        .foregroundStyle(Color.white.opacity(0.08))
-                        .offset(x: 10, y: 58)
-                        .accessibilityHidden(true)
-                }
+        GeometryReader { geometry in
+            GeneratedCoverView(recipe: recipe, width: geometry.size.width,
+                               epubURL: showsArt ? epubURL : nil,
+                               epubWorkID: showsArt ? epubWorkID : nil,
+                               height: geometry.size.height, showsWords: false,
+                               showsArt: showsArt, ink: Self.ink, cornerRadius: 0)
+                .overlay(Color.black.opacity(Self.scrimOpacity))
             }
             .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
             .overlay(
@@ -416,9 +419,8 @@ struct WorkResumeCard: View {
     let primaryLabel: String
     var isBusy = false
     var isInteractive = true
-    /// A hidden mature work must not draw its initial: the letter stays
-    /// recognisable under the 6 pt blur. Every other card keeps it.
-    var showsInitial = true
+    /// Hidden mature works draw only the cover ground beneath the blur.
+    var showsContent = true
     var showsVariantLabel = true
     let onPrimary: () -> Void
     let onReadAloud: () -> Void
@@ -452,6 +454,7 @@ struct WorkResumeCard: View {
         .padding(variant == .detail ? 14 : 16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .foregroundStyle(.white)
+        .opacity(showsContent ? 1 : 0)
         .background(cardBackground)
         .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
         .environment(\.colorScheme, .dark)
@@ -461,6 +464,7 @@ struct WorkResumeCard: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityLabel)
+        .accessibilityHidden(!showsContent)
     }
 
     /// The queue's fraction while a download or restore is in flight
@@ -529,10 +533,11 @@ struct WorkResumeCard: View {
     }
 
     private var cardBackground: some View {
-        WorkIdentityCardBackground(
-            art: model.art,
-            title: model.title,
-            showsInitial: showsInitial
+        WorkCoverCardBackground(
+            recipe: model.coverRecipe,
+            epubURL: localWork?.hasEPUB == true ? localWork?.fileURL : nil,
+            epubWorkID: localWork?.id,
+            showsArt: showsContent
         )
     }
 
@@ -594,23 +599,24 @@ extension WorkResumeCard {
     private var identity: some View {
         VStack(alignment: .leading, spacing: 2) {
             if let fandom = model.primaryFandom {
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    fandomLabel(fandom)
-                    if model.extraFandomCount > 0 {
-                        Text("+\(model.extraFandomCount)")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.white.opacity(0.9))
-                            .accessibilityLabel("plus \(model.extraFandomCount) more")
-                    }
-                }
+                fandomRow(fandom)
                 Capsule().fill(Color.white.opacity(0.9)).frame(width: 16, height: 2)
                     .padding(.vertical, 2)
             }
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(model.title)
-                    .font(.system(.title2, design: .serif, weight: .semibold))
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                    .fixedSize(horizontal: false, vertical: true)
+                if dynamicTypeSize.isAccessibilitySize {
+                    Text(AccessibilitySoftBreak.opportunities(in: model.title))
+                        .font(.system(.title2, design: .serif, weight: .semibold))
+                        .lineLimit(nil)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Text(model.title)
+                        .font(.system(.title2, design: .serif, weight: .semibold))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if variant == .next, model.isFavorite {
                     Image(systemName: "star.fill")
                         .font(.caption)
@@ -628,9 +634,12 @@ extension WorkResumeCard {
             )
             .tint(.white)
             if let line = metadataLine {
-                Text(line)
+                Text(dynamicTypeSize.isAccessibilitySize
+                    ? AccessibilitySoftBreak.opportunities(in: line)
+                    : line)
                     .font(.footnote)
                     .foregroundStyle(Color.white.opacity(0.85))
+                    .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if variant == .next {
@@ -648,8 +657,36 @@ extension WorkResumeCard {
     }
 
     @ViewBuilder
+    private func fandomRow(_ fandom: String) -> some View {
+        let extra = model.extraFandomCount
+        if dynamicTypeSize.isAccessibilitySize {
+            // The name and "+N" in one row are wider than the card at AX5.
+            VStack(alignment: .leading, spacing: 2) {
+                fandomLabel(fandom)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if extra > 0 { fandomExtra(extra) }
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                fandomLabel(fandom)
+                if extra > 0 { fandomExtra(extra) }
+            }
+        }
+    }
+
+    private func fandomExtra(_ count: Int) -> some View {
+        Text("+\(count)")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.white.opacity(0.9))
+            .accessibilityLabel("plus \(count) more")
+    }
+
+    @ViewBuilder
     private func fandomLabel(_ fandom: String) -> some View {
-        let label = Text(fandom.uppercased())
+        let name = dynamicTypeSize.isAccessibilitySize
+            ? AccessibilitySoftBreak.opportunities(in: fandom.uppercased())
+            : fandom.uppercased()
+        let label = Text(name)
             .font(.caption.weight(.semibold))
             .tracking(0.8)
             .foregroundStyle(Color.white.opacity(0.9))
@@ -730,25 +767,34 @@ extension WorkResumeCard {
             } else {
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(shown.displayedChapterName + " · " + model.postedLabel)
+                        Text(wrappingCaption(shown.displayedChapterName + " · " + model.postedLabel))
                         Spacer(minLength: 4)
-                        if !model.updated.isEmpty { Text("Updated \(model.updated)") }
+                        if !model.updated.isEmpty { Text(wrappingCaption("Updated \(model.updated)")) }
                     }
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(shown.displayedChapterName + " · " + model.postedLabel)
-                        if !model.updated.isEmpty { Text("Updated \(model.updated)") }
+                        Text(wrappingCaption(shown.displayedChapterName + " · " + model.postedLabel))
+                        if !model.updated.isEmpty { Text(wrappingCaption("Updated \(model.updated)")) }
                     }
                 }
                 .font(.caption)
                 .foregroundStyle(Color.white.opacity(0.85))
+                .multilineTextAlignment(.leading)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 if let lastReadLabel = model.lastReadLabel {
-                    Text(lastReadLabel)
+                    Text(wrappingCaption(lastReadLabel))
                         .font(.caption)
                         .foregroundStyle(Color.white.opacity(0.85))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
+    }
+
+    /// The default size keeps the string it already drew. Accessibility sizes
+    /// gain break opportunities so a chapter title can wrap inside the card.
+    private func wrappingCaption(_ text: String) -> String {
+        dynamicTypeSize.isAccessibilitySize ? AccessibilitySoftBreak.opportunities(in: text) : text
     }
 
     private var chapterLegend: some View {
@@ -792,6 +838,17 @@ extension WorkResumeCard {
                         detailCircleActions
                     }
                 }
+            } else if HomeResumeLayout.stacksActions(dynamicTypeSize) {
+                // The strip is a fixed width and Resume does not wrap. In one
+                // row they are wider than a 320 pt phone, which widens the card.
+                VStack(alignment: .leading, spacing: 10) {
+                    statusStrip
+                    ViewThatFits(in: .horizontal) {
+                        sideBySideActions
+                            .fixedSize(horizontal: true, vertical: false)
+                        stackedActions
+                    }
+                }
             } else {
                 HStack(spacing: 10) { actionContents }
             }
@@ -805,23 +862,45 @@ extension WorkResumeCard {
         }
     }
 
+    /// Tight tiles as the boards draw them, not spread over the free width.
+    private var statusStrip: some View {
+        WorkStatusIconGrid(
+            rating: model.rating.isEmpty ? nil : model.rating,
+            categories: model.categories,
+            warnings: model.warnings,
+            completion: model.completion,
+            tileSize: 24,
+            announcesToVoiceOver: true,
+            arrangement: .strip
+        )
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var sideBySideActions: some View {
+        HStack(spacing: 10) {
+            #if os(iOS)
+            readAloudCircle
+            #endif
+            primaryButton
+        }
+    }
+
+    private var stackedActions: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            #if os(iOS)
+            readAloudCircle
+            #endif
+            primaryButton
+        }
+    }
+
     @ViewBuilder
     private var actionContents: some View {
         if variant == .detail {
             primaryButton
             detailCircleActions
         } else {
-            WorkStatusIconGrid(
-                rating: model.rating.isEmpty ? nil : model.rating,
-                categories: model.categories,
-                warnings: model.warnings,
-                completion: model.completion,
-                tileSize: 24,
-                announcesToVoiceOver: true,
-                arrangement: .strip
-            )
-            // Tight tiles as the boards draw them, not spread over the free width.
-            .fixedSize(horizontal: true, vertical: false)
+            statusStrip
             Spacer(minLength: 0)
             #if os(iOS)
             readAloudCircle
@@ -956,18 +1035,47 @@ extension WorkResumeCard {
 
     private var primaryButton: some View {
         Button { if isInteractive { onPrimary() } } label: {
-            HStack(spacing: 8) {
-                if isBusy {
-                    ProgressView().controlSize(.small).tint(accentFill)
-                } else {
-                    Image(systemName: "play.fill").font(.caption)
-                }
-                Text(variant == .detail ? shown.detailPrimaryTitle(fallback: primaryLabel) : primaryLabel)
-            }
-            .frame(maxWidth: variant == .detail ? .infinity : nil)
+            primaryLabelContent
+                .frame(maxWidth: variant == .detail ? .infinity : nil)
         }
         .buttonStyle(.kudos(variant: .onGradient, size: variant == .detail ? .confirm : .regular))
         .disabled(!isInteractive || isBusy)
+    }
+
+    /// Icon beside the word, except on the home and up-next cards at an
+    /// accessibility size, where the icon sits above the word. Headline
+    /// "Resume" plus the icon and the button's padding is wider than the
+    /// card on a 320 pt phone.
+    @ViewBuilder
+    private var primaryLabelContent: some View {
+        let title = Text(variant == .detail ? shown.detailPrimaryTitle(fallback: primaryLabel) : primaryLabel)
+        if HomeResumeLayout.stacksActions(dynamicTypeSize), variant != .detail {
+            VStack(spacing: 2) {
+                primaryIcon
+                title.multilineTextAlignment(.center)
+            }
+        } else {
+            // One line, never broken inside the word: when a pane is too narrow the
+            // layout above is what gives, not the label (T-562c N8).
+            // Work Detail's "Resume Chapter 123" is long and keeps wrapping to the card.
+            HStack(spacing: 8) {
+                primaryIcon
+                if variant == .detail {
+                    title
+                } else {
+                    title.lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var primaryIcon: some View {
+        if isBusy {
+            ProgressView().controlSize(.small).tint(accentFill)
+        } else {
+            Image(systemName: "play.fill").font(.caption)
+        }
     }
 }
 
@@ -984,11 +1092,15 @@ struct HomeResumeComposition<Hero: View, Next: View>: View {
     @ViewBuilder var next: () -> Next
     @Environment(\.dashboardContentRegions) private var regions
     @Environment(\.layoutDirection) private var direction
+    /// The Duo held upright stacks the card full width, like `Duo-Portrait-Home`: the
+    /// dashboard's own region host does not see the fold from inside the scroll view,
+    /// so this reads the app-level signal (T-562c N8).
+    @Environment(\.duoLayout) private var duoLayout
     private var cardSize = ScaledCarouselCardSize()
 
     var body: some View {
         #if os(iOS)
-        if let regions, let panes = regions.resumePanes(
+        if !duoLayout.isUprightFold, let regions, let panes = regions.resumePanes(
             hasNext: hasNext,
             cardWidth: cardSize.width(in: nil),
             rightToLeft: direction == .rightToLeft

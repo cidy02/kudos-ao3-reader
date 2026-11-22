@@ -6,6 +6,8 @@ import SwiftUI
 /// on iPad/macOS through `filterPanelPresentation`.
 struct LibraryFilterPanel: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.filterPanelInInspector) private var inInspector
+    @Environment(\.duoLayout) private var duoLayout
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(ThemeManager.self) private var theme
     @Binding var filters: LibraryFilters
@@ -13,6 +15,9 @@ struct LibraryFilterPanel: View {
     let works: [SavedWork]
     /// The user's own tag names, for the "Your Tags" facet.
     let userTagNames: [String]
+    @State private var gridWidth: CGFloat = .infinity
+    /// A one-word category label ("Other", "Multi") at the current Dynamic Type size.
+    @ScaledMetric(relativeTo: .subheadline) private var labelWidth: CGFloat = 38
     #if DEBUG
     @State private var debugFandomPicker = false
     #endif
@@ -26,18 +31,19 @@ struct LibraryFilterPanel: View {
     }
 
     var body: some View {
+        let bookLeadingInset: CGFloat = (inInspector && duoLayout.isVerticalFoldActive)
+            ? DuoLayoutSignal.bookFoldInset
+            : 0
         NavigationStack {
             form
-                .navigationTitle("Filters")
-            #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-            #endif
-                .toolbar { actionButtons }
+                .padding(.leading, bookLeadingInset)
+                .filterPanelChrome(title: "Filters")
                 .safeAreaInset(edge: .bottom) {
                     FilterResultsBar(
                         buttonTitle: "Show \(matchingCount.formatted()) \(matchingCount == 1 ? "Work" : "Works")",
                         onConfirm: { dismiss() }
                     )
+                    .padding(.leading, bookLeadingInset)
                 }
         }
         #if DEBUG
@@ -54,28 +60,28 @@ struct LibraryFilterPanel: View {
         #endif
     }
 
-    @ToolbarContentBuilder
-    private var actionButtons: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-            }
-            .accessibilityLabel("Close")
-        }
-        // No ✓ (board 03): the "Show N Works" bar below is the sheet's one confirm.
-    }
-
     private func groupLabel(_ text: String) -> some View {
         SubjectFieldLabel(text: text, style: .formGroup)
     }
 
     /// The six AO3 categories are a 3×2 grid, falling back to one column at accessibility sizes.
+    /// Two across when the panel is too narrow for three (a narrow inspector): a label
+    /// never breaks inside a word (T-562c N6).
     private var categoryColumns: [GridItem] {
         dynamicTypeSize.isAccessibilitySize
             ? [GridItem(.flexible())]
-            : Array(repeating: GridItem(.flexible()), count: 3)
+            : Array(repeating: GridItem(.flexible()), count: Self.categoryColumnCount(gridWidth: gridWidth, labelWidth: labelWidth))
+    }
+
+    /// A dense card's fixed parts (padding, 22 pt symbol, indicator, spacing) around a one-word label.
+    private static let denseCardChrome: CGFloat = 68
+    private static let gridSpacing: CGFloat = 8
+
+    /// Three across when each card can hold its chrome plus a one-word label, else two. `gridWidth`
+    /// is the grid's own width, after the Form's margins.
+    static func categoryColumnCount(gridWidth: CGFloat, labelWidth: CGFloat) -> Int {
+        let three = 3 * (denseCardChrome + labelWidth) + 2 * gridSpacing
+        return gridWidth < three ? 2 : 3
     }
 
     /// Warnings: two columns (AO3 filter sheet), one at accessibility sizes.
@@ -160,6 +166,7 @@ struct LibraryFilterPanel: View {
                             }
                         }
                     }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
                     .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                     .listRowBackground(Color.clear)
                 } header: {
@@ -260,8 +267,8 @@ struct LibraryFilterPanel: View {
                             Text("Reset All Filters")
                                 .foregroundStyle(
                                     filters.hasActiveFilters
-                                        ? theme.appTheme.errorColor
-                                        : Color.secondary
+                                        ? AnyShapeStyle(theme.appTheme.errorColor)
+                                        : AnyShapeStyle(.secondaryInk)
                                 )
                             Spacer()
                         }
@@ -533,7 +540,7 @@ private struct LibraryMultiSelectField: View {
                 Text(title).foregroundStyle(.primary)
                 Spacer()
                 Text(selection.isEmpty ? "Any" : "\(selection.count) selected")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.tertiary)
@@ -568,10 +575,10 @@ private struct LibraryOptionPicker: View {
                 let matches = filtered
                 if options.isEmpty {
                     Text("Your Library has no \(title.lowercased()) yet.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 } else if matches.isEmpty {
                     Text("None of your options match “\(query)”.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 } else {
                     ForEach(matches, id: \.self) { value in
                         Button {

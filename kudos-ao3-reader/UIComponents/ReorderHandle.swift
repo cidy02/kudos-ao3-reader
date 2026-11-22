@@ -9,7 +9,7 @@ struct ReorderHandleView: View {
     var body: some View {
         Image(systemName: "line.3.horizontal")
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .frame(width: 28, height: 28)
             .background(.regularMaterial, in: Circle())
             .accessibilityLabel("Reorder")

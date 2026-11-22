@@ -358,7 +358,7 @@ struct RecentlyDeletedView: View {
     private func sectionNote(_ text: String) -> some View {
         Text(text)
             .font(.system(size: sectionNoteSize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .pageBodyRow(top: 6, gutter: SubjectMetrics.accountGutter)
@@ -387,7 +387,7 @@ struct RecentlyDeletedView: View {
             }
         }
         .font(.system(size: reassuranceSize))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.secondaryInk)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
@@ -618,15 +618,22 @@ extension RecentlyDeletedEntry {
     }
 
     static func queue(_ queue: ReadingQueue, in context: ModelContext) -> Self {
-        RecentlyDeletedEntry(
+        let isSmart = queue.kind == .smart
+        return RecentlyDeletedEntry(
             id: queue.id,
-            kicker: "Reading queue",
-            noun: "reading queue",
+            kicker: isSmart ? "Smart queue" : "Reading queue",
+            noun: isSmart ? "smart queue" : "reading queue",
             title: queue.displayName,
-            detail: containerDetail(queue.memberships.count, deletedAt: queue.deletedAt),
+            detail: isSmart
+                ? smartQueueDetail(deletedAt: queue.deletedAt)
+                : containerDetail(queue.memberships.count, deletedAt: queue.deletedAt),
             daysRemaining: RecentlyDeletedView.daysRemaining(queue.permanentDeletionScheduledAt),
             restore: { PreservedWorkService.restore(queue, in: context) },
-            deletionMessage: { RecentlyDeletedView.containerDeletionMessage(workCount: queue.memberships.count) },
+            deletionMessage: {
+                isSmart
+                    ? "Your works stay in your Library. You can't undo this."
+                    : RecentlyDeletedView.containerDeletionMessage(workCount: queue.memberships.count)
+            },
             deletePermanently: { PreservedWorkService.deletePermanently(queue, in: context) }
         )
     }
@@ -636,6 +643,13 @@ extension RecentlyDeletedEntry {
         let works = "\(count) work\(count == 1 ? "" : "s")"
         guard let deletedAt else { return works }
         return works + " · deleted "
+            + deletedAt.formatted(.dateTime.day().month(.abbreviated).locale(locale))
+    }
+
+    static func smartQueueDetail(deletedAt: Date?, locale: Locale = .current) -> String {
+        let base = "Fills from rules"
+        guard let deletedAt else { return base }
+        return base + " · deleted "
             + deletedAt.formatted(.dateTime.day().month(.abbreviated).locale(locale))
     }
 
@@ -809,7 +823,7 @@ struct RecentlyDeletedRow: View {
                     if !entry.detail.isEmpty {
                         Text(entry.detail)
                             .font(.system(size: detailSize))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -851,7 +865,7 @@ struct RecentlyDeletedRow: View {
                     if !entry.detail.isEmpty {
                         Text(entry.detail)
                             .font(.system(size: detailSize))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -907,7 +921,7 @@ struct RecentlyDeletedRow: View {
             if !fandoms.isEmpty {
                 Text(fandoms.joined(separator: ", "))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             }
         }
@@ -933,7 +947,7 @@ struct RecentlyDeletedRow: View {
                 .font(.system(size: daysSize, weight: .semibold))
                 .monospacedDigit()
         }
-        .foregroundStyle(urgent ? Color.red : Color.secondary)
+        .foregroundStyle(urgent ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondaryInk))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(label)
     }

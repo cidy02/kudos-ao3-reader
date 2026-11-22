@@ -105,6 +105,9 @@ nonisolated struct ReaderPositionSummary: Equatable {
     let chapterTimeLabel: String
     /// "Chapter 2 of 10 · 34% of work · 1 hr 5 min left"
     let workLine: String
+    /// "Ch 2 of 10" — the compact position bar's title-row label (Duo boards).
+    /// Front and back matter keep their names; `.other` is empty.
+    let chapterShortLabel: String
 
     /// - Parameters:
     ///   - page/pageCount: Readium positions within the current chapter.
@@ -130,6 +133,7 @@ nonisolated struct ReaderPositionSummary: Equatable {
             parts.append(ReaderTimeEstimate.workRemainingLabel(positions: remainingInWork))
         }
         workLine = parts.joined(separator: " · ")
+        chapterShortLabel = place.shortLabel
     }
 
     /// Where the reader is, for the card's bottom line. AO3 EPUBs wrap the story
@@ -153,6 +157,14 @@ nonisolated struct ReaderPositionSummary: Equatable {
             case .summary: "Summary"
             case .afterword: "Afterword"
             case .other: ""
+            }
+        }
+
+        /// `label` for a narrow title row: "Ch 7 of 20". Same floor as `label`.
+        var shortLabel: String {
+            switch self {
+            case let .chapter(index, total): "Ch \(index) of \(max(total, index))"
+            default: label
             }
         }
     }

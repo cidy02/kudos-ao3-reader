@@ -57,7 +57,7 @@ struct WritingChaptersView: View {
     @ViewBuilder
     private func rows(_ chapters: [AO3ChapterRef]) -> some View {
         ForEach(Array(chapters.enumerated()), id: \.element.id) { index, chapter in
-            SubjectFormRow(label: chapter.displayName, value: chapter.dateText, showsDisclosure: true)
+            SubjectFormRow(label: chapter.displayName, value: WorkStat.displayDate(chapter.dateText), showsDisclosure: true)
                 .subjectRowNavigation(accessibilityLabel: chapter.displayName) {
                     WritingChapterDestination(
                         workID: workID, workTitle: workTitle,

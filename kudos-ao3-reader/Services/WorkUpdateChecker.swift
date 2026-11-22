@@ -37,6 +37,10 @@ enum WorkUpdateChecker {
             do {
                 let groups = try await fetchTags(id)
                 guard !groups.isEmpty, !groups.chapters.isEmpty else { continue }
+                let posted = SavedWork.postedChapterCount(from: groups.chapters)
+                if work.shouldResumeStacking(postedChapters: posted) {
+                    work.setReadingStatus(.reading)
+                }
                 work.chapters = groups.chapters
                 // Baseline on first sight (native imports seed this at download time).
                 if work.knownChapterCount == 0 {

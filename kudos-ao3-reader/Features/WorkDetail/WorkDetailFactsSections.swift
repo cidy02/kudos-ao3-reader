@@ -34,7 +34,7 @@ private struct WorkDetailMyCopyCell: View {
                 }
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             Text(row.value)
                 .font(.subheadline)
                 .foregroundStyle(.primary)

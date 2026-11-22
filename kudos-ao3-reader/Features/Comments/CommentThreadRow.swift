@@ -308,7 +308,7 @@ struct CommentParticipantBadge: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
             .background(isEmphasized ? AnyShapeStyle(.accentFill) : AnyShapeStyle(.quaternary), in: Capsule())
-            .foregroundStyle(isEmphasized ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+            .foregroundStyle(isEmphasized ? AnyShapeStyle(.white) : AnyShapeStyle(.secondaryInk))
             .fixedSize()
             .layoutPriority(1)
             // One element, one announcement — without this VoiceOver reads the
@@ -434,6 +434,8 @@ struct CommentThreadHandlers {
     /// what makes the synthesized memberwise init treat this param as optional
     /// too, so `.noop` below keeps compiling unchanged.
     var onOpenAuthor: ((AO3AuthorRoute) -> Void)?
+    /// Mutes a commenter on AO3 through the shared moderation confirm/submit path.
+    var onMute: ((AO3AuthorRoute) -> Void)?
 
     static let noop = CommentThreadHandlers(
         onReply: { _ in },
@@ -869,7 +871,7 @@ private func continueThreadButton(count: Int, action: @escaping () -> Void) -> s
                 .foregroundStyle(.tertiary)
             Text(countText)
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Image(systemName: "chevron.right")
                 .imageScale(.small)
                 .foregroundStyle(.tint)
@@ -1151,7 +1153,7 @@ private struct CommentPostRow: View {
             // The avatar placeholder stays so the reply rail passes through.
             Text(comment.bodyText.isEmpty ? "(Previous comment deleted.)" : comment.bodyText)
                 .font(.subheadline.italic())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .frame(minHeight: CommentThreadGeometry.avatarSize(forDepth: depth), alignment: .center)
         } else {
             VStack(alignment: .leading, spacing: 6) {
@@ -1186,7 +1188,7 @@ private struct CommentPostRow: View {
                 .minimumHitTarget()
                 .accessibilityHint("Opens the rest of this thread on the AO3 website")
         } else {
-            label.foregroundStyle(.secondary)
+            label.foregroundStyle(.secondaryInk)
         }
     }
 
@@ -1235,7 +1237,7 @@ private struct CommentPostRow: View {
         } else if showsParentAttribution, let replyToAuthor, !replyToAuthor.isEmpty {
             Label("in reply to \(replyToAuthor)", systemImage: "arrow.turn.down.right")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .accessibilityHidden(true)
@@ -1318,7 +1320,7 @@ private struct CommentPostRow: View {
                 // name is what gives way (see `byline`).
                 Text(collapse.label)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(1)
                     .fixedSize()
                     .padding(.horizontal, 8)
@@ -1422,7 +1424,7 @@ private struct CommentPostRow: View {
         )
         return Text(timestamp)
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .accessibilityLabel(absolute)
@@ -1442,7 +1444,7 @@ private struct CommentPostRow: View {
                 .padding(.horizontal, 7)
                 .padding(.vertical, 2)
                 .background(.quaternary, in: Capsule())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
                 .fixedSize()
                 .layoutPriority(1)
@@ -1519,6 +1521,44 @@ private struct CommentPostRow: View {
 
     @ViewBuilder
     private func commentMenuItems(showsReply: Bool) -> some View {
+        CommentMenuItems(
+            comment: comment,
+            isLoggedIn: auth.isLoggedIn,
+            currentUsername: auth.username,
+            showsReply: showsReply,
+            handlers: handlers
+        )
+    }
+}
+
+struct CommentMenuItems: View {
+    struct MuteDescriptor: Equatable {
+        let title: String
+        let systemImage: String
+        let target: AO3AuthorRoute
+    }
+
+    let comment: AO3Comment
+    let isLoggedIn: Bool
+    let currentUsername: String?
+    let showsReply: Bool
+    let handlers: CommentThreadHandlers
+
+    var muteItem: MuteDescriptor? {
+        guard handlers.onMute != nil,
+              let target = comment.muteTargetRoute(
+                  isLoggedIn: isLoggedIn,
+                  currentUsername: currentUsername
+              )
+        else { return nil }
+        return MuteDescriptor(
+            title: "Mute \(comment.author)",
+            systemImage: "speaker.slash",
+            target: target
+        )
+    }
+
+    var body: some View {
         MenuTopRow {
             if showsReply {
                 Button { handlers.onReply(comment) } label: {
@@ -1557,6 +1597,11 @@ private struct CommentPostRow: View {
                 Label("Go to Chapter \(chapter)", systemImage: "book")
             }
         }
+        if let onMute = handlers.onMute, let item = muteItem {
+            Button { onMute(item.target) } label: {
+                Label(item.title, systemImage: item.systemImage)
+            }
+        }
         if comment.editPath != nil {
             Button { handlers.onEdit(comment) } label: {
                 Label("Edit Comment", systemImage: "pencil")
@@ -1577,7 +1622,7 @@ struct CommentOverflowButtonLabel: View {
         // 1f: a bare mark on every row, not a chip; the 44pt target stays.
         Image(systemName: "ellipsis")
             .font(.system(size: 15))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(Rectangle())
     }
@@ -1776,6 +1821,12 @@ struct CommentAuthorAvatarButton: View {
 }
 
 struct CommentAvatar: View {
+    struct TintPalette: Equatable {
+        let background: Color
+        let foreground: Color
+        let border: Color
+    }
+
     private let isGuest: Bool
     private let avatarURL: URL?
     /// Whose avatar this is, used only for the no-image fallback. Optional so a
@@ -1783,6 +1834,7 @@ struct CommentAvatar: View {
     private let name: String?
     var size: CGFloat = 40
 
+    @Environment(ThemeManager.self) private var theme
     @State private var loadedImage: Image?
 
     private var imageURL: URL? {
@@ -1803,6 +1855,32 @@ struct CommentAvatar: View {
         self.size = size
     }
 
+    /// Deterministic soft per-name tint for a commenter's initial circle.
+    /// Hue comes from `CoverArt.hue(for:)` (djb2 over `unicodeScalars`, never
+    /// `hashValue`), never the app colour, with >= 4.5:1 contrast for the initial
+    /// across all four themes' backgrounds.
+    static func tintPalette(forName name: String, theme: ReaderTheme) -> TintPalette {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hue = CoverArt.hue(for: trimmed)
+        if theme.isDarkFamily {
+            return TintPalette(
+                background: Color(hue: hue, saturation: 0.48, brightness: 0.86).opacity(0.22),
+                foreground: Color(hue: hue, saturation: 0.18, brightness: 0.96),
+                border: Color(hue: hue, saturation: 0.48, brightness: 0.86).opacity(0.30)
+            )
+        }
+        return TintPalette(
+            background: Color(hue: hue, saturation: 0.72, brightness: 0.52).opacity(0.15),
+            foreground: Color(hue: hue, saturation: 0.85, brightness: 0.30),
+            border: Color(hue: hue, saturation: 0.72, brightness: 0.52).opacity(0.22)
+        )
+    }
+
+    private var tintPalette: TintPalette? {
+        guard !isGuest, initial != nil else { return nil }
+        return Self.tintPalette(forName: name ?? "", theme: theme.appTheme)
+    }
+
     var body: some View {
         Group {
             if let loadedImage {
@@ -1814,16 +1892,30 @@ struct CommentAvatar: View {
             }
         }
         .frame(width: size, height: size)
-        .background(.quaternary.opacity(0.5), in: Circle())
+        .background(circleBackground, in: Circle())
         .clipShape(Circle())
         .overlay {
             Circle()
-                .strokeBorder(.quaternary, lineWidth: 0.5)
+                .strokeBorder(circleBorder, lineWidth: 0.5)
         }
         // Hidden when decorative; parent Button supplies the profile label when
         // the avatar is a tappable entry point.
         .accessibilityHidden(true)
         .task(id: imageURL) { await loadImage() }
+    }
+
+    private var circleBackground: AnyShapeStyle {
+        if loadedImage == nil, let tintPalette {
+            return AnyShapeStyle(tintPalette.background)
+        }
+        return AnyShapeStyle(.quaternary.opacity(0.5))
+    }
+
+    private var circleBorder: AnyShapeStyle {
+        if loadedImage == nil, let tintPalette {
+            return AnyShapeStyle(tintPalette.border)
+        }
+        return AnyShapeStyle(.quaternary)
     }
 
     private func loadImage() async {
@@ -1864,17 +1956,17 @@ struct CommentAvatar: View {
     /// down the page — the glyph is the honest answer for someone with no identity.
     @ViewBuilder
     private var placeholder: some View {
-        if !isGuest, let initial {
+        if !isGuest, let initial, let tintPalette {
             Text(initial)
                 .font(.system(size: size * 0.42, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(tintPalette.foreground)
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             Image(systemName: "person.fill")
                 .font(.system(size: size * 0.43, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }

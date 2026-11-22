@@ -43,6 +43,17 @@ enum AppTab: String, Hashable, CaseIterable, Identifiable {
         case .search: "magnifyingglass"
         }
     }
+
+    var selectedSymbol: String {
+        switch self {
+        case .home: "house.fill"
+        case .library: "books.vertical.fill"
+        case .writing: "square.and.pencil"
+        case .browse: "safari.fill"
+        case .account: "person.crop.circle.fill"
+        case .search: "magnifyingglass"
+        }
+    }
 }
 
 /// The four AO3-managed reading lists now grouped under Library > On AO3.
@@ -190,9 +201,8 @@ struct AO3TagWorksRequest: Hashable {
     /// Links that already point at `/works` (or at a sub-listing like
     /// `/bookmarks`) are left alone.
     private static func worksListing(for url: URL) -> URL {
-        var parts = url.pathComponents.filter { $0 != "/" }
-        guard parts.first == "tags", parts.count == 2 else { return url }
-        parts.append("works")
+        guard case .tag = AO3Link(url).kind,
+              url.path(percentEncoded: true).split(separator: "/").count == 2 else { return url }
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
         // Rebuilt from the *original* path, not from the decoded components: AO3
         // writes `&` in a tag path as `*a*` and percent-encodes the rest, and
@@ -307,6 +317,13 @@ nonisolated enum WritingTabEvents {
 
 /// Shared navigation state so other tabs can hand a URL to the browser and
 /// switch to it (e.g. opening a saved bookmark).
+struct QueueSearchRoute {
+    let id = UUID()
+    let searchID: UUID
+    let queueID: UUID
+    let page: AO3SearchPage?
+}
+
 @Observable
 final class AppRouter {
     struct RestoredSelection: Equatable {
@@ -364,8 +381,16 @@ final class AppRouter {
 
     /// The tab the focused Search mode returns to when its Back button is tapped.
     var lastNonSearchTab: AppTab = .library
-    /// Home presents Account as a sheet; it is no longer a root tab.
+    /// Home presents Account as a sheet (or trailing inspector on Open/Book Duo);
+    /// it is no longer a root tab.
     var isPresentingAccount = false
+    /// Shared Account navigation stack so rotating or folding between the Duo
+    /// inspector and sheet hosts preserves the active destination (including deep links).
+    var accountNavigationPath = NavigationPath()
+    /// True while Home is at its root and out of Select mode, so its rail toolbar can
+    /// host Account's Close button (`Duo-Open-Account`). When false, Account falls back
+    /// to a modal sheet with its own Done button instead of showing without Close.
+    var isHomeReadyForAccountInspector = true
     private var opensWebsiteAfterAccountDismiss = false
     private var websiteURLAfterAccountDismiss: URL?
     var pendingAccountRoute: AccountSheetRoute?
@@ -377,6 +402,17 @@ final class AppRouter {
     /// does not switch the user into the Browse tab — Done returns them to
     /// whatever tab/subpage they came from.
     var isPresentingWebBrowser = false
+    var pendingWorkLink: (id: Int, chapterID: Int?)?
+    var pendingLoginWorkLink: (id: Int, chapterID: Int?)?
+    var pendingLoginSessionGeneration: Int?
+    var isPresentingLinkedWorkLogin = false
+    private var opensWebsiteAfterLinkedWorkLoginDismiss = false
+    private var websiteURLAfterLinkedWorkLoginDismiss: URL?
+    private var isDismissingLinkedWorkForLogin = false
+    private var reopenLinkedWorkAfterDismiss = false
+    private(set) var workLinkEpoch = 0
+    var isPresentingLinkedWork = false
+    private var pendingAO3LinkAfterPanelDismiss: URL?
     /// A tag the Library should filter by on its next appearance (e.g. tapped on a
     /// work's detail page). Consumed + cleared by `LibraryView`.
     var pendingLibraryTag: LibraryTagFilter?
@@ -394,6 +430,16 @@ final class AppRouter {
     /// A tag the Search tab should search AO3 for (e.g. a tapped fandom/character/
     /// relationship chip). Consumed + cleared by `SearchView`.
     var pendingTagSearch: AO3TagSearch?
+    var pendingLandingTagSearch: AO3TagSearch?
+    var pendingLandingTagWorks: AO3TagWorksRequest?
+    var pendingQueueSearch: QueueSearchRoute?
+    var currentQueueID: UUID?
+    func consumeQueueSearchRoute() -> QueueSearchRoute? {
+        guard let route = pendingQueueSearch else { return nil }
+        currentQueueID = route.queueID
+        pendingQueueSearch = nil
+        return route
+    }
     /// A tag's works page to show natively in Browse (e.g. an AO3 link tapped in a
     /// work's preface). Consumed + cleared by `BrowseView`.
     var pendingTagWorks: AO3TagWorksRequest?
@@ -425,6 +471,20 @@ final class AppRouter {
         case none, searchFilters, libraryFilters, readerChapters, readerDisplay, readerFind
     }
 
+    var canPresentLinkedWorkOverPanel: Bool {
+        panel != .searchFilters && panel != .libraryFilters
+    }
+
+    var webBrowserPresentation: Binding<Bool> {
+        Binding(
+            get: {
+                self.isPresentingWebBrowser && !self.isPresentingLinkedWork
+                    && !self.isPresentingLinkedWorkLogin
+            },
+            set: { self.isPresentingWebBrowser = $0 }
+        )
+    }
+
     /// Opens a URL in the in-app AO3 website sheet without changing tabs.
     ///
     /// Scheme + host gates live at this sink, not at the call sites.
@@ -440,15 +500,20 @@ final class AppRouter {
             openWebsiteAfterDismissingAccount(url)
             return
         }
-        if !AO3AuthorRoute.isAO3URL(url) {
+        if isPresentingLinkedWorkLogin || opensWebsiteAfterLinkedWorkLoginDismiss {
+            openWebsiteAfterDismissingLinkedWorkLogin(url)
+            return
+        }
+        let destination = Self.canonicalAO3URL(url)
+        if !AO3AuthorRoute.isAO3URL(destination) {
             #if os(macOS)
-            NSWorkspace.shared.open(url)
+            NSWorkspace.shared.open(destination)
             #else
-            UIApplication.shared.open(url)
+            UIApplication.shared.open(destination)
             #endif
             return
         }
-        pendingURL = url
+        pendingURL = destination
         isPresentingWebBrowser = true
     }
 
@@ -464,22 +529,106 @@ final class AppRouter {
     /// action where one exists — a tag's `/tags/<name>/works` page opens a native
     /// works list — falling back to the in-app web view for everything else.
     func openAO3Link(_ url: URL) {
-        if let author = Self.authorRoute(for: url) {
+        let link = AO3Link(url)
+        guard link.kind != .notAO3 else {
+            open(url)
+            return
+        }
+        // A second link while the filter sheet is still dismissing must wait too.
+        // The newer URL replaces the one already queued.
+        if pendingAO3LinkAfterPanelDismiss != nil
+            || (panel == .searchFilters && selection == .search)
+            || (panel == .libraryFilters && selection == .library) {
+            pendingAO3LinkAfterPanelDismiss = url
+            panel = .none
+            return
+        }
+        if case let .work(id, chapterID) = link.kind {
+            openWorkLink(id: id, chapterID: chapterID)
+            return
+        }
+        let destination = Self.canonicalAO3URL(url)
+        if let author = Self.authorRoute(for: destination) {
             openAuthorProfile(author)
             return
         }
-        let parts = url.pathComponents.filter { $0 != "/" }
-        // Same host gate as `open(_:)` (`isAO3URL`: https-only, apex or
-        // subdomain) — a substring check here would treat a lookalike host
-        // like `archiveofourown.org.evil.example` as native-eligible and hand
-        // its URL straight to `AO3Client.worksPage(at:)`.
-        if AO3AuthorRoute.isAO3URL(url),
-           parts.first == "tags", parts.count >= 2 {
-            pendingTagWorks = AO3TagWorksRequest(url: url, title: Self.unmungeTag(parts[1]))
-            selection = .browse
+        if case let .tag(tag) = link.kind, AO3AuthorRoute.isAO3URL(destination) {
+            let request = AO3TagWorksRequest(url: destination, title: tag)
+            if isPresentingLinkedWork {
+                isPresentingWebBrowser = false
+                pendingLandingTagWorks = request
+            } else {
+                pendingTagWorks = request
+                selection = .browse
+            }
             return
         }
-        open(url)
+        open(destination)
+    }
+
+    private func openWorkLink(id: Int, chapterID: Int?) {
+        pendingWorkLink = (id, chapterID)
+        workLinkEpoch &+= 1
+        if isPresentingAccount {
+            isPresentingAccount = false
+        } else if isPresentingLinkedWorkLogin || opensWebsiteAfterLinkedWorkLoginDismiss {
+            pendingLoginWorkLink = nil
+            pendingLoginSessionGeneration = nil
+            opensWebsiteAfterLinkedWorkLoginDismiss = false
+            websiteURLAfterLinkedWorkLoginDismiss = nil
+            isPresentingLinkedWorkLogin = false
+        } else if isDismissingLinkedWorkForLogin || reopenLinkedWorkAfterDismiss {
+            isDismissingLinkedWorkForLogin = false
+            pendingLoginWorkLink = nil
+            pendingLoginSessionGeneration = nil
+            reopenLinkedWorkAfterDismiss = true
+        } else if isPresentingWebBrowser && !isPresentingLinkedWork {
+            // A newer work supersedes a login kept open across password reset.
+            pendingLoginWorkLink = nil
+            pendingLoginSessionGeneration = nil
+            isPresentingWebBrowser = false
+        } else {
+            pendingLoginWorkLink = nil
+            pendingLoginSessionGeneration = nil
+            isPresentingWebBrowser = false
+            isPresentingLinkedWork = true
+        }
+    }
+
+    private static func canonicalAO3URL(_ url: URL) -> URL {
+        guard AO3Link(url).kind != .notAO3,
+              var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        parts.scheme = "https"
+        if parts.host?.lowercased() == "ao3.org" { parts.host = "archiveofourown.org" }
+        return parts.url ?? url
+    }
+
+    func requestLinkedWorkLogin(sessionGeneration: Int) {
+        guard let pendingWorkLink else { return }
+        pendingLoginWorkLink = pendingWorkLink
+        pendingLoginSessionGeneration = sessionGeneration
+        isDismissingLinkedWorkForLogin = true
+        reopenLinkedWorkAfterDismiss = false
+        isPresentingLinkedWork = false
+    }
+
+    func linkedWorkDidDismiss() {
+        if isDismissingLinkedWorkForLogin {
+            isDismissingLinkedWorkForLogin = false
+            pendingWorkLink = nil
+            if pendingLoginWorkLink != nil { isPresentingLinkedWorkLogin = true }
+        } else if reopenLinkedWorkAfterDismiss {
+            reopenLinkedWorkAfterDismiss = false
+            if pendingWorkLink != nil { isPresentingLinkedWork = true }
+        } else {
+            pendingWorkLink = nil
+        }
+    }
+
+    func panelDidDismiss() {
+        guard let url = pendingAO3LinkAfterPanelDismiss else { return }
+        pendingAO3LinkAfterPanelDismiss = nil
+        openAO3Link(url)
     }
 
     /// Pushes a verified author route without changing tabs. Keeping the current
@@ -756,6 +905,9 @@ final class AppRouter {
     }
 
     func showAccount(_ route: AccountSheetRoute? = nil) {
+        if !isPresentingAccount {
+            accountNavigationPath = NavigationPath()
+        }
         selection = .home
         pendingAccountRoute = route
         isPresentingAccount = true
@@ -768,6 +920,7 @@ final class AppRouter {
     }
 
     func accountDidDismiss() {
+        accountNavigationPath = NavigationPath()
         guard opensWebsiteAfterAccountDismiss else { return }
         let url = websiteURLAfterAccountDismiss
         opensWebsiteAfterAccountDismiss = false
@@ -776,6 +929,60 @@ final class AppRouter {
             open(url)
         } else {
             openWebsite()
+        }
+    }
+
+    /// Runs the full post-dismissal cleanup once Account has finished leaving screen:
+    /// resets Account's stack, opens any queued AO3 website URL, and delivers any
+    /// queued AO3 work link.
+    func finalizeAccountDismissal() {
+        accountDidDismiss()
+        if pendingWorkLink != nil {
+            isPresentingLinkedWork = true
+        }
+    }
+
+    func openWebsiteAfterDismissingLinkedWorkLogin(_ url: URL) {
+        opensWebsiteAfterLinkedWorkLoginDismiss = true
+        websiteURLAfterLinkedWorkLoginDismiss = url
+        isPresentingLinkedWorkLogin = false
+    }
+
+    /// Login sheet finished dismissing. A password-reset / invitation browser keeps
+    /// `pendingLoginWorkLink` so closing that browser can present this login again.
+    func linkedWorkLoginSheetDidDismiss(isLoggedIn: Bool, sessionGeneration: Int) {
+        if let link = pendingLoginWorkLink, isLoggedIn,
+           sessionGeneration != pendingLoginSessionGeneration {
+            pendingLoginWorkLink = nil
+            pendingLoginSessionGeneration = nil
+            let url = link.chapterID.map {
+                AO3Client.chapterURL(workID: link.id, chapterID: $0)
+            } ?? AO3Client.workURL(workID: link.id)
+            openAO3Link(url)
+        } else if !opensWebsiteAfterLinkedWorkLoginDismiss {
+            pendingLoginWorkLink = nil
+            pendingLoginSessionGeneration = nil
+            if pendingWorkLink != nil { isPresentingLinkedWork = true }
+        }
+        linkedWorkLoginDidDismiss()
+    }
+
+    func linkedWorkLoginDidDismiss() {
+        guard opensWebsiteAfterLinkedWorkLoginDismiss else { return }
+        let url = websiteURLAfterLinkedWorkLoginDismiss
+        opensWebsiteAfterLinkedWorkLoginDismiss = false
+        websiteURLAfterLinkedWorkLoginDismiss = nil
+        if let url, pendingWorkLink == nil {
+            open(url)
+        }
+    }
+
+    /// Root AO3 browser sheet finished dismissing.
+    func webBrowserDidDismiss() {
+        if pendingWorkLink != nil {
+            isPresentingLinkedWork = true
+        } else if pendingLoginWorkLink != nil {
+            isPresentingLinkedWorkLogin = true
         }
     }
 
@@ -818,14 +1025,9 @@ final class AppRouter {
         AO3AuthorRoute(url: url)
     }
 
-    /// Turns an AO3 tag URL slug back into a readable name (AO3 escapes `/ & . ? #`).
+    /// Turns a once-decoded AO3 tag slug into a readable name.
     static func unmungeTag(_ slug: String) -> String {
-        (slug.removingPercentEncoding ?? slug)
-            .replacingOccurrences(of: "*s*", with: "/")
-            .replacingOccurrences(of: "*a*", with: "&")
-            .replacingOccurrences(of: "*d*", with: ".")
-            .replacingOccurrences(of: "*q*", with: "?")
-            .replacingOccurrences(of: "*h*", with: "#")
+        AO3Link.unmungeTag(slug)
     }
 
     /// Switches to the Library and filters it to works containing `value` in `field`.
@@ -850,6 +1052,10 @@ final class AppRouter {
     /// Switches to Search and runs an AO3 search for `value` in the given tag `field`
     /// (a tapped fandom/character/relationship/freeform chip → "more works with this").
     func searchAO3(_ field: AO3TagSearch.Field, _ value: String) {
+        if isPresentingLinkedWork {
+            pendingLandingTagSearch = AO3TagSearch(field: field, value: value, isFreshTabJump: false)
+            return
+        }
         let isFreshTabJump = selection != .search
         pendingTagSearch = AO3TagSearch(field: field, value: value, isFreshTabJump: isFreshTabJump)
         selection = .search
@@ -871,5 +1077,43 @@ final class AppRouter {
             get: { self.panel == targetPanel },
             set: { self.panel = $0 ? targetPanel : .none }
         )
+    }
+
+    /// The landing sheet and the reader it covers share `panel`. Only the reader
+    /// inside the sheet may present or clear it.
+    static func readerOwnsSharedPanel(landingCoversReader: Bool) -> Bool {
+        !landingCoversReader
+    }
+
+    static func readerClearsSharedPanel(_ panel: Panel, ownsPanel: Bool) -> Bool {
+        ownsPanel && (
+            panel == .readerChapters || panel == .readerDisplay || panel == .readerFind
+        )
+    }
+
+    func readerPanelBinding(includesFind: Bool, suppressed: Bool) -> Binding<Bool> {
+        let ownsPanel = Self.readerOwnsSharedPanel(landingCoversReader: suppressed)
+        return Binding(
+            get: {
+                ownsPanel && (
+                    self.panel == .readerChapters || self.panel == .readerDisplay
+                        || (includesFind && self.panel == .readerFind)
+                )
+            },
+            set: { if !$0, ownsPanel { self.panel = .none } }
+        )
+    }
+}
+
+private struct ReaderPanelSuppressedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// True on readers underneath the link-landing sheet. They must not present
+    /// or clear `AppRouter.panel`; the reader inside the sheet owns it.
+    var readerPanelSuppressed: Bool {
+        get { self[ReaderPanelSuppressedKey.self] }
+        set { self[ReaderPanelSuppressedKey.self] = newValue }
     }
 }

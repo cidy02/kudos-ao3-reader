@@ -469,7 +469,10 @@ extension AO3Client {
         guard let labels = try? doc.select("dl.meta dt").array() else { return "" }
         for label in labels {
             let text = ((try? label.text()) ?? "").lowercased()
-            if text.contains(needle), let value = try? label.nextElementSibling()?.text() {
+            if text.contains(needle),
+               let sibling = try? label.nextElementSibling(),
+               sibling.tagName().lowercased() == "dd",
+               let value = try? sibling.text() {
                 return clean(value)
             }
         }

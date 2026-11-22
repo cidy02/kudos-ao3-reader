@@ -39,6 +39,7 @@ struct AO3WorkRow: View {
     var rankedContext: RankedWork? = nil
     /// Search-only local state shown beside the title, such as "In Library".
     var badgeTitle: String? = nil
+    var quickQueue: (() -> Void)?
     /// Detailed surfaces. Off hides the summary paragraph only; tags, the stat
     /// line and the bookmark note stay. A ledger row still shows its summary.
     var showsSummary = true
@@ -114,7 +115,7 @@ struct AO3WorkRow: View {
             if isSelecting || !showsContextMenu {
                 presentedCard
             } else {
-                presentedCard.remoteWorkContextMenu(work: work)
+                presentedCard.remoteWorkContextMenu(work: work, quickQueue: quickQueue)
             }
         }
         // Follow the global expand/collapse-all toggle (also applies on first
@@ -159,10 +160,11 @@ struct AO3WorkRow: View {
             }
             ledgerFacts
             if let bookmark, !bookmark.date.isEmpty {
-                Text(bookmark.date)
+                let dateText = WorkStat.displayDate(bookmark.date)
+                Text(dateText)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("Bookmarked \(bookmark.date)")
+                    .foregroundStyle(.secondaryInk)
+                    .accessibilityLabel("Bookmarked \(dateText)")
             }
         }
     }
@@ -186,13 +188,14 @@ struct AO3WorkRow: View {
             wide: wide || summaryRunsFullWidth,
             showsSeparator: showsSeparator,
             separatorInset: rowSeparatorInset,
-            insertsByline: hasStandardByline
+            insertsByline: hasStandardByline,
+            showsUnderTitleTrailing: showsStandardTrailing
         ) {
             selectionCheck
         } symbols: { arrangement in
             symbols(arrangement)
-        } heading: { includesByline in
-            standardHeading(includesByline: includesByline)
+        } heading: { includesTrailing in
+            standardHeading(includesByline: includesTrailing, includesTrailing: includesTrailing)
         } byline: {
             standardByline
         } remainder: {
@@ -208,7 +211,7 @@ struct AO3WorkRow: View {
                 if showsSummary, !work.summary.isEmpty {
                     Text(work.summary)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize ? nil : 3)
                         .multilineTextAlignment(.leading)
                         .animation(nil, value: expanded)
@@ -234,7 +237,15 @@ struct AO3WorkRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, fullWidthLeadingPadding)
+        } trailing: {
+            if showsStandardTrailing { expandButton }
         }
+    }
+
+    /// Under the Title the expand control leaves the title line. Search and
+    /// fandom rows keep theirs on the kicker, which is already above the title.
+    private var showsStandardTrailing: Bool {
+        !symbolPlacement.keepsTrailingControlsInTitleLine && isExpandable && showsExpandButton
     }
 
     /// Fandom label, title, author, summary, every stat, and equal chapter bars.
@@ -288,7 +299,7 @@ struct AO3WorkRow: View {
                 if showsSummary, !work.summary.isEmpty {
                     Text(work.summary)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize
                             ? nil
                             : (presentation == .fandomTop ? 3 : 2))
@@ -321,7 +332,7 @@ struct AO3WorkRow: View {
         return !work.authors.isEmpty || !nonemptyFandoms.isEmpty
     }
 
-    private func standardHeading(includesByline: Bool) -> some View {
+    private func standardHeading(includesByline: Bool, includesTrailing: Bool) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             if presentation == .fandomTop {
                 fandomLabel
@@ -341,7 +352,7 @@ struct AO3WorkRow: View {
                 if !work.dateUpdated.isEmpty {
                     WorkUpdatedDateBadge(dateUpdated: work.dateUpdated)
                 }
-                if isExpandable && showsExpandButton { expandButton }
+                if includesTrailing, isExpandable, showsExpandButton { expandButton }
             }
             if includesByline { standardByline }
         }
@@ -405,7 +416,7 @@ struct AO3WorkRow: View {
                             Text(fandom).multilineTextAlignment(.leading)
                         }
                         .buttonStyle(.borderless)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                     }
                     if hiddenFandomCount > 0 {
                         Text("+\(hiddenFandomCount) other\(hiddenFandomCount == 1 ? "" : "s")")
@@ -509,7 +520,7 @@ struct AO3WorkRow: View {
     private func seriesLabel(position: String, title: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 3) {
             Text("Part \(position) of")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Text(title)
                 .foregroundStyle(themeManager.accentInk)
         }
@@ -617,7 +628,7 @@ struct AO3WorkRow: View {
         readingState: SavedWork.ReadingState,
         chapterLabel: String?,
         isWantToRead: Bool,
-        queueCount: Int,
+        queueNames: [String],
         isInLibrary: Bool
     ) -> String? {
         if readingState == .finished { return "Finished" }
@@ -625,8 +636,9 @@ struct AO3WorkRow: View {
             let chapter = chapterLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
             return chapter.flatMap { $0.isEmpty ? nil : "Reading · \($0)" } ?? "Reading"
         }
+        if queueNames.count == 1 { return "In \(queueNames[0])" }
+        if queueNames.count > 1 { return "In \(queueNames.count) queues" }
         if isWantToRead { return "Want to Read" }
-        if queueCount > 0 { return "In a queue" }
         return isInLibrary ? "In Library" : nil
     }
 
@@ -637,7 +649,7 @@ struct AO3WorkRow: View {
             readingState: work.readingState,
             chapterLabel: chapter,
             isWantToRead: work.isOnSavedForLaterShelf,
-            queueCount: work.activeQueueMemberships.count,
+            queueNames: work.activeQueueMemberships.compactMap { $0.queue?.displayName },
             isInLibrary: !work.isQueueOnlyWork
         )
     }
@@ -685,7 +697,7 @@ struct AO3WorkRow: View {
         if presentation == .fandomTop {
             button
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
                 .accessibilityLabel(expanded ? "Show less" : "Show more")
@@ -778,7 +790,7 @@ struct AO3WorkRow: View {
     private func inlineTagLabel(_ label: String) -> some View {
         Text(label)
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .padding(.top, 1)
             .accessibilityAddTraits(.isHeader)
     }
@@ -826,7 +838,7 @@ extension AO3WorkRow {
                         }
                         if isExpandable || badgeTitle != nil {
                             HStack(spacing: 5) {
-                                if let badgeTitle { UpdateMarker(text: badgeTitle) }
+                                if let badgeTitle { UpdateMarker(text: badgeTitle, wraps: true) }
                                 if isExpandable && showsExpandButton {
                                     Spacer(minLength: 0)
                                     expandButton
@@ -839,7 +851,7 @@ extension AO3WorkRow {
                         fandomLabel
                         crossoverMark
                         Spacer(minLength: 0)
-                        if let badgeTitle { UpdateMarker(text: badgeTitle) }
+                        if let badgeTitle { UpdateMarker(text: badgeTitle, wraps: true) }
                         if isExpandable && showsExpandButton {
                             expandButton
                         }

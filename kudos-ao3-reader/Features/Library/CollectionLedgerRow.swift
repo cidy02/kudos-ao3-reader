@@ -84,7 +84,7 @@ struct CollectionLedgerRow: View {
 
             Text("\(totalWorkCount) work\(totalWorkCount == 1 ? "" : "s")")
                 .font(.system(size: detailSize))
-                .foregroundStyle(Color.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
         }
     }
@@ -100,64 +100,14 @@ struct CollectionLedgerRow: View {
     }
 }
 
-/// A miniature work cover (61×54) in the 2×2 collection preview grid:
-/// diagonal card wash derived from the work's hue, a 13×2 accent rule,
-/// 2-line title, and 1-line author.
+/// A miniature work cover in the 2×2 collection preview grid.
 private struct MiniatureWorkCover: View {
-    @Environment(ThemeManager.self) private var themeManager
     let work: SavedWork
 
     var body: some View {
-        let hue = CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-        let palette = themeManager.appTheme.subjectPalette(hue: hue)
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-
-        VStack(alignment: .leading, spacing: 0) {
-            Capsule()
-                .fill(palette.accent)
-                .frame(width: 13, height: 2)
-                .padding(.bottom, 4)
-
-            Text(work.title)
-                .font(.system(size: 9, weight: .semibold))
-                .lineSpacing(1.5)
-                .foregroundStyle(
-                    themeManager.appTheme.isDarkFamily
-                        ? Color.white.opacity(0.92)
-                        : Color.primary
-                )
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Spacer(minLength: 0)
-
-            if !work.author.isEmpty {
-                Text(work.author)
-                    .font(.system(size: 8))
-                    .foregroundStyle(
-                        themeManager.appTheme.isDarkFamily
-                            ? Color.white.opacity(0.62)
-                            : Color.secondary
-                    )
-                    .lineLimit(1)
-            }
-        }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 6)
-        .frame(width: 61, height: 54, alignment: .topLeading)
-        .background {
-            shape
-                .fill(palette.cardWash)
-                .overlay(
-                    shape.strokeBorder(
-                        themeManager.appTheme.isDarkFamily
-                            ? Color.white.opacity(0.10)
-                            : palette.cardBorder,
-                        lineWidth: 0.5
-                    )
-                )
-        }
-        .clipShape(shape)
+        GeneratedCoverView(recipe: work.generatedCoverRecipe,
+           width: 61, epubURL: work.hasEPUB ? work.fileURL : nil, epubWorkID: work.id,
+           height: 54, showsWords: false)
     }
 }
 

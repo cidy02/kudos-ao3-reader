@@ -37,7 +37,7 @@ enum WorkDownload {
     /// The first Keep-offline container holding this work, by name.
     static func keeper(of work: SavedWork) -> String? {
         if let queue = work.activeQueueMemberships.compactMap(\.queue)
-            .first(where: { KeepOffline.queueKeeps($0.keepsWorksOffline) }) {
+            .first(where: { $0.kind != .smart && KeepOffline.queueKeeps($0.keepsWorksOffline) }) {
             return queue.displayName
         }
         return work.activeCollections

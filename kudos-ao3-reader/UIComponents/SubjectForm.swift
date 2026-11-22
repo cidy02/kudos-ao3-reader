@@ -366,7 +366,7 @@ struct SubjectFormValue: View {
     var body: some View {
         Text(text)
             .font(valueFont)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             // At the accessibility sizes the value has the row to itself, under its label
             // (see `SubjectFormRow`), and one line still cut it: "Blur mature wo…".
             .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
@@ -425,7 +425,7 @@ struct SubjectSegmentedControl<Value: Hashable>: View {
         } label: {
             Text(title(option))
                 .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-                .foregroundStyle(isSelected ? Color.primary : .secondary)
+                .foregroundStyle(isSelected ? AnyShapeStyle(Color.primary) : AnyShapeStyle(.secondaryInk))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .frame(maxWidth: .infinity)

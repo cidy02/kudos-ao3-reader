@@ -296,7 +296,7 @@ struct ReaderSearchView: View {
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             TextField("Find in Work", text: $query)
                 .focused($isFieldFocused)
                 .submitLabel(.search)
@@ -314,7 +314,7 @@ struct ReaderSearchView: View {
                     isFieldFocused = true
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
@@ -373,7 +373,7 @@ struct ReaderSearchView: View {
                     HStack(spacing: 8) {
                         ProgressView().accentFill()
                         Text("Searching…")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     .listRowBackground(Color.clear)
                 }
@@ -421,9 +421,9 @@ struct ReaderSearchView: View {
                 }
                 // The match itself is emphasised inside its surrounding sentence, so
                 // a result is readable in context rather than as a bare keyword.
-                (Text(result.before).foregroundStyle(.secondary)
+                (Text(result.before).foregroundStyle(.secondaryInk)
                     + Text(result.match).bold()
-                    + Text(result.after).foregroundStyle(.secondary))
+                    + Text(result.after).foregroundStyle(.secondaryInk))
                     .font(.callout)
                     // Roomy enough to show real context either side of the match
                     // rather than a keyword stranded on its own line.

@@ -28,7 +28,7 @@ struct ReplaceUndoCopyRecoveryTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self
+            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self, QueueSavedSearchLink.self
         ])
         return ModelContext(try ModelContainer(
             for: schema,

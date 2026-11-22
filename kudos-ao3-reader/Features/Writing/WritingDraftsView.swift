@@ -319,7 +319,7 @@ private struct DraftCard: View {
             if !work.summary.isEmpty {
                 Text(work.summary)
                     .font(.system(size: summarySize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(3)
             }
             if counts != nil || created != nil {
@@ -329,11 +329,11 @@ private struct DraftCard: View {
                     }
                     Spacer(minLength: 8)
                     if let created {
-                        Text("Created \(created.formatted(.dateTime.day().month(.abbreviated).year()))")
+                        Text("Created \(WorkStat.displayDate(created))")
                     }
                 }
                 .font(.system(size: metaSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .monospacedDigit()
             }
         }

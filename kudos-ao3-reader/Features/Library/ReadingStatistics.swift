@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 /// Local-only reading insights derived from the Library's `SavedWork` records.
 /// The app does not track sessions or per-word progress, so "words read" counts
@@ -31,7 +32,8 @@ struct ReadingStatistics {
     init(
         works: [SavedWork],
         now: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        aliases: TagAliasResolver = .empty
     ) {
         var started: [SavedWork] = []
         for work in works where Self.hasStarted(work) {
@@ -44,7 +46,7 @@ struct ReadingStatistics {
         startedWorks = started.count
         finishedWorks = finished.count
         inProgressWorks = inProgress.count
-        wordsRead = finished.reduce(0) { total, work in
+        wordsRead = finished.filter { $0.wordUnit == .words }.reduce(0) { total, work in
             total + max(0, work.wordCount)
         }
         latestReadDate = works.compactMap(\.lastReadDate).max()
@@ -56,7 +58,7 @@ struct ReadingStatistics {
             ?? startOfToday
         openedLast7Days = Self.countOpened(works, since: sevenDayStart, through: now)
         openedLast30Days = Self.countOpened(works, since: thirtyDayStart, through: now)
-        topFandoms = Self.fandomCounts(in: started)
+        topFandoms = Self.fandomCounts(in: started, aliases: aliases)
     }
 
     /// Finished counts as started even when the progress fields were reset. Defers
@@ -78,13 +80,13 @@ struct ReadingStatistics {
         }
     }
 
-    private static func fandomCounts(in works: [SavedWork]) -> [FandomCount] {
+    private static func fandomCounts(
+        in works: [SavedWork],
+        aliases: TagAliasResolver = .empty
+    ) -> [FandomCount] {
         var counts: [String: Int] = [:]
         for work in works {
-            let uniqueFandoms = Set(work.workFandoms.compactMap { raw -> String? in
-                let fandom = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                return fandom.isEmpty ? nil : fandom
-            })
+            let uniqueFandoms = aliases.resolvedUnique(work.workFandoms, kind: .fandom)
             for fandom in uniqueFandoms {
                 counts[fandom, default: 0] += 1
             }
@@ -185,6 +187,102 @@ struct HomeReadingStats: Equatable, Sendable {
         works.filter { !$0.isQueueOnlyWork && !gate.isConcealed($0, enabled: hideMature) }
     }
 
+    /// The works Insights' Hidden section holds: every adult-rated work while Hide Mature
+    /// is on, whatever has been revealed this session, so the main figures do not change
+    /// when the gate opens. Queue-only works are not singled out: their reading counts
+    /// (owner, 2026-11-19). Needs the UNFILTERED library: on an already-filtered list it
+    /// is always empty.
+    static func insightsHiddenWorkIDs(
+        from libraryWorks: [SavedWork],
+        hideMature: Bool
+    ) -> Set<UUID> {
+        guard hideMature else { return [] }
+        return Set(libraryWorks.lazy.filter(\.isAdult).map(\.id))
+    }
+
+    /// Adult-rated works sitting in Recently Deleted (`isPendingDeletion == true`).
+    /// Needed so pre-D1 sessions (blank snapshot rating) of soft-deleted mature works
+    /// still classify as hidden while locked and appear in Hidden when revealed.
+    @MainActor
+    static func softDeletedAdultWorkIDs(in context: ModelContext) -> Set<UUID> {
+        let deleted = (try? context.fetch(
+            FetchDescriptor<SavedWork>(predicate: #Predicate { $0.isPendingDeletion })
+        )) ?? []
+        return Set(deleted.lazy.filter(\.isAdult).map(\.id))
+    }
+
+    /// Whether Library's `•••` menu offers "Reading Insights": whenever the user has
+    /// any live work (saved, queue-only, or mature-only) or any recorded reading
+    /// sessions, independent of the privacy gate so toggling Show Mature neither
+    /// hides the entry nor leaks library composition.
+    static func showsReadingInsightsMenuEntry(
+        liveWorkCount: Int,
+        sessionCount: Int
+    ) -> Bool {
+        liveWorkCount > 0 || sessionCount > 0
+    }
+
+    /// What one Insights scope counts. `revealed` is `PrivacyGate.revealAll`: while it is
+    /// false the Hidden scope is empty and the combined scope is the main one, so nothing
+    /// hidden is computed or exported.
+    static func insightsScope(
+        _ scope: InsightsScope,
+        from libraryWorks: [SavedWork],
+        hideMature: Bool,
+        revealed: Bool
+    ) -> InsightsScopeSelection {
+        let hidden = insightsHiddenWorkIDs(from: libraryWorks, hideMature: hideMature)
+        let liveWorks = libraryWorks.filter { !$0.isPendingDeletion }
+        switch scope {
+        case .hidden where !revealed:
+            return InsightsScopeSelection(
+                libraryWorks: [],
+                readingWorks: [],
+                excludedWorkIDs: [],
+                onlyWorkIDs: [],
+                scope: .hidden,
+                hideMature: hideMature,
+                revealed: false,
+                hiddenWorkIDs: hidden
+            )
+        case .hidden:
+            let reading = liveWorks.filter { hidden.contains($0.id) }
+            return InsightsScopeSelection(
+                libraryWorks: reading.filter { !$0.isQueueOnlyWork },
+                readingWorks: reading,
+                excludedWorkIDs: [],
+                onlyWorkIDs: hidden,
+                scope: .hidden,
+                hideMature: hideMature,
+                revealed: true,
+                hiddenWorkIDs: hidden
+            )
+        case .combined where revealed:
+            return InsightsScopeSelection(
+                libraryWorks: liveWorks.filter { !$0.isQueueOnlyWork },
+                readingWorks: liveWorks,
+                excludedWorkIDs: [],
+                onlyWorkIDs: nil,
+                scope: .combined,
+                hideMature: hideMature,
+                revealed: true,
+                hiddenWorkIDs: hidden
+            )
+        case .main, .combined:
+            let reading = liveWorks.filter { !hidden.contains($0.id) }
+            return InsightsScopeSelection(
+                libraryWorks: reading.filter { !$0.isQueueOnlyWork },
+                readingWorks: reading,
+                excludedWorkIDs: hidden,
+                onlyWorkIDs: nil,
+                scope: scope,
+                hideMature: hideMature,
+                revealed: revealed,
+                hiddenWorkIDs: hidden
+            )
+        }
+    }
+
     /// Revision key for Home weekly reading stats. Incorporates the start of today
     /// so the stats recalculate across the midnight boundary.
     static func revisionKey(
@@ -195,5 +293,155 @@ struct HomeReadingStats: Equatable, Sendable {
     ) -> String {
         let day = calendar.startOfDay(for: now).timeIntervalSince1970
         return "\(sessionCount)|\(newestModified)|\(day)"
+    }
+}
+
+/// Which reading Insights counts (owner, 2026-11-19): `main` leaves out the works Hide
+/// Mature conceals, `hidden` is only those (the Hidden section), `combined` is both.
+enum InsightsScope: Equatable, Sendable {
+    case main
+    case hidden
+    case combined
+}
+
+/// The works and sittings one `InsightsScope` counts.
+struct InsightsScopeSelection {
+    /// Saved-library works (never queue-only): the library-inventory figures (statuses,
+    /// unread backlog, WIP freshness, stopped works, preserved stats) and export statuses.
+    var libraryWorks: [SavedWork]
+    /// Every work whose sittings count, queue-only included: reading time, words,
+    /// fandom shares, taste, habits, finished works.
+    var readingWorks: [SavedWork]
+    /// These works' sittings never count.
+    var excludedWorkIDs: Set<UUID>
+    /// When set, only these works' sittings count (the Hidden section).
+    var onlyWorkIDs: Set<UUID>?
+    var scope: InsightsScope = .main
+    var hideMature: Bool = false
+    var revealed: Bool = false
+    /// Known adult-rated work IDs while `hideMature` is on (live works; augmented
+    /// with soft-deleted adult works and adult-rated session snapshots at filter time).
+    var hiddenWorkIDs: Set<UUID> = []
+
+    /// Whether a single sitting belongs in this scope (live-work IDs plus its own
+    /// recorded rating snapshot, plus any caller-supplied soft-deleted adult IDs).
+    func includes(
+        _ session: ReadingSession,
+        extraHiddenWorkIDs: Set<UUID> = []
+    ) -> Bool {
+        if scope == .hidden && !revealed { return false }
+        if hideMature {
+            if scope == .combined && revealed { return true }
+            let isHidden = hiddenWorkIDs.contains(session.workID)
+                || extraHiddenWorkIDs.contains(session.workID)
+                || MatureContentRating.isAdult(session.rating)
+            return scope == .hidden ? isHidden : !isHidden
+        }
+        if excludedWorkIDs.contains(session.workID) { return false }
+        if let onlyWorkIDs { return onlyWorkIDs.contains(session.workID) }
+        return true
+    }
+
+    /// Filters a set of sessions to this scope. Classifies sessions of deleted and
+    /// soft-deleted mature works using `ModelContext` (soft-deleted `SavedWork`s)
+    /// and any adult `ReadingSession.rating` snapshot for that `workID`, so every
+    /// sitting of a deleted mature work stays out of locked views and lands in Hidden
+    /// when revealed.
+    @MainActor
+    func sessions(
+        _ all: [ReadingSession],
+        in context: ModelContext? = nil
+    ) -> [ReadingSession] {
+        if scope == .hidden && !revealed { return [] }
+        guard hideMature else {
+            return all.filter { includes($0) }
+        }
+        if scope == .combined && revealed { return all }
+        var allHiddenIDs = hiddenWorkIDs
+        if let context {
+            allHiddenIDs.formUnion(HomeReadingStats.softDeletedAdultWorkIDs(in: context))
+        }
+        for session in all where MatureContentRating.isAdult(session.rating) {
+            allHiddenIDs.insert(session.workID)
+        }
+        return scope == .hidden
+            ? all.filter { allHiddenIDs.contains($0.workID) }
+            : all.filter { !allHiddenIDs.contains($0.workID) }
+    }
+}
+
+/// View-level scope, re-lock, subtitle and Hidden cache state for `ReadingInsightsView`.
+/// Extracted so lock → reveal → Include Hidden → re-lock transitions are unit-testable
+/// and never paint stale combined mature data across a re-lock.
+struct ReadingInsightsScopeState {
+    var includeHidden = false
+    var loadedScope: InsightsScope = .main
+    var hiddenInsights: ReadingInsights?
+    var hiddenMasker: InsightsDiscreetMasker = .empty
+
+    func canIncludeHidden(hideMature: Bool, revealed: Bool) -> Bool {
+        hideMature && revealed
+    }
+
+    func screenScope(hideMature: Bool, revealed: Bool) -> InsightsScope {
+        includeHidden && revealed && hideMature ? .combined : .main
+    }
+
+    func scopeSuffix(hideMature: Bool, revealed: Bool) -> String {
+        screenScope(hideMature: hideMature, revealed: revealed) == .combined ? " · incl. hidden" : ""
+    }
+
+    /// Prevents painting stale `.combined` mature figures/titles on a render pass
+    /// after the privacy gate re-locks before the synchronous reload completes.
+    func mayDisplayLoadedData(hideMature: Bool, revealed: Bool) -> Bool {
+        !(hideMature && !revealed && loadedScope == .combined)
+    }
+
+    /// In combined Discreet Mode, the Hidden section shares the main/combined masker
+    /// so every fandom keeps one placeholder letter across the screen.
+    func hiddenSectionMasker(
+        mainMasker: InsightsDiscreetMasker,
+        hideMature: Bool,
+        revealed: Bool
+    ) -> InsightsDiscreetMasker {
+        screenScope(hideMature: hideMature, revealed: revealed) == .combined
+            ? mainMasker
+            : hiddenMasker
+    }
+
+    mutating func clearHiddenCache() {
+        hiddenInsights = nil
+        hiddenMasker = .empty
+    }
+
+    /// Called synchronously when `PrivacyGate.revealAll` changes.
+    /// Returns `true` when the caller should reload immediately.
+    @discardableResult
+    mutating func handleRevealChange(revealed: Bool, hideMature: Bool) -> Bool {
+        if !revealed {
+            let needsReload = includeHidden || loadedScope == .combined || hiddenInsights != nil
+            includeHidden = false
+            clearHiddenCache()
+            return needsReload
+        }
+        return hideMature
+    }
+
+    /// Called synchronously when `hideMatureContent` toggles.
+    mutating func handleHideMatureChange(hideMature: Bool, revealed: Bool) {
+        if !hideMature || !revealed {
+            includeHidden = false
+            clearHiddenCache()
+        }
+    }
+
+    mutating func recordGather(
+        scope: InsightsScope,
+        hiddenInsights: ReadingInsights?,
+        hiddenMasker: InsightsDiscreetMasker
+    ) {
+        loadedScope = scope
+        self.hiddenInsights = hiddenInsights
+        self.hiddenMasker = hiddenMasker
     }
 }

@@ -18,15 +18,28 @@ func importEPUB(
     isComplete: Bool = false,
     seriesURL: String = "",
     knownChapterCount: Int = 0,
+    verifyAvailability: Bool = true,
+    canImport: (@MainActor () -> Bool)? = nil,
     into context: ModelContext
 ) async throws -> SavedWork {
     let downloadedAt = Date()
     // Reading the EPUB's metadata pulls the whole file into memory and unzips it, so
     // run that off the main actor; everything below (SwiftData + the file move) stays
     // on the main actor where it belongs.
-    let meta = await Task.detached(priority: .userInitiated) {
-        try? EPUBDocument.metadata(ofEPUBAt: tempURL)
+    let inspected = await Task.detached(priority: .userInitiated) {
+        let meta = try? EPUBDocument.metadata(ofEPUBAt: tempURL)
+        let analysis = try? AO3EPUBChapterWordCounter.analyze(
+            epubURL: tempURL,
+            language: meta?.language ?? ""
+        )
+        return (meta, analysis)
     }.value
+    let meta = inspected.0
+    let wordAnalysis = inspected.1
+    if let canImport, !canImport() {
+        try? FileManager.default.removeItem(at: tempURL)
+        throw CancellationError()
+    }
     if meta == nil { Log.library.notice("EPUB metadata unreadable; importing with the filename as title") }
     let fallbackTitle = tempURL.deletingPathExtension().lastPathComponent
     let title = (meta?.title).flatMap { $0.isEmpty ? nil : $0 } ?? fallbackTitle
@@ -52,12 +65,23 @@ func importEPUB(
         do {
             try ReadingQueueService.replaceEPUB(for: existing, with: tempURL)
             existing.hasEPUB = true
+            if let wordAnalysis {
+                existing.applyChapterWordAnalysis(
+                    AO3EPUBChapterWordCounter.Analysis(
+                        chapterWordCounts: wordAnalysis.chapterWordCounts,
+                        wordUnit: SavedWork.wordUnit(forLanguage: existing.language) == .characters
+                            ? .characters
+                            : wordAnalysis.wordUnit
+                    )
+                )
+            }
             if existing.downloadedAt == nil { existing.downloadedAt = downloadedAt }
         } catch {
             Log.library.error("Couldn't save imported EPUB: \(error.localizedDescription, privacy: .public)")
             throw error
         }
         existing.markModified()
+        existing.ensureCoverPinnedOrRefreshed()
         WorkSearchIndex.reindex(existing)
         try? context.save()
         if revived {
@@ -68,7 +92,7 @@ func importEPUB(
         // Verifies the work still exists on AO3 as well as refreshing its tags —
         // one request, and it is what makes the Library's "Last Copy" badge accurate
         // from the moment of import. See `WorkAvailability`.
-        Task { await WorkAvailability.verify(existing, in: context) }
+        if verifyAvailability { Task { await WorkAvailability.verify(existing, in: context) } }
         return existing
     }
 
@@ -103,19 +127,30 @@ func importEPUB(
     do {
         try ReadingQueueService.replaceEPUB(for: work, with: tempURL)
         work.hasEPUB = true
+        if let wordAnalysis {
+            work.applyChapterWordAnalysis(
+                AO3EPUBChapterWordCounter.Analysis(
+                    chapterWordCounts: wordAnalysis.chapterWordCounts,
+                    wordUnit: SavedWork.wordUnit(forLanguage: work.language) == .characters
+                        ? .characters
+                        : wordAnalysis.wordUnit
+                )
+            )
+        }
     } catch {
         Log.library.error("Couldn't save imported EPUB: \(error.localizedDescription, privacy: .public)")
         throw error
     }
 
     context.insert(work)
+    work.pinCover(salt: 0, automatic: true)
     WorkSearchIndex.reindex(work)
     try? context.save()
     Log.library.info("Imported work “\(title)”")
 
     // Refresh the work's tags from AO3's live page in the background; the EPUB
     // tags set above stand in until (and if) that succeeds.
-    Task { await WorkAvailability.verify(work, in: context) }
+    if verifyAvailability { Task { await WorkAvailability.verify(work, in: context) } }
 
     return work
 }
@@ -189,6 +224,7 @@ func waitForUbiquitousDownload(
 private nonisolated struct UserEPUBInspection {
     let package: EPUBPackageInspection
     let extracted: ExtractedAO3EPUBMetadata
+    let chapterAnalysis: AO3EPUBChapterWordCounter.Analysis?
 
     var metadata: EPUBMetadata {
         package.metadata
@@ -229,7 +265,11 @@ private nonisolated struct UserEPUBInspection {
     static func inspect(_ url: URL) throws -> Self {
         let package = try EPUBDocument.inspectPackage(ofEPUBAt: url)
         let extracted = AO3EPUBMetadataScanner.scan(url)
-        return Self(package: package, extracted: extracted)
+        let analysis = try? AO3EPUBChapterWordCounter.analyze(
+            epubURL: url,
+            language: extracted.groups.language.isEmpty ? package.metadata.language : extracted.groups.language
+        )
+        return Self(package: package, extracted: extracted, chapterAnalysis: analysis)
     }
 
     private func firstNonEmpty(_ first: String, _ second: String) -> String {
@@ -260,17 +300,21 @@ func importUserEPUB(
         if revivedFromRecentlyDeleted {
             PreservedWorkService.restore(duplicate, in: context)
         }
+        let hadEmptyFandoms = duplicate.workFandoms.isEmpty
+        let hadZeroWords = duplicate.wordCount == 0
         applyUserImportMetadata(inspection, to: duplicate, fillOnly: true)
         if duplicate.downloadedAt == nil { duplicate.downloadedAt = downloadedAt }
         if !duplicate.hasEPUB {
             try copyImportedEPUB(from: url, into: duplicate)
             duplicate.hasEPUB = true
+            pinOrRefreshDuplicateCover(duplicate, hadEmptyFandoms: hadEmptyFandoms, hadZeroWords: hadZeroWords)
             duplicate.markModified()
             WorkSearchIndex.reindex(duplicate)
             try? context.save()
             Task { await WorkAvailability.verify(duplicate, in: context) }
             return .restored(duplicate)
         }
+        pinOrRefreshDuplicateCover(duplicate, hadEmptyFandoms: hadEmptyFandoms, hadZeroWords: hadZeroWords)
         duplicate.markModified()
         WorkSearchIndex.reindex(duplicate)
         try? context.save()
@@ -293,12 +337,22 @@ func importUserEPUB(
     try copyImportedEPUB(from: url, into: work)
 
     context.insert(work)
+    work.pinCover(salt: 0, automatic: work.workFandoms.isEmpty || work.wordCount == 0)
     WorkSearchIndex.reindex(work)
     try? context.save()
     Log.library.info("Imported user EPUB “\(work.title)”")
 
     Task { await WorkAvailability.verify(work, in: context) }
     return .imported(work)
+}
+
+@MainActor
+private func pinOrRefreshDuplicateCover(_ work: SavedWork, hadEmptyFandoms: Bool, hadZeroWords: Bool) {
+    if work.coverRecipeJSON == nil {
+        work.pinCover(salt: 0, automatic: true)
+    } else {
+        work.refreshCoverAfterMetadataUpdate(hadEmptyFandoms: hadEmptyFandoms, hadZeroWords: hadZeroWords)
+    }
 }
 
 /// Re-reads the EPUB already stored for `work` and applies its metadata.
@@ -320,7 +374,10 @@ func applyStoredEPUBMetadata(to work: SavedWork, in context: ModelContext, fillO
         try? UserEPUBInspection.inspect(url)
     }.value
     guard let inspection, work.modelContext != nil else { return }
+    let hadEmptyFandoms = work.workFandoms.isEmpty
+    let hadZeroWords = work.wordCount == 0
     applyUserImportMetadata(inspection, to: work, fillOnly: fillOnly)
+    pinOrRefreshDuplicateCover(work, hadEmptyFandoms: hadEmptyFandoms, hadZeroWords: hadZeroWords)
     work.markModified()
     WorkSearchIndex.reindex(work)
     context.saveBestEffort(reason: "Saving re-read EPUB metadata failed")
@@ -363,6 +420,17 @@ private func applyUserImportMetadata(
     }
     if work.ao3SeriesID == nil {
         work.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: work.seriesURL)
+    }
+    if let analysis = inspection.chapterAnalysis, !fillOnly || work.chapterWordCountsJSON.isEmpty {
+        let resolvedUnit: SavedWork.WordUnit = SavedWork.wordUnit(forLanguage: work.language) == .characters
+            ? .characters
+            : analysis.wordUnit
+        work.applyChapterWordAnalysis(
+            AO3EPUBChapterWordCounter.Analysis(
+                chapterWordCounts: analysis.chapterWordCounts,
+                wordUnit: resolvedUnit
+            )
+        )
     }
 }
 

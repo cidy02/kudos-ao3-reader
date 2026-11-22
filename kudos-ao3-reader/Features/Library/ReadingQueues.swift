@@ -19,6 +19,7 @@ struct ReadingQueueCard: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(PrivacyGate.self) private var gate
     let queue: ReadingQueue
+    var precomputedSmartWorks: [SavedWork]?
 
     static let width: CGFloat = 300
     static let spacing: CGFloat = 16
@@ -26,24 +27,30 @@ struct ReadingQueueCard: View {
     @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 17
     @ScaledMetric(relativeTo: .footnote) private var detailSize: CGFloat = 13
 
-    init(queue: ReadingQueue) {
+    init(queue: ReadingQueue, precomputedSmartWorks: [SavedWork]? = nil) {
         self.queue = queue
+        self.precomputedSmartWorks = precomputedSmartWorks
     }
 
     // Ordered the same way the queue's own detail view is (sortOrderInQueue).
     // Memberships of a soft-deleted work survive (so restoring it re-joins its
     // queues), but the work itself belongs to Recently Deleted, not this card —
     // orderedWorks already excludes it.
-    private var works: [SavedWork] {
-        ReadingQueueService.orderedWorks(in: queue)
+    private var memberships: [ReadingQueueMembership] {
+        queue.kind == .smart ? [] : ReadingQueueService.orderedMemberships(in: queue)
     }
 
     var body: some View {
-        let queued = works
+        let orderedMemberships = memberships
+        let queued: [SavedWork] = if queue.kind == .smart {
+            precomputedSmartWorks ?? ReadingQueueService.orderedWorks(in: queue)
+        } else {
+            orderedMemberships.compactMap(\.work)
+        }
         let progress = ReadingQueueFacts.progress(of: queued.map(\.readingState))
         let palette = themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
         HStack(spacing: 12) {
-            deck(works: queued)
+            deck(memberships: orderedMemberships, works: queued)
             VStack(alignment: .leading, spacing: 3) {
                 Text(queue.displayName)
                     .font(.system(size: titleSize, weight: .semibold))
@@ -51,7 +58,7 @@ struct ReadingQueueCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Text(detailLine(works: queued))
                     .font(.system(size: detailSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                 if !queued.isEmpty {
                     QueueProgressStrip(
@@ -72,13 +79,14 @@ struct ReadingQueueCard: View {
 
     /// Board 00: a fixed 72pt queue stack beside the row's text. The front is
     /// the queue's own identity; the next visible works wait behind it.
-    private func deck(works: [SavedWork]) -> some View {
+    private func deck(memberships: [ReadingQueueMembership], works: [SavedWork]) -> some View {
         StackedWorkCover(
             kind: .queue,
             name: queue.displayName,
-            hue: queue.displayHue,
+            identity: queue.id,
+            hue: queue.hue,
             pickedHex: queue.colorHex,
-            backs: worksBehind(in: works),
+            backs: worksBehind(in: memberships, works: works),
             size: CGSize(width: 72, height: 72)
         )
         .accessibilityHidden(true)
@@ -90,9 +98,23 @@ struct ReadingQueueCard: View {
 
     /// Blur and Hide both conceal a work's generated art; the count and progress
     /// remain aggregate facts and reveal no title, fandom or cover colour.
-    private func worksBehind(in queued: [SavedWork]) -> [SavedWork] {
-        let visible = queued.filter { !gate.isConcealed($0, enabled: hideMature) }
-        let split = ReadingQueueFacts.upNext(in: visible)
+    private func worksBehind(
+        in memberships: [ReadingQueueMembership],
+        works: [SavedWork]
+    ) -> [SavedWork] {
+        if queue.kind == .smart {
+            let visible = works.filter { !gate.isConcealed($0, enabled: hideMature) }
+            guard let first = visible.first(where: { !$0.isFinished }) else {
+                return Array(visible.prefix(CoverStackLayout.maxBacks))
+            }
+            let rest = visible.filter { $0.id != first.id }
+            return Array(([first] + rest).prefix(CoverStackLayout.maxBacks))
+        }
+        let visible = memberships.filter { membership in
+            guard let work = membership.work else { return false }
+            return !gate.isConcealed(work, enabled: hideMature)
+        }
+        let split = ReadingQueueFacts.upNext(inMemberships: visible)
         var ordered = split.inLine
         if let upNext = split.upNext { ordered.insert(upNext, at: 0) }
         return Array(ordered.prefix(CoverStackLayout.maxBacks))
@@ -132,6 +154,7 @@ struct ReadingQueueDetailView: View {
 struct WorkReorderDropDelegate: DropDelegate {
     let target: SavedWork
     let works: [SavedWork]
+    var trailingIDs: [UUID] = []
     @Binding var draggedWorkID: UUID?
     @Binding var pendingOrder: [UUID]?
     let queue: ReadingQueue
@@ -158,7 +181,7 @@ struct WorkReorderDropDelegate: DropDelegate {
         // disk for a drag that moved nothing. `works` is unmutated during the gesture
         // (the whole point of deferring the write), so it's still the pre-drag order.
         if let pendingOrder, pendingOrder != works.map(\.id) {
-            ReadingQueueService.reorder(pendingOrder, in: queue, context: context)
+            ReadingQueueService.reorder(pendingOrder + trailingIDs, in: queue, context: context)
         }
         pendingOrder = nil
         draggedWorkID = nil
@@ -211,7 +234,7 @@ struct ReadingQueueStorageView: View {
                 Section {
                     if preservedWorks.isEmpty {
                         Text("None of your queued works is downloaded on this device.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     } else {
                         ForEach(preservedWorks) { work in
                             preservedWorkRow(work)
@@ -308,13 +331,13 @@ struct ReadingQueueStorageView: View {
                 }
                 Text(byteString(fileSize(for: work.fileURL)))
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             Spacer(minLength: 8)
             if work.isQueueOnlyWork {
                 Text("Queue")
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(.quaternary, in: Capsule())
@@ -355,17 +378,31 @@ struct ReadingQueueStorageView: View {
 
 struct AddToQueueView: View {
     let works: [SavedWork]
+    let entryState: ReadingQueueMembershipState
+    let origin: ReadingQueueMembershipOrigin?
+    @State private var sourceQueue: ReadingQueue?
 
-    init(work: SavedWork) {
+    init(
+        work: SavedWork,
+        movingFrom: ReadingQueue? = nil,
+        origin: ReadingQueueMembershipOrigin? = nil
+    ) {
         works = [work]
+        entryState = .inLine
+        self.origin = origin
+        _sourceQueue = State(initialValue: movingFrom)
     }
 
-    init(works: [SavedWork]) {
+    init(works: [SavedWork], origin: ReadingQueueMembershipOrigin? = nil) {
         self.works = works
+        entryState = .new
+        self.origin = origin
+        _sourceQueue = State(initialValue: nil)
     }
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(DownloadQueue.self) private var downloadQueue
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
     private var queues: [ReadingQueue]
     @State private var newName = ""
@@ -410,6 +447,7 @@ struct AddToQueueView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .disabled(workingQueueIDs.contains(queue.id))
                     }
                 } header: {
                     Text("Queues")
@@ -427,12 +465,12 @@ struct AddToQueueView: View {
                                 HStack {
                                     ProgressView().accentFill()
                                     Text("Checking series size…")
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(.secondaryInk)
                                 }
                             } else if let seriesPrompt {
                                 Text(seriesPrompt.message)
                                     .font(.footnote)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.secondaryInk)
                             }
 
                             Button {
@@ -457,7 +495,7 @@ struct AddToQueueView: View {
                             if let seriesResult {
                                 Text(seriesCompletionText(seriesResult))
                                     .font(.footnote)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.secondaryInk)
                             }
                         }
                     } header: {
@@ -507,7 +545,7 @@ struct AddToQueueView: View {
     }
 
     private var sortedQueues: [ReadingQueue] {
-        queues.sorted {
+        queues.filter { $0.kind != .smart }.sorted {
             if $0.kind != $1.kind { return $0.kind == .savedForLater }
             if $0.sortOrder != $1.sortOrder { return $0.sortOrder < $1.sortOrder }
             return $0.displayName < $1.displayName
@@ -564,6 +602,8 @@ struct AddToQueueView: View {
                 await ReadingQueueService.preserveSeries(
                     summaries,
                     to: queues,
+                    state: .new,
+                    origin: origin ?? ReadingQueueMembershipOrigin(kind: .manual),
                     in: context,
                     progress: { seriesResult = $0 }
                 )
@@ -571,6 +611,8 @@ struct AddToQueueView: View {
                 await ReadingQueueService.preserveSeries(
                     anchoredAt: soloWork,
                     to: queues,
+                    state: .new,
+                    origin: origin ?? ReadingQueueMembershipOrigin(kind: .manual),
                     in: context,
                     progress: { seriesResult = $0 }
                 )
@@ -587,7 +629,12 @@ struct AddToQueueView: View {
     }
 
     private func toggle(_ queue: ReadingQueue) {
+        guard !workingQueueIDs.contains(queue.id) else { return }
         Haptics.selection()
+        if let sourceQueue {
+            move(to: queue, from: sourceQueue)
+            return
+        }
         if isMember(queue) {
             for work in works {
                 ReadingQueueService.removeFromQueue(work, from: queue, in: context)
@@ -595,13 +642,44 @@ struct AddToQueueView: View {
             return
         }
         let nonMembers = works.filter { work in !work.queueMemberships.contains { $0.queue?.id == queue.id } }
+        let resolvedOrigin = origin ?? ReadingQueueMembershipOrigin(kind: .manual)
         workingQueueIDs.insert(queue.id)
         Task {
             for work in nonMembers {
-                _ = await ReadingQueueService.addAndPreserve(work, to: queue, in: context)
+                _ = await ReadingQueueService.addAndPreserve(
+                    work,
+                    to: queue,
+                    state: entryState,
+                    origin: resolvedOrigin,
+                    in: context
+                )
             }
+            UserDefaults.standard.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
             workingQueueIDs.remove(queue.id)
         }
+    }
+
+    private func move(to queue: ReadingQueue, from source: ReadingQueue) {
+        if source.id != queue.id {
+            ReadingQueueService.move(
+                works,
+                from: source,
+                to: queue,
+                state: entryState,
+                origin: origin,
+                in: context
+            )
+            if KeepOffline.queueKeeps(queue.keepsWorksOffline) {
+                downloadQueue.enqueue(KeepOffline.downloadItems(for: works).map { item in
+                    var item = item
+                    item.requiresOfflineQueue = true
+                    return item
+                }, into: context)
+            }
+            UserDefaults.standard.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
+        }
+        sourceQueue = nil
+        dismiss()
     }
 
     private func seriesCompletionText(_ result: ReadingQueueService.SeriesPreservationResult) -> String {
@@ -622,11 +700,23 @@ struct AddToQueueView: View {
         guard !trimmed.isEmpty else { return }
         let queue = ReadingQueueService.createQueue(named: trimmed, in: context)
         newName = ""
+        if let sourceQueue {
+            move(to: queue, from: sourceQueue)
+            return
+        }
+        let resolvedOrigin = origin ?? ReadingQueueMembershipOrigin(kind: .manual)
         workingQueueIDs.insert(queue.id)
         Task {
             for work in works {
-                _ = await ReadingQueueService.addAndPreserve(work, to: queue, in: context)
+                _ = await ReadingQueueService.addAndPreserve(
+                    work,
+                    to: queue,
+                    state: entryState,
+                    origin: resolvedOrigin,
+                    in: context
+                )
             }
+            UserDefaults.standard.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
             workingQueueIDs.remove(queue.id)
         }
     }

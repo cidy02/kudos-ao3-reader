@@ -55,6 +55,8 @@ nonisolated struct ReadingHistoryTimeline: Equatable, Sendable {
     /// the reason `ReadingInsights.finishRate` gives.
     var finishedCount: Int = 0
     var wordsRead: Int = 0
+    /// Characters read in the period (no-space scripts), kept separate from `wordsRead`.
+    var charactersRead: Int = 0
     /// Consecutive days with reading up to the period's last day (today, for the
     /// current period). It may begin before the period does.
     var streakDays: Int = 0
@@ -269,7 +271,8 @@ nonisolated struct ReadingHistoryTimeline: Equatable, Sendable {
         timeline.totalSeconds = sittings.reduce(0) { $0 + $1.durationSeconds }
         timeline.workCount = Set(sittings.map(\.workID)).count
         timeline.finishedCount = Set(sittings.filter(\.didFinish).map(\.workID)).count
-        timeline.wordsRead = periodFacts.reduce(0) { $0 + $1.wordsRead }
+        timeline.wordsRead = periodFacts.filter { $0.wordUnit == .words }.reduce(0) { $0 + $1.wordsRead }
+        timeline.charactersRead = periodFacts.filter { $0.wordUnit == .characters }.reduce(0) { $0 + $1.wordsRead }
         timeline.days = Dictionary(grouping: sittings) { calendar.startOfDay(for: $0.startedAt) }
             .sorted { $0.key > $1.key }
             .map { Day(start: $0.key, sittings: $0.value.sorted { $0.startedAt > $1.startedAt }) }

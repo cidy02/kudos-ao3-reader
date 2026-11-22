@@ -23,10 +23,10 @@ struct AboutView: View {
                         Text("Kudos").font(.title2.bold())
                         Text("Version \(Self.versionString)")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                         Text("Read and save Archive of Our Own works on your Apple devices.")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity)
@@ -85,7 +85,7 @@ struct AboutView: View {
                         + "Own. AO3 doesn't provide an official way for apps to read its pages, "
                         + "so Kudos reads the same public pages you can visit.")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
             .appThemedRows()
@@ -126,9 +126,9 @@ struct AboutView: View {
             HStack {
                 Text(name).font(.body.weight(.medium))
                 Spacer()
-                Text(license).font(.caption).foregroundStyle(.secondary)
+                Text(license).font(.caption).foregroundStyle(.secondaryInk)
             }
-            Text(detail).font(.caption).foregroundStyle(.secondary)
+            Text(detail).font(.caption).foregroundStyle(.secondaryInk)
             if let link = URL(string: url) {
                 Link(url.replacingOccurrences(of: "https://", with: ""), destination: link)
                     .font(.caption)

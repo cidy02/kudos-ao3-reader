@@ -14,6 +14,8 @@ import SwiftUI
 /// list-based Library.
 struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Environment(\.modelContext) private var context
+    @Environment(\.duoLayout) private var duoLayout
+    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var gate
@@ -35,6 +37,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Query(filter: #Predicate<WorkCollection> { $0.isPendingDeletion }) private var deletedCollections: [WorkCollection]
     @Query(filter: #Predicate<ReadingQueue> { $0.isPendingDeletion }) private var deletedQueues: [ReadingQueue]
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }) private var readingQueues: [ReadingQueue]
+    @Query private var tagAliases: [TagAlias]
     /// `library.dashboard.layout` is left in UserDefaults and never read. Which
     /// shelves are sections, and carousel or list, is `pageArrangement`.
     @AppStorage(LibraryPageArrangement.storageKey) private var pageArrangement = LibraryPageArrangement.default
@@ -74,6 +77,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @State private var isSelecting = false
     @State private var selection = Set<UUID>()
     @State private var showingSelectionList = false
+    /// Only queried when `works.isEmpty`, so a user who deleted all works can
+    /// still reach Reading Insights for remaining reading log history.
+    @State private var hasReadingLogSessions = false
     /// Tracks the select-mode list's in-flight refresh so it can be cancelled if the
     /// user switches tabs (see `cancelRefreshOnTabChange`) — this can be the whole Library.
     @State private var refreshTask: Task<Void, Never>?
@@ -83,11 +89,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     /// Select hid rows that stayed selected, and Delete took them unseen (audit A12-4).
     private var selectedWorks: [SavedWork] {
         selectableWorks.filter { selection.contains($0.id) }
-    }
-
-    /// Keeps privacy-hidden works out of aggregate counts and fandom labels.
-    private var statisticsWorks: [SavedWork] {
-        HomeReadingStats.insightsWorks(from: works, gate: gate, hideMature: hideMature)
     }
 
     /// The dashboard's currently-visible/filtered works (mirrors `dashboardWorks(for:)`
@@ -144,6 +145,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)
             #endif
+                .duoVerticalCompressionPrefersTabBar(duoLayout.hasVerticalBar)
                 .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
                 .navigationDestination(for: LocalWorkDestination.self) { LocalWorkDestinationView(destination: $0) }
                 .navigationDestination(for: LibrarySectionRoute.self, destination: sectionList)
@@ -162,7 +164,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .ao3AuthorNavigation(path: $path, tab: .library)
                 .navigationDestination(for: RecentlyDeletedDestination.self) { _ in RecentlyDeletedView() }
                 .navigationDestination(for: ReadingInsightsDestination.self) { _ in
-                    ReadingInsightsView(works: statisticsWorks)
+                    ReadingInsightsView(libraryWorks: works)
                 }
                 #if DEBUG
                 .task {
@@ -213,16 +215,23 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .onChange(of: pageArrangement) { _, _ in
                     NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
                 }
-                .filterPanelPresentation(isPresented: router.isShowing(.libraryFilters)) {
+                .filterPanelPresentation(
+                    isPresented: router.isShowing(.libraryFilters),
+                    onDismiss: { router.panelDidDismiss() }
+                ) {
                     // The lists are drawn from what the Library can show: not a work Hide
                     // mode hides (its fandoms and tags were offered here). A queue's
                     // entry stays: the Saved for Later shelf shows it.
+                    let inspectorWidth = duoLayout.inspectorWidth(rightToLeft: layoutDirection == .rightToLeft)
                     LibraryFilterPanel(
                         filters: $filters,
                         works: works.filter(passesPrivacy),
                         userTagNames: userTagNames
                     )
-                        .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+                        .inspectorColumnWidth(
+                            min: 280, ideal: inspectorWidth ?? 320,
+                            max: max(380, inspectorWidth ?? 0)
+                        )
                 }
                 .task {
                     // ContentView already normalizes the full library at launch.
@@ -237,6 +246,18 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     // before we spend the main actor filtering every section.
                     await Task.yield()
                     rebuildSectionCache()
+                }
+                .task(id: works.isEmpty) {
+                    guard works.isEmpty else {
+                        hasReadingLogSessions = false
+                        return
+                    }
+                    hasReadingLogSessions = ((try? context.fetchCount(FetchDescriptor<ReadingSession>())) ?? 0) > 0
+                }
+                .onAppear {
+                    if works.isEmpty {
+                        hasReadingLogSessions = ((try? context.fetchCount(FetchDescriptor<ReadingSession>())) ?? 0) > 0
+                    }
                 }
                 // A tag tapped on a work's detail page filters the Library to it.
                 // `initial: true` catches a tag set just before this view appears.
@@ -409,31 +430,67 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     private var realDashboard: some View { shelvesDashboard }
 
     private var shelvesDashboard: some View {
-        ScrollView {
-            // 26pt between sections (Rules; 1c drew 22), the chips' row included.
-            VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
-                libraryHeaderLink
-                fandomFilterBar
-                ForEach(pageArrangement.sections) { section in
-                    arrangedSection(section)
-                }
-                if !pageArrangement.buttons.isEmpty {
-                    LibraryShelfButtonGrid(
-                        buttons: pageArrangement.buttons,
-                        counts: shelfCounts,
-                        onEdit: { showingEditShelves = true },
-                        onOpen: openShelf
-                    )
-                    .dashboardLeadingRegion()
-                }
-                onAO3Panel.dashboardLeadingRegion()
-                if recentlyDeletedCount > 0 {
-                    recentlyDeletedRow.dashboardLeadingRegion()
-                }
+        let duoSplit = pageArrangement.duoPaneSections()
+        let isDuoSplitLandscape = duoLayout.isFoldSplitLandscape(rightToLeft: layoutDirection == .rightToLeft)
+        return DuoFoldAdaptiveScrollHost(onRefresh: { await refreshLibraryDashboard() }) {
+            libraryHeaderLink
+                .duoScrollAnchor("libraryHeader")
+            fandomFilterBar
+                .duoScrollAnchor("fandomFilterBar")
+            ForEach(duoSplit.leading) { section in
+                arrangedSection(section)
+                    .duoScrollAnchor("section:\(section.id.rawValue)")
             }
-            .padding(.vertical, 12)
+        } trailing: {
+            ForEach(duoSplit.trailing) { section in
+                arrangedSection(section)
+                    .duoScrollAnchor("section:\(section.id.rawValue)")
+            }
+            if !pageArrangement.buttons.isEmpty {
+                LibraryShelfButtonGrid(
+                    buttons: pageArrangement.buttons,
+                    counts: shelfCounts,
+                    forcesCompactColumns: true,
+                    onEdit: { showingEditShelves = true },
+                    onOpen: openShelf
+                )
+                .duoScrollAnchor("shelves")
+            }
+            onAO3Panel
+                .duoScrollAnchor("onAO3")
+            if recentlyDeletedCount > 0 {
+                recentlyDeletedRow
+                    .duoScrollAnchor("recentlyDeleted")
+            }
+        } fallback: {
+            libraryHeaderLink
+                .duoScrollAnchor("libraryHeader")
+            fandomFilterBar
+                .duoScrollAnchor("fandomFilterBar")
+            ForEach(pageArrangement.sections) { section in
+                arrangedSection(section)
+                    .duoScrollAnchor("section:\(section.id.rawValue)")
+            }
+            if !pageArrangement.buttons.isEmpty {
+                LibraryShelfButtonGrid(
+                    buttons: pageArrangement.buttons,
+                    counts: shelfCounts,
+                    forcesCompactColumns: isDuoSplitLandscape,
+                    onEdit: { showingEditShelves = true },
+                    onOpen: openShelf
+                )
+                .dashboardLeadingRegion()
+                .duoScrollAnchor("shelves")
+            }
+            onAO3Panel
+                .dashboardLeadingRegion()
+                .duoScrollAnchor("onAO3")
+            if recentlyDeletedCount > 0 {
+                recentlyDeletedRow
+                    .dashboardLeadingRegion()
+                    .duoScrollAnchor("recentlyDeleted")
+            }
         }
-        .refreshable { await refreshLibraryDashboard() }
     }
 
     private var onAO3Panel: some View {
@@ -480,14 +537,14 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             HStack(spacing: 10) {
                 Image(systemName: "trash")
                     .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 Text("Recently Deleted")
                     .font(.system(size: recentlyDeletedTitleSize, weight: .semibold))
                 Spacer()
                 Text(recentlyDeletedCount.compactCount)
                     .font(.system(size: recentlyDeletedCountSize))
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.tertiary)
@@ -558,7 +615,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         } emptyState: {
             Text("Use + above to create a collection for works you want to group together.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         }
     }
 
@@ -604,7 +661,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         )
         let phrase = LibraryPageArrangement.workCountPhrase(libraryHeader.workCount)
         let line = Text(phrase).fontWeight(.semibold).foregroundStyle(.primary)
-            + Text(" · \(libraryHeader.downloadedCount) downloaded · \(bytes)").foregroundStyle(.secondary)
+            + Text(" · \(libraryHeader.downloadedCount) downloaded · \(bytes)").foregroundStyle(.secondaryInk)
         return Button {
             path.append(LibraryCatalogueDestination(kind: .allWorks))
         } label: {
@@ -647,7 +704,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     private var shelfQueues: [ReadingQueue] {
         readingQueues
-            .filter { $0.kind == .custom }
+            .filter(\.isUserQueue)
             .sorted { lhs, rhs in
                 if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
                 return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
@@ -787,7 +844,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             if collections.isEmpty {
                 Text(emptyCopy(for: .collections))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 16)
             } else {
@@ -814,19 +871,29 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     }
 
     private var queuesCarousel: some View {
-        WorkCarouselSection(
+        let shownQueues = Array(shelfQueues.prefix(12))
+        let smartSnapshot = shownQueues.contains { $0.kind == .smart }
+            ? ReadingQueueService.SmartLibrarySnapshot(
+                works: works,
+                aliases: TagAliasResolver(models: tagAliases)
+            )
+            : nil
+        return WorkCarouselSection(
             title: LibraryShelfID.queues.title,
             hasItems: !shelfQueues.isEmpty,
             itemCount: shelfQueues.count,
             cardSpacing: ReadingQueueCard.spacing,
             cardWidth: ReadingQueueCard.width,
-            visibleCount: min(shelfQueues.count, 12),
+            visibleCount: shownQueues.count,
             actionTitle: "See All",
             onSeeAll: !shelfQueues.isEmpty ? { openShelf(.queues) } : nil
         ) {
-            ForEach(shelfQueues.prefix(12)) { queue in
+            ForEach(shownQueues) { queue in
                 NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
-                    ReadingQueueCard(queue: queue)
+                    ReadingQueueCard(
+                        queue: queue,
+                        precomputedSmartWorks: queue.kind == .smart ? smartSnapshot?.matching(queue, where: passesPrivacy) : nil
+                    )
                 }
                 .buttonStyle(.plain)
             }
@@ -834,7 +901,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             VStack(alignment: .leading, spacing: 8) {
                 Text(emptyCopy(for: .queues))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                 Button("Open Queues") {
                     path.append(AllReadingQueuesDestination(initialQueueID: nil))
@@ -845,7 +912,14 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     }
 
     private var queuesList: some View {
-        LibraryCollapsingShelf(
+        let shownQueues = Array(shelfQueues.prefix(12))
+        let smartSnapshot = shownQueues.contains { $0.kind == .smart }
+            ? ReadingQueueService.SmartLibrarySnapshot(
+                works: works,
+                aliases: TagAliasResolver(models: tagAliases)
+            )
+            : nil
+        return LibraryCollapsingShelf(
             title: LibraryShelfID.queues.title,
             count: shelfQueues.count,
             actionTitle: "See All",
@@ -855,7 +929,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 VStack(alignment: .leading, spacing: 8) {
                     Text(emptyCopy(for: .queues))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                     Button("Open Queues") {
                         path.append(AllReadingQueuesDestination(initialQueueID: nil))
@@ -865,9 +939,12 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .padding(.horizontal, 16)
             } else {
                 VStack(spacing: 8) {
-                    ForEach(shelfQueues.prefix(12)) { queue in
+                    ForEach(shownQueues) { queue in
                         NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
-                            LibraryQueueLedgerRow(queue: queue)
+                            LibraryQueueLedgerRow(
+                                queue: queue,
+                                precomputedSmartWorks: queue.kind == .smart ? smartSnapshot?.matching(queue, where: passesPrivacy) : nil
+                            )
                         }
                         .buttonStyle(.plain)
                     }
@@ -996,7 +1073,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             #endif
         } else {
             let showsMature = hideMature
-            let showsStatistics = !statisticsWorks.isEmpty
+            let showsStatistics = HomeReadingStats.showsReadingInsightsMenuEntry(
+                liveWorkCount: works.count,
+                sessionCount: finishingSessions.count + (hasReadingLogSessions ? 1 : 0)
+            )
             let showsSelect = !works.isEmpty
             let showsMoreMenu = true
             // Gated as a whole, not just its inner pieces — an empty HStack (or a
@@ -1006,51 +1086,74 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             // New Collection is always there — it was the collections shelf's
             // first card (owner, 2026-10-01). Edit Shelves, Privacy and Reading
             // Insights live behind "...".
-            // Board 01: the filter, then + and ••• as one pill (adjacent items in one placement
-            // share a glass pill; the spacer keeps the filter out of it). Select lives in •••
-            // (owner, 2026-11-09), in the app's menu order: Mature · Select · page items.
-            if !works.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
-                    FilterButton(filtersActive: filters.hasActiveFilters,
-                                 showingFilters: router.isShowing(.libraryFilters),
-                                 onClearFilters: { filters = LibraryFilters() })
-                        .labelStyle(.iconOnly)
-                }
-                ToolbarSpacer(.fixed, placement: .primaryAction)
-            }
-            ToolbarItemGroup(placement: .primaryAction) {
-                ToolbarIconButton(title: "New Collection", systemImage: "plus") {
-                    showingNewCollection = true
-                }
-                .labelStyle(.iconOnly)
-                if showsMoreMenu {
-                    WorkListMoreMenu {
-                        Button {
-                            showingEditShelves = true
-                        } label: {
-                            Label("Edit Shelves", systemImage: "square.grid.2x2")
-                        }
-                        if showsMature {
-                            MatureRevealToggle()
-                        }
-                        if showsSelect {
-                            Button {
-                                enterSelectMode()
-                            } label: {
-                                Label("Select", systemImage: "checklist")
-                            }
-                        }
-                        // A page item, so after the shelf controls (pass2-2).
-                        if showsStatistics {
-                            NavigationLink(value: ReadingInsightsDestination()) {
-                                Label("Reading Insights", systemImage: "chart.bar.xaxis")
-                            }
-                        }
+            if duoLayout.usesSingleRailActionGroup {
+                // Duo vertical rail (N9): all actions sit in one glass group (no spacer split).
+                ToolbarItemGroup(placement: .primaryAction) {
+                    if !works.isEmpty {
+                        FilterButton(filtersActive: filters.hasActiveFilters,
+                                     showingFilters: router.isShowing(.libraryFilters),
+                                     onClearFilters: { filters = LibraryFilters() })
+                            .labelStyle(.iconOnly)
+                    }
+                    ToolbarIconButton(title: "New Collection", systemImage: "plus") {
+                        showingNewCollection = true
                     }
                     .labelStyle(.iconOnly)
+                    if showsMoreMenu {
+                        libraryMoreMenu(showsMature: showsMature, showsSelect: showsSelect, showsStatistics: showsStatistics)
+                    }
+                }
+            } else {
+                // Board 01: the filter, then + and ••• as one pill (adjacent items in one placement
+                // share a glass pill; the spacer keeps the filter out of it). Select lives in •••
+                // (owner, 2026-11-09), in the app's menu order: Mature · Select · page items.
+                if !works.isEmpty {
+                    ToolbarItem(placement: .primaryAction) {
+                        FilterButton(filtersActive: filters.hasActiveFilters,
+                                     showingFilters: router.isShowing(.libraryFilters),
+                                     onClearFilters: { filters = LibraryFilters() })
+                            .labelStyle(.iconOnly)
+                    }
+                    ToolbarSpacer(.fixed, placement: .primaryAction)
+                }
+                ToolbarItemGroup(placement: .primaryAction) {
+                    ToolbarIconButton(title: "New Collection", systemImage: "plus") {
+                        showingNewCollection = true
+                    }
+                    .labelStyle(.iconOnly)
+                    if showsMoreMenu {
+                        libraryMoreMenu(showsMature: showsMature, showsSelect: showsSelect, showsStatistics: showsStatistics)
+                    }
                 }
             }
         }
+    }
+
+    private func libraryMoreMenu(showsMature: Bool, showsSelect: Bool, showsStatistics: Bool) -> some View {
+        WorkListMoreMenu {
+            Button {
+                showingEditShelves = true
+            } label: {
+                Label("Edit Shelves", systemImage: "square.grid.2x2")
+            }
+            if showsMature {
+                MatureRevealToggle()
+            }
+            if showsSelect {
+                Button {
+                    enterSelectMode()
+                } label: {
+                    Label("Select", systemImage: "checklist")
+                }
+            }
+            // A page item, so after the shelf controls (pass2-2).
+            if showsStatistics {
+                NavigationLink(value: ReadingInsightsDestination()) {
+                    Label("Reading Insights", systemImage: "chart.bar.xaxis")
+                }
+            }
+        }
+        .labelStyle(.iconOnly)
     }
 
     // MARK: Loading

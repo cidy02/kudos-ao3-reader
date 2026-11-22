@@ -32,6 +32,8 @@ nonisolated enum SyncRecordStatus: String, Codable, CaseIterable {
 nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
     case savedForLater
     case custom
+    /// Fills itself from the library. Members are computed, never stored.
+    case smart
 }
 
 nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
@@ -64,6 +66,10 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     case readingFavorite
     /// A per-fandom last-visited watermark the user (or replace-mode) removed.
     case fandomReadWatermark
+    /// A locally followed tag removed via Unfollow or replace-mode.
+    case followedTag
+    /// A learned canonical tag alias removed via delete or replace-mode.
+    case tagAlias
 }
 
 /// Durable marker for an explicit local deletion. Future cloud merge code must treat
@@ -141,6 +147,8 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// is intentionally omitted from `.kudosbackup`; restoring an older backup
     /// safely leaves the author text visible but non-tappable until AO3 refreshes it.
     var authorIdentitiesJSON: String = ""
+    /// A plain optional JSON column avoids SwiftData composite migration faults.
+    var coverRecipeJSON: String?
     var summary: String = ""
     var sourceURL: String = ""
     var dateAdded: Date = Date()
@@ -213,6 +221,78 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
 
     /// 1ai Abandoned is derived (mid-way and untouched past a threshold).
     /// Setting this true is the undo: the threshold must not re-abandon it.
+    var readingStatusRaw: String = ""
+    var statusChangedAt: Date?
+    var stoppedAt: Date?
+    var stopReasonRaw: String = ""
+    var stopTag: String = ""
+    var stopNote: String = ""
+    var stackThreshold: Int = 3
+    var stackBaselineChapterCount: Int = 0
+    var statusWasRecorded: Bool = false
+
+    var hasRecordedStatus: Bool {
+        statusWasRecorded || !readingStatusRaw.isEmpty || statusChangedAt != nil
+            || stoppedAt != nil || !stopReasonRaw.isEmpty || !stopTag.isEmpty
+            || !stopNote.isEmpty || stackThreshold != 3 || stackBaselineChapterCount != 0
+    }
+
+    func setReadingStatus(_ status: ExplicitReadingStatus?, at date: Date = .now) {
+        readingStatusRaw = status?.rawValue ?? ""
+        statusChangedAt = status == nil ? nil : date
+        statusWasRecorded = true
+        stackBaselineChapterCount = status == .stacking ? postedChapterCount : 0
+        if status != .stopped {
+            stoppedAt = nil
+            stopReasonRaw = ""
+            stopTag = ""
+            stopNote = ""
+        }
+        markModified(date)
+    }
+
+    enum ExplicitReadingStatus: String { case reading, onHold, stacking, stopped }
+    enum InsightsReadingStatus: String, CaseIterable {
+        case stopped, onHold, stacking, finished, caughtUp, reading, savedForLater
+    }
+
+    /// Canonical WIP caught-up check shared by `insightsReadingStatus` and the
+    /// queue's derived **Waiting** section: not complete, not manually finished,
+    /// started, every posted chapter reached (`>= 99%` of its final spine or `100%`
+    /// whole-book progress), and no newer chapter posted since `knownChapterCount`.
+    var isCaughtUpOnWIP: Bool {
+        !isComplete
+            && !isFinished
+            && hasStartedReading
+            && postedChapterCount > 0
+            && lastSpineIndex + 1 >= postedChapterCount
+            && (lastScrollFraction >= 0.99 || publicationProgress == 1)
+            && !hasUpdate
+    }
+
+    var insightsReadingStatus: InsightsReadingStatus {
+        switch ExplicitReadingStatus(rawValue: readingStatusRaw) {
+        case .stopped: return .stopped
+        case .onHold: return .onHold
+        case .stacking: return .stacking
+        case .reading, .none: break
+        }
+        if isFinished { return .finished }
+        if isCaughtUpOnWIP {
+            return .caughtUp
+        }
+        if readingStatusRaw == ExplicitReadingStatus.reading.rawValue || hasStartedReading {
+            return .reading
+        }
+        return .savedForLater
+    }
+
+    func shouldResumeStacking(postedChapters: Int) -> Bool {
+        readingStatusRaw == ExplicitReadingStatus.stacking.rawValue
+            && statusChangedAt != nil
+            && postedChapters - stackBaselineChapterCount >= max(1, stackThreshold)
+    }
+
     var keepInProgressOverride: Bool = false
 
     /// 1ah's "Remove from history": when the reader took this work off History.
@@ -263,6 +343,16 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// Total word count from AO3's work stats. 0 until refreshed from AO3 (the
     /// EPUB doesn't carry it); used by the Library word-count filter and sort.
     var wordCount: Int = 0
+
+    /// Per-chapter word (or character) counts from the local EPUB's chapter
+    /// prose only (preface, summaries, notes, and afterword excluded), encoded as
+    /// a JSON `[Int]`. Empty string until computed; read via `chapterWordCounts`.
+    var chapterWordCountsJSON: String = ""
+
+    /// Measurement unit for `chapterWordCountsJSON`: `"words"` or
+    /// `"characters"` (no-space languages: Chinese, Japanese, Thai). Empty string
+    /// until recorded so untouched works omit the backup key.
+    var wordUnitRaw: String = ""
 
     /// Best-effort AO3/EPUB date text. Remote AO3 summaries already carry their own
     /// dates; these persist dates parsed from a locally imported EPUB.
@@ -488,7 +578,10 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// queue in Recently Deleted still counts, so restoring it finds its works
     /// as they were. A queue switched off is a plain list and holds nothing.
     var isKeptOffline: Bool {
-        queueMemberships.contains { KeepOffline.queueKeeps($0.queue?.keepsWorksOffline) }
+        queueMemberships.contains { membership in
+            guard let queue = membership.queue, queue.kind != .smart else { return false }
+            return KeepOffline.queueKeeps(queue.keepsWorksOffline)
+        }
             || collections.contains { KeepOffline.collectionKeeps($0.keepsWorksOffline) }
     }
 
@@ -501,7 +594,7 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// beside it, so the projection lives here rather than at each call site.
     var activeQueueMemberships: [ReadingQueueMembership] {
         queueMemberships.filter { membership in
-            guard let queue = membership.queue else { return false }
+            guard let queue = membership.queue, queue.kind != .smart else { return false }
             return !membership.isPendingDeletion && !queue.isPendingDeletion
         }
     }
@@ -671,6 +764,101 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         if let before, let after = readiumProgress,
            abs(after - before) < ReadiumProgressPersistence.minProgressionDelta { return }
         legacyReaderProgress = nil
+    }
+}
+
+extension SavedWork {
+    nonisolated enum WordUnit: String, Equatable, Sendable {
+        case words
+        case characters
+    }
+
+    var wordUnit: WordUnit {
+        WordUnit(rawValue: wordUnitRaw) ?? Self.wordUnit(forLanguage: language)
+    }
+
+    var chapterWordCounts: [Int] {
+        get {
+            guard !chapterWordCountsJSON.isEmpty,
+                  let data = chapterWordCountsJSON.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([Int].self, from: data)
+            else { return [] }
+            return decoded
+        }
+        set {
+            if newValue.isEmpty {
+                chapterWordCountsJSON = ""
+                return
+            }
+            guard let data = try? JSONEncoder().encode(newValue),
+                  let json = String(data: data, encoding: .utf8)
+            else {
+                chapterWordCountsJSON = ""
+                return
+            }
+            chapterWordCountsJSON = json
+        }
+    }
+
+    func applyChapterWordAnalysis(_ analysis: AO3EPUBChapterWordCounter.Analysis) {
+        chapterWordCounts = analysis.chapterWordCounts
+        wordUnitRaw = analysis.wordUnit.rawValue
+    }
+
+    func applyLanguageMetadata(_ language: String) {
+        guard !language.isEmpty else { return }
+        self.language = language
+        if Self.wordUnit(forLanguage: language) == .characters {
+            wordUnitRaw = WordUnit.characters.rawValue
+        }
+    }
+
+    nonisolated static func validatedChapterWordCountsJSON(_ json: String?) -> String? {
+        guard let json, !json.isEmpty,
+              let data = json.data(using: .utf8),
+              let counts = try? JSONDecoder().decode([Int].self, from: data),
+              !counts.isEmpty,
+              counts.allSatisfy({ $0 >= 0 }),
+              let normalized = try? JSONEncoder().encode(counts),
+              let normalizedString = String(data: normalized, encoding: .utf8)
+        else { return nil }
+        return normalizedString
+    }
+
+    nonisolated static func validatedWordUnitRaw(_ raw: String?) -> String? {
+        guard let raw, let unit = WordUnit(rawValue: raw) else { return nil }
+        return unit.rawValue
+    }
+
+    /// Maps a `SavedWork.language` string (EPUB `dc:language` code or AO3
+    /// display language) to `.characters` for languages written without spaces
+    /// (Chinese, Japanese, Thai) and `.words` otherwise.
+    nonisolated static func wordUnit(forLanguage language: String) -> WordUnit {
+        let trimmed = language.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .words }
+        let lower = trimmed.lowercased()
+        let code = lower
+            .replacingOccurrences(of: "_", with: "-")
+            .split(whereSeparator: { $0 == "-" || $0.isWhitespace })
+            .first
+            .map(String.init) ?? lower
+        switch code {
+        case "zh", "zho", "chi", "cmn", "yue", "hak", "nan", "wuu",
+             "ja", "jpn",
+             "th", "tha":
+            return .characters
+        default:
+            break
+        }
+        let characterIndicators = [
+            "中文", "chinese", "mandarin", "cantonese", "hokkien", "hakka",
+            "日本語", "japanese",
+            "ไทย", "thai"
+        ]
+        if characterIndicators.contains(where: { lower.contains($0) }) {
+            return .characters
+        }
+        return .words
     }
 }
 
@@ -925,8 +1113,16 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// note is stored as "" so clearing it travels through sync.
     var notes: String?
 
+    /// T-533: one JSON document (`SmartQueueDocument`) for a `.smart` queue.
+    /// Optional and additive, like `notes`. Absent on every older queue.
+    /// Not a composite attribute — see `docs/DATA_AND_PERSISTENCE_INVARIANTS.md`.
+    var smartRulesJSON: String?
+
     @Relationship(deleteRule: .cascade, inverse: \ReadingQueueMembership.queue)
     var memberships: [ReadingQueueMembership] = []
+    @Relationship(deleteRule: .cascade, inverse: \QueueSavedSearchLink.queue)
+    var searchLinks: [QueueSavedSearchLink] = []
+    var searchSourcesModifiedAt: Date?
     /// The reader's own tags on this queue — 1h draws them under the header with
     /// a dashed "+ Tag", and 1i filters the organizer by them. Shares `Tag` with
     /// `SavedWork.tags` so the vocabulary is one list, not two.
@@ -953,6 +1149,11 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         get { ReadingQueueKind(rawValue: kindRaw) ?? .custom }
         set { kindRaw = newValue.rawValue }
     }
+
+    /// Custom and smart queues. Saved for Later is the only system queue.
+    /// An unknown `kindRaw` still reads as `.custom`, so it stays in this set
+    /// and is shown as an ordinary empty queue.
+    var isUserQueue: Bool { kind != .savedForLater }
 
     var syncStatus: SyncRecordStatus {
         get { SyncRecordStatus(rawValue: syncStatusRaw) ?? .localOnly }
@@ -981,6 +1182,62 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     }
 }
 
+/// Stored state of a membership inside a queue (`new` = recently added, not yet
+/// sorted into the reader's order; `inLine` = placed in order). `Waiting` and
+/// `Finished` are derived from `SavedWork` and never stored.
+nonisolated enum ReadingQueueMembershipState: String, CaseIterable, Codable, Sendable {
+    case new
+    case inLine
+}
+
+/// How a work entered a reading queue (`T-528` / `T-536` Insights D8).
+nonisolated enum ReadingQueueMembershipOriginKind: String, CaseIterable, Codable, Sendable {
+    case search
+    case link
+    case source
+    case manual
+}
+
+/// Non-persistent value describing why a work was added to a queue; backed on
+/// `ReadingQueueMembership` by plain optional/defaulted primitive fields (never a
+/// composite SwiftData attribute).
+nonisolated struct ReadingQueueMembershipOrigin: Equatable, Hashable, Codable, Sendable {
+    var kind: ReadingQueueMembershipOriginKind
+    var searchID: UUID?
+    var label: String?
+
+    init(kind: ReadingQueueMembershipOriginKind, searchID: UUID? = nil, label: String? = nil) {
+        self.kind = kind
+        self.searchID = searchID
+        let trimmed = label?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.label = (trimmed?.isEmpty == false) ? trimmed : nil
+    }
+
+    /// Display line for queue rows (`"From <label>"`) when a label was recorded.
+    var displayLine: String? {
+        guard let label, !label.isEmpty else { return nil }
+        return "From \(label)"
+    }
+
+    /// Reconstructs an origin from persisted/transport raw fields (`ReadingQueueMembership`
+    /// and `KudosBackupReadingQueueMembership` share this normalization).
+    static func normalized(kindRaw: String?, searchID: UUID?, label: String?) -> ReadingQueueMembershipOrigin? {
+        let trimmed = label?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanLabel = (trimmed?.isEmpty == false) ? trimmed : nil
+        if let kind = kindRaw.flatMap(ReadingQueueMembershipOriginKind.init(rawValue:)) {
+            return ReadingQueueMembershipOrigin(kind: kind, searchID: searchID, label: cleanLabel)
+        }
+        if searchID != nil || cleanLabel != nil {
+            return ReadingQueueMembershipOrigin(
+                kind: searchID != nil ? .search : .manual,
+                searchID: searchID,
+                label: cleanLabel
+            )
+        }
+        return nil
+    }
+}
+
 /// Join record between a work and a reading queue. Duplicate queue/work pairs are
 /// prevented in `ReadingQueueService` rather than with a fragile unique attribute.
 @Model final class ReadingQueueMembership {
@@ -991,6 +1248,15 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var isPendingDeletion: Bool = false
     var sortOrderInQueue: Int = 0
     var note: String = ""
+    /// `"new"` or `"inLine"`; default `"inLine"` so existing queues keep their order.
+    var stateRaw: String = ReadingQueueMembershipState.inLine.rawValue
+    /// Mirrors `SavedWork.statusWasRecorded` (`KudosBackup.swift`): distinguishes an
+    /// explicit `.new` -> `.inLine` sort from an older/Android manifest stripping keys.
+    var stateWasRecorded: Bool = false
+    /// Origin fields kept per membership (not on `SavedWork`) for queue rows and Insights.
+    var originKindRaw: String?
+    var originSearchID: UUID?
+    var originLabel: String?
     var syncStatusRaw: String = SyncRecordStatus.localOnly.rawValue
     var lastSyncAttemptAt: Date?
     var lastSyncError: String = ""
@@ -1000,11 +1266,14 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
 
     init(
         id: UUID = UUID(),
-        queue: ReadingQueue,
-        work: SavedWork,
+        queue: ReadingQueue?,
+        work: SavedWork?,
         queuedAt: Date = Date(),
         sortOrderInQueue: Int = 0,
-        note: String = ""
+        note: String = "",
+        state: ReadingQueueMembershipState = .inLine,
+        stateWasRecorded: Bool = false,
+        origin: ReadingQueueMembershipOrigin? = nil
     ) {
         self.id = id
         self.queue = queue
@@ -1013,6 +1282,43 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         lastModifiedAt = queuedAt
         self.sortOrderInQueue = sortOrderInQueue
         self.note = note
+        stateRaw = state.rawValue
+        self.stateWasRecorded = stateWasRecorded || state != .inLine
+        originKindRaw = origin?.kind.rawValue
+        originSearchID = origin?.searchID
+        originLabel = origin?.label
+    }
+
+    var state: ReadingQueueMembershipState {
+        get { ReadingQueueMembershipState(rawValue: stateRaw) ?? .inLine }
+        set {
+            stateRaw = newValue.rawValue
+            stateWasRecorded = true
+        }
+    }
+
+    var originKind: ReadingQueueMembershipOriginKind? {
+        get { originKindRaw.flatMap(ReadingQueueMembershipOriginKind.init(rawValue:)) }
+        set { originKindRaw = newValue?.rawValue }
+    }
+
+    var origin: ReadingQueueMembershipOrigin? {
+        get {
+            ReadingQueueMembershipOrigin.normalized(
+                kindRaw: originKindRaw,
+                searchID: originSearchID,
+                label: originLabel
+            )
+        }
+        set {
+            originKindRaw = newValue?.kind.rawValue
+            originSearchID = newValue?.searchID
+            originLabel = newValue?.label
+        }
+    }
+
+    var originDisplayLine: String? {
+        origin?.displayLine
     }
 
     var syncStatus: SyncRecordStatus {

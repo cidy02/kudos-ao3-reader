@@ -43,12 +43,12 @@ struct AO3AuthorHero: View {
                     if route.pseud != nil {
                         Text("Pseud of \(route.username)")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     } else {
                         Text("AO3 user")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
 
                     if !profileTitle.isEmpty {
@@ -231,7 +231,7 @@ struct AO3AuthorAvatar: View {
     private var placeholder: some View {
         Image(systemName: isCircular ? "person.crop.circle" : "person.crop.square")
             .font(.system(size: size * 0.42, weight: .regular))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -304,7 +304,7 @@ struct AO3SeriesRow: View {
                 Text(series.summary)
                     .font(.system(size: summarySize))
                     .lineSpacing(1.5)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(3)
             }
 
@@ -316,7 +316,7 @@ struct AO3SeriesRow: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(figures.joined(separator: "  ·  "))
                         if !series.dateUpdated.isEmpty {
-                            Text(series.dateUpdated)
+                            Text(WorkStat.displayDate(series.dateUpdated))
                         }
                     }
                 } else {
@@ -329,13 +329,13 @@ struct AO3SeriesRow: View {
                         }
                         Spacer(minLength: 8)
                         if !series.dateUpdated.isEmpty {
-                            Text(series.dateUpdated)
+                            Text(WorkStat.displayDate(series.dateUpdated))
                         }
                     }
                 }
             }
             .font(.system(size: metaSize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
 
             AO3AuthorBylineView(
                 names: series.creatorNames, identities: series.creatorIdentities,
@@ -393,14 +393,14 @@ struct AO3SeriesRow: View {
             if !series.fandoms.isEmpty {
                 Label(series.fandoms.joined(separator: ", "), systemImage: "books.vertical")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(2)
             }
 
             if !series.summary.isEmpty {
                 Text(series.summary)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(3)
             }
 
@@ -435,7 +435,7 @@ struct AO3SeriesRow: View {
                     )
                 }
                 if !series.dateUpdated.isEmpty {
-                    WorkStatLabel(text: series.dateUpdated, symbol: "calendar")
+                    WorkStatLabel(text: WorkStat.displayDate(series.dateUpdated), symbol: "calendar")
                 }
             }
             .font(.caption2)
@@ -513,10 +513,11 @@ struct AO3BookmarkFootnote: View {
                     if bookmark.isRecommendation { SubjectStateBadge(title: "Rec", color: .secondary) }
                     Spacer(minLength: 0)
                     if !bookmark.date.isEmpty {
-                        Text(bookmark.date)
+                        let dateText = WorkStat.displayDate(bookmark.date)
+                        Text(dateText)
                             .font(.system(size: dateSize))
-                            .foregroundStyle(.secondary)
-                            .accessibilityLabel("Bookmarked \(bookmark.date)")
+                            .foregroundStyle(.secondaryInk)
+                            .accessibilityLabel("Bookmarked \(dateText)")
                     }
                 }
             }
@@ -530,7 +531,7 @@ struct AO3BookmarkFootnote: View {
                         font: .system(size: noteSize),
                         lineSpacing: 7
                     )
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 }
                 .fixedSize(horizontal: false, vertical: true)
             }

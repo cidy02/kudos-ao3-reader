@@ -1,5 +1,5 @@
 {
-  "originHash" : "8f7c953d5031ceb0bb4e6ea2491355f7dc1b525d2ba2a63a22e9172a9b2680ad",
+  "originHash" : "e9dafac113dccbafa2035711c4ee2a3bf698c43a355e35a4290bef948a27e7d4",
   "pins" : [
     {
       "identity" : "bitbytedata",
@@ -85,10 +85,9 @@
     {
       "identity" : "swift-toolkit",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/readium/swift-toolkit.git",
+      "location" : "https://github.com/cidy02/swift-toolkit.git",
       "state" : {
-        "revision" : "de07026e9f825a5791f27a7ac4cd6bb1a784ab8d",
-        "version" : "3.9.0"
+        "revision" : "740bdf0f608d38f72444639a79f5f1f7de4539e3"
       }
     },
     {

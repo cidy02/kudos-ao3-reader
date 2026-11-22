@@ -12,7 +12,7 @@ struct AO3InvitationRequestLink: View {
     var body: some View {
         Text("No AO3 account? [Create one ↗](\(AO3InvitationRequest.url.absoluteString))")
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
             .environment(\.openURL, OpenURLAction { url in
@@ -28,6 +28,8 @@ struct AO3InvitationRequestLink: View {
 /// off-screen unless the automatic mechanism fails, at which point this view
 /// deliberately switches to the visible fallback.
 struct AO3LoginView: View {
+    var contextMessage: String? = nil
+    var contextURL: URL? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
@@ -139,6 +141,20 @@ struct AO3LoginView: View {
     private var nativeContent: some View {
         ScrollView {
             VStack(spacing: 14) {
+                if let contextMessage {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label(contextMessage, systemImage: "lock")
+                            .font(.subheadline.weight(.semibold))
+                        if let contextURL {
+                            Text(contextURL.absoluteString)
+                                .font(.caption)
+                                .textSelection(.enabled)
+                        }
+                    }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 16))
+                }
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "lock")
                         .foregroundStyle(.green)
@@ -208,7 +224,7 @@ struct AO3LoginView: View {
 
                 Text("These open AO3 in Kudos. Come back here to log in afterwards.")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
             }
@@ -262,7 +278,7 @@ struct AO3LoginView: View {
                 .font(.headline)
             Text(auth.fallbackMessage ?? "Complete login on AO3 below.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             if let error = auth.errorMessage {
                 Text(error)
                     .font(.footnote)
@@ -287,14 +303,14 @@ struct AO3LoginView: View {
         }
     }
 
-    /// Opens an AO3 help page (sign-up / password reset) in the in-app Browse tab,
-    /// dismissing the login sheet first. Login resumes when the user returns and
-    /// signs in. AO3 uses Devise, so these are its standard registration / reset
+    /// Opens an AO3 help page (sign-up / password reset). `router.open` defers the
+    /// browser until this sheet has dismissed, and closing that browser returns
+    /// here. AO3 uses Devise, so these are its standard registration / reset
     /// routes; either way AO3's own page shows the current invitation/reset flow.
     private func openOnAO3(_ url: URL) {
         userInitiatedClose = true
         auth.cancelLogin()
-        dismiss()
         router.open(url)
+        dismiss()
     }
 }

@@ -48,7 +48,7 @@ nonisolated struct AO3ReadingEntry: Equatable, Sendable {
         guard !lastVisited.isEmpty else { return nil }
         return lastVisitedIsRelative
             ? "Last visited \(lastVisited) ago"
-            : "Last visited \(lastVisited)"
+            : "Last visited \(WorkStat.displayDate(lastVisited))"
     }
 
     /// 1t draws "Visited once" / "Visited twice" / "Visited 7 times". AO3 itself

@@ -157,7 +157,7 @@ struct AddChapterView: View {
         SubjectFormRow(label: number == nil ? "Expected Chapter Total" : "Chapter Number", arrangement: .control) {
             HStack(spacing: 6) {
                 if let number {
-                    Text("\(number) of").foregroundStyle(.secondary)
+                    Text("\(number) of").foregroundStyle(.secondaryInk)
                 }
                 TextField(number == nil ? "Unknown" : "?", text: $form.wipLength)
                     .multilineTextAlignment(.trailing)
@@ -178,7 +178,7 @@ struct AddChapterView: View {
                 let layout = dynamicTypeSize.isAccessibilitySize
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4)) : AnyLayout(HStackLayout(spacing: 6))
                 layout {
-                    Text("After chapter").foregroundStyle(.secondary)
+                    Text("After chapter").foregroundStyle(.secondaryInk)
                     TextField("?", text: Binding(
                         get: { Self.afterChapterText(position: form.position) },
                         set: { form.position = Self.position(afterChapterText: $0) }
@@ -303,7 +303,7 @@ struct AddChapterView: View {
                 Button("Retry Updating the Work Total") { save(submit: .update) }
                     .padding().disabled(isSaving || isPosting)
                 Text("The chapter was saved. Only the work total will be retried.")
-                    .font(.caption).foregroundStyle(.secondary).padding()
+                    .font(.caption).foregroundStyle(.secondaryInk).padding()
             } else {
             Button {
                 // AO3's two buttons on this form: `post_without_preview_button`

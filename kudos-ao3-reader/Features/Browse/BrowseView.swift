@@ -93,11 +93,13 @@ struct AO3WebBrowserView: View {
             text: $model.urlString,
             placeholder: "Search AO3 or enter a URL",
             submitLabel: .go,
-            onSubmit: { model.loadFromAddressBar() }
+            onSubmit: {
+                model.loadFromAddressBar()
+            }
         ) {
             Image(systemName: model.isLoading ? "arrow.trianglehead.clockwise" : "magnifyingglass")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .symbolEffect(.rotate, isActive: model.isLoading)
         } trailing: {
             Button {
@@ -107,7 +109,7 @@ struct AO3WebBrowserView: View {
             }
             .accessibilityLabel("Reload")
             .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
         }
     }
 

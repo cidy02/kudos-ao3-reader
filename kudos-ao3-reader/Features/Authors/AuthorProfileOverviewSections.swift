@@ -37,7 +37,7 @@ struct AuthorProfileOverviewHeader: View {
                         if let userID = about.userID {
                             LabeledContent("User ID", value: userID.formatted())
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                         if !about.bio.isEmpty {
                             AO3RichTextView(document: about.bio, font: .subheadline)
@@ -73,7 +73,7 @@ struct AuthorProfileOverviewHeader: View {
                 if let subtitle = identitySubtitle(header) {
                     Text(subtitle)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -83,15 +83,28 @@ struct AuthorProfileOverviewHeader: View {
     }
 
     private func identitySubtitle(_ header: AO3AuthorHeader) -> String? {
+        Self.identitySubtitle(
+            about: model.about,
+            pseudCount: header.pseuds.count,
+            route: model.route
+        )
+    }
+
+    static func identitySubtitle(
+        about: AO3AuthorAbout?,
+        pseudCount: Int,
+        route: AO3AuthorRoute,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String? {
         var parts: [String] = []
-        if let joined = model.about?.joinedDate, !joined.isEmpty {
+        if let joined = about?.displayJoinedDate(locale: locale), !joined.isEmpty {
             parts.append("Joined \(joined)")
         }
-        if header.pseuds.count > 1 {
-            parts.append("\(header.pseuds.count) pseuds")
+        if pseudCount > 1 {
+            parts.append("\(pseudCount) pseuds")
         }
-        if model.route.pseud != nil {
-            parts.append("Pseud of \(model.route.username)")
+        if route.pseud != nil {
+            parts.append("Pseud of \(route.username)")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
@@ -134,7 +147,7 @@ struct AuthorProfileOverviewHeader: View {
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.title.weight(.medium))
                         .imageScale(.small)
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
             .accessibilityLabel("\(model.route.displayName). Choose a pseud")
@@ -260,7 +273,7 @@ struct AuthorProfileCountStrip: View {
                                 .font(.title3.weight(.bold).monospacedDigit())
                             Text(item.title)
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
@@ -309,7 +322,7 @@ private struct AuthorProfileOverviewFailure: View {
                 .font(.subheadline.weight(.semibold))
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Button("Retry") { model.retrySection(section, auth: auth) }
                 .buttonStyle(.kudosSecondary)
         }
@@ -382,7 +395,7 @@ struct AuthorProfileOverviewSections: View {
                                     if let count = fandom.workCount {
                                         Text(count.compactCount)
                                             .font(.subheadline)
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(.secondaryInk)
                                     }
                                 }
                                 .padding(.horizontal, 12)
@@ -596,7 +609,7 @@ struct AuthorProfileOverviewSections: View {
     private func overviewMessage(_ text: String) -> some View {
         Text(text)
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
             .subjectPanel()
@@ -610,16 +623,12 @@ struct AuthorProfileLatestCard: View {
     /// Board 23 (Author) draws a play disc; board 35 (Account) a chevron disc.
     var discSymbol = "play.fill"
 
-    @Environment(ThemeManager.self) private var theme
+    @Environment(PrivacyGate.self) private var gate
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
     @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = 24
     @ScaledMetric(relativeTo: .subheadline) private var summarySize: CGFloat = 15
-
-    private var palette: SubjectPalette {
-        theme.appTheme.subjectPalette(
-            hue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)
-        )
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -642,7 +651,7 @@ struct AuthorProfileLatestCard: View {
                             .font(.caption.weight(.semibold))
                             .textCase(.uppercase)
                             .tracking(0.6)
-                            .foregroundStyle(.primary.opacity(0.88))
+                            .foregroundStyle(Color.white.opacity(0.88))
                             .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
                     }
                     Text(work.title)
@@ -657,19 +666,20 @@ struct AuthorProfileLatestCard: View {
             if !work.summary.isEmpty {
                 Text(work.summary)
                     .font(.system(size: summarySize))
-                    .foregroundStyle(.primary.opacity(0.92))
+                    .foregroundStyle(Color.white.opacity(0.92))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !statsLine.isEmpty {
                 Text(statsLine)
                     .font(.caption)
-                    .foregroundStyle(.primary.opacity(0.85))
+                    .foregroundStyle(Color.white.opacity(0.85))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .foregroundStyle(.white)
         .overlay(alignment: .topTrailing) {
             // Board 23's play disc. Decorative: the whole card is already the
             // work's link (SensitiveRemoteWorkCard), and the card has no read
@@ -684,16 +694,8 @@ struct AuthorProfileLatestCard: View {
                 .accessibilityHidden(true)
         }
         .background {
-            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                .fill(theme.appTheme.carouselCardSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                        .fill(palette.cardWash)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                        .strokeBorder(palette.cardBorder, lineWidth: 0.5)
-                )
+            WorkCoverCardBackground(recipe: work.generatedCoverRecipe,
+                                    showsArt: !gate.isBlurred(work, enabled: hideMature, mode: mode))
         }
     }
 
@@ -710,7 +712,7 @@ struct AuthorProfileLatestCard: View {
 
     private var statsLine: String {
         var parts: [String] = []
-        if !work.dateUpdated.isEmpty { parts.append("Updated \(work.dateUpdated)") }
+        if !work.dateUpdated.isEmpty { parts.append("Updated \(WorkStat.displayDate(work.dateUpdated))") }
         if let words = work.words { parts.append("\(words.formatted()) words") }
         if let kudos = work.kudos { parts.append("♥ \(kudos.compactCount)") }
         if let hits = work.hits { parts.append("\(hits.compactCount) hits") }
@@ -767,7 +769,7 @@ struct AuthorProfileSeriesCard: View {
                 if let meta = seriesMeta {
                     Text(meta)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -789,7 +791,7 @@ struct AuthorProfileSeriesCard: View {
         if series.isComplete == true {
             parts.append("complete")
         } else if !series.dateUpdated.isEmpty {
-            parts.append(series.dateUpdated)
+            parts.append(WorkStat.displayDate(series.dateUpdated))
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
@@ -840,7 +842,7 @@ struct AuthorProfileBookmarkNoteCard: View {
                     if let meta = bookmarkMeta {
                         Text(meta)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .lineLimit(1)
                     }
                 }

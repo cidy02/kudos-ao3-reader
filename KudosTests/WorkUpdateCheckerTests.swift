@@ -17,10 +17,30 @@ struct WorkUpdateCheckerTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         return ModelContext(try ModelContainer(for: schema, configurations: [configuration]))
+    }
+
+    @Test func stackingResumesOnlyForChaptersPostedAfterEntering() async throws {
+        let context = try makeContext()
+        let work = SavedWork(title: "WIP", author: "Writer")
+        work.ao3WorkID = 42
+        work.chapters = "4/?"
+        work.knownChapterCount = 2
+        work.setReadingStatus(.stacking)
+        work.stackThreshold = 3
+        context.insert(work)
+        for posted in [6, 7] {
+            var groups = AO3WorkTagGroups()
+            groups.fandoms = ["Fandom"]
+            groups.chapters = "\(posted)/?"
+            let response = groups
+            work.lastUpdateCheck = nil
+            await WorkUpdateChecker.checkForUpdates(among: [work], in: context) { _ in response }
+            #expect(work.readingStatusRaw == (posted == 6 ? "stacking" : "reading"))
+        }
     }
 
     /// `fetchThrows`: the in-flight fetch sees the cancellation (the usual case) or

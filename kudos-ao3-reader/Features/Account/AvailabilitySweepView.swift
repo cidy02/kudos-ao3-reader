@@ -79,7 +79,7 @@ struct AvailabilitySweepView: View {
                     } label: {
                         Text("Hidden mature work")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .buttonStyle(.plain)
@@ -93,7 +93,7 @@ struct AvailabilitySweepView: View {
                                 .lineLimit(1)
                             Text(work.author)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                                 .lineLimit(1)
                         }
                     }
@@ -116,20 +116,20 @@ struct AvailabilitySweepView: View {
                     + "separately. Kudos waits about two seconds between works to avoid "
                     + "overloading AO3; you can stop anytime and keep the results so far.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 if unverifiableCount > 0 {
                     Text("\(unverifiableCount.formatted()) imported "
                         + "\(unverifiableCount == 1 ? "work came" : "works came") from other sites, "
                         + "so Kudos can't check them on AO3.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 if pendingCount > WorkAvailabilitySweep.defaultLimit {
                     Text("This check covers up to \(WorkAvailabilitySweep.defaultLimit) works. "
                         + "Start it again later for the rest; works checked during the past week "
                         + "are skipped.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
             .cardRow()
@@ -144,7 +144,7 @@ struct AvailabilitySweepView: View {
                 ProgressView(value: Double(completed), total: Double(max(total, 1))).accentFill()
                 Text("Checked \(completed.formatted()) of \(total.formatted())")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             .cardRow()
         }
@@ -161,14 +161,14 @@ struct AvailabilitySweepView: View {
                     Text("Kudos marked them as no longer on AO3. Any downloaded copies are now "
                         + "treated as the last copies you have and will be kept permanently.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 } else if summary.checked > 0 {
                     Label("Everything checked is still on AO3", systemImage: "checkmark.circle")
                         .font(.subheadline)
                 }
                 Text(detailLine(summary))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             .cardRow()
         } header: {
@@ -201,7 +201,7 @@ struct AvailabilitySweepView: View {
             if pendingCount == 0 {
                 Text("You checked every AO3 work in your Library within the past week.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .cardRow()
             }
         }

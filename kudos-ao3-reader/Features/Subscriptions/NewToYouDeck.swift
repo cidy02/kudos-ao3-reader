@@ -28,7 +28,7 @@ struct NewToYouCard: Equatable, Identifiable, Sendable {
         case let .series(name):
             guard !name.isEmpty else { return nil }
             return "New in \(name)"
-        case .work, .unknown:
+        case .work, .tag, .unknown:
             return nil
         }
     }
@@ -129,7 +129,13 @@ enum NewToYouLibrary {
         let file = try await download(summary.id)
         let work = try await importEPUB(file, source: summary.workURL, into: context)
         let queue = ReadingQueueService.ensureSavedForLaterQueue(in: context)
-        _ = ReadingQueueService.add(work, to: queue, in: context)
+        _ = ReadingQueueService.add(
+            work,
+            to: queue,
+            state: .inLine,
+            origin: ReadingQueueMembershipOrigin(kind: .manual),
+            in: context
+        )
         return work
     }
 

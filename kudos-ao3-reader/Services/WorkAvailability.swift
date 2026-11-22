@@ -39,7 +39,7 @@ enum WorkAvailability {
         // The caller fires this as a detached task, so the work can be deleted (or its
         // container torn down in tests) before it runs. Same liveness guard the tag
         // refresh uses.
-        guard work.modelContext != nil else { return }
+        guard work.modelContext != nil, !work.isPendingDeletion else { return }
         guard let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) else {
             // No AO3 identity: nothing to ask, and nothing recorded. A community copy
             // from another site stays "unknown", which is the honest answer.
@@ -54,10 +54,10 @@ enum WorkAvailability {
 
         do {
             _ = try await (fetchMetadata ?? liveFetch)(id)
-            guard work.modelContext != nil else { return }
+            guard work.modelContext != nil, !work.isPendingDeletion else { return }
             record(.present, on: work, in: context)
         } catch AO3Error.notFound {
-            guard work.modelContext != nil else { return }
+            guard work.modelContext != nil, !work.isPendingDeletion else { return }
             Log.library.info("AO3 no longer has work \(id, privacy: .private(mask: .hash)); marking the local copy as the last one")
             record(.deleted, on: work, in: context)
         } catch {

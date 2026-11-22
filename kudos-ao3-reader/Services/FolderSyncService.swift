@@ -165,6 +165,10 @@ enum FolderSyncService {
         )
     }
 
+    /// Test seam invoked after `performSyncUp` clears the dirty flag and captures
+    /// the local snapshot, before the detached write commits it.
+    static var beforeSyncUpWriteForTesting: (@MainActor () -> Void)?
+
     /// Marks local state as having changes not yet written to the sync folder.
     /// Durable (UserDefaults-backed) so a change survives a force-quit before the
     /// debounced sync-up fires — the next launch/foreground/background trigger will
@@ -216,7 +220,6 @@ enum FolderSyncService {
             let upResult = try await performSyncUp(in: context, defaults: defaults)
             result.didWriteRemoteFile = upResult.didWriteRemoteFile
             recordSuccess(defaults: defaults)
-            defaults.set(false, forKey: dirtyFlagKey)
             return result
         }
     }
@@ -410,66 +413,77 @@ enum FolderSyncService {
     ) async throws -> FolderSyncResult {
         var result = FolderSyncResult()
         let folderURL = try resolveFolder(defaults: defaults)
-        let contents = try makeLocalContents(in: context, defaults: defaults)
-        try await withFolderAccess(folderURL) {
-            let syncDirectoryURL = folderURL.appendingPathComponent(
-                syncDirectoryName,
-                isDirectory: true
-            )
-            let manifestURL = syncDirectoryURL.appendingPathComponent(manifestFileName)
-            // Orphan pruning is only safe when this device's view of the folder
-            // is current.
-            //
-            // The automatic path (`FolderSyncObserver.scheduleFolderSyncUp`)
-            // calls `syncUp` ALONE, seven seconds after any local change — no
-            // sync-down first. So a device that never learned about another
-            // device's new work published a manifest without it, and the prune
-            // below deleted that work's remote EPUB: the local copy survived,
-            // the backup copy did not. Pruning by manifest membership is right,
-            // but only when the manifest being published is informed.
-            //
-            // "Current" means the remote manifest has not moved since the last
-            // one this device restored or wrote. A missing manifest is the
-            // first write and has nothing to lose. When the view is stale the
-            // prune is skipped and stale files simply remain — a later sync
-            // from an informed device clears them, and leftover bytes are not
-            // a data loss.
-            let storedStamp = defaults.object(forKey: lastRestoredRemoteStampKey) as? Date
-            let remoteStampBeforeWrite = try? manifestURL.resourceValues(
-                forKeys: [.contentModificationDateKey]
-            ).contentModificationDate
-            // Only a folder with nothing in it is a first write. One that holds
-            // files and no manifest is not: older Android builds rename the
-            // manifest away for a moment while they replace it, a manifest that
-            // iCloud has not downloaded is not at its path, and an interrupted
-            // first sync leaves its files without one. Read as a first write, as
-            // it was, this device pruned every file its own library did not
-            // list. It writes its manifest and prunes nothing; refusing to write
-            // would leave such a folder unable to sync for good. A manifest
-            // whose date cannot be read is not known to be the one last read.
-            let viewIsCurrent = FileManager.default.fileExists(atPath: manifestURL.path)
-                ? remoteStampBeforeWrite != nil && remoteStampBeforeWrite == storedStamp
-                : syncDirectoryHoldsNothing(syncDirectoryURL)
-
-            try await Task.detached {
-                try coordinatedWriteSyncDirectory(
-                    contents,
-                    to: syncDirectoryURL,
-                    pruneOrphans: viewIsCurrent
+        // Clear BEFORE capturing the snapshot so any edit (e.g. a cover shuffle)
+        // arriving while the upload is in flight re-arms the flag rather than being wiped
+        // when `syncNow` finishes. Restore it if the upload throws.
+        let hadPendingChanges = defaults.bool(forKey: dirtyFlagKey)
+        defaults.set(false, forKey: dirtyFlagKey)
+        do {
+            let contents = try makeLocalContents(in: context, defaults: defaults)
+            try await withFolderAccess(folderURL) {
+                let syncDirectoryURL = folderURL.appendingPathComponent(
+                    syncDirectoryName,
+                    isDirectory: true
                 )
-            }.value
-            result.didWriteRemoteFile = true
-            // Stamp our own manifest write so the next sync-down doesn't fully
-            // re-restore it — unless a previous sync-down still has asset
-            // fetches outstanding, in which case the stamp stays withheld so
-            // those fetches retry.
-            if !defaults.bool(forKey: pendingRemoteAssetsKey),
-               let stamp = try? manifestURL.resourceValues(forKeys: [.contentModificationDateKey])
-                   .contentModificationDate {
-                defaults.set(stamp, forKey: lastRestoredRemoteStampKey)
+                let manifestURL = syncDirectoryURL.appendingPathComponent(manifestFileName)
+                // Orphan pruning is only safe when this device's view of the folder
+                // is current.
+                //
+                // The automatic path (`FolderSyncObserver.scheduleFolderSyncUp`)
+                // calls `syncUp` ALONE, seven seconds after any local change — no
+                // sync-down first. So a device that never learned about another
+                // device's new work published a manifest without it, and the prune
+                // below deleted that work's remote EPUB: the local copy survived,
+                // the backup copy did not. Pruning by manifest membership is right,
+                // but only when the manifest being published is informed.
+                //
+                // "Current" means the remote manifest has not moved since the last
+                // one this device restored or wrote. A missing manifest is the
+                // first write and has nothing to lose. When the view is stale the
+                // prune is skipped and stale files simply remain — a later sync
+                // from an informed device clears them, and leftover bytes are not
+                // a data loss.
+                let storedStamp = defaults.object(forKey: lastRestoredRemoteStampKey) as? Date
+                let remoteStampBeforeWrite = try? manifestURL.resourceValues(
+                    forKeys: [.contentModificationDateKey]
+                ).contentModificationDate
+                // Only a folder with nothing in it is a first write. One that holds
+                // files and no manifest is not: older Android builds rename the
+                // manifest away for a moment while they replace it, a manifest that
+                // iCloud has not downloaded is not at its path, and an interrupted
+                // first sync leaves its files without one. Read as a first write, as
+                // it was, this device pruned every file its own library did not
+                // list. It writes its manifest and prunes nothing; refusing to write
+                // would leave such a folder unable to sync for good. A manifest
+                // whose date cannot be read is not known to be the one last read.
+                let viewIsCurrent = FileManager.default.fileExists(atPath: manifestURL.path)
+                    ? remoteStampBeforeWrite != nil && remoteStampBeforeWrite == storedStamp
+                    : syncDirectoryHoldsNothing(syncDirectoryURL)
+
+                beforeSyncUpWriteForTesting?()
+                try await Task.detached {
+                    try coordinatedWriteSyncDirectory(
+                        contents,
+                        to: syncDirectoryURL,
+                        pruneOrphans: viewIsCurrent
+                    )
+                }.value
+                result.didWriteRemoteFile = true
+                // Stamp our own manifest write so the next sync-down doesn't fully
+                // re-restore it — unless a previous sync-down still has asset
+                // fetches outstanding, in which case the stamp stays withheld so
+                // those fetches retry.
+                if !defaults.bool(forKey: pendingRemoteAssetsKey),
+                   let stamp = try? manifestURL.resourceValues(forKeys: [.contentModificationDateKey])
+                       .contentModificationDate {
+                    defaults.set(stamp, forKey: lastRestoredRemoteStampKey)
+                }
             }
+            return result
+        } catch {
+            if hadPendingChanges { defaults.set(true, forKey: dirtyFlagKey) }
+            throw error
         }
-        return result
     }
 
     private static func makeLocalContents(
@@ -487,6 +501,8 @@ enum FolderSyncService {
             readingSessions: (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? [],
             readingFavorites: (try? context.fetch(FetchDescriptor<ReadingFavorite>())) ?? [],
             fandomReadWatermarks: (try? context.fetch(FetchDescriptor<FandomReadWatermark>())) ?? [],
+            followedTags: (try? context.fetch(FetchDescriptor<FollowedTag>())) ?? [],
+            tagAliases: (try? context.fetch(FetchDescriptor<TagAlias>())) ?? [],
             tombstones: context.fetch(FetchDescriptor<SyncTombstone>()),
             defaults: defaults
         )

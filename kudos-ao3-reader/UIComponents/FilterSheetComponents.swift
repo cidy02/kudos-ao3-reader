@@ -124,7 +124,10 @@ struct FilterSymbolChipCard: View {
                 // Boards 03/12 wrap long warnings ("Creator Chose Not To Use") instead of truncating.
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                    .lineLimit(3)
+                    // Dense (three across) labels are one short word: shrink rather than
+                    // break inside it ("Oth-er", T-562c N6).
+                    .lineLimit(dense ? 1 : 3)
+                    .minimumScaleFactor(dense ? 0.7 : 1)
                     .fixedSize(horizontal: false, vertical: true)
                     .foregroundStyle(foreground)
                     .strikethrough(state == .excluded, color: strokeColor)
@@ -323,7 +326,7 @@ struct ActiveFiltersBlock: View {
 
                     Text("\(items.count) \(items.count == 1 ? "filter" : "filters")")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
 
                     Spacer()
 
@@ -449,7 +452,7 @@ struct FilterLengthSection: View {
                 HStack(spacing: 8) {
                     Text("Words")
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                     TextField("", text: FilterRangeSlider.digitsOnly($wordsFrom), prompt: Text("from"))
                         .multilineTextAlignment(.trailing)
                         .accessibilityLabel("Word count from")
@@ -465,7 +468,7 @@ struct FilterLengthSection: View {
                 HStack(spacing: 8) {
                     Text("to")
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                     TextField("", text: FilterRangeSlider.digitsOnly($wordsTo), prompt: Text("to"))
                         .multilineTextAlignment(.trailing)
                         .accessibilityLabel("Word count to")
@@ -559,7 +562,7 @@ struct FilterResultsBar: View {
                         .background(isDark ? Color(white: 0.22) : Color.white)
                         // The readable accent ink (the fill red is ~1.2:1 on Dark's grey);
                         // disabled, plain secondary text the system does not dim further.
-                        .foregroundStyle(isSaveDisabled ? AnyShapeStyle(.secondary) : AnyShapeStyle(theme.accentInk))
+                        .foregroundStyle(isSaveDisabled ? AnyShapeStyle(.secondaryInk) : AnyShapeStyle(theme.accentInk))
                         .clipShape(Capsule())
                         .overlay(
                             Capsule()

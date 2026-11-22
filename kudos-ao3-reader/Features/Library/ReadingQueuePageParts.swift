@@ -7,11 +7,32 @@ import SwiftUI
 enum ReadingQueueFacts {
     /// The design's queue rows estimate silent reading at 200 words per minute
     /// and round to five minutes so the line stays useful rather than precise.
+    static let wordsPerMinute: Double = 200
+
     static func rowDetail(workCount: Int, totalWordCount: Int, offlineCount: Int) -> String {
+        rowDetail(
+            workCount: workCount,
+            timeEstimate: readingTimeEstimate(wordCount: totalWordCount),
+            offlineCount: offlineCount
+        )
+    }
+
+    /// Computes the queue header detail line using each work's remaining reading
+    /// time so the queue header and What Fits read the same time-left rule.
+    static func headerDetail(for works: [SavedWork], offlineCount: Int) -> String {
+        let timeEstimate = remainingMinutes(for: works).flatMap { readingTimeEstimate(minutes: $0) }
+        return rowDetail(
+            workCount: works.count,
+            timeEstimate: timeEstimate,
+            offlineCount: offlineCount
+        )
+    }
+
+    private static func rowDetail(workCount: Int, timeEstimate: String?, offlineCount: Int) -> String {
         guard workCount > 0 else { return "No works yet" }
         var parts = ["\(workCount) work\(workCount == 1 ? "" : "s")"]
-        if let estimate = readingTimeEstimate(wordCount: totalWordCount) {
-            parts.append(estimate)
+        if let timeEstimate {
+            parts.append(timeEstimate)
         }
         let offline = min(max(offlineCount, 0), workCount)
         if offline == workCount {
@@ -41,9 +62,46 @@ enum ReadingQueueFacts {
         )
     }
 
-    static func readingTimeEstimate(wordCount: Int) -> String? {
+    /// Unrounded reading time in minutes at `wordsPerMinute` (200 wpm), or nil
+    /// when `wordCount <= 0` so works without word counts are never guessed.
+    static func estimatedMinutes(wordCount: Int) -> Double? {
         guard wordCount > 0 else { return nil }
-        let rawMinutes = Double(wordCount) / 200
+        return Double(wordCount) / wordsPerMinute
+    }
+
+    /// Unread share of a work (`0` when finished, `1` before reading starts,
+    /// `1 - clampedProgress` once reading has started).
+    static func unreadShare(for work: SavedWork) -> Double {
+        if work.isFinished { return 0 }
+        guard work.hasStartedReading else { return 1 }
+        let progress = min(max(work.readingProgress ?? 0, 0), 1)
+        return max(0, 1 - progress)
+    }
+
+    /// Remaining reading minutes for a single work using `estimatedMinutes` and
+    /// `unreadShare`, or nil when `wordCount <= 0`.
+    static func minutesLeft(for work: SavedWork) -> Double? {
+        guard let total = estimatedMinutes(wordCount: work.wordCount) else { return nil }
+        return total * unreadShare(for: work)
+    }
+
+    /// Total remaining minutes across a queue's works; withholds the estimate
+    /// (`nil`) if any unfinished work lacks a word count or nothing remains.
+    static func remainingMinutes(for works: [SavedWork]) -> Double? {
+        guard !works.isEmpty,
+              works.allSatisfy({ $0.isFinished || $0.wordCount > 0 })
+        else { return nil }
+        let total = works.reduce(0.0) { $0 + (minutesLeft(for: $1) ?? 0) }
+        return total > 0 ? total : nil
+    }
+
+    static func readingTimeEstimate(wordCount: Int) -> String? {
+        guard let rawMinutes = estimatedMinutes(wordCount: wordCount) else { return nil }
+        return readingTimeEstimate(minutes: rawMinutes)
+    }
+
+    static func readingTimeEstimate(minutes rawMinutes: Double) -> String? {
+        guard rawMinutes > 0 else { return nil }
         let minutes = max(5, Int((rawMinutes / 5).rounded()) * 5)
         let hours = minutes / 60
         let remainder = minutes % 60
@@ -247,24 +305,67 @@ struct QueuePageHeader<FilterRail: View>: View {
     let preservedIDs: Set<UUID>
     let palette: SubjectPalette
     let onAddTag: () -> Void
+    let onFindMore: (SavedSearch) -> Void
     @ViewBuilder var filterRail: () -> FilterRail
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
 
     var body: some View {
-        let totalWords = works.reduce(0) { $0 + max(0, $1.wordCount) }
         let progress = ReadingQueueFacts.progress(of: works.map(\.readingState))
         let fills = works.map {
             ReadingQueueFacts.segmentFill(state: $0.readingState, progress: $0.readingProgress)
         }
-        let detailLine = ReadingQueueFacts.rowDetail(
-            workCount: works.count,
-            totalWordCount: totalWords,
+        let detailLine = ReadingQueueFacts.headerDetail(
+            for: works,
             offlineCount: preservedIDs.count
         )
 
         VStack(alignment: .leading, spacing: 14) {
             headerTop(detailLine: detailLine)
+
+            if queue.kind != .smart {
+                ForEach(queue.searchLinks.filter { $0.search != nil }.sorted {
+                    ($0.search?.name ?? "") < ($1.search?.name ?? "")
+                }) { link in
+                    if let search = link.search {
+                        let count = QueueSourceChecks.displayedCount(
+                            link.newResultCount, filters: search.filters
+                        )
+                        let layout = dynamicTypeSize.isAccessibilitySize
+                            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                            : AnyLayout(HStackLayout(alignment: .center, spacing: 10))
+                        Button { onFindMore(search) } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundStyle(.secondary)
+                                layout {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Find More").font(.subheadline.weight(.semibold))
+                                        Text(search.name).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 4) }
+                                    if let count {
+                                        Text(QueueSourceChecks.badge(count))
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.tint)
+                                    }
+                                }
+                                // Stacked at AX sizes there is no Spacer: keep the card full width (third review).
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+                            }
+                            .padding(12)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(QueueSourceChecks.findMoreAccessibilityLabel(
+                            name: search.name, count: link.newResultCount, filters: search.filters
+                        ))
+                    }
+                }
+            }
 
             if !works.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
@@ -297,13 +398,13 @@ struct QueuePageHeader<FilterRail: View>: View {
             if let notes = queue.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
                 Text(notes)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Text(detailLine)
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
 
@@ -325,9 +426,11 @@ struct QueuePageHeader<FilterRail: View>: View {
         StackedWorkCover(
             kind: .queue,
             name: queue.displayName,
-            hue: queue.displayHue,
+            identity: queue.id,
+            hue: queue.hue,
             pickedHex: queue.colorHex,
-            backs: Array(works.prefix(CoverStackLayout.maxBacks)),
+            // StackedWorkCover's rule: a concealed work's fandom colour stays out.
+            backs: Array(works.filter { !gate.isConcealed($0, enabled: hideMature) }.prefix(CoverStackLayout.maxBacks)),
             size: CGSize(width: 96, height: 96)
         )
         .accessibilityHidden(true)
@@ -342,7 +445,7 @@ struct QueuePageHeader<FilterRail: View>: View {
             HStack(alignment: .center, spacing: 6) {
                 Text(legend)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(1)
 
                 Spacer(minLength: 8)
@@ -353,7 +456,7 @@ struct QueuePageHeader<FilterRail: View>: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(legend)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
 
                 tagChips(sortedTags)
             }
@@ -400,7 +503,7 @@ struct QueueHeaderDetails<FilterRail: View>: View {
                     QueueProgressStrip(progress: progress, palette: palette)
                     Text(ReadingQueueFacts.legend(progress, offlineCount: preservedIDs.count))
                         .font(.system(size: legendSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.horizontal, SubjectMetrics.gutter)
@@ -448,14 +551,14 @@ struct QueueSelectionStatusRow: View {
             Text(queueName.uppercased())
                 .font(.system(size: queueNameSize, weight: .bold))
                 .tracking(11 * 0.13)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
             Rectangle()
                 .fill(Color.primary.opacity(0.14))
                 .frame(height: 0.5)
             Text("\(selectedCount) / \(total)")
                 .font(.system(size: countSize, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         }
         .combinedAccessibilityRow("\(queueName), \(selectedCount) of \(total) selected")
     }

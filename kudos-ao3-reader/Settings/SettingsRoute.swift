@@ -28,7 +28,7 @@ enum SettingsRoute: Hashable, CaseIterable {
         case .font: "Font"
         case .reader: "Reader"
         case .listening: "Listening"
-        case .downloads: "Downloads"
+        case .downloads: "Storage"
         case .preservation: "Preservation"
         case .readingQueues: "Reading Queues"
         case .library: "Library"
@@ -108,14 +108,14 @@ enum SettingsRoute: Hashable, CaseIterable {
     private var searchKeywords: [String] {
         switch self {
         case .appearance: ["theme", "dark", "light", "sepia", "oled", "accent", "color", "colour", "mode",
-                           "symbols", "rating", "warnings", "list"]
+                           "symbols", "rating", "warnings", "list", "cover", "covers", "art"]
         case .font: ["typeface", "serif", "sans", "size", "custom font", "text"]
         case .reader: ["paged", "scrolled", "spread", "awake", "page jump", "reading"]
         case .listening: ["tts", "speech", "voice", "kokoro", "audio", "read aloud", "speed", "pitch", "pronunciation"]
-        case .downloads: ["offline", "storage", "keep", "subscribe", "space", "disk"]
+        case .downloads: ["downloads", "offline", "storage", "keep", "subscribe", "space", "disk"]
         case .preservation: ["availability", "archive", "check", "missing", "works"]
         case .readingQueues: ["queue", "order", "auto-preserve", "series"]
-        case .library: ["delete", "confirm", "zero counts", "stats", "shelves"]
+        case .library: ["delete", "confirm", "zero counts", "stats", "shelves", "series", "weekly", "check"]
         case .backup: ["export", "import", "archive", "kudosbackup", "restore"]
         case .syncFolder: ["sync", "icloud", "folder", "devices", "tombstone", "pair"]
         case .importFiles: ["epub", "files", "document", "html", "txt", "import"]
@@ -172,6 +172,9 @@ struct SettingsHubInputs {
     var matureMode: MaturePrivacyMode
     var folderSync: FolderSyncSnapshot
     var auth: AO3AuthStatus
+    var speechEngineID: String = ""
+    var speechVoiceID: String = ""
+    var speechVoiceName: String = ""
 }
 
 /// The value each hub row shows on its right ("Appearance · Dark"). One rule per
@@ -182,14 +185,28 @@ enum SettingsHubValue {
         case .appearance: theme(app: inputs.appTheme, reader: inputs.readerTheme, matched: inputs.themesMatched)
         case .font: inputs.fontName
         case .reader: inputs.readingMode.title
+        case .listening:
+            listening(
+                engineID: inputs.speechEngineID,
+                voiceID: inputs.speechVoiceID,
+                voiceName: inputs.speechVoiceName
+            )
         case .downloads: downloads(onSubscribe: inputs.downloadOnSubscribe, keepsWorksYouRead: inputs.keepsWorksYouRead)
         case .readingQueues: readingQueues(autoPreserve: inputs.autoPreserveSeries, seriesLimit: inputs.seriesLimit)
         case .syncFolder: syncFolder(inputs.folderSync)
         case .account: account(inputs.auth)
         case .privacySettings: privacy(hidesMature: inputs.hidesMature, mode: inputs.matureMode)
         case .about: Changelog.currentVersion
-        case .listening, .preservation, .library, .backup, .importFiles, .privacy: ""
+        case .preservation, .library, .backup, .importFiles, .privacy: ""
         }
+    }
+
+    static func listening(engineID: String, voiceID: String, voiceName: String) -> String {
+        ReaderSpeechPreferences.listeningSummary(
+            engineID: engineID,
+            voiceID: voiceID,
+            voiceName: voiceName
+        )
     }
 
     static func theme(app: ReaderTheme, reader: ReaderTheme, matched: Bool) -> String {

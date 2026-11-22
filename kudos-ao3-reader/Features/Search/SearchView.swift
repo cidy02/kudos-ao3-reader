@@ -10,6 +10,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Environment(PrivacyGate.self) private var gate
     @Environment(\.modelContext) private var context
+    @Environment(\.duoLayout) private var duoLayout
+    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var themeManager
@@ -17,6 +19,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     #endif
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     // Local-first search sources (Global Search, Phase 2): matched on-device, live.
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
@@ -30,6 +33,12 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @Query(sort: \SavedSearch.dateAdded, order: .reverse) private var savedSearches: [SavedSearch]
 
     @State private var filters = AO3SearchFilters()
+    /// Unapplied draft edits while the Filters pane is persistently docked on the Duo;
+    /// committed to `filters` only when the reader taps Show Works.
+    @State private var dockedDraftFilters = AO3SearchFilters()
+    /// Bumped when a result filter chip is tapped while docked, returning a docked
+    /// Sort By / Language subpage to the root Filters pane without claiming `router.panel`.
+    @State private var dockedFiltersRevealToken = 0
     /// T-473: how the loaded results are ranked (Filters › Sort By) and Momentum's
     /// baseline. Kept for the session beside `filters`; none of it is sent to AO3.
     @State private var ranking = SearchRankingSession()
@@ -68,6 +77,18 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// token is stale (superseded by a newer search, or by returning to Browse
     /// before it finished) discards its result instead of re-showing results.
     @State private var loadToken = 0
+    struct ActiveSavedSearch: Equatable {
+        let id: UUID
+        let name: String
+        let filters: AO3SearchFilters
+    }
+
+    /// A saved search whose page 1 has not loaded yet: Try Again and pull to refresh still
+    /// record its open when they succeed, so its "new" badge clears (T-526 third review).
+    @State private var pendingSavedSearchOpen: (id: UUID, filters: AO3SearchFilters)?
+    /// The saved search currently displayed in results (when launched from Saved Searches
+    /// or a Queue's "Find more" action) so queue adds stamp `originSearchID` + `originLabel`.
+    @State private var activeSavedSearch: ActiveSavedSearch?
     /// The in-flight search, so a superseded one is actually cancelled rather
     /// than left to finish and have its result thrown away. Without this the
     /// pacer serializes the doomed request's start slot ahead of the one the
@@ -150,15 +171,75 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         case idle, loading, loaded, failed(String)
     }
 
+    private var isRightToLeft: Bool { layoutDirection == .rightToLeft }
+
+    private var duoInspectorSplit: DuoInspectorSplitGeometry? {
+        duoLayout.inspectorSplit(rightToLeft: isRightToLeft)
+    }
+
+    /// On the open/Book iPhone Duo, Search splits into results on the leading pane
+    /// and a persistently docked Filters pane on the trailing pane (`Duo-Open-Search`).
+    private var isFiltersDocked: Bool {
+        duoInspectorSplit != nil && path.isEmpty && !bulkSelection.isSelecting && !isSelectingLocal
+    }
+
+    /// Trailing inset keeping Search's leading pane clear of the fold both while Filters
+    /// is docked and while bulk selection hides the inspector.
+    private var searchLeadingTrailingInset: CGFloat {
+        guard path.isEmpty else { return 0 }
+        return duoLayout.searchLeadingFoldClearance(
+            rightToLeft: isRightToLeft,
+            inspectorVisible: isFiltersDocked
+        )
+    }
+
+    private var dockedDraftBinding: Binding<AO3SearchFilters> {
+        Binding(
+            get: { SearchDockedFilterDraft.syncedDraft(dockedDraftFilters, query: filters.query) },
+            set: { dockedDraftFilters = $0 }
+        )
+    }
+
+    private var panelFiltersForSave: AO3SearchFilters {
+        isFiltersDocked
+            ? SearchDockedFilterDraft.syncedDraft(dockedDraftFilters, query: filters.query)
+            : filters
+    }
+
+    private var searchBackdrop: Color {
+        phase == .idle && localQuery.isEmpty && savedSearches.isEmpty
+            ? themeManager.appTheme.cardBackdrop
+            : themeManager.appTheme.contentBackdrop
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
             content
+                // On the open/Book Duo, host the search field at the top of the leading
+                // pane instead of the full-width navigation bar so it never spans the fold.
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if isFiltersDocked {
+                        dockedSearchBar
+                    }
+                }
+                // Shares the inner bottom inset with the queue toast inside NavigationStack so
+                // neither draws over the other (a stack-outer inset never reduced the inner safe area).
+                // Applied inside the leading fold inset & before `.filterPanelPresentation` so
+                // the pagination pill stays centred in the leading pane and never crosses the fold.
+                .remoteWorkSelectionChrome(bulkSelection, showsBottomAccessory: showPagination) {
+                    paginationBar.padding(.horizontal, SubjectMetrics.gutter)
+                }
+                .padding(.trailing, searchLeadingTrailingInset)
+                .background(searchBackdrop.ignoresSafeArea())
                 .scrollAwayTopChrome()
                 .task { await FandomCatalog.shared.warmCache() }
                 #if DEBUG
                 .task {
                     try? await Task.sleep(for: .seconds(2))
-                    if DebugLaunchRoute.opensSearchFilters { router.panel = .searchFilters }
+                    if DebugLaunchRoute.opensSearchFilters,
+                       SearchDockedFilterDraft.shouldOpenRouterPanel(isFiltersDocked: isFiltersDocked) {
+                        router.panel = .searchFilters
+                    }
                     if let query = DebugLaunchRoute.searchQuery, filters.query.isEmpty {
                         // `-KudosDebugRank <LoadedWorksRank>`: shots of ranked results (FID40).
                         if let raw = UserDefaults.standard.string(forKey: "KudosDebugRank"),
@@ -185,10 +266,15 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     // behind a still-visible, unrelated screen.
                     path = NavigationPath()
                 }
-                .navigationTitle("Search")
+                .onChange(of: router.pendingQueueSearch?.id, initial: true) { _, _ in
+                    consumeQueueSearch()
+                }
+                .onChange(of: savedSearches.map(\.id)) { _, _ in consumeQueueSearch() }
+                .navigationTitle(isFiltersDocked ? "" : "Search")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
+                .duoVerticalCompressionPrefersTabBar(duoLayout.hasVerticalBar)
                 .navigationDestination(for: AO3WorkSummary.self) { work in
                     WorkDetailView(remote: work)
                 }
@@ -250,7 +336,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                             .accessibilityLabel("Back")
                         }
                         #endif
-                        ToolbarItem(placement: .principal) { searchField }
+                        if !isFiltersDocked {
+                            ToolbarItem(placement: .principal) { searchField }
+                        }
                         // Save and Filter sit directly visible after the search field —
                         // everything else (Select, Expand/Collapse) lives behind "...".
                         ActionToolbar(items: [
@@ -263,17 +351,23 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                     action: presentResultsSaveDialog
                                 ))
                                 : nil,
-                            // The toolbar owns the one filter control and its active count.
-                            AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
-                                                  showingFilters: router.isShowing(.searchFilters),
-                                                  onClearFilters: clearAllFilters,
-                                                  badgeCount: SearchFilterBadge.count(for: filters))),
+                            // The toolbar owns the one filter control and its active count;
+                            // hidden while the Filters pane is persistently docked on the Duo.
+                            isFiltersDocked
+                                ? nil
+                                : AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
+                                                       showingFilters: router.isShowing(.searchFilters),
+                                                       onClearFilters: clearAllFilters,
+                                                       badgeCount: SearchFilterBadge.count(for: filters))),
                             (!results.isEmpty && (phase == .loaded || phase == .loading))
                                 ? AnyView(WorkListMoreMenu {
                                     if hideMature {
                                         MatureRevealToggle()
                                     }
-                                    Button { bulkSelection.isSelecting = true } label: {
+                                    Button {
+                                        if router.panel == .searchFilters { router.panel = .none }
+                                        bulkSelection.isSelecting = true
+                                    } label: {
                                         Label("Select", systemImage: "checklist")
                                     }
                                     ShowSummariesMenuItem(isOn: $showSummaries)
@@ -290,7 +384,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                         if hideMature {
                                             MatureRevealToggle()
                                         }
-                                        Button { isSelectingLocal = true } label: {
+                                        Button {
+                                            if router.panel == .searchFilters { router.panel = .none }
+                                            isSelectingLocal = true
+                                        } label: {
                                             Label("Select", systemImage: "checklist")
                                         }
                                     })
@@ -305,6 +402,16 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 // Only at the root — pushed detail pages use the normal swipe-to-pop.
                 .edgeSwipeToGoBack(isActive: path.isEmpty) { goBack() }
             #endif
+                .onChange(of: isFiltersDocked, initial: true) { _, docked in
+                    dockedDraftFilters = filters
+                    if docked, router.panel == .searchFilters {
+                        router.panel = .none
+                        router.panelDidDismiss()
+                    }
+                }
+                .onChange(of: filters.query) { _, newQuery in
+                    dockedDraftFilters.query = newQuery
+                }
                 .onChange(of: router.panel == .searchFilters) { _, showing in
                     // Closed without Apply while results are on screen: the panel's edits are
                     // dropped (the typed search text is not the panel's, and stays). The next
@@ -313,7 +420,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     // (A27-10), and during the first search there was nothing to restore
                     // (A30-8). Apply clears `loadedFilters` and sends its own request first,
                     // so it is not undone here.
-                    guard !showing, let restored = SearchPanelClose.restored(
+                    guard !showing, !isFiltersDocked, let restored = SearchPanelClose.restored(
                         live: filters, loaded: loadedFilters, requested: requestedFilters,
                         isIdle: phase == .idle
                     ) else { return }
@@ -321,12 +428,17 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 }
                 .filterPanelPresentation(
                     isPresented: router.isShowing(.searchFilters),
-                    detents: [.medium, .large]
+                    isDocked: isFiltersDocked,
+                    detents: [.medium, .large],
+                    onDismiss: { router.panelDidDismiss() }
                 ) {
                     // Width applies on iPad/macOS, where this is a real inspector;
                     // iPhone gets a sheet, and its grabber, from the modifier.
                     filterPanel
-                        .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+                        .inspectorColumnWidth(
+                            min: 280, ideal: duoInspectorSplit?.inspectorWidth ?? 320,
+                            max: max(380, duoInspectorSplit?.inspectorWidth ?? 0)
+                        )
                         // Artboard 1ax. The alert this replaced could take a name and
                         // nothing else, so it asked for a commitment to "the current
                         // search and its filters" while showing neither.
@@ -338,9 +450,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         #endif
                         .sheet(isPresented: $showingSaveDialog, onDismiss: { saveName = "" }) {
                             SaveSearchSheet(
-                                filters: filters,
+                                filters: panelFiltersForSave,
                                 name: $saveName,
-                                onSave: commitSavedSearch
+                                onSave: { commitSavedSearch(panelFiltersForSave) }
                             )
                             // 1ax: a part-height sheet with its grabber.
                             .presentationDetents([.medium, .large])
@@ -348,13 +460,20 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         }
                 }
                 .sheet(isPresented: $showingResultsSaveDialog, onDismiss: { saveName = "" }) {
-                    SaveSearchSheet(filters: filters, name: $saveName, onSave: commitSavedSearch)
+                    SaveSearchSheet(
+                        filters: filters,
+                        name: $saveName,
+                        onSave: { commitSavedSearch(filters) }
+                    )
                         .presentationDetents([.medium, .large])
                         .presentationDragIndicator(.visible)
                 }
-                .remoteWorkSelectionChrome(bulkSelection)
+                .environment(\.queueMembershipOrigin, bulkSelection.origin)
                 .onChange(of: router.selection) { _, selection in
-                    if selection != .search { rankTop100.cancel() }
+                    if selection != .search {
+                        rankTop100.cancel()
+                        if router.panel == .searchFilters { router.panel = .none }
+                    }
                 }
                 .onChange(of: scenePhase) { _, phase in
                     if phase != .active { rankTop100.cancel() }
@@ -367,10 +486,6 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 .onChange(of: savedWorks.map(\.id), initial: true) { _, _ in
                     libraryIndex = WorkIdentityIndex(savedWorks)
                 }
-        }
-        // A floating pill above the tab bar on every platform: a child's tabViewBottomAccessory drew nothing on Lane E.
-        .safeAreaInset(edge: .bottom) {
-            if showPagination { paginationBar.padding(.horizontal, SubjectMetrics.gutter) }
         }
     }
 
@@ -412,10 +527,17 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                             // query would get wrong.
                             subjectField: filters.searchSubject.field
                                 ?? heroSummary.subjectField(inAnyOf: results),
-                            // Search's panel is router-owned (it's an inspector
-                            // shared with the toolbar's Filter button), so open
-                            // it the same way that button does.
-                            onEditFilters: { router.panel = .searchFilters },
+                            // Search's panel is router-owned when presented on demand;
+                            // while persistently docked on the Duo, reveal the pane's
+                            // root without setting `.searchFilters` (which would leave
+                            // `AppRouter.openAO3Link` waiting for a dismissal).
+                            onEditFilters: {
+                                if SearchDockedFilterDraft.shouldOpenRouterPanel(isFiltersDocked: isFiltersDocked) {
+                                    router.panel = .searchFilters
+                                } else {
+                                    dockedFiltersRevealToken &+= 1
+                                }
+                            },
                             presentation: .subjectPage,
                             // This menu applies immediately; the filter panel
                             // keeps its separate Apply action.
@@ -424,6 +546,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                 set: { sort in
                                     guard filters.sort != sort else { return }
                                     filters.sort = sort
+                                    dockedDraftFilters = filters
                                     bulkSelection.selection.removeAll()
                                     runSearch()
                                 }
@@ -479,6 +602,19 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
                     let partition = ranking.partitioned(results)
 
+                    if let line = ReaderResponseCopy.rankedWorksLine(
+                        loaded: partition.ranked.count,
+                        rank: ranking.settings.rank,
+                        seenBeforeLine: partition.seenBeforeLine
+                    ) {
+                        Section {
+                            RankedWorksCaption(text: line)
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                        }
+                    }
+
                     Section {
                         // Ranked from whatever is loaded, so it re-ranks as `results` changes.
                         ForEach(partition.ranked) { entry in
@@ -526,7 +662,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                 )
                             }
                         } header: {
-                            combinedHeader("Not Ranked", count: partition.unranked.count)
+                            combinedHeader("Not ranked", count: partition.unranked.count)
                         }
                     }
 
@@ -573,19 +709,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             List {
                 Section {
                     ForEach(savedSearches) { saved in
-                        Button { runSaved(saved) } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(saved.name).foregroundStyle(.primary)
-                                if let subtitle = savedSearchSubtitle(saved.filters) {
-                                    Text(subtitle)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+                        savedSearchRow(saved)
                     }
                     .onDelete(perform: deleteSavedSearches)
                     .cardRow()
@@ -597,11 +721,51 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 Text("Search above for works in your Library or on AO3. "
                     + "To explore by fandom, use the Browse tab.")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .bareListRow()
             }
             .cardList()
         }
+    }
+
+    @ViewBuilder
+    private func savedSearchRow(_ saved: SavedSearch) -> some View {
+        let count = QueueSourceChecks.displayedCount(
+            saved.queueLinks.compactMap(\.newResultCount).max(),
+            filters: saved.filters
+        )
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 4))
+        Button { runSaved(saved) } label: {
+            layout {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(saved.name).foregroundStyle(.primary)
+                    if let subtitle = savedSearchSubtitle(saved.filters) {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondaryInk)
+                            .lineLimit(1)
+                    }
+                }
+                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 4) }
+                if let count {
+                    Text(QueueSourceChecks.badge(count))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tint)
+                }
+            }
+            // Stacked at AX sizes there is no Spacer: the whole row stays tappable (third review).
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(QueueSourceChecks.savedSearchAccessibilityLabel(
+            name: saved.name,
+            count: saved.queueLinks.compactMap(\.newResultCount).max(),
+            isLinked: !saved.queueLinks.isEmpty,
+            filters: saved.filters
+        ))
     }
 
     /// Shown when nothing's typed yet and there are no saved searches.
@@ -705,7 +869,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             works: localWorks,
             isSelecting: $isSelectingLocal,
             selection: $localSelection,
-            onSearchAO3: runSearch,
+            onSearchAO3: { runSearch() },
             onSearchFandom: { setIncludedFandom($0); runSearch() }
         )
         // Leaving the live matches (an AO3 search, or a cleared query) ends a
@@ -850,11 +1014,19 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
     // MARK: Search bar + filter button
 
+    private var dockedSearchBar: some View {
+        searchField
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .glassEffect(.regular.interactive(), in: .capsule)
+            .padding(.horizontal, SubjectMetrics.gutter)
+            .padding(.vertical, 8)
+    }
+
     private var searchField: some View {
-        GlassFieldBar(text: $filters.query, placeholder: "Library and AO3", onSubmit: runSearch) {
+        GlassFieldBar(text: $filters.query, placeholder: "Library and AO3", onSubmit: { runSearch() }) {
             Image(systemName: "magnifyingglass")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         } trailing: {
             if !filters.query.isEmpty {
                 Button(action: clearQuery) {
@@ -862,7 +1034,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 }
                 .accessibilityLabel("Clear search")
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             }
         }
     }
@@ -872,6 +1044,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         resetRankTop100()
         isLibraryExpanded = false
         filters.query = ""
+        dockedDraftFilters.query = ""
         if !filters.hasActiveFilters {
             filterHistory.removeAll()
             results = []
@@ -895,6 +1068,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         filterHistory.removeAll()
         isLibraryExpanded = false
         filters = AO3SearchFilters(query: filters.query)
+        dockedDraftFilters = filters
         if filters.isSearchable {
             runSearch()
         } else {
@@ -930,26 +1104,46 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     // MARK: Filter sidebar
 
     private var filterPanel: some View {
-        AO3FilterPanel(
-            filters: $filters,
-            canReset: filters.hasActiveFilters,
-            onApply: runSearch,
+        let panelFilters = isFiltersDocked ? dockedDraftFilters : filters
+        return AO3FilterPanel(
+            filters: isFiltersDocked ? dockedDraftBinding : $filters,
+            canReset: panelFilters.hasActiveFilters,
+            onApply: applyPanelFilters,
             onSave: presentSaveDialog,
-            onReset: {
-                resetRankTop100()
-                filterHistory.removeAll()
-                filters = AO3SearchFilters(query: filters.query)
-                // Nothing left to search → return to the Media Browser.
-                if !filters.isSearchable {
-                    results = []
-                    phase = .idle
-                    forgetSearch()
-                    router.panel = .none
-                }
-            },
+            onReset: resetPanelFilters,
             ranking: $ranking.settings,
-            totalWorks: resultSummary?.total ?? (results.isEmpty ? nil : results.count)
+            totalWorks: resultSummary?.total ?? (results.isEmpty ? nil : results.count),
+            appliedFilters: loadedFilters,
+            revealRootTrigger: dockedFiltersRevealToken
         )
+    }
+
+    private func applyPanelFilters() {
+        if isFiltersDocked {
+            let committed = SearchDockedFilterDraft.committed(
+                draft: dockedDraftFilters, query: filters.query
+            )
+            filters = committed
+            dockedDraftFilters = committed
+        }
+        runSearch()
+    }
+
+    private func resetPanelFilters() {
+        if isFiltersDocked {
+            dockedDraftFilters = SearchDockedFilterDraft.resetDraft(query: filters.query)
+            return
+        }
+        resetRankTop100()
+        filterHistory.removeAll()
+        filters = AO3SearchFilters(query: filters.query)
+        // Nothing left to search → return to the Media Browser.
+        if !filters.isSearchable {
+            results = []
+            phase = .idle
+            forgetSearch()
+            router.panel = .none
+        }
     }
 
     // MARK: Navigation
@@ -967,6 +1161,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             resetRankTop100()
             bulkSelection.selection.removeAll()
             filters = previous.filters
+            dockedDraftFilters = previous.filters
             loadedFilters = previous.filters
             results = previous.results
             currentPage = previous.page
@@ -987,6 +1182,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         resetRankTop100()
         filterHistory.removeAll()
         filters = AO3SearchFilters()
+        dockedDraftFilters = AO3SearchFilters()
         results = []
         currentPage = 1
         totalPages = 1
@@ -1004,6 +1200,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { $0.caseInsensitiveCompare(name) != .orderedSame }
             .joined(separator: ", ")
+        dockedDraftFilters = filters
     }
 
     /// The failed overlay's Try Again: the page that failed when results are on
@@ -1014,14 +1211,27 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             current: currentPage,
             hasResults: !results.isEmpty
         ) {
-            load(page: page)
+            load(page: page, recordingOpenOf: pendingSavedSearchID)
         } else {
-            runSearch()
+            runSearch(recordingOpenOf: pendingSavedSearchID)
         }
     }
 
-    private func runSearch() {
+    /// The pending saved search's ID while the filters on screen are still its own.
+    private var pendingSavedSearchID: UUID? {
+        guard let pending = pendingSavedSearchOpen, pending.filters == filters else { return nil }
+        return pending.id
+    }
+
+    private func runSearch(recordingOpenOf savedSearchID: UUID? = nil) {
+        if let url = URL(string: localQuery), AO3Link(url).kind != .notAO3 {
+            filters.query = ""
+            router.openAO3Link(url)
+            return
+        }
         guard filters.isSearchable else { return }
+        // Any other search replaces the pending saved one.
+        if savedSearchID == nil { pendingSavedSearchOpen = nil }
         // Close the filters panel — the other AO3FilterPanel call sites
         // (NativeBrowseView's applyFilters, AO3AccountWorksList) already dismiss
         // on apply; this was the one left open after running the search.
@@ -1036,7 +1246,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         isLibraryExpanded = false
         localMatches = computeLocalMatches()
         resetRankTop100()
-        load(page: 1)
+        load(page: 1, recordingOpenOf: savedSearchID)
     }
 
     /// Runs a fresh AO3 search for a single tag (from a tapped chip), placing it in the
@@ -1088,6 +1298,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             ))
         }
         filters = new
+        dockedDraftFilters = new
         runSearch()
     }
 
@@ -1096,7 +1307,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// Opens the name-entry alert for saving the current filter set, seeding a sensible
     /// default name. Invoked from the filter panel's "Save Search…" action.
     private func presentSaveDialog() {
-        saveName = Self.defaultSavedSearchName(for: filters)
+        saveName = Self.defaultSavedSearchName(for: panelFiltersForSave)
         showingSaveDialog = true
     }
 
@@ -1115,22 +1326,108 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         return subject == AO3SearchFilters.searchResultsFallback ? "Saved Search" : subject
     }
 
-    /// Persists the current filter set under the entered name.
-    private func commitSavedSearch() {
+    /// Computes the membership origin for the search results currently on screen.
+    static func queueOrigin(
+        filters: AO3SearchFilters,
+        activeSavedSearch: ActiveSavedSearch?,
+        savedSearches: [SavedSearch]
+    ) -> ReadingQueueMembershipOrigin? {
+        if let activeSavedSearch, activeSavedSearch.filters == filters {
+            return ReadingQueueMembershipOrigin(
+                kind: .search,
+                searchID: activeSavedSearch.id,
+                label: activeSavedSearch.name
+            )
+        }
+        if let matching = savedSearches.first(where: { $0.filters == filters }) {
+            return ReadingQueueMembershipOrigin(
+                kind: .search,
+                searchID: matching.id,
+                label: matching.name
+            )
+        }
+        guard filters.isSearchable else { return nil }
+        let subject = filters.searchSubject
+        let label: String = if subject.text != AO3SearchFilters.searchResultsFallback {
+            subject.field == nil ? "“\(subject.text)”" : subject.text
+        } else {
+            filters.summaryLabels().first?.text ?? "Search"
+        }
+        return ReadingQueueMembershipOrigin(kind: .search, searchID: nil, label: label)
+    }
+
+    private func refreshBulkSelectionOrigin(for activeFilters: AO3SearchFilters) {
+        bulkSelection.origin = Self.queueOrigin(
+            filters: activeFilters,
+            activeSavedSearch: activeSavedSearch,
+            savedSearches: savedSearches
+        )
+    }
+
+    /// Persists the chosen filter set under the entered name.
+    private func commitSavedSearch(_ savedFilters: AO3SearchFilters) {
         let name = saveName.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty, filters.isSearchable else { return }
-        context.insert(SavedSearch(name: name, filters: filters))
+        guard !name.isEmpty, savedFilters.isSearchable else { return }
+        let search = SavedSearch(name: name, filters: savedFilters)
+        search.lastOpenedAt = Date()
+        context.insert(search)
+        if savedFilters == filters {
+            activeSavedSearch = ActiveSavedSearch(id: search.id, name: search.name, filters: search.filters)
+            refreshBulkSelectionOrigin(for: filters)
+        }
+        FolderSyncService.markDirty()
         try? context.save()
         saveName = ""
     }
 
     /// Loads a saved search's filters and runs it.
-    private func runSaved(_ saved: SavedSearch) {
+    private func consumeQueueSearch() {
+        guard let route = router.pendingQueueSearch,
+              let saved = savedSearches.first(where: { $0.id == route.searchID })
+        else { return }
+        _ = router.consumeQueueSearchRoute()
+        runSaved(saved, cachedPage: route.page)
+        path = NavigationPath()
+    }
+
+    private func runSaved(_ saved: SavedSearch, cachedPage: AO3SearchPage? = nil) {
         filterHistory.removeAll()
         isLibraryExpanded = false
+        activeSavedSearch = ActiveSavedSearch(id: saved.id, name: saved.name, filters: saved.filters)
         filters = saved.filters
+        dockedDraftFilters = saved.filters
         router.panel = .none
-        runSearch()
+        refreshBulkSelectionOrigin(for: saved.filters)
+        if QueueSourceChecks.recordsOpenImmediately(hasCachedPage: cachedPage != nil),
+           let cachedPage {
+            recordSavedSearchOpen(saved)
+            loadTask?.cancel()
+            loadToken += 1
+            results = cachedPage.works
+            showsRankedResults = false
+            bulkSelection.selection.removeAll()
+            rankTop100Pages = [:]
+            currentPage = cachedPage.currentPage
+            totalPages = AO3ResultListPaging.clampedTotalPages(cachedPage.totalPages)
+            resultSummary = cachedPage.summary
+            loadedFilters = saved.filters
+            requestedFilters = saved.filters
+            requestedPage = nil
+            failedPage = nil
+            lastAppendError = nil
+            phase = .loaded
+        } else {
+            pendingSavedSearchOpen = (saved.id, saved.filters)
+            runSearch(recordingOpenOf: saved.id)
+        }
+    }
+
+    private func recordSavedSearchOpen(_ saved: SavedSearch) {
+        if pendingSavedSearchOpen?.id == saved.id { pendingSavedSearchOpen = nil }
+        saved.lastOpenedAt = Date()
+        for link in saved.queueLinks { link.newResultCount = 0 }
+        FolderSyncService.markDirty()
+        try? context.save()
     }
 
     private func deleteSavedSearches(at offsets: IndexSet) {
@@ -1156,7 +1453,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         load(page: page)
     }
 
-    private func load(page: Int) {
+    private func load(page: Int, recordingOpenOf savedSearchID: UUID? = nil) {
         rankTop100.cancel()
         // A next-page load, refresh or Try Again after an un-applied filter edit
         // would otherwise ask for page N of a query whose page 1 never loaded.
@@ -1214,6 +1511,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     )
                 }
                 phase = .loaded
+                refreshBulkSelectionOrigin(for: current)
+                if let savedSearchID,
+                   QueueSourceChecks.shouldRecordOpen(
+                    page: page, loadToken: token, expectedToken: loadToken
+                   ),
+                   let saved = savedSearches.first(where: { $0.id == savedSearchID }) {
+                    recordSavedSearchOpen(saved)
+                }
                 #if DEBUG
                 // `shot:remoteselect` (board 15): select mode with two works picked.
                 if DebugLaunchRoute.takeSheet("remoteselect") {
@@ -1333,7 +1638,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         // refresh instead of leaving it to finish and spend a paced request slot
         // ahead of the page the user is actually waiting for. Awaiting the task
         // holds the pull-to-refresh spinner until the load it started is done.
-        load(page: 1)
+        load(page: 1, recordingOpenOf: pendingSavedSearchID)
         // `loadTask` is unstructured, so awaiting it plainly would drop the
         // cancellation edge this function used to get for free when it awaited the
         // AO3 request directly: SwiftUI cancels the `.refreshable` task when the
@@ -1377,5 +1682,33 @@ enum SearchRetry {
     static func page(requested: Int?, current: Int, hasResults: Bool) -> Int? {
         guard hasResults else { return nil }
         return requested ?? current
+    }
+}
+
+/// Pure rules separating the docked Duo Filters draft from the applied search on screen:
+/// panel edits stay in `draft` until Show Works commits them, while results, pagination,
+/// refresh and results-toolbar Save remain bound to `applied`.
+enum SearchDockedFilterDraft {
+    static func syncedDraft(_ draft: AO3SearchFilters, query: String) -> AO3SearchFilters {
+        var updated = draft
+        updated.query = query
+        return updated
+    }
+
+    static func committed(draft: AO3SearchFilters, query: String) -> AO3SearchFilters {
+        var committed = draft
+        committed.query = query
+        return committed
+    }
+
+    static func resetDraft(query: String) -> AO3SearchFilters {
+        AO3SearchFilters(query: query)
+    }
+
+    /// Result filter chips open `.searchFilters` when Filters is presented on demand,
+    /// but never claim router panel ownership while persistently docked on the Duo
+    /// (which would leave `AppRouter.openAO3Link` waiting for a dismissal).
+    static func shouldOpenRouterPanel(isFiltersDocked: Bool) -> Bool {
+        !isFiltersDocked
     }
 }

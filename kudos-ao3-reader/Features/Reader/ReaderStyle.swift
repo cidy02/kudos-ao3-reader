@@ -23,6 +23,66 @@ enum ReadingMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// How a paged turn moves. Stored at `storageKey`. Raw values match
+/// Readium's `PageTransition`, including curl.
+enum ReaderPageTurnStyle: String, CaseIterable, Identifiable {
+    case none
+    case slide
+    case fade
+    case curl
+
+    static let storageKey = "readerPageTurn"
+    /// Used when the key is absent or the stored string is not a case.
+    static let defaultStyle = ReaderPageTurnStyle.slide
+    /// None, Slide, Fast Fade, Curl. The order is the picker order.
+    static let pickerCases: [ReaderPageTurnStyle] = [.none, .slide, .fade, .curl]
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .none: "None"
+        case .slide: "Slide"
+        case .fade: "Fast Fade"
+        case .curl: "Curl"
+        }
+    }
+
+    /// The style the reader acts on. An absent or unknown string is slide,
+    /// matching the `@AppStorage` default. Does not write.
+    static func stored(in defaults: UserDefaults = .standard) -> ReaderPageTurnStyle {
+        guard let raw = defaults.string(forKey: storageKey) else { return defaultStyle }
+        return ReaderPageTurnStyle(rawValue: raw) ?? defaultStyle
+    }
+}
+
+/// Whether a directional turn (edge tap, arrow or space, `goForward` /
+/// `goBackward`) asks Readium to animate.
+///
+/// `animated: false` forces `PageTransition.none` inside the fork, so Slide,
+/// Fast Fade and Curl have to ask for animation or the preference is ignored.
+/// Scroll mode is instant. Reduce Motion keeps asking for Slide only: the fork
+/// resolves that request to Fast Fade, while Fast Fade and Curl stay instant.
+/// Locator seeks are a different
+/// path and stay unanimated at the call site — this helper is not consulted
+/// for them.
+enum ReaderPageTurnPolicy {
+    static func animatedTransition(
+        style: ReaderPageTurnStyle,
+        readingMode: ReadingMode,
+        reduceMotion: Bool
+    ) -> Bool {
+        switch style {
+        case .slide:
+            readingMode == .paged
+        case .fade, .curl:
+            readingMode == .paged && !reduceMotion
+        case .none:
+            false
+        }
+    }
+}
+
 /// A reading color theme applied to the EPUB content.
 enum ReaderTheme: String, CaseIterable, Identifiable {
     case light, sepia, dark, oled
@@ -142,14 +202,17 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Accent/tint for controls, links, and selection.
-    var appTint: Color? {
-        self == .sepia ? Color(red: 0.604, green: 0.404, blue: 0.196) : nil
-    }
-
     /// Hairline separators and borders that read on the warm surfaces.
     var appSeparator: Color? {
         self == .sepia ? Color(red: 0.357, green: 0.275, blue: 0.212).opacity(0.18) : nil
+    }
+
+    /// Secondary text and muted ink on Sepia's warm paper surfaces (#6B594B).
+    /// Measured WCAG contrast: 5.00:1 on `appBaseBackground` (#ECDEC1) and
+    /// 5.88:1 on `appElevatedBackground` / `backgroundColor` (#FBF0D9).
+    /// Nil on Light, Dark, and OLED, which keep the system's `.secondary`.
+    var appSecondaryInk: Color? {
+        self == .sepia ? Color(red: 0.420, green: 0.349, blue: 0.294) : nil
     }
 }
 

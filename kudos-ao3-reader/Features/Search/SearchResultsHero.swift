@@ -127,7 +127,13 @@ struct SearchResultsHero: View {
     /// Rank Top 100 temporarily shows pages 1…N together while the pager remains
     /// on the reader's original page.
     var rankedResultCount: Int?
+    /// Shown on feed-eligible tag/fandom works pages so readers can follow or adjust
+    /// follow settings right from the tag header.
+    var followTagLabel: String?
+    var isFollowingTag: Bool = false
+    var onFollowTag: (() -> Void)?
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.accentFill) private var accentFill
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .title2) private var subjectTitleSize: CGFloat = 24
 
@@ -193,16 +199,18 @@ struct SearchResultsHero: View {
 
                     Text(countFact)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
 
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 8) {
                         sortControl
+                        followTagControl
                         Spacer(minLength: 0)
                     }
                     FlowLayout(spacing: 8, rowSpacing: 8) {
                         sortControl
+                        followTagControl
                     }
                 }
             }
@@ -246,7 +254,7 @@ struct SearchResultsHero: View {
 
             Text(count)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         }
     }
 
@@ -280,7 +288,7 @@ struct SearchResultsHero: View {
                         .lineLimit(1)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
@@ -303,6 +311,29 @@ struct SearchResultsHero: View {
             .background(themeManager.appTheme.glassFill(0.12))
             .foregroundStyle(Color.primary)
             .clipShape(SubjectMetrics.controlShape(dynamicTypeSize))
+        }
+    }
+
+    @ViewBuilder
+    private var followTagControl: some View {
+        if let onFollowTag, let followTagLabel {
+            Button(action: onFollowTag) {
+                HStack(spacing: 5) {
+                    Image(systemName: isFollowingTag ? "bell.fill" : "bell")
+                        .font(.caption2.weight(.semibold))
+                    Text(followTagLabel)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .frame(minHeight: 32)
+                .background(isFollowingTag ? accentFill : themeManager.appTheme.glassFill(0.12))
+                .foregroundStyle(isFollowingTag ? ThemeManager.label(on: accentFill) : Color.primary)
+                .clipShape(SubjectMetrics.controlShape(dynamicTypeSize))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isFollowingTag ? "Following tag, edit settings" : "Follow tag")
         }
     }
 
@@ -373,7 +404,7 @@ struct SearchResultsHero: View {
                 // not share an icon inside one card.
                 WorkStatLabel(text: countText, symbol: "doc.text")
                     .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .contentTransition(.numericText())
             }
 
@@ -496,7 +527,7 @@ struct AO3ResultListEndFooter: View {
                             totalPages: totalPages
                         ))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                     }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel(AO3ResultListPaging.footerLoadingText(
@@ -507,7 +538,7 @@ struct AO3ResultListEndFooter: View {
                     VStack(spacing: 6) {
                         Text(errorMessage)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .multilineTextAlignment(.center)
                         Button("Try Again", action: loadNextPage)
                             .buttonStyle(.kudosSecondary)

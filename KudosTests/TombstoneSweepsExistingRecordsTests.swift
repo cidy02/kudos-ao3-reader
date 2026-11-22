@@ -25,7 +25,7 @@ struct TombstoneSweepsExistingRecordsTests {
         Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self
+            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self, QueueSavedSearchLink.self
         ])
     }
 

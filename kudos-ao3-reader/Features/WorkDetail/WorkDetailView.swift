@@ -6,6 +6,15 @@ import SwiftUI
 // WorkDetailOverviewSections.swift / WorkDetailSections.swift.
 // swiftlint:disable file_length
 
+enum LinkedChapterTarget {
+    static func spineIndex(
+        chapterID: Int, chapters: [AO3ChapterRef], sections: [ReaderSection]
+    ) -> Int? {
+        guard let position = chapters.first(where: { $0.id == chapterID })?.position else { return nil }
+        return sections.spineIndex(forStoryChapter: position)
+    }
+}
+
 /// The single, canonical work-detail screen — used for **every** work the app can open,
 /// whether it's a locally saved work or a remote AO3 summary (Home, Library, Browse,
 /// Search, Bookmarks, AO3 lists, …). There is no separate "compact" remote detail.
@@ -27,20 +36,24 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     }
 
     let source: Source
+    let linkedChapterID: Int?
     /// True only for the title-pill sheet the reader itself presents (A2).
     /// That sheet's `WorkDetailView` is always the reader's *own* work, so
     /// `read()` has nothing useful to push — it dismisses back to the live
     /// reader underneath instead of stacking a second reader on top of it.
     private let openedFromReader: Bool
+    @State private var recordedSeriesView = false
 
-    init(work: SavedWork, openedFromReader: Bool = false) {
+    init(work: SavedWork, openedFromReader: Bool = false, linkedChapterID: Int? = nil) {
         source = .saved(work)
         self.openedFromReader = openedFromReader
+        self.linkedChapterID = linkedChapterID
     }
 
-    init(remote: AO3WorkSummary) {
+    init(remote: AO3WorkSummary, linkedChapterID: Int? = nil) {
         source = .remote(remote)
         openedFromReader = false
+        self.linkedChapterID = linkedChapterID
     }
 
     @Environment(\.modelContext) var context
@@ -55,6 +68,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) var auth
     @Environment(DownloadQueue.self) private var downloadQueue
+    @Environment(\.queueMembershipOrigin) private var queueOrigin
     @Query(sort: \Tag.name) var allTags: [Tag]
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var allWorks: [SavedWork]
 
@@ -94,6 +108,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     @State var newTagName = ""
     @State var showingAddToCollection = false
+    @State private var showingEPUBExport = false
     @State var working = false // a download / import is in flight
     @State var loadError: String?
     #if os(iOS)
@@ -106,6 +121,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     }
     #endif
     @State private var readerWork: SavedWork? // non-nil → push the reader
+    @State private var readerInitialSpineIndex: Int?
     /// The speaker button's push: the reader starts Read Aloud once the book is ready.
     @State private var readerStartsReadAloud = false
     @State var queuingSeries = false
@@ -197,7 +213,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     )
                     showingSeriesQueuePrompt = true
                 }
-                if DebugLaunchRoute.takeSheet("bookmarkform") { workActions.startBookmark() }
                 #endif
             }
         }
@@ -212,6 +227,18 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             // switching sections re-renders from this already-loaded state without
             // re-fetching anything.
             resolveExistingIfNeeded()
+            if !openedFromReader, !recordedSeriesView {
+                recordedSeriesView = true
+                SavedSeriesWeeklyCheck.recordView(
+                    seriesID: localWork?.ao3SeriesID ?? ReadingQueueService.ao3SeriesID(from: displaySeriesURL),
+                    in: context
+                )
+            }
+            #if DEBUG
+            if let workID = ao3WorkID, DebugLaunchRoute.takeSheet("bookmarkform") {
+                workActions.startBookmark(workID: workID, auth: auth)
+            }
+            #endif
             guard let work = localWork else { return }
             ReadingQueueService.normalize(work)
             await WorkTags.backfillFromEPUB(for: work, in: context)
@@ -220,7 +247,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         // BookReaderView routes to the Readium navigator on iOS, the legacy reader on
         // macOS — so the unified detail opens the right reader on this branch.
         .navigationDestination(item: $readerWork) {
-            BookReaderView(work: $0, startsReadAloud: readerStartsReadAloud)
+            BookReaderView(work: $0, startsReadAloud: readerStartsReadAloud,
+                           initialSpineIndex: readerInitialSpineIndex)
         }
         .sheet(isPresented: $showingAddToCollection) {
             if let work = localWork {
@@ -230,9 +258,17 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 #endif
             }
         }
+        #if os(iOS)
+        .sheet(isPresented: $showingEPUBExport) {
+            if let work = localWork { WorkEPUBExportSheet(works: [work]) }
+        }
+        #endif
         .sheet(isPresented: $showingAddToQueue) {
             if let work = localWork {
-                AddToQueueView(work: work)
+                AddToQueueView(
+                    work: work,
+                    origin: queueOrigin ?? ReadingQueueMembershipOrigin(kind: .manual)
+                )
                 #if os(iOS)
                     .modifier(ScopeSurfaceAccent())
                 #endif
@@ -292,7 +328,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
             perform: deleteFromLibrary
         )
-        .ao3WorkActions(workActions, workID: ao3WorkID ?? 0, auth: auth)
+        .ao3WorkActions(workActions, workID: ao3WorkID, auth: auth)
         .sensoryFeedback(.selection, trigger: localWork?.isFavorite ?? false)
         .toolbar { detailToolbar }
         .screenTint(workPalette)
@@ -359,6 +395,10 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// grid no longer opens with a Read tile — two controls for one action, a
     /// thumb-length apart, is a coin toss the reader should not have to make.
     private var resumeCardModel: ResumeCardModel {
+        let coverRecipe: GeneratedCoverRecipe = switch source {
+        case .saved(let work): work.generatedCoverRecipe
+        case .remote(let work): localWork?.generatedCoverRecipe ?? work.generatedCoverRecipe
+        }
         let opened = localWork?.lastReadDate?.formatted(.relative(presentation: .named))
         let chapterProgress = localWork.flatMap {
             WorkReadingPosition.chapterProgress(from: $0.readiumLocator)
@@ -370,6 +410,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             max(0, $0.postedChapterCount - $0.knownChapterCount)
         } ?? 0
         return ResumeCardModel(
+            coverRecipe: coverRecipe,
             title: displayTitle,
             authors: displayAuthorList,
             authorIdentities: displayAuthorIdentities,
@@ -480,7 +521,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     } else if let notice {
                         Text(notice)
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
 
                     if preserving {
@@ -537,13 +578,13 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     .accessibilityAddTraits(.isHeader)
                 Text("Private to this device")
                     .font(.system(size: myCopySubtitleSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Button { showingMyCopy = false } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .frame(width: 28, height: 28)
                     .background(Circle().fill(themeManager.appTheme.glassFill()))
             }
@@ -591,6 +632,27 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
                     Section("Library") {
                         localWorkMenuItems(includesQuickToggles: ao3WorkID != nil)
+                        #if os(iOS)
+                        if let work = localWork, work.hasEPUB {
+                            Button { showingEPUBExport = true } label: {
+                                Label("Export EPUB…", systemImage: "square.and.arrow.up")
+                            }
+                            .disabled(working)
+                        }
+                        #endif
+                    }
+
+                    if let work = localWork {
+                        Section("Cover") {
+                            Button("Shuffle Cover", systemImage: "shuffle") {
+                                work.pinCover(salt: work.generatedCoverRecipe.salt + 1)
+                                context.saveBestEffort(reason: "Saving shuffled cover failed")
+                            }
+                            Button("Reset Cover", systemImage: "arrow.counterclockwise") {
+                                work.pinCover(salt: 0)
+                                context.saveBestEffort(reason: "Resetting cover failed")
+                            }
+                        }
                     }
 
                     if let id = ao3WorkID {
@@ -854,6 +916,13 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         localWork?.seriesPosition ?? remote?.seriesPosition ?? 0
     }
 
+    /// AO3's part count for this work's series, once the reader has opened the series page (T-519).
+    var displaySeriesPartCount: Int? {
+        guard let id = localWork?.ao3SeriesID ?? ReadingQueueService.ao3SeriesID(from: displaySeriesURL),
+              let saved = SavedSeriesStore.series(for: id, in: context) else { return nil }
+        return saved.snapshot.effectivePartCount
+    }
+
     var displaySeriesURL: String {
         if let url = localWork?.seriesURL, !url.isEmpty { return url }
         return remote?.seriesURL ?? ""
@@ -1045,10 +1114,16 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         queueNotice = nil
         loadError = nil
 
+        let resolvedOrigin = queueOrigin ?? ReadingQueueMembershipOrigin(kind: .manual)
         if let work = localWork {
             Task {
                 working = true
-                _ = await ReadingQueueService.addToSavedForLater(work, in: context)
+                _ = await ReadingQueueService.addToSavedForLater(
+                    work,
+                    state: .inLine,
+                    origin: resolvedOrigin,
+                    in: context
+                )
                 working = false
                 queueNotice = "Added to Want to Read."
                 maybeOfferSeriesPreservation(for: work)
@@ -1061,7 +1136,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             working = true
             loadError = nil
             do {
-                let work = try await ReadingQueueService.addToSavedForLater(summary, in: context)
+                let work = try await ReadingQueueService.addToSavedForLater(
+                    summary,
+                    state: .inLine,
+                    origin: resolvedOrigin,
+                    in: context
+                )
                 localWork = work
                 working = false
                 queueNotice = "Added to Want to Read."
@@ -1191,10 +1271,13 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         preservingSeries = true
         queueNotice = "Preserving series…"
         seriesPreservationProgress = nil
+        let resolvedOrigin = queueOrigin ?? ReadingQueueMembershipOrigin(kind: .manual)
         seriesPreservationTask = Task { @MainActor in
             let result: ReadingQueueService.SeriesPreservationResult = if let summaries {
                 await ReadingQueueService.preserveSeries(
                     summaries,
+                    state: .new,
+                    origin: resolvedOrigin,
                     in: context,
                     progress: {
                         seriesPreservationProgress = $0
@@ -1204,6 +1287,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             } else {
                 await ReadingQueueService.preserveSeries(
                     anchoredAt: work,
+                    state: .new,
+                    origin: resolvedOrigin,
                     in: context,
                     progress: {
                         seriesPreservationProgress = $0
@@ -1270,8 +1355,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
         withLocalWork { work in
             if WorkReaderPreparation.hasReadableEPUB(for: work) {
-                if openingContents { router.panel = .readerChapters }
-                readerWork = work
+                if linkedChapterID != nil {
+                    Task { await openLinkedChapter(in: work, openingContents: openingContents) }
+                } else {
+                    if openingContents { router.panel = .readerChapters }
+                    readerWork = work
+                }
                 return
             }
             // Freed history entry: re-download into the existing record, keeping its id
@@ -1282,8 +1371,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 do {
                     try await WorkReaderPreparation.restoreReadableEPUB(for: work, in: context)
                     working = false
-                    if openingContents { router.panel = .readerChapters }
-                    readerWork = work
+                    if linkedChapterID != nil {
+                        await openLinkedChapter(in: work, openingContents: openingContents)
+                    } else {
+                        if openingContents { router.panel = .readerChapters }
+                        readerWork = work
+                    }
                 } catch let error as AO3Error {
                     loadError = error.errorDescription
                     working = false
@@ -1292,6 +1385,49 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     working = false
                 }
             }
+        }
+    }
+
+    private func openLinkedChapter(in work: SavedWork, openingContents: Bool) async {
+        guard let linkedChapterID, let workID = ao3WorkID else { return }
+        working = true
+        loadError = nil
+        defer { working = false }
+        do {
+            let generation = auth.sessionGeneration
+            let request = auth.isLoggedIn
+                ? try auth.authenticatedRequest(for: AO3Client.chapterIndexURL(workID: workID)) : nil
+            let chapters = try await AO3RequestCoordinator.shared.withSlot {
+                try await AO3Client.shared.chapterIndex(workID: workID, request: request)
+            }
+            guard auth.sessionGeneration == generation else { throw CancellationError() }
+            let fileURL = work.fileURL
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("linked-chapter-\(UUID().uuidString)", isDirectory: true)
+            let sections = try await Task.detached(priority: .userInitiated) {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                defer { try? FileManager.default.removeItem(at: directory) }
+                let document = try EPUBDocument.open(epubURL: fileURL, into: directory)
+                return ReaderSectionBuilder.build(
+                    tocEntries: document.chapters.map {
+                        ReaderSectionBuilder.RawTOCEntry(title: $0.title, spineIndex: $0.spineIndex)
+                    }, spineHrefs: document.spineURLs.map(\.absoluteString)
+                )
+            }.value
+            guard auth.sessionGeneration == generation, !Task.isCancelled else { throw CancellationError() }
+            guard let spineIndex = LinkedChapterTarget.spineIndex(
+                chapterID: linkedChapterID, chapters: chapters, sections: sections
+            ) else {
+                loadError = "This chapter is not in the downloaded work."
+                return
+            }
+            readerInitialSpineIndex = spineIndex
+            if openingContents { router.panel = .readerChapters }
+            readerWork = work
+        } catch is CancellationError {
+            return
+        } catch {
+            loadError = WorkMetadataRefresh.message(for: error)
         }
     }
 
@@ -1474,7 +1610,7 @@ private struct SeriesPreservationPromptSheet: View {
                         Text("Kudos saves the series one work at a time, with the usual pause between "
                             + "visits to AO3.")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
 
                     Section {
@@ -1482,7 +1618,7 @@ private struct SeriesPreservationPromptSheet: View {
                         Text("Kudos saves a series automatically only when the first AO3 page shows "
                             + "the full series and it has \(threshold) works or fewer.")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
 
                     Section {

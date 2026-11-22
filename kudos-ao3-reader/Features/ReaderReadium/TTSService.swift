@@ -529,7 +529,11 @@ public protocol TTSService: AnyObject {
     /// Starts speaking locator-bearing source units. An engine may chunk a unit
     /// for synthesis, but must report the matching unit locator through
     /// `onAdvance` when it begins.
-    func speak(units: [TTSSpeechUnit]) async throws
+    /// - Returns: `true` once playback started (status `.playing`). `false` when
+    ///   nothing in `units` was speakable — the engine then emits no status at
+    ///   all — or when it went `.unavailable` (which it has already published).
+    @discardableResult
+    func speak(units: [TTSSpeechUnit]) async throws -> Bool
 
     /// Pauses playback.
     func pause()

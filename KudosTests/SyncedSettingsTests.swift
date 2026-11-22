@@ -135,6 +135,32 @@ struct SyncedSettingsTests {
         #expect(KudosBackupSettings.recencyKeys.contains(LibraryPageArrangement.storageKey))
         #expect(KudosBackupSettings.recencyKeys.contains(WorkSymbolPlacement.storageKey))
         #expect(WorkSymbolPlacement.storageKey == "workSymbolPlacement")
+
+        // Settings the integration branch added after T-541 forked (named fields, stamped here).
+        for key in [
+            "useEmbeddedCoverArt", SavedSeriesWeeklyCheck.enabledKey, ReaderPageTurnStyle.storageKey,
+            ReaderSpeechPreferences.voiceIDKey, ReaderSpeechPreferences.voiceNameKey,
+            "lastAddedReadingQueueID", InsightsOptions.Keys.discreetMode, InsightsOptions.Keys.hideReadingTime,
+            InsightsOptions.Keys.countRereads, InsightsOptions.Keys.countReadAloud,
+            InsightsOptions.Keys.askAboutUntouched, InsightsOptions.Keys.untouchedDays,
+            InsightsOptions.Keys.excludedFandoms, InsightsOptions.Keys.excludedTags,
+            InsightsOptions.Keys.excludedWorkIDs
+        ] {
+            #expect(KudosBackupSettings.recencyKeys.contains(key), "\(key)")
+            #expect(KudosBackupSettings.extraKeys[key] == nil, "\(key) must not travel twice")
+        }
+        #expect(KudosBackupSettings.extraKeys["workExportIncludesCover"] == .bool)
+    }
+
+    @Test func aRemovedPatternedLayoutKeyStillGetsItsRemovalStamped() {
+        let defaults = freshDefaults()
+        let key = "collection.0F0F0F0F.arrangement"
+        _ = KudosBackupSettings.capture(defaults: defaults)
+        defaults.set("grid", forKey: key)
+        _ = KudosBackupSettings.capture(defaults: defaults)
+        #expect(SyncedSettingsClock.stamps(in: defaults)[key] != nil)
+        defaults.removeObject(forKey: key)
+        #expect(KudosBackupSettings.observedKeys(in: defaults).keys.contains(key))
     }
 
     @Test func stampsAndExtrasSurviveARoundTripAndAnOlderArchiveStillDecodes() throws {

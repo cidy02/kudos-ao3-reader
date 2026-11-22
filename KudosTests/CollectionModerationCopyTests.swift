@@ -31,7 +31,7 @@ struct CollectionModerationCopyTests {
 
     @Test func bylineAddsTheSubmissionDateOnlyWhenAO3PrintedOne() {
         #expect(CollectionModerationCopy.byline(creator: "kestrelmoon", dateText: "03 Nov 2026")
-            == "kestrelmoon · submitted 03 Nov 2026")
+            == "kestrelmoon · submitted \(WorkStat.displayDate("03 Nov 2026"))")
         #expect(CollectionModerationCopy.byline(creator: "kestrelmoon", dateText: "  ") == "kestrelmoon")
     }
 

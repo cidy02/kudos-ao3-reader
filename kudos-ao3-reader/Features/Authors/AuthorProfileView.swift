@@ -24,6 +24,7 @@ struct AuthorProfileView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.duoLayout) private var duoLayout
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var model: AO3AuthorProfileModel
@@ -325,7 +326,7 @@ private extension AuthorProfileView {
                 if model.isShowingStaleCache {
                     Label("Showing cached AO3 data", systemImage: "wifi.slash")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .padding(.horizontal, SubjectMetrics.accountGutter)
                 }
                 AO3AuthorWorksScopeSection(
@@ -389,7 +390,7 @@ private extension AuthorProfileView {
                 Section {
                     Label("Showing cached AO3 data", systemImage: "wifi.slash")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .cardRow()
                 }
             }
@@ -439,7 +440,7 @@ private extension AuthorProfileView {
             if let postingLine {
                 Text("Posting as \(postingLine)")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .padding(.horizontal, SubjectMetrics.accountGutter)
             }
             // Before the counts load the subtitle is just the name; under "Posting as"
@@ -588,7 +589,7 @@ private extension AuthorProfileView {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0)) : AnyLayout(HStackLayout(spacing: 12))
         return layout {
             Label("Scope", systemImage: "person.2")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Spacer(minLength: 8)
             Menu {
                 if let allPseuds = AO3AuthorRoute(username: model.route.username) {
@@ -677,7 +678,7 @@ private extension AuthorProfileView {
             Section("Bio") {
                 if about.bio.isEmpty {
                     Text("This user has not added a bio.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .cardRow()
                 } else {
                     AO3RichTextView(document: about.bio)
@@ -712,8 +713,9 @@ private extension AuthorProfileView {
                 if let pseud = model.route.pseud {
                     LabeledContent("Selected Pseud", value: pseud).cardRow()
                 }
-                if !about.joinedDate.isEmpty {
-                    LabeledContent("Joined", value: about.joinedDate).cardRow()
+                let joined = about.displayJoinedDate()
+                if !joined.isEmpty {
+                    LabeledContent("Joined", value: joined).cardRow()
                 }
                 if let userID = about.userID {
                     LabeledContent("User ID", value: userID.formatted()).cardRow()
@@ -1029,11 +1031,13 @@ private extension AuthorProfileView {
             }
         } else {
             ActionToolbar(items: leadingToolbarItems)
-            if !leadingToolbarItems.isEmpty {
+            if !leadingToolbarItems.isEmpty, !duoLayout.usesSingleRailActionGroup {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
             }
             // Board 23: Share and "…" are one glass pill (one group shares a pill).
             // Your own works/series list (board 41) keeps Share in the menu, so the title fits.
+            // On the Duo rail (N9), New Work joins this single action group instead of
+            // breaking out into its own circle after a spacer.
             ToolbarItemGroup(placement: .primaryAction) {
                 if !isOwnWorksOrSeries {
                     ShareLink(item: model.route.dashboardURL) {
@@ -1041,9 +1045,15 @@ private extension AuthorProfileView {
                     }
                     .labelStyle(.iconOnly)
                 }
+                if showsNewWork, duoLayout.usesSingleRailActionGroup {
+                    ToolbarIconButton(title: "New Work", systemImage: "plus") {
+                        isCreatingWork = true
+                    }
+                    .labelStyle(.iconOnly)
+                }
                 profileMenu.labelStyle(.iconOnly)
             }
-            if showsNewWork {
+            if showsNewWork, !duoLayout.usesSingleRailActionGroup {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
                 ToolbarItem(placement: .primaryAction) {
                     Button {

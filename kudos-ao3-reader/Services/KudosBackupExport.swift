@@ -86,10 +86,14 @@ extension KudosBackupService {
         readingSessions: [ReadingSession] = [],
         readingFavorites: [ReadingFavorite] = [],
         fandomReadWatermarks: [FandomReadWatermark] = [],
+        followedTags: [FollowedTag] = [],
+        tagAliases: [TagAlias] = [],
         tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupExportPlan {
-        let queueMemberships = readingQueues.flatMap(\.memberships)
+        let queueMemberships = readingQueues
+            .filter { $0.kind != .smart }
+            .flatMap(\.memberships)
             .compactMap(KudosBackupReadingQueueMembership.init)
         let manifest = KudosBackupManifest(
             works: works.map(KudosBackupWork.init),
@@ -103,6 +107,8 @@ extension KudosBackupService {
             readingSessions: readingSessions.map(KudosBackupReadingSession.init),
             readingFavorites: readingFavorites.map(KudosBackupReadingFavorite.init),
             fandomReadWatermarks: fandomReadWatermarks.map(KudosBackupFandomReadWatermark.init),
+            followedTags: followedTags.map(KudosBackupFollowedTag.init),
+            tagAliases: tagAliases.map(KudosBackupTagAlias.init),
             settings: .capture(defaults: defaults),
             pronunciations: .capture(),
             tombstones: tombstones.map(KudosBackupTombstone.init)

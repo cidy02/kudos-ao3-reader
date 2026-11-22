@@ -20,6 +20,11 @@ struct QueueTagManagerView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+    /// Smart queues count and edit only what Hide Mature lets the reader see.
+    private func isVisible(_ work: SavedWork) -> Bool { !gate.isHidden(work, enabled: hideMature, mode: matureMode) }
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
     private var allQueues: [ReadingQueue]
     @State private var newTagName = ""
@@ -43,7 +48,7 @@ struct QueueTagManagerView: View {
     var body: some View {
         // Counted once per body rather than per row and per sort comparison,
         // which walked every work in the queue for every tag, twice per compare.
-        let counts = queue.workCountsByTag()
+        let counts = queue.workCountsByTag(where: isVisible)
         let used = queue.tags.filter { counts[$0.persistentModelID, default: 0] > 0 }
             .sorted { counts[$0.persistentModelID, default: 0] > counts[$1.persistentModelID, default: 0] }
         let unused = queue.tags.filter { counts[$0.persistentModelID, default: 0] == 0 }
@@ -110,7 +115,7 @@ struct QueueTagManagerView: View {
             presenting: pendingRemoval
         ) { tag in
             Button("Remove", role: .destructive) {
-                queue.removeTagFromWorks(tag)
+                queue.removeTagFromWorks(tag, where: isVisible)
                 context.saveBestEffort(reason: "Removing tag failed")
             }
             Button("Cancel", role: .cancel) {}
@@ -130,7 +135,7 @@ struct QueueTagManagerView: View {
     /// is no sharing in this app, so there is no one else to say it about.
     private var tally: String {
         let tags = queue.tags.count
-        let works = ReadingQueueService.orderedWorks(in: queue).count
+        let works = ReadingQueueService.orderedWorks(in: queue, where: isVisible).count
         guard tags > 0 else { return "No tags on this queue yet" }
         return "\(tags) tag\(tags == 1 ? "" : "s") across "
             + "\(works) work\(works == 1 ? "" : "s")"
@@ -157,10 +162,10 @@ struct QueueTagManagerView: View {
                             Text(count.compactCount)
                                 .font(.system(size: countSize))
                                 .monospacedDigit()
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                             Image(systemName: "ellipsis")
                                 .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                                 .accessibilityHidden(true)
                         }
                     }
@@ -273,9 +278,9 @@ extension ReadingQueue {
     /// works, shared by the tag manager and its edit sheet so their figures
     /// cannot disagree.
     @MainActor
-    func workCountsByTag() -> [PersistentIdentifier: Int] {
+    func workCountsByTag(where include: ((SavedWork) -> Bool)? = nil) -> [PersistentIdentifier: Int] {
         var counts: [PersistentIdentifier: Int] = [:]
-        for work in ReadingQueueService.orderedWorks(in: self) {
+        for work in ReadingQueueService.orderedWorks(in: self, where: include) {
             for tag in work.tags {
                 counts[tag.persistentModelID, default: 0] += 1
             }
@@ -287,8 +292,8 @@ extension ReadingQueue {
     /// vocabulary. Recently Deleted works keep their data, matching the count
     /// and merge population shown by the tag manager.
     @MainActor
-    func removeTagFromWorks(_ tag: Tag) {
-        for work in ReadingQueueService.orderedWorks(in: self) {
+    func removeTagFromWorks(_ tag: Tag, where include: ((SavedWork) -> Bool)? = nil) {
+        for work in ReadingQueueService.orderedWorks(in: self, where: include) {
             guard work.tags.contains(where: { $0.persistentModelID == tag.persistentModelID })
             else { continue }
             work.tags.removeAll { $0.persistentModelID == tag.persistentModelID }
@@ -308,6 +313,11 @@ struct QueueTagEditSheet: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+    /// Smart queues count and edit only what Hide Mature lets the reader see.
+    private func isVisible(_ work: SavedWork) -> Bool { !gate.isHidden(work, enabled: hideMature, mode: matureMode) }
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var name: String
     @State private var confirmStrip = false
@@ -347,7 +357,7 @@ struct QueueTagEditSheet: View {
     }
 
     var body: some View {
-        let counts = queue.workCountsByTag()
+        let counts = queue.workCountsByTag(where: isVisible)
         let workCount = counts[tag.persistentModelID, default: 0]
         return NavigationStack {
             List {
@@ -561,7 +571,7 @@ struct QueueTagEditSheet: View {
     /// The same population as `merge(into:)` and every figure on this sheet —
     /// see its comment.
     private func strip() {
-        queue.removeTagFromWorks(tag)
+        queue.removeTagFromWorks(tag, where: isVisible)
         context.saveBestEffort(reason: "Removing tag failed")
         dismiss()
     }

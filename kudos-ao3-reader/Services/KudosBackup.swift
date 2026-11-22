@@ -620,6 +620,12 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
     let readingSessions: [KudosBackupReadingSession]
     let readingFavorites: [KudosBackupReadingFavorite]
     let fandomReadWatermarks: [KudosBackupFandomReadWatermark]
+    /// Locally followed tags. Optional and omitted (`nil`) when empty so manifests
+    /// match older iOS/Android golden archives verbatim.
+    let followedTags: [KudosBackupFollowedTag]?
+    /// Canonical tag aliases learned passively from AO3 redirects. Optional and
+    /// omitted (`nil`) when empty so manifests match older iOS/Android golden archives.
+    let tagAliases: [KudosBackupTagAlias]?
     let settings: KudosBackupSettings
     /// Read-aloud pronunciation corrections. Hand-made, unreconstructible, and
     /// small, so they travel with the reader rather than being stranded on one
@@ -655,6 +661,8 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         readingSessions: [KudosBackupReadingSession] = [],
         readingFavorites: [KudosBackupReadingFavorite] = [],
         fandomReadWatermarks: [KudosBackupFandomReadWatermark] = [],
+        followedTags: [KudosBackupFollowedTag]? = nil,
+        tagAliases: [KudosBackupTagAlias]? = nil,
         settings: KudosBackupSettings,
         pronunciations: KudosBackupPronunciations = .empty,
         tombstones: [KudosBackupTombstone] = []
@@ -672,6 +680,8 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         self.readingSessions = readingSessions
         self.readingFavorites = readingFavorites
         self.fandomReadWatermarks = fandomReadWatermarks
+        self.followedTags = followedTags.flatMap { $0.isEmpty ? nil : $0 }
+        self.tagAliases = tagAliases.flatMap { $0.isEmpty ? nil : $0 }
         self.pronunciations = pronunciations
         self.settings = settings
         self.tombstones = tombstones
@@ -691,6 +701,8 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         case readingSessions
         case readingFavorites
         case fandomReadWatermarks
+        case followedTags
+        case tagAliases
         case settings
         case pronunciations
         case tombstones
@@ -737,6 +749,14 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
             [KudosBackupFandomReadWatermark].self,
             forKey: .fandomReadWatermarks
         ) ?? []
+        followedTags = try container.decodeIfPresent(
+            [KudosBackupFollowedTag].self,
+            forKey: .followedTags
+        )
+        tagAliases = try container.decodeIfPresent(
+            [KudosBackupTagAlias].self,
+            forKey: .tagAliases
+        )
         settings = try container.decode(KudosBackupSettings.self, forKey: .settings)
         pronunciations = try container.decodeIfPresent(
             KudosBackupPronunciations.self,
@@ -982,6 +1002,15 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     /// the override used to decode as `false` and, on winning the timestamp
     /// comparison, silently clear a preference it had no opinion about.
     let keepInProgressOverride: Bool?
+    let readingStatusRaw: String?
+    let statusChangedAt: Date??
+    let stoppedAt: Date??
+    let stopReasonRaw: String?
+    let stopTag: String?
+    let stopNote: String?
+    let stackThreshold: Int?
+    let stackBaselineChapterCount: Int?
+    let statusWasRecorded: Bool?
     let hasEPUB: Bool
     let isComplete: Bool
     let rating: String
@@ -1046,6 +1075,11 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     /// The bylines as AO3 accounts (T-541), so a restored work's authors stay tappable without
     /// a fresh AO3 request. Nil from an older archive or Android.
     let authorIdentitiesJSON: String?
+    /// Omitted for older/Android records; absence never clears a local pin.
+    let coverRecipeJSON: String?
+    /// Additive D3 derived fields; omitted when empty so untouched works emit no key.
+    let chapterWordCountsJSON: String?
+    let wordUnitRaw: String?
 
     @MainActor
     init(work: SavedWork) {
@@ -1067,6 +1101,16 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         isSaved = work.isSaved
         isFinished = work.isFinished
         keepInProgressOverride = work.keepInProgressOverride
+        let recorded = work.hasRecordedStatus
+        readingStatusRaw = recorded ? work.readingStatusRaw : nil
+        statusChangedAt = recorded ? .some(work.statusChangedAt) : nil
+        stoppedAt = recorded ? .some(work.stoppedAt) : nil
+        stopReasonRaw = recorded ? work.stopReasonRaw : nil
+        stopTag = recorded ? work.stopTag : nil
+        stopNote = recorded ? work.stopNote : nil
+        stackThreshold = recorded ? work.stackThreshold : nil
+        stackBaselineChapterCount = recorded ? work.stackBaselineChapterCount : nil
+        statusWasRecorded = recorded ? true : nil
         // `|| remoteEPUBPending`: a device that was promised a book and has
         // not received it yet must not publish its absence as fact. The remote
         // file is still there — the prune keeps assets by manifest work id —
@@ -1121,6 +1165,9 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         hiddenFromHistoryAt = .some(work.hiddenFromHistoryAt)
         epubDigest = work.epubDigest.isEmpty ? nil : work.epubDigest
         authorIdentitiesJSON = work.authorIdentitiesJSON.isEmpty ? nil : work.authorIdentitiesJSON
+        coverRecipeJSON = work.coverRecipeJSON
+        chapterWordCountsJSON = work.chapterWordCountsJSON.isEmpty ? nil : work.chapterWordCountsJSON
+        wordUnitRaw = work.wordUnitRaw.isEmpty ? nil : work.wordUnitRaw
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1142,6 +1189,15 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case isSaved
         case isFinished
         case keepInProgressOverride
+        case readingStatusRaw
+        case statusChangedAt
+        case stoppedAt
+        case stopReasonRaw
+        case stopTag
+        case stopNote
+        case stackThreshold
+        case stackBaselineChapterCount
+        case statusWasRecorded
         case hasEPUB
         case isComplete
         case rating
@@ -1186,6 +1242,9 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case hiddenFromHistoryAt
         case epubDigest
         case authorIdentitiesJSON
+        case coverRecipeJSON
+        case chapterWordCountsJSON
+        case wordUnitRaw
     }
 
     init(from decoder: Decoder) throws {
@@ -1215,6 +1274,17 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
             Bool.self,
             forKey: .keepInProgressOverride
         )
+        readingStatusRaw = try container.decodeIfPresent(String.self, forKey: .readingStatusRaw)
+        statusChangedAt = container.contains(.statusChangedAt)
+            ? .some(try container.decode(Date?.self, forKey: .statusChangedAt)) : nil
+        stoppedAt = container.contains(.stoppedAt)
+            ? .some(try container.decode(Date?.self, forKey: .stoppedAt)) : nil
+        stopReasonRaw = try container.decodeIfPresent(String.self, forKey: .stopReasonRaw)
+        stopTag = try container.decodeIfPresent(String.self, forKey: .stopTag)
+        stopNote = try container.decodeIfPresent(String.self, forKey: .stopNote)
+        stackThreshold = try container.decodeIfPresent(Int.self, forKey: .stackThreshold)
+        stackBaselineChapterCount = try container.decodeIfPresent(Int.self, forKey: .stackBaselineChapterCount)
+        statusWasRecorded = try container.decodeIfPresent(Bool.self, forKey: .statusWasRecorded)
         hasEPUB = try container.decodeIfPresent(Bool.self, forKey: .hasEPUB) ?? false
         isComplete = try container.decodeIfPresent(Bool.self, forKey: .isComplete) ?? false
         rating = try container.decodeIfPresent(String.self, forKey: .rating) ?? ""
@@ -1270,6 +1340,9 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
             ? .some(try container.decode(Date?.self, forKey: .hiddenFromHistoryAt)) : nil
         epubDigest = try container.decodeIfPresent(String.self, forKey: .epubDigest)
         authorIdentitiesJSON = try? container.decodeIfPresent(String.self, forKey: .authorIdentitiesJSON)
+        coverRecipeJSON = try container.decodeIfPresent(String.self, forKey: .coverRecipeJSON)
+        chapterWordCountsJSON = try container.decodeIfPresent(String.self, forKey: .chapterWordCountsJSON)
+        wordUnitRaw = try container.decodeIfPresent(String.self, forKey: .wordUnitRaw)
     }
 }
 
@@ -1328,6 +1401,7 @@ nonisolated struct KudosBackupSavedSearch: Codable, Equatable {
     let name: String
     let dateAdded: Date
     let filters: AO3SearchFilters
+    let lastOpenedAt: Date?
 
     @MainActor
     init(savedSearch: SavedSearch) {
@@ -1335,13 +1409,27 @@ nonisolated struct KudosBackupSavedSearch: Codable, Equatable {
         name = savedSearch.name
         dateAdded = savedSearch.dateAdded
         filters = savedSearch.filters
+        lastOpenedAt = savedSearch.lastOpenedAt
     }
 
-    init(id: UUID, name: String, dateAdded: Date, filters: AO3SearchFilters) {
+    init(id: UUID, name: String, dateAdded: Date, filters: AO3SearchFilters, lastOpenedAt: Date? = nil) {
         self.id = id
         self.name = name
         self.dateAdded = dateAdded
         self.filters = filters
+        self.lastOpenedAt = lastOpenedAt
+    }
+}
+
+nonisolated struct KudosBackupQueueSearchLink: Codable, Equatable {
+    let searchID: UUID
+    let lastCheckedAt: Date?
+    let newResultCount: Int?
+
+    @MainActor init(link: QueueSavedSearchLink) {
+        searchID = link.search?.id ?? UUID()
+        lastCheckedAt = link.lastCheckedAt
+        newResultCount = link.newResultCount
     }
 }
 
@@ -1365,6 +1453,20 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
     let activeSeconds: Double?
     let deviceID: String?
     let rulesVersion: Int?
+    let fandoms: [String]?
+    let relationships: [String]?
+    let characters: [String]?
+    let freeformTags: [String]?
+    let rating: String?
+    let warnings: [String]?
+    let categories: [String]?
+    let authorAccounts: [String]?
+    let language: String?
+    let isCompleteAtVisit: Bool?
+    let metadataSnapshotRecorded: Bool?
+    let ao3SeriesID: Int??
+    let seriesPosition: Int?
+    let publishedYear: Int??
     let lastSpineIndex: Int
     let chapterTitle: String
     let endingProgress: Double
@@ -1378,6 +1480,20 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         case durationSeconds, lastSpineIndex, chapterTitle, endingProgress
         case tzOffsetSeconds, startProgress, startSpineIndex, modeRaw
         case playbackRate, activeSeconds, deviceID, rulesVersion
+        case fandoms
+        case relationships
+        case characters
+        case freeformTags
+        case rating
+        case warnings
+        case categories
+        case authorAccounts
+        case language
+        case isCompleteAtVisit
+        case metadataSnapshotRecorded
+        case ao3SeriesID
+        case seriesPosition
+        case publishedYear
         case wordCount, chapterCountAtVisit, didFinish, lastModifiedAt
     }
 
@@ -1402,6 +1518,21 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         activeSeconds = session.activeSeconds
         deviceID = session.deviceID.isEmpty ? nil : session.deviceID
         rulesVersion = recorded ? session.rulesVersion : nil
+        let snapshot = session.metadataSnapshotRecorded
+        fandoms = snapshot ? session.fandoms : nil
+        relationships = snapshot ? session.relationships : nil
+        characters = snapshot ? session.characters : nil
+        freeformTags = snapshot ? session.freeformTags : nil
+        rating = snapshot ? session.rating : nil
+        warnings = snapshot ? session.warnings : nil
+        categories = snapshot ? session.categories : nil
+        authorAccounts = snapshot ? session.authorAccounts : nil
+        language = snapshot ? session.language : nil
+        metadataSnapshotRecorded = snapshot ? true : nil
+        isCompleteAtVisit = snapshot ? session.isCompleteAtVisit : nil
+        ao3SeriesID = snapshot ? .some(session.ao3SeriesID) : nil
+        seriesPosition = snapshot ? session.seriesPosition : nil
+        publishedYear = snapshot ? .some(session.publishedYear) : nil
         lastSpineIndex = session.lastSpineIndex
         chapterTitle = session.chapterTitle
         endingProgress = session.endingProgress
@@ -1429,6 +1560,22 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         activeSeconds = try container.decodeIfPresent(Double.self, forKey: .activeSeconds)
         deviceID = try container.decodeIfPresent(String.self, forKey: .deviceID)
         rulesVersion = try container.decodeIfPresent(Int.self, forKey: .rulesVersion)
+        fandoms = try container.decodeIfPresent([String].self, forKey: .fandoms)
+        relationships = try container.decodeIfPresent([String].self, forKey: .relationships)
+        characters = try container.decodeIfPresent([String].self, forKey: .characters)
+        freeformTags = try container.decodeIfPresent([String].self, forKey: .freeformTags)
+        rating = try container.decodeIfPresent(String.self, forKey: .rating)
+        warnings = try container.decodeIfPresent([String].self, forKey: .warnings)
+        categories = try container.decodeIfPresent([String].self, forKey: .categories)
+        authorAccounts = try container.decodeIfPresent([String].self, forKey: .authorAccounts)
+        language = try container.decodeIfPresent(String.self, forKey: .language)
+        isCompleteAtVisit = try container.decodeIfPresent(Bool.self, forKey: .isCompleteAtVisit)
+        metadataSnapshotRecorded = try container.decodeIfPresent(Bool.self, forKey: .metadataSnapshotRecorded)
+        ao3SeriesID = container.contains(.ao3SeriesID)
+            ? .some(try container.decode(Int?.self, forKey: .ao3SeriesID)) : nil
+        seriesPosition = try container.decodeIfPresent(Int.self, forKey: .seriesPosition)
+        publishedYear = container.contains(.publishedYear)
+            ? .some(try container.decode(Int?.self, forKey: .publishedYear)) : nil
         lastSpineIndex = try container.decodeIfPresent(Int.self, forKey: .lastSpineIndex) ?? 0
         chapterTitle = try container.decodeIfPresent(String.self, forKey: .chapterTitle) ?? ""
         endingProgress = try container.decodeIfPresent(Double.self, forKey: .endingProgress) ?? 0
@@ -1506,6 +1653,115 @@ nonisolated struct KudosBackupFandomReadWatermark: Codable, Equatable {
             ?? ""
         lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt)
             ?? lastVisitedAt
+    }
+}
+
+/// Additive backup representation of `FollowedTag`. Optional runtime values leave
+/// `nil` rather than emitting placeholder keys until a feed check or user edit sets them.
+nonisolated struct KudosBackupFollowedTag: Codable, Equatable {
+    let id: UUID
+    let ao3TagID: Int
+    let name: String
+    let tagCategoryRaw: String?
+    let tagURLString: String?
+    let showOnHome: Bool
+    let completeOnly: Bool
+    let hideExplicit: Bool
+    let followedAt: Date
+    let lastCheckedAt: Date?
+    let lastSeenWorkID: Int?
+    let lastSeenPublishedAt: Date?
+    let seenWorkIDs: [Int]?
+    let lastModifiedAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case id, ao3TagID, name, tagCategoryRaw, tagURLString
+        case showOnHome, completeOnly, hideExplicit
+        case followedAt, lastCheckedAt, lastSeenWorkID, lastSeenPublishedAt, seenWorkIDs
+        case lastModifiedAt
+    }
+
+    @MainActor
+    init(tag: FollowedTag) {
+        id = tag.id
+        ao3TagID = tag.ao3TagID
+        name = tag.name
+        tagCategoryRaw = tag.tagCategoryRaw
+        tagURLString = tag.tagURLString
+        showOnHome = tag.showOnHome
+        completeOnly = tag.completeOnly
+        hideExplicit = tag.hideExplicit
+        followedAt = tag.followedAt
+        lastCheckedAt = tag.lastCheckedAt
+        lastSeenWorkID = tag.lastSeenWorkID
+        lastSeenPublishedAt = tag.lastSeenPublishedAt
+        let ids = tag.seenWorkIDs
+        seenWorkIDs = ids.isEmpty ? nil : ids
+        lastModifiedAt = tag.lastModifiedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        ao3TagID = try container.decodeIfPresent(Int.self, forKey: .ao3TagID) ?? 0
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        tagCategoryRaw = try container.decodeIfPresent(String.self, forKey: .tagCategoryRaw)
+        tagURLString = try container.decodeIfPresent(String.self, forKey: .tagURLString)
+        showOnHome = try container.decodeIfPresent(Bool.self, forKey: .showOnHome) ?? true
+        completeOnly = try container.decodeIfPresent(Bool.self, forKey: .completeOnly) ?? false
+        hideExplicit = try container.decodeIfPresent(Bool.self, forKey: .hideExplicit) ?? false
+        followedAt = try container.decodeIfPresent(Date.self, forKey: .followedAt) ?? Date()
+        lastCheckedAt = try container.decodeIfPresent(Date.self, forKey: .lastCheckedAt)
+        lastSeenWorkID = try container.decodeIfPresent(Int.self, forKey: .lastSeenWorkID)
+        lastSeenPublishedAt = try container.decodeIfPresent(Date.self, forKey: .lastSeenPublishedAt)
+        let decodedIDs = try container.decodeIfPresent([Int].self, forKey: .seenWorkIDs)
+        seenWorkIDs = decodedIDs?.isEmpty == true ? nil : decodedIDs
+        lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt)
+            ?? followedAt
+    }
+}
+
+/// Codable backup entry for a learned AO3 canonical tag alias (`TagAlias`).
+nonisolated struct KudosBackupTagAlias: Codable, Equatable {
+    let id: UUID
+    let name: String
+    let canonicalName: String
+    let kindRaw: String
+    let parentFandoms: [String]?
+    let learnedAt: Date
+    let lastModifiedAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, canonicalName, kindRaw, parentFandoms, learnedAt, lastModifiedAt
+    }
+
+    @MainActor
+    init(alias: TagAlias) {
+        id = alias.id
+        name = alias.name
+        canonicalName = alias.canonicalName
+        kindRaw = alias.kindRaw
+        let parents = LearnedTagAlias.normalizedParentFandoms(alias.parentFandoms)
+        parentFandoms = parents.isEmpty ? nil : parents
+        learnedAt = alias.learnedAt
+        lastModifiedAt = alias.lastModifiedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = (try container.decodeIfPresent(String.self, forKey: .name) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        canonicalName = (try container.decodeIfPresent(String.self, forKey: .canonicalName) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        kindRaw = try container.decodeIfPresent(String.self, forKey: .kindRaw)
+            ?? TagAliasKind.freeform.rawValue
+        let decodedParents = try container.decodeIfPresent([String].self, forKey: .parentFandoms)
+            .map(LearnedTagAlias.normalizedParentFandoms)
+        parentFandoms = decodedParents?.isEmpty == true ? nil : decodedParents
+        learnedAt = try container.decodeIfPresent(Date.self, forKey: .learnedAt) ?? Date()
+        lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt)
+            ?? learnedAt
     }
 }
 
@@ -1611,6 +1867,12 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
     /// `hue`: an older archive or Android carries none, and `nil` there is "no
     /// description", never an instruction to clear one.
     let notes: String?
+    /// T-533 smart-queue rules. One JSON string, omitted when the queue has
+    /// none. An older archive or Android drops the key; import must not treat
+    /// that as "clear the rules". No manifest version bump.
+    let smartRulesJSON: String?
+    let searchSources: [KudosBackupQueueSearchLink]?
+    let searchSourcesModifiedAt: Date?
 
     @MainActor
     init(queue: ReadingQueue) {
@@ -1628,8 +1890,16 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
         colorHex = queue.colorHex
         tagNames = queue.tags.map(\.name).sorted()
         isPinned = queue.isPinned
-        keepsWorksOffline = queue.keepsWorksOffline
+        keepsWorksOffline = queue.kind == .smart ? false : queue.keepsWorksOffline
         notes = queue.notes
+        // Rules travel only on a queue whose kind uses them, so a custom queue
+        // never carries rules that would read as a smart queue elsewhere.
+        smartRulesJSON = queue.kindRaw == ReadingQueueKind.custom.rawValue || queue.kind == .savedForLater
+            ? nil : queue.smartRulesJSON
+        let links = queue.kind == .smart ? [] : queue.searchLinks.filter { $0.search != nil }
+        searchSources = queue.kind == .smart || (queue.searchSourcesModifiedAt == nil && links.isEmpty)
+            ? nil : links.map(KudosBackupQueueSearchLink.init)
+        searchSourcesModifiedAt = queue.kind == .smart ? nil : queue.searchSourcesModifiedAt
     }
 
     func effectiveModifiedAt(memberships: [KudosBackupReadingQueueMembership]) -> Date? {
@@ -1649,6 +1919,14 @@ nonisolated struct KudosBackupReadingQueueMembership: Codable, Equatable {
     let lastModifiedAt: Date?
     let sortOrderInQueue: Int
     let note: String
+    /// Omitted when unrecorded `.inLine` so existing archives stay byte-identical;
+    /// `stateWasRecorded == true` lets `.reconcile` distinguish an explicit sort
+    /// into `.inLine` from Android / older-iOS manifests stripping unknown keys.
+    let stateRaw: String?
+    let stateWasRecorded: Bool?
+    let originKindRaw: String?
+    let originSearchID: UUID?
+    let originLabel: String?
 
     @MainActor
     init?(membership: ReadingQueueMembership) {
@@ -1662,6 +1940,25 @@ nonisolated struct KudosBackupReadingQueueMembership: Codable, Equatable {
         lastModifiedAt = membership.lastModifiedAt
         sortOrderInQueue = membership.sortOrderInQueue
         note = membership.note
+        let recorded = membership.stateWasRecorded || membership.state != .inLine
+        stateRaw = recorded ? membership.state.rawValue : nil
+        stateWasRecorded = recorded ? true : nil
+        let origin = membership.origin
+        originKindRaw = origin?.kind.rawValue
+        originSearchID = origin?.searchID
+        originLabel = origin?.label
+    }
+
+    var restoredState: ReadingQueueMembershipState {
+        stateRaw.flatMap(ReadingQueueMembershipState.init(rawValue:)) ?? .inLine
+    }
+
+    var restoredOrigin: ReadingQueueMembershipOrigin? {
+        ReadingQueueMembershipOrigin.normalized(
+            kindRaw: originKindRaw,
+            searchID: originSearchID,
+            label: originLabel
+        )
     }
 }
 
@@ -1751,6 +2048,33 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     /// that never chose cannot reset one that did through folder sync. Apply writes only a
     /// value this build knows. Additive — no manifest version bump.
     var workSymbolPlacement: String?
+    /// Nil means an older backup has no opinion about the local preference.
+    var useEmbeddedCoverArt: Bool?
+    /// Settings › Library's weekly saved-series check (T-519b). Nil = an older backup has no opinion.
+    var checksSavedSeriesWeekly: Bool?
+    /// Reader page-turn style (`ReaderPageTurnStyle.storageKey`). Nil when the key is
+    /// absent, so an older archive leaves the local choice. An unknown string is kept
+    /// on the value for a round-trip but not applied. Additive — no manifest version bump.
+    var readerPageTurn: String?
+    /// Settings › Listening's pinned voice id (`ReaderSpeechPreferences.voiceIDKey`).
+    /// Nil when absent or nothing is stored so exports with no pinned voice omit it.
+    var readerSpeechVoiceID: String?
+    /// Settings › Listening's picked voice display name (`ReaderSpeechPreferences.voiceNameKey`).
+    /// Applied only alongside `readerSpeechVoiceID` so one device's label never lands on another's id.
+    var readerSpeechVoiceName: String?
+    var lastAddedReadingQueueID: String?
+    /// Reading Insights options (D5). Nil when unset or absent so untouched
+    /// devices omit them and older/Android payloads leave local choices alone.
+    var discreetMode: Bool?
+    var hideReadingTime: Bool?
+    var countRereads: Bool?
+    var countReadAloud: Bool?
+    var askAboutUntouched: Bool?
+    var untouchedDays: Int?
+    var excludedFandoms: [String]?
+    var excludedTags: [String]?
+    var excludedWorkIDs: [String]?
+
     /// When each setting last changed on the device that wrote this (T-541), keyed by its
     /// `UserDefaults` key. Nil from an older build or Android. See `SyncedSettingsClock`.
     var modifiedAt: [String: Date]?
@@ -1768,7 +2092,16 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         "readerLineHeight", "readerLetterSpacing", "readerWordSpacing", "readerMargin",
         "readerJustify", "appTheme", "readerTheme", "matchAppReaderTheme", "accentColorHex",
         "autoPreserveSmallSeriesOnSaveForLater", "autoPreserveSeriesWorkThreshold",
-        "library.page.arrangement", "workSymbolPlacement", "readerFontID"
+        "library.page.arrangement", "workSymbolPlacement", "readerFontID",
+        // Named fields the integration branch added after T-541 forked: they travel under
+        // their own keys (Android and older builds read those) and are stamped like the rest.
+        "useEmbeddedCoverArt", "checksSavedSeriesWeekly", "readerPageTurn", "readerSpeechVoiceID",
+        "readerSpeechVoiceName", "lastAddedReadingQueueID",
+        "kudos.insights.discreetMode", "kudos.insights.hideReadingTime",
+        "kudos.insights.countRereads", "kudos.insights.countReadAloud",
+        "kudos.insights.askAboutUntouched", "kudos.insights.untouchedDays",
+        "kudos.insights.excludedFandoms", "kudos.insights.excludedTags",
+        "kudos.insights.excludedWorkIDs"
     ]
 
     /// Everything else the reader chose, carried by key since T-541 (owner, 2026-11-16: "backups
@@ -1784,11 +2117,10 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
 
     static let extraKeys: [String: KudosBackupSettingValue.Kind] = [
         "keepScreenAwake": .bool,
+        "workExportIncludesCover": .bool,
         "showsZeroStats": .bool,
         "downloadOnSubscribe": .bool,
         "keepsWorksYouRead": .bool,
-        "kudos.insights.discreetMode": .bool,
-        "kudos.insights.hideReadingTime": .bool,
         "browse.fandoms.groupsVariants": .bool,
         "search.showSummaries": .bool,
         "browse.fandomWorks.showSummaries": .bool,
@@ -1821,7 +2153,6 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         "library.readingQueueBrowser.lastSelectedID": .string,
         "readerHighlightColor": .string,
         "readerSpeechEngine": .string,
-        "readerSpeechVoiceID": .string,
         "ttsDevContinuationPause": .number,
         "ttsDevLinePause": .number,
         "ttsDevParagraphPause": .number,
@@ -1901,7 +2232,22 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         autoPreserveSmallSeriesOnSaveForLater: Bool,
         autoPreserveSeriesWorkThreshold: Int,
         libraryPageArrangement: LibraryPageArrangement? = nil,
-        workSymbolPlacement: String? = nil
+        workSymbolPlacement: String? = nil,
+        useEmbeddedCoverArt: Bool? = nil,
+        checksSavedSeriesWeekly: Bool? = nil,
+        readerPageTurn: String? = nil,
+        readerSpeechVoiceID: String? = nil,
+        readerSpeechVoiceName: String? = nil,
+        lastAddedReadingQueueID: String? = nil,
+        discreetMode: Bool? = nil,
+        hideReadingTime: Bool? = nil,
+        countRereads: Bool? = nil,
+        countReadAloud: Bool? = nil,
+        askAboutUntouched: Bool? = nil,
+        untouchedDays: Int? = nil,
+        excludedFandoms: [String]? = nil,
+        excludedTags: [String]? = nil,
+        excludedWorkIDs: [String]? = nil
     ) {
         self.readerFontID = readerFontID
         self.readerMode = readerMode
@@ -1926,6 +2272,21 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         self.autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
         self.libraryPageArrangement = libraryPageArrangement
         self.workSymbolPlacement = workSymbolPlacement
+        self.useEmbeddedCoverArt = useEmbeddedCoverArt
+        self.checksSavedSeriesWeekly = checksSavedSeriesWeekly
+        self.readerPageTurn = readerPageTurn
+        self.readerSpeechVoiceID = readerSpeechVoiceID
+        self.readerSpeechVoiceName = readerSpeechVoiceName
+        self.lastAddedReadingQueueID = lastAddedReadingQueueID
+        self.discreetMode = discreetMode
+        self.hideReadingTime = hideReadingTime
+        self.countRereads = countRereads
+        self.countReadAloud = countReadAloud
+        self.askAboutUntouched = askAboutUntouched
+        self.untouchedDays = untouchedDays
+        self.excludedFandoms = excludedFandoms
+        self.excludedTags = excludedTags
+        self.excludedWorkIDs = excludedWorkIDs
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1954,6 +2315,21 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         case workSymbolPlacement
         case modifiedAt
         case extras
+        case useEmbeddedCoverArt
+        case checksSavedSeriesWeekly
+        case readerPageTurn
+        case readerSpeechVoiceID
+        case readerSpeechVoiceName
+        case lastAddedReadingQueueID
+        case discreetMode
+        case hideReadingTime
+        case countRereads
+        case countReadAloud
+        case askAboutUntouched
+        case untouchedDays
+        case excludedFandoms
+        case excludedTags
+        case excludedWorkIDs
     }
 
     init(from decoder: Decoder) throws {
@@ -2005,7 +2381,35 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             workSymbolPlacement: (try? container.decodeIfPresent(
                 String.self,
                 forKey: .workSymbolPlacement
-            )) ?? nil
+            )) ?? nil,
+            useEmbeddedCoverArt: (try? container.decodeIfPresent(Bool.self, forKey: .useEmbeddedCoverArt)) ?? nil,
+            checksSavedSeriesWeekly: (try? container.decodeIfPresent(
+                Bool.self, forKey: .checksSavedSeriesWeekly
+            )) ?? nil,
+            readerPageTurn: (try? container.decodeIfPresent(
+                String.self, forKey: .readerPageTurn
+            )) ?? nil,
+            readerSpeechVoiceID: (try? container.decodeIfPresent(
+                String.self,
+                forKey: .readerSpeechVoiceID
+            )) ?? nil,
+            readerSpeechVoiceName: (try? container.decodeIfPresent(
+                String.self,
+                forKey: .readerSpeechVoiceName
+            )) ?? nil,
+            lastAddedReadingQueueID: (try? container.decodeIfPresent(
+                String.self,
+                forKey: .lastAddedReadingQueueID
+            )) ?? nil,
+            discreetMode: (try? container.decodeIfPresent(Bool.self, forKey: .discreetMode)) ?? nil,
+            hideReadingTime: (try? container.decodeIfPresent(Bool.self, forKey: .hideReadingTime)) ?? nil,
+            countRereads: (try? container.decodeIfPresent(Bool.self, forKey: .countRereads)) ?? nil,
+            countReadAloud: (try? container.decodeIfPresent(Bool.self, forKey: .countReadAloud)) ?? nil,
+            askAboutUntouched: (try? container.decodeIfPresent(Bool.self, forKey: .askAboutUntouched)) ?? nil,
+            untouchedDays: (try? container.decodeIfPresent(Int.self, forKey: .untouchedDays)) ?? nil,
+            excludedFandoms: (try? container.decodeIfPresent([String].self, forKey: .excludedFandoms)) ?? nil,
+            excludedTags: (try? container.decodeIfPresent([String].self, forKey: .excludedTags)) ?? nil,
+            excludedWorkIDs: (try? container.decodeIfPresent([String].self, forKey: .excludedWorkIDs)) ?? nil
         )
         // Entry by entry: one bad entry must not drop the rest, and must not read as the
         // whole map being absent, which a removal would take as "reset everywhere".
@@ -2038,7 +2442,11 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     }
 
     private static func values(defaults: UserDefaults) -> Self {
-        Self(
+        let capturedVoiceID = nonEmptyString(defaults, ReaderSpeechPreferences.voiceIDKey)
+        let capturedVoiceName = capturedVoiceID == nil
+            ? nil
+            : nonEmptyString(defaults, ReaderSpeechPreferences.voiceNameKey)
+        return Self(
             readerFontID: defaults.string(forKey: "readerFontID") ?? "system",
             readerMode: defaults.string(forKey: "readerMode") ?? ReadingMode.scroll.rawValue,
             readerTwoPage: bool(defaults, "readerTwoPage", fallback: false),
@@ -2090,7 +2498,37 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             )),
             libraryPageArrangement: LibraryPageArrangement.stored(in: defaults),
             // Only a stored choice, like `accentColorHex`.
-            workSymbolPlacement: defaults.string(forKey: WorkSymbolPlacement.storageKey)
+            workSymbolPlacement: defaults.string(forKey: WorkSymbolPlacement.storageKey),
+            useEmbeddedCoverArt: defaults.object(forKey: "useEmbeddedCoverArt") == nil
+                ? nil : defaults.bool(forKey: "useEmbeddedCoverArt"),
+            checksSavedSeriesWeekly: defaults.object(forKey: "checksSavedSeriesWeekly") == nil
+                ? nil : defaults.bool(forKey: "checksSavedSeriesWeekly"),
+            readerPageTurn: {
+                let raw = defaults.string(forKey: ReaderPageTurnStyle.storageKey)
+                guard let raw, !raw.isEmpty else { return nil }
+                return raw
+            }(),
+            readerSpeechVoiceID: capturedVoiceID,
+            readerSpeechVoiceName: capturedVoiceName,
+            lastAddedReadingQueueID: defaults.string(forKey: "lastAddedReadingQueueID"),
+            discreetMode: defaults.object(forKey: InsightsOptions.Keys.discreetMode) == nil
+                ? nil : defaults.bool(forKey: InsightsOptions.Keys.discreetMode),
+            hideReadingTime: defaults.object(forKey: InsightsOptions.Keys.hideReadingTime) == nil
+                ? nil : defaults.bool(forKey: InsightsOptions.Keys.hideReadingTime),
+            countRereads: defaults.object(forKey: InsightsOptions.Keys.countRereads) == nil
+                ? nil : defaults.bool(forKey: InsightsOptions.Keys.countRereads),
+            countReadAloud: defaults.object(forKey: InsightsOptions.Keys.countReadAloud) == nil
+                ? nil : defaults.bool(forKey: InsightsOptions.Keys.countReadAloud),
+            askAboutUntouched: defaults.object(forKey: InsightsOptions.Keys.askAboutUntouched) == nil
+                ? nil : defaults.bool(forKey: InsightsOptions.Keys.askAboutUntouched),
+            untouchedDays: defaults.object(forKey: InsightsOptions.Keys.untouchedDays) == nil
+                ? nil : InsightsOptions.clampUntouchedDays(defaults.integer(forKey: InsightsOptions.Keys.untouchedDays)),
+            excludedFandoms: defaults.object(forKey: InsightsOptions.Keys.excludedFandoms) == nil
+                ? nil : InsightsOptions.normalizedNames(defaults.stringArray(forKey: InsightsOptions.Keys.excludedFandoms) ?? []),
+            excludedTags: defaults.object(forKey: InsightsOptions.Keys.excludedTags) == nil
+                ? nil : InsightsOptions.normalizedNames(defaults.stringArray(forKey: InsightsOptions.Keys.excludedTags) ?? []),
+            excludedWorkIDs: defaults.object(forKey: InsightsOptions.Keys.excludedWorkIDs) == nil
+                ? nil : InsightsOptions.normalizedWorkIDs(defaults.stringArray(forKey: InsightsOptions.Keys.excludedWorkIDs) ?? [])
         )
     }
 
@@ -2120,11 +2558,13 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         func wins(_ id: String, _ incoming: SyncedSettingsClock.Stamp?) -> Bool {
             SyncedSettingsClock.incomingWins(local: localStamps[id], incoming: incoming, fromSync: fromSync)
         }
-        func write(_ value: Any, _ key: String) {
+        @discardableResult
+        func write(_ value: Any, _ key: String) -> Bool {
             let incoming = stamp(key)
-            guard wins(key, incoming) else { return }
+            guard wins(key, incoming) else { return false }
             defaults.set(value, forKey: key)
             SyncedSettingsClock.adopt(key: key, stamp: incoming, in: defaults)
+            return true
         }
         // A map setting merges entry by entry: comment drafts typed on two devices both stay.
         func merge(_ incoming: [String: String], into key: String) {
@@ -2251,6 +2691,17 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             defaults.removeObject(forKey: named.key)
             SyncedSettingsClock.adopt(key: named.key, stamp: own, in: defaults)
         }
+        // The integration's named fields are not part of `extras`, so an unreadable entry there
+        // does not stop them.
+        applyNamedByRecency(
+            write: { write($0, $1) },
+            reset: { key, absent in
+                guard absent, let own = ownStamp(key), wins(key, own) else { return }
+                defaults.removeObject(forKey: key)
+                SyncedSettingsClock.adopt(key: key, stamp: own, in: defaults)
+            },
+            defaults: defaults
+        )
         guard !extrasIncomplete else { return }
         for key in observed.keys where !observed.maps.contains(key) && Self.extraKind(for: key) != nil
             && extras?[key] == nil {
@@ -2258,6 +2709,80 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             defaults.removeObject(forKey: key)
             SyncedSettingsClock.adopt(key: key, stamp: own, in: defaults)
         }
+    }
+
+    /// The named fields the integration branch added: written by recency like every other
+    /// setting, and reset when the sender's own stamp says it removed the value.
+    private func applyNamedByRecency(
+        write: (Any, String) -> Bool, reset: (String, Bool) -> Void, defaults: UserDefaults
+    ) {
+        @discardableResult func put(_ value: Any, _ key: String) -> Bool { write(value, key) }
+        if let useEmbeddedCoverArt { put(useEmbeddedCoverArt, "useEmbeddedCoverArt") }
+        if let checksSavedSeriesWeekly { put(checksSavedSeriesWeekly, "checksSavedSeriesWeekly") }
+        // Absent leaves the local page-turn style. A string this build does not
+        // know stays in the archive (capture keeps it) but is not written.
+        if let readerPageTurn, ReaderPageTurnStyle(rawValue: readerPageTurn) != nil {
+            put(readerPageTurn, ReaderPageTurnStyle.storageKey)
+        }
+        // Apply the display name only together with its voice id; an archive
+        // with a name alone must never label a different local voice id.
+        if let voiceID = Self.trimmedNonEmpty(readerSpeechVoiceID) {
+            let localVoiceID = Self.nonEmptyString(defaults, ReaderSpeechPreferences.voiceIDKey)
+            if put(voiceID, ReaderSpeechPreferences.voiceIDKey) {
+                if let voiceName = Self.trimmedNonEmpty(readerSpeechVoiceName) {
+                    _ = put(voiceName, ReaderSpeechPreferences.voiceNameKey)
+                } else if localVoiceID != voiceID {
+                    defaults.removeObject(forKey: ReaderSpeechPreferences.voiceNameKey)
+                }
+            }
+        }
+        if let lastAddedReadingQueueID, UUID(uuidString: lastAddedReadingQueueID) != nil {
+            put(lastAddedReadingQueueID, "lastAddedReadingQueueID")
+        }
+        if let discreetMode { put(discreetMode, InsightsOptions.Keys.discreetMode) }
+        if let hideReadingTime { put(hideReadingTime, InsightsOptions.Keys.hideReadingTime) }
+        if let countRereads { put(countRereads, InsightsOptions.Keys.countRereads) }
+        if let countReadAloud { put(countReadAloud, InsightsOptions.Keys.countReadAloud) }
+        if let askAboutUntouched { put(askAboutUntouched, InsightsOptions.Keys.askAboutUntouched) }
+        if let untouchedDays {
+            put(InsightsOptions.clampUntouchedDays(untouchedDays), InsightsOptions.Keys.untouchedDays)
+        }
+        if let excludedFandoms {
+            put(InsightsOptions.normalizedNames(excludedFandoms), InsightsOptions.Keys.excludedFandoms)
+        }
+        if let excludedTags {
+            put(InsightsOptions.normalizedNames(excludedTags), InsightsOptions.Keys.excludedTags)
+        }
+        if let excludedWorkIDs {
+            put(InsightsOptions.normalizedWorkIDs(excludedWorkIDs), InsightsOptions.Keys.excludedWorkIDs)
+        }
+        // Absent with the sender's own stamp is a reset there; absent without one is an older
+        // build or Android that never wrote the field.
+        reset("useEmbeddedCoverArt", useEmbeddedCoverArt == nil)
+        reset("checksSavedSeriesWeekly", checksSavedSeriesWeekly == nil)
+        reset(ReaderPageTurnStyle.storageKey, readerPageTurn == nil)
+        reset(ReaderSpeechPreferences.voiceIDKey, Self.trimmedNonEmpty(readerSpeechVoiceID) == nil)
+        reset(ReaderSpeechPreferences.voiceNameKey, Self.trimmedNonEmpty(readerSpeechVoiceName) == nil)
+        reset("lastAddedReadingQueueID", lastAddedReadingQueueID == nil)
+        reset(InsightsOptions.Keys.discreetMode, discreetMode == nil)
+        reset(InsightsOptions.Keys.hideReadingTime, hideReadingTime == nil)
+        reset(InsightsOptions.Keys.countRereads, countRereads == nil)
+        reset(InsightsOptions.Keys.countReadAloud, countReadAloud == nil)
+        reset(InsightsOptions.Keys.askAboutUntouched, askAboutUntouched == nil)
+        reset(InsightsOptions.Keys.untouchedDays, untouchedDays == nil)
+        reset(InsightsOptions.Keys.excludedFandoms, excludedFandoms == nil)
+        reset(InsightsOptions.Keys.excludedTags, excludedTags == nil)
+        reset(InsightsOptions.Keys.excludedWorkIDs, excludedWorkIDs == nil)
+    }
+
+    private static func trimmedNonEmpty(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    private static func nonEmptyString(_ defaults: UserDefaults, _ key: String) -> String? {
+        trimmedNonEmpty(defaults.string(forKey: key))
     }
 
     private static func bool(
@@ -2283,6 +2808,8 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     let fonts: Int
     var suppressedQueues: Int = 0
     var suppressedQueueMemberships: Int = 0
+    /// Archived memberships targeting a `.smart` queue (computed from rules, never stored).
+    var skippedSmartQueueMemberships: Int = 0
     var revivedQueues: Int = 0
     var restoredRevivedQueueMemberships: Int = 0
     var ambiguousQueueConflicts: Int = 0
@@ -2303,6 +2830,8 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     /// recovered half, and it is the whole point of merging a backup after a
     /// download has gone missing.
     var recoveredMissingEPUBs: Int = 0
+    /// Cover pins whose tier or ring the restore brought up to date; announced to sync only after the save.
+    var reconciledCoverPins: Int = 0
     /// Imported originals written back — the documents converted works were
     /// made from, which backups did not carry at all until now.
     var restoredOriginals: Int = 0
@@ -2453,6 +2982,8 @@ enum KudosBackupService {
         readingSessions: [ReadingSession] = [],
         readingFavorites: [ReadingFavorite] = [],
         fandomReadWatermarks: [FandomReadWatermark] = [],
+        followedTags: [FollowedTag] = [],
+        tagAliases: [TagAlias] = [],
         tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupContents {
@@ -2472,7 +3003,9 @@ enum KudosBackupService {
             }
         }
 
-        let queueMemberships = readingQueues.flatMap(\.memberships)
+        let queueMemberships = readingQueues
+            .filter { $0.kind != .smart }
+            .flatMap(\.memberships)
             .compactMap(KudosBackupReadingQueueMembership.init)
         // Imported originals: the exact file a converted work was made from,
         // plus the record naming the converter that made it. `preserveOriginal`
@@ -2502,6 +3035,8 @@ enum KudosBackupService {
             readingSessions: readingSessions.map(KudosBackupReadingSession.init),
             readingFavorites: readingFavorites.map(KudosBackupReadingFavorite.init),
             fandomReadWatermarks: fandomReadWatermarks.map(KudosBackupFandomReadWatermark.init),
+            followedTags: followedTags.map(KudosBackupFollowedTag.init),
+            tagAliases: tagAliases.map(KudosBackupTagAlias.init),
             settings: .capture(defaults: defaults),
             pronunciations: .capture(),
             tombstones: tombstones.map(KudosBackupTombstone.init)
@@ -2565,6 +3100,10 @@ enum KudosBackupService {
                 journal: journal
             )
             journal.discard()
+            if summary.reconciledCoverPins > 0 {
+                FolderSyncService.markDirty(defaults: defaults)
+                NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+            }
             return summary
         } catch {
             journal.restoreDisplaced()
@@ -2693,6 +3232,7 @@ enum KudosBackupService {
         var skippedInvalidEPUBs = 0
         var worksMissingPromisedEPUB = 0
         var recoveredMissingEPUBs = 0
+        var reconciledCoverPins = 0
 
         // Phase 1: unsigned incoming tombstones still drop.
         // Phase 2: adopt only if the signature verifies over the incoming
@@ -2881,13 +3421,15 @@ enum KudosBackupService {
                     localModifiedAt: work.lastModifiedAt,
                     incomingModifiedAt: archived.lastModifiedAt ?? archived.dateAdded
                 )
-            apply(
+            if apply(
                 archived,
                 to: work,
                 isNewRecord: isNewRecord,
                 mode: mode,
                 adoptsArchiveClock: createdNewWork
-            )
+            ) {
+                reconciledCoverPins += 1
+            }
             restoredWorksByArchivedID[archived.id] = work
             workIndex.index(work)
 
@@ -2950,6 +3492,14 @@ enum KudosBackupService {
                     try ReadingQueueService.replaceEPUB(for: work, with: staged)
                     work.hasEPUB = true
                     markPreservedIfFileRestored(work)
+                    // `replaceEPUB` clears derived chapter counts when EPUB bytes change;
+                    // re-apply any validated D3 fields from the matching incoming record.
+                    if let validCounts = SavedWork.validatedChapterWordCountsJSON(archived.chapterWordCountsJSON) {
+                        work.chapterWordCountsJSON = validCounts
+                    }
+                    if let validUnit = SavedWork.validatedWordUnitRaw(archived.wordUnitRaw) {
+                        work.wordUnitRaw = validUnit
+                    }
                 } catch {
                     try? FileManager.default.removeItem(at: staged)
                     // This one work is being skipped while the restore carries
@@ -3224,6 +3774,7 @@ enum KudosBackupService {
         var revivedQueueIDs: Set<UUID> = []
         var suppressedQueues = 0
         var suppressedQueueMemberships = 0
+        var skippedSmartQueueMemberships = 0
         var suppressedAnnotations = 0
         var revivedQueues = 0
         var restoredRevivedQueueMemberships = 0
@@ -3282,6 +3833,11 @@ enum KudosBackupService {
                     dateCreated: archived.dateCreated,
                     dateUpdated: archived.dateUpdated
                 )
+                // `kind` collapses an unknown raw value to `.custom`. Keep the
+                // archived string so a later export still says what it said.
+                if kind != .savedForLater, !archived.kindRaw.isEmpty {
+                    queue.kindRaw = archived.kindRaw
+                }
                 context.insert(queue)
                 queuesByID[archived.id] = queue
             }
@@ -3305,12 +3861,24 @@ enum KudosBackupService {
                     incomingModifiedAt: incomingModifiedAt
                 )
             }
-            if kind == .savedForLater {
+            // `queue.kind` too: an archive that reuses Saved for Later's id under
+            // another kind must not turn the built-in queue into that kind.
+            if kind == .savedForLater || queue.kind == .savedForLater {
                 queue.name = ReadingQueueService.savedForLaterName
                 queue.kind = .savedForLater
             } else if incomingWins || queue.name.isEmpty {
                 queue.name = archived.name
-                queue.kind = kind
+                // Write the archived string, not `kind`. `ReadingQueueKind(rawValue:)`
+                // maps anything it does not know — including a future kind — to
+                // `.custom`, and assigning that would erase it on the way back out.
+                // Older shipped iOS builds decode unknown kinds as `.custom`, so an
+                // archive's "custom" never downgrades a queue this device knows as
+                // another kind, with or without rules (no UI turns a queue custom).
+                if incomingWins, !archived.kindRaw.isEmpty,
+                   !(archived.kindRaw == ReadingQueueKind.custom.rawValue
+                     && queue.kindRaw != ReadingQueueKind.custom.rawValue) {
+                    queue.kindRaw = archived.kindRaw
+                }
                 queue.sortOrder = archived.sortOrder
             }
             // Only ever fills a colour in, never clears one: an archive written
@@ -3336,13 +3904,27 @@ enum KudosBackupService {
             }
             // `nil` here is "never asked", which is why it is optional: an older
             // archive cannot be read as the reader having chosen "no".
-            if let archivedOffline = archived.keepsWorksOffline,
-               incomingWins || queue.keepsWorksOffline == nil {
+            // Smart queues never keep works offline; leaving `nil` would read as
+            // "never asked" (`KeepOffline.queueKeeps(nil) == true`).
+            if queue.kind == .smart {
+                queue.keepsWorksOffline = false
+            } else if let archivedOffline = archived.keepsWorksOffline,
+                      incomingWins || queue.keepsWorksOffline == nil {
                 queue.keepsWorksOffline = archivedOffline
             }
             // The description fills in, and a winning archive's "" clears it.
             if let archivedNotes = archived.notes, incomingWins || queue.notes == nil {
                 queue.notes = archivedNotes
+            }
+            // Same as notes: a missing key is an older archive or Android, not
+            // a request to drop rules this device already stored. Replace
+            // included — the key's absence is not part of the snapshot.
+            // A custom queue (or one an older build downgraded) never stores
+            // rules: they would be re-exported and read as a smart queue.
+            if let archivedRules = archived.smartRulesJSON,
+               queue.kindRaw != ReadingQueueKind.custom.rawValue, queue.kind != .savedForLater,
+               incomingWins || queue.smartRulesJSON == nil {
+                queue.smartRulesJSON = archivedRules
             }
             // Union-only under merge and reconcile, exactly like SavedWork's
             // user tags above: there is no per-tag tombstone, so absence from a
@@ -3442,6 +4024,9 @@ enum KudosBackupService {
             let queue: ReadingQueue
             if let mapped = queueIDMap[archived.queueID] {
                 queue = mapped
+            } else if let existing = queuesByID[archived.queueID], existing.kind == .smart {
+                skippedSmartQueueMemberships += 1
+                continue
             } else {
                 // A malformed/older backup can contain a membership without the queue
                 // metadata. Preserve it in a clearly-restored custom queue instead of
@@ -3461,6 +4046,11 @@ enum KudosBackupService {
                 queueIDMap[archived.queueID] = restoredQueue
                 ambiguousQueueConflicts += 1
                 queue = restoredQueue
+            }
+            // Smart queues compute their works from rules; never attach stored memberships.
+            guard queue.kind != .smart else {
+                skippedSmartQueueMemberships += 1
+                continue
             }
             if let existing = work.queueMemberships.first(where: { $0.queue?.id == queue.id }) {
                 let incomingModifiedAt = archived.lastModifiedAt ?? archived.queuedAt
@@ -3483,6 +4073,16 @@ enum KudosBackupService {
                 if membershipWins {
                     existing.sortOrderInQueue = archived.sortOrderInQueue
                     existing.note = archived.note
+                    if mode == .replaceLibrary || archived.stateRaw != nil || archived.stateWasRecorded == true {
+                        let recorded = archived.stateWasRecorded ?? (archived.stateRaw != nil)
+                        existing.state = archived.restoredState
+                        existing.stateWasRecorded = recorded
+                    }
+                    if mode == .replaceLibrary {
+                        existing.origin = archived.restoredOrigin
+                    } else if let incomingOrigin = archived.restoredOrigin {
+                        existing.origin = incomingOrigin
+                    }
                     existing.lastModifiedAt = incomingModifiedAt
                     queue.lastMembershipChangedAt = max(queue.lastMembershipChangedAt, incomingModifiedAt)
                 }
@@ -3495,7 +4095,10 @@ enum KudosBackupService {
                 work: work,
                 queuedAt: archived.queuedAt,
                 sortOrderInQueue: archived.sortOrderInQueue,
-                note: archived.note
+                note: archived.note,
+                state: archived.restoredState,
+                stateWasRecorded: archived.stateWasRecorded ?? (archived.stateRaw != nil),
+                origin: archived.restoredOrigin
             )
             membership.lastModifiedAt = archived.lastModifiedAt ?? archived.queuedAt
             context.insert(membership)
@@ -3513,7 +4116,17 @@ enum KudosBackupService {
         // The same second pass saved searches and reading sessions have, on the
         // membership's own clock: one changed after the removal survives.
         let membershipsAfterRestore = (try? context.fetch(FetchDescriptor<ReadingQueueMembership>())) ?? []
-        applyTombstonesToExisting(membershipsAfterRestore, in: context, mode: mode) {
+        var nonSmartMemberships: [ReadingQueueMembership] = []
+        for membership in membershipsAfterRestore {
+            if membership.queue?.kind == .smart {
+                membership.queue?.memberships.removeAll { $0.id == membership.id }
+                membership.work?.queueMemberships.removeAll { $0.id == membership.id }
+                context.delete(membership)
+            } else {
+                nonSmartMemberships.append(membership)
+            }
+        }
+        applyTombstonesToExisting(nonSmartMemberships, in: context, mode: mode) {
             tombstones.membershipResolution(id: $0.id, incomingModifiedAt: $0.lastModifiedAt)
         }
         ReadingQueueService.normalizeAllQueuedWorks(in: context)
@@ -3552,12 +4165,58 @@ enum KudosBackupService {
                 existing.name = archived.name
                 existing.dateAdded = archived.dateAdded
                 existing.filters = archived.filters
+                if let opened = archived.lastOpenedAt,
+                   mode == .replaceLibrary || opened > (existing.lastOpenedAt ?? .distantPast) {
+                    existing.lastOpenedAt = opened
+                }
             } else {
                 let search = SavedSearch(name: archived.name, filters: archived.filters)
                 search.id = archived.id
                 search.dateAdded = archived.dateAdded
+                search.lastOpenedAt = archived.lastOpenedAt
                 context.insert(search)
                 savedSearchesByID[archived.id] = search
+            }
+        }
+        // An absent key is an older or Android snapshot, not a request to
+        // detach sources already recorded on this device.
+        for archived in contents.manifest.readingQueues {
+            guard !suppressedQueueIDs.contains(archived.id),
+                  let sources = archived.searchSources,
+                  let queue = queuesByID[archived.id],
+                  queue.kind != .smart
+            else { continue }
+            let sourceStamp = archived.searchSourcesModifiedAt ?? archived.dateUpdated
+            let applyMembership = mode == .replaceLibrary
+                || sourceStamp > (queue.searchSourcesModifiedAt ?? .distantPast)
+            if applyMembership {
+                let incomingIDs = Set(sources.map(\.searchID))
+                for link in queue.searchLinks where link.search.map({ !incomingIDs.contains($0.id) }) ?? true {
+                    context.delete(link)
+                }
+                queue.searchSourcesModifiedAt = sourceStamp
+            }
+            var seenSourceIDs = Set<UUID>()
+            for source in sources {
+                guard seenSourceIDs.insert(source.searchID).inserted else { continue }
+                guard let search = savedSearchesByID[source.searchID] else { continue }
+                let existing = queue.searchLinks.first { $0.search?.id == source.searchID }
+                guard applyMembership || existing != nil else { continue }
+                let link = existing ?? {
+                    let created = QueueSavedSearchLink(queue: queue, search: search)
+                    context.insert(created)
+                    return created
+                }()
+                if let checked = source.lastCheckedAt,
+                   mode == .replaceLibrary || checked > (link.lastCheckedAt ?? .distantPast) {
+                    link.lastCheckedAt = checked
+                    link.newResultCount = source.newResultCount
+                }
+                // A visit clears the badge even when no new check has run.
+                if let opened = search.lastOpenedAt,
+                   opened > (link.lastCheckedAt ?? .distantPast) {
+                    link.newResultCount = 0
+                }
             }
         }
         // Searches this device still has that a trusted tombstone says were
@@ -3588,6 +4247,12 @@ enum KudosBackupService {
             restoredWorksByArchivedID: restoredWorksByArchivedID
         )
         restoreFandomReadWatermarks(
+            contents: contents, context: context, tombstones: tombstones, mode: mode
+        )
+        restoreFollowedTags(
+            contents: contents, context: context, tombstones: tombstones, mode: mode
+        )
+        restoreTagAliases(
             contents: contents, context: context, tombstones: tombstones, mode: mode
         )
 
@@ -3960,6 +4625,7 @@ enum KudosBackupService {
             fonts: restoredFonts,
             suppressedQueues: suppressedQueues,
             suppressedQueueMemberships: suppressedQueueMemberships,
+            skippedSmartQueueMemberships: skippedSmartQueueMemberships,
             revivedQueues: revivedQueues,
             restoredRevivedQueueMemberships: restoredRevivedQueueMemberships,
             ambiguousQueueConflicts: ambiguousQueueConflicts,
@@ -3970,6 +4636,7 @@ enum KudosBackupService {
             removedCollectionMemberships: removedCollectionMemberships,
             worksMissingPromisedEPUB: worksMissingPromisedEPUB,
             recoveredMissingEPUBs: recoveredMissingEPUBs,
+            reconciledCoverPins: reconciledCoverPins,
             restoredOriginals: restoredOriginals,
             suppressedAnnotations: suppressedAnnotations,
             removedWorks: removedWorks,
@@ -4047,6 +4714,21 @@ enum KudosBackupService {
                     didFinish: archived.didFinish,
                     lastModifiedAt: archived.lastModifiedAt
                 )
+                session.fandoms = archived.fandoms ?? session.fandoms
+                session.relationships = archived.relationships ?? session.relationships
+                session.characters = archived.characters ?? session.characters
+                session.freeformTags = archived.freeformTags ?? session.freeformTags
+                session.rating = archived.rating ?? session.rating
+                session.warnings = archived.warnings ?? session.warnings
+                session.categories = archived.categories ?? session.categories
+                session.authorAccounts = archived.authorAccounts ?? session.authorAccounts
+                session.language = archived.language ?? session.language
+                session.isCompleteAtVisit = archived.isCompleteAtVisit ?? session.isCompleteAtVisit
+                session.metadataSnapshotRecorded = archived.metadataSnapshotRecorded
+                    ?? session.metadataSnapshotRecorded
+                if let value = archived.ao3SeriesID { session.ao3SeriesID = value }
+                session.seriesPosition = archived.seriesPosition ?? session.seriesPosition
+                if let value = archived.publishedYear { session.publishedYear = value }
                 context.insert(session)
                 byID[archived.id] = session
                 resolvedLocalIDs.insert(session.id)
@@ -4116,6 +4798,21 @@ enum KudosBackupService {
         session.activeSeconds = archived.activeSeconds ?? session.activeSeconds
         session.deviceID = archived.deviceID ?? session.deviceID
         session.rulesVersion = archived.rulesVersion ?? session.rulesVersion
+        session.fandoms = archived.fandoms ?? session.fandoms
+        session.relationships = archived.relationships ?? session.relationships
+        session.characters = archived.characters ?? session.characters
+        session.freeformTags = archived.freeformTags ?? session.freeformTags
+        session.rating = archived.rating ?? session.rating
+        session.warnings = archived.warnings ?? session.warnings
+        session.categories = archived.categories ?? session.categories
+        session.authorAccounts = archived.authorAccounts ?? session.authorAccounts
+        session.language = archived.language ?? session.language
+        session.isCompleteAtVisit = archived.isCompleteAtVisit ?? session.isCompleteAtVisit
+        session.metadataSnapshotRecorded = archived.metadataSnapshotRecorded
+            ?? session.metadataSnapshotRecorded
+        if let value = archived.ao3SeriesID { session.ao3SeriesID = value }
+        session.seriesPosition = archived.seriesPosition ?? session.seriesPosition
+        if let value = archived.publishedYear { session.publishedYear = value }
         session.lastSpineIndex = archived.lastSpineIndex
         session.chapterTitle = archived.chapterTitle
         session.endingProgress = min(1, max(0, archived.endingProgress))
@@ -4289,6 +4986,237 @@ enum KudosBackupService {
             for watermark in existing where !resolvedLocalIDs.contains(watermark.id) {
                 SyncTombstones.recordDeletion(of: watermark, in: context)
                 context.delete(watermark)
+            }
+        }
+    }
+
+    /// Restores locally followed tags when `manifest.followedTags` is present.
+    ///
+    /// Older iOS backups and Android archives omit `followedTags` (`nil`), in which case
+    /// existing local followed tags are left completely untouched.
+    private static func restoreFollowedTags(
+        contents: KudosBackupContents,
+        context: ModelContext,
+        tombstones: TombstoneIndex,
+        mode: BackupImportMode
+    ) {
+        guard let archivedTags = contents.manifest.followedTags else { return }
+
+        let existing = (try? context.fetch(FetchDescriptor<FollowedTag>())) ?? []
+        // Suppress tombstoned local rows before counting survivors against the 20-tag cap
+        // so unfollows from another device free slots for incoming follows in the same pass.
+        var suppressedLocalIDs: Set<UUID> = []
+        if mode != .replaceLibrary {
+            for tag in existing {
+                if case .suppressStaleData = tombstones.followedTagResolution(
+                    id: tag.id,
+                    incomingModifiedAt: tag.lastModifiedAt
+                ) {
+                    suppressedLocalIDs.insert(tag.id)
+                    context.delete(tag)
+                }
+            }
+        }
+        let survivors = existing.filter { !suppressedLocalIDs.contains($0.id) }
+        var byID = Dictionary(survivors.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var byAO3TagID = Dictionary(
+            survivors.map { ($0.ao3TagID, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var resolvedLocalIDs: Set<UUID> = []
+
+        for archived in archivedTags {
+            guard archived.ao3TagID > 0 else { continue }
+            if mode != .replaceLibrary {
+                switch tombstones.followedTagResolution(
+                    id: archived.id,
+                    incomingModifiedAt: archived.lastModifiedAt
+                ) {
+                case .suppressStaleData:
+                    continue
+                case .reviveNewerData, .preserveAmbiguous, .noTombstone:
+                    break
+                }
+            }
+
+            if let local = byID[archived.id] ?? byAO3TagID[archived.ao3TagID] {
+                resolvedLocalIDs.insert(local.id)
+                if mode == .merge, byID[archived.id] != nil { continue }
+                guard SyncMerge.shouldApplyIncoming(
+                    localModifiedAt: local.lastModifiedAt,
+                    incomingModifiedAt: archived.lastModifiedAt
+                ) else { continue }
+                apply(archived, to: local)
+                byID[local.id] = local
+                byAO3TagID[local.ao3TagID] = local
+            } else {
+                if mode == .replaceLibrary {
+                    guard resolvedLocalIDs.count < FollowedTag.maxFollowedCount else { continue }
+                } else {
+                    guard byID.count < FollowedTag.maxFollowedCount else { continue }
+                }
+                let tag = FollowedTag(
+                    id: archived.id,
+                    ao3TagID: archived.ao3TagID,
+                    name: archived.name,
+                    tagCategoryRaw: archived.tagCategoryRaw,
+                    tagURLString: archived.tagURLString,
+                    showOnHome: archived.showOnHome,
+                    completeOnly: archived.completeOnly,
+                    hideExplicit: archived.hideExplicit,
+                    followedAt: archived.followedAt,
+                    lastCheckedAt: archived.lastCheckedAt,
+                    lastSeenWorkID: archived.lastSeenWorkID,
+                    lastSeenPublishedAt: archived.lastSeenPublishedAt,
+                    seenWorkIDs: archived.seenWorkIDs ?? [],
+                    lastModifiedAt: archived.lastModifiedAt
+                )
+                context.insert(tag)
+                byID[tag.id] = tag
+                byAO3TagID[tag.ao3TagID] = tag
+                resolvedLocalIDs.insert(tag.id)
+            }
+        }
+
+        if mode == .replaceLibrary {
+            for tag in existing where !resolvedLocalIDs.contains(tag.id) {
+                SyncTombstones.recordDeletion(of: tag, in: context)
+                context.delete(tag)
+            }
+        }
+    }
+
+    private static func apply(_ archived: KudosBackupFollowedTag, to local: FollowedTag) {
+        local.ao3TagID = archived.ao3TagID
+        local.name = archived.name
+        local.tagCategoryRaw = archived.tagCategoryRaw
+        local.tagURLString = archived.tagURLString
+        local.showOnHome = archived.showOnHome
+        local.completeOnly = archived.completeOnly
+        local.hideExplicit = archived.hideExplicit
+        local.followedAt = archived.followedAt
+        if let archivedChecked = archived.lastCheckedAt,
+           local.lastCheckedAt == nil || archivedChecked > (local.lastCheckedAt ?? .distantPast) {
+            local.lastCheckedAt = archivedChecked
+        }
+        if let archivedWorkID = archived.lastSeenWorkID,
+           local.lastSeenPublishedAt == nil
+            || (archived.lastSeenPublishedAt ?? .distantPast)
+            >= (local.lastSeenPublishedAt ?? .distantPast) {
+            local.lastSeenWorkID = archivedWorkID
+            local.lastSeenPublishedAt = archived.lastSeenPublishedAt
+        }
+        if let archivedSeen = archived.seenWorkIDs, !archivedSeen.isEmpty {
+            local.seenWorkIDs += archivedSeen
+        }
+        local.lastModifiedAt = archived.lastModifiedAt
+    }
+
+    /// Restores learned canonical tag aliases when `manifest.tagAliases` is present.
+    ///
+    /// Older iOS backups and Android archives omit `tagAliases` (`nil`), in which case
+    /// existing local aliases are left completely untouched.
+    private static func restoreTagAliases(
+        contents: KudosBackupContents,
+        context: ModelContext,
+        tombstones: TombstoneIndex,
+        mode: BackupImportMode
+    ) {
+        let archivedAliases = contents.manifest.tagAliases
+        if archivedAliases == nil, !tombstones.hasTagAliasTombstones {
+            return
+        }
+
+        let existing = (try? context.fetch(FetchDescriptor<TagAlias>())) ?? []
+        var suppressedLocalIDs: Set<UUID> = []
+        if mode != .replaceLibrary {
+            for alias in existing {
+                if case .suppressStaleData = tombstones.tagAliasResolution(
+                    id: alias.id,
+                    incomingModifiedAt: alias.lastModifiedAt
+                ) {
+                    suppressedLocalIDs.insert(alias.id)
+                    context.delete(alias)
+                }
+            }
+        }
+
+        // Legacy/Android archives omit `tagAliases` (`nil`); after applying any
+        // explicit deletions above, leave surviving local aliases untouched.
+        guard let archivedAliases else { return }
+
+        let survivors = existing.filter { !suppressedLocalIDs.contains($0.id) }
+        var byID = Dictionary(survivors.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var byNaturalKey = Dictionary(
+            survivors.map { (TagAlias.normalizedKey(name: $0.name, kind: $0.kind), $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var resolvedLocalIDs: Set<UUID> = []
+
+        for archived in archivedAliases {
+            let name = archived.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let canonicalName = archived.canonicalName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, !canonicalName.isEmpty, name != canonicalName else { continue }
+            let kind = TagAliasKind(rawValue: archived.kindRaw) ?? .freeform
+            let naturalKey = TagAlias.normalizedKey(name: name, kind: kind)
+            let incomingParents = LearnedTagAlias.normalizedParentFandoms(archived.parentFandoms ?? [])
+
+            if mode != .replaceLibrary {
+                switch tombstones.tagAliasResolution(
+                    id: archived.id,
+                    incomingModifiedAt: archived.lastModifiedAt
+                ) {
+                case .suppressStaleData:
+                    continue
+                case .reviveNewerData, .preserveAmbiguous, .noTombstone:
+                    break
+                }
+            }
+
+            if let local = byID[archived.id] ?? byNaturalKey[naturalKey] {
+                resolvedLocalIDs.insert(local.id)
+                if mode == .merge, byID[archived.id] != nil { continue }
+                if mode != .replaceLibrary {
+                    guard SyncMerge.shouldApplyIncoming(
+                        localModifiedAt: local.lastModifiedAt,
+                        incomingModifiedAt: archived.lastModifiedAt
+                    ) else { continue }
+                }
+                local.name = name
+                local.canonicalName = canonicalName
+                local.kind = kind
+                if mode == .replaceLibrary {
+                    local.parentFandoms = incomingParents
+                } else if !incomingParents.isEmpty {
+                    local.parentFandoms = LearnedTagAlias.normalizedParentFandoms(
+                        local.parentFandoms + incomingParents
+                    )
+                }
+                local.learnedAt = archived.learnedAt
+                local.lastModifiedAt = archived.lastModifiedAt
+                byID[local.id] = local
+                byNaturalKey[naturalKey] = local
+            } else {
+                let alias = TagAlias(
+                    id: archived.id,
+                    name: name,
+                    canonicalName: canonicalName,
+                    kind: kind,
+                    parentFandoms: incomingParents,
+                    learnedAt: archived.learnedAt,
+                    lastModifiedAt: archived.lastModifiedAt
+                )
+                context.insert(alias)
+                byID[alias.id] = alias
+                byNaturalKey[naturalKey] = alias
+                resolvedLocalIDs.insert(alias.id)
+            }
+        }
+
+        if mode == .replaceLibrary {
+            for alias in existing where !resolvedLocalIDs.contains(alias.id) {
+                SyncTombstones.recordDeletion(of: alias, in: context)
+                context.delete(alias)
             }
         }
     }
@@ -4599,6 +5527,8 @@ enum KudosBackupService {
         private var readingSessionTombstonesByID: [UUID: SyncTombstone] = [:]
         private var readingFavoriteTombstonesByID: [UUID: SyncTombstone] = [:]
         private var fandomReadWatermarkTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var followedTagTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var tagAliasTombstonesByID: [UUID: SyncTombstone] = [:]
 
         init(_ tombstones: [SyncTombstone]) {
             for tombstone in tombstones {
@@ -4634,6 +5564,10 @@ enum KudosBackupService {
                     indexNewest(tombstone, byReadingFavoriteID: tombstone.recordID)
                 case .fandomReadWatermark:
                     indexNewest(tombstone, byFandomReadWatermarkID: tombstone.recordID)
+                case .followedTag:
+                    indexNewest(tombstone, byFollowedTagID: tombstone.recordID)
+                case .tagAlias:
+                    indexNewest(tombstone, byTagAliasID: tombstone.recordID)
                 }
             }
         }
@@ -4737,6 +5671,26 @@ enum KudosBackupService {
                 return
             }
             fandomReadWatermarkTombstonesByID[id] = tombstone
+        }
+
+        private mutating func indexNewest(
+            _ tombstone: SyncTombstone, byFollowedTagID id: UUID
+        ) {
+            if let existing = followedTagTombstonesByID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            followedTagTombstonesByID[id] = tombstone
+        }
+
+        private mutating func indexNewest(
+            _ tombstone: SyncTombstone, byTagAliasID id: UUID
+        ) {
+            if let existing = tagAliasTombstonesByID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            tagAliasTombstonesByID[id] = tombstone
         }
 
         /// Whether importing this archived work would resurrect an explicit local delete.
@@ -4863,6 +5817,28 @@ enum KudosBackupService {
             SyncMerge.tombstoneResolution(
                 incomingModifiedAt: incomingModifiedAt,
                 tombstoneDeletedAt: fandomReadWatermarkTombstonesByID[id]?.lastModifiedAt
+            )
+        }
+
+        func followedTagResolution(
+            id: UUID, incomingModifiedAt: Date?
+        ) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: followedTagTombstonesByID[id]?.lastModifiedAt
+            )
+        }
+
+        var hasTagAliasTombstones: Bool {
+            !tagAliasTombstonesByID.isEmpty
+        }
+
+        func tagAliasResolution(
+            id: UUID, incomingModifiedAt: Date?
+        ) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: tagAliasTombstonesByID[id]?.lastModifiedAt
             )
         }
 
@@ -5018,13 +5994,15 @@ enum KudosBackupService {
         return (true, now.addingTimeInterval(PreservedWorkService.recoveryWindow))
     }
 
+    /// Returns whether the work's cover pin was reconciled (see `restore`).
+    @discardableResult
     private static func apply(
         _ archived: KudosBackupWork,
         to work: SavedWork,
         isNewRecord: Bool,
         mode: BackupImportMode,
         adoptsArchiveClock: Bool = false
-    ) {
+    ) -> Bool {
         let incomingModifiedAt = archived.lastModifiedAt ?? archived.dateAdded
         // A freshly-created placeholder's lastModifiedAt is "now" (restore time), which is
         // always at least as new as any real archived snapshot — so incomingWins alone would
@@ -5082,6 +6060,17 @@ enum KudosBackupService {
         work.isFinished = incomingWins ? archived.isFinished : work.isFinished
         // An archive that carries no opinion cannot overrule one the reader has
         // expressed here, however new that archive is.
+        if incomingWins {
+            if let value = archived.readingStatusRaw { work.readingStatusRaw = value }
+            if let value = archived.stopReasonRaw { work.stopReasonRaw = value }
+            if let value = archived.stopTag { work.stopTag = value }
+            if let value = archived.stopNote { work.stopNote = value }
+            if let value = archived.stackThreshold { work.stackThreshold = value }
+            if let value = archived.stackBaselineChapterCount { work.stackBaselineChapterCount = value }
+            if let value = archived.statusWasRecorded { work.statusWasRecorded = value }
+            if let value = archived.statusChangedAt { work.statusChangedAt = value }
+            if let value = archived.stoppedAt { work.stoppedAt = value }
+        }
         if let archivedKeepInProgress = archived.keepInProgressOverride, incomingWins {
             work.keepInProgressOverride = archivedKeepInProgress
         }
@@ -5141,6 +6130,22 @@ enum KudosBackupService {
         work.workCharacters = TagMerge.merged(work.workCharacters, archived.workCharacters)
         work.workRelationships = TagMerge.merged(work.workRelationships, archived.workRelationships)
         work.workFreeforms = TagMerge.merged(work.workFreeforms, archived.workFreeforms)
+        if let coverRecipeJSON = archived.coverRecipeJSON,
+           mode == .replaceLibrary || shouldApplyIncomingCover(
+               localJSON: work.coverRecipeJSON,
+               incomingJSON: coverRecipeJSON
+           ) {
+            work.coverRecipeJSON = GeneratedCoverRecipe.clampingFuturePinIfSupported(coverRecipeJSON)
+        }
+        if let incomingCounts = SavedWork.validatedChapterWordCountsJSON(archived.chapterWordCountsJSON),
+           work.chapterWordCountsJSON.isEmpty || mode == .replaceLibrary || incomingWins {
+            work.chapterWordCountsJSON = incomingCounts
+        }
+        if let incomingUnit = SavedWork.validatedWordUnitRaw(archived.wordUnitRaw),
+           work.wordUnitRaw.isEmpty || mode == .replaceLibrary || incomingWins {
+            work.wordUnitRaw = incomingUnit
+        }
+        let coverPinReconciled = work.reconcileCoverMetadata(notifySync: false)
         work.workTagsFetched = work.workTagsFetched || archived.workTagsFetched
         work.ao3Unavailable = work.ao3Unavailable || archived.ao3Unavailable
         work.isQueuedForLater = work.isQueuedForLater || archived.isQueuedForLater
@@ -5198,6 +6203,24 @@ enum KudosBackupService {
         work.lastModifiedAt = adoptsArchiveClock
             ? incomingModifiedAt
             : max(work.lastModifiedAt, incomingModifiedAt)
+        return coverPinReconciled
+    }
+
+    private static func shouldApplyIncomingCover(localJSON: String?, incomingJSON: String) -> Bool {
+        guard let localJSON else { return true }
+        let now = Date()
+        let localTime = GeneratedCoverRecipe.pinnedAt(in: localJSON, now: now)
+        let incomingTime = GeneratedCoverRecipe.pinnedAt(in: incomingJSON, now: now)
+        let epoch = Date(timeIntervalSince1970: 0)
+        if localTime == epoch, incomingTime == epoch,
+           let local = GeneratedCoverRecipe.supportedPin(in: localJSON),
+           let incoming = GeneratedCoverRecipe.supportedPin(in: incomingJSON) {
+            let localRank = (local.fandom.isEmpty ? 0 : 1, local.closedRing ? 1 : 0, local.tier)
+            let incomingRank = (incoming.fandom.isEmpty ? 0 : 1, incoming.closedRing ? 1 : 0, incoming.tier)
+            if incomingRank != localRank { return incomingRank > localRank }
+            return incomingJSON > localJSON
+        }
+        return SyncMerge.shouldApplyIncoming(localModifiedAt: localTime, incomingModifiedAt: incomingTime)
     }
 
     private static func mergedText(current: String, incoming: String, incomingWins: Bool) -> String {

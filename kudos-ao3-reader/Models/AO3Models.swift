@@ -90,6 +90,14 @@ nonisolated struct AO3SearchPage: Sendable {
     var readingEntries: [AO3ReadingEntry] = []
     /// The works-filter sidebar's include lists, on tag/fandom works pages. Empty elsewhere.
     var facets = AO3SearchFacets()
+    /// AO3's numeric `Tag.id` from `/tags/<id>/feed.atom` when this page is a single
+    /// feed-eligible tag (`Fandom`, `Character`, `Relationship`, or category `"F/F"`).
+    var feedTagID: Int? = nil
+    /// Final URL observed on the HTTP response after any server redirects.
+    var finalURL: URL? = nil
+    /// Canonical tag alias learned passively when a tag works request answered
+    /// under a different canonical `/tags/<name>/works` URL.
+    var learnedTagAlias: LearnedTagAlias? = nil
 }
 
 /// The count line AO3 prints above a works list — "92,495 Found",

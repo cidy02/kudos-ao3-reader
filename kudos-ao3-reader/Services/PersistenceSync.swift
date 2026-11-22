@@ -144,10 +144,41 @@ enum PersistenceMigrationService {
         // libraries that have anything to hash. It also caps each pass, so a
         // large library needs several launches to finish, which a one-shot
         // migration cannot give it.
+        do {
+            try await ReadingSessionSnapshotBackfill(modelContainer: context.container).run(defaults: defaults)
+        } catch {
+            // Retry on the next launch; never mark an incomplete pass done.
+        }
+        try? await SavedWorkChapterWordCountBackfill(modelContainer: context.container).run()
         await backfillEPUBDigests(in: context)
         let current = PersistenceStatusStore.snapshot(defaults: defaults).migrationState
-        guard current != .completed else { return current }
-        return await run(in: context, defaults: defaults)
+        if current == .completed {
+            await backfillCoverRecipes(in: context, defaults: defaults)
+            return current
+        }
+        let result = await run(in: context, defaults: defaults)
+        if result == .completed { await backfillCoverRecipes(in: context, defaults: defaults) }
+        return result
+    }
+
+    static func backfillCoverRecipes(in context: ModelContext, defaults _: UserDefaults = .standard) async {
+        guard PersistenceOperationGate.begin(.migration) else { return }
+        defer { PersistenceOperationGate.end(.migration) }
+        do {
+            let descriptor = FetchDescriptor<SavedWork>(predicate: #Predicate { $0.coverRecipeJSON == nil })
+            var processed = 0
+            var changed = false
+            for work in try context.fetch(descriptor) {
+                guard work.modelContext != nil, work.coverRecipeJSON == nil else { continue }
+                work.pinCover(salt: 0, automatic: true)
+                changed = true
+                processed += 1
+                if processed.isMultiple(of: yieldInterval) { await Task.yield() }
+            }
+            if changed { try context.save() }
+        } catch {
+            Log.library.error("Cover recipe backfill failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// Gives content identities to books that have none, a bounded number per
@@ -537,6 +568,33 @@ enum SyncTombstones {
         )
     }
 
+    static func recordDeletion(of followedTag: FollowedTag, in context: ModelContext) {
+        insertSigned(
+            SyncTombstone(
+                recordID: followedTag.id,
+                recordType: .followedTag,
+                sourceURL: followedTag.tagURLString ?? "",
+                createdAt: TombstoneSigning.now(),
+                deletedOnDeviceID: PersistenceDevice.currentID(),
+                deletionReason: "followedTagDeleted"
+            ),
+            in: context
+        )
+    }
+
+    static func recordDeletion(of tagAlias: TagAlias, in context: ModelContext) {
+        insertSigned(
+            SyncTombstone(
+                recordID: tagAlias.id,
+                recordType: .tagAlias,
+                createdAt: TombstoneSigning.now(),
+                deletedOnDeviceID: PersistenceDevice.currentID(),
+                deletionReason: "tagAliasDeleted"
+            ),
+            in: context
+        )
+    }
+
     /// Records that `work` was explicitly removed from `collection`, so a stale sync
     /// file (an older manifest that still lists this work in the collection) can't
     /// silently re-add it on the next merge — the same class of bug tombstones already
@@ -703,5 +761,80 @@ nonisolated enum SyncMerge {
               let incoming = SavedWork.totalProgression(in: locator)
         else { return false }
         return abs(incoming - local) >= ReadiumProgressPersistence.minProgressionDelta
+    }
+}
+
+/// SwiftData work stays on a model actor, off the launch/UI actor. A completion
+/// flag is written only after the whole pass saves, so an interrupted pass retries.
+@ModelActor
+actor ReadingSessionSnapshotBackfill {
+    func run(defaults: UserDefaults = .standard) async throws {
+        let key = "readingSessionMetadataSnapshotBackfilled"
+        guard !defaults.bool(forKey: key) else { return }
+        guard await MainActor.run(body: { PersistenceOperationGate.begin(.migration) }) else { return }
+        do {
+            let works = try modelContext.fetch(FetchDescriptor<SavedWork>())
+            let byID = Dictionary(works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            var offset = 0
+            while true {
+                var descriptor = FetchDescriptor<ReadingSession>(sortBy: [SortDescriptor(\.id)])
+                descriptor.fetchLimit = 100
+                descriptor.fetchOffset = offset
+                let sessions = try modelContext.fetch(descriptor)
+                guard !sessions.isEmpty else { break }
+                for session in sessions where !session.hasMetadataSnapshot {
+                    guard let work = byID[session.workID] else { continue }
+                    session.snapshot(from: work)
+                }
+                try modelContext.save()
+                offset += sessions.count
+            }
+            defaults.set(true, forKey: key)
+        } catch {
+            await MainActor.run { PersistenceOperationGate.end(.migration) }
+            throw error
+        }
+        await MainActor.run { PersistenceOperationGate.end(.migration) }
+    }
+}
+
+/// Lazily populates `SavedWork.chapterWordCountsJSON` and `wordUnitRaw` from
+/// existing local EPUBs (D3) in bounded batches off the main actor. Never calls
+/// `markModified()` so derived backfill never triggers Folder Sync uploads.
+@ModelActor
+actor SavedWorkChapterWordCountBackfill {
+    private static let worksPerPass = 50
+
+    func run(limit: Int = worksPerPass) async throws {
+        guard await MainActor.run(body: { PersistenceOperationGate.begin(.migration) }) else { return }
+        do {
+            var descriptor = FetchDescriptor<SavedWork>(
+                predicate: #Predicate {
+                    $0.hasEPUB && !$0.isPendingDeletion && $0.chapterWordCountsJSON == ""
+                },
+                sortBy: [SortDescriptor(\.lastReadDate, order: .reverse)]
+            )
+            descriptor.fetchLimit = limit
+            let pending = try modelContext.fetch(descriptor)
+            var changed = false
+            for work in pending {
+                await Task.yield()
+                let fileURL = work.fileURL
+                guard FileManager.default.fileExists(atPath: fileURL.path) else { continue }
+                guard let analysis = try? AO3EPUBChapterWordCounter.analyze(
+                    epubURL: fileURL,
+                    language: work.language
+                ) else { continue }
+                work.applyChapterWordAnalysis(analysis)
+                changed = true
+            }
+            if changed {
+                try modelContext.save()
+            }
+        } catch {
+            await MainActor.run { PersistenceOperationGate.end(.migration) }
+            throw error
+        }
+        await MainActor.run { PersistenceOperationGate.end(.migration) }
     }
 }

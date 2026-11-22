@@ -56,17 +56,18 @@ public final class CoreMLKokoroTTSService: TTSService {
         attachPlayerNodeIfNeeded()
     }
 
-    public func speak(units: [TTSSpeechUnit]) async throws {
+    @discardableResult
+    public func speak(units: [TTSSpeechUnit]) async throws -> Bool {
         resetPlayback(notifyStopped: false)
 
         guard KokoroAneAvailability.isUsableForPlayback else {
             Log.tts.error("Kokoro Neural Engine pack is not installed")
             status = .unavailable
-            return
+            return false
         }
 
         let utterances = TTSSpeechUnit.kokoroUtterances(from: units)
-        guard !utterances.isEmpty else { return }
+        guard !utterances.isEmpty else { return false }
 
         try activateAudioSession()
 
@@ -87,7 +88,7 @@ public final class CoreMLKokoroTTSService: TTSService {
         }
         #else
         status = .unavailable
-        return
+        return false
         #endif
 
         status = .playing
@@ -182,6 +183,7 @@ public final class CoreMLKokoroTTSService: TTSService {
             guard !Task.isCancelled else { return }
             self.finishNaturally()
         }
+        return true
     }
 
     #if canImport(FluidAudio)

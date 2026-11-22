@@ -545,6 +545,174 @@ struct QualitySignalsTests {
         ) == nil)
     }
 
+    // MARK: - T-538 screens
+
+    /// Steady is 200 kudos. The old subtitle said "Thousands of readers".
+    @Test func confidenceSubtitlesFollowTheKudosCutOffs() {
+        let steady = "200 or more kudos; the figure is unlikely to move much"
+        let settling = "50 to 199 kudos; the figure is still settling"
+        let early = "Under 50 kudos; few readers yet"
+        #expect(ReaderResponseCopy.confidenceSubtitle(forKudos: 200) == steady)
+        #expect(ReaderResponseCopy.confidenceSubtitle(forKudos: 312) == steady)
+        #expect(ReaderResponseCopy.confidenceSubtitle(forKudos: 199) == settling)
+        #expect(ReaderResponseCopy.confidenceSubtitle(forKudos: 50) == settling)
+        #expect(ReaderResponseCopy.confidenceSubtitle(forKudos: 49) == early)
+        #expect(ReaderResponseCopy.confidenceSubtitle(forKudos: 0) == early)
+        #expect(!steady.contains("Thousands"))
+        #expect(!settling.contains("Hundreds"))
+        #expect(ReaderResponseCopy.confidenceExplainer.contains("Steady at 200"))
+        #expect(ReaderResponseCopy.confidenceExplainer.contains("Settling from 50 to 199"))
+        #expect(ReaderResponseCopy.confidenceExplainer.contains("Early under 50"))
+        #expect(!ReaderResponseCopy.confidenceExplainer.contains("volume of reader feedback"))
+    }
+
+    /// Sort By and How It Works name the 20-kudos margin. The old line did not.
+    @Test func unusualStatsCopyNamesTheMargin() {
+        let oldSort = "More kudos than hits, or thousands of kudos and almost no bookmarks"
+        #expect(ReaderResponseCopy.unusualStatsSubtitle != oldSort)
+        #expect(ReaderResponseCopy.unusualStatsSubtitle.contains("At least 20 more kudos than hits"))
+        #expect(ReaderResponseCopy.unusualStatsSubtitle.contains("at least 20 hits"))
+        let oldExplainer = "such as more kudos than hits"
+        #expect(!ReaderResponseCopy.unusualStatsExplainer.contains(oldExplainer))
+        #expect(ReaderResponseCopy.unusualStatsExplainer.contains("at least 20 hits"))
+        #expect(ReaderResponseCopy.unusualStatsExplainer.contains("Not ranked"))
+    }
+
+    /// A momentum score of 1.0 is growth, not "1.0×". The strip shows the gain.
+    /// Kudos per hit still shows the unshrunk multiplier, and the cautious one apart.
+    @Test func momentumScoreIsNotShownAsAMultiplier() {
+        let momentum = ReaderResponseCopy.highlightedStat(
+            rankTitle: LoadedWorksRank.momentum.title,
+            ownKudosPerHit: 0.1,
+            prior: 0.1,
+            cautiousScore: 1.0,
+            signal: WorkSignal(label: "+20 kudos", note: "Since you last saw it", tone: .high)
+        )
+        #expect(momentum.value == "+20 kudos")
+        #expect(momentum.label == "Momentum")
+        #expect(!momentum.value.contains("×"))
+        #expect(!momentum.value.contains("1.0"))
+        #expect(ReaderResponseCopy.cautiousDetail(
+            rankTitle: LoadedWorksRank.momentum.title, score: 1.0
+        ) == nil)
+        #expect(ReaderResponseCopy.cautiousDetail(
+            rankTitle: LoadedWorksRank.savesPerKudos.title, score: 0.26
+        ) == nil)
+
+        let shown = ReaderResponseCopy.highlightedStat(
+            rankTitle: LoadedWorksRank.kudosPerHitAdjusted.title,
+            ownKudosPerHit: 1_804.0 / 19_200.0,
+            prior: 0.039,
+            cautiousScore: 2.3,
+            signal: nil
+        )
+        #expect(shown.value == "2.4×")
+        #expect(shown.label == "Kudos per hit vs similar")
+        #expect(shown.accessibilityText == "Kudos per hit versus similar: 2.4×")
+        #expect(ReaderResponseCopy.cautiousDetail(
+            rankTitle: LoadedWorksRank.kudosPerHitAdjusted.title, score: 2.3025
+        ) == "2.3×")
+        // Using the cautious score as the strip would print 2.3×.
+        #expect(shown.value != "2.3×")
+    }
+
+    /// Appendix D's sheet band, and the bands the spec does not have.
+    @Test func similarWorksNamesOnlySpecBands() {
+        #expect(ReaderResponseBands.similarWorksLine(
+            chaptersPosted: 7, words: 22_410, isComplete: true, postedYear: 2026
+        ) == "6 to 20 chapters · 20,000 to 60,000 words · complete · posted 2025 or later")
+
+        let wrong = "6 to 10 chapters · 15,000 to 30,000 words · posted 2026"
+        let corrected = ReaderResponseBands.similarWorksLine(
+            chaptersPosted: 8, words: 15_000, isComplete: nil, postedYear: 2026
+        )
+        #expect(corrected != wrong)
+        #expect(!corrected.contains("6 to 10"))
+        #expect(!corrected.contains("15,000 to 30,000"))
+        #expect(!corrected.contains("posted 2026"))
+        #expect(corrected == "6 to 20 chapters · 5,000 to 20,000 words · posted 2025 or later")
+
+        #expect(ReaderResponseBands.chaptersPhrase(posted: 1) == "1 chapter")
+        #expect(ReaderResponseBands.chaptersPhrase(posted: 2) == "2 to 5 chapters")
+        #expect(ReaderResponseBands.chaptersPhrase(posted: 5) == "2 to 5 chapters")
+        #expect(ReaderResponseBands.chaptersPhrase(posted: 6) == "6 to 20 chapters")
+        #expect(ReaderResponseBands.chaptersPhrase(posted: 20) == "6 to 20 chapters")
+        #expect(ReaderResponseBands.chaptersPhrase(posted: 21) == "21 or more chapters")
+        #expect(ReaderResponseBands.lengthPhrase(words: 4_999) == "Under 5,000 words")
+        #expect(ReaderResponseBands.lengthPhrase(words: 5_000) == "5,000 to 20,000 words")
+        #expect(ReaderResponseBands.lengthPhrase(words: 8_000) == "5,000 to 20,000 words")
+        #expect(ReaderResponseBands.lengthPhrase(words: 19_999) == "5,000 to 20,000 words")
+        #expect(ReaderResponseBands.lengthPhrase(words: 20_000) == "20,000 to 60,000 words")
+        #expect(ReaderResponseBands.lengthPhrase(words: 59_999) == "20,000 to 60,000 words")
+        #expect(ReaderResponseBands.lengthPhrase(words: 60_000) == "60,000 to 150,000 words")
+        #expect(ReaderResponseBands.lengthPhrase(words: 149_999) == "60,000 to 150,000 words")
+        #expect(ReaderResponseBands.lengthPhrase(words: 150_000) == "150,000 or more words")
+        #expect(ReaderResponseBands.lengthPhrase(words: 8_000) != "Under 10,000 words")
+        #expect(ReaderResponseBands.statusPhrase(isComplete: true) == "complete")
+        #expect(ReaderResponseBands.statusPhrase(isComplete: false) == "WIP")
+        #expect(ReaderResponseBands.yearPhrase(2014) == "posted 2014 or earlier")
+        #expect(ReaderResponseBands.yearPhrase(2015) == "posted 2015 to 2017")
+        #expect(ReaderResponseBands.yearPhrase(2017) == "posted 2015 to 2017")
+        #expect(ReaderResponseBands.yearPhrase(2018) == "posted 2018 to 2019")
+        #expect(ReaderResponseBands.yearPhrase(2020) == "posted 2020")
+        #expect(ReaderResponseBands.yearPhrase(2021) == "posted 2021 to 2022")
+        #expect(ReaderResponseBands.yearPhrase(2023) == "posted 2023 to 2024")
+        #expect(ReaderResponseBands.yearPhrase(2024) == "posted 2023 to 2024")
+        #expect(ReaderResponseBands.yearPhrase(2025) == "posted 2025 or later")
+        let noShape = ReaderResponseBands.similarWorksLine(
+            chaptersPosted: nil, words: nil, isComplete: nil, postedYear: nil
+        )
+        #expect(noShape == "Loaded works of similar length and age")
+        #expect(!noShape.contains("updated within a year"))
+    }
+
+    /// Quality-WIPs notes. Reverting a word or a note fails one of these.
+    @Test func wipScheduleNotesMatchTheBoard() {
+        #expect(QualitySignalTones.wipScheduleNote(
+            chaptersPosted: 15, chaptersExpected: 30, daysSinceUpdate: 8, cadenceDays: 9
+        ) == "About every 9 days")
+        #expect(QualitySignalTones.wipScheduleNote(
+            chaptersPosted: 18, chaptersExpected: 20, daysSinceUpdate: 12, cadenceDays: 14
+        ) == "18 of 20 · about every 2 weeks")
+        #expect(QualitySignalTones.wipScheduleNote(
+            chaptersPosted: 1, chaptersExpected: nil, daysSinceUpdate: 4, cadenceDays: nil
+        ) == "1 chapter · 4 days ago")
+        #expect(QualitySignalTones.wipScheduleNote(
+            chaptersPosted: 6, chaptersExpected: nil, daysSinceUpdate: 31, cadenceDays: 12
+        ) == "Usually every 12 days · 31 days since")
+        let slower = QualitySignalTones.wipScheduleNote(
+            chaptersPosted: 6, chaptersExpected: nil, daysSinceUpdate: 31, cadenceDays: 12
+        )
+        #expect(slower?.contains("Running late") != true)
+        #expect(QualitySignalTones.wipScheduleNote(
+            chaptersPosted: 2, chaptersExpected: nil, daysSinceUpdate: 31, cadenceDays: nil
+        ) == nil)
+    }
+
+    /// The results line, including momentum's seen-before count.
+    @Test func rankedWorksLineNamesTheOrder() {
+        #expect(ReaderResponseCopy.rankedWorksLine(
+            loaded: 40, rank: .kudosPerHitAdjusted, seenBeforeLine: nil
+        ) == "Ranked 40 loaded works by kudos per hit against similar works")
+        #expect(ReaderResponseCopy.rankedWorksLine(
+            loaded: 40, rank: .momentum, seenBeforeLine: "12 of 40 seen before"
+        ) == "Ranked 40 loaded works by kudos growth since you last saw them. 12 of 40 seen before")
+        #expect(ReaderResponseCopy.rankedWorksLine(
+            loaded: 40, rank: .ao3Order, seenBeforeLine: nil
+        ) == nil)
+        let wips = ReaderResponseCopy.rankedWorksLine(
+            loaded: 40, rank: .kudosPerHitAdjusted, seenBeforeLine: nil
+        )
+        #expect(wips?.contains("on schedule first") != true)
+        #expect(LoadedWorksRank.commentsPerKudos.subtitle == "Comments, replies included, ÷ kudos")
+        #expect(ReaderResponseCopy.commentsSubtitle(similar: 0.03, readersOnly: 0.021)
+            == "Similar works 3.0% · replies included · readers only 2.1%")
+        #expect(ReaderResponseCopy.rateSubtitle(similar: nil, footnote: "public bookmarks only")
+            == "public bookmarks only")
+        #expect(ReaderResponseCopy.rateSubtitle(similar: 0.14, footnote: "public bookmarks only")
+            == "Similar works 14% · public bookmarks only")
+    }
+
     private func posted(_ day: Int) -> Date {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt

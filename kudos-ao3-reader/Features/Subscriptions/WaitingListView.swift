@@ -33,6 +33,7 @@ struct WaitingListView: View {
     var baselines: [SubscriptionScanSnapshot] = []
     var alphabeticalNote: String?
     var onCheck: (() -> Void)?
+    var onOpenTagUpdate: ((Int) -> Void)?
 
     @Environment(PrivacyGate.self) private var privacyGate
     @AppStorage("hideMatureContent") private var hideMature = true
@@ -77,7 +78,7 @@ struct WaitingListView: View {
                         if let alphabeticalNote {
                             Text(alphabeticalNote)
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .listRowSeparator(.hidden)
                         }
@@ -105,10 +106,9 @@ struct WaitingListView: View {
                 ForEach(days) { day in
                     Section {
                         ForEach(Array(day.updates.enumerated()), id: \.element.id) { index, update in
-                            WaitingRow(
+                            waitingRowView(
                                 update: update,
                                 position: index + 1,
-                                showsPosition: showsPosition,
                                 isFirst: index == 0,
                                 isLast: index == day.updates.count - 1
                             )
@@ -134,6 +134,40 @@ struct WaitingListView: View {
             .navigationBarTitleDisplayMode(.inline)
         #endif
     }
+
+    @ViewBuilder
+    private func waitingRowView(
+        update: SubscriptionUpdate,
+        position: Int,
+        isFirst: Bool,
+        isLast: Bool
+    ) -> some View {
+        let isBlurred = privacyGate.isBlurred(
+            remoteID: Int(clamping: update.workID),
+            rating: update.rating,
+            enabled: hideMature,
+            mode: matureMode
+        )
+        let row = WaitingRow(
+            update: update,
+            position: position,
+            showsPosition: showsPosition,
+            isFirst: isFirst,
+            isLast: isLast
+        )
+        if let tagRequest = update.source.tagWorksRequest, !isBlurred {
+            NavigationLink(value: tagRequest) {
+                row
+            }
+            .simultaneousGesture(TapGesture().onEnded {
+                if case let .tag(source) = update.source {
+                    onOpenTagUpdate?(source.tagID)
+                }
+            })
+        } else {
+            row
+        }
+    }
 }
 
 private struct WaitingScanHeader: View {
@@ -146,7 +180,7 @@ private struct WaitingScanHeader: View {
                 if let checkedLabel = status.checkedLabel {
                     Text(checkedLabel)
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
 
                 Text("\(status.waitingCount.formatted()) waiting")
@@ -154,12 +188,12 @@ private struct WaitingScanHeader: View {
 
                 Text(status.followsLine)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
 
                 if let note = status.note {
                     Text(note)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -187,11 +221,11 @@ private struct WaitingBaselineRow: View {
             if !snapshot.author.isEmpty {
                 Text(snapshot.author)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             Text(detail)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
@@ -209,7 +243,7 @@ private struct WaitingBaselineRow: View {
             }
         }
         if !snapshot.updatedText.isEmpty {
-            parts.append("Updated \(snapshot.updatedText)")
+            parts.append("Updated \(WorkStat.displayDate(snapshot.updatedText))")
         }
         parts.append("Baseline")
         return parts.joined(separator: " · ")
@@ -229,14 +263,14 @@ private struct WaitingMailHeader: View {
                     + since.formatted(.dateTime.month(.abbreviated).year())
             )
             .font(.subheadline.weight(.medium))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
 
             Text("\(updateCount.formatted()) waiting")
                 .font(.largeTitle.bold())
 
             Text("no requests to AO3")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
 
             if unverifiedCount > 0 {
                 Label(
@@ -244,13 +278,13 @@ private struct WaitingMailHeader: View {
                     systemImage: "exclamationmark.shield"
                 )
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             }
 
             if let refreshError {
                 Text(refreshError)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -267,7 +301,7 @@ private struct WaitingDayHeader: View {
         let calendar = Calendar.current
         if calendar.isDateInToday(start) { return "Today" }
         if calendar.isDateInYesterday(start) { return "Yesterday" }
-        return start.formatted(date: .abbreviated, time: .omitted)
+        return WorkStat.displayDate(start)
     }
 
     var body: some View {
@@ -277,7 +311,7 @@ private struct WaitingDayHeader: View {
                 .foregroundStyle(.primary)
             Text("\(count)")
                 .font(.caption.bold())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 4)
                 .background(.quaternary, in: Capsule())
@@ -364,6 +398,14 @@ struct WaitingRow: View {
         switch update.source {
         case let .author(name): return "New from \(name)"
         case let .series(name): return "New in \(name)"
+        case let .tag(tag):
+            if tag.isBusy {
+                return "\(max(tag.count, FollowedTagFeedEvaluator.maxFeedEntries))+ new works"
+            }
+            if tag.count > 1 {
+                return "\(tag.count) new works"
+            }
+            return update.workTitle.isEmpty ? "1 new work" : update.workTitle
         case .work, .unknown: return "New in a work you follow"
         }
     }
@@ -372,6 +414,7 @@ struct WaitingRow: View {
     /// claim. Nil when the work is pinned (the title is the headline already) or
     /// when the preface was contested and nothing survived it.
     private var claimedTitle: String? {
+        if case .tag = update.source { return nil }
         guard !update.pinsTheWork, !update.workTitle.isEmpty else { return nil }
         return update.workTitle
     }
@@ -387,6 +430,20 @@ struct WaitingRow: View {
     }
 
     private var whatChanged: String {
+        if case let .tag(tag) = update.source {
+            if tag.isBusy {
+                return update.workTitle.isEmpty
+                    ? "and more — open tag on AO3"
+                    : "\u{201C}\(update.workTitle)\u{201D} and more"
+            }
+            if tag.count > 1 {
+                let extra = tag.count - 1
+                return update.workTitle.isEmpty
+                    ? "\(tag.count) new works in \(tag.name)"
+                    : "\u{201C}\(update.workTitle)\u{201D} and \(extra) more"
+            }
+            return "New work in \(tag.name)"
+        }
         guard isConfirmed else {
             // "This work updated" asserts the work, which is the one thing an
             // author or series notification does not pin — see `pinsTheWork`.
@@ -402,6 +459,12 @@ struct WaitingRow: View {
     }
 
     private var badge: String {
+        if case let .tag(tag) = update.source {
+            if tag.isBusy {
+                return "\(max(tag.count, FollowedTagFeedEvaluator.maxFeedEntries))+"
+            }
+            return tag.count > 1 ? "+\(tag.count)" : "New"
+        }
         guard isConfirmed else { return update.pinsTheWork ? "Updated" : "Check" }
         switch update.change {
         case .newChapter: return chapter.map { "+1 · Ch. \($0)" } ?? "Updated"
@@ -433,7 +496,7 @@ struct WaitingRow: View {
             }
         }
         .font(.caption2.monospacedDigit())
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.secondaryInk)
         .fixedSize(horizontal: false, vertical: true)
         .frame(width: 40, alignment: .trailing)
         .padding(.top, 12)
@@ -469,9 +532,12 @@ struct WaitingRow: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(update.source.color, in: Capsule())
-            Text(update.source.line)
+            Text(isAccessibilitySize
+                ? AccessibilitySoftBreak.opportunities(in: update.source.line)
+                : update.source.line)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
+                .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -484,8 +550,9 @@ struct WaitingRow: View {
     }
 
     private var titleText: some View {
-        Text(headline)
+        Text(isAccessibilitySize ? AccessibilitySoftBreak.opportunities(in: headline) : headline)
             .font(.headline)
+            .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -525,7 +592,7 @@ struct WaitingRow: View {
                 }
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
         }
     }
 
@@ -553,21 +620,28 @@ struct WaitingRow: View {
                 metadata
                 if let claimedTitle {
                     // Quoted and attributed: the email said this, AO3 did not.
-                    Text("AO3's notification names \u{201C}\(claimedTitle)\u{201D}")
+                    Text(isAccessibilitySize
+                        ? AccessibilitySoftBreak.opportunities(
+                            in: "AO3's notification names \u{201C}\(claimedTitle)\u{201D}")
+                        : "AO3's notification names \u{201C}\(claimedTitle)\u{201D}")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
+                        .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Text(whatChanged)
+                Text(isAccessibilitySize
+                    ? AccessibilitySoftBreak.opportunities(in: whatChanged)
+                    : whatChanged)
                     .font(.subheadline)
-                    .foregroundStyle(isConfirmed ? .primary : .secondary)
+                    .foregroundStyle(isConfirmed ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondaryInk))
+                    .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let alsoInThisEmail {
                     Text(alsoInThisEmail)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -628,6 +702,7 @@ private extension SubscriptionUpdate.Source {
         case .work: "Work"
         case .series: "Series"
         case .author: "Author"
+        case .tag: "Tag"
         case .unknown: "Update"
         }
     }
@@ -637,6 +712,7 @@ private extension SubscriptionUpdate.Source {
         case .work: "Following this work"
         case let .series(name): "Following \(name)"
         case let .author(name): "Following \(name)"
+        case let .tag(tag): tag.category.map { "\(tag.name) · \($0)" } ?? tag.name
         case .unknown: "From a subscription"
         }
     }
@@ -649,6 +725,8 @@ private extension SubscriptionUpdate.Source {
         case .work: Color(red: 0x82 / 255, green: 0x10 / 255, blue: 0x19 / 255)
         case .series: Color(red: 0x1E / 255, green: 0x63 / 255, blue: 0xC8 / 255)
         case .author: Color(red: 0x7B / 255, green: 0x3F / 255, blue: 0xA0 / 255)
+        // Rich green (> 7.0:1 against white) matching the Tags board.
+        case .tag: Color(red: 0x25 / 255, green: 0x66 / 255, blue: 0x3C / 255)
         // Neutral: there is no kind to signal, and the chip still needs to
         // carry white text.
         case .unknown: Color(red: 0x4A / 255, green: 0x4A / 255, blue: 0x4F / 255)

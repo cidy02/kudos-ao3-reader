@@ -19,13 +19,13 @@ struct QueueCardMenu: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if queue.kind == .custom, isEnabled {
+        if queue.isUserQueue, isEnabled {
             content
                 .contextMenu {
                     Button {
                         showingEdit = true
                     } label: {
-                        Label("Edit Queue", systemImage: "pencil")
+                        Label(queue.kind == .smart ? "Edit Rules" : "Edit Queue", systemImage: "pencil")
                     }
                     Button {
                         QueueOrganizerSelection.setPinned([queue], !queue.isPinned, in: context)

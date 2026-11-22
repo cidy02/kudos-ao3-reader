@@ -107,7 +107,7 @@ struct ScopedRemovalBulkActionBar: View {
         }
         .accessibilityLabel("Done")
         .sheet(isPresented: $showingAddToQueue) {
-            AddToQueueView(works: selectedWorks)
+            AddToQueueView(works: selectedWorks, origin: ReadingQueueMembershipOrigin(kind: .manual))
         }
         // The removal runs on dismiss rather than inside the picker: the picker
         // is shared with Add to Queue and must not learn about this scope. It
@@ -119,7 +119,7 @@ struct ScopedRemovalBulkActionBar: View {
             // The moved rows have left this list; the selection went with them.
             onDone()
         }) {
-            AddToQueueView(works: selectedWorks)
+            AddToQueueView(works: selectedWorks, origin: ReadingQueueMembershipOrigin(kind: .manual))
         }
         .sheet(isPresented: $showingAddToCollection) {
             AddToCollectionView(works: selectedWorks)
@@ -278,7 +278,12 @@ struct ScopedRemovalBulkActionBar: View {
             if shouldSave {
                 guard !work.isInSavedForLaterQueue else { continue }
                 Task { @MainActor in
-                    _ = await ReadingQueueService.addToSavedForLater(work, in: context)
+                    _ = await ReadingQueueService.addToSavedForLater(
+                        work,
+                        state: .new,
+                        origin: ReadingQueueMembershipOrigin(kind: .manual),
+                        in: context
+                    )
                 }
             } else {
                 guard work.isInSavedForLaterQueue else { continue }

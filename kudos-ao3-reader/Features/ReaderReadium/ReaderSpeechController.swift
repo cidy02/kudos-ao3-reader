@@ -77,7 +77,12 @@ final class ReaderSpeechController {
         case paused
     }
 
-    private(set) var status: Status = .unavailable
+    private(set) var status: Status = .unavailable {
+        didSet {
+            guard !isAuditioning, status != oldValue, let workID = sessionWorkID else { return }
+            onStatusTransition?(workID, status, isReaderOpen)
+        }
+    }
     /// The sentence currently being spoken, for the mini player's caption.
     private(set) var spokenText: String = ""
     /// 0…1 **smoothed** envelope for the mini-player equalizer (attack/release).
@@ -102,8 +107,8 @@ final class ReaderSpeechController {
     var onSessionEnded: (() -> Void)?
     /// Now Playing / Lock Screen previous-track — chapter skip (same as mini player).
     var onSkipPrevious: (() -> Void)?
-    /// Now Playing / Lock Screen next-track — chapter skip (same as mini player).
-    var onSkipNext: (() -> Void)?
+    /// Now Playing / Lock Screen next-track — chapter skip (returns `true` if a next chapter started).
+    var onSkipNext: (() -> Bool)?
 
     /// App-owned persistence sink. Unlike the callbacks above, this never captures
     /// a reader/navigator and stays installed while the reader is detached.
@@ -116,13 +121,21 @@ final class ReaderSpeechController {
         _ sessionProgressStamp: Date
     ) -> ReaderSpeechPositionSaveResult)?
     /// Lets the app resume normal finished-copy cleanup after the detached
-    /// controller has released the Publication that still read from that EPUB.
+    /// controller has released the Publication that still read from that EPUB,
+    /// and closes any detached reading-log sitting cleanly.
     var onReleaseDetachedWork: ((_ workID: UUID) -> Void)?
+    /// Notifies the reading log when Read Aloud transitions between playing,
+    /// paused, and stopped (including detached transport).
+    var onStatusTransition: ((_ workID: UUID, _ status: Status, _ isReaderOpen: Bool) -> Void)?
+    /// Keeps listening `activeSeconds` advancing during spoken utterances even
+    /// when locked or detached (`ReadingLogService.activeGap`).
+    var onPlaybackActivity: ((_ workID: UUID, _ date: Date) -> Void)?
 
     private var publication: Publication?
     private(set) var sessionWorkID: UUID?
     private(set) var isReaderOpen = false
     private var openReaderWorkID: UUID?
+    private var isAuditioning = false
     private var sections: [ReaderSection] = []
     private var chapterStartLocators: [Locator?] = []
     private var positionSaveThrottle = ReaderSpeechPositionSaveThrottle()
@@ -140,6 +153,10 @@ final class ReaderSpeechController {
     /// Chapter finished speaking — next `reanchor` should resume even though
     /// status has already flipped to `.stopped`.
     private var pendingAutoContinue = false
+    /// Chapters skipped in a row because nothing in them could be spoken. Bounds
+    /// the skip loop if a chapter skip fails to move the position.
+    private var unspeakableChapterRun = 0
+    private static let maxUnspeakableChapterRun = 10
     /// In-flight chapter extract + `speak` so a second tap can cancel it.
     private var startTask: Task<Void, Never>?
     /// Instantaneous target (0…1); `speechEnergy` lerps toward this at ~60 fps.
@@ -164,9 +181,15 @@ final class ReaderSpeechController {
     /// duration/elapsed via `ReaderTimeEstimate` (same model as the position card).
     private var totalPositionCount: Int = 0
     /// Last locator spoken or requested — remote Play after pause/stop uses this
-    /// when the in-reader `toggle(from:)` call has no locator.
-    private var resumeLocator: Locator?
+    /// when the in-reader `toggle(from:)` call has no locator, and in-reader
+    /// auto-advance uses it so skipping an unspeakable chapter never stalls on a
+    /// stale navigator locator.
+    private(set) var resumeLocator: Locator?
     private var remoteCommandsInstalled = false
+    #if DEBUG
+    private var testUnitProvider: ((Locator?) async -> [TTSSpeechUnit])?
+    private var skipsEngineReplacementForTests = false
+    #endif
 
     var isAvailable: Bool { status != .unavailable }
     var isPlaying: Bool { status == .playing }
@@ -285,7 +308,7 @@ final class ReaderSpeechController {
         onSpokenRange: @escaping (Locator) -> Void,
         onSessionEnded: @escaping () -> Void,
         onSkipPrevious: @escaping () -> Void,
-        onSkipNext: @escaping () -> Void
+        onSkipNext: @escaping () -> Bool
     ) {
         guard openReaderWorkID == workID, sessionWorkID == workID else { return }
         resetDetachedPositionSaving()
@@ -457,46 +480,7 @@ final class ReaderSpeechController {
         }
 
         service.onStatusChange = { [weak self] newStatus in
-            guard let self else { return }
-            switch newStatus {
-            case .unavailable:
-                self.status = .unavailable
-                self.persistPosition(for: .sessionEnd)
-                self.onSessionEnded?()
-                if self.publication != nil, !self.isReaderOpen {
-                    self.releasePreparedSession()
-                }
-            case .stopped:
-                // Only auto-advance when a playing chapter actually finished.
-                // `speak()` used to call `stop()` on the way in, which fired this
-                // path with `stoppedManually == false` and skipped a chapter on
-                // every Read Aloud tap.
-                let shouldContinue = self.status == .playing && !self.stoppedManually
-                self.status = .stopped
-                self.clearSpeechEnergy()
-                self.clearNowPlaying()
-                if !self.stoppedManually {
-                    self.persistPosition(for: .sessionEnd)
-                }
-                self.onSessionEnded?()
-                if shouldContinue {
-                    self.pendingAutoContinue = true
-                    let didAdvance = self.requestNextChapter()
-                    self.pendingAutoContinue = false
-                    if !didAdvance, !self.isReaderOpen {
-                        self.releasePreparedSession()
-                    }
-                } else if !self.stoppedManually, !self.isReaderOpen {
-                    self.releasePreparedSession()
-                }
-            case .playing:
-                self.status = .playing
-                self.publishNowPlaying(playing: true)
-            case .paused:
-                self.status = .paused
-                self.clearSpeechEnergy()
-                self.publishNowPlaying(playing: false)
-            }
+            self?.handleEngineStatusChange(newStatus)
         }
 
         service.onSpokenTextChange = { [weak self] text in
@@ -631,20 +615,41 @@ final class ReaderSpeechController {
     /// where it left off. Walks only the current spine resource — not the rest
     /// of the publication — so a long work does not stall the first tap.
     private func startSpeech(from locator: Locator?) {
-        guard let publication else { return }
+        #if DEBUG
+        let hasContentSource = publication != nil || testUnitProvider != nil
+        #else
+        let hasContentSource = publication != nil
+        #endif
+        guard hasContentSource else { return }
+        isAuditioning = false
         SpeechOwnerRegistry.shared.claim(self)
         let startLoc = locator ?? resumeLocator
+        #if DEBUG
+        if !skipsEngineReplacementForTests { ensureEngineForPlayback() }
+        #else
         ensureEngineForPlayback()
+        #endif
         applyPreferences()
 
         startTask?.cancel()
         startTask = Task {
             do {
-                let units = await Self.chapterUnits(
-                    from: startLoc, in: publication
-                )
+                let units: [TTSSpeechUnit]
+                #if DEBUG
+                if let testUnitProvider {
+                    units = await testUnitProvider(startLoc)
+                } else if let publication {
+                    units = await Self.chapterUnits(from: startLoc, in: publication)
+                } else {
+                    units = []
+                }
+                #else
+                guard let publication else { return }
+                units = await Self.chapterUnits(from: startLoc, in: publication)
+                #endif
                 guard !units.isEmpty else {
                     Log.tts.error("No extractable text in the current chapter")
+                    if !Task.isCancelled { handleChapterSpeakResult(started: false) }
                     return
                 }
 
@@ -652,11 +657,32 @@ final class ReaderSpeechController {
                 stoppedManually = false
                 // Re-check after chapter extract so a download that finished
                 // while we were walking the spine is used for this tap.
+                #if DEBUG
+                if !skipsEngineReplacementForTests { ensureEngineForPlayback() }
+                #else
                 ensureEngineForPlayback()
+                #endif
                 applyPreferences()
-                try await ttsService?.speak(units: units)
+                let started = try await ttsService?.speak(units: units) ?? false
+                if !Task.isCancelled { handleChapterSpeakResult(started: started) }
             } catch {
                 Log.tts.error("speak() failed: \(error.localizedDescription, privacy: .public)")
+                if !Task.isCancelled && (status == .playing || status == .paused || pendingPauseAfterReanchor) {
+                    pendingPauseAfterReanchor = false
+                    unspeakableChapterRun = 0
+                    let wasStoppedManually = stoppedManually
+                    stoppedManually = true
+                    ttsService?.stop()
+                    stoppedManually = wasStoppedManually
+                    spokenText = ""
+                    if status == .playing || status == .paused {
+                        onSessionEnded?()
+                        status = ttsService == nil ? .unavailable : .stopped
+                        clearSpeechEnergy()
+                        clearNowPlaying()
+                    }
+                    if !isReaderOpen { releasePreparedSession() }
+                }
             }
         }
     }
@@ -689,27 +715,38 @@ final class ReaderSpeechController {
     /// and Control Center transport, which is reader-session scoped.
     func audition(text: String) {
         startTask?.cancel()
+        isAuditioning = true
         stoppedManually = false
+        #if DEBUG
+        if !skipsEngineReplacementForTests { ensureEngineForPlayback() }
+        #else
         ensureEngineForPlayback()
+        #endif
         applyPreferences()
         guard let service = ttsService else {
             status = .unavailable
+            isAuditioning = false
             return
         }
         let unit = TTSSpeechUnit(text: text, locator: nil)
         startTask = Task { [weak self] in
             do {
-                try await service.speak(units: [unit])
+                let started = try await service.speak(units: [unit])
+                if !started {
+                    self?.isAuditioning = false
+                }
             } catch {
                 Log.tts.error(
                     "Audition failed: \(error.localizedDescription, privacy: .public)"
                 )
                 self?.status = .stopped
+                self?.isAuditioning = false
             }
         }
     }
 
     func stop() {
+        isAuditioning = false
         if isSessionActive {
             persistPosition(for: .stop)
         }
@@ -717,6 +754,7 @@ final class ReaderSpeechController {
         SpeechOwnerRegistry.shared.release(self)
         pendingPauseAfterReanchor = false
         pendingAutoContinue = false
+        unspeakableChapterRun = 0
         stoppedManually = true
         startTask?.cancel()
         startTask = nil
@@ -831,6 +869,9 @@ final class ReaderSpeechController {
         locator: Locator? = nil,
         at date: Date = Date()
     ) {
+        if !isAuditioning, let workID = sessionWorkID, status == .playing {
+            onPlaybackActivity?(workID, date)
+        }
         guard !isReaderOpen,
               !detachedWritesSuspended,
               let workID = sessionWorkID,
@@ -884,10 +925,163 @@ final class ReaderSpeechController {
 
     private func requestNextChapter() -> Bool {
         if isReaderOpen, let onSkipNext {
-            onSkipNext()
-            return true
+            return onSkipNext()
         }
         return skipDetachedChapter(forward: true)
+    }
+
+    /// After `speak()` returns: if the engine queued nothing (the chapter is only
+    /// symbols, images, or filtered boilerplate) while continuous Read Aloud is
+    /// `.playing`, no engine status will ever arrive. Treat it as the chapter
+    /// ending, so playback moves on to the next chapter or stops with a real
+    /// `.stopped`, instead of sitting on `.playing` in silence.
+    /// When re-anchoring while `.paused`, clear the pending pause and move to
+    /// `.stopped` so Play is never wedged against a stopped engine.
+    func handleChapterSpeakResult(started: Bool) {
+        guard !started else {
+            unspeakableChapterRun = 0
+            return
+        }
+        if status == .paused || pendingPauseAfterReanchor {
+            pendingPauseAfterReanchor = false
+            unspeakableChapterRun = 0
+            spokenText = ""
+            let wasStoppedManually = stoppedManually
+            stoppedManually = true
+            ttsService?.stop()
+            stoppedManually = wasStoppedManually
+            if status == .paused || status == .playing {
+                onSessionEnded?()
+                status = ttsService == nil ? .unavailable : .stopped
+                clearSpeechEnergy()
+                clearNowPlaying()
+            }
+            if !isReaderOpen { releasePreparedSession() }
+            return
+        }
+        // A fresh tap is still `.stopped` (nothing to publish); an engine that went
+        // `.unavailable` has already published that.
+        guard status == .playing else { return }
+        unspeakableChapterRun += 1
+        if ttsService != nil, unspeakableChapterRun <= Self.maxUnspeakableChapterRun {
+            handleEngineStatusChange(.stopped)
+            return
+        }
+        unspeakableChapterRun = 0
+        status = ttsService == nil ? .unavailable : .stopped
+        clearSpeechEnergy()
+        clearNowPlaying()
+        if !isReaderOpen { releasePreparedSession() }
+    }
+
+    #if DEBUG
+    /// Test seam: seeds controller state without initializing an audio engine or Readium publication.
+    func seedSessionForTests(
+        workID: UUID,
+        status: Status,
+        isReaderOpen: Bool,
+        isAuditioning: Bool = false,
+        withSystemEngine: Bool = false,
+        ttsService customService: TTSService? = nil,
+        unitProvider: ((Locator?) async -> [TTSSpeechUnit])? = nil,
+        resumeLocator: Locator? = nil,
+        chapterStartLocators: [Locator?] = [],
+        onSkipNext: (() -> Bool)? = nil
+    ) {
+        self.isAuditioning = true
+        if let customService {
+            self.skipsEngineReplacementForTests = true
+            installTTSService(customService, kind: .system, runtimeConfiguration: nil)
+        } else if withSystemEngine, ttsService == nil {
+            installTTSService(SystemTTSService(), kind: .system, runtimeConfiguration: nil)
+        }
+        self.testUnitProvider = unitProvider
+        self.sessionWorkID = workID
+        self.isReaderOpen = isReaderOpen
+        self.openReaderWorkID = isReaderOpen ? workID : nil
+        self.resumeLocator = resumeLocator
+        self.chapterStartLocators = chapterStartLocators
+        self.stoppedManually = false
+        self.pendingPauseAfterReanchor = false
+        self.pendingAutoContinue = false
+        self.unspeakableChapterRun = 0
+        self.status = status
+        self.onSkipNext = onSkipNext
+        self.isAuditioning = isAuditioning
+    }
+
+    /// Awaits the current in-flight `startSpeech` / `audition` task (and any chained
+    /// auto-advance `startTask` it spawned) so unit tests exercise real `startSpeech` wiring.
+    func waitForStartTaskForTests() async {
+        while let task = startTask {
+            await task.value
+            if startTask == task {
+                break
+            }
+        }
+    }
+    #endif
+
+    /// Processes a speech-engine status transition without splitting continuous
+    /// chapter auto-advance into separate `.stopped` -> `.playing` visits.
+    func handleEngineStatusChange(_ newStatus: TTSServiceStatus) {
+        if isAuditioning {
+            switch newStatus {
+            case .unavailable:
+                status = .unavailable
+                isAuditioning = false
+            case .stopped:
+                status = .stopped
+                isAuditioning = false
+                clearSpeechEnergy()
+            case .playing:
+                status = .playing
+            case .paused:
+                status = .paused
+                clearSpeechEnergy()
+            }
+            return
+        }
+
+        switch newStatus {
+        case .unavailable:
+            status = .unavailable
+            persistPosition(for: .sessionEnd)
+            onSessionEnded?()
+            if publication != nil, !isReaderOpen {
+                releasePreparedSession()
+            }
+        case .stopped:
+            // Only auto-advance when a playing chapter actually finished.
+            let shouldContinue = status == .playing && !stoppedManually
+            if !stoppedManually {
+                persistPosition(for: .sessionEnd)
+            }
+            onSessionEnded?()
+            if shouldContinue {
+                pendingAutoContinue = true
+                let didAdvance = requestNextChapter()
+                pendingAutoContinue = false
+                if didAdvance {
+                    // Keep `status == .playing` across chapters so continuous
+                    // Read Aloud logs one sitting and Now Playing does not flicker.
+                    return
+                }
+            }
+            status = .stopped
+            clearSpeechEnergy()
+            clearNowPlaying()
+            if !stoppedManually, !isReaderOpen {
+                releasePreparedSession()
+            }
+        case .playing:
+            status = .playing
+            publishNowPlaying(playing: true)
+        case .paused:
+            status = .paused
+            clearSpeechEnergy()
+            publishNowPlaying(playing: false)
+        }
     }
 
     private func requestPreviousChapter() -> Bool {
@@ -1165,12 +1359,13 @@ struct ReaderSpeechMiniPlayer: View {
     /// Tap on non-control chrome (caption, waveform, gutters) — typically shows
     /// the full reader chrome when only the mini player is visible.
     let onBackgroundTap: () -> Void
+    /// Opens the reader's shared Read Aloud settings sheet (with cast ranking,
+    /// pronunciation scan, and listening-rate log sync).
+    let onOpenSettings: () -> Void
 
     /// HIG minimum; matches the floating chrome round buttons so a near-miss
     /// doesn't fall through to the page and toggle chrome instead.
     private static let hitSize: CGFloat = 44
-
-    @State private var showingSpeechSettings = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1232,7 +1427,7 @@ struct ReaderSpeechMiniPlayer: View {
 
             Text(controller.spokenText)
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .tint(nil)
                 // Always reserve two lines so a short sentence (1 line) doesn't
                 // collapse the strip height under the transport row.
@@ -1245,11 +1440,6 @@ struct ReaderSpeechMiniPlayer: View {
         // still win hit-testing over this gesture.
         .contentShape(Rectangle())
         .onTapGesture(perform: onBackgroundTap)
-        .sheet(isPresented: $showingSpeechSettings, onDismiss: {
-            controller.applyPreferences()
-        }) {
-            ReaderSpeechSettingsSheet()
-        }
     }
 
     /// Compact equalizer: still in silence, dramatic only while speech energy > 0.
@@ -1265,9 +1455,7 @@ struct ReaderSpeechMiniPlayer: View {
     /// both gutters still reveal chrome, so that gesture keeps most of its
     /// target.
     private var playingWaveform: some View {
-        Button {
-            showingSpeechSettings = true
-        } label: {
+        Button(action: onOpenSettings) {
             NowPlayingEqualizerBars(
                 isPlaying: controller.isPlaying,
                 spectrum: controller.speechSpectrum,

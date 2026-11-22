@@ -49,7 +49,7 @@ struct ReaderSpeechDeveloperSettingsView: View {
                     systemImage: "info.circle"
                 )
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 pause("Between chunks", $continuationPause,
                       note: "Mid-sentence split. Shipped 0.14s.")
                 pause("Line break", $linePause,
@@ -139,14 +139,14 @@ struct ReaderSpeechDeveloperSettingsView: View {
                 Text(title)
                 Spacer()
                 Text(String(format: "%.2fs", value.wrappedValue))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .monospacedDigit()
             }
             Slider(value: value, in: ReaderSpeechTuning.pauseRange, step: 0.01)
                 .accessibilityLabel(title)
                 .accessibilityValue(String(format: "%.2f seconds", value.wrappedValue))
                 .accentFill()
-            Text(note).font(.footnote).foregroundStyle(.secondary)
+            Text(note).font(.footnote).foregroundStyle(.secondaryInk)
         }
     }
 
@@ -162,7 +162,7 @@ struct ReaderSpeechDeveloperSettingsView: View {
                 Text(title)
                 Spacer()
                 Text("\(value.wrappedValue)")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .monospacedDigit()
             }
             Slider(value: proxy, in: range, step: 5)

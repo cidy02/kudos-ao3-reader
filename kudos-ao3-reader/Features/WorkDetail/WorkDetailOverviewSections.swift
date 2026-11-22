@@ -26,11 +26,15 @@ enum WorkDetailDisclosure {
         return parts.isEmpty ? "No AO3 tags" : parts.joined(separator: " · ")
     }
 
-    /// The series' size and length are not known here: the device holds only the
-    /// works downloaded from it, so a count or word total would understate a
-    /// longer series. The series card says "Part N" for the same reason.
-    static func seriesDigest(title: String, position: Int) -> String {
-        position > 0 ? "\(title) · part \(position)" : title
+    /// The series' size comes only from AO3's own count, saved when the reader opened the series page
+    /// (T-519): the works downloaded here would understate a longer series. Without it, "Part N" alone.
+    static func seriesDigest(title: String, position: Int, partCount: Int? = nil) -> String {
+        position > 0 ? "\(title) · \(seriesPartLabel(position: position, partCount: partCount).lowercased())" : title
+    }
+
+    static func seriesPartLabel(position: Int, partCount: Int?) -> String {
+        if let partCount, partCount >= position { return "Part \(position) of \(partCount)" }
+        return "Part \(position)"
     }
 }
 
@@ -55,13 +59,13 @@ struct WorkDetailDisclosureHeader: View {
                             .foregroundStyle(.primary)
                         Text(digest)
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                         .accessibilityHidden(true)
                 }
@@ -117,7 +121,7 @@ extension WorkDetailView {
                         }
                         if let id = ao3WorkID {
                             if summaryTruncates {
-                                Text("·").foregroundStyle(.secondary).accessibilityHidden(true)
+                                Text("·").foregroundStyle(.secondaryInk).accessibilityHidden(true)
                             }
                             Button("Notes") { router.open(AO3Client.workURL(workID: id)) }
                                 .buttonStyle(.plain)
@@ -309,7 +313,8 @@ extension WorkDetailView {
                 WorkDetailDisclosureHeader(
                     title: "Series",
                     digest: WorkDetailDisclosure.seriesDigest(
-                        title: displaySeriesTitle, position: displaySeriesPosition
+                        title: displaySeriesTitle, position: displaySeriesPosition,
+                        partCount: displaySeriesPartCount
                     ),
                     isExpanded: $seriesExpanded
                 )
@@ -324,7 +329,7 @@ extension WorkDetailView {
                     if localWork != nil, seriesWorks.isEmpty {
                         Text("When you download more works from this series, they will appear here.")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .pageBodyRow(top: 8)
                     }
                 }
@@ -384,9 +389,11 @@ extension WorkDetailView {
             VStack(alignment: .leading, spacing: 0) {
                 Text(displaySeriesTitle).font(.body)
                 if displaySeriesPosition > 0 {
-                    Text("Part \(displaySeriesPosition)")
+                    Text(WorkDetailDisclosure.seriesPartLabel(
+                        position: displaySeriesPosition, partCount: displaySeriesPartCount
+                    ))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -437,17 +444,17 @@ extension WorkDetailView {
             Text(number)
                 .font(.subheadline)
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .frame(minWidth: 22, alignment: .leading)
             Text(title)
                 .font(.body.weight(isCurrent ? .semibold : .regular))
-                .foregroundStyle(dimmed ? .secondary : .primary)
+                .foregroundStyle(dimmed ? AnyShapeStyle(.secondaryInk) : AnyShapeStyle(.primary))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if isCurrent {
                 Text("This work")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             } else if !dimmed {
                 seriesChevron
             }

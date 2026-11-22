@@ -52,7 +52,8 @@ struct CollectionCard: View {
             StackedWorkCover(
                 kind: .collection,
                 name: collection.name,
-                hue: collection.displayHue,
+                identity: collection.id,
+                hue: collection.hue,
                 pickedHex: collection.colorHex,
                 backs: Array(previewWorks.prefix(CoverStackLayout.maxBacks)),
                 size: CGSize(width: cardSize.width, height: tileHeight)
@@ -64,7 +65,7 @@ struct CollectionCard: View {
                     .foregroundStyle(.primary)
                 Text("\(workCount) work\(workCount == 1 ? "" : "s")")
                     .font(.system(size: 12 * scale))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(1)
             }
         }
@@ -689,7 +690,7 @@ struct AddToCollectionView: View {
                 if collections.isEmpty {
                     Section {
                         Text("You have no collections yet. Create one above to group works together.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     .appThemedRows()
                 } else {
@@ -703,7 +704,7 @@ struct AddToCollectionView: View {
                                     Spacer()
                                     Text("\(collection.works.count(where: { !$0.isPendingDeletion }))")
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(.secondaryInk)
                                     if isMember(collection) {
                                         Image(systemName: "checkmark")
                                             .foregroundStyle(.tint)

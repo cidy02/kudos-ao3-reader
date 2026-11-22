@@ -5,16 +5,25 @@ import SwiftUI
 /// moves the existing profile, Inbox, AO3 preferences, website entry, Settings
 /// and session actions here; its larger visual restyle belongs to T-470.
 struct AccountView: View {
+    /// True when hosted inside HomeView's trailing Duo inspector (Open/Book landscape):
+    /// Close sits in Home's side rail, so Account omits its own Done button and clears
+    /// the active Book fold shadow on its leading edge (`Duo-Open-Account`).
+    var inInspector: Bool = false
+
     @Environment(AO3AuthService.self) private var auth
     @Environment(AO3InboxModel.self) private var inboxModel
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.duoLayout) private var duoLayout
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Query private var localWorks: [SavedWork]
 
-    @State private var path = NavigationPath()
+    private var path: NavigationPath {
+        get { router.accountNavigationPath }
+        nonmutating set { router.accountNavigationPath = newValue }
+    }
     @State private var showingLogin = false
     @State private var selectedTab: AccountTab = .overview
     @ScaledMetric(relativeTo: .body) private var scopeRowTitleSize: CGFloat = 15
@@ -143,7 +152,8 @@ struct AccountView: View {
     @State private var chromeScrolledAway = false
 
     var body: some View {
-        NavigationStack(path: $path) {
+        @Bindable var router = router
+        NavigationStack(path: $router.accountNavigationPath) {
             Group { standardListRoot }
                 .navigationTitle("Account")
                 #if os(iOS)
@@ -153,7 +163,9 @@ struct AccountView: View {
                 #if DEBUG
                 .task {
                     try? await Task.sleep(for: .seconds(1.5))
-                    DebugLaunchRoute.applyAccount(to: &path)
+                    if router.accountNavigationPath.isEmpty {
+                        DebugLaunchRoute.applyAccount(to: &router.accountNavigationPath)
+                    }
                     editingWorkID = DebugLaunchRoute.accountEditWorkID
                     if DebugLaunchRoute.takeSheet("inboxfilter") { showingInboxFilters = true }
                 }
@@ -196,14 +208,16 @@ struct AccountView: View {
                         onResolveWorkContext: { inboxModel.cacheWorkContext($0, for: destination, auth: auth) }
                     )
                 }
-                .ao3AuthorNavigation(path: $path, tab: .account)
+                .ao3AuthorNavigation(path: $router.accountNavigationPath, tab: .account)
                 .toolbar {
-                    // `.primaryAction`, not `.confirmationAction`: iOS 26 fills a
-                    // confirmation button with the tint; board 35 shows the plain glass check.
-                    ToolbarItem(placement: .primaryAction) {
-                        Button(action: dismissAccount) {
-                            Label("Done", systemImage: "checkmark")
-                                .labelStyle(.iconOnly)
+                    if !inInspector {
+                        // `.primaryAction`, not `.confirmationAction`: iOS 26 fills a
+                        // confirmation button with the tint; board 35 shows the plain glass check.
+                        ToolbarItem(placement: .primaryAction) {
+                            Button(action: dismissAccount) {
+                                Label("Done", systemImage: "checkmark")
+                                    .labelStyle(.iconOnly)
+                            }
                         }
                     }
                 }
@@ -261,7 +275,8 @@ struct AccountView: View {
                     if tab != .inbox { inboxModel.endSelection() }
                 }
         }
-        .presentationDragIndicator(.visible)
+        .safeAreaPadding(.leading, inInspector && duoLayout.isVerticalFoldActive ? DuoLayoutSignal.bookFoldInset : 0)
+        .presentationDragIndicator(inInspector ? .hidden : .visible)
     }
 
     private var standardListRoot: some View {
@@ -480,7 +495,7 @@ struct AccountView: View {
             Section {
                 Text(notice)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
             }
         }
@@ -609,7 +624,7 @@ struct AccountView: View {
                     ? "Couldn't read your latest work. Open Works to try again."
                     : "No recent works visible on AO3.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .padding(16)
                     .subjectPanel()
                     .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
@@ -648,7 +663,7 @@ struct AccountView: View {
             if items.isEmpty {
                 Text("No messages in your AO3 inbox.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(14)
             } else {
@@ -661,7 +676,7 @@ struct AccountView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(message)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 Button("Try Again") { inboxModel.retry(auth: auth) }
                     .foregroundStyle(.accentInk)
             }
@@ -761,7 +776,7 @@ struct AccountView: View {
 
     private func dismissAccount() {
         router.isPresentingAccount = false
-        dismiss()
+        if !inInspector { dismiss() }
     }
 
     private func openAO3FromAccount() {
@@ -965,13 +980,13 @@ struct AccountView: View {
                         Section {
                             Label("Showing cached AO3 data", systemImage: "wifi.slash")
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                                 .cardRow()
                         }
                     } else {
                         Label("Showing cached AO3 data", systemImage: "wifi.slash")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .padding(.horizontal, CardListMetrics.sideMargin)
                     }
                 }
@@ -1172,7 +1187,7 @@ private extension AccountView {
             VStack(alignment: .leading, spacing: 0) {
                 Text("When you sign in, this tab shows your AO3 account and activity.")
                     .font(.system(size: previewNoticeSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .padding(.bottom, 14)
 
                 identitySkeletonRow
@@ -1460,7 +1475,7 @@ private extension AccountView {
                     if let subtitle = destination.subtitle {
                         Text(subtitle)
                             .font(.system(size: scopeRowSubtitleSize))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -1472,7 +1487,7 @@ private extension AccountView {
                     // artboard shows exactly that against Collections.
                     Text(count)
                         .font(.system(size: scopeRowCountSize, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
 
                 Image(systemName: "chevron.right")

@@ -10,7 +10,7 @@ struct ReadingLogTests {
         Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self,
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self,
             ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self
         ])
     }
@@ -94,7 +94,7 @@ struct ReadingLogTests {
         ReadingLogService.startSession(for: work, now: t0, timeZone: zone, defaults: defaults)
         work.readiumLocator = locator(progress: 0.75)
         work.lastSpineIndex = 8
-        ReadingLogService.setMode(.listen, for: work, playbackRate: 1.25)
+        ReadingLogService.setMode(.listen, for: work, playbackRate: 1.25, now: t0)
         ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(60))
         let session = try #require(try context.fetch(FetchDescriptor<ReadingSession>()).first)
         #expect(session.tzOffsetSeconds == 19_800)
@@ -112,16 +112,18 @@ struct ReadingLogTests {
         #expect(!settingsJSON.contains("readingLogDeviceID"))
     }
 
-    @Test func laterCheckpointUpdatesListeningFactsOnTheSameRow() throws {
+    @Test func laterCheckpointUpdatesListeningFactsOnTheSameRowWhenStayingInListeningMode() throws {
         ReadingLogService.resetOpenSessionsForTests()
         let context = try context()
         let work = SavedWork(title: "Checkpoint", author: "A")
         context.insert(work)
         let t0 = Date(timeIntervalSince1970: 10_000)
-        ReadingLogService.startSession(for: work, now: t0)
+        ReadingLogService.startSession(for: work, mode: .listen, playbackRate: 1.0, now: t0)
         ReadingLogService.pauseSession(for: work, now: t0.addingTimeInterval(20))
         ReadingLogService.resumeSession(for: work, now: t0.addingTimeInterval(30))
-        ReadingLogService.setMode(.listen, for: work, playbackRate: 1.25)
+        ReadingLogService.setMode(
+            .listen, for: work, playbackRate: 1.25, now: t0.addingTimeInterval(30)
+        )
         ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(50))
         let sessions = try context.fetch(FetchDescriptor<ReadingSession>())
         #expect(sessions.count == 1)
@@ -421,8 +423,8 @@ struct ReadingLogTests {
             wordCount: 99_999
         )
         // 30_000 words / 1.5 hours = 20_000. The live work's wordCount is not consulted.
-        #expect(ReadingLogService.wordsPerHour(sessions: [slow, fast, ignored]) == 20_000)
-        #expect(ReadingLogService.wordsPerHour(sessions: []) == 0)
+        #expect(ReadingLogService.wordsPerHour(sessions: [slow, fast, ignored], works: []) == 20_000)
+        #expect(ReadingLogService.wordsPerHour(sessions: [], works: []) == 0)
     }
 
     @Test func aSittingCountsWhatItReadNotTheWholeWork() {
@@ -439,10 +441,10 @@ struct ReadingLogTests {
         }
         let c = row(3, 1.0, finished: true), a = row(1, 0.1), b = row(2, 0.4)
         let d = row(4, 0.2), e = row(5, 0.1), f = row(6, 0.3), x = row(1, 0.05, of: UUID())
-        let read = ReadingLogService.wordsRead(sessions: [c, a, b, d, e, f, x])
+        let read = ReadingLogService.wordsRead(sessions: [c, a, b, d, e, f, x], works: [])
         // A reread starts from the beginning (d); going back reads nothing (e).
         #expect([a, b, c, d, e, f, x].map { read[$0.id] } == [10_000, 30_000, 60_000, 20_000, 0, 20_000, 5_000])
-        #expect(ReadingLogService.wordsPerHour(sessions: [a, b]) == 20_000)
+        #expect(ReadingLogService.wordsPerHour(sessions: [a, b], works: []) == 20_000)
     }
 
     @Test func wipGrowthCreditsOnlyTheNewWordsAfterCatchingUp() {
@@ -465,7 +467,7 @@ struct ReadingLogTests {
             wordCount: 14_000,
             didFinish: false
         )
-        let read = ReadingLogService.wordsRead(sessions: [caughtUp, newChapters])
+        let read = ReadingLogService.wordsRead(sessions: [caughtUp, newChapters], works: [])
         #expect(read[caughtUp.id] == 10_000)
         #expect(read[newChapters.id] == 4_000)
     }
@@ -490,7 +492,7 @@ struct ReadingLogTests {
             wordCount: 14_000,
             didFinish: true
         )
-        let read = ReadingLogService.wordsRead(sessions: [finishedEarlier, newChapters])
+        let read = ReadingLogService.wordsRead(sessions: [finishedEarlier, newChapters], works: [])
         #expect(read[finishedEarlier.id] == 10_000)
         #expect(read[newChapters.id] == 4_000)
     }
@@ -525,7 +527,8 @@ struct ReadingLogTests {
             wordCount: 10_000
         )
         let read = ReadingLogService.wordsRead(
-            sessions: [withExplicitStart, withoutExplicitStart, jumpedAhead]
+            sessions: [withExplicitStart, withoutExplicitStart, jumpedAhead],
+            works: []
         )
         #expect(read[withExplicitStart.id] == 3_500)
         #expect(read[withoutExplicitStart.id] == 2_500)
@@ -561,7 +564,7 @@ struct ReadingLogTests {
             endingProgress: 0.50,
             wordCount: 12_000
         )
-        let read = ReadingLogService.wordsRead(sessions: [first, movedBack, movedForward])
+        let read = ReadingLogService.wordsRead(sessions: [first, movedBack, movedForward], works: [])
         #expect(read[first.id] == 7_000)
         #expect(read[movedBack.id] == 0)
         #expect(read[movedForward.id] == 4_000)

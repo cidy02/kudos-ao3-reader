@@ -115,7 +115,7 @@ struct WorkSurfaceLayoutTests {
         #expect(line.contains("4 kudos"))
         #expect(line.contains("1 bookmark"))
         #expect(line.contains("10 hits"))
-        #expect(line.contains("01/02/2020"))
+        #expect(line.contains(WorkStat.displayDate("2020-01-02")))
         #expect(!line.contains("0 comments"))
     }
 
@@ -157,7 +157,7 @@ struct WorkSurfaceLayoutTests {
         #expect(figures.visible.contains("♥ \(400.formatted())"))
         #expect(figures.visible.contains("12 bookmarks"))
         #expect(figures.visible.contains("\(9000.formatted()) hits"))
-        #expect(figures.visible.contains("01/02/2020"))
+        #expect(figures.visible.contains(WorkStat.displayDate("2020-01-02")))
         #expect(figures.spoken.contains("\(400.formatted()) kudos"))
         #expect(!figures.spoken.contains("♥"))
 

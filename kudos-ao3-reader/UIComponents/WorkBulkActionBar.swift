@@ -13,6 +13,10 @@ struct WorkBulkActionBar: View {
     var onDeleted: () -> Void = {}
     /// Called when the checkmark is tapped to exit selection mode without deleting.
     var onDone: () -> Void = {}
+    #if os(iOS)
+    /// Shelf lists host their sheet outside a Menu and provide this action.
+    var onExportEPUB: (() -> Void)? = nil
+    #endif
 
     @Environment(\.modelContext) private var context
     @Environment(DownloadQueue.self) private var downloadQueue
@@ -20,6 +24,9 @@ struct WorkBulkActionBar: View {
     @State private var showingAddToQueue = false
     @State private var showingAddToCollection = false
     @State private var showingTag = false
+    #if os(iOS)
+    @State private var showingEPUBExport = false
+    #endif
 
     private var allFavorited: Bool {
         !selectedWorks.isEmpty && selectedWorks.allSatisfy(\.isFavorite)
@@ -48,6 +55,15 @@ struct WorkBulkActionBar: View {
         Spacer()
 
         Menu {
+            #if os(iOS)
+            if selectedWorks.contains(where: \.hasEPUB) {
+                Button {
+                    if let onExportEPUB { onExportEPUB() } else { showingEPUBExport = true }
+                } label: {
+                    Label("Export EPUBs…", systemImage: "square.and.arrow.up")
+                }
+            }
+            #endif
             if let download = WorkDownload.bulkAction(for: selectedWorks) {
                 Button {
                     Task {
@@ -113,7 +129,7 @@ struct WorkBulkActionBar: View {
         }
         .accessibilityLabel("Done")
         .sheet(isPresented: $showingAddToQueue) {
-            AddToQueueView(works: selectedWorks)
+            AddToQueueView(works: selectedWorks, origin: ReadingQueueMembershipOrigin(kind: .manual))
         }
         .sheet(isPresented: $showingAddToCollection) {
             AddToCollectionView(works: selectedWorks)
@@ -121,6 +137,11 @@ struct WorkBulkActionBar: View {
         .sheet(isPresented: $showingTag) {
             WorkBulkTagSheet(works: selectedWorks)
         }
+        #if os(iOS)
+        .sheet(isPresented: $showingEPUBExport) {
+            WorkEPUBExportSheet(works: selectedWorks.filter(\.hasEPUB))
+        }
+        #endif
         #if DEBUG
         .task { if DebugLaunchRoute.takeSheet("bulktag") { showingTag = true } }
         #endif
@@ -161,7 +182,12 @@ struct WorkBulkActionBar: View {
                 guard !work.isInSavedForLaterQueue else { continue }
                 // Discard membership: Task must not inherit a non-Sendable PersistentModel result.
                 Task { @MainActor in
-                    _ = await ReadingQueueService.addToSavedForLater(work, in: context)
+                    _ = await ReadingQueueService.addToSavedForLater(
+                        work,
+                        state: .new,
+                        origin: ReadingQueueMembershipOrigin(kind: .manual),
+                        in: context
+                    )
                 }
             } else {
                 guard work.isInSavedForLaterQueue else { continue }

@@ -63,7 +63,7 @@ struct EPUBTests {
     @Test @MainActor func userImportCreatesSavedWorkAndDetectsDuplicate() async throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -110,14 +110,55 @@ struct EPUBTests {
         #expect(imported.ao3WorkID == nil)
         #expect(imported.isProtected)
 
-        let duplicateOutcome = try await importUserEPUB(try Self.sampleEPUB, into: context)
-        switch duplicateOutcome {
+        let outcome = try await importUserEPUB(try Self.sampleEPUB, into: context)
+        switch outcome {
         case .duplicate(let duplicate):
             #expect(duplicate.id == imported.id)
         case .imported, .restored:
             Issue.record("Expected the second import to be treated as a duplicate")
         }
         #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
+    }
+
+    @Test @MainActor func userImportAndStoredMetadataPinAndRefreshCovers() async throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+        ])
+        let container = try ModelContainer(
+            for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        )
+        let context = ModelContext(container)
+        var cleanupURL: URL?
+        defer { if let cleanupURL { try? FileManager.default.removeItem(at: cleanupURL) } }
+
+        let importedOutcome = try await importUserEPUB(try Self.sampleEPUB, into: context)
+        let imported = importedOutcome.work
+        cleanupURL = imported.fileURL
+        #expect(imported.coverRecipeJSON != nil)
+        #expect(GeneratedCoverRecipe.isAutomaticPin(in: imported.coverRecipeJSON))
+
+        // Duplicate import fills a missing pin and refreshes an existing pin if tier rises.
+        imported.coverRecipeJSON = nil
+        _ = try await importUserEPUB(try Self.sampleEPUB, into: context)
+        #expect(imported.coverRecipeJSON != nil)
+
+        imported.pinCover(salt: 2)
+        imported.wordCount = 95_000
+        _ = try await importUserEPUB(try Self.sampleEPUB, into: context)
+        #expect(imported.generatedCoverRecipe.salt == 2)
+        #expect(imported.generatedCoverRecipe.tier == 2)
+
+        // applyStoredEPUBMetadata pins a nil work and refreshes an existing shuffled pin.
+        imported.coverRecipeJSON = nil
+        await applyStoredEPUBMetadata(to: imported, in: context, fillOnly: true)
+        #expect(imported.coverRecipeJSON != nil)
+
+        imported.pinCover(salt: 3)
+        imported.wordCount = 5_000
+        await applyStoredEPUBMetadata(to: imported, in: context, fillOnly: true)
+        #expect(imported.generatedCoverRecipe.salt == 3)
+        #expect(imported.generatedCoverRecipe.tier == 0)
     }
 
     @Test func tableOfContentsFromNCX() throws {

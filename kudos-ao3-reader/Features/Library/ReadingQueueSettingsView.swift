@@ -32,9 +32,15 @@ struct ReadingQueueSettingsView: View {
     var onShowOnlyTag: (Tag) -> Void = { _ in }
 
     @Environment(\.modelContext) private var context
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Environment(ThemeManager.self) private var themeManager
     /// The shared vocabulary "Manage all tags" counts.
     @Query private var allTags: [Tag]
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion })
+    private var libraryWorks: [SavedWork]
+    @Query private var tagAliases: [TagAlias]
     @State private var showingTags = false
     #if DEBUG
     @State private var debugManageTags = false
@@ -47,25 +53,28 @@ struct ReadingQueueSettingsView: View {
         themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
     }
 
-    private var works: [SavedWork] {
-        ReadingQueueService.orderedWorks(in: queue)
+    private func resolveWorks() -> [SavedWork] {
+        if queue.kind == .smart {
+            let snapshot = ReadingQueueService.SmartLibrarySnapshot(
+                works: libraryWorks,
+                aliases: TagAliasResolver(models: tagAliases)
+            )
+            // Hide Mature before the limit, as on the queue page: these facts describe what the reader sees.
+            return snapshot.matching(queue) { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
+        }
+        return ReadingQueueService.orderedMemberships(in: queue).compactMap(\.work)
     }
 
-    private var preservedWorks: [SavedWork] {
-        works.filter { $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path) }
-    }
-
-    private var preservedByteCount: Int64 {
-        preservedWorks.reduce(0) { $0 + queueWorkFileSize($1.fileURL) }
-    }
-
-    private var subtitle: String {
-        let count = works.count
-        let base = "\(count) work\(count == 1 ? "" : "s")"
-        guard count > 0 else { return base }
-        let offline = preservedWorks.count == count
+    private func subtitle(
+        workCount: Int,
+        preservedCount: Int,
+        preservedByteCount: Int64
+    ) -> String {
+        let base = "\(workCount) work\(workCount == 1 ? "" : "s")"
+        guard workCount > 0 else { return base }
+        let offline = preservedCount == workCount
             ? "all kept offline"
-            : "\(preservedWorks.count) kept offline"
+            : "\(preservedCount) kept offline"
         return "\(base) · \(offline) · \(queueByteCountString(preservedByteCount))"
     }
 
@@ -118,18 +127,27 @@ struct ReadingQueueSettingsView: View {
     }
 
     var body: some View {
+        let currentWorks = resolveWorks()
+        let currentPreserved = currentWorks.filter {
+            $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path)
+        }
+        let currentBytes = currentPreserved.reduce(Int64(0)) { $0 + queueWorkFileSize($1.fileURL) }
         List {
             Section {
-                SubjectPageFact(subtitle)
+                SubjectPageFact(subtitle(
+                    workCount: currentWorks.count,
+                    preservedCount: currentPreserved.count,
+                    preservedByteCount: currentBytes
+                ))
                     .pageBodyRow(top: 12, gutter: 0)
-                if !works.isEmpty {
-                    let progress = ReadingQueueFacts.progress(of: works.map(\.readingState))
+                if !currentWorks.isEmpty {
+                    let progress = ReadingQueueFacts.progress(of: currentWorks.map(\.readingState))
                     // 1h.3 repeats the queue page's strip and its legend.
                     VStack(alignment: .leading, spacing: 7) {
                         QueueProgressStrip(progress: progress, palette: palette)
-                        Text(ReadingQueueFacts.legend(progress, offlineCount: preservedWorks.count))
+                        Text(ReadingQueueFacts.legend(progress, offlineCount: currentPreserved.count))
                             .font(.system(size: legendSize))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
                 }
@@ -152,14 +170,16 @@ struct ReadingQueueSettingsView: View {
             Section {
                 SubjectFieldLabel(text: "Details", style: .formGroup)
                     .pageBodyRow(top: 22, gutter: SubjectMetrics.gutter)
-                detailsPanel
+                detailsPanel(works: currentWorks)
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
                 Text(
-                    "When this is off, the queue keeps only your list. It doesn't download or keep copies, "
-                        + "so it uses no extra storage."
+                    queue.kind == .smart
+                        ? NewReadingQueueSheet.smartFootnote
+                        : "When this is off, the queue keeps only your list. It doesn't download or keep copies, "
+                            + "so it uses no extra storage."
                 )
                     .font(.system(size: footnoteSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .pageBodyRow(top: 2, gutter: SubjectMetrics.gutter + 6)
             }
@@ -192,7 +212,7 @@ struct ReadingQueueSettingsView: View {
 
     /// 1h.3/1h.4's single Details card. The header and legend already report
     /// the preserved count, so it is not repeated as another row here.
-    private var detailsPanel: some View {
+    private func detailsPanel(works: [SavedWork]) -> some View {
         VStack(spacing: 0) {
             Menu {
                 ForEach(SubjectHueSwatches.all) { swatch in
@@ -231,24 +251,31 @@ struct ReadingQueueSettingsView: View {
                     onPick: setCustomColour
                 )
             }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Keep Works Offline", arrangement: .control) {
-                Toggle("Keep Works Offline", isOn: Binding(
-                    // nil is "never asked", and a never-asked queue keeps its
-                    // works downloaded as queues always did (`KeepOffline`).
-                    get: { KeepOffline.queueKeeps(queue.keepsWorksOffline) },
-                    set: { isOn in
-                        queue.keepsWorksOffline = isOn
-                        queue.markModified()
-                        context.saveBestEffort(reason: "Saving queue offline setting failed")
-                        if isOn { ReadingQueueService.preserveMissingWorks(in: queue, context: context) }
-                    }
-                ))
-                .labelsHidden()
-                .accentFill()
+            if queue.kind != .smart {
+                SubjectRowSeparator()
+                SubjectFormRow(label: "Keep Works Offline", arrangement: .control) {
+                    Toggle("Keep Works Offline", isOn: Binding(
+                        // nil is "never asked", and a never-asked queue keeps its
+                        // works downloaded as queues always did (`KeepOffline`).
+                        get: { KeepOffline.queueKeeps(queue.keepsWorksOffline) },
+                        set: { isOn in
+                            queue.keepsWorksOffline = isOn
+                            queue.markModified()
+                            context.saveBestEffort(reason: "Saving queue offline setting failed")
+                            if isOn { ReadingQueueService.preserveMissingWorks(in: queue, context: context) }
+                        }
+                    ))
+                    .labelsHidden()
+                    .accentFill()
+                }
             }
             SubjectRowSeparator()
-            SubjectFormRow(label: "Order", value: "Manual")
+            SubjectFormRow(
+                label: "Order",
+                value: queue.kind == .smart
+                    ? (SmartQueueRules.decode(queue.smartRulesJSON)?.sort.title ?? "By rules")
+                    : "Manual"
+            )
             SubjectRowSeparator()
             SubjectFormRow(
                 label: "Last Read",

@@ -19,22 +19,27 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @Environment(AO3InboxModel.self) private var inboxModel
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.duoLayout) private var duoLayout
+    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
     @Environment(SubscriptionScanService.self) private var subscriptionScan
+    @Environment(FollowedTagUpdateStore.self) private var followedTagUpdates
     #if os(iOS)
     @Environment(MailSubscriptionDriver.self) private var mailDriver
     #endif
 
     /// What the Subscriptions screen's Waiting tab shows, newest first: mail while it
-    /// is connected, otherwise the scan's. Hide mode's omissions as in Waiting.
+    /// is connected, otherwise the scan's, plus any followed tag flagged Show on Home.
+    /// Hide mode's omissions as in Waiting.
     private var recentSubscriptionUpdates: [SubscriptionUpdate] {
         var updates = subscriptionScan.updates
         #if os(iOS)
         if mailDriver.isConnected { updates = mailDriver.updates }
         #endif
+        updates += followedTagUpdates.visibleUpdates(for: followedTags, homeOnly: true)
         return updates
             .filter {
                 !gate.isHidden(remoteID: Int(clamping: $0.workID), rating: $0.rating, enabled: hideMature, mode: matureMode)
@@ -55,8 +60,13 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     private var homeCollections: [WorkCollection]
     @Query(sort: \ReadingSession.startedAt, order: .reverse)
     private var readingSessions: [ReadingSession]
+    @Query(sort: \FollowedTag.followedAt)
+    private var followedTags: [FollowedTag]
+    @Query private var tagAliases: [TagAlias]
     @State private var readingStats = HomeReadingStats()
     @State private var path = NavigationPath()
+    @State private var isHomeVisible = false
+    @State private var followedTagCheckTask: Task<Void, Never>?
     @Namespace private var cardZoomNamespace
     @State private var subscriptions: [AO3WorkSummary] = []
     @State private var accountAvatarURL: URL?
@@ -106,8 +116,12 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     }
 
     private func enterSelectMode(selecting work: SavedWork? = nil) {
+        if isShowingAccountInspector {
+            router.isPresentingAccount = false
+        }
         if let work { selection.insert(work.id) }
         isSelecting = true
+        syncHomeInspectorReadiness()
     }
 
     private func selectAction(for work: SavedWork) -> (() -> Void)? {
@@ -117,6 +131,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     private func exitSelectMode() {
         isSelecting = false
         selection = []
+        syncHomeInspectorReadiness()
+    }
+
+    private func syncHomeInspectorReadiness() {
+        router.isHomeReadyForAccountInspector = path.isEmpty && !isSelecting
     }
 
     private var allLocalSelected: Bool {
@@ -174,10 +193,6 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         hasSectionCache = true
     }
 
-    private var statisticsWorks: [SavedWork] {
-        HomeReadingStats.insightsWorks(from: works, gate: gate, hideMature: hideMature)
-    }
-
     private var homeStatsRevision: String {
         let newest = readingSessions.map(\.lastModifiedAt).max()?.timeIntervalSince1970 ?? 0
         return HomeReadingStats.revisionKey(
@@ -193,36 +208,80 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         readingStats = HomeReadingStats.calculate(facts: facts)
     }
 
+    private var accountInspectorGeometry: DuoInspectorSplitGeometry? {
+        duoLayout.accountPresentation(rightToLeft: layoutDirection == .rightToLeft).inspectorGeometry
+    }
+
+    private var isShowingAccountInspector: Bool {
+        accountInspectorGeometry != nil
+            && router.selection == .home
+            && router.isHomeReadyForAccountInspector
+            && router.isPresentingAccount
+    }
+
     var body: some View {
+        #if os(iOS)
+        // Keep `homeNavigationStack` full-width so its toolbar (`×` Close / Profile) stays
+        // attached to the vertical rail on Open/Book Duo; inset Home's scroll content to
+        // the leading pane while Account occupies the trailing pane from fold to screen edge
+        // (with trailing safe-area padding clearing the rail so its wash bleeds seamlessly
+        // behind the vertical bar, N5 / Duo-Open-Account).
+        ZStack(alignment: .trailing) {
+            homeNavigationStack
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if let split = accountInspectorGeometry, isShowingAccountInspector {
+                // Span from the fold centre to the physical trailing edge so the hairline
+                // sits squarely on the fold and Account's wash bleeds seamlessly behind the
+                // vertical rail while `safeAreaPadding` keeps its cards clear of the rail.
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    AccountView(inInspector: true)
+                        .safeAreaPadding(.trailing, split.trailingRailReserve)
+                        .frame(width: split.fullFoldHalfWidth)
+                        .frame(maxHeight: .infinity)
+                        .overlay(alignment: .leading) {
+                            Rectangle()
+                                .fill(Color.primary.opacity(0.14))
+                                .frame(width: 0.5)
+                                .ignoresSafeArea(edges: [.top, .bottom])
+                        }
+                }
+                .ignoresSafeArea(edges: .trailing)
+                .transition(.move(edge: .trailing))
+            }
+        }
+        .animation(
+            accountInspectorGeometry != nil ? .snappy(duration: 0.25) : nil,
+            value: isShowingAccountInspector
+        )
+        #else
+        homeNavigationStack
+        #endif
+    }
+
+    private var homeNavigationStack: some View {
         NavigationStack(path: $path) {
             Group {
                 if hasSectionCache {
                     DashboardRegionHost {
                         ScrollViewReader { proxy in
-                            ScrollView {
-                                // 26pt between sections (Rules; 1b drew 22).
-                                VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
-                                    statsLine
-                                    resumeSection
-                                    newChaptersSection
-                                        .id("chapters")
-                                    readingQueuesSection
-                                        .id("queues")
-                                    let shelves = HomeCollectionShelves.shelves(homeCollections)
-                                    ForEach(Array(shelves.enumerated()), id: \.element.id) { index, collection in
-                                        HomeCollectionShelf(
-                                            collection: collection,
-                                            works: HomeCollectionShelves.works(in: collection, visible: passesPrivacy),
-                                            onSeeAll: { path.append(collection) }
-                                        )
-                                        .id(index == 0 ? "collections" : "collection:\(collection.id)")
-                                    }
-                                    subscriptionsSection
-                                        .id("subscriptions")
-                                }
-                                .padding(.vertical, 12)
+                            DuoFoldAdaptiveScrollHost(onRefresh: { await refreshHome() }) {
+                                duoLeadingHomeSections
+                            } trailing: {
+                                duoTrailingHomeSections
+                            } fallback: {
+                                statsLine
+                                    .duoScrollAnchor("stats")
+                                resumeSection
+                                    .duoScrollAnchor("resume")
+                                newChaptersSection
+                                    .duoScrollAnchor("chapters")
+                                readingQueuesSection
+                                    .duoScrollAnchor("queues")
+                                pinnedCollectionShelves
+                                subscriptionsSection
+                                    .duoScrollAnchor("subscriptions")
                             }
-                            .refreshable { await refreshHome() }
                             #if os(iOS)
                             .task { await mailDriver.refreshIfNeeded() }
                             #endif
@@ -246,14 +305,16 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     )
                 }
             }
+            .padding(.trailing, isShowingAccountInspector ? (accountInspectorGeometry?.foldHalfWidth ?? 0) : 0)
             .background(themeManager.appTheme.contentBackdrop.ignoresSafeArea())
             .navigationTitle("Home")
             #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)
             #endif
+                .duoVerticalCompressionPrefersTabBar(duoLayout.hasVerticalBar)
                 .navigationDestination(for: SavedWork.self) { HomeWorkDestination(work: $0) }
                 .navigationDestination(for: ReadingInsightsDestination.self) { _ in
-                    ReadingInsightsView(works: statisticsWorks)
+                    ReadingInsightsView(libraryWorks: works)
                 }
                 .navigationDestination(for: LocalWorkDestination.self) { destination in
                     LocalWorkDestinationView(destination: destination, onReaderOpen: markUpdateSeen)
@@ -319,6 +380,35 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {
                         updateReadingStats()
+                        startHomeTagCheckIfNeeded()
+                    } else {
+                        cancelHomeTagCheck()
+                    }
+                }
+                .onAppear {
+                    isHomeVisible = true
+                    startHomeTagCheckIfNeeded()
+                }
+                .onDisappear {
+                    isHomeVisible = false
+                    cancelHomeTagCheck()
+                }
+                .onChange(of: router.selection) { _, selection in
+                    if selection == .home {
+                        startHomeTagCheckIfNeeded()
+                    } else {
+                        cancelHomeTagCheck()
+                    }
+                }
+                .onChange(of: path.isEmpty, initial: true) { _, isEmpty in
+                    if !isEmpty, isShowingAccountInspector {
+                        router.isPresentingAccount = false
+                    }
+                    syncHomeInspectorReadiness()
+                    if isEmpty {
+                        startHomeTagCheckIfNeeded()
+                    } else {
+                        cancelHomeTagCheck()
                     }
                 }
                 .task(id: auth.isLoggedIn) {
@@ -361,6 +451,37 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                             WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
                         }
                         #endif
+                    } else if duoLayout.hasVerticalBar {
+                        // Duo rail (N4 / N5): only the profile button sits at the top of the rail
+                        // (replaced by Close while Account's trailing inspector is open). Home has
+                        // no other toolbar items; New Queue stays in Reading Queues › Organise / New
+                        // Queue, Select on card context menus, Mature reveal inline or in Library.
+                        #if os(iOS)
+                        if isShowingAccountInspector {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button {
+                                    router.isPresentingAccount = false
+                                } label: {
+                                    Label("Close Account", systemImage: "xmark")
+                                        .labelStyle(.iconOnly)
+                                }
+                                .tint(Color.primary)
+                            }
+                            .duoVerticalPreferredAxis()
+                        } else {
+                            ToolbarItem(placement: .topBarLeading) {
+                                profileButton
+                            }
+                            .sharedBackgroundVisibility(.hidden)
+                            .duoVerticalPreferredAxis()
+                        }
+                        #endif
+                    } else if duoLayout.hidesHomeSecondaryToolbarActions {
+                        // Duo upright portrait (N8 / Duo-Portrait-Home): large title "Home" with
+                        // only the profile button at the top right (no +, no …).
+                        ToolbarItem(placement: .primaryAction) {
+                            profileButton
+                        }
                     } else {
                         let hasMature = hideMature
                         // Gated as a whole, not just its inner pieces — an empty HStack
@@ -426,7 +547,10 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     /// T-460 replaces the Account tab with this persistent Home identity control.
     /// Its badge shares the Inbox model with the sheet, so reads clear immediately.
     private var profileButton: some View {
-        Button {
+        let onRail = duoLayout.hasVerticalBar
+        let avatarSize: CGFloat = onRail ? 46 : 30
+        let targetSize: CGFloat = onRail ? 48 : 44
+        return Button {
             router.showAccount()
         } label: {
             ZStack(alignment: .topTrailing) {
@@ -436,23 +560,29 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         username: auth.username,
                         identity: auth.username.map {
                             themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: $0))
-                        }
+                        },
+                        size: avatarSize
                     )
                 }
-                .frame(width: 30, height: 30)
+                .frame(width: avatarSize, height: avatarSize)
 
                 if let unreadCount = inboxModel.unreadCount, unreadCount > 0 {
                     Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
                         .font(.caption2.bold())
                         .foregroundStyle(.white)
                         .padding(.horizontal, unreadCount > 9 ? 4 : 3)
-                        .frame(minWidth: 15, minHeight: 15)
+                        .frame(minWidth: onRail ? 18 : 15, minHeight: onRail ? 18 : 15)
                         .background(.accentFill, in: Capsule())
-                        .offset(x: 7, y: -6)
+                        .overlay {
+                            if onRail {
+                                Capsule().strokeBorder(themeManager.appTheme.contentBackdrop, lineWidth: 2)
+                            }
+                        }
+                        .offset(x: onRail ? 3 : 7, y: onRail ? -3 : -6)
                         .accessibilityHidden(true)
                 }
             }
-            .frame(width: 44, height: 44)
+            .frame(width: targetSize, height: targetSize)
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -493,6 +623,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     + Text(" streak").foregroundStyle(.secondary)
                 )
                 .font(.subheadline)
+                .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
 
                 Image(systemName: "chevron.right")
@@ -510,45 +641,152 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         .buttonStyle(.plain)
     }
 
+    /// Open & Book Duo leading pane (`Duo-Open-Home`, `Duo-Book-Home`):
+    /// weekly stats, Resume card, Reading Now ("Also Reading") carousel, then pinned collections.
+    @ViewBuilder
+    private var duoLeadingHomeSections: some View {
+        statsLine
+            .duoScrollAnchor("stats")
+        if readingNow.isEmpty {
+            resumeEmptySection
+                .duoScrollAnchor("resume")
+        } else {
+            let heroWork = readingNow[0]
+            let carouselWorks = Array(readingNow.dropFirst().prefix(HomeReadingNowCount.carouselLimit))
+            let counts = HomeReadingNowCount.shelfCounts(total: readingNow.count)
+            HomeResumeHero(
+                work: heroWork,
+                isSelecting: isSelecting,
+                isSelected: selection.contains(heroWork.id),
+                onToggleSelection: { toggleSelection(heroWork) },
+                onSelect: selectAction(for: heroWork),
+                onPrimary: { path.append(LocalWorkDestination.reader(heroWork)) },
+                onReadAloud: { path.append(LocalWorkDestination.readerReadAloud(heroWork)) }
+            )
+            .downloadDimmed(heroWork)
+            .padding(.horizontal, 16)
+            .duoScrollAnchor("resume")
+
+            if !carouselWorks.isEmpty {
+                WorkCarouselSection(
+                    title: "Reading Now",
+                    hasItems: true,
+                    itemCount: counts.sectionCount,
+                    visibleCount: counts.visibleCount,
+                    onSeeAll: { router.showLibrarySection(.readingNow, from: "Home") }
+                ) {
+                    readingNowCarouselCards(carouselWorks)
+                } emptyState: {
+                    EmptyView()
+                }
+                .duoScrollAnchor("readingNow")
+            }
+        }
+        pinnedCollectionShelves
+    }
+
+    /// Open & Book Duo trailing pane (`Duo-Open-Home`, `Duo-Book-Home`):
+    /// New Chapters, Reading Queues, and Subscriptions.
+    @ViewBuilder
+    private var duoTrailingHomeSections: some View {
+        newChaptersSection
+            .duoScrollAnchor("chapters")
+        readingQueuesSection
+            .duoScrollAnchor("queues")
+        subscriptionsSection
+            .duoScrollAnchor("subscriptions")
+    }
+
+    @ViewBuilder
+    private var pinnedCollectionShelves: some View {
+        let shelves = HomeCollectionShelves.shelves(homeCollections)
+        ForEach(Array(shelves.enumerated()), id: \.element.id) { index, collection in
+            HomeCollectionShelf(
+                collection: collection,
+                works: HomeCollectionShelves.works(in: collection, visible: passesPrivacy),
+                onSeeAll: { path.append(collection) }
+            )
+            .duoScrollAnchor(index == 0 ? "collections" : "collection:\(collection.id)")
+        }
+    }
+
+    private var resumeEmptySection: some View {
+        // Strong empty state (Synthesis v2): section chrome + CTAs, not a
+        // dead hero-shaped hole. Same header weight as other Home rows.
+        VStack(alignment: .leading, spacing: 11) {
+            SectionRuleHeader(title: "Continue Reading")
+                .dashboardLeadingRegion()
+
+            SectionEmptyState(
+                message: HomeSectionKind.readingNow.emptyMessage,
+                systemImage: HomeSectionKind.readingNow.emptyIcon
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .dashboardLeadingRegion()
+
+            HStack(spacing: 12) {
+                Button("Browse AO3") {
+                    router.selection = .browse
+                }
+                .buttonStyle(.kudosPrimary)
+
+                Button("Open Library") {
+                    router.selection = .library
+                }
+                .buttonStyle(.kudosSecondary)
+            }
+            .padding(.horizontal, 16)
+            .dashboardLeadingRegion()
+        }
+    }
+
+    @ViewBuilder
+    private func readingNowCarouselCards(_ carouselWorks: [SavedWork]) -> some View {
+        ForEach(carouselWorks) { work in
+            if isSelecting {
+                SensitiveWorkCoverCard(
+                    work: work,
+                    footer: footer(.readingNow, work),
+                    progress: progress(.readingNow, work),
+                    isSelecting: true,
+                    isSelected: selection.contains(work.id),
+                    onToggleSelection: { toggleSelection(work) }
+                )
+                .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+            } else if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+                SensitiveWorkCoverCard(
+                    work: work,
+                    footer: footer(.readingNow, work),
+                    progress: progress(.readingNow, work)
+                )
+            } else {
+                NavigationLink(value: LocalWorkDestination.reader(work)) {
+                    SensitiveWorkCoverCard(
+                        work: work,
+                        footer: footer(.readingNow, work),
+                        progress: progress(.readingNow, work)
+                    )
+                }
+                .buttonStyle(.plain)
+                .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+            }
+        }
+    }
+
     private var resumeSection: some View {
         Group {
             if readingNow.isEmpty {
-                // Strong empty state (Synthesis v2): section chrome + CTAs, not a
-                // dead hero-shaped hole. Same header weight as other Home rows.
-                VStack(alignment: .leading, spacing: 11) {
-                    SectionRuleHeader(title: "Continue Reading")
-                        .dashboardLeadingRegion()
-
-                    SectionEmptyState(
-                        message: HomeSectionKind.readingNow.emptyMessage,
-                        systemImage: HomeSectionKind.readingNow.emptyIcon
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .dashboardLeadingRegion()
-
-                    HStack(spacing: 12) {
-                        Button("Browse AO3") {
-                            router.selection = .browse
-                        }
-                        .buttonStyle(.kudosPrimary)
-
-                        Button("Open Library") {
-                            router.selection = .library
-                        }
-                        .buttonStyle(.kudosSecondary)
-                    }
-                    .padding(.horizontal, 16)
-                    .dashboardLeadingRegion()
-                }
+                resumeEmptySection
             } else {
                 let heroWork = readingNow[0]
-                let carouselWorks = Array(readingNow.dropFirst().prefix(3))
+                let carouselWorks = Array(readingNow.dropFirst().prefix(HomeReadingNowCount.carouselLimit))
+                let counts = HomeReadingNowCount.shelfCounts(total: readingNow.count)
                 HomeResumeComposition(
                     hasNext: !carouselWorks.isEmpty,
                     nextSectionTitle: "Reading Now",
-                    nextSectionCount: readingNow.count,
-                    nextSectionVisibleCount: min(readingNow.count, 4),
+                    nextSectionCount: counts.sectionCount,
+                    nextSectionVisibleCount: counts.visibleCount,
                     onSeeAll: { router.showLibrarySection(.readingNow, from: "Home") }
                 ) {
                     HomeResumeHero(
@@ -562,35 +800,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     )
                     .downloadDimmed(heroWork)
                 } next: {
-                    ForEach(carouselWorks) { work in
-                        if isSelecting {
-                            SensitiveWorkCoverCard(
-                                work: work,
-                                footer: footer(.readingNow, work),
-                                progress: progress(.readingNow, work),
-                                isSelecting: true,
-                                isSelected: selection.contains(work.id),
-                                onToggleSelection: { toggleSelection(work) }
-                            )
-                            .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
-                        } else if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
-                            SensitiveWorkCoverCard(
-                                work: work,
-                                footer: footer(.readingNow, work),
-                                progress: progress(.readingNow, work)
-                            )
-                        } else {
-                            NavigationLink(value: LocalWorkDestination.reader(work)) {
-                                SensitiveWorkCoverCard(
-                                    work: work,
-                                    footer: footer(.readingNow, work),
-                                    progress: progress(.readingNow, work)
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
-                        }
-                    }
+                    readingNowCarouselCards(carouselWorks)
                 }
             }
         }
@@ -649,18 +859,31 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
 
     private var readingQueuesSection: some View {
         let customQueues = readingQueues
-            .filter { $0.kind == .custom }
+            .filter(\.isUserQueue)
             .sorted { $0.sortOrder < $1.sortOrder }
         let visibleQueues = Array(customQueues.prefix(3))
+        let smartSnapshot = visibleQueues.contains { $0.kind == .smart }
+            ? ReadingQueueService.SmartLibrarySnapshot(
+                works: works,
+                aliases: TagAliasResolver(models: tagAliases)
+            )
+            : nil
 
         return VStack(alignment: .leading, spacing: 6) {
             SectionRuleHeader(
                 title: "Reading Queues",
                 count: customQueues.count,
-                actionTitle: customQueues.count > 3 ? "See All" : "Organise",
+                actionTitle: customQueues.isEmpty && duoLayout.hidesHomeSecondaryToolbarActions
+                    ? "New Queue"
+                    : (customQueues.count > 3 ? "See All" : "Organise"),
                 onSeeAll: !customQueues.isEmpty
                     ? { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
-                    : nil
+                    : (duoLayout.hidesHomeSecondaryToolbarActions
+                        ? {
+                            newQueueName = ""
+                            showingNewQueue = true
+                        }
+                        : nil)
             )
             .dashboardLeadingRegion()
 
@@ -677,6 +900,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         }
                         HomeQueueRow(
                             queue: queue,
+                            precomputedSmartWorks: queue.kind == .smart ? smartSnapshot?.matching(queue, where: passesPrivacy) : nil,
                             onOpenQueue: { path.append(AllReadingQueuesDestination(initialQueueID: queue.id)) },
                             onStartWork: { path.append(LocalWorkDestination.reader($0)) }
                         )
@@ -720,10 +944,21 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             SectionRuleHeader(
                 title: "Subscriptions",
                 count: updates.isEmpty ? totalCount : updates.count,
-                actionTitle: (updates.isEmpty ? visibleEntries.count : updates.count) > 2 ? "See All" : nil,
-                onSeeAll: visibleEntries.isEmpty && updates.isEmpty
+                actionTitle: (updates.isEmpty ? visibleEntries.count : updates.count) > 2
+                    ? "See All"
+                    : (!followedTags.isEmpty && updates.isEmpty && visibleEntries.isEmpty ? "Tags" : nil),
+                onSeeAll: visibleEntries.isEmpty && updates.isEmpty && followedTags.isEmpty
                     ? nil
-                    : { path.append(SubscriptionsRoute(tab: updates.isEmpty ? .following : .waiting)) }
+                    : {
+                        let tab: SubscriptionsView.Tab = if !updates.isEmpty {
+                            .waiting
+                        } else if !visibleEntries.isEmpty {
+                            .following
+                        } else {
+                            .tags
+                        }
+                        path.append(SubscriptionsRoute(tab: tab))
+                    }
             )
             .dashboardLeadingRegion()
 
@@ -741,8 +976,12 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         )
                         .padding(.horizontal, 16)
                         .contentShape(Rectangle())
-                        .onTapGesture { path.append(SubscriptionsRoute()) }
-                        .accessibilityAction(named: "Open Subscriptions") { path.append(SubscriptionsRoute()) }
+                        .onTapGesture { openHomeSubscriptionUpdate(update) }
+                        .accessibilityAction(
+                            named: update.source.tagWorksRequest != nil ? "Open Tag" : "Open Subscriptions"
+                        ) {
+                            openHomeSubscriptionUpdate(update)
+                        }
                     }
                 }
                 .dashboardLeadingRegion()
@@ -854,13 +1093,67 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         isLoadingSubscriptions = false
     }
 
+    private var isHomeCheckActive: Bool {
+        isHomeVisible && router.selection == .home && path.isEmpty && scenePhase == .active
+    }
+
+    private func startHomeTagCheckIfNeeded() {
+        guard isHomeCheckActive else { return }
+        followedTagCheckTask?.cancel()
+        followedTagCheckTask = Task {
+            await followedTagUpdates.checkIfNeeded(
+                screen: .home,
+                in: context,
+                ignoringCooldown: false,
+                isScreenActive: { isHomeCheckActive }
+            )
+            await SavedSeriesWeeklyCheck.run(
+                in: context,
+                mail: {
+                    #if os(iOS)
+                    (mailDriver.isConnected, mailDriver.updates)
+                    #else
+                    (false, [])
+                    #endif
+                },
+                isScreenActive: { isHomeCheckActive }
+            )
+        }
+    }
+
+    private func cancelHomeTagCheck() {
+        followedTagCheckTask?.cancel()
+        followedTagCheckTask = nil
+        followedTagUpdates.cancelCheck()
+    }
+
+    private func openHomeSubscriptionUpdate(_ update: SubscriptionUpdate) {
+        if let tagRequest = update.source.tagWorksRequest {
+            if case let .tag(source) = update.source {
+                followedTagUpdates.markSeen(tagID: source.tagID)
+            }
+            path.append(tagRequest)
+        } else {
+            path.append(SubscriptionsRoute())
+        }
+    }
+
     private func refreshHome() async {
+        // Pull to refresh lifts any maintenance hold for a single probe.
+        await AO3Client.shared.invalidateCachedResponses()
         _ = await WorkMetadataRefresh.refresh(visibleHomeWorks, in: context, auth: auth)
         await loadSubscriptions()
         #if os(iOS)
         // The Subscriptions rows above can come from mail; reading it asks AO3 for nothing.
         await mailDriver.refresh()
         #endif
+        cancelHomeTagCheck()
+        await followedTagUpdates.checkIfNeeded(
+            screen: .home,
+            in: context,
+            ignoringCooldown: true,
+            isScreenActive: { isHomeCheckActive }
+        )
     }
 
     private var visibleHomeWorks: [SavedWork] {
@@ -886,6 +1179,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         let trimmed = newQueueName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         _ = ReadingQueueService.createQueue(
+            id: options.draftID,
             named: trimmed,
             hue: newQueueHue,
             colorHex: options.colorHex,
@@ -893,6 +1187,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             seededFrom: options.seed,
             tagNames: options.tagNames,
             seedWorkIDs: options.seedWorkIDs,
+            smartRulesJSON: options.isSmart ? options.smartRulesJSON : nil,
             in: context
         )
         // `createQueue` saved best-effort; this asks whether that stuck (a no-op when it
@@ -931,6 +1226,7 @@ private struct HomeProfileAvatar: View {
     let username: String?
     /// The account's identity colour (board 56: a solid circle). Nil keeps the tinted fallback.
     let identity: SubjectPalette?
+    var size: CGFloat = 30
 
     @Environment(\.accentFill) private var accentFill
     @Environment(\.accentInk) private var accentInk
@@ -944,7 +1240,7 @@ private struct HomeProfileAvatar: View {
                 fallback
             }
         }
-        .frame(width: 30, height: 30)
+        .frame(width: size, height: size)
         .background(identity?.accent ?? accentFill.opacity(0.16))
         .clipShape(Circle())
         .task(id: url) { cachedImage = Self.cachedImage(for: url) }
@@ -969,12 +1265,12 @@ private struct HomeProfileAvatar: View {
     private var fallback: some View {
         if let initial = username?.first {
             Text(String(initial).uppercased())
-                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .font(.system(size: size >= 40 ? 20 : 15, weight: .bold, design: .rounded))
                 // Black or white by contrast: Dark/OLED's identity accent is a light tint.
                 .foregroundStyle(identity?.labelOnAccent ?? accentInk)
         } else {
             Image(systemName: "person.crop.circle")
-                .font(.system(size: 27, weight: .regular))
+                .font(.system(size: size >= 40 ? 34 : 27, weight: .regular))
                 .foregroundStyle(.primary)
         }
     }
@@ -1247,9 +1543,12 @@ private struct HomeNewChapterRow: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(rowTitle)
+                Text(dynamicTypeSize.isAccessibilitySize
+                    ? AccessibilitySoftBreak.opportunities(in: rowTitle)
+                    : rowTitle)
                     .font(.body.weight(.semibold))
                     .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
                 if symbolPlacement == .underTitle {
@@ -1263,9 +1562,12 @@ private struct HomeNewChapterRow: View {
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text(metaText)
+                Text(dynamicTypeSize.isAccessibilitySize
+                    ? AccessibilitySoftBreak.opportunities(in: metaText)
+                    : metaText)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
                 if let preservation = work?.preservationState.badgeLabel {
@@ -1284,6 +1586,7 @@ private struct HomeNewChapterRow: View {
 
 private struct HomeQueueRow: View {
     let queue: ReadingQueue
+    var precomputedSmartWorks: [SavedWork]?
     let onOpenQueue: () -> Void
     let onStartWork: (SavedWork) -> Void
 
@@ -1295,44 +1598,97 @@ private struct HomeQueueRow: View {
     /// The up-next work's measured chapters, so its "Ch N" matches its bars elsewhere.
     @State private var upNextLengths: ChapterLengths?
 
-    private var queuedWorks: [SavedWork] {
-        ReadingQueueService.orderedWorks(in: queue)
+    private struct ResolvedState {
+        let queuedWorks: [SavedWork]
+        let upNextWork: SavedWork?
+        let worksBehind: [SavedWork]
+        let emptyUpNextLabel: String
+        let leftCount: Int
+        let queueProgress: ReadingQueueFacts.Progress
+        let queueFills: [Double]
+
+        var isResume: Bool {
+            guard let upNextWork else { return false }
+            return (upNextWork.readingProgress ?? 0) > 0 || upNextWork.readingState == .inProgress
+        }
+
+        var actionTitle: String {
+            isResume ? "Resume" : "Start"
+        }
     }
 
-    private var visibleQueuedWorks: [SavedWork] {
-        queuedWorks.filter { !gate.isConcealed($0, enabled: hideMature) }
+    private func resolveState() -> ResolvedState {
+        let memberships = queue.kind == .smart ? [] : ReadingQueueService.orderedMemberships(in: queue)
+        let queuedWorks: [SavedWork] = if queue.kind == .smart {
+            precomputedSmartWorks ?? ReadingQueueService.orderedWorks(in: queue)
+        } else {
+            memberships.compactMap(\.work)
+        }
+        let visibleMemberships = memberships.filter { membership in
+            guard let work = membership.work else { return false }
+            return !gate.isConcealed(work, enabled: hideMature)
+        }
+        let visibleWorks = queuedWorks.filter { !gate.isConcealed($0, enabled: hideMature) }
+        let upNextWork: SavedWork?
+        let worksBehind: [SavedWork]
+        let emptyLabel: String
+        if queue.kind == .smart {
+            upNextWork = visibleWorks.first { !$0.isFinished }
+            if let first = upNextWork {
+                let rest = visibleWorks.filter { $0.id != first.id }
+                worksBehind = Array(([first] + rest).prefix(CoverStackLayout.maxBacks))
+            } else {
+                worksBehind = Array(visibleWorks.prefix(CoverStackLayout.maxBacks))
+            }
+            if queuedWorks.isEmpty {
+                emptyLabel = "No matches"
+            } else if visibleWorks.isEmpty {
+                emptyLabel = "Works hidden"
+            } else {
+                emptyLabel = "All finished"
+            }
+        } else {
+            let split = ReadingQueueFacts.upNext(inMemberships: visibleMemberships)
+            upNextWork = split.upNext
+            var ordered = split.inLine
+            if let upNext = split.upNext { ordered.insert(upNext, at: 0) }
+            worksBehind = Array(ordered.prefix(CoverStackLayout.maxBacks))
+            if queuedWorks.isEmpty {
+                emptyLabel = "Empty queue"
+            } else if visibleMemberships.isEmpty {
+                emptyLabel = "Works hidden"
+            } else {
+                let partition = ReadingQueueFacts.partition(memberships: visibleMemberships)
+                if !partition.new.isEmpty {
+                    emptyLabel = partition.new.count == 1
+                        ? "1 new to sort"
+                        : "\(partition.new.count) new to sort"
+                } else if !partition.waiting.isEmpty {
+                    emptyLabel = "Waiting for new chapters"
+                } else {
+                    emptyLabel = "All finished"
+                }
+            }
+        }
+        return ResolvedState(
+            queuedWorks: queuedWorks,
+            upNextWork: upNextWork,
+            worksBehind: worksBehind,
+            emptyUpNextLabel: emptyLabel,
+            leftCount: queuedWorks.count { !$0.isFinished },
+            queueProgress: ReadingQueueFacts.progress(of: queuedWorks.map(\.readingState)),
+            queueFills: queuedWorks.map {
+                ReadingQueueFacts.segmentFill(state: $0.readingState, progress: $0.readingProgress)
+            }
+        )
     }
 
-    private var upNextWork: SavedWork? {
-        ReadingQueueFacts.upNext(in: visibleQueuedWorks).upNext
-    }
-
-    private var worksBehind: [SavedWork] {
-        let split = ReadingQueueFacts.upNext(in: visibleQueuedWorks)
-        var ordered = split.inLine
-        if let upNext = split.upNext { ordered.insert(upNext, at: 0) }
-        return Array(ordered.prefix(CoverStackLayout.maxBacks))
-    }
-
-    private var leftCount: Int {
-        queuedWorks.filter { !$0.isFinished }.count
-    }
-
-    private var isResume: Bool {
-        guard let upNextWork else { return false }
-        return (upNextWork.readingProgress ?? 0) > 0 || upNextWork.readingState == .inProgress
-    }
-
-    private var actionTitle: String {
-        isResume ? "Resume" : "Start"
-    }
-
-    private var metaLine: String {
-        guard let work = upNextWork else { return "No works" }
+    private func metaLine(for state: ResolvedState) -> String {
+        guard let work = state.upNextWork else { return "No works" }
         var parts: [String] = []
         let author = work.author.trimmingCharacters(in: .whitespacesAndNewlines)
         if !author.isEmpty { parts.append(author) }
-        if isResume {
+        if state.isResume {
             if let progress = work.readingProgress, progress > 0 {
                 parts.append(WorkCoverMetadata.reading(
                     chapters: work.chapters, progress: progress, weights: upNextLengths?.positions
@@ -1358,54 +1714,46 @@ private struct HomeQueueRow: View {
         themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
     }
 
-    private var queueProgress: ReadingQueueFacts.Progress {
-        ReadingQueueFacts.progress(of: queuedWorks.map(\.readingState))
-    }
-
-    private var queueFills: [Double] {
-        queuedWorks.map {
-            ReadingQueueFacts.segmentFill(state: $0.readingState, progress: $0.readingProgress)
-        }
-    }
-
     var body: some View {
+        let state = resolveState()
         Group {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .top, spacing: 12) {
-                        coverButton
-                        detailsButton
+                        coverButton(worksBehind: state.worksBehind)
+                        detailsButton(state: state)
                     }
-                    if upNextWork != nil {
+                    if state.upNextWork != nil {
                         HStack {
                             Spacer(minLength: 0)
-                            startButton
+                            startButton(state: state)
                         }
                     }
                 }
             } else {
                 HStack(alignment: .center, spacing: 12) {
-                    coverButton
-                    detailsButton
-                    startButton
+                    coverButton(worksBehind: state.worksBehind)
+                    detailsButton(state: state)
+                    startButton(state: state)
                 }
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .modifier(QueueCardMenu(queue: queue))
-        .task(id: ChapterLengthCache.taskKey(for: upNextWork)) {
-            guard let upNextWork else { upNextLengths = nil; return }
+        .task(id: ChapterLengthCache.taskKey(for: state.upNextWork)) {
+            guard let upNextWork = state.upNextWork else { upNextLengths = nil; return }
             upNextLengths = await ChapterLengthCache.lengths(for: upNextWork)
         }
     }
 
-    private var coverButton: some View {
+    private func coverButton(worksBehind: [SavedWork]) -> some View {
         Button(action: onOpenQueue) {
             StackedWorkCover(
                 kind: .queue,
                 name: queue.displayName,
-                hue: queue.displayHue,
+                identity: queue.id,
+                hue: queue.hue,
                 pickedHex: queue.colorHex,
                 backs: worksBehind,
                 size: CGSize(width: 52, height: 52)
@@ -1415,50 +1763,57 @@ private struct HomeQueueRow: View {
         .accessibilityHidden(true)
     }
 
-    private var detailsButton: some View {
+    private func detailsButton(state: ResolvedState) -> some View {
         Button(action: onOpenQueue) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(queue.displayName)
+                Text(dynamicTypeSize.isAccessibilitySize
+                    ? AccessibilitySoftBreak.opportunities(in: queue.displayName)
+                    : queue.displayName)
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(palette.accent)
+                    .multilineTextAlignment(.leading)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
                 // Two lines before it truncates: the offline count is the last fact.
-                Text(ReadingQueueFacts.planFacts(for: queuedWorks))
+                Text(ReadingQueueFacts.planFacts(for: state.queuedWorks))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if let work = upNextWork {
-                    Text(work.title)
+                if let work = state.upNextWork {
+                    Text(dynamicTypeSize.isAccessibilitySize
+                        ? AccessibilitySoftBreak.opportunities(in: work.title)
+                        : work.title)
                         .font(.body.weight(.semibold))
                         .foregroundStyle(.primary)
+                        .multilineTextAlignment(.leading)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
                     HStack(spacing: 8) {
                         QueueProgressStrip(
-                            progress: queueProgress,
+                            progress: state.queueProgress,
                             palette: palette,
-                            fills: queueFills,
+                            fills: state.queueFills,
                             height: 4,
                             gap: 3
                         )
                         .frame(maxWidth: .infinity)
 
-                        Text("\(leftCount) to go")
+                        Text("\(state.leftCount) to go")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                            .fixedSize(horizontal: false, vertical: dynamicTypeSize.isAccessibilitySize)
                     }
                     .padding(.vertical, 2)
 
-                    Text(metaLine)
+                    Text(metaLine(for: state))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 } else {
-                    Text(queuedWorks.isEmpty ? "Empty queue" : "Works hidden")
+                    Text(state.emptyUpNextLabel)
                         .font(.body.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
@@ -1469,10 +1824,10 @@ private struct HomeQueueRow: View {
     }
 
     @ViewBuilder
-    private var startButton: some View {
-        if let work = upNextWork {
+    private func startButton(state: ResolvedState) -> some View {
+        if let work = state.upNextWork {
             Button(action: { onStartWork(work) }) {
-                Text(actionTitle)
+                Text(state.actionTitle)
                     .font(.subheadline.weight(.semibold))
                     // The theme's app colour (Sepia brown), not the fixed asset red.
                     .foregroundStyle(.accentInk)
@@ -1481,7 +1836,7 @@ private struct HomeQueueRow: View {
                     .background(accentFill.opacity(0.10), in: Capsule())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(actionTitle) \(work.title)")
+            .accessibilityLabel("\(state.actionTitle) \(work.title)")
         }
     }
 }

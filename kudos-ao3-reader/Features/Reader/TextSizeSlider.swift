@@ -11,7 +11,7 @@ struct TextSizeSlider: View {
         HStack(spacing: 14) {
             Text("A")
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 // Its own width: a fixed 18 cut the letter in half at the largest text sizes.
                 .fixedSize()
             Slider(value: $fontSizePt,
@@ -21,7 +21,7 @@ struct TextSizeSlider: View {
                 .accessibilityValue("\(Int(fontSizePt.rounded())) points")
             Text("A")
                 .font(.title3)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize()
         }
         .padding(.vertical, 2)

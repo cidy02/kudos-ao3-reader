@@ -10,7 +10,7 @@ struct WorkReconversionTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         return ModelContext(try ModelContainer(for: schema, configurations: [configuration]))

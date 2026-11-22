@@ -121,7 +121,7 @@ struct SeriesEditView: View {
                     Section {
                         Text(savedMessage)
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .pageBodyRow(top: 12, gutter: gutter)
                             .id(Self.verdictID)
                     }
@@ -398,8 +398,8 @@ struct SeriesReorderView: View {
                 Text(SeriesRemoveWorksView.title(row, concealed: concealed))
                     .font(.system(size: workTitleSize, weight: .medium))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                if let metadata = row.metadataText {
-                    Text(metadata).font(.system(size: footnoteSize)).foregroundStyle(.secondary)
+                if let metadata = SeriesRemoveWorksView.displayMetadataText(for: row) {
+                    Text(metadata).font(.system(size: footnoteSize)).foregroundStyle(.secondaryInk)
                 }
             }
             Spacer(minLength: 0)
@@ -416,7 +416,7 @@ struct SeriesReorderView: View {
         // Reads what the row shows: "Untitled work" for an empty title, and
         // the Draft chip, which was drawn but never spoken.
         .accessibilityLabel("\(index). \(SeriesRemoveWorksView.title(row, concealed: concealed))"
-            + (row.isDraft ? ", Draft" : "") + (row.metadataText.map { ", \($0)" } ?? ""))
+            + (row.isDraft ? ", Draft" : "") + (SeriesRemoveWorksView.displayMetadataText(for: row).map { ", \($0)" } ?? ""))
     }
 
     private func save() {
@@ -543,8 +543,8 @@ struct SeriesRemoveWorksView: View {
                 Text(Self.title(row, concealed: isConcealed(row)))
                     .font(.system(size: workTitleSize, weight: .medium))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                if let metadata = row.metadataText {
-                    Text(metadata).font(.system(size: footnoteSize)).foregroundStyle(.secondary)
+                if let metadata = SeriesRemoveWorksView.displayMetadataText(for: row) {
+                    Text(metadata).font(.system(size: footnoteSize)).foregroundStyle(.secondaryInk)
                 }
             }
             Spacer(minLength: 0)
@@ -599,6 +599,14 @@ struct SeriesRemoveWorksView: View {
             }
             isRemoving = false
         }
+    }
+
+    /// Formats `AO3SeriesWorkRow`'s blurb words and date for display (`Models/` is unchanged).
+    static func displayMetadataText(for row: AO3SeriesWorkRow) -> String? {
+        var parts: [String] = []
+        if let words = row.words { parts.append("\(words.formatted()) \(words == 1 ? "word" : "words")") }
+        if !row.dateText.isEmpty { parts.append(WorkStat.displayDate(row.dateText)) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     /// AO3's rows after a removal, keeping the words and date already joined.

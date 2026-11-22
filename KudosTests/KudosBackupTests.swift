@@ -1,6 +1,7 @@
 import CoreText
 import Foundation
 import SwiftData
+import os
 import Testing
 @testable import Kudos
 
@@ -12,6 +13,344 @@ extension PersistenceGateSuites {
 @MainActor
 @Suite(.serialized)
 struct KudosBackupTests {
+    /// A ModelContext does not keep its container alive; a freed container traps on insert.
+    nonisolated(unsafe) private static var liveContainers: [ModelContainer] = []
+
+    private func coverContext() throws -> ModelContext {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+        ])
+        let container = try ModelContainer(for: schema,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)])
+        Self.liveContainers.append(container)
+        return container.mainContext
+    }
+
+    private func coverContents(_ work: SavedWork) throws -> KudosBackupContents {
+        try KudosBackupService.makeContents(works: [work], bookmarks: [], fonts: [],
+                                            readingQueues: [], defaults: testDefaults())
+    }
+
+    @Test func shuffleSurvivesLaterUnrelatedWorkEditAndTwoWaySync() throws {
+        let id = UUID()
+        let phone = try coverContext()
+        let ipad = try coverContext()
+        let shuffled = SavedWork(id: id, title: "Shared", author: "Author")
+        let edited = SavedWork(id: id, title: "Shared", author: "Author")
+        ipad.insert(edited)
+        edited.pinCover(salt: 0)
+        let initialJSON = try #require(edited.coverRecipeJSON)
+        var initialPin = try #require(JSONSerialization.jsonObject(with: Data(initialJSON.utf8)) as? [String: Any])
+        initialPin["pinnedAt"] = Date().timeIntervalSince1970 - 60
+        edited.coverRecipeJSON = try #require(String(
+            data: JSONSerialization.data(withJSONObject: initialPin), encoding: .utf8
+        ))
+        phone.insert(shuffled)
+        let workClock = shuffled.lastModifiedAt
+        shuffled.pinCover(salt: 1)
+        let shuffledJSON = shuffled.coverRecipeJSON
+        #expect(shuffled.lastModifiedAt == workClock)
+
+        edited.title = "Later unrelated edit"
+        edited.markModified(Date().addingTimeInterval(60))
+        _ = try KudosBackupService.restore(coverContents(edited), into: phone, defaults: testDefaults())
+        #expect(shuffled.title == edited.title)
+        #expect(shuffled.coverRecipeJSON == shuffledJSON)
+
+        _ = try KudosBackupService.restore(coverContents(shuffled), into: ipad, defaults: testDefaults())
+        #expect(edited.coverRecipeJSON == shuffledJSON)
+        #expect(edited.generatedCoverRecipe.salt == 1)
+    }
+
+    @Test func equalClockRemotePinDoesNotUndoAO3RefreshedShuffle() throws {
+        let id = UUID()
+        let phone = try coverContext()
+        let ipad = try coverContext()
+        let work = SavedWork(id: id, title: "Shared", author: "Author")
+        phone.insert(work)
+        work.pinCover(salt: 1)
+        let stalePin = try #require(work.coverRecipeJSON)
+        _ = try KudosBackupService.restore(coverContents(work), into: ipad, defaults: testDefaults())
+        let remote = try #require(try ipad.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(remote.coverRecipeJSON == stalePin)
+
+        work.wordCount = 92_000
+        work.isComplete = true
+        work.refreshCoverAfterMetadataUpdate(hadEmptyFandoms: false, hadZeroWords: true)
+        work.markModified(Date().addingTimeInterval(60))
+        let refreshedPin = try #require(work.coverRecipeJSON)
+        #expect(GeneratedCoverRecipe.supportedPin(in: refreshedPin)?.tier == 2)
+        #expect(GeneratedCoverRecipe.supportedPin(in: refreshedPin)?.closedRing == true)
+        #expect(GeneratedCoverRecipe.pinnedAt(in: refreshedPin) == GeneratedCoverRecipe.pinnedAt(in: stalePin))
+
+        _ = try KudosBackupService.restore(coverContents(remote), into: phone, defaults: testDefaults())
+        #expect(work.wordCount == 92_000)
+        #expect(work.isComplete)
+        #expect(work.coverRecipeJSON == refreshedPin)
+    }
+
+    @Test func laterRemoteShuffleWinsAndKeepsRefreshedTierAndRing() throws {
+        let id = UUID()
+        let phone = try coverContext()
+        let ipad = try coverContext()
+        let work = SavedWork(id: id, title: "Shared", author: "Author")
+        phone.insert(work)
+        work.pinCover(salt: 1)
+        _ = try KudosBackupService.restore(coverContents(work), into: ipad, defaults: testDefaults())
+        let remote = try #require(try ipad.fetch(FetchDescriptor<SavedWork>()).first)
+
+        work.wordCount = 92_000
+        work.isComplete = true
+        work.refreshCoverAfterMetadataUpdate(hadEmptyFandoms: false, hadZeroWords: true)
+        work.markModified(Date().addingTimeInterval(60))
+        let workClock = work.lastModifiedAt
+        let priorPin = try #require(work.coverRecipeJSON)
+        remote.pinCover(salt: 2)
+        let laterPin = try #require(remote.coverRecipeJSON)
+        let laterRecipe = try #require(GeneratedCoverRecipe.supportedPin(in: laterPin))
+        let priorTime = try #require(GeneratedCoverRecipe.supportedPin(in: priorPin)?.pinnedAt)
+        let laterTime = try #require(laterRecipe.pinnedAt)
+        #expect(laterTime > priorTime)
+        #expect(laterRecipe.tier == 0)
+        #expect(!laterRecipe.closedRing)
+
+        _ = try KudosBackupService.restore(coverContents(remote), into: phone, defaults: testDefaults())
+        let mergedPin = try #require(work.coverRecipeJSON)
+        let merged = try #require(GeneratedCoverRecipe.supportedPin(in: mergedPin))
+        #expect(merged.salt == 2)
+        #expect(merged.pinnedAt == laterRecipe.pinnedAt)
+        #expect(merged.motif == laterRecipe.motif)
+        #expect(merged.hues == laterRecipe.hues)
+        #expect(merged.tier == 2)
+        #expect(merged.closedRing)
+        #expect(work.lastModifiedAt == workClock)
+    }
+
+    @Test func nilLocalPinAdoptsIncomingDespiteNewerWorkClock() throws {
+        let id = UUID()
+        let context = try coverContext()
+        let local = SavedWork(id: id, title: "Local", author: "Author")
+        local.markModified(Date().addingTimeInterval(60))
+        context.insert(local)
+        let incoming = SavedWork(id: id, title: "Older", author: "Author")
+        incoming.pinCover(salt: 3)
+
+        _ = try KudosBackupService.restore(coverContents(incoming), into: context, defaults: testDefaults())
+        #expect(local.title == "Local")
+        #expect(local.coverRecipeJSON == incoming.coverRecipeJSON)
+    }
+
+    @Test func laterBackfillDoesNotOverwriteEarlierShuffleAndTwoBackfillsConverge() async throws {
+        let id = UUID()
+        let phone = try coverContext()
+        let ipad = try coverContext()
+        let shuffled = SavedWork(id: id, title: "Shared", author: "Author")
+        phone.insert(shuffled)
+        shuffled.pinCover(salt: 1)
+        let shuffledPin = try #require(shuffled.coverRecipeJSON)
+
+        let stale = SavedWork(id: id, title: "Shared", author: "Author")
+        ipad.insert(stale)
+        try ipad.save()
+        await PersistenceMigrationService.backfillCoverRecipes(in: ipad, defaults: try testDefaults())
+        #expect(GeneratedCoverRecipe.isAutomaticPin(in: stale.coverRecipeJSON))
+
+        _ = try KudosBackupService.restore(coverContents(stale), into: phone, defaults: try testDefaults())
+        #expect(shuffled.coverRecipeJSON == shuffledPin)
+        _ = try KudosBackupService.restore(coverContents(shuffled), into: ipad, defaults: try testDefaults())
+        #expect(stale.coverRecipeJSON == shuffledPin)
+
+        // Two automatic pins converge deterministically on the richer pin rather than ping-ponging.
+        let bareID = UUID()
+        let plainCtx = try coverContext()
+        let richCtx = try coverContext()
+        let plain = SavedWork(id: bareID, title: "Converge", author: "Author")
+        plain.pinCover(salt: 0, automatic: true)
+        plainCtx.insert(plain)
+        let rich = SavedWork(id: bareID, title: "Converge", author: "Author")
+        rich.workFandoms = ["Sherlock Holmes"]
+        rich.wordCount = 92_000
+        rich.isComplete = true
+        rich.pinCover(salt: 0, automatic: true)
+        let richPin = try #require(rich.coverRecipeJSON)
+        richCtx.insert(rich)
+
+        _ = try KudosBackupService.restore(coverContents(plain), into: richCtx, defaults: try testDefaults())
+        #expect(rich.coverRecipeJSON == richPin)
+        _ = try KudosBackupService.restore(coverContents(rich), into: plainCtx, defaults: try testDefaults())
+        #expect(plain.coverRecipeJSON == richPin)
+    }
+
+    @Test func replaceLibraryRestoresArchivedCoverOverNewerLocalShuffle() throws {
+        let id = UUID()
+        let archivedContext = try coverContext()
+        let archivedWork = SavedWork(id: id, title: "Snapshot", author: "Author")
+        archivedContext.insert(archivedWork)
+        archivedWork.pinCover(salt: 0)
+        let snapshotRaw = try #require(archivedWork.coverRecipeJSON)
+        var snapshotObj = try #require(
+            JSONSerialization.jsonObject(with: Data(snapshotRaw.utf8)) as? [String: Any]
+        )
+        snapshotObj["pinnedAt"] = Date().timeIntervalSince1970 - 600
+        archivedWork.coverRecipeJSON = try #require(String(
+            data: JSONSerialization.data(withJSONObject: snapshotObj), encoding: .utf8
+        ))
+        let snapshotPin = archivedWork.coverRecipeJSON
+
+        let localContext = try coverContext()
+        let localWork = SavedWork(id: id, title: "Snapshot", author: "Author")
+        localContext.insert(localWork)
+        localWork.pinCover(salt: 2)
+        let localPin = try #require(localWork.coverRecipeJSON)
+
+        _ = try KudosBackupService.restore(
+            coverContents(archivedWork), into: localContext, defaults: try testDefaults(), mode: .replaceLibrary
+        )
+        #expect(localWork.coverRecipeJSON == snapshotPin)
+
+        // An archive without the key still keeps the stored local pin in Replace mode.
+        localWork.coverRecipeJSON = localPin
+        archivedWork.coverRecipeJSON = nil
+        _ = try KudosBackupService.restore(
+            coverContents(archivedWork), into: localContext, defaults: try testDefaults(), mode: .replaceLibrary
+        )
+        #expect(localWork.coverRecipeJSON == localPin)
+    }
+
+    @Test func futureSkewedIncomingPinIsClampedDuringBackupRestore() throws {
+        let id = UUID()
+        let incomingContext = try coverContext()
+        let incoming = SavedWork(id: id, title: "Skewed", author: "Author")
+        incomingContext.insert(incoming)
+        incoming.pinCover(salt: 1)
+        let rawIncoming = try #require(incoming.coverRecipeJSON)
+        var obj = try #require(
+            JSONSerialization.jsonObject(with: Data(rawIncoming.utf8)) as? [String: Any]
+        )
+        obj["pinnedAt"] = 32_503_680_000.0 // Year 3000
+        incoming.coverRecipeJSON = try #require(
+            String(data: JSONSerialization.data(withJSONObject: obj), encoding: .utf8)
+        )
+
+        let targetContext = try coverContext()
+        _ = try KudosBackupService.restore(
+            coverContents(incoming), into: targetContext, defaults: try testDefaults()
+        )
+        let restored = try #require(try targetContext.fetch(FetchDescriptor<SavedWork>()).first)
+        let ceiling = Date().addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew)
+        let twoDaysLater = Date().addingTimeInterval(2 * 24 * 60 * 60)
+        let storedPinTime = try #require(GeneratedCoverRecipe.pinnedAt(in: restored.coverRecipeJSON, now: twoDaysLater))
+        #expect(storedPinTime <= ceiling)
+        #expect(restored.generatedCoverRecipe.salt == 1)
+    }
+
+    @Test func reconciledPinReachesFolderSyncOnlyAfterTheRestoreSaves() throws {
+        let id = UUID()
+        let context = try coverContext()
+        let local = SavedWork(id: id, title: "Shared", author: "Author")
+        local.wordCount = 1_000
+        context.insert(local)
+        local.pinCover(salt: 1)
+        try context.save()
+        let pinBefore = local.coverRecipeJSON
+        let incoming = SavedWork(id: id, title: "Shared", author: "Author")
+        incoming.wordCount = 92_000 // another length tier, so the restore reconciles the pin
+        incoming.isComplete = true
+        incoming.markModified(Date().addingTimeInterval(60))
+
+        let posts = OSAllocatedUnfairLock(initialState: 0)
+        let observer = NotificationCenter.default.addObserver(
+            forName: .kudosSyncRelevantSettingChanged, object: nil, queue: nil) { _ in posts.withLock { $0 += 1 } }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        // The work merges (and its pin reconciles) before the fonts are checked, so this restore
+        // fails after the pin changed and rolls it back.
+        let defaults = try testDefaults()
+        let base = try KudosBackupService.makeContents(
+            works: [incoming], bookmarks: [], fonts: [CustomFont(name: "Bad", fileName: "bad.txt")],
+            readingQueues: [], defaults: defaults)
+        let failing = KudosBackupContents(manifest: base.manifest, fontFiles: ["bad.txt": Data(repeating: 0x41, count: 16)])
+        #expect(throws: KudosBackupError.self) {
+            _ = try KudosBackupService.restore(failing, into: context, defaults: defaults)
+        }
+        #expect(local.coverRecipeJSON == pinBefore)
+        #expect(posts.withLock { $0 } == 0)
+        #expect(FolderSyncService.snapshot(defaults: defaults).isDirty == false)
+
+        let summary = try KudosBackupService.restore(coverContents(incoming), into: context, defaults: defaults)
+        #expect(summary.reconciledCoverPins == 1)
+        #expect(local.coverRecipeJSON != pinBefore)
+        #expect(posts.withLock { $0 } == 1)
+        #expect(FolderSyncService.snapshot(defaults: defaults).isDirty)
+    }
+
+    @Test func futureUndecodablePinPassesThroughRestoreAndActions() throws {
+        let id = UUID()
+        let context = try coverContext()
+        let local = SavedWork(id: id, title: "Shared", author: "Author")
+        context.insert(local)
+        local.pinCover(salt: 0)
+        let incoming = SavedWork(id: id, title: "Shared", author: "Author")
+        incoming.pinCover(salt: 1)
+        let json = try #require(incoming.coverRecipeJSON)
+        var object = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        object["rendererVersion"] = 2
+        object["ground"] = 99
+        object["futureField"] = "keep me"
+        object["pinnedAt"] = Date().timeIntervalSince1970 + 60
+        let raw = try #require(String(data: JSONSerialization.data(withJSONObject: object), encoding: .utf8))
+        incoming.coverRecipeJSON = raw
+
+        local.wordCount = 92_000
+        local.isComplete = true
+        local.markModified(Date().addingTimeInterval(60))
+
+        _ = try KudosBackupService.restore(coverContents(incoming), into: context, defaults: testDefaults())
+        #expect(local.coverRecipeJSON == raw)
+        #expect(local.generatedCoverRecipe.rendererVersion == 1)
+        local.pinCover(salt: local.generatedCoverRecipe.salt + 1) // Shuffle
+        local.pinCover(salt: 0) // Reset and Update Covers
+        local.refreshCoverIfNeeded() // Completion/tier refresh
+        #expect(local.coverRecipeJSON == raw)
+
+        let roundTripped = try KudosBackupContents.decodeManifest(coverContents(local).manifestData())
+        #expect(roundTripped.works.first?.coverRecipeJSON == raw)
+        let third = try coverContext()
+        _ = try KudosBackupService.restore(KudosBackupContents(manifest: roundTripped),
+                                            into: third, defaults: testDefaults())
+        #expect(try third.fetch(FetchDescriptor<SavedWork>()).first?.coverRecipeJSON == raw)
+    }
+
+    @Test func coverKeysAreAdditiveAndOlderArchivesKeepThePreference() throws {
+        let work = SavedWork(title: "Older work", author: "Author")
+        let old = try JSONSerialization.jsonObject(with: JSONEncoder().encode(KudosBackupWork(work: work)))
+            as? [String: Any]
+        #expect(old?["coverRecipeJSON"] == nil)
+        let decoded = try JSONDecoder().decode(KudosBackupWork.self,
+            from: JSONSerialization.data(withJSONObject: old ?? [:]))
+        #expect(decoded.coverRecipeJSON == nil)
+
+        let defaults = try testDefaults()
+        let settings = KudosBackupSettings.capture(defaults: defaults)
+        #expect(settings.useEmbeddedCoverArt == nil)
+        let oldSettings = try JSONSerialization.jsonObject(with: JSONEncoder().encode(settings))
+            as? [String: Any]
+        #expect(oldSettings?["useEmbeddedCoverArt"] == nil)
+        defaults.set(false, forKey: "useEmbeddedCoverArt")
+        let switched = KudosBackupSettings.capture(defaults: defaults)
+        #expect(switched.useEmbeddedCoverArt == false)
+        let roundTripped = try JSONDecoder().decode(KudosBackupSettings.self,
+            from: JSONEncoder().encode(switched))
+        #expect(roundTripped.useEmbeddedCoverArt == false)
+        defaults.set(true, forKey: "useEmbeddedCoverArt")
+        settings.apply(to: defaults)
+        #expect(defaults.bool(forKey: "useEmbeddedCoverArt"))
+        switched.apply(to: defaults)
+        #expect(defaults.bool(forKey: "useEmbeddedCoverArt") == false)
+    }
+
     @Test func archiveRoundTripPreservesManifestAndAssets() throws {
         let defaults = try testDefaults()
         defaults.set("sepia", forKey: "appTheme")
@@ -21,6 +360,7 @@ struct KudosBackupTests {
         work.isSaved = true
         work.wordCount = 42_000
         work.workFandoms = ["Archive Test"]
+        work.pinCover(salt: 2)
         work.tags = [Tag(name: "Comfort Read")]
         work.kudos = 890
         work.bookmarks = 56
@@ -71,6 +411,7 @@ struct KudosBackupTests {
         #expect(decoded.manifest.works.first?.kudos == 890)
         #expect(decoded.manifest.works.first?.bookmarks == 56)
         #expect(decoded.manifest.works.first?.downloadedAt == work.downloadedAt)
+        #expect(decoded.manifest.works.first?.coverRecipeJSON == work.coverRecipeJSON)
         #expect(decoded.manifest.bookmarks.first?.urlString == bookmark.urlString)
         #expect(decoded.manifest.bookmarks.first?.id == bookmark.id)
         #expect(decoded.manifest.fonts.first?.fileName == font.fileName)
@@ -87,7 +428,7 @@ struct KudosBackupTests {
     @Test func authorIdentityTravelsInTheBackupWithoutAVersionBump() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let sourceConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -140,7 +481,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -210,7 +551,7 @@ struct KudosBackupTests {
 
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -222,6 +563,8 @@ struct KudosBackupTests {
             title: "Old Title",
             author: "Old Author"
         )
+        existing.pinCover(salt: 1)
+        let localCover = existing.coverRecipeJSON
         existing.markModified(olderLocalDate)
         context.insert(existing)
         let targetDefaults = try testDefaults()
@@ -237,10 +580,20 @@ struct KudosBackupTests {
         let restoredBookmarks = try context.fetch(FetchDescriptor<Bookmark>())
         let restoredTags = try context.fetch(FetchDescriptor<Kudos.Tag>())
 
-        #expect(summary == .init(works: 1, bookmarks: 1, fonts: 0))
+        // The local pin's tier follows the restored word count, so the restore reconciles it once.
+        #expect(summary == .init(works: 1, bookmarks: 1, fonts: 0, reconciledCoverPins: 1))
         #expect(restoredWorks.count == 1)
         #expect(restored.title == "Restored Work")
         #expect(restored.author == "Writer")
+        // The local Shuffle wins (salt and pinnedAt kept); its length tier follows the merged
+        // word count, so a stale pin cannot hide a refresh (Codex's final T-524c review).
+        let localJSON = try #require(localCover)
+        let restoredJSON = try #require(restored.coverRecipeJSON)
+        let localPin = try #require(GeneratedCoverRecipe.supportedPin(in: localJSON))
+        let restoredPin = try #require(GeneratedCoverRecipe.supportedPin(in: restoredJSON))
+        #expect(restoredPin.salt == localPin.salt)
+        #expect(restoredPin.pinnedAt == localPin.pinnedAt)
+        #expect(restoredPin.tier == restored.coverTier)
         #expect(restored.isFavorite)
         #expect(restored.isFinished)
         #expect(restored.wordCount == 99_001)
@@ -265,7 +618,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -361,7 +714,7 @@ struct KudosBackupTests {
     @Test func backupRestoresReadingQueuesAndPreservedEPUBs() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -417,7 +770,7 @@ struct KudosBackupTests {
     @Test func restoreMergesByAO3WorkIDBeforeUUID() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -466,7 +819,7 @@ struct KudosBackupTests {
     @Test func restoreMergesByCanonicalAO3URLBeforeUUID() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -513,7 +866,7 @@ struct KudosBackupTests {
     @Test func restorePreservedStatusWithMissingEPUBBecomesMissingFile() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -596,7 +949,7 @@ struct KudosBackupTests {
         let contents = try KudosBackupContents(fileWrapper: wrapper)
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -819,7 +1172,7 @@ struct KudosBackupTests {
     @Test func staleArchiveWithoutTagsDoesNotRemoveNewerLocalTag() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let olderArchiveDate = Date(timeIntervalSince1970: 100)
@@ -864,7 +1217,7 @@ struct KudosBackupTests {
     @Test func repeatedRestoreOfArchiveTagsIsIdempotent() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let archivedWork = SavedWork(title: "Idempotent Work", author: "Writer")
@@ -897,7 +1250,7 @@ struct KudosBackupTests {
     @Test func invalidBackupEPUBLeavesValidLocalEPUBUnchanged() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let workID = UUID()
@@ -985,7 +1338,7 @@ struct KudosBackupTests {
     @Test func backupEPUBWithUnreferencedHostileEntryLeavesValidLocalEPUBUnchanged() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let workID = UUID()
@@ -1045,7 +1398,7 @@ struct KudosBackupTests {
     @Test func tombstoneSuppressedWorkDoesNotWriteEPUBBlob() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let workID = UUID()
@@ -1095,7 +1448,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self
         ])
         let collectionID = UUID(uuidString: "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff")!
         let dateAdded = Date(timeIntervalSince1970: 1_719_403_200) // 2024-06-26T12:00:00Z
@@ -1219,7 +1572,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -1337,7 +1690,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -1389,7 +1742,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self
         ])
         let searchID = UUID(uuidString: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")!
         let dateAdded = Date(timeIntervalSince1970: 1_719_403_200) // 2024-06-26T12:00:00Z
@@ -1601,7 +1954,7 @@ struct KudosBackupTests {
     @Test func incomingUnsignedTombstonesAreNotAdoptedOnMerge() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1636,7 +1989,7 @@ struct KudosBackupTests {
     @Test func replaceDoesNotLeaveStandingTombstonesThatBlockLaterMerge() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1690,7 +2043,7 @@ struct KudosBackupTests {
     @Test func fileMergeDoesNotOverwriteActiveOverlapTitleProgressOrUserTags() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1743,7 +2096,7 @@ struct KudosBackupTests {
     @Test func defaultReconcileAppliesLastWriterWinsOnOverlap() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1786,7 +2139,7 @@ struct KudosBackupTests {
     @Test func defaultReconcileDropsIncomingUnsignedTombstonesAndStillInsertsPresentWork() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1831,7 +2184,7 @@ struct KudosBackupTests {
     func existingSavedForLaterKeepsItsNewerMembershipClock(mode: BackupImportMode) throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1862,7 +2215,7 @@ struct KudosBackupTests {
     @Test func repeatedFileMergeKeepsArchivedDeletionsAndLocalRecoveryDeadlines() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1927,7 +2280,7 @@ struct KudosBackupTests {
     @Test func fileMergeUndeletesPendingDeletion() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1958,7 +2311,7 @@ struct KudosBackupTests {
     @Test func repeatedFileMergeUndoesReplaceParkingForWorksCollectionsAndQueues() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -2038,7 +2391,7 @@ struct KudosBackupTests {
     @Test func fileMergeAddsNewAnnotationIDsWithoutOverwritingExisting() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -2094,7 +2447,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
-            ReadingAnnotation.self, SavedSearch.self
+            ReadingAnnotation.self, SavedSearch.self, QueueSavedSearchLink.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -2146,7 +2499,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self
+            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self, QueueSavedSearchLink.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -2196,7 +2549,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self
+            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self, QueueSavedSearchLink.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -2251,7 +2604,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self
+            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self, QueueSavedSearchLink.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -2300,7 +2653,7 @@ struct KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self
+            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self, QueueSavedSearchLink.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -2394,7 +2747,7 @@ struct KudosBackupTests {
 
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -2455,7 +2808,7 @@ struct KudosBackupTests {
 
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -2516,7 +2869,7 @@ struct KudosBackupTests {
         let peer = TombstoneSigning.makePrivateKey()
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -2558,7 +2911,7 @@ struct KudosBackupTests {
 
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -2600,7 +2953,7 @@ struct KudosBackupTests {
 
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -2641,7 +2994,7 @@ struct KudosBackupTests {
     @Test func retractTombstoneMatchesAO3OrCanonicalURLNotOnlyRecordID() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)

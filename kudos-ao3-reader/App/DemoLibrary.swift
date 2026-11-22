@@ -690,6 +690,7 @@ enum DebugShots {
     private static let neon = "queue:Neon reread"
     private static let neonDetails = "queue-details:Neon reread"
     private static let sodium = "work:Sodium Lights"
+    private static let river = "work:What the River Keeps"
     private static let readSodium = "read:Sodium Lights"
     private static let readRiver = "read:What the River Keeps"
     private static let winter = "acct:ao3collection:winter_exchange"
@@ -702,6 +703,8 @@ enum DebugShots {
         ("newqueue", DebugShot(route: "queues", sheets: ["newqueue"])),
         ("editqueue", DebugShot(route: neon, sheets: ["editqueue"])),
         ("addworks", DebugShot(route: neon, sheets: ["addworks"])),
+        // T-529 Sort New over the queue page (the demo has no New works, so it sorts them all).
+        ("sortnew", DebugShot(route: neon, sheets: ["sortnew"])),
         ("queuetag", DebugShot(route: neonDetails, sheets: ["queuetag"])),
         ("queuetags", DebugShot(route: neonDetails, pushes: ["queuetags"])),
         ("queuetagedit", DebugShot(route: neonDetails, pushes: ["queuetags", "queuetagedit"])),
@@ -722,7 +725,7 @@ enum DebugShots {
         ("tagpicker", DebugShot(route: starSearch, sheets: ["tagpicker"])),
         ("downloaddate", DebugShot(route: sodium, sheets: ["downloaddate"])),
         ("seriespreserve", DebugShot(route: sodium, sheets: ["seriespreserve"])),
-        ("bookmarkform", DebugShot(route: sodium, sheets: ["bookmarkform"])),
+        ("bookmarkform", DebugShot(route: river, sheets: ["bookmarkform"])),
         ("readercontents", DebugShot(route: readSodium, sheets: ["readercontents"])),
         ("readerfind", DebugShot(route: readSodium, sheets: ["readerfind"], query: "lights")),
         ("readerdisplay", DebugShot(route: readSodium, sheets: ["readerdisplay"])),
@@ -840,6 +843,9 @@ enum DebugLaunchRoute {
     /// The page an existing helper should open. A shot uses its mapped route;
     /// every other launch is unchanged.
     static var pageRoute: String? { shot?.route ?? value }
+
+    /// `insights-hidden`: Insights opens scrolled to Overview's Hidden section.
+    static var opensInsightsHidden: Bool { pageRoute == "insights-hidden" }
 
     /// Scrolls Home to a named section for design-review screenshots.
     static var homeAnchor: String? {
@@ -1015,7 +1021,8 @@ enum DebugLaunchRoute {
     /// otherwise restores whichever tab the last launch left.
     private static let workRoutes = ["work:", "mycopy:", "read:", "comments:", "compose:", "thread:"]
     /// Queue routes resolve against Home's queues for the same reason.
-    private static let homePrefixRoutes = workRoutes + ["queue:", "queue-details:"]
+    // author: opens on Home too, so a shot never lands on whichever tab the last launch left selected.
+    private static let homePrefixRoutes = workRoutes + ["queue:", "queue-details:", "author:"]
 
     /// `acct:<screen>` on the Account tab (pair with `-KudosFixtureDir` and
     /// `-KudosDemoSignedIn YES`): dashboard, drafts, works, series, inbox,
@@ -1071,13 +1078,15 @@ enum DebugLaunchRoute {
         }
     }
 
-    /// Library's stack: `collections`, `collection:<name>`, `recentlyDeleted`, `insights`.
+    /// Library's stack: `collections`, `collection:<name>`, `recentlyDeleted`, `insights`,
+    /// `insights-hidden`.
     static func applyLibrary(to path: inout NavigationPath, collections: [WorkCollection]) {
         guard let value = pageRoute else { return }
         switch value {
         case "collections": path.append(AllCollectionsDestination())
         case "recentlyDeleted": path.append(RecentlyDeletedDestination())
-        case "insights": path.append(ReadingInsightsDestination())
+        // `insights-hidden` opens Insights scrolled to the Hidden section.
+        case "insights", "insights-hidden": path.append(ReadingInsightsDestination())
         default:
             if value.hasPrefix("collection:"),
                let collection = collections.first(where: { $0.name == String(value.dropFirst("collection:".count)) }) {

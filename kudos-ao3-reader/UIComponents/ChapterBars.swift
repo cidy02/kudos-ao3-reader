@@ -714,7 +714,7 @@ struct ChapterBars: View {
                     if scale == .card, let note = current.groupNote {
                         Text(note)
                             .font(.caption)
-                            .foregroundStyle(onGradient ? Color.white.opacity(0.85) : .secondary)
+                            .foregroundStyle(onGradient ? AnyShapeStyle(Color.white.opacity(0.85)) : AnyShapeStyle(.secondaryInk))
                     }
                 }
             }

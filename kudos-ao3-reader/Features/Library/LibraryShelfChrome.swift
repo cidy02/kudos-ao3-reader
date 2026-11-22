@@ -100,6 +100,10 @@ struct LibraryShelfTile: View {
 struct LibraryShelfButtonGrid: View {
     var buttons: [LibraryShelfID]
     var counts: [LibraryShelfID: Int]
+    /// A Duo split pane is ~355 pt wide despite `.regular` horizontal size class;
+    /// keep the board's 2-column shelf tile grid (`Duo-Open-Library-Root`) while
+    /// preserving the 1-column accessibility layout.
+    var forcesCompactColumns: Bool = false
     var onEdit: () -> Void
     var onOpen: (LibraryShelfID) -> Void
 
@@ -117,11 +121,15 @@ struct LibraryShelfButtonGrid: View {
 
     private var columns: [GridItem] {
         let isRegular: Bool
-        #if os(iOS)
-        isRegular = horizontalSizeClass == .regular
-        #else
-        isRegular = true
-        #endif
+        if forcesCompactColumns {
+            isRegular = false
+        } else {
+            #if os(iOS)
+            isRegular = horizontalSizeClass == .regular
+            #else
+            isRegular = true
+            #endif
+        }
         let count = Self.columnCount(
             isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
             isRegularWidth: isRegular
@@ -160,13 +168,16 @@ struct LibraryShelfButtonGrid: View {
 /// the short footer; this is the list's fuller line.
 struct LibraryQueueLedgerRow: View {
     let queue: ReadingQueue
+    var precomputedSmartWorks: [SavedWork]?
 
     @Environment(ThemeManager.self) private var themeManager
     @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 17
     @ScaledMetric(relativeTo: .footnote) private var detailSize: CGFloat = 13
 
     var body: some View {
-        let works = ReadingQueueService.orderedWorks(in: queue)
+        let works = queue.kind == .smart
+            ? (precomputedSmartWorks ?? ReadingQueueService.orderedWorks(in: queue))
+            : ReadingQueueService.orderedWorks(in: queue)
         let states = works.map(\.readingState)
         let progress = ReadingQueueFacts.progress(of: states)
         let preserved = works.filter { $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path) }
@@ -190,26 +201,26 @@ struct LibraryQueueLedgerRow: View {
                     Spacer(minLength: 8)
                     Text(works.count.compactCount)
                         .font(.system(size: detailSize, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 Text(ReadingQueueFacts.cardFooter(states: states))
                     .font(.system(size: detailSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(legend)
                     .font(.system(size: detailSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                 if !tags.isEmpty {
                     Text(tags.joined(separator: " · "))
                         .font(.system(size: detailSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if !note.isEmpty {
                     Text(note)
                         .font(.system(size: detailSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

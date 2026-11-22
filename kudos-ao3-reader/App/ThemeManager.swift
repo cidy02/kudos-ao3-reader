@@ -1,12 +1,22 @@
 import SwiftUI
 
-/// One of the six Appearance accents. Dark and OLED share `darkInkHex`; anything
-/// else — a custom colour, or a legacy value such as the old `#990000` — takes
-/// `Color.readable(on:)` instead of a named step.
+/// One of the seven Appearance accents. Dark and OLED share `darkInkHex`, and
+/// Sepia uses `sepiaInkHex` when the fill reads under 4.5:1 on Sepia's
+/// surfaces; anything else — a custom colour, or a legacy value such as the
+/// old `#990000` — takes `Color.readable(on:)` on Dark/OLED and stays unchanged
+/// on Light and Sepia.
 struct AppAccent: Identifiable, Equatable {
     let name: String
     let fillHex: String
     let darkInkHex: String
+    let sepiaInkHex: String
+
+    init(name: String, fillHex: String, darkInkHex: String, sepiaInkHex: String? = nil) {
+        self.name = name
+        self.fillHex = fillHex
+        self.darkInkHex = darkInkHex
+        self.sepiaInkHex = sepiaInkHex ?? fillHex
+    }
 
     var id: String { fillHex }
     var isDefault: Bool { fillHex == Self.ao3Red.fillHex }
@@ -14,11 +24,18 @@ struct AppAccent: Identifiable, Equatable {
     static let ao3Red = AppAccent(name: "AO3 Red", fillHex: "#821019", darkInkHex: "#EE8A93")
     static let plum = AppAccent(name: "Plum", fillHex: "#7B2D6B", darkInkHex: "#D88BC7")
     static let inkBlue = AppAccent(name: "Ink Blue", fillHex: "#24508F", darkInkHex: "#7FA6E8")
-    static let deepTeal = AppAccent(name: "Deep Teal", fillHex: "#11707A", darkInkHex: "#5CC3CC")
+    static let deepTeal = AppAccent(
+        name: "Deep Teal", fillHex: "#11707A", darkInkHex: "#5CC3CC", sepiaInkHex: "#0F656E"
+    )
     static let forest = AppAccent(name: "Forest", fillHex: "#2F6B4F", darkInkHex: "#7CC59E")
-    static let ochre = AppAccent(name: "Ochre", fillHex: "#9A5B00", darkInkHex: "#E7A84B")
+    static let ochre = AppAccent(
+        name: "Ochre", fillHex: "#9A5B00", darkInkHex: "#E7A84B", sepiaInkHex: "#854E00"
+    )
+    static let sepiaBrown = AppAccent(
+        name: "Sepia Brown", fillHex: "#9A6732", darkInkHex: "#D4A16A", sepiaInkHex: "#7D5328"
+    )
 
-    static let all: [AppAccent] = [ao3Red, plum, inkBlue, deepTeal, forest, ochre]
+    static let all: [AppAccent] = [ao3Red, plum, inkBlue, deepTeal, forest, ochre, sepiaBrown]
 
     /// Case-insensitive `#RRGGBB` match against the fill, not the text step.
     static func named(hex: String) -> AppAccent? {
@@ -26,11 +43,12 @@ struct AppAccent: Identifiable, Equatable {
     }
 
     /// What the Appearance picker shows for a stored accent. A named fill
-    /// selects itself. A string that is not a colour selects AO3 Red, which
-    /// is what the app already paints. Any other hex stays, for the custom well.
-    static func pickerHex(for stored: String) -> String {
+    /// selects itself. A string that is not a colour selects the theme's
+    /// default accent, which is what the app already paints. Any other hex
+    /// stays, for the custom well.
+    static func pickerHex(for stored: String, on theme: ReaderTheme = .light) -> String {
         if named(hex: stored) != nil { return stored }
-        if Color(hex: stored) == nil { return ThemeManager.ao3Red }
+        if Color(hex: stored) == nil { return ThemeManager.defaultAccentHex(for: theme) }
         return stored
     }
 }
@@ -63,20 +81,25 @@ final class ThemeManager {
         didSet { store(readerThemeStored, forKey: "readerTheme") }
     }
 
-    /// The reader's accent as `#RRGGBB` for display. A stored `#990000` is read
-    /// as AO3 Red. The setter writes the given string. Init assigns the backing
-    /// store instead, so a missing key stays missing and `#990000` is not rewritten.
+    /// The reader's accent as `#RRGGBB` for display. An absent key or `#990000`
+    /// resolves to Sepia Brown on Sepia and AO3 Red on the other themes, while
+    /// an explicitly stored `#821019` keeps AO3 Red on Sepia too. The setter
+    /// writes the given string. Init assigns the backing store instead, so a
+    /// missing key stays missing and `#990000` is not rewritten.
     var accentHex: String {
-        get { Self.readingAccentHex(storedAccentHex) }
+        get { Self.readingAccentHex(storedAccentHex, for: appTheme) }
         set { writeAccentHex(newValue) }
     }
 
-    /// The UserDefaults string, or AO3 Red in memory when the key is absent.
-    /// `#990000` is kept here so the getter can map it without writing.
-    private var storedAccentHex: String
+    /// The raw `UserDefaults` value (`nil` when the key is absent). Keeping `nil`
+    /// distinct from `#821019` lets Sepia keep its brown default when the reader
+    /// never picked an accent, while still taking AO3 Red when `#821019` was
+    /// explicitly chosen. `#990000` stays intact so the getter can treat it as
+    /// unchosen without writing.
+    private var storedAccentHex: String?
 
-    /// Default accent when nothing is stored. A stored value is never rewritten
-    /// to this.
+    /// Default accent for Light, Dark, and OLED when nothing is stored. A stored
+    /// value is never rewritten to this.
     nonisolated static let ao3Red = AppAccent.ao3Red.fillHex
     /// The pre-2026-10-29 default. Old builds, and the current Android build,
     /// write this when the reader never chose a colour, so it carries no choice.
@@ -86,10 +109,24 @@ final class ThemeManager {
         hex.caseInsensitiveCompare(legacyUnchosenAccentHex) == .orderedSame
     }
 
-    /// What the app shows for a stored accent. A missing key and `#990000`
-    /// are AO3 Red. The stored string is not rewritten.
-    nonisolated static func readingAccentHex(_ stored: String?) -> String {
-        guard let stored, !isLegacyUnchosenAccent(stored) else { return ao3Red }
+    /// Default accent hex when no stored choice exists for `theme`: Sepia keeps
+    /// Sepia Brown (`#9A6732`), while Light, Dark and OLED default to AO3 Red (`#821019`).
+    nonisolated static func defaultAccentHex(for theme: ReaderTheme) -> String {
+        theme == .sepia ? AppAccent.sepiaBrown.fillHex : ao3Red
+    }
+
+    /// What the app shows for a stored accent on `theme`.
+    ///
+    /// Rule: `accentColorHex` has no `@AppStorage` default — `nil` (missing key)
+    /// and `#990000` (the pre-2026-10-29 unchosen default) both mean "never
+    /// chose an accent", so Sepia resolves to `#9A6732` and the other three
+    /// themes resolve to `#821019`. Any other stored string (including an
+    /// explicit `#821019`) is a user choice and applies across all four themes,
+    /// including Sepia. The stored string is never rewritten when read.
+    nonisolated static func readingAccentHex(_ stored: String?, for theme: ReaderTheme = .light) -> String {
+        guard let stored, !isLegacyUnchosenAccent(stored) else {
+            return defaultAccentHex(for: theme)
+        }
         return stored
     }
     private static let matchKey = "matchAppReaderTheme"
@@ -129,9 +166,10 @@ final class ThemeManager {
                 defaults.removeObject(forKey: Self.paperKey)
             }
         }
-        // The setter would write. A missing key must stay missing, and a stored
-        // `#990000` must stay `#990000` while the getter reads it as AO3 Red.
-        storedAccentHex = defaults.string(forKey: Self.accentKey) ?? Self.ao3Red
+        // The setter would write. A missing key must stay missing (`nil`), and a
+        // stored `#990000` must stay `#990000` while the getter resolves unchosen
+        // defaults per theme.
+        storedAccentHex = defaults.string(forKey: Self.accentKey)
     }
 
     private func writeAccentHex(_ hex: String) {
@@ -139,33 +177,35 @@ final class ThemeManager {
         UserDefaults.standard.set(hex, forKey: Self.accentKey)
     }
 
-    /// The user's accent colour (falls back to AO3 red if the stored hex is bad).
+    /// The user's accent colour (falls back to the theme's default if the stored hex is bad).
     var accentColor: Color {
-        Color(hex: accentHex) ?? Color(hex: Self.ao3Red)!
+        Color(hex: accentHex) ?? Color(hex: Self.defaultAccentHex(for: appTheme))!
     }
 
-    /// The exact control fill for the whole app: Sepia keeps its cohesive warm
-    /// brown; Light, Dark and OLED use the reader's accent.
+    /// The exact control fill for the whole app across Light, Sepia, Dark and OLED.
     var effectiveTint: Color {
-        SubjectPalette.controlColor(appTheme.appTint ?? accentColor, on: appTheme)
+        SubjectPalette.controlColor(accentColor, on: appTheme)
     }
 
     /// Text, glyphs and text-button labels; filled controls keep `effectiveTint`.
     var accentInk: Color { appTheme.accentInk(for: effectiveTint) }
 
+    /// Secondary text ink: Sepia's warm brown-grey, or the system secondary grey elsewhere.
+    var secondaryInk: Color { appTheme.appSecondaryInk ?? .secondary }
+
     /// The palette every *scope*-level surface in the redesign draws from — the
     /// Account hub, the pushed Home and Library sections, the inbox, Writing.
     ///
-    /// Scope-level screens use the reader's accent (or Sepia's warm brown) for
-    /// both identity and wash. Work-, fandom-, collection-, and queue-scoped
-    /// screens still use their subject colour for identity and wash, but not for
-    /// app controls.
+    /// Scope-level screens use the reader's accent (defaulting to Sepia Brown on
+    /// Sepia) for both identity and wash. Work-, fandom-, collection-, and
+    /// queue-scoped screens still use their subject colour for identity and wash,
+    /// but not for app controls.
     var scopePalette: SubjectPalette {
         SubjectPalette(color: effectiveTint, theme: appTheme)
     }
 
     /// A foreground guaranteed to stay readable on top of `effectiveTint` — the
-    /// color controls actually render with (Sepia's warm brown, or the accent).
+    /// color controls actually render with.
     var onEffectiveTint: Color {
         Self.label(on: effectiveTint)
     }
@@ -173,12 +213,13 @@ final class ThemeManager {
     /// The one app-control tint for a theme. Subject palettes call this too so a
     /// screen's identity colour never leaks into buttons, toggles, pills or chrome.
     /// Reads the stored accent directly: this is not a view, so it cannot observe
-    /// `accentHex`. A stored `#990000` is read as AO3 Red. Screens that must
-    /// refresh use `effectiveTint`.
+    /// `accentHex`. An absent key or stored `#990000` resolves to Sepia Brown on
+    /// Sepia and AO3 Red elsewhere; any stored choice applies to all four themes.
+    /// Screens that must refresh use `effectiveTint`.
     static func appTint(for theme: ReaderTheme) -> Color {
-        let hex = readingAccentHex(UserDefaults.standard.string(forKey: accentKey))
-        let accent = Color(hex: hex) ?? Color(hex: ao3Red)!
-        return SubjectPalette.controlColor(theme.appTint ?? accent, on: theme)
+        let hex = readingAccentHex(UserDefaults.standard.string(forKey: accentKey), for: theme)
+        let accent = Color(hex: hex) ?? Color(hex: defaultAccentHex(for: theme))!
+        return SubjectPalette.controlColor(accent, on: theme)
     }
 
     /// Stores a picked colour. A value whose hex is a named fill is that accent.

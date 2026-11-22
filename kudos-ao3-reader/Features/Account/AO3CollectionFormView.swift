@@ -253,7 +253,7 @@ struct AO3CollectionFormView: View {
             if let note {
                 Text(note)
                     .font(.system(size: groupNoteSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
@@ -365,7 +365,7 @@ struct AO3CollectionFormView: View {
     private func noticeCard(_ message: String, isError: Bool) -> some View {
         Text(message)
             .font(.system(size: noticeCardSize))
-            .foregroundStyle(isError ? Color.red : .secondary)
+            .foregroundStyle(isError ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondaryInk))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
@@ -416,7 +416,7 @@ struct AO3CollectionFormView: View {
                 .font(.system(size: actionTitleSize, weight: .semibold))
             Text("Open AO3 to close this collection. Deleting the collection leaves its works on AO3.")
                 .font(.system(size: noticeCardSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
             if let slug {
                 Button("Open Collection Settings on AO3") {

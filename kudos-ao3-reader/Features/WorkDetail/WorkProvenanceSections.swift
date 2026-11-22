@@ -49,27 +49,27 @@ struct WorkProvenanceSections: View {
                         .fixedSize(horizontal: false, vertical: true)
                 } icon: {
                     Image(systemName: work.origin.symbolName)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 if !work.sourceURL.isEmpty {
                     // Selectable and shown in full: for a work its site has deleted,
                     // this is often the only citation that still exists.
                     Text(work.sourceURL)
                         .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .textSelection(.enabled)
                 }
                 if !work.origin.supportsLiveLookup {
                     Text("Kudos can't update this work's tags, stats, or availability from "
                         + "\(unreachableName). You also can't leave kudos or comments here.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let explanation = work.preservationState.explanation(origin: work.origin) {
                     Text(explanation)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -96,12 +96,12 @@ struct WorkProvenanceSections: View {
                     if rebuilt {
                         Label("Rebuilt with the current converter", systemImage: "checkmark.circle")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     Text("The original file stays on your device, so you can rebuild this work "
                         + "without downloading it again.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Always offered, never conditional on staleness. A rebuild is also
@@ -129,7 +129,7 @@ struct WorkProvenanceSections: View {
                         : "Rebuilding reads the original file again. Your progress, tags, and "
                             + "collections are kept.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .font(.system(size: rowContentSize))

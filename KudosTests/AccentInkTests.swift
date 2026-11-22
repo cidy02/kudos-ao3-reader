@@ -47,22 +47,31 @@ struct AccentInkTests {
         #expect(previousDarkStep.contrastRatio(on: ReaderTheme.dark.cardBackdrop) < 4.5)
     }
 
-    @Test func eachNamedAccentKeepsItsFillAndDarkStep() throws {
-        // Literals from the Accent-Options board, not AppAccent's own fields.
-        let table: [(name: String, fill: String, dark: String)] = [
-            ("AO3 Red", "#821019", "#EE8A93"),
-            ("Plum", "#7B2D6B", "#D88BC7"),
-            ("Ink Blue", "#24508F", "#7FA6E8"),
-            ("Deep Teal", "#11707A", "#5CC3CC"),
-            ("Forest", "#2F6B4F", "#7CC59E"),
-            ("Ochre", "#9A5B00", "#E7A84B"),
+    @Test func eachNamedAccentKeepsItsFillAndDarkAndSepiaSteps() throws {
+        // Literals from the Accent-Options board plus Sepia Brown and Sepia ink steps.
+        struct ExpectedAccent {
+            let name: String
+            let fill: String
+            let dark: String
+            let sepia: String
+        }
+        let table: [ExpectedAccent] = [
+            ExpectedAccent(name: "AO3 Red", fill: "#821019", dark: "#EE8A93", sepia: "#821019"),
+            ExpectedAccent(name: "Plum", fill: "#7B2D6B", dark: "#D88BC7", sepia: "#7B2D6B"),
+            ExpectedAccent(name: "Ink Blue", fill: "#24508F", dark: "#7FA6E8", sepia: "#24508F"),
+            ExpectedAccent(name: "Deep Teal", fill: "#11707A", dark: "#5CC3CC", sepia: "#0F656E"),
+            ExpectedAccent(name: "Forest", fill: "#2F6B4F", dark: "#7CC59E", sepia: "#2F6B4F"),
+            ExpectedAccent(name: "Ochre", fill: "#9A5B00", dark: "#E7A84B", sepia: "#854E00"),
+            ExpectedAccent(name: "Sepia Brown", fill: "#9A6732", dark: "#D4A16A", sepia: "#7D5328"),
         ]
+        #expect(AppAccent.all.count == 7)
         #expect(AppAccent.all.map(\.name) == table.map(\.name))
         #expect(ThemeManager.ao3Red == "#821019")
         for row in table {
             let accent = try #require(AppAccent.all.first { $0.name == row.name })
             #expect(accent.fillHex == row.fill)
             #expect(accent.darkInkHex == row.dark)
+            #expect(accent.sepiaInkHex == row.sepia)
             #expect(accent.isDefault == (row.fill == "#821019"))
             let fill = try #require(Color(hex: row.fill))
             #expect(fill.hexString == row.fill)
@@ -70,15 +79,47 @@ struct AccentInkTests {
             for theme in [ReaderTheme.dark, .oled] {
                 #expect(theme.accentInk(for: fill).hexString == row.dark)
             }
-            for theme in [ReaderTheme.light, .sepia] {
-                #expect(theme.accentInk(for: fill).hexString == row.fill)
-            }
+            #expect(ReaderTheme.light.accentInk(for: fill).hexString == row.fill)
+            #expect(ReaderTheme.sepia.accentInk(for: fill).hexString == row.sepia)
         }
     }
 
-    @Test func aMalformedStoredHexSelectsAO3RedInThePicker() {
+    @Test func everyNamedAccentClearsContrastOnSepiaDarkAndFill() throws {
+        let sepiaBase = try #require(ReaderTheme.sepia.appBaseBackground)
+        let sepiaElevated = try #require(ReaderTheme.sepia.appElevatedBackground)
+        let sepiaPageHex = try #require(Color(hex: "#ECDEC1"))
+        let sepiaCardHex = try #require(Color(hex: "#FBF0D9"))
+
+        for accent in AppAccent.all {
+            let fill = try #require(Color(hex: accent.fillHex))
+            let sepiaInk = ReaderTheme.sepia.accentInk(for: fill)
+            #expect(sepiaInk.contrastRatio(on: sepiaBase) >= 4.5, "\(accent.name) on Sepia base")
+            #expect(sepiaInk.contrastRatio(on: sepiaElevated) >= 4.5, "\(accent.name) on Sepia elevated")
+            #expect(
+                sepiaInk.contrastRatio(on: ReaderTheme.sepia.backgroundColor) >= 4.5,
+                "\(accent.name) on Sepia backgroundColor"
+            )
+            #expect(sepiaInk.contrastRatio(on: sepiaPageHex) >= 4.5, "\(accent.name) on #ECDEC1")
+            #expect(sepiaInk.contrastRatio(on: sepiaCardHex) >= 4.5, "\(accent.name) on #FBF0D9")
+
+            for theme in [ReaderTheme.dark, .oled] {
+                let darkInk = theme.accentInk(for: fill)
+                #expect(darkInk.contrastRatio(on: theme.cardBackdrop) >= 4.5, "\(accent.name) on \(theme)")
+                let darkElevated = try #require(theme.appElevatedBackground)
+                #expect(darkInk.contrastRatio(on: darkElevated) >= 4.5, "\(accent.name) on \(theme) elevated")
+            }
+
+            let label = ThemeManager.label(on: fill)
+            #expect(label.contrastRatio(on: fill) >= 4.5, "label on \(accent.name)")
+            #expect(Color.white.contrastRatio(on: fill) >= 4.5, "white on \(accent.name)")
+        }
+    }
+
+    @Test func aMalformedStoredHexSelectsThemeDefaultInThePicker() {
         #expect(AppAccent.pickerHex(for: "nope") == "#821019")
         #expect(AppAccent.named(hex: AppAccent.pickerHex(for: "nope"))?.name == "AO3 Red")
+        #expect(AppAccent.pickerHex(for: "nope", on: .sepia) == "#9A6732")
+        #expect(AppAccent.named(hex: AppAccent.pickerHex(for: "nope", on: .sepia))?.name == "Sepia Brown")
         #expect(AppAccent.pickerHex(for: "#2468AC") == "#2468AC")
         #expect(AppAccent.named(hex: AppAccent.pickerHex(for: "#2468AC")) == nil)
     }
@@ -109,7 +150,7 @@ struct AccentInkTests {
             let palette = SubjectPalette(color: subject, theme: theme)
             #expect(palette.tint == ThemeManager.appTint(for: theme))
             if theme == .sepia {
-                #expect(palette.tint == theme.appTint)
+                #expect(palette.tint.hexString == AppAccent.sepiaBrown.fillHex)
             } else {
                 #expect(palette.tint.hexString == ThemeManager.ao3Red)
             }
@@ -128,17 +169,83 @@ struct AccentInkTests {
         for theme in ReaderTheme.allCases {
             manager.appTheme = theme
             #expect(manager.accentInk == theme.accentInk(for: manager.effectiveTint))
-            if theme == .sepia {
-                #expect(manager.effectiveTint == theme.appTint)
-                #expect(manager.accentInk == manager.effectiveTint)
-            } else if theme == .dark || theme == .oled {
-                #expect(manager.effectiveTint.hexString == "#2468AC")
+            #expect(manager.effectiveTint.hexString == "#2468AC")
+            if theme == .dark || theme == .oled {
                 let custom = try #require(Color(hex: "#2468AC"))
                 #expect(manager.accentInk.hexString == custom.readable(on: theme.cardBackdrop).hexString)
                 #expect(manager.accentInk.contrastRatio(on: theme.cardBackdrop) >= 4.5)
             } else {
-                #expect(manager.effectiveTint.hexString == "#2468AC")
                 #expect(manager.accentInk == manager.effectiveTint)
+            }
+        }
+    }
+
+    @MainActor @Test func unchosenAccentKeepsSepiaBrownAndAO3RedElsewhere() {
+        let defaults = UserDefaults.standard
+        let keys = ["appTheme", "accentColorHex"]
+        let previous = keys.map { defaults.object(forKey: $0) }
+        defaults.removeObject(forKey: "appTheme")
+        defaults.removeObject(forKey: "accentColorHex")
+        defer {
+            for (key, value) in zip(keys, previous) { defaults.set(value, forKey: key) }
+        }
+
+        #expect(ThemeManager.appTint(for: .sepia).hexString == "#9A6732")
+        #expect(ThemeManager.appTint(for: .light).hexString == "#821019")
+        #expect(ThemeManager.appTint(for: .dark).hexString == "#821019")
+        #expect(ThemeManager.appTint(for: .oled).hexString == "#821019")
+
+        let manager = ThemeManager()
+        manager.appTheme = .light
+        #expect(manager.accentHex == "#821019")
+        #expect(manager.effectiveTint.hexString == "#821019")
+        #expect(manager.accentInk.hexString == "#821019")
+
+        manager.appTheme = .sepia
+        #expect(manager.accentHex == "#9A6732")
+        #expect(manager.effectiveTint.hexString == "#9A6732")
+        #expect(manager.accentInk.hexString == "#7D5328")
+        #expect(defaults.string(forKey: "accentColorHex") == nil)
+    }
+
+    @MainActor @Test func sepiaFollowsStoredPlumAO3RedAndSepiaBrown() {
+        let defaults = UserDefaults.standard
+        let keys = ["appTheme", "accentColorHex"]
+        let previous = keys.map { defaults.object(forKey: $0) }
+        defaults.removeObject(forKey: "appTheme")
+        defaults.removeObject(forKey: "accentColorHex")
+        defer {
+            for (key, value) in zip(keys, previous) { defaults.set(value, forKey: key) }
+        }
+
+        // Explicit Plum stored → Sepia gets Plum.
+        defaults.set(AppAccent.plum.fillHex, forKey: "accentColorHex")
+        #expect(ThemeManager.appTint(for: .sepia).hexString == "#7B2D6B")
+        let plumManager = ThemeManager()
+        plumManager.appTheme = .sepia
+        #expect(plumManager.accentHex == "#7B2D6B")
+        #expect(plumManager.effectiveTint.hexString == "#7B2D6B")
+        #expect(plumManager.accentInk.hexString == "#7B2D6B")
+
+        // Explicit AO3 Red stored (distinct from unchosen) → Sepia gets AO3 Red.
+        plumManager.accentHex = AppAccent.ao3Red.fillHex
+        #expect(defaults.string(forKey: "accentColorHex") == "#821019")
+        #expect(ThemeManager.appTint(for: .sepia).hexString == "#821019")
+        #expect(plumManager.effectiveTint.hexString == "#821019")
+        #expect(plumManager.accentInk.hexString == "#821019")
+
+        // Explicit Sepia Brown stored → works across every theme.
+        plumManager.accentHex = AppAccent.sepiaBrown.fillHex
+        for theme in ReaderTheme.allCases {
+            plumManager.appTheme = theme
+            #expect(plumManager.effectiveTint.hexString == "#9A6732")
+            switch theme {
+            case .light:
+                #expect(plumManager.accentInk.hexString == "#9A6732")
+            case .sepia:
+                #expect(plumManager.accentInk.hexString == "#7D5328")
+            case .dark, .oled:
+                #expect(plumManager.accentInk.hexString == "#D4A16A")
             }
         }
     }
@@ -191,11 +298,7 @@ struct AccentInkTests {
             #expect(actual.fill == manager.effectiveTint)
             #expect(actual.ink == manager.accentInk)
             #expect(actual.fill != heroTint)
-            if theme == .sepia {
-                #expect(actual.fill == theme.appTint)
-            } else {
-                #expect(actual.fill.hexString == "#356A72")
-            }
+            #expect(actual.fill.hexString == "#356A72")
         }
     }
 
@@ -286,6 +389,7 @@ struct AccentInkTests {
         let previous = defaults.object(forKey: "accentColorHex")
         let previousTheme = defaults.object(forKey: "appTheme")
         defaults.removeObject(forKey: "accentColorHex")
+        defaults.removeObject(forKey: "appTheme")
         defer {
             if let previous {
                 defaults.set(previous, forKey: "accentColorHex")
@@ -309,6 +413,7 @@ struct AccentInkTests {
         let defaults = UserDefaults.standard
         let previous = defaults.object(forKey: "accentColorHex")
         let previousTheme = defaults.object(forKey: "appTheme")
+        defaults.removeObject(forKey: "appTheme")
         defer {
             if let previous {
                 defaults.set(previous, forKey: "accentColorHex")
@@ -332,6 +437,10 @@ struct AccentInkTests {
         manager.appTheme = .light
         #expect(manager.effectiveTint.hexString == "#821019")
         #expect(ThemeManager.appTint(for: .light).hexString == "#821019")
+        manager.appTheme = .sepia
+        #expect(manager.accentHex == "#9A6732")
+        #expect(manager.effectiveTint.hexString == "#9A6732")
+        #expect(ThemeManager.appTint(for: .sepia).hexString == "#9A6732")
         #expect(defaults.string(forKey: "accentColorHex") == "#990000")
     }
 
@@ -481,6 +590,44 @@ struct AccentInkTests {
                 #expect(pixels.pixel(x: 3, y: pixels.height / 2) == icon.pixel(x: 0, y: 0))
                 #expect(pixels.pixel(x: pixels.width - 4, y: pixels.height / 2) == title.pixel(x: 0, y: 0))
             }
+        }
+    }
+
+    @Test func sepiaInkGivesWayToSystemGreyOnADarkCard() throws {
+        let sepia = try #require(ReaderTheme.sepia.appSecondaryInk)
+        #expect(SecondaryInkStyle.themeInk(sepia, scheme: .light) == sepia)
+        #expect(SecondaryInkStyle.themeInk(sepia, scheme: .dark) == nil)
+    }
+
+    @MainActor @Test func secondaryInkRoutesSepiaOnlyAndLeavesOtherThemesUnchanged() throws {
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: "appTheme")
+        defer { defaults.set(previous, forKey: "appTheme") }
+        let manager = ThemeManager()
+
+        for theme in ReaderTheme.allCases {
+            manager.appTheme = theme
+            if theme == .sepia {
+                #expect(manager.secondaryInk == theme.appSecondaryInk)
+            } else {
+                #expect(manager.secondaryInk == .secondary)
+            }
+
+            let routed = try renderedPixels(
+                Rectangle().fill(.secondaryInk)
+                    .frame(width: 10, height: 10)
+                    .accentTint(manager.effectiveTint, on: theme)
+                    .background(theme.cardSurface)
+                    .environment(\.colorScheme, theme.colorScheme)
+            )
+            let expectedColor: Color = theme.appSecondaryInk ?? .secondary
+            let expected = try renderedPixels(
+                Rectangle().fill(expectedColor)
+                    .frame(width: 10, height: 10)
+                    .background(theme.cardSurface)
+                    .environment(\.colorScheme, theme.colorScheme)
+            )
+            #expect(routed.pixel(x: 5, y: 5) == expected.pixel(x: 5, y: 5))
         }
     }
     #endif

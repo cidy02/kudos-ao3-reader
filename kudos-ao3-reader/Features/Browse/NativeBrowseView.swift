@@ -24,6 +24,7 @@ enum BrowseZoomKey: Hashable {
 struct BrowseView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.duoLayout) private var duoLayout
 
     @State private var path = NavigationPath()
     @Namespace private var cardZoomNamespace
@@ -58,6 +59,7 @@ struct BrowseView: View {
             #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)
             #endif
+                .duoVerticalCompressionPrefersTabBar(duoLayout.hasVerticalBar)
                 .navigationDestination(for: AO3MediaCategory.self) { category in
                     FandomListView(category: category, onSelect: openFandom)
                 }
@@ -65,9 +67,6 @@ struct BrowseView: View {
                     FandomWorksView(
                         fandom: route.title, includedFandoms: route.names, previousVisit: route.previousVisit
                     )
-                }
-                .navigationDestination(for: AO3TagWorksRequest.self) { request in
-                    TagWorksView(request: request)
                 }
                 .navigationDestination(for: AO3WorkSummary.self) { work in
                     WorkDetailView(remote: work)
@@ -125,6 +124,7 @@ struct FandomWorksView: View {
     /// The other half of the fandom-row zoom — set by BrowseView on the stack.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
 
+    @Environment(\.modelContext) private var modelContext
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
@@ -132,7 +132,10 @@ struct FandomWorksView: View {
     #if os(iOS)
     #endif
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var savedWorks: [SavedWork]
+    @Query(sort: \FollowedTag.followedAt) private var followedTags: [FollowedTag]
     @State private var results: [AO3WorkSummary] = []
+    @State private var feedTagID: Int?
+    @State private var showingFollowSheet = false
     @State private var ranking = SearchRankingSession()
     @State private var rankTop100 = RankTop100Controller()
     @State private var rankTop100Pages: [Int: AO3SearchPage] = [:]
@@ -239,7 +242,12 @@ struct FandomWorksView: View {
                                 sortSelection: sortSelection,
                                 sortOptions: AO3SearchFilters.Sort.allCases.filter { $0 != .relevance },
                                 query: nil,
-                                rankedResultCount: showsRankedResults ? results.count : nil
+                                rankedResultCount: showsRankedResults ? results.count : nil,
+                                followTagLabel: canFollowTag
+                                    ? (followedTag != nil ? "Following" : "Follow")
+                                    : nil,
+                                isFollowingTag: followedTag != nil,
+                                onFollowTag: canFollowTag ? { showingFollowSheet = true } : nil
                             )
                             .pageBodyRow(top: 8, gutter: 0)
                         }
@@ -262,6 +270,18 @@ struct FandomWorksView: View {
                     let partition = ranking.partitioned(results)
                     // Once per render: each call re-parses every date on the page.
                     let dividerID = dividerAfterWorkID
+                    if let line = ReaderResponseCopy.rankedWorksLine(
+                        loaded: partition.ranked.count,
+                        rank: ranking.settings.rank,
+                        seenBeforeLine: partition.seenBeforeLine
+                    ) {
+                        Section {
+                            RankedWorksCaption(text: line)
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                        }
+                    }
                     Section {
                         ForEach(partition.ranked) { entry in
                             SelectableAO3WorkRow(
@@ -368,7 +388,15 @@ struct FandomWorksView: View {
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
-            .remoteWorkSelectionChrome(bulkSelection)
+            .remoteWorkSelectionChrome(bulkSelection, showsBottomAccessory: showPagination) {
+                paginationBar.padding(.horizontal, SubjectMetrics.gutter)
+            }
+            .environment(\.queueMembershipOrigin, bulkSelection.origin)
+            .onAppear {
+                if bulkSelection.origin == nil {
+                    bulkSelection.origin = ReadingQueueMembershipOrigin(kind: .search, searchID: nil, label: fandom)
+                }
+            }
             .task { await load(page: 1) }
             .task { await rankTop100.refreshAvailability() }
             .onChange(of: savedWorks.map(\.id), initial: true) { _, _ in
@@ -386,9 +414,16 @@ struct FandomWorksView: View {
                 rankTop100Pages = [:]
                 showsRankedResults = false
             }
-            // A floating pill above the tab bar on every platform: a child's tabViewBottomAccessory drew nothing on Lane E.
-            .safeAreaInset(edge: .bottom) {
-                if showPagination { paginationBar.padding(.horizontal, SubjectMetrics.gutter) }
+            .sheet(isPresented: $showingFollowSheet) {
+                if let resolvedID = feedTagID ?? followedTag?.ao3TagID, includedFandoms.count == 1 {
+                    FollowTagSheet(
+                        ao3TagID: resolvedID,
+                        tagName: includedFandoms[0],
+                        tagCategoryRaw: "Fandom",
+                        tagURLString: AO3Client.tagWorksURL(tagName: includedFandoms[0])?.absoluteString,
+                        existingTag: followedTag
+                    )
+                }
             }
     }
 
@@ -579,6 +614,9 @@ struct FandomWorksView: View {
                 }
             }
             guard token == loadToken else { return }
+            if let learnedAlias = result.learnedTagAlias {
+                TagAliasStore.upsert(learnedAlias, in: modelContext)
+            }
             let newWorks = ranking.noting(result.works)
             results = newWorks
             showsRankedResults = false
@@ -588,6 +626,9 @@ struct FandomWorksView: View {
             totalPages = AO3ResultListPaging.clampedTotalPages(result.totalPages)
             resultSummary = result.summary
             facets = result.facets
+            if includedFandoms.count == 1, let id = result.feedTagID {
+                feedTagID = id
+            }
             requestedPage = nil
             failedPage = nil
             lastAppendError = nil
@@ -700,21 +741,50 @@ struct FandomWorksView: View {
 
     // MARK: Multi-select / bulk actions
 
+    private var followedTag: FollowedTag? {
+        guard includedFandoms.count == 1, let id = feedTagID else { return nil }
+        return followedTags.first { $0.ao3TagID == id }
+    }
+
+    private var canFollowTag: Bool {
+        includedFandoms.count == 1 && (feedTagID != nil || followedTag != nil)
+    }
+
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         if bulkSelection.isSelecting {
             RemoteWorkSelectionToolbar(controller: bulkSelection, selectable: { results }) {
                 bulkSelection.selected(in: results)
             }
-        } else if !results.isEmpty && (phase == .loaded || phase == .loading) {
-            ActionToolbar(items: [
-                AnyView(FilterButton(filtersActive: hasExtraFilters,
-                                      showingFilters: $showingFilters,
-                                      filterHelp: "Filter works in this fandom",
-                                      onClearFilters: resetFilters)),
-                AnyView(WorkListMoreMenu {
+        } else if (!results.isEmpty || canFollowTag) && (phase == .loaded || phase == .loading) {
+            let followItem: AnyView? = canFollowTag ? AnyView(
+                ToolbarIconButton(
+                    title: followedTag != nil ? "Following Tag" : "Follow Tag",
+                    systemImage: followedTag != nil ? "bell.fill" : "bell",
+                    tint: followedTag != nil ? themeManager.effectiveTint : nil,
+                    help: followedTag != nil ? "Edit followed tag settings" : "Follow this tag on AO3"
+                ) {
+                    showingFollowSheet = true
+                }
+            ) : nil
+            let filterItem: AnyView? = !results.isEmpty ? AnyView(
+                FilterButton(filtersActive: hasExtraFilters,
+                             showingFilters: $showingFilters,
+                             filterHelp: "Filter works in this fandom",
+                             onClearFilters: resetFilters)
+            ) : nil
+            let menuItem: AnyView? = !results.isEmpty ? AnyView(
+                WorkListMoreMenu {
                     if hideMature {
                         MatureRevealToggle()
+                    }
+                    if canFollowTag {
+                        Button { showingFollowSheet = true } label: {
+                            Label(
+                                followedTag != nil ? "Follow Settings…" : "Follow Tag…",
+                                systemImage: followedTag != nil ? "bell.fill" : "bell"
+                            )
+                        }
                     }
                     Button { bulkSelection.isSelecting = true } label: {
                         Label("Select", systemImage: "checklist")
@@ -727,8 +797,9 @@ struct FandomWorksView: View {
                         isPageLoading: phase == .loading,
                         start: startRankTop100
                     )
-                })
-            ])
+                }
+            ) : nil
+            ActionToolbar(items: [followItem, filterItem, menuItem].compactMap(\.self))
         }
     }
 
@@ -752,6 +823,7 @@ struct TagWorksView: View {
     @AppStorage("hideMatureContent") private var hideMature = true
     let request: AO3TagWorksRequest
 
+    @Environment(\.modelContext) private var modelContext
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
@@ -759,7 +831,10 @@ struct TagWorksView: View {
     #if os(iOS)
     #endif
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var savedWorks: [SavedWork]
+    @Query(sort: \FollowedTag.followedAt) private var followedTags: [FollowedTag]
     @State private var results: [AO3WorkSummary] = []
+    @State private var feedTagID: Int?
+    @State private var showingFollowSheet = false
     @State private var ranking = SearchRankingSession()
     @State private var rankTop100 = RankTop100Controller()
     @State private var rankTop100Pages: [Int: AO3SearchPage] = [:]
@@ -829,7 +904,12 @@ struct TagWorksView: View {
                                 sortSelection: sortSelection,
                                 sortOptions: AO3SearchFilters.Sort.allCases.filter { $0 != .relevance },
                                 query: nil,
-                                rankedResultCount: showsRankedResults ? results.count : nil
+                                rankedResultCount: showsRankedResults ? results.count : nil,
+                                followTagLabel: canFollowTag
+                                    ? (followedTag != nil ? "Following" : "Follow")
+                                    : nil,
+                                isFollowingTag: followedTag != nil,
+                                onFollowTag: canFollowTag ? { showingFollowSheet = true } : nil
                             )
                             .pageBodyRow(top: 8, gutter: 0)
                         }
@@ -850,6 +930,18 @@ struct TagWorksView: View {
                         }
                     }
                     let partition = ranking.partitioned(results)
+                    if let line = ReaderResponseCopy.rankedWorksLine(
+                        loaded: partition.ranked.count,
+                        rank: ranking.settings.rank,
+                        seenBeforeLine: partition.seenBeforeLine
+                    ) {
+                        Section {
+                            RankedWorksCaption(text: line)
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                        }
+                    }
                     Section {
                         ForEach(partition.ranked) { entry in
                             SelectableAO3WorkRow(
@@ -949,15 +1041,27 @@ struct TagWorksView: View {
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
-            .remoteWorkSelectionChrome(bulkSelection)
+            .remoteWorkSelectionChrome(bulkSelection, showsBottomAccessory: showPagination) {
+                paginationBar.padding(.horizontal, SubjectMetrics.gutter)
+            }
+            .environment(\.queueMembershipOrigin, bulkSelection.origin)
+            .onAppear {
+                if bulkSelection.origin == nil {
+                    bulkSelection.origin = ReadingQueueMembershipOrigin(
+                        kind: .search,
+                        searchID: nil,
+                        label: request.title
+                    )
+                }
+            }
             .task { await load(page: 1) }
             .task { await rankTop100.refreshAvailability() }
             .onChange(of: savedWorks.map(\.id), initial: true) { _, _ in
                 libraryIndex = WorkIdentityIndex(savedWorks)
             }
             .onDisappear { rankTop100.cancel() }
-            .onChange(of: router.selection) { _, selection in
-                if selection != .browse { rankTop100.cancel() }
+            .onChange(of: router.selection) { oldSelection, newSelection in
+                if oldSelection != newSelection { rankTop100.cancel() }
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase != .active { rankTop100.cancel() }
@@ -967,10 +1071,38 @@ struct TagWorksView: View {
                 rankTop100Pages = [:]
                 showsRankedResults = false
             }
-            // A floating pill above the tab bar on every platform: a child's tabViewBottomAccessory drew nothing on Lane E.
-            .safeAreaInset(edge: .bottom) {
-                if showPagination { paginationBar.padding(.horizontal, SubjectMetrics.gutter) }
+            .sheet(isPresented: $showingFollowSheet) {
+                if let resolvedID = feedTagID ?? followedTag?.ao3TagID {
+                    FollowTagSheet(
+                        ao3TagID: resolvedID,
+                        tagName: heroSummary?.subject ?? request.title,
+                        tagCategoryRaw: inferredTagCategory,
+                        tagURLString: request.url.absoluteString,
+                        existingTag: followedTag
+                    )
+                }
             }
+    }
+
+    private var followedTag: FollowedTag? {
+        guard let id = feedTagID else { return nil }
+        return followedTags.first { $0.ao3TagID == id }
+    }
+
+    private var canFollowTag: Bool {
+        feedTagID != nil || followedTag != nil
+    }
+
+    private var inferredTagCategory: String? {
+        let title = (heroSummary?.subject ?? request.title)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if title == "F/F" { return "Category" }
+        switch heroSummary?.subjectField(inAnyOf: results) {
+        case .fandom: return "Fandom"
+        case .character: return "Character"
+        case .relationship: return "Relationship"
+        case .warning, .freeform, nil: return nil
+        }
     }
 
     @ToolbarContentBuilder
@@ -979,14 +1111,34 @@ struct TagWorksView: View {
             RemoteWorkSelectionToolbar(controller: bulkSelection, selectable: { results }) {
                 bulkSelection.selected(in: results)
             }
-        } else if !results.isEmpty && (phase == .loaded || phase == .loading) {
-            ActionToolbar(items: [
-                AnyView(FilterButton(filtersActive: hasExtraFilters,
-                                      showingFilters: $showingFilters,
-                                      onClearFilters: resetFilters)),
-                AnyView(WorkListMoreMenu {
+        } else if (!results.isEmpty || canFollowTag) && (phase == .loaded || phase == .loading) {
+            let followItem: AnyView? = canFollowTag ? AnyView(
+                ToolbarIconButton(
+                    title: followedTag != nil ? "Following Tag" : "Follow Tag",
+                    systemImage: followedTag != nil ? "bell.fill" : "bell",
+                    tint: followedTag != nil ? themeManager.effectiveTint : nil,
+                    help: followedTag != nil ? "Edit followed tag settings" : "Follow this tag on AO3"
+                ) {
+                    showingFollowSheet = true
+                }
+            ) : nil
+            let filterItem: AnyView? = !results.isEmpty ? AnyView(
+                FilterButton(filtersActive: hasExtraFilters,
+                             showingFilters: $showingFilters,
+                             onClearFilters: resetFilters)
+            ) : nil
+            let menuItem: AnyView? = !results.isEmpty ? AnyView(
+                WorkListMoreMenu {
                     if hideMature {
                         MatureRevealToggle()
+                    }
+                    if canFollowTag {
+                        Button { showingFollowSheet = true } label: {
+                            Label(
+                                followedTag != nil ? "Follow Settings…" : "Follow Tag…",
+                                systemImage: followedTag != nil ? "bell.fill" : "bell"
+                            )
+                        }
                     }
                     Button { bulkSelection.isSelecting = true } label: {
                         Label("Select", systemImage: "checklist")
@@ -999,8 +1151,9 @@ struct TagWorksView: View {
                         isPageLoading: phase == .loading,
                         start: startRankTop100
                     )
-                })
-            ])
+                }
+            ) : nil
+            ActionToolbar(items: [followItem, filterItem, menuItem].compactMap(\.self))
         }
     }
 
@@ -1152,6 +1305,9 @@ struct TagWorksView: View {
                 )
             }
             guard token == loadToken else { return }
+            if let learnedAlias = result.learnedTagAlias {
+                TagAliasStore.upsert(learnedAlias, in: modelContext)
+            }
             let newWorks = ranking.noting(result.works)
             results = newWorks
             showsRankedResults = false
@@ -1160,6 +1316,9 @@ struct TagWorksView: View {
             totalPages = AO3ResultListPaging.clampedTotalPages(result.totalPages)
             resultSummary = result.summary
             facets = result.facets
+            if let id = result.feedTagID {
+                feedTagID = id
+            }
             requestedPage = nil
             failedPage = nil
             lastAppendError = nil

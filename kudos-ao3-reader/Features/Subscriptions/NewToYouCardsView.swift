@@ -172,7 +172,7 @@ struct NewToYouCardsView: View {
             VStack(spacing: CardListMetrics.interCardSpacing) {
                 Text(positionText)
                     .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     .accessibilityLabel("Work \(positionText)")
                     .accessibilityAddTraits(.isHeader)
@@ -231,7 +231,7 @@ struct NewToYouCardsView: View {
             if let attribution = card.attribution {
                 Text(attribution)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -259,16 +259,16 @@ struct NewToYouCardsView: View {
                     if !work.chapters.isEmpty { cardStat(work.chapters, symbol: "book") }
                     if let words = work.words { cardStat(words.formatted(), symbol: "textformat.size") }
                     if let kudos = work.kudos { cardStat(kudos.formatted(), symbol: "heart") }
-                    if !work.dateUpdated.isEmpty { cardStat(work.dateUpdated, symbol: "calendar") }
+                    if !work.dateUpdated.isEmpty { cardStat(WorkStat.displayDate(work.dateUpdated), symbol: "calendar") }
                 }
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
 
             if !warnings(of: work).isEmpty {
                 Label(warnings(of: work).joined(separator: ", "), systemImage: "exclamationmark.triangle")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
 

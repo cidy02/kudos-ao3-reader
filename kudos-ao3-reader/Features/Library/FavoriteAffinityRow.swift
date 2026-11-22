@@ -136,7 +136,7 @@ struct FavoriteAffinityRow: View {
                 }
                 Text(logLine)
                     .font(.system(size: captionSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                 // 1ak's own label says these counts belong on the author's page
                 // "rather than crowding the row", so this used to be hidden
@@ -176,7 +176,7 @@ struct FavoriteAffinityRow: View {
                 .font(.system(size: 8.5, weight: .bold))
                 .kerning(0.85)
                 .textCase(.uppercase)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             let unread = row.unreadInLibrary
             Text(unread > 0 ? "\(unread) unread work\(unread == 1 ? "" : "s")" : "No unread works")
                 .font(.system(size: unreadCountSize, weight: .semibold))
@@ -184,7 +184,7 @@ struct FavoriteAffinityRow: View {
             if let libraryDetail {
                 Text(libraryDetail)
                     .font(.system(size: captionSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -204,7 +204,7 @@ struct FavoriteAffinityRow: View {
                 .font(.system(size: 8.5, weight: .bold))
                 .kerning(0.85)
                 .textCase(.uppercase)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Button {
                 gate.reveal(work)
             } label: {
@@ -231,7 +231,7 @@ struct FavoriteAffinityRow: View {
                 .font(.system(size: 8.5, weight: .bold))
                 .kerning(0.85)
                 .textCase(.uppercase)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             HStack(alignment: .top, spacing: 9) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(work.title)
@@ -239,7 +239,7 @@ struct FavoriteAffinityRow: View {
                         .lineLimit(2)
                     Text(newestWorkMetadata(work))
                         .font(.system(size: captionSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -281,7 +281,7 @@ struct FavoriteAffinityRow: View {
             parts.append(FandomDisplayName.bareTitle(fandom))
         }
         if !work.dateUpdated.isEmpty {
-            parts.append("updated \(work.dateUpdated)")
+            parts.append("updated \(WorkStat.displayDate(work.dateUpdated))")
         }
         if let words = work.words, words > 0 {
             parts.append("\(words.formatted(.number.notation(.compactName))) words")
@@ -337,7 +337,7 @@ struct FavoriteAffinityRow: View {
             parts.append(ReadingInsights.durationLabel(row.totalSeconds))
         }
         if let lastRead = row.lastRead {
-            parts.append("last read \(lastRead.formatted(date: .abbreviated, time: .omitted))")
+            parts.append("last read \(WorkStat.displayDate(lastRead))")
         }
         return parts.joined(separator: " · ")
     }
@@ -346,7 +346,7 @@ struct FavoriteAffinityRow: View {
     private var libraryLine: some View {
         Text(libraryText)
             .font(.system(size: libraryLineSize))
-            .foregroundStyle(row.unreadInLibrary > 0 ? palette.accent : Color.secondary)
+            .foregroundStyle(row.unreadInLibrary > 0 ? AnyShapeStyle(palette.accent) : AnyShapeStyle(.secondaryInk))
             .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -391,7 +391,7 @@ struct FavoriteAffinityEmptyCard: View {
                 .font(.system(size: titleSize, weight: .semibold))
             Text(detail)
                 .font(.system(size: detailSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
