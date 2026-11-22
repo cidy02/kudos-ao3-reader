@@ -203,6 +203,7 @@ struct QueueSortNewTests {
         fixture.mLibrary.note = "edited on iPad"
         fixture.mLibrary.origin = editedOrigin
         fixture.mLibrary.queuedAt = editedQueuedAt
+        try fixture.context.save()
 
         let result = QueueSortNew.undo(session: &session, queue: fixture.queue, context: fixture.context)
         #expect(result.undoneRecord?.action == .keep)
