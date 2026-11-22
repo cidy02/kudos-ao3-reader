@@ -4,6 +4,7 @@ import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.reader.speech.PronunciationCorrections
 import io.github.cidy02.kudos.works.WorkIdentityIndex
+import java.io.ByteArrayInputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -19,6 +20,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.decodeFromStream
 
 @OptIn(ExperimentalSerializationApi::class)
 private fun SerialDescriptor.elementNameSet(): Set<String> =
@@ -61,12 +63,19 @@ private val recordListDescriptors: Map<String, SerialDescriptor> by lazy {
     )
 }
 
+// Parsed straight from the bytes: a String of the whole manifest would be one more full copy.
+@OptIn(ExperimentalSerializationApi::class)
 internal fun parseJsonObjectOrNull(bytes: ByteArray): JsonObject? {
-    val text = bytes.toString(Charsets.UTF_8)
-    val strict = runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull()
-    if (strict != null) return strict
-    return runCatching { BackupJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+    fun parse(json: Json) = runCatching {
+        json.decodeFromStream(JsonElement.serializer(), ByteArrayInputStream(bytes)) as? JsonObject
+    }.getOrNull()
+    return parse(Json) ?: parse(BackupJson)
 }
+
+@OptIn(ExperimentalSerializationApi::class)
+internal fun isStrictJsonObject(bytes: ByteArray): Boolean =
+    runCatching { Json.decodeFromStream(JsonElement.serializer(), ByteArrayInputStream(bytes)) is JsonObject }
+        .getOrDefault(false)
 
 private fun JsonObject.text(key: String): String? =
     (get(key) as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull

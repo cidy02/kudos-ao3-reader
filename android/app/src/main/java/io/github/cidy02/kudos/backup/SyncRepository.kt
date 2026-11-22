@@ -237,14 +237,18 @@ class SyncRepository(
                     !name.startsWith(BackupPaths.MANIFEST_TEMP)
             }
             val manifestBytesAtRead = readLiveManifest(syncDir)
-            val decodedLive = manifestBytesAtRead?.let { bytes ->
-                runCatching { BackupValidator.decodeManifest(bytes) }.getOrNull()
+            // One parse gives the typed manifest and the raw tree.
+            var live = manifestBytesAtRead?.let { bytes ->
+                runCatching { BackupValidator.decodeManifestWithRaw(bytes) }.getOrNull()
             }
+            // The typed copy is dropped once it is imported (below): only the tree is carried on.
+            var decodedLive = live?.first
+            val liveReadable = decodedLive != null
             // Whole JSON this build cannot read was written by a version of Kudos that knows
             // more than this one, or lists more than this one allows. It is not damage, and
             // writing over it would drop what that version listed. A manifest cut short by an
             // interrupted write is damage: no device can read it, and this run repairs it.
-            if (decodedLive == null && manifestBytesAtRead != null && isWholeJsonObject(manifestBytesAtRead)) {
+            if (!liveReadable && manifestBytesAtRead != null && isWholeJsonObject(manifestBytesAtRead)) {
                 throw IOException("This version of Kudos cannot read the sync folder's manifest. Its files were kept.")
             }
             val backupManifest = syncDir.findFile(BackupPaths.MANIFEST_BACKUP)
@@ -262,12 +266,9 @@ class SyncRepository(
             // was lost or cut short unable to sync again, and an interrupted first sync is
             // enough to leave one: files in the folder and no manifest yet.
             var folderViewIsCurrent = false
-            var readManifestJson: JsonObject? = if (decodedLive != null && manifestBytesAtRead != null) {
-                parseJsonObjectOrNull(manifestBytesAtRead)
-            } else {
-                null
-            }
-            var hasUsableFolderManifest = decodedLive != null
+            var readManifestJson: JsonObject? = live?.second
+            live = null
+            var hasUsableFolderManifest = liveReadable
             // Live is a candidate only when it decoded. Its .bak is not, so a live file that
             // removed a key is not restored from the previous bak. .bak joins only below,
             // when the live file did not decode.
@@ -294,8 +295,8 @@ class SyncRepository(
                 val liveDigest = manifestBytesAtRead?.let(BackupPaths::sha256)
                 val nativeDigest = context.getSharedPreferences("pronunciation-sync", Context.MODE_PRIVATE)
                     .getString("nativeManifestDigest", null)
-                val ownPronunciations = decodedLive != null && liveDigest == nativeDigest
-                val ownManifest = decodedLive != null && liveDigest ==
+                val ownPronunciations = liveReadable && liveDigest == nativeDigest
+                val ownManifest = liveReadable && liveDigest ==
                     settingsRepository.settings.first().sync.lastManifestDigest
                 if (ownManifest) {
                     // An older Android wrote these as unknown keys. Its digest can match
@@ -307,10 +308,10 @@ class SyncRepository(
                     // Files can land in the folder after the manifest that lists their work.
                     importOriginals(syncDir, decodedLive!!)
                 } else {
-                    val fallbackBackup = if (decodedLive == null) decodeManifestWithRawOrNull(backupManifest) else null
+                    val fallbackBackup = if (!liveReadable) decodeManifestWithRawOrNull(backupManifest) else null
                     val manifest = decodedLive ?: fallbackBackup?.first
                     if (fallbackBackup != null) hasUsableFolderManifest = true
-                    val bakJson = if (decodedLive == null) fallbackBackup?.second else null
+                    val bakJson = if (!liveReadable) fallbackBackup?.second else null
                     if (bakJson != null) {
                         readManifestJson = bakJson
                         manifestCopies += RawManifestCopy(
@@ -327,7 +328,7 @@ class SyncRepository(
                         val outcome = importManifest(syncDir, incoming)
                         pendingFonts += outcome.pendingFonts
                         absorbed = absorbed.absorb(outcome.summary)
-                        folderViewIsCurrent = decodedLive != null && outcome.complete
+                        folderViewIsCurrent = liveReadable && outcome.complete
                     }
                 }
 
@@ -384,6 +385,7 @@ class SyncRepository(
                 // One that holds files and no manifest is not: see above.
                 folderViewIsCurrent = syncDir.listFiles().isEmpty()
             }
+            decodedLive = null
 
             // 2. Export incrementally
             val pronunciationsUnreadable = persistenceGate.withLock {
@@ -534,13 +536,13 @@ class SyncRepository(
                     android.util.Log.w("SyncRepository", "Pending import data held back: the manifest would exceed the read cap")
                 }
                 beforeManifestCommit()
-                if (!readLiveManifest(syncDir).contentEquals(manifestBytesAtRead)) {
+                if (!liveManifestUnchanged(syncDir, manifestBytesAtRead)) {
                     throw IOException("Sync folder changed during sync. Try syncing again.")
                 }
                 if (generation != folderGeneration || getSyncFolderUri() != uri) {
                     throw IOException("Sync folder changed during sync. Try syncing again.")
                 }
-                writeManifest(syncDir, manifestBytes, backup = manifestBytesAtRead.takeIf { decodedLive != null })
+                writeManifest(syncDir, manifestBytes, backup = manifestBytesAtRead.takeIf { liveReadable })
                 if (generation != folderGeneration || getSyncFolderUri() != uri) {
                     throw IOException("Sync folder changed during sync. Try syncing again.")
                 }
@@ -641,7 +643,7 @@ class SyncRepository(
             val bytes = context.contentResolver.openInputStream(file.uri)?.use { input ->
                 input.readLimitedBytes(BackupPaths.MANIFEST, BackupLimits.MAX_MANIFEST_BYTES)
             } ?: return@runCatching null
-            BackupValidator.decodeManifest(bytes) to parseJsonObjectOrNull(bytes)
+            BackupValidator.decodeManifestWithRaw(bytes)
         }.getOrNull()
     }
 
@@ -675,9 +677,19 @@ class SyncRepository(
         }
     }
 
+    /** [readLiveManifest] compared to [expected] as it streams: a second copy of the file is never held. */
+    private fun liveManifestUnchanged(syncDir: DocumentFile, expected: ByteArray?): Boolean {
+        val file = syncDir.findFile(BackupPaths.MANIFEST) ?: return expected == null
+        if (expected == null) return false
+        return try {
+            (context.contentResolver.openInputStream(file.uri) ?: throw IOException()).use { it.hasExactly(expected) }
+        } catch (error: Exception) {
+            throw IOException("The sync folder's manifest could not be read. Its files were kept.")
+        }
+    }
+
     // Strict JSON, not `BackupJson`: that one is lenient, and reads a bare word as a value.
-    private fun isWholeJsonObject(bytes: ByteArray): Boolean =
-        runCatching { Json.parseToJsonElement(bytes.toString(Charsets.UTF_8)) is JsonObject }.getOrDefault(false)
+    private fun isWholeJsonObject(bytes: ByteArray): Boolean = isStrictJsonObject(bytes)
 
     /** What importing one manifest left in the folder untaken. */
     private class ImportOutcome(
@@ -862,21 +874,6 @@ class SyncRepository(
     private fun InputStream.readFontBytes(path: String): ByteArray =
         readLimitedBytes(path, BackupLimits.MAX_FONT_ENTRY_BYTES)
 
-    internal fun InputStream.readLimitedBytes(path: String, limit: Long): ByteArray {
-        val output = ByteArrayOutputStream()
-        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-        var total = 0L
-        while (true) {
-            val count = read(buffer)
-            if (count < 0) break
-            total += count
-            if (total > limit) {
-                throw BackupError.EntryTooLarge(path)
-            }
-            output.write(buffer, 0, count)
-        }
-        return output.toByteArray()
-    }
 
     /**
      * Writes the manifest over the one that is there, and never takes it away first.
@@ -1092,4 +1089,33 @@ sealed interface SyncResult {
      * nothing. Treated as non-failure by lifecycle / WorkManager callers.
      */
     data object SkippedAlreadyRunning : SyncResult
+}
+
+internal fun InputStream.readLimitedBytes(path: String, limit: Long): ByteArray {
+    val output = ByteArrayOutputStream()
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    var total = 0L
+    while (true) {
+        val count = read(buffer)
+        if (count < 0) break
+        total += count
+        if (total > limit) {
+            throw BackupError.EntryTooLarge(path)
+        }
+        output.write(buffer, 0, count)
+    }
+    return output.toByteArray()
+}
+
+/** True when the stream holds exactly [expected], read in blocks. */
+internal fun InputStream.hasExactly(expected: ByteArray): Boolean {
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    var offset = 0
+    while (true) {
+        val count = read(buffer)
+        if (count < 0) return offset == expected.size
+        if (offset + count > expected.size) return false
+        for (i in 0 until count) if (buffer[i] != expected[offset + i]) return false
+        offset += count
+    }
 }

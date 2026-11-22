@@ -2293,6 +2293,27 @@ class SyncManifestPassthroughTest {
     }
 
     @Test
+    fun aManifestJustUnderTheLimitRoundTripsImportExportAndSync() = runTest {
+        val limit = BackupLimits.MAX_MANIFEST_BYTES.toInt()
+        val base = iosT541ManifestJson()
+        fun withPad(n: Int) = JsonObject(base + mapOf("liveOpaque" to JsonPrimitive("x".repeat(n))))
+        val baseSize = BackupJson.encodeToString(JsonObject.serializer(), withPad(0)).toByteArray().size
+        val pad = limit - baseSize - 4096
+        val manifest = withPad(pad)
+        assertTrue(BackupJson.encodeToString(JsonObject.serializer(), manifest).toByteArray().size in (limit - 8192)..limit)
+
+        backupRepository.importV2ZipBytes(zipManifest(manifest), mode = BackupImportMode.MERGE)
+        val exported = exportedManifest()
+        assertEquals(pad, (exported["liveOpaque"] as JsonPrimitive).content.length)
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        val published = readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!)
+        assertTrue(published.size <= limit)
+        val json = BackupValidator.decodeManifestWithRaw(published).second!!
+        assertEquals(pad, (json["liveOpaque"] as JsonPrimitive).content.length)
+    }
+
+    @Test
     fun aCancelledReplaceDropsTheSetAsideOverlaysInsteadOfRestoringThem() = runTest {
         // Cancellation can surface after Room committed, so the old overlays must never come back.
         val workId = "99999999-0000-4000-8000-000000000095"
