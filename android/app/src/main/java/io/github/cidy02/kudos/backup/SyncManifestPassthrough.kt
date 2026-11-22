@@ -813,9 +813,16 @@ internal class SyncLastManifestStore(
 
     /** Replace sets the overlay aside by atomic rename; [restoreAside] or [dropAside] settles it. */
     fun setAside() = synchronized(lock) {
-        if (Files.exists(file)) Files.move(file, aside, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-        if (Files.exists(legacyFolderFile)) {
-            Files.move(legacyFolderFile, asideFolder, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        val bodyMoved = Files.exists(file)
+        if (bodyMoved) Files.move(file, aside, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        try {
+            if (Files.exists(legacyFolderFile)) {
+                Files.move(legacyFolderFile, asideFolder, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            }
+        } catch (error: Exception) {
+            // All or nothing: the body goes back so the store is as it was.
+            if (bodyMoved) Files.move(aside, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            throw error
         }
     }
 

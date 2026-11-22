@@ -519,10 +519,20 @@ class SyncRepository(
                     storeBase != null && pendingImport != null -> mergeImportedManifestJson(pendingImport, storeBase)
                     else -> storeBase ?: pendingImport
                 }
-                val manifestBytes = BackupJson.encodeToString(
+                fun encode(replaced: JsonObject?) = BackupJson.encodeToString(
                     JsonObject.serializer(),
-                    carryUnknownRecordKeys(manifestJson, replacedJson)
+                    carryUnknownRecordKeys(manifestJson, replaced)
                 ).toByteArray(Charsets.UTF_8)
+                var manifestBytes = encode(replacedJson)
+                // Over the read cap, carry only what the folder's manifest already held (what parity
+                // carried) and keep the pending import for a later sync. Never refuse: parity
+                // publishes whatever it builds.
+                var pendingHeldBack = false
+                if (manifestBytes.size.toLong() > BackupLimits.MAX_MANIFEST_BYTES && pendingImport != null) {
+                    pendingHeldBack = true
+                    manifestBytes = encode(readManifestJson)
+                    android.util.Log.w("SyncRepository", "Pending import data held back: the manifest would exceed the read cap")
+                }
                 beforeManifestCommit()
                 if (!readLiveManifest(syncDir).contentEquals(manifestBytesAtRead)) {
                     throw IOException("Sync folder changed during sync. Try syncing again.")
@@ -535,7 +545,7 @@ class SyncRepository(
                     throw IOException("Sync folder changed during sync. Try syncing again.")
                 }
                 lastManifestStore.save(manifestBytes, folderUri = uri.toString())
-                pendingImportManifestStore.clear()
+                if (!pendingHeldBack) pendingImportManifestStore.clear()
                 foldedConflicts.forEach { it.delete() }
                 // Remembered only when nothing is outstanding (iOS withholds its stamp the same
                 // way): a work still owed an EPUB, or one whose file has gone missing from this

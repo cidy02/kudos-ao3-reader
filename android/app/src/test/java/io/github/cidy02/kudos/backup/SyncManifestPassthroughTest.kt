@@ -2192,6 +2192,8 @@ class SyncManifestPassthroughTest {
     fun aReplaceThatFailsBeforeRoomPutsBothOverlaysBack() = runTest {
         val workId = "99999999-0000-4000-8000-000000000093"
         backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
+        val pendingBefore = SyncLastManifestStore(filesRoot, BackupRepository.PENDING_IMPORT_MANIFEST_FILE).load()
+        val exportBefore = SyncLastManifestStore(filesRoot).load()
         BackupRepository.afterOverlaysStaged = { throw java.io.IOException("Room failed") }
         try {
             assertTrue(
@@ -2204,7 +2206,90 @@ class SyncManifestPassthroughTest {
         }
         assertEquals(false, database.workDao().getById(workId)!!.isDeleted)
         assertOldOverlaysStillExported(exportedManifest())
+        // Both stores, not just the one manual export reads.
+        assertEquals(exportBefore, SyncLastManifestStore(filesRoot).load())
+        assertEquals(pendingBefore, SyncLastManifestStore(filesRoot, BackupRepository.PENDING_IMPORT_MANIFEST_FILE).load())
         assertTrue(Files.list(filesRoot).use { it.noneMatch { p -> p.fileName.toString().endsWith(".replace-aside") } })
+    }
+
+    @Test
+    fun aReplaceWhoseLegacySidecarCannotBeSetAsideRestoresTheBody() = runTest {
+        val workId = "99999999-0000-4000-8000-000000000095"
+        backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
+        // The export overlay is a legacy pair: body plus a .folder sidecar.
+        val body = BackupJson.encodeToString(JsonObject.serializer(), backupOneOverlay(workId)).toByteArray()
+        Files.write(filesRoot.resolve("sync-last-manifest.json"), body)
+        Files.write(filesRoot.resolve("sync-last-manifest.json.folder"), "content://folder-a".toByteArray())
+        val slot = filesRoot.resolve("sync-last-manifest.json.folder.replace-aside")
+        Files.createDirectories(slot.resolve("blocked")).also { Files.write(it.resolve("x"), byteArrayOf(0)) }
+        assertTrue(
+            runCatching {
+                backupRepository.importV2ZipBytes(zipManifest(emptyReplacement), mode = BackupImportMode.REPLACE_LIBRARY)
+            }.isFailure
+        )
+        assertEquals(false, database.workDao().getById(workId)!!.isDeleted)
+        val store = SyncLastManifestStore(filesRoot)
+        assertTrue(store.belongsToFolder("content://folder-a"))
+        assertOldOverlaysStillExported(exportedManifest())
+        // A restart must not delete a stranded body: nothing was left aside.
+        backupRepository.recoverInterruptedReplace()
+        assertOldOverlaysStillExported(exportedManifest())
+    }
+
+    @Test
+    fun pendingOpaqueDataOverTheCapIsHeldBackAndTheRestPublishes() = runTest {
+        val big = { n: Int -> JsonPrimitive("x".repeat(n)) }
+        val half = (BackupLimits.MAX_MANIFEST_BYTES / 2).toInt()
+        writeChild(
+            ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), JsonObject(iosT541ManifestJson() + mapOf("liveOpaque" to big(half)))).toByteArray()
+        )
+        val pending = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-27T12:00:00.000Z"),
+                "importOpaque" to big(half + 1024)
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(pending), mode = BackupImportMode.MERGE)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        val published = readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!)
+        assertTrue(published.size <= BackupLimits.MAX_MANIFEST_BYTES)
+        val json = Json.parseToJsonElement(published.toString(Charsets.UTF_8)).jsonObject
+        assertNotNull(json["liveOpaque"])
+        assertNull(json["importOpaque"])
+        assertNotNull(SyncLastManifestStore(filesRoot, BackupRepository.PENDING_IMPORT_MANIFEST_FILE).load())
+    }
+
+    @Test
+    fun aManifestOverTheCapEvenWithoutPendingDataIsStillPublished() = runTest {
+        val cap = BackupLimits.MAX_MANIFEST_BYTES.toInt()
+        writeChild(
+            ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json",
+            BackupJson.encodeToString(
+                JsonObject.serializer(),
+                JsonObject(iosT541ManifestJson() + mapOf("liveOpaque" to JsonPrimitive("x".repeat(cap - 200_000))))
+            ).toByteArray()
+        )
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        val stored = checkNotNull(database.workDao().getById(WORK_ONE)).toDomain()
+        repeat(3) { i ->
+            database.workDao().upsert(
+                stored.copy(
+                    id = "99999999-0000-4000-8000-0000000002%02d".format(i),
+                    ao3WorkID = 840000 + i,
+                    sourceUrl = "https://archiveofourown.org/works/${840000 + i}",
+                    title = "y".repeat(900_000),
+                    hasEpub = false,
+                    lastModifiedAt = FIXED_CLOCK.plusSeconds(60)
+                ).toEntity()
+            )
+        }
+        clockInstant = FIXED_CLOCK.plusSeconds(600)
+        assertTrue("parity publishes whatever it builds", syncRepository.runSync() is SyncResult.Success)
+        val published = readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!)
+        assertTrue(published.size > BackupLimits.MAX_MANIFEST_BYTES)
+        assertNotNull(Json.parseToJsonElement(published.toString(Charsets.UTF_8)).jsonObject["liveOpaque"])
     }
 
     @Test
