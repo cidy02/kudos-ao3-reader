@@ -408,6 +408,51 @@ struct FolderSyncTests {
         #expect(targetDefaults.string(forKey: "readerFontID") == "custom:\(fileName)")
     }
 
+    @Test func syncDownFollowsTheSelectedFontToItsCollisionSafeName() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let targetContainer = try container()
+        let targetContext = targetContainer.mainContext
+        let targetDefaults = try testDefaults()
+        defer { FolderSyncService.disconnect(defaults: targetDefaults) }
+
+        let (fontData, fileExtension) = try validFontData()
+        let localData = fontData + Data(repeating: 0, count: 16)
+        let incomingData = fontData + Data(repeating: 0, count: 15) + Data([1])
+        let fileName = "collision-\(UUID().uuidString).\(fileExtension)"
+        let suffixName = (fileName as NSString).deletingPathExtension
+            + "-restored-1.\((fileName as NSString).pathExtension)"
+        let localURL = Storage.fontsDirectory.appendingPathComponent(fileName)
+        let suffixURL = Storage.fontsDirectory.appendingPathComponent(suffixName)
+        defer {
+            try? FileManager.default.removeItem(at: localURL)
+            try? FileManager.default.removeItem(at: suffixURL)
+        }
+        try FileManager.default.createDirectory(at: Storage.fontsDirectory, withIntermediateDirectories: true)
+        try localData.write(to: localURL)
+        targetContext.insert(CustomFont(name: "Local", fileName: fileName))
+        try targetContext.save()
+        targetDefaults.set("custom:\(fileName)", forKey: "readerFontID")
+
+        let manifest = try fontManifest(fileName: fileName, readerFontID: "custom:\(fileName)")
+        try writeRemoteFont(manifest: manifest, fileName: fileName, data: incomingData, to: folder)
+        try FolderSyncService.connect(to: folder, defaults: targetDefaults)
+
+        let result = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
+
+        #expect(result.didReadRemoteFile)
+        #expect(try Data(contentsOf: localURL) == localData)
+        let restoredCollisionData = try? Data(contentsOf: suffixURL)
+        #expect(
+            restoredCollisionData == incomingData,
+            "Equal-size different font bytes must be restored under a collision-safe suffix."
+        )
+        #expect(Set(try targetContext.fetch(FetchDescriptor<CustomFont>()).map(\.fileName)) == [fileName, suffixName])
+        // T-541, Codex's fourth review: the snapshot selected the font that landed under the
+        // collision-safe name, so the reader follows it there, not to the local font of that name.
+        #expect(targetDefaults.string(forKey: "readerFontID") == "custom:\(suffixName)")
+    }
+
     @Test func syncDownConvergesWhenFontLibraryExceedsAggregateCap() async throws {
         let folder = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }

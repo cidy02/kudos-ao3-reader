@@ -1,3 +1,4 @@
+import Combine
 import SwiftData
 import SwiftUI
 
@@ -32,6 +33,11 @@ struct FolderSyncObserver: View {
             .frame(width: 0, height: 0)
             .accessibilityHidden(true)
             .task {
+                // T-541. Learn every synced setting's current value before anything can change
+                // one, so the first change after an upgrade is stamped and uploaded like any
+                // other. Values seen here for the first time get no stamp.
+                let observed = KudosBackupSettings.observedKeys(in: .standard)
+                SyncedSettingsClock.noteLocalChanges(keys: observed.keys, mapKeys: observed.maps, in: .standard)
                 await Task.yield()
                 guard FolderSyncService.snapshot().autoSyncEnabled else { return }
                 lastForegroundFolderSyncAt = Date()
@@ -82,6 +88,22 @@ struct FolderSyncObserver: View {
             // SettingsView's own @AppStorage bindings — it marks sync dirty itself via
             // NotificationCenter since it isn't always mounted while ContentView is.
             .onReceive(NotificationCenter.default.publisher(for: .kudosSyncRelevantSettingChanged)) { _ in
+                FolderSyncService.markDirty()
+                scheduleFolderSyncUp()
+            }
+            // T-541. Every synced setting, wherever its control lives: stamp it when it
+            // changes, so a sync can tell this device's newer choice from the folder's older
+            // one, and upload it. Before this, most settings never marked sync dirty, so a
+            // changed setting sat here until another device's write came down over it.
+            // Debounced onto the main run loop, so a restore's own writes are adopted first.
+            .onReceive(
+                NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+                    .debounce(for: .seconds(1), scheduler: RunLoop.main)
+            ) { _ in
+                let observed = KudosBackupSettings.observedKeys(in: .standard)
+                guard SyncedSettingsClock.stampChanges(
+                    keys: observed.keys, mapKeys: observed.maps, in: .standard
+                ) else { return }
                 FolderSyncService.markDirty()
                 scheduleFolderSyncUp()
             }

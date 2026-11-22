@@ -311,7 +311,10 @@ struct MailSubscriptionDriverTests {
         try driver.recordDecision(.notForMe, workID: 42)
 
         let reloaded = makeDriver(vault: vault, store: store, mailbox: mailbox)
-        #expect(reloaded.decisions == [SubscriptionDecision(workID: 42, action: .notForMe)])
+        // T-541: a choice records when it was made, on the driver's clock.
+        #expect(reloaded.decisions == [SubscriptionDecision(
+            workID: 42, action: .notForMe, decidedAt: Date(timeIntervalSince1970: 1_762_000_000)
+        )])
     }
 
     @Test func mailboxGenerationChangeKeepsDecisions() async {
@@ -351,6 +354,22 @@ struct MailSubscriptionDriverTests {
         #expect(store.cursor == nil)
         #expect(!driver.isConnected)
         #expect(driver.updates.isEmpty)
+    }
+
+    /// Codex's fourth T-541 review: a choice merged into the file from another device after the
+    /// driver loaded must survive this device's next choice.
+    @Test func aChoiceMergedFromAnotherDeviceSurvivesTheNextChoiceHere() throws {
+        let store = MemorySubscriptionUpdateStore(state: SubscriptionUpdateState(decisions: [
+            SubscriptionDecision(workID: 1, action: .saved, decidedAt: Date(timeIntervalSince1970: 100))
+        ]))
+        let driver = makeDriver(vault: MemoryMailCredentialsVault(), store: store, mailbox: FakeMailbox(harvests: []))
+        // A sync merges another device's later choice into the file behind the driver's back.
+        store.state = SubscriptionUpdateState.merged(local: store.state, incoming: SubscriptionUpdateState(decisions: [
+            SubscriptionDecision(workID: 2, action: .notForMe, decidedAt: Date(timeIntervalSince1970: 200))
+        ]))
+        try driver.recordDecision(.saved, workID: 3)
+        let actions = Dictionary(uniqueKeysWithValues: store.state.decisions.map { ($0.workID, $0.action) })
+        #expect(actions == [1: .saved, 2: .notForMe, 3: .saved])
     }
 
     private func makeDriver(

@@ -52,6 +52,7 @@ struct SubscriptionScanStore {
         var directory = directoryURL
         try directory.setResourceValues(values)
         try fileData(file).write(to: fileURL, options: .atomic)
+        LocalSnapshotChange.post()
     }
 
     var fileURL: URL {

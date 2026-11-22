@@ -570,7 +570,7 @@ struct CrossPlatformBackupTests {
         let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         let works = root?["works"] as? [[String: Any]]
         #expect(works?.allSatisfy { $0["freedAt"] == nil } == true)
-        #expect(works?.allSatisfy { $0["authorIdentitiesJSON"] == nil } == true)
+        // `authorIdentitiesJSON` travels since T-541 (owner: a backup is a complete snapshot).
     }
 
     private func canonicalManifest(_ data: Data) throws -> Data {
@@ -578,12 +578,18 @@ struct CrossPlatformBackupTests {
         var root = try #require(lowercasedUUIDs(in: object) as? [String: Any])
         root.removeValue(forKey: "exportedAt")
         root.removeValue(forKey: "exportedBy")
+        // T-541, iOS-only so far: writing drafts and data files come from the test host's own
+        // folders, so they are not part of a golden either.
+        root.removeValue(forKey: "writingRecovery")
+        root.removeValue(forKey: "documents")
         if var settings = root["settings"] as? [String: Any] {
             settings.removeValue(forKey: "readerFontID") // iOS restore deliberately keeps it device-local.
             // iOS writes the reader's Library shelf layout. The goldens and
             // Android do not, so the round-trip compares only shared fields.
             settings.removeValue(forKey: "libraryPageArrangement")
             settings.removeValue(forKey: "workSymbolPlacement") // iOS-only, like the shelf layout.
+            settings.removeValue(forKey: "modifiedAt") // T-541 setting stamps, iOS-only so far.
+            settings.removeValue(forKey: "extras") // T-541 preferences carried by key, iOS-only so far.
             root["settings"] = settings
         }
         if var works = root["works"] as? [[String: Any]] {
@@ -593,6 +599,7 @@ struct CrossPlatformBackupTests {
                 works[index].removeValue(forKey: "readiumLocatorPlatform")
                 works[index].removeValue(forKey: "readiumLocatorEngine")
                 works[index].removeValue(forKey: "readiumLocatorVersion")
+                works[index].removeValue(forKey: "authorIdentitiesJSON") // T-541, iOS-only so far.
             }
             root["works"] = sorted(works)
         }
@@ -602,6 +609,7 @@ struct CrossPlatformBackupTests {
                 if key == "collections" {
                     for index in records.indices {
                         records[index].removeValue(forKey: "permanentDeletionScheduledAt")
+                        records[index].removeValue(forKey: "lastMembershipChangedAt") // T-541, iOS-only so far.
                     }
                 }
                 root[key] = sorted(records)
