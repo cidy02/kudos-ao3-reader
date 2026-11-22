@@ -260,6 +260,9 @@ final class ManifestBaselineHarnessTests: XCTestCase {
                 let heldAfter = T567Memory.footprint()
                 let result = sampler.stop()
                 ctx.retained = nil
+                // Let the main run loop turn so autoreleased objects from the operation can drain before "settled".
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.2))
                 let after = T567Memory.settledFootprint()
                 T567Recorder.append("ios-baseline.jsonl", meta.merging([
                     "phase": "finished", "outcome": outcome, "note": note,
