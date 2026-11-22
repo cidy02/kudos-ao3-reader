@@ -2208,6 +2208,25 @@ class SyncManifestPassthroughTest {
     }
 
     @Test
+    fun aCancelledReplaceDropsTheSetAsideOverlaysInsteadOfRestoringThem() = runTest {
+        // Cancellation can surface after Room committed, so the old overlays must never come back.
+        val workId = "99999999-0000-4000-8000-000000000095"
+        backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
+        BackupRepository.afterOverlaysStaged = { throw kotlinx.coroutines.CancellationException("cancelled") }
+        try {
+            assertTrue(
+                runCatching {
+                    backupRepository.importV2ZipBytes(zipManifest(emptyReplacement), mode = BackupImportMode.REPLACE_LIBRARY)
+                }.isFailure
+            )
+        } finally {
+            BackupRepository.afterOverlaysStaged = null
+        }
+        assertTrue(exportedManifest()["documents"]?.jsonArray.isNullOrEmpty())
+        assertTrue(Files.list(filesRoot).use { it.noneMatch { p -> p.fileName.toString().endsWith(".replace-aside") } })
+    }
+
+    @Test
     fun aReplaceWhoseSecondOverlayCannotBeSetAsideLeavesTheFirstInPlace() = runTest {
         val workId = "99999999-0000-4000-8000-000000000094"
         backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)

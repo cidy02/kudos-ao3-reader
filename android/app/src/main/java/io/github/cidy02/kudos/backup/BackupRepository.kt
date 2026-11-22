@@ -206,7 +206,13 @@ class BackupRepository(
             return apply().also { stores.forEach { it.dropAside() } }
         } catch (error: Throwable) {
             // Safe to put back only if the new overlays were never written; they are written after this.
-            staged.forEach { runCatching { it.restoreAside() } }
+            // A cancellation can surface after Room committed (withTransaction's prompt cancellation),
+            // so it drops the asides instead: opaque fields lost, as before A-541, never put over new works.
+            if (error is kotlinx.coroutines.CancellationException) {
+                staged.forEach { runCatching { it.dropAside() } }
+            } else {
+                staged.forEach { runCatching { it.restoreAside() } }
+            }
             throw error
         }
     }
