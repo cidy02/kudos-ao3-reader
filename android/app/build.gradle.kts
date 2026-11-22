@@ -169,4 +169,6 @@ ksp {
 // read the committed fixtures; `./gradlew … -Dkudos.writeGolden=true` rewrites Android's export.
 tasks.withType<Test>().configureEach {
     System.getProperty("kudos.writeGolden")?.let { systemProperty("kudos.writeGolden", it) }
+    // A-567 P1 opt-in harness only: unset in ordinary runs, so the default test heap is unchanged.
+    System.getenv("A567_TEST_HEAP")?.let { maxHeapSize = it }
 }
