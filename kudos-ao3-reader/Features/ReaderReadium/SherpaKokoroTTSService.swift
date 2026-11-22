@@ -43,10 +43,11 @@ public final class SherpaKokoroTTSService: TTSService {
     public var onSpokenTextChange: ((String) -> Void)?
     public var onSpeechEnergyPulse: ((Double, Double) -> Void)?
     public var onSpeechSpectrum: ((SpeechSpectrum) -> Void)?
-    public var onAdvance: ((Locator) -> Void)?
+    public var onAudible: ((Locator) -> Void)?
     public var onSpokenRange: ((Locator) -> Void)?
 
     private var activeTask: Task<Void, Never>?
+    private var playbackGeneration: UInt64 = 0
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private var playerAttached = false
@@ -62,7 +63,7 @@ public final class SherpaKokoroTTSService: TTSService {
     private let modelDirectory: URL
     private let modelPack: KokoroModelPack
     private let executionProvider: KokoroExecutionProvider
-    private static let synthesisQueue = DispatchQueue(
+    private nonisolated static let synthesisQueue = DispatchQueue(
         label: "com.cidy02.Kudos.tts.synthesis",
         qos: .userInitiated
     )
@@ -122,6 +123,7 @@ public final class SherpaKokoroTTSService: TTSService {
     @discardableResult
     public func speak(units: [TTSSpeechUnit]) async throws -> Bool {
         resetPlayback(notifyStopped: false)
+        let generation = playbackGeneration
 
         // The sherpa Kokoro frontend is configured for one sentence. Supplying
         // complete sentence units preserves punctuation/prosody and avoids
@@ -129,7 +131,14 @@ public final class SherpaKokoroTTSService: TTSService {
         let chunks = TTSSpeechUnit.sentenceChunks(from: units)
         guard !chunks.isEmpty else { return false }
 
-        guard loadEngineIfNeeded(), let tts else {
+        // Creating the ONNX session takes long enough on a cold start (and twice
+        // that after a failed provider) to freeze transport and reader dismissal if
+        // it ran on the main actor, so it runs on `synthesisQueue`.
+        let loaded = await loadEngineIfNeeded()
+        // Stop, reader close or a newer `speak` landed during the load: do not
+        // touch the audio session or the engine for a request nobody owns.
+        guard !Task.isCancelled, playbackGeneration == generation else { return false }
+        guard loaded, let tts else {
             Log.tts.error("Kokoro engine unavailable — model missing or failed to load")
             status = .unavailable
             return false
@@ -172,6 +181,7 @@ public final class SherpaKokoroTTSService: TTSService {
             // audio, not an unbounded chapter cache. A sentence can overshoot
             // the target because sentence boundaries remain intact.
             while !Task.isCancelled,
+                  self.playbackGeneration == generation,
                   KokoroPlaybackAnalysis.needsMoreQueuedAudio(
                     queuedAudioSeconds: primed.map {
                         Double($0.generated.samples.count) / sampleRate
@@ -179,7 +189,7 @@ public final class SherpaKokoroTTSService: TTSService {
                     requiredFollowingAudioSeconds: Self.requiredFollowingAudioSeconds
                   ) {
                 await self.waitWhilePaused()
-                guard !Task.isCancelled, self.status != .stopped else { return }
+                guard !Task.isCancelled, self.playbackGeneration == generation, self.status != .stopped else { return }
 
                 guard let next = await Self.generateNextAudibleChunk(
                     request: synthesis,
@@ -193,16 +203,17 @@ public final class SherpaKokoroTTSService: TTSService {
                 nextStartIndex = next.index + 1
             }
 
+            guard !Task.isCancelled, self.playbackGeneration == generation else { return }
             guard !primed.isEmpty else {
-                self.finishNaturally()
+                self.failStartup()
                 return
             }
 
-            // Nothing is scheduled until the whole initial lead is ready. That
-            // keeps pause/resume from starting a lone first sentence mid-prime.
-            await self.waitWhilePaused()
-            guard !Task.isCancelled, self.status == .playing else { return }
-
+            // Queue the first audio *before* announcing it. The controller moves the
+            // page and saves the reading position on the announcement, so a buffer
+            // that cannot be queued must fail the start with nothing committed.
+            // Nothing plays yet (the player node is started below), so a paused
+            // skip can still hold the whole initial lead for Resume.
             var queued: [(chunk: GeneratedTextChunk, playback: ScheduledPlayback)] = []
             for chunk in primed {
                 guard let playback = self.enqueue(
@@ -210,13 +221,21 @@ public final class SherpaKokoroTTSService: TTSService {
                     samples: chunk.generated.samples,
                     energyEnvelope: chunk.generated.energyEnvelope,
                     seed: Double.random(in: 0...1),
-                    startsPlayback: false
+                    startsPlayback: false,
+                    allowsPaused: true
                 ) else {
-                    self.finishNaturally()
+                    self.failStartup()
                     return
                 }
                 queued.append((chunk, playback))
             }
+
+            // Hold the whole queued lead while paused. Nothing is announced here: the
+            // reader moves when the energy pump (below) reaches this unit, i.e. once
+            // the player node is really playing it (`onAudible`).
+            await self.waitWhilePaused()
+            guard !Task.isCancelled, self.playbackGeneration == generation, self.status == .playing else { return }
+
             self.startPlayerIfNeeded()
             let followingAudioSeconds = queued.dropFirst()
                 .map { $0.playback.audioSeconds }
@@ -227,9 +246,9 @@ public final class SherpaKokoroTTSService: TTSService {
             )
             Log.tts.debug("\(primingMessage, privacy: .public)")
 
-            while !Task.isCancelled {
+            while !Task.isCancelled, self.playbackGeneration == generation {
                 await self.waitWhilePaused()
-                guard !Task.isCancelled, self.status != .stopped else { return }
+                guard !Task.isCancelled, self.playbackGeneration == generation, self.status != .stopped else { return }
 
                 if !sourceExhausted,
                    KokoroPlaybackAnalysis.needsMoreQueuedAudio(
@@ -247,7 +266,9 @@ public final class SherpaKokoroTTSService: TTSService {
                     nextStartIndex = next.index + 1
 
                     await self.waitWhilePaused()
-                    guard !Task.isCancelled, self.status == .playing else { return }
+                    guard !Task.isCancelled, self.playbackGeneration == generation, self.status == .playing else {
+                        return
+                    }
                     guard let playback = self.enqueue(
                         unit: next.unit,
                         samples: next.generated.samples,
@@ -265,7 +286,7 @@ public final class SherpaKokoroTTSService: TTSService {
                 guard !queued.isEmpty else { break }
                 let oldest = queued.removeFirst()
                 await self.waitUntilConsumed(oldest.playback)
-                guard !Task.isCancelled, self.status != .stopped else { return }
+                guard !Task.isCancelled, self.playbackGeneration == generation, self.status != .stopped else { return }
 
                 if sourceExhausted, queued.isEmpty {
                     await self.waitForPlaybackDrain()
@@ -273,6 +294,7 @@ public final class SherpaKokoroTTSService: TTSService {
                 }
             }
 
+            guard !Task.isCancelled, self.playbackGeneration == generation else { return }
             self.finishNaturally()
         }
         return true
@@ -287,12 +309,37 @@ public final class SherpaKokoroTTSService: TTSService {
     public func resume() {
         guard status == .paused else { return }
         if !engine.isRunning {
-            try? engine.start()
+            do {
+                try restartAudioEngine()
+            } catch {
+                // An interruption or route change stopped the engine and it cannot
+                // come back: publishing `.playing` over a dead node would show Pause
+                // with no audio and a queue that never drains. End it instead.
+                Log.tts.error("Kokoro resume failed: \(error.localizedDescription, privacy: .public)")
+                resetPlayback(notifyStopped: false)
+                status = .unavailable
+                return
+            }
         }
         status = .playing
         startPlayerIfNeeded()
         resumePauseWaiters()
     }
+
+    private func restartAudioEngine() throws {
+        #if DEBUG
+        if let testRestartEngine { try testRestartEngine(); return }
+        #endif
+        try engine.start()
+    }
+
+    #if DEBUG
+    var testRestartEngine: (() throws -> Void)?
+    /// Puts a fresh (never-spoken) service into `.paused` so `resume()` can be driven.
+    func pauseForTests() {
+        status = .paused
+    }
+    #endif
 
     public func stop() {
         resetPlayback(notifyStopped: true)
@@ -314,10 +361,86 @@ public final class SherpaKokoroTTSService: TTSService {
 
     // MARK: - Engine
 
-    @discardableResult
-    private func loadEngineIfNeeded() -> Bool {
+    /// A built ONNX session, handed back from `synthesisQueue`. The wrapper is only
+    /// ever used by one request at a time (sherpa serialises generation on the
+    /// same queue), as before.
+    private struct LoadedWrapper: @unchecked Sendable {
+        let wrapper: SherpaOnnxOfflineTtsWrapper
+        let usedProvider: KokoroExecutionProvider
+    }
+
+    /// Shared by overlapping `speak` calls so a second request waits for the load
+    /// already running instead of building a second session.
+    private var loadTask: Task<LoadedWrapper?, Never>?
+
+    /// Loads the model on `synthesisQueue`, off the main actor. The result is kept
+    /// even when the request that asked for it was superseded meanwhile (it is the
+    /// engine's cache, not that request's playback); the caller re-checks its own
+    /// generation before using it.
+    private func loadEngineIfNeeded() async -> Bool {
         if let tts, tts.tts != nil { return true }
 
+        let task: Task<LoadedWrapper?, Never>
+        if let existing = loadTask {
+            task = existing
+        } else {
+            let directory = modelDirectory
+            let pack = modelPack
+            let provider = executionProvider
+            task = Task.detached(priority: .userInitiated) {
+                await Self.buildWrapperOnSynthesisQueue(
+                    modelDirectory: directory,
+                    modelPack: pack,
+                    executionProvider: provider
+                )
+            }
+            loadTask = task
+        }
+        let loaded = await task.value
+        if loadTask == task { loadTask = nil }
+        if let tts, tts.tts != nil { return true }
+        guard let loaded else { return false }
+
+        let wrapper = loaded.wrapper
+        tts = wrapper
+        let loadMessage: String
+        if loaded.usedProvider == executionProvider {
+            loadMessage = "Kokoro loaded \(modelPack.rawValue); "
+                + "provider-request=\(executionProvider.rawValue)"
+        } else {
+            loadMessage = "Kokoro loaded \(modelPack.rawValue); "
+                + "provider-request=\(executionProvider.rawValue); "
+                + "provider-retry=\(loaded.usedProvider.rawValue)"
+        }
+        Log.tts.info("\(loadMessage, privacy: .public)")
+        let count = Int(wrapper.numSpeakers)
+        if count > 0 {
+            availableVoices = Self.voices(count: count)
+        }
+        return true
+    }
+
+    private nonisolated static func buildWrapperOnSynthesisQueue(
+        modelDirectory: URL,
+        modelPack: KokoroModelPack,
+        executionProvider: KokoroExecutionProvider
+    ) async -> LoadedWrapper? {
+        await withCheckedContinuation { continuation in
+            synthesisQueue.async {
+                continuation.resume(returning: buildWrapper(
+                    modelDirectory: modelDirectory,
+                    modelPack: modelPack,
+                    executionProvider: executionProvider
+                ))
+            }
+        }
+    }
+
+    private nonisolated static func buildWrapper(
+        modelDirectory: URL,
+        modelPack: KokoroModelPack,
+        executionProvider: KokoroExecutionProvider
+    ) -> LoadedWrapper? {
         let modelPath = modelDirectory.appendingPathComponent(modelPack.modelFileName).path
         let voicesPath = modelDirectory.appendingPathComponent("voices.bin").path
         let tokensPath = modelDirectory.appendingPathComponent("tokens.txt").path
@@ -328,7 +451,7 @@ public final class SherpaKokoroTTSService: TTSService {
               fm.fileExists(atPath: voicesPath),
               fm.fileExists(atPath: tokensPath)
         else {
-            return false
+            return nil
         }
 
         var usedProvider = executionProvider
@@ -352,28 +475,12 @@ public final class SherpaKokoroTTSService: TTSService {
         }
         guard wrapper.tts != nil else {
             Log.tts.error("SherpaOnnxCreateOfflineTts returned nil")
-            return false
+            return nil
         }
-
-        tts = wrapper
-        let loadMessage: String
-        if usedProvider == executionProvider {
-            loadMessage = "Kokoro loaded \(modelPack.rawValue); "
-                + "provider-request=\(executionProvider.rawValue)"
-        } else {
-            loadMessage = "Kokoro loaded \(modelPack.rawValue); "
-                + "provider-request=\(executionProvider.rawValue); "
-                + "provider-retry=\(usedProvider.rawValue)"
-        }
-        Log.tts.info("\(loadMessage, privacy: .public)")
-        let count = Int(wrapper.numSpeakers)
-        if count > 0 {
-            availableVoices = Self.voices(count: count)
-        }
-        return true
+        return LoadedWrapper(wrapper: wrapper, usedProvider: usedProvider)
     }
 
-    private func makeTTSWrapper(
+    private nonisolated static func makeTTSWrapper(
         modelPath: String,
         voicesPath: String,
         tokensPath: String,
@@ -490,9 +597,12 @@ public final class SherpaKokoroTTSService: TTSService {
         samples: [Float],
         energyEnvelope: [Double],
         seed: Double,
-        startsPlayback: Bool = true
+        startsPlayback: Bool = true,
+        allowsPaused: Bool = false
     ) -> ScheduledPlayback? {
-        guard status == .playing, !Task.isCancelled else { return nil }
+        guard status == .playing || (allowsPaused && status == .paused), !Task.isCancelled else {
+            return nil
+        }
         guard let format = playbackFormat else { return nil }
 
         // Structural silence, appended to the clip itself.
@@ -553,7 +663,11 @@ public final class SherpaKokoroTTSService: TTSService {
             streamContinuation.finish()
         }
         hasScheduledPlayback = true
-        enqueueSpeechEnergy(energyEnvelope, seed: seed, unit: unit)
+        enqueueSpeechEnergy(
+            energyEnvelope,
+            seed: seed,
+            unit: unit
+        )
         if startsPlayback {
             startPlayerIfNeeded()
         }
@@ -565,7 +679,7 @@ public final class SherpaKokoroTTSService: TTSService {
     }
 
     private func startPlayerIfNeeded() {
-        guard hasScheduledPlayback, !playerNode.isPlaying, status == .playing else { return }
+        guard hasScheduledPlayback, !playerNode.isPlaying, status == .playing, engine.isRunning else { return }
         if playbackStartedAt == nil {
             playbackStartedAt = Date()
         }
@@ -620,6 +734,7 @@ public final class SherpaKokoroTTSService: TTSService {
     }
 
     private func resetPlayback(notifyStopped: Bool) {
+        playbackGeneration &+= 1
         activeTask?.cancel()
         activeTask = nil
         stopSpeechEnergyPulses()
@@ -634,6 +749,29 @@ public final class SherpaKokoroTTSService: TTSService {
         speechEnergy = 0
         speechEnergySeed = 0
         if notifyStopped, status != .unavailable {
+            status = .stopped
+        }
+    }
+
+    /// The first audio could not be produced or queued. Nothing was announced, so
+    /// the controller sees a plain zero-audio stop (paused or not) and moves on or
+    /// reports it; it must never be left holding a paused/playing engine with no
+    /// audio behind it.
+    private func failStartup() {
+        guard !Task.isCancelled else { return }
+        activeTask = nil
+        stopSpeechEnergyPulses()
+        playerNode.stop()
+        hasScheduledPlayback = false
+        playbackStartedAt = nil
+        if engine.isRunning {
+            engine.stop()
+        }
+        resumePauseWaiters()
+        spokenText = ""
+        speechEnergy = 0
+        speechEnergySeed = 0
+        if status == .playing || status == .paused {
             status = .stopped
         }
     }
@@ -664,9 +802,13 @@ private extension SherpaKokoroTTSService {
         seed: Double,
         unit: TTSSpeechUnit
     ) {
-        guard !envelope.isEmpty else { return }
-
-        let nextEnvelope = SpeechEnergyEnvelope(levels: envelope, seed: seed, unit: unit)
+        // Even a clip with no energy windows is queued: this pump is what announces a
+        // unit as audible, so skipping it would leave that unit uncommitted.
+        let nextEnvelope = SpeechEnergyEnvelope(
+            levels: envelope,
+            seed: seed,
+            unit: unit
+        )
         if let waiter = speechEnergyWaiter {
             speechEnergyWaiter = nil
             waiter.resume(returning: nextEnvelope)
@@ -694,7 +836,7 @@ private extension SherpaKokoroTTSService {
 
                 self.spokenText = envelope.unit.text
                 if let locator = envelope.unit.locator {
-                    self.onAdvance?(locator)
+                    self.onAudible?(locator)
                     self.onSpokenRange?(locator)
                 }
                 self.speechEnergySeed = envelope.seed

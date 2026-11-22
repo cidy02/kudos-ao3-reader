@@ -51,6 +51,17 @@ public enum TTSServiceStatus: Equatable {
 /// A piece of source text paired with its Readium location. Engines can split
 /// these units for synthesis while preserving an exact range for the reader's
 /// transient "currently reading" decoration.
+extension TTSSpeechUnit {
+    /// Has at least one letter or digit: anything else (scene-break symbols,
+    /// emoji, punctuation) is silence to every engine. One rule for the Apple
+    /// engine's chunk filter and Read Aloud's speakable-chapter scan.
+    nonisolated public var hasSpeakableText: Bool {
+        text.unicodeScalars.contains {
+            CharacterSet.letters.contains($0) || CharacterSet.decimalDigits.contains($0)
+        }
+    }
+}
+
 public struct TTSSpeechUnit: Hashable, Sendable {
     public let text: String
     public let locator: Locator?
@@ -519,16 +530,20 @@ public protocol TTSService: AnyObject {
     /// See `SpeechSpectrum`.
     var onSpeechSpectrum: ((SpeechSpectrum) -> Void)? { get set }
 
-    /// Callback for page syncing.
-    var onAdvance: ((Locator) -> Void)? { get set }
+    /// THE commit point. Fired when audio for this range is **audible** (Apple: the
+    /// synthesizer started the utterance; Kokoro engines: the player node has begun
+    /// rendering its clip) — never on announce, queueing or scheduling. It is the only
+    /// event that may move the reader's page or save the reading position, and an
+    /// engine fires it once per range, in order, only while it is `.playing`.
+    var onAudible: ((Locator) -> Void)? { get set }
 
-    /// Callback when a locator range becomes audible. Unlike `onAdvance`,
+    /// Callback when a locator range becomes audible. Unlike `onAudible`,
     /// this must not drive reader navigation for every Apple word callback.
     var onSpokenRange: ((Locator) -> Void)? { get set }
 
     /// Starts speaking locator-bearing source units. An engine may chunk a unit
     /// for synthesis, but must report the matching unit locator through
-    /// `onAdvance` when it begins.
+    /// `onAudible` when it becomes audible.
     /// - Returns: `true` once playback started (status `.playing`). `false` when
     ///   nothing in `units` was speakable — the engine then emits no status at
     ///   all — or when it went `.unavailable` (which it has already published).

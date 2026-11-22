@@ -58,20 +58,50 @@ nonisolated enum ReaderSpeechSkip {
         return chapter < chapterCount ? .nextChapter : .none
     }
 
-    /// Resolves the next 1-based spine chapter for skip-forward / auto-advance,
-    /// preferring Read Aloud's synchronously-updated `speechChapter` over the
-    /// asynchronously-settling navigator `bookChapter`.
-    static func nextChapterForSkipForward(
+    /// Where a Read Aloud chapter skip counts from: a 1-based spine chapter and the
+    /// 1-based page within it.
+    struct Origin: Equatable {
+        var chapter: Int
+        var page: Int
+    }
+
+    /// One rule for ⏭ and ⏮ (review 4 P3 #1).
+    /// - `followsSpeech` (playing, or Read Aloud advancing itself past an unspeakable
+    ///   chapter): count from the speech position. The navigator settles
+    ///   asynchronously, so right after a chapter jump `visibleChapter` is stale;
+    ///   counting from it re-skipped the same chapter.
+    /// - Otherwise (paused or stopped): count from the page the user is looking at.
+    ///   Paused without browsing, the two agree; paused after browsing to another
+    ///   chapter, the visible page wins, so ⏭ never jumps backwards.
+    /// When the speech chapter is used but differs from the visible one, the page
+    /// is taken as 1: the speech position has just moved to that chapter's start.
+    static func origin(
+        followsSpeech: Bool,
         speechChapter: Int?,
-        bookChapter: Int?,
-        chapterCount: Int
-    ) -> Int? {
-        guard let currentChapter = speechChapter ?? bookChapter else { return nil }
-        switch forwardAction(chapter: currentChapter, chapterCount: chapterCount) {
-        case .nextChapter:
-            return currentChapter + 1
-        case .none:
-            return nil
+        visibleChapter: Int?,
+        visiblePage: Int
+    ) -> Origin? {
+        guard let visibleChapter else {
+            return speechChapter.map { Origin(chapter: $0, page: 1) }
+        }
+        if followsSpeech, let speechChapter, speechChapter != visibleChapter {
+            return Origin(chapter: speechChapter, page: 1)
+        }
+        return Origin(chapter: visibleChapter, page: max(1, visiblePage))
+    }
+
+    /// 1-based target chapter for a skip from `origin`, or `nil` when there is nothing
+    /// to do (⏭ on the last chapter, ⏮ on the first page of the first chapter).
+    static func targetChapter(forward: Bool, from origin: Origin, chapterCount: Int) -> Int? {
+        if forward {
+            return forwardAction(chapter: origin.chapter, chapterCount: chapterCount) == .nextChapter
+                ? origin.chapter + 1
+                : nil
+        }
+        switch backwardAction(page: origin.page, chapter: origin.chapter, chapterCount: chapterCount) {
+        case .restartChapter: return origin.chapter
+        case .previousChapter: return origin.chapter - 1
+        case .none: return nil
         }
     }
 

@@ -33,13 +33,38 @@ public final class CoreMLKokoroTTSService: TTSService {
     public var onSpokenTextChange: ((String) -> Void)?
     public var onSpeechEnergyPulse: ((Double, Double) -> Void)?
     public var onSpeechSpectrum: ((SpeechSpectrum) -> Void)?
-    public var onAdvance: ((Locator) -> Void)?
+    public var onAudible: ((Locator) -> Void)?
     public var onSpokenRange: ((Locator) -> Void)?
 
     private var activeTask: Task<Void, Never>?
+    /// Monotonic token incremented on every `resetPlayback` so a cancelled `speak`
+    /// waking up after setup awaits (`readyManager`, lexicon, observer) can never
+    /// publish `.playing` or start audio after Stop or reader teardown.
+    private var playbackGeneration: UInt64 = 0
     /// The prefetch is an *unstructured* `Task`, so cancelling `activeTask`
     /// does not reach it. Type-erased so the property needs no `#if`.
     private var cancelPrefetch: (() -> Void)?
+    #if DEBUG
+    /// Test seams. They replace only the parts that need the 180 MB pack or real
+    /// audio hardware; `speak`'s ordering (generation checks, status, task launch)
+    /// and the playback loop (arm -> announce -> hold while paused -> play) are the
+    /// production code.
+    /// Replaces availability + audio-session + Core ML pack/manager setup.
+    var testSetupOverride: (() async throws -> Void)?
+    /// Stand in for the manager's lexicon / fallback-observer steps (only used when
+    /// `testSetupOverride` replaced the manager), so the generation checks after each
+    /// production suspension point are the real ones.
+    var testLexiconStep: (() async -> Void)?
+    var testObserverStep: (() async -> Void)?
+    /// Replaces one utterance's synthesis: returns the raw synthesized samples.
+    var testSynthesize: ((String) async throws -> [Float])?
+    /// Replaces graph configuration + `AVAudioEngine.start()` (may throw).
+    var testStartAudioEngine: (() throws -> Void)?
+    /// Replaces scheduling the buffer and awaiting its playback; gets the sample count.
+    var testPlayBuffer: ((Int) async -> Void)?
+    var testDidStartPlaybackTask = false
+    var pauseWaiterCountForTests: Int { pauseWaiters.count }
+    #endif
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private var playerAttached = false
@@ -56,41 +81,122 @@ public final class CoreMLKokoroTTSService: TTSService {
         attachPlayerNodeIfNeeded()
     }
 
+    /// One utterance's PCM (silence for a pause already appended). `Sendable` closure
+    /// so the playback loop's prefetch can run it off the main actor.
+    private typealias SynthesizeClip = @Sendable (KokoroUtterance, Bool, Float) async throws -> PreparedClip
+
     @discardableResult
     public func speak(units: [TTSSpeechUnit]) async throws -> Bool {
         resetPlayback(notifyStopped: false)
+        let generation = playbackGeneration
+        guard !Task.isCancelled else { return false }
 
-        guard KokoroAneAvailability.isUsableForPlayback else {
-            Log.tts.error("Kokoro Neural Engine pack is not installed")
-            status = .unavailable
-            return false
+        #if DEBUG
+        let seamed = testSetupOverride != nil
+        #else
+        let seamed = false
+        #endif
+
+        if !seamed {
+            guard KokoroAneAvailability.isUsableForPlayback else {
+                Log.tts.error("Kokoro Neural Engine pack is not installed")
+                status = .unavailable
+                return false
+            }
         }
 
         let utterances = TTSSpeechUnit.kokoroUtterances(from: units)
         guard !utterances.isEmpty else { return false }
 
-        try activateAudioSession()
+        if !seamed { try activateAudioSession() }
 
         #if canImport(FluidAudio)
-        let manager = try await CoreMLKokoroPackInstaller.shared.readyManager()
-        let (lexicon, lexiconRevision) = pronunciations.resolved()
-        // `KokoroAneManager` is an actor: without `await` the lexicon lands
-        // *after* the first utterances synthesize (and it is a hard error in
-        // Swift 6 language mode).
-        await manager.setEnglishCustomLexicon(lexicon)
+        var realManager: KokoroAneManager?
+        #if DEBUG
+        if let testSetupOverride {
+            try await testSetupOverride()
+        } else {
+            realManager = try await CoreMLKokoroPackInstaller.shared.readyManager()
+        }
+        #else
+        realManager = try await CoreMLKokoroPackInstaller.shared.readyManager()
+        #endif
+        guard isCurrentStart(generation) else { return false }
+        var lexiconRevision = ""
+        if let manager = realManager {
+            let (lexicon, revision) = pronunciations.resolved()
+            lexiconRevision = revision
+            // `KokoroAneManager` is an actor: without `await` the lexicon lands
+            // *after* the first utterances synthesize (and it is a hard error in
+            // Swift 6 language mode).
+            await manager.setEnglishCustomLexicon(lexicon)
+        } else {
+            #if DEBUG
+            await testLexiconStep?()
+            #endif
+        }
+        guard isCurrentStart(generation) else { return false }
         // Record what the model had to guess at, so the reader can correct it
         // later. Buffered, not written per word: the observer fires inside
         // synthesis and a disk write there would sit on the path that has to
         // keep audio fed. Flushed when playback stops.
-        let collector = guessedWords
-        await manager.setNeuralFallbackObserver { word in
-            collector.add(word)
+        if let manager = realManager {
+            let collector = guessedWords
+            await manager.setNeuralFallbackObserver { word in
+                collector.add(word)
+            }
+        } else {
+            #if DEBUG
+            await testObserverStep?()
+            #endif
         }
+        guard isCurrentStart(generation) else { return false }
+        let voice = currentVoice
+        let synthesize: SynthesizeClip
+        if let manager = realManager {
+            let revision = lexiconRevision
+            synthesize = { [self] utterance, isLast, speed in
+                try await prepareClip(
+                    utterance: utterance,
+                    isLast: isLast,
+                    manager: manager,
+                    voice: voice,
+                    speed: speed,
+                    lexiconRevision: revision
+                )
+            }
+        } else {
+            #if DEBUG
+            let synthesizeSeam = testSynthesize
+            synthesize = { utterance, _, _ in
+                let raw = try await synthesizeSeam?(utterance.text) ?? [0.1, -0.1]
+                return PreparedClip(
+                    samples: raw,
+                    sampleRate: KokoroPauseAssembler.sampleRate,
+                    timingsMs: 0,
+                    phonemeCount: 0,
+                    spectrum: []
+                )
+            }
+            #else
+            return false
+            #endif
+        }
+        return beginPlayback(utterances: utterances, generation: generation, synthesize: synthesize)
         #else
         status = .unavailable
         return false
         #endif
+    }
 
+    /// Publishes `.playing` and launches the loop. The loop itself announces nothing
+    /// (`onAudible` / caption) until the first clip is synthesized *and* the audio
+    /// engine has started, so a controller commit always means audio is imminent.
+    private func beginPlayback(
+        utterances: [KokoroUtterance],
+        generation: UInt64,
+        synthesize: @escaping SynthesizeClip
+    ) -> Bool {
         status = .playing
         // Speed is deliberately *not* captured here. It used to be, which
         // meant dragging the rate slider did nothing until the next batch —
@@ -100,94 +206,110 @@ public final class CoreMLKokoroTTSService: TTSService {
         //
         // Voice stays captured: switching narrator mid-chapter should finish
         // the chapter in the voice it started in.
-        let voice = currentVoice
-
+        #if DEBUG
+        testDidStartPlaybackTask = true
+        #endif
         activeTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            #if canImport(FluidAudio)
-            var prefetched: PreparedClip?
-            for index in utterances.indices {
-                guard !Task.isCancelled, self.status != .stopped else { return }
-                await self.waitWhilePaused()
-                guard !Task.isCancelled, self.status == .playing else { return }
-
-                let utterance = utterances[index]
-                self.spokenText = utterance.text
-                if let locator = utterance.locator {
-                    self.onAdvance?(locator)
-                    self.onSpokenRange?(locator)
-                }
-
-                let clip: PreparedClip
-                do {
-                    if let prefetched {
-                        clip = prefetched
-                    } else {
-                        clip = try await self.prepareClip(
-                            utterance: utterance,
-                            isLast: index == utterances.indices.last,
-                            manager: manager,
-                            voice: voice,
-                            speed: self.currentSpeed,
-                            lexiconRevision: lexiconRevision
-                        )
-                    }
-                    prefetched = nil
-                } catch is CancellationError {
-                    return
-                } catch {
-                    Log.tts.error(
-                        "Kokoro ANE synthesize failed: \(error.localizedDescription, privacy: .public)"
-                    )
-                    self.status = .unavailable
-                    return
-                }
-
-                let nextIndex = utterances.index(after: index)
-                let prefetch: Task<PreparedClip, Error>?
-                if nextIndex < utterances.endIndex {
-                    let next = utterances[nextIndex]
-                    let task = Task {
-                        try await self.prepareClip(
-                            utterance: next,
-                            isLast: nextIndex == utterances.indices.last,
-                            manager: manager,
-                            voice: voice,
-                            speed: self.currentSpeed,
-                            lexiconRevision: lexiconRevision
-                        )
-                    }
-                    self.cancelPrefetch = { task.cancel() }
-                    prefetch = task
-                } else {
-                    prefetch = nil
-                }
-
-                Log.tts.info(
-                    "Kokoro ANE \(clip.timingsMs, privacy: .public)ms phonemes=\(clip.phonemeCount, privacy: .public)"
-                )
-                await self.play(clip: clip)
-
-                if let prefetch {
-                    do {
-                        prefetched = try await prefetch.value
-                    } catch is CancellationError {
-                        return
-                    } catch {
-                        prefetched = nil
-                    }
-                    self.cancelPrefetch = nil
-                }
-            }
-            #endif
-            guard !Task.isCancelled else { return }
-            self.finishNaturally()
+            await self?.runPlaybackLoop(
+                utterances: utterances,
+                generation: generation,
+                synthesize: synthesize
+            )
         }
         return true
     }
 
-    #if canImport(FluidAudio)
-    private struct PreparedClip {
+    private func runPlaybackLoop(
+        utterances: [KokoroUtterance],
+        generation: UInt64,
+        synthesize: @escaping SynthesizeClip
+    ) async {
+        var prefetched: PreparedClip?
+        for index in utterances.indices {
+            guard isCurrentStart(generation), status != .stopped else { return }
+            await waitWhilePaused()
+            guard isCurrentStart(generation), status == .playing else { return }
+
+            let utterance = utterances[index]
+            let clip: PreparedClip
+            do {
+                if let prefetched {
+                    clip = prefetched
+                } else {
+                    clip = try await synthesize(
+                        utterance,
+                        index == utterances.indices.last,
+                        currentSpeed
+                    )
+                }
+                prefetched = nil
+            } catch is CancellationError {
+                return
+            } catch {
+                guard isCurrentStart(generation) else { return }
+                Log.tts.error(
+                    "Kokoro ANE synthesize failed: \(error.localizedDescription, privacy: .public)"
+                )
+                status = .unavailable
+                return
+            }
+
+            guard isCurrentStart(generation), status != .stopped else { return }
+            guard !clip.samples.isEmpty else { continue }
+
+            // Start the audio engine and build the buffer *before* announcing the
+            // utterance: the controller moves the page and saves the position on
+            // that announcement, so it must only happen once audio can really
+            // start. A failure here goes `.unavailable` with nothing committed.
+            guard let armed = arm(clip) else {
+                if status == .unavailable { return }
+                continue
+            }
+            guard isCurrentStart(generation), status != .stopped else { return }
+
+            // Hold the armed clip while paused. Nothing is announced: the reader moves
+            // when `play` sees the clip start rendering (`onAudible`).
+            await waitWhilePaused()
+            guard isCurrentStart(generation), status == .playing else { return }
+
+            let nextIndex = utterances.index(after: index)
+            let prefetch: Task<PreparedClip, Error>?
+            if nextIndex < utterances.endIndex {
+                let next = utterances[nextIndex]
+                let isLast = nextIndex == utterances.indices.last
+                let speed = currentSpeed
+                let task = Task { try await synthesize(next, isLast, speed) }
+                cancelPrefetch = { task.cancel() }
+                prefetch = task
+            } else {
+                prefetch = nil
+            }
+
+            Log.tts.info(
+                "Kokoro ANE \(clip.timingsMs, privacy: .public)ms phonemes=\(clip.phonemeCount, privacy: .public)"
+            )
+            await play(armed, utterance: utterance, generation: generation)
+
+            if let prefetch {
+                do {
+                    prefetched = try await prefetch.value
+                } catch is CancellationError {
+                    return
+                } catch {
+                    prefetched = nil
+                }
+                cancelPrefetch = nil
+            }
+        }
+        guard isCurrentStart(generation) else { return }
+        finishNaturally()
+    }
+
+    private func isCurrentStart(_ generation: UInt64) -> Bool {
+        !Task.isCancelled && playbackGeneration == generation
+    }
+
+    private struct PreparedClip: @unchecked Sendable {
         let samples: [Float]
         let sampleRate: Double
         let timingsMs: Double
@@ -199,6 +321,7 @@ public final class CoreMLKokoroTTSService: TTSService {
         let spectrum: [SpeechSpectrum]
     }
 
+    #if canImport(FluidAudio)
     /// `nonisolated` on purpose: the project builds with
     /// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so without this the
     /// per-sample RMS/zero-crossing scan in `KokoroPauseAssembler` and the
@@ -272,6 +395,8 @@ public final class CoreMLKokoroTTSService: TTSService {
                 voice: voice,
                 speed: speed
             )
+            // An empty synthesis stays empty: `KokoroPauseAssembler.assemble` adds no
+            // structural silence to it (tested there), so the clip is rejected.
             let pause: KokoroBoundary = queue.isEmpty
                 ? (isLast ? .none : utterance.pauseAfter)
                 : .continuation
@@ -316,17 +441,36 @@ public final class CoreMLKokoroTTSService: TTSService {
         engine.pause()
     }
 
+    /// Set once a clip has configured the graph (`arm`). Before that the player node
+    /// is not connected to the mixer, so starting the engine would raise.
+    private var graphConfigured = false
+
     public func resume() {
         guard status == .paused else { return }
-        status = .playing
-        do {
-            try engine.start()
-            playerNode.play()
-        } catch {
-            Log.tts.error("Kokoro ANE resume failed: \(error.localizedDescription, privacy: .public)")
-            status = .unavailable
-            return
+        if graphConfigured {
+            do {
+                #if DEBUG
+                if let testStartAudioEngine {
+                    try testStartAudioEngine()
+                } else {
+                    try engine.start()
+                    playerNode.play()
+                }
+                #else
+                try engine.start()
+                playerNode.play()
+                #endif
+            } catch {
+                // The restart failed with a clip held at the pause gate: end the
+                // task and release its waiters *before* reporting, so nothing stays
+                // suspended in a service the controller is about to drop.
+                Log.tts.error("Kokoro ANE resume failed: \(error.localizedDescription, privacy: .public)")
+                resetPlayback(notifyStopped: false)
+                status = .unavailable
+                return
+            }
         }
+        status = .playing
         let waiters = pauseWaiters
         pauseWaiters.removeAll()
         waiters.forEach { $0.resume() }
@@ -387,6 +531,7 @@ public final class CoreMLKokoroTTSService: TTSService {
     }
 
     private func resetPlayback(notifyStopped: Bool) {
+        playbackGeneration &+= 1
         activeTask?.cancel()
         activeTask = nil
         cancelPrefetch?()
@@ -398,7 +543,8 @@ public final class CoreMLKokoroTTSService: TTSService {
         let waiters = pauseWaiters
         pauseWaiters.removeAll()
         waiters.forEach { $0.resume() }
-        if notifyStopped {
+        // Like the Apple and sherpa engines: a stop never overwrites `.unavailable`.
+        if notifyStopped, status != .unavailable {
             status = .stopped
             spokenText = ""
             speechEnergy = 0
@@ -411,30 +557,76 @@ public final class CoreMLKokoroTTSService: TTSService {
         }
     }
 
-    private func play(clip: PreparedClip) async {
+    /// A clip whose audio path is ready: engine running, buffer built. Nothing is
+    /// scheduled yet, so a paused skip can hold it for Resume.
+    private struct ArmedClip {
+        let clip: PreparedClip
+        let buffer: AVAudioPCMBuffer?
+    }
+
+    /// Starts the audio engine and builds the clip's buffer without scheduling it.
+    /// Returns nil when that cannot be done; `AVAudioEngine.start()` failing also
+    /// takes the engine `.unavailable` (before the caller has announced anything).
+    private func arm(_ clip: PreparedClip) -> ArmedClip? {
         let samples = clip.samples
-        let sampleRate = clip.sampleRate
-        guard status == .playing, !samples.isEmpty else { return }
-        configureEngineGraph(sampleRate: sampleRate)
+        guard status != .stopped, status != .unavailable, !samples.isEmpty else { return nil }
+        #if DEBUG
+        if let testStartAudioEngine {
+            do {
+                try testStartAudioEngine()
+            } catch {
+                status = .unavailable
+                return nil
+            }
+            graphConfigured = true
+            return ArmedClip(clip: clip, buffer: nil)
+        }
+        #endif
+        configureEngineGraph(sampleRate: clip.sampleRate)
+        graphConfigured = true
         do {
             if !engine.isRunning { try engine.start() }
         } catch {
             Log.tts.error("AVAudioEngine.start failed: \(error.localizedDescription, privacy: .public)")
             status = .unavailable
-            return
+            return nil
         }
+        // A pause that landed while this clip was synthesizing: keep the engine
+        // quiet until Resume (which restarts it).
+        if status == .paused { engine.pause() }
 
         guard let format = playbackFormat,
               let buffer = AVAudioPCMBuffer(
                 pcmFormat: format,
                 frameCapacity: AVAudioFrameCount(samples.count)
               )
-        else { return }
+        else { return nil }
         buffer.frameLength = AVAudioFrameCount(samples.count)
         samples.withUnsafeBufferPointer { src in
             guard let base = src.baseAddress, let dest = buffer.floatChannelData?[0] else { return }
             dest.update(from: base, count: samples.count)
         }
+        return ArmedClip(clip: clip, buffer: buffer)
+    }
+
+    private func play(_ armed: ArmedClip, utterance: KokoroUtterance, generation: UInt64) async {
+        let clip = armed.clip
+        let samples = clip.samples
+        let sampleRate = clip.sampleRate
+        guard status == .playing, !samples.isEmpty else { return }
+        // The one announcement: this clip is audible now. Emitted once, from whichever
+        // comes first — the player node reporting rendered frames, or the clip ending
+        // (a clip too short for the poll still was heard).
+        clipAnnounced = false
+        #if DEBUG
+        if let testPlayBuffer {
+            // Stands in for the player node rendering the clip.
+            announceAudible(utterance, generation: generation)
+            await testPlayBuffer(samples.count)
+            return
+        }
+        #endif
+        guard let buffer = armed.buffer else { return }
 
         let energy = KokoroPlaybackAnalysis.waveformEnergy(samples: samples)
         speechEnergy = energy
@@ -460,12 +652,40 @@ public final class CoreMLKokoroTTSService: TTSService {
         }
         defer { ticker.cancel() }
 
+        // `playerTime.sampleTime > 0` after `play()` means frames have been rendered.
+        let renderWatcher = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 10_000_000)
+                guard let self, !Task.isCancelled else { return }
+                if self.playerNode.isPlaying,
+                   let last = self.playerNode.lastRenderTime,
+                   let time = self.playerNode.playerTime(forNodeTime: last),
+                   time.sampleTime > 0 {
+                    self.announceAudible(utterance, generation: generation)
+                    return
+                }
+            }
+        }
+        defer { renderWatcher.cancel() }
+
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             playerNode.scheduleBuffer(buffer) {
                 continuation.resume()
             }
             if !playerNode.isPlaying { playerNode.play() }
         }
+        announceAudible(utterance, generation: generation)
+    }
+
+    /// Whether the current clip has already announced itself (`onAudible` fires once).
+    private var clipAnnounced = false
+
+    private func announceAudible(_ utterance: KokoroUtterance, generation: UInt64) {
+        guard !clipAnnounced, isCurrentStart(generation), status != .stopped, status != .unavailable else { return }
+        clipAnnounced = true
+        if let locator = utterance.locator { onAudible?(locator) }
+        spokenText = utterance.text
+        if let locator = utterance.locator { onSpokenRange?(locator) }
     }
 
     private func attachPlayerNodeIfNeeded() {

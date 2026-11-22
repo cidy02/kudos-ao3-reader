@@ -45,17 +45,22 @@ public final class SystemTTSService: TTSService {
     public var onSpokenTextChange: ((String) -> Void)?
     public var onSpeechEnergyPulse: ((Double, Double) -> Void)?
     public var onSpeechSpectrum: ((SpeechSpectrum) -> Void)?
-    public var onAdvance: ((Locator) -> Void)?
+    public var onAudible: ((Locator) -> Void)?
     public var onSpokenRange: ((Locator) -> Void)?
 
     private let synthesizer = AVSpeechSynthesizer()
     private let delegateProxy = DelegateProxy()
     private var activeTask: Task<Void, Never>?
+    private var playbackGeneration: UInt64 = 0
     private var interruptionObserver: NSObjectProtocol?
     private var utteranceWaiter: CheckedContinuation<Void, Never>?
     private var pauseWaiters: [CheckedContinuation<Void, Never>] = []
     private var activeUtteranceID: ObjectIdentifier?
     private var activeUtteranceUnit: TTSSpeechUnit?
+    #if DEBUG
+    var testSpeakUtterance: ((TTSSpeechUnit) async -> Void)?
+    var testSkipAudioSessionActivation = false
+    #endif
 
     private var chunks: [TTSSpeechUnit] = []
     private var currentIndex: Int = 0
@@ -88,18 +93,23 @@ public final class SystemTTSService: TTSService {
                     pauseAfter: unit.pauseAfter
                 )
             }
-            .filter { chunk in
-                chunk.text.unicodeScalars.contains { CharacterSet.letters.contains($0)
-                    || CharacterSet.decimalDigits.contains($0) }
-            }
+            .filter(\.hasSpeakableText)
         guard !prepared.isEmpty else { return false }
 
         chunks = prepared
         currentIndex = 0
+        let generation = playbackGeneration
 
+        #if DEBUG
+        if !testSkipAudioSessionActivation {
+            try activateAudioSession()
+        }
+        #else
         try activateAudioSession()
+        #endif
+        guard !Task.isCancelled, playbackGeneration == generation else { return false }
         status = .playing
-        startPlayback(from: 0)
+        startPlayback(from: 0, generation: generation)
         return true
     }
 
@@ -140,15 +150,15 @@ public final class SystemTTSService: TTSService {
 
     // MARK: - Playback
 
-    private func startPlayback(from index: Int) {
+    private func startPlayback(from index: Int, generation: UInt64) {
         activeTask?.cancel()
         currentIndex = index
         activeTask = Task { [weak self] in
-            await self?.playChunks(from: index)
+            await self?.playChunks(from: index, generation: generation)
         }
     }
 
-    private func playChunks(from startIndex: Int) async {
+    private func playChunks(from startIndex: Int, generation: UInt64) async {
         let bound = chunks.count
         guard startIndex < bound else {
             finishNaturally()
@@ -156,20 +166,28 @@ public final class SystemTTSService: TTSService {
         }
 
         for index in startIndex..<bound {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, playbackGeneration == generation else { return }
             await waitWhilePaused()
-            guard !Task.isCancelled, status != .stopped else { return }
+            guard !Task.isCancelled, playbackGeneration == generation, status == .playing else { return }
 
             currentIndex = index
             let chunk = chunks[index]
-            spokenText = chunk.text
-            if let locator = chunk.locator {
-                onAdvance?(locator)
+            // Nothing is announced here: the reader moves on `didStart` (see
+            // `handleUtteranceStarted`), when the synthesizer is really speaking it.
+            #if DEBUG
+            if let testSpeakUtterance {
+                // Stands in for the synthesizer: "started" is the moment it is handed
+                // the utterance.
+                activeUtteranceUnit = chunk
+                handleUtteranceStarted(utteranceID: nil)
+                await testSpeakUtterance(chunk)
+                continue
             }
-
+            #endif
             await speakUtterance(chunk)
         }
 
+        guard !Task.isCancelled, playbackGeneration == generation else { return }
         finishNaturally()
     }
 
@@ -215,6 +233,14 @@ public final class SystemTTSService: TTSService {
         onSpeechSpectrum?(SpeechSpectrum.forSpoken(word: trimmed))
     }
 
+    /// `didStart`: the utterance is audible. The single place Apple speech commits.
+    fileprivate func handleUtteranceStarted(utteranceID: ObjectIdentifier?) {
+        if let utteranceID, utteranceID != activeUtteranceID { return }
+        guard let unit = activeUtteranceUnit, status != .stopped, status != .unavailable else { return }
+        if let locator = unit.locator { onAudible?(locator) }
+        spokenText = unit.text
+    }
+
     fileprivate func handleUtteranceEnded(utteranceID: ObjectIdentifier? = nil) {
         if let utteranceID, utteranceID != activeUtteranceID {
             return
@@ -254,6 +280,7 @@ public final class SystemTTSService: TTSService {
     }
 
     private func resetPlayback(notifyStopped: Bool) {
+        playbackGeneration &+= 1
         activeTask?.cancel()
         activeTask = nil
         synthesizer.stopSpeaking(at: .immediate)
@@ -336,6 +363,16 @@ public final class SystemTTSService: TTSService {
     /// controller; same thin-proxy pattern as the pre-Kokoro `DelegateProxy`.
     private final class DelegateProxy: NSObject, AVSpeechSynthesizerDelegate, @unchecked Sendable {
         weak var owner: SystemTTSService?
+
+        func speechSynthesizer(
+            _ synthesizer: AVSpeechSynthesizer,
+            didStart utterance: AVSpeechUtterance
+        ) {
+            let utteranceID = ObjectIdentifier(utterance)
+            Task { @MainActor [weak owner] in
+                owner?.handleUtteranceStarted(utteranceID: utteranceID)
+            }
+        }
 
         func speechSynthesizer(
             _ synthesizer: AVSpeechSynthesizer,

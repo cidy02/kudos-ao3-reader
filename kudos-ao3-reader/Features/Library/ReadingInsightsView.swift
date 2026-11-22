@@ -1,3 +1,4 @@
+import Combine
 import SwiftData
 import SwiftUI
 
@@ -35,7 +36,7 @@ struct ReadingInsightsView: View {
     }
 
     private func selection(_ scope: InsightsScope) -> InsightsScopeSelection {
-        HomeReadingStats.insightsScope(scope, from: libraryWorks, hideMature: hideMature, revealed: gate.revealAll)
+        HomeReadingStats.insightsScope(scope, from: libraryMirror.works, hideMature: hideMature, revealed: gate.revealAll)
     }
 
     @State private var selectedTab: Tab = .overview
@@ -70,34 +71,35 @@ struct ReadingInsightsView: View {
     @AppStorage(InsightsOptions.Keys.untouchedDays)
     private var untouchedDays: Int = InsightsOptions.defaultUntouchedDays
 
-    /// Lightweight scalar fingerprint so mutations to `libraryWorks` while mounted
-    /// (e.g. AO3 refresh marking a work Explicit, or finishing a work) trigger a reload.
-    private var libraryWorksFingerprint: String {
-        var adultCount = 0
-        var finishedCount = 0
-        var newestModified: TimeInterval = 0
-        var newestProgress: TimeInterval = 0
-        for work in libraryWorks {
-            if work.isAdult { adultCount += 1 }
-            if work.isFinished { finishedCount += 1 }
-            let mod = work.lastModifiedAt.timeIntervalSince1970
-            if mod > newestModified { newestModified = mod }
-            if let prog = work.progressModifiedAt?.timeIntervalSince1970, prog > newestProgress {
-                newestProgress = prog
-            }
-        }
-        return "\(libraryWorks.count)-\(adultCount)-\(finishedCount)-\(newestModified)-\(newestProgress)"
-    }
+    /// `InsightsReloadDigest` of the library as of the last reload (or the last
+    /// relevant save seen while on screen). Part of `reloadKey`, so a change that
+    /// moves the figures (an AO3 refresh marking a work Explicit, finishing a work,
+    /// a sitting written) reloads them once; a reading-position save does not.
+    @State private var libraryDigest = ""
+    @State private var reloadCoordinator = InsightsReloadCoordinator()
+    /// Always the library the parent last handed over, so a refresh that waited out
+    /// its window reads the *current* works, never the array its save arrived with.
+    @State private var libraryMirror = LibraryMirror()
+    private final class LibraryMirror { var works: [SavedWork] = [] }
+    /// Saves arriving while another screen covers this one are ignored; `onAppear`
+    /// reloads on return.
+    @State private var isOnScreen = false
 
     private var reloadKey: String {
-        [
-            range.rawValue,
-            "\(referenceDate.timeIntervalSince1970)",
-            "\(hideMature)-\(gate.revealAll)-\(scopeState.includeHidden)",
-            "\(countRereads)-\(countReadAloud)-\(askAboutUntouched)-\(untouchedDays)",
-            "\(optionsRevision)",
-            libraryWorksFingerprint
-        ].joined(separator: "|")
+        InsightsReloadKey.make(
+            range: range.rawValue,
+            referenceDate: referenceDate,
+            hideMature: hideMature,
+            revealAll: gate.revealAll,
+            includeHidden: scopeState.includeHidden,
+            countRereads: countRereads,
+            countReadAloud: countReadAloud,
+            askAboutUntouched: askAboutUntouched,
+            untouchedDays: untouchedDays,
+            optionsRevision: optionsRevision,
+            libraryCount: libraryWorks.count,
+            libraryDigest: libraryDigest
+        )
     }
 
     enum Tab: String, CaseIterable, Identifiable {
@@ -140,6 +142,7 @@ struct ReadingInsightsView: View {
     }
 
     var body: some View {
+        let _ = libraryMirror.works = libraryWorks // refreshed on every body pass
         VStack(spacing: 0) {
             // Pinned header with tabs and period controls
             headerView
@@ -225,7 +228,12 @@ struct ReadingInsightsView: View {
             reload()
         }
         .onAppear {
+            isOnScreen = true
             if hasLoadedOnce { reload() }
+        }
+        .onDisappear {
+            isOnScreen = false
+            reloadCoordinator.cancel()
         }
         .onChange(of: gate.revealAll) { _, revealed in
             // Synchronously clear hidden state and recompute main figures on re-lock so
@@ -242,6 +250,22 @@ struct ReadingInsightsView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .kudosSyncRelevantSettingChanged)) { _ in
             optionsRevision += 1
+        }
+        // Filter ordinary reading-position checkpoints and unrelated models in O(k)
+        // before scheduling a bounded-interval coalesced reload, so detached Read
+        // Aloud never walks the library and a continuous save stream cannot starve.
+        .onReceive(
+            NotificationCenter.default.publisher(for: ModelContext.didSave)
+                .receive(on: DispatchQueue.main)
+        ) { notification in
+            guard isOnScreen else { return }
+            reloadCoordinator.noteSave(
+                notification,
+                works: { [libraryMirror] in libraryMirror.works },
+                context: context,
+                isOnScreen: { isOnScreen },
+                reload: { snapshot in reload(baseline: snapshot) }
+            )
         }
         .refreshable {
             reload()
@@ -771,7 +795,13 @@ struct ReadingInsightsView: View {
         discreetMasker = .empty
     }
 
-    private func reload() {
+    /// - Parameter baseline: the digest snapshot a coalesced save refresh already took;
+    ///   adopted as-is so that refresh walks the library once.
+    private func reload(baseline: InsightsReloadDigest.Snapshot? = nil) {
+        // Taken first, so `reloadKey` already holds it when `lastReloadKey` is
+        // written below and a save this reload follows triggers no second one.
+        libraryDigest = baseline.map { reloadCoordinator.tracker.adopt($0) }
+            ?? reloadCoordinator.tracker.recordBaseline(works: libraryMirror.works, context: context)
         let component = range.component
         guard let currentInterval = calendar.dateInterval(of: component, for: referenceDate),
               let earlierDate = calendar.date(byAdding: component, value: -1, to: referenceDate),

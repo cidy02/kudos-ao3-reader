@@ -20,6 +20,9 @@ nonisolated enum KokoroPauseAssembler: Sendable {
         pauseAfter: KokoroBoundary,
         speed: Float = 1.0
     ) -> [Float] {
+        // Nothing synthesized is not a clip: padding it would hand a caller a
+        // non-empty, silent array that passes its "has samples" check.
+        guard !samples.isEmpty else { return [] }
         let trimmed = trimEdgeSilence(samples: samples, sampleRate: sampleRate)
         let speech = trimmed.isEmpty ? samples : trimmed
         let scale = Double(max(0.1, speed))

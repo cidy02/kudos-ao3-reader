@@ -455,6 +455,16 @@ struct ReadiumReaderView: View {
             } message: {
                 Text(kudosError ?? "")
             }
+            .alert("Nothing to Read Aloud", isPresented: nothingToSpeakPresented) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(speech.nothingToSpeakMessage)
+            }
+            .alert("Couldn't Start Read Aloud", isPresented: speechErrorPresented) {
+                Button("OK", role: .cancel) { speech.speechErrorMessage = nil }
+            } message: {
+                Text(speech.speechErrorMessage ?? "")
+            }
             // Immersive reading: hide the tab bar; the status bar follows the chrome.
             .toolbar(.hidden, for: .tabBar)
             .statusBarHidden(hidesStatusBar)
@@ -641,6 +651,7 @@ struct ReadiumReaderView: View {
             },
             onSpokenRange: { locator in book.applySpeechDecoration(at: locator) },
             onSessionEnded: { book.applySpeechDecoration(at: nil) },
+            onChapterSkipCommitted: { playSpeechChapterHaptic() },
             // Lock Screen / Island previous-next track = chapter skip (mini player).
             onSkipPrevious: { handleSpeechSkipBack() },
             onSkipNext: { handleSpeechSkipForward() }
@@ -660,7 +671,8 @@ struct ReadiumReaderView: View {
     ///
     /// Must key off `isSessionActive` (playing/paused), not `status != .stopped`.
     private func toggleReadingAloud() {
-        if speech.isSessionActive {
+        // A start still preparing its first audio counts: the second tap cancels it.
+        if speech.isSessionActive || speech.isStartPending {
             stopReadingAloud()
         } else {
             speech.toggle(from: book.currentLocator)
@@ -1668,7 +1680,7 @@ struct ReadiumReaderView: View {
         // matched `.unavailable`, so a publication Readium can't speak got the
         // filled/emphasized "active" look and a "Stop reading aloud" a11y label
         // on a control that was simultaneously disabled below.
-        let speechActive = speech.isSessionActive
+        let speechActive = speech.isSessionActive || speech.isStartPending
         actions.append(ReaderFanRoundAction(
             id: "readAloud",
             // Active: a filled waveform in the app colour.
@@ -2143,52 +2155,48 @@ extension ReadiumReaderView {
         .accentTint(themeManager.effectiveTint, on: themeManager.readerChromeTheme)
         .preferredColorScheme(readerPageColors.colorScheme)
     }
+
+    /// ⏮ and ⏭ share one rule (`ReadiumBook.speechSkipTarget`): while Read Aloud
+    /// plays or advances itself they count from the speech position; while paused,
+    /// from the page on screen, so browsing to another chapter and skipping never
+    /// jumps the wrong way.
     private func handleSpeechSkipBack() {
-        guard let pos = book.readingPosition else { return }
-        switch ReaderSpeechSkip.backwardAction(
-            page: pos.page,
-            chapter: pos.chapter,
-            chapterCount: pos.chapterCount
-        ) {
-        case .restartChapter:
-            goToSpineChapterStart(pos.chapter, resumePlaying: speech.isPlaying)
-            playSpeechChapterHaptic()
-        case .previousChapter:
-            goToSpineChapterStart(pos.chapter - 1, resumePlaying: speech.isPlaying)
-            playSpeechChapterHaptic()
-        case .none:
-            break
-        }
+        guard let target = book.speechSkipTarget(
+            forward: false,
+            speechLocator: speech.resumeLocator,
+            followsSpeech: speech.skipFollowsSpeechPosition
+        ) else { return }
+        goToSpineChapterStart(target, resumePlaying: speech.isPlaying, direction: .backward)
     }
 
     @discardableResult
     private func handleSpeechSkipForward() -> Bool {
-        let chapterCount = max(
-            1,
-            book.positionsByReadingOrder.isEmpty ? book.readingOrder.count : book.positionsByReadingOrder.count
-        )
-        let speechChapter = speech.resumeLocator.flatMap { book.spineChapter(for: $0) }
-        guard let nextChapter = ReaderSpeechSkip.nextChapterForSkipForward(
-            speechChapter: speechChapter,
-            bookChapter: book.readingPosition?.chapter,
-            chapterCount: chapterCount
+        guard let target = book.speechSkipTarget(
+            forward: true,
+            speechLocator: speech.resumeLocator,
+            followsSpeech: speech.skipFollowsSpeechPosition
         ) else { return false }
-        let didMove = goToSpineChapterStart(nextChapter, resumePlaying: speech.isPlaying)
-        if didMove { playSpeechChapterHaptic() }
-        return didMove
+        return goToSpineChapterStart(target, resumePlaying: speech.isPlaying)
     }
 
-    /// 1-based spine chapter → first Readium position; re-anchors TTS.
+    /// 1-based spine chapter → first Readium position; re-anchors TTS there. The
+    /// page is not moved here: Read Aloud moves it (`onAdvance`) and fires the
+    /// chapter haptic (`onChapterSkipCommitted`) once a speakable chapter commits,
+    /// so skipping onto art-only chapters never jumps the reader to the end,
+    /// rewrites progress or marks the work finished.
     @discardableResult
-    private func goToSpineChapterStart(_ chapter1Based: Int, resumePlaying: Bool) -> Bool {
+    private func goToSpineChapterStart(
+        _ chapter1Based: Int,
+        resumePlaying: Bool,
+        direction: ReaderSpeechController.ScanDirection = .forward
+    ) -> Bool {
         let index = chapter1Based - 1
         guard book.positionsByReadingOrder.indices.contains(index),
               let first = book.positionsByReadingOrder[index].first
         else { return false }
-        book.go(to: first)
         // Keep a paused session paused at the new chapter; only autoplay if we
         // were already speaking.
-        speech.reanchor(to: first, resumePlaying: resumePlaying)
+        speech.reanchor(to: first, resumePlaying: resumePlaying, direction: direction, isManualSkip: true)
         return true
     }
 
@@ -2374,6 +2382,22 @@ extension ReadiumReaderView {
             }
             kudosWorking = false
         }
+    }
+
+    private var nothingToSpeakPresented: Binding<Bool> {
+        // Play on an unspeakable chapter is never a silent dead button. Only the
+        // reader Read Aloud belongs to shows it (a "Next Work" reader stacks on top).
+        Binding(
+            get: { speech.showsNothingToSpeakAlert && speech.openReaderWorkID == work.id },
+            set: { speech.showsNothingToSpeakAlert = $0 }
+        )
+    }
+
+    private var speechErrorPresented: Binding<Bool> {
+        Binding(
+            get: { speech.speechErrorMessage != nil && speech.openReaderWorkID == work.id },
+            set: { if !$0 { speech.speechErrorMessage = nil } }
+        )
     }
 
     private var kudosErrorPresented: Binding<Bool> {
