@@ -17,6 +17,13 @@ tombstones (`docs/KUDOSBACKUP_FORMAT.md`). Both apps hold the entire document in
 Peak memory grows with the file. Android's 8 MiB cap exists for that reason, and a large enough library would hit a
 memory limit on iOS too, only later. Streaming makes peak memory depend on the largest single record, not the library.
 
+**Measured (A-566, Android, desktop JVM, `out/a566-measure.md`):** peak heap is **15–17× the manifest size** on every
+path (import, sync, sync with a pending import), almost all of it the typed object graph plus the `JsonElement` trees.
+Removing duplicate copies (one parse from bytes, no `String`, no second read at commit) saved only 8–10%:
+8 MiB → 119–151 MiB peak, 16 MiB → 231–287 MiB, 32 MiB → 439–558 MiB. So the limit stays 8 MiB until P2/P4 land —
+the cost is per-record trees held all at once, which only streaming plus keeping just the unknown keys (P4) removes.
+iOS has not been measured yet; P2 starts by measuring it the same way.
+
 ## Decisions
 
 1. **The on-disk format does not change.** Still one `manifest.json`, same keys, same JSON. No v9, no shards. Every
