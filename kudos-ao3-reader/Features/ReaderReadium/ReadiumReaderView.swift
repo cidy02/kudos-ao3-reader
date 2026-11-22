@@ -605,6 +605,7 @@ struct ReadiumReaderView: View {
         if DebugLaunchRoute.takeSheet("readercaughtup") {
             // Demo works carry no AO3 URL; give this one an id so the AO3 actions show.
             if ao3WorkID == nil { work.sourceURL = "https://archiveofourown.org/works/9000001" }
+            if work.chapters.isEmpty || work.isComplete { work.chapters = "12/?"; work.isComplete = false }
             book.goToPublicationEndForDebug()
         }
         if DebugLaunchRoute.takeSheet("readerchapterend") {
