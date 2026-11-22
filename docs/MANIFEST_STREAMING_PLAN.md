@@ -1,8 +1,8 @@
 # Streaming `manifest.json` on iOS and Android — plan
 
 Owner, 2026-11-22: "raise the limit and plan a change to stream the manifest on both platforms".
-Status: **plan only** (tasks T-567 iOS, A-567 Android). **Goal (owner, 2026-11-22): Android accepts the same 200 MB
-manifest iOS does, with memory that does not grow with the manifest.** A-566 measured that the limit cannot rise before
+Status: **plan only** (tasks T-567 iOS, A-567 Android). **Goal (owner, 2026-11-22): both platforms accept a manifest up to
+256 MiB (2^28 bytes; the owner chose 2^8 MiB over iOS's 200 MB), with memory that does not grow with the manifest.** A-566 measured that the limit cannot rise before
 this lands.
 
 ## Why
@@ -50,17 +50,18 @@ iOS has not been measured yet; P2 starts by measuring it the same way.
    (Android compares a digest of bytes it uploaded to detect its own manifest, so the first write after the change
    reads as "changed" once — harmless, note it in the PR.)
 6. **Limits change meaning** once memory no longer scales with the file: a per-record cap (e.g. 1 MiB per element,
-   catches a single absurd record) plus **one total cap of 200 MB on both platforms** (iOS's current ZIP entry cap).
-   Android's `MAX_MANIFEST_BYTES` rises from 8 MiB to 200 MB **in the same change that proves flat memory** (below),
-   never before.
+   catches a single absurd record) plus **one total cap of 256 MiB (268,435,456 bytes) on both platforms**. Android's `MAX_MANIFEST_BYTES` rises from
+   8 MiB to 256 MiB, and iOS gets a manifest-specific 256 MiB cap (today the manifest falls under the general 200 MB
+   ZIP entry cap, `MiniZip.swift:76`, which also covers EPUBs and stays as it is), **in the same change that proves flat
+   memory** (below), never before.
 7. **Streaming the parse is not enough on its own.** A-566 found the typed records cost about as much as the JSON trees,
-   and import, merge and export each hold the whole library as typed objects. For a 200 MB manifest the consumers must
+   and import, merge and export each hold the whole library as typed objects. For a 256 MiB manifest the consumers must
    stream too: import writes records to the store in batches as they are decoded; merge looks records up by ID in the
    store instead of in an in-memory copy; export streams from the store (Room cursor / SwiftData fetch in batches) to the
    file; Android's pass-through keeps only each record's unknown keys, spilled to a file keyed by record ID.
 8. **Memory budget (definition of done):** peak memory for import, Folder Sync and export stays under **64 MiB above
-   the app's baseline at any manifest size up to 200 MB**, measured with the A-566 benchmark
-   (`ManifestMemoryBenchmarkTest`) on Android and an equivalent XCTest on iOS at 8, 32, 100 and 200 MB.
+   the app's baseline at any manifest size up to 256 MiB**, measured with the A-566 benchmark
+   (`ManifestMemoryBenchmarkTest`) on Android and an equivalent XCTest on iOS at 8, 32, 128 and 256 MiB.
 
 ## Phases
 
@@ -69,10 +70,10 @@ iOS has not been measured yet; P2 starts by measuring it the same way.
 | P0 ✅ | Android | **A-566**: measured; removed duplicate copies (−8–10%); limit stays 8 MiB. | `out/a566-measure.md`; on `android/rd-a541a` `7fd493a06`. |
 | P1 | both | Splitter + shared vectors (no callers yet). iOS: measure today's peak with the same generated manifests. | Both suites pass the same vectors; iOS baseline table recorded. |
 | P2 | both (T-567 / A-567) | Read via the splitter, one record at a time; Android reuses one tree per record for typed + pass-through. Callers unchanged. | All backup/sync tests and golden archives pass unchanged; JSON-tree cost gone in the benchmark. |
-| P3 | both | Streaming write (export + Folder Sync) from the store in batches. | Round trip iOS → Android → iOS and the reverse on a generated 100 MB manifest. |
+| P3 | both | Streaming write (export + Folder Sync) from the store in batches. | Round trip iOS → Android → iOS and the reverse on a generated 128 MiB manifest. |
 | P4 | Android | Pass-through keeps only unknown keys per record, spilled to a file by record ID. | Overlay no longer scales with the library in the benchmark. |
-| P5 | both | Consumers stream: batched import into the store, merge by ID lookup, no whole-library arrays. | **Memory budget met at 200 MB** on both benchmarks. |
-| P6 | Android | Raise `MAX_MANIFEST_BYTES` to 200 MB (and the per-record cap), equal to iOS. | Benchmark at 200 MB within budget; 200 MB round-trip test on both gates. |
+| P5 | both | Consumers stream: batched import into the store, merge by ID lookup, no whole-library arrays. | **Memory budget met at 256 MiB** on both benchmarks. |
+| P6 | both | Set the 256 MiB manifest cap on both: Android `MAX_MANIFEST_BYTES`, iOS a manifest-specific cap; plus the per-record cap. | Benchmark at 256 MiB within budget; 256 MiB round-trip test on both gates. |
 
 P1–P3 are independent of A-541a landing, except that Android P2 touches the pass-through read and should start
 from `android/rd-a541a` once it lands. P5 is the largest phase (it changes the restore/merge services on both
@@ -80,7 +81,7 @@ platforms) and gets its own adversarial review per platform.
 
 ## Verification
 
-- Memory tests on both platforms with generated manifests of 8 / 32 / 100 MB (works with full tags and summaries,
+- Memory tests on both platforms with generated manifests of 8 / 32 / 128 / 256 MiB (works with full tags and summaries,
   many reading sessions, unknown iOS keys): record peak memory before and after each phase.
 - Golden archives and cross-platform fixtures pass byte-for-content (decoded equality).
 - Folder Sync crash points (asset upload, manifest temp write, rename) behave as today.
