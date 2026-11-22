@@ -129,12 +129,12 @@ nonisolated enum AO3CommentTimestamp {
         formatter.timeZone = timeZone
         formatter.setLocalizedDateFormatFromTemplate("jm")
         let time = formatter.string(from: date)
+            .replacingOccurrences(of: "\u{202f}", with: " ")
+            .replacingOccurrences(of: "\u{00a0}", with: " ")
         // The zone name follows the given locale; `TimeZone.abbreviation(for:)` reads the device's
         // and printed "GMT-4" instead of "EDT" on a device without an en_US region.
         formatter.dateFormat = "zzz"
         let zone = formatter.string(from: date)
-            .replacingOccurrences(of: "\u{202f}", with: " ")
-            .replacingOccurrences(of: "\u{00a0}", with: " ")
         return "\(time) \(zone)"
     }
 }
