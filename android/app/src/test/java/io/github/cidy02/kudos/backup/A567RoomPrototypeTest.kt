@@ -363,8 +363,11 @@ class A567RoomPrototypeTest {
                             val replace = A567StagedReplace(rig, staging, null)
                             val t1 = System.nanoTime()
                             runBlocking {
-                                replace.captureLive()
-                                replace.apply(now, A567StagedReplace.Hooks().apply { afterBatch = { n -> if (n % 20_000 < 500) sample() } })
+                                replace.captureLive { n -> if (n % 20_000 == 0) sample() }
+                                replace.apply(now, A567StagedReplace.Hooks().apply {
+                                    afterBatch = { n -> if (n % 20_000 < 500) sample() }
+                                    afterSweepBatch = { n -> if (n % 20_000 < 500) sample() }
+                                })
                             }
                             applyMs = (System.nanoTime() - t1) / 1_000_000
                             dbMiB = File(rig.cacheRoot, "staging.db").length() / 1048576.0

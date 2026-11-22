@@ -98,6 +98,7 @@ class A567StagedReplace(private val rig: A567Rig, private val staging: A567Stagi
     class Hooks {
         var afterBatch: ((Int) -> Unit)? = null
         var beforeCommit: (() -> Unit)? = null
+        var afterSweepBatch: ((Int) -> Unit)? = null
         /** Skip file rollback to model a process that dies inside the transaction. */
         var simulateProcessDeath = false
     }
@@ -105,7 +106,8 @@ class A567StagedReplace(private val rig: A567Rig, private val staging: A567Stagi
     class Counts(var created: Int = 0, var removed: Int = 0, var deferred: Int = 0, var epubsInstalled: Int = 0)
 
     /** Records the local rows Replace may sweep, as the merge's captured snapshot does (id + a change fingerprint). */
-    fun captureLive() {
+    fun captureLive(onBatch: (Int) -> Unit = {}) {
+        var seen = 0
         staging.db.execSQL("DELETE FROM live_works")
         var last = ""
         while (true) {
@@ -121,6 +123,7 @@ class A567StagedReplace(private val rig: A567Rig, private val staging: A567Stagi
                 staging.db.setTransactionSuccessful()
             } finally { staging.db.endTransaction() }
             last = batch.last().first
+            seen += batch.size; onBatch(seen)
         }
     }
 
@@ -135,7 +138,7 @@ class A567StagedReplace(private val rig: A567Rig, private val staging: A567Stagi
             try {
                 rig.database.withTransaction {
                     try {
-                        sweepOmitted(now, counts)
+                        sweepOmitted(now, counts, hooks)
                         upsertStaged(now, counts, undo, hooks)
                         // Durable commit discriminator: written in the same transaction, so it exists iff the rows do.
                         rig.database.tagDao().upsert(TagEntity(id = TOKEN_ID, name = TOKEN_NAME, dateCreated = now))
@@ -162,8 +165,9 @@ class A567StagedReplace(private val rig: A567Rig, private val staging: A567Stagi
         }
     }
 
-    private suspend fun sweepOmitted(now: Instant, counts: Counts) {
+    private suspend fun sweepOmitted(now: Instant, counts: Counts, hooks: Hooks) {
         var last = ""
+        var seen = 0
         while (true) {
             val captured = mutableListOf<Pair<String, String>>()
             staging.db.rawQuery("SELECT id, fingerprint FROM live_works WHERE id > ? ORDER BY id LIMIT 500", arrayOf(last)).use { c ->
@@ -188,6 +192,7 @@ class A567StagedReplace(private val rig: A567Rig, private val staging: A567Stagi
                 counts.removed++
             }
             last = captured.last().first
+            seen += captured.size; hooks.afterSweepBatch?.invoke(seen)
         }
     }
 
