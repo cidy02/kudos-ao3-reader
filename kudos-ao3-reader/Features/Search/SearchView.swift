@@ -274,6 +274,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
+                .duoVerticalCompressionPrefersTabBar(duoLayout.hasVerticalBar)
                 .navigationDestination(for: AO3WorkSummary.self) { work in
                     WorkDetailView(remote: work)
                 }

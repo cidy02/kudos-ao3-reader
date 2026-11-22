@@ -362,5 +362,109 @@ struct DuoLayoutSignalTests {
         #expect(MediaBrowserView.jumpBackInChipMaxWidth(isAccessibilitySize: true, foldPaneWidth: 455.5) == 439.5)
         #expect(MediaBrowserView.jumpBackInChipMaxWidth(isAccessibilitySize: true, foldPaneWidth: 439.5) == 423.5)
     }
+
+    @Test func navigationSignalsDistinguishEveryDuoPoseFromOrdinaryScreens() {
+        let phone = DuoLayoutSignal()
+        #expect(!phone.isMeasured)
+        #expect(!phone.isDuo)
+        #expect(!phone.usesSingleRailActionGroup)
+        #expect(!phone.hidesHomeSecondaryToolbarActions)
+        #expect(!phone.separatesSearchTab)
+
+        var measuredPhone = DuoLayoutSignal()
+        measuredPhone.width = 393
+        #expect(measuredPhone.isMeasured)
+        #expect(!measuredPhone.isDuo)
+        #expect(!measuredPhone.usesSingleRailActionGroup)
+        #expect(!measuredPhone.hidesHomeSecondaryToolbarActions)
+        #expect(!measuredPhone.separatesSearchTab)
+
+        let cover = DuoLayoutSignal(regions: ReaderHostRegions(verticalBar: .right), width: 466)
+        #expect(cover.isMeasured)
+        #expect(cover.isDuo)
+        #expect(cover.usesSingleRailActionGroup)
+        #expect(cover.hidesHomeSecondaryToolbarActions)
+        #expect(cover.separatesSearchTab)
+
+        var openRegions = ReaderHostRegions(verticalBar: .right)
+        openRegions.fold = CGRect(x: 455.5, y: 0, width: 40, height: 669)
+        let open = DuoLayoutSignal(regions: openRegions, width: 951, isVerticalFoldActive: false)
+        let book = DuoLayoutSignal(regions: openRegions, width: 951, isVerticalFoldActive: true)
+        for pose in [open, book] {
+            #expect(pose.isDuo)
+            #expect(pose.usesSingleRailActionGroup)
+            #expect(pose.hidesHomeSecondaryToolbarActions)
+            #expect(pose.separatesSearchTab)
+        }
+
+        var uprightRegions = ReaderHostRegions(verticalBar: .none)
+        uprightRegions.fold = CGRect(x: 0, y: 455.5, width: 669, height: 40)
+        let upright = DuoLayoutSignal(regions: uprightRegions, width: 669)
+        #expect(upright.isDuo)
+        #expect(!upright.usesSingleRailActionGroup)
+        #expect(upright.hidesHomeSecondaryToolbarActions)
+        #expect(upright.separatesSearchTab)
+    }
+
+    @Test func accountPresentationMatchesBoardAcrossEveryPoseAndDirection() throws {
+        // Unmeasured default never flashes a modal sheet before DuoLayoutProbe measures.
+        let unmeasured = DuoLayoutSignal()
+        #expect(unmeasured.accountPresentation() == .sheet)
+        #expect(!unmeasured.presentsAccountAsSheet(isPresentingAccount: true, onHome: true))
+
+        // Measured ordinary iPhone/iPad presents standard sheet.
+        var phone = DuoLayoutSignal()
+        phone.width = 393
+        #expect(phone.accountPresentation() == .sheet)
+        #expect(phone.presentsAccountAsSheet(isPresentingAccount: true, onHome: true))
+        #expect(!phone.presentsAccountAsSheet(isPresentingAccount: false, onHome: true))
+
+        // Duo Cover (vertical rail, no vertical fold): standard sheet.
+        let cover = DuoLayoutSignal(regions: ReaderHostRegions(verticalBar: .right), width: 466)
+        #expect(cover.accountPresentation() == .sheet)
+        #expect(cover.presentsAccountAsSheet(isPresentingAccount: true, onHome: true))
+
+        // Duo Upright portrait (horizontal fold, no rail): form sheet (~541 pt).
+        var uprightRegions = ReaderHostRegions(verticalBar: .none)
+        uprightRegions.fold = CGRect(x: 0, y: 455.5, width: 669, height: 40)
+        let upright = DuoLayoutSignal(regions: uprightRegions, width: 669)
+        #expect(upright.accountPresentation() == .formSheet)
+        #expect(upright.presentsAccountAsSheet(isPresentingAccount: true, onHome: true))
+
+        // Duo Open & Book landscape: trailing inspector from fold centre to screen edge.
+        var railRight = ReaderHostRegions(verticalBar: .right)
+        railRight.fold = CGRect(x: 455.5, y: 0, width: 40, height: 669)
+        let openRight = DuoLayoutSignal(regions: railRight, width: 951, isVerticalFoldActive: false)
+        let bookRight = DuoLayoutSignal(regions: railRight, width: 951, isVerticalFoldActive: true)
+
+        let ltrOpen = try #require(openRight.accountPresentation(rightToLeft: false).inspectorGeometry)
+        #expect(ltrOpen.foldHalfWidth == 391.5)
+        #expect(ltrOpen.trailingRailReserve == DuoLayoutSignal.railReserve)
+        #expect(ltrOpen.fullFoldHalfWidth == 475.5)
+        #expect(!openRight.presentsAccountAsSheet(isPresentingAccount: true, onHome: true))
+        #expect(openRight.presentsAccountAsSheet(isPresentingAccount: true, onHome: false))
+
+        let rtlOpen = try #require(openRight.accountPresentation(rightToLeft: true).inspectorGeometry)
+        #expect(rtlOpen.foldHalfWidth == 475.5)
+        #expect(rtlOpen.trailingRailReserve == 0)
+        #expect(rtlOpen.fullFoldHalfWidth == 475.5)
+
+        let ltrBook = try #require(bookRight.accountPresentation(rightToLeft: false).inspectorGeometry)
+        #expect(ltrBook.fullFoldHalfWidth == 475.5)
+        #expect(ltrBook.leadingFoldClearance == 56)
+
+        // 180° left-rail landscape: LTR has no rail on the trailing pane; RTL does.
+        var railLeft = ReaderHostRegions(verticalBar: .left)
+        railLeft.fold = CGRect(x: 455.5, y: 0, width: 40, height: 669)
+        let openLeft = DuoLayoutSignal(regions: railLeft, width: 951, isVerticalFoldActive: false)
+        let ltrLeft = try #require(openLeft.accountPresentation(rightToLeft: false).inspectorGeometry)
+        #expect(ltrLeft.foldHalfWidth == 475.5)
+        #expect(ltrLeft.trailingRailReserve == 0)
+        #expect(ltrLeft.fullFoldHalfWidth == 475.5)
+        let rtlLeft = try #require(openLeft.accountPresentation(rightToLeft: true).inspectorGeometry)
+        #expect(rtlLeft.foldHalfWidth == 391.5)
+        #expect(rtlLeft.trailingRailReserve == DuoLayoutSignal.railReserve)
+        #expect(rtlLeft.fullFoldHalfWidth == 475.5)
+    }
 }
 #endif

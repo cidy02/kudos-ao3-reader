@@ -21,6 +21,7 @@ struct ReadingQueueBrowserView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accentInk) private var accentInk
     @Environment(\.accentFill) private var accentFill
+    @Environment(\.duoLayout) private var duoLayout
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Environment(PrivacyGate.self) private var gate
@@ -1415,7 +1416,9 @@ extension ReadingQueueBrowserView {
                     )
                     .labelStyle(.iconOnly)
                 }
-                ToolbarSpacer(.fixed, placement: .primaryAction)
+                if !duoLayout.usesSingleRailActionGroup {
+                    ToolbarSpacer(.fixed, placement: .primaryAction)
+                }
                 ToolbarItemGroup(placement: .primaryAction) {
                     addWorksButton.labelStyle(.iconOnly)
                     WorkListMoreMenu {
@@ -1479,7 +1482,9 @@ extension ReadingQueueBrowserView {
                 )
                 .labelStyle(.iconOnly)
             }
-            ToolbarSpacer(.fixed, placement: .primaryAction)
+            if !duoLayout.usesSingleRailActionGroup {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+            }
             ToolbarItem(placement: .primaryAction) {
                 WorkListMoreMenu {
                     if hideMature {

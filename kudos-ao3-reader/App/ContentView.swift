@@ -76,14 +76,17 @@ struct ContentView: View {
                     DownloadQueueBanner()
                 }
             }
-            // Home's profile control opens Account as a self-contained sheet.
-            // Root-hosting also gives restored/deep-linked Account routes one sink.
+            // Account sheet presentation lives inside `duoLayoutProbe()` (in
+            // `RootAccountSheetHost` on iOS, or directly below on macOS) so it reads
+            // `\.duoLayout` and yields to HomeView's trailing inspector on Open/Book Duo.
+            #if os(macOS)
             .sheet(isPresented: $router.isPresentingAccount, onDismiss: {
                 router.accountDidDismiss()
                 if router.pendingWorkLink != nil { router.isPresentingLinkedWork = true }
             }) {
                 AccountView()
             }
+            #endif
             // AO3 website sheet is root-hosted so `router.open` never switches the
             // user into Browse — Done returns them to the tab they left.
             .sheet(isPresented: router.webBrowserPresentation, onDismiss: {
@@ -445,7 +448,11 @@ struct ContentView: View {
         #if os(macOS)
         sidebarSplit
         #else
-        tabs.duoLayoutProbe()
+        IOSTabShell(
+            destination: destination(for:),
+            speechAccessory: { readerSpeechAccessory }
+        )
+        .duoLayoutProbe()
         #endif
     }
 
@@ -536,46 +543,7 @@ struct ContentView: View {
         )
     }
 
-    // MARK: iOS — adaptive tab bar / sidebar
-
-    private var tabs: some View {
-        TabView(selection: $router.selection) {
-            ForEach(router.mainTabs) { tab in
-                Tab(tab.title, systemImage: tab.symbol, value: tab) {
-                    destination(for: tab)
-                }
-            }
-            #if os(iOS)
-            // Global Search uses iOS 26's search-role slot so the system lays it out
-            // as a separate circular button beside the tab bar (the same relationship
-            // Apple Books gives its Search button), distinct from the four core tabs.
-            Tab(AppTab.search.title, systemImage: AppTab.search.symbol,
-                value: AppTab.search, role: .search) {
-                    destination(for: .search)
-                }
-            #endif
-        }
-        .tabViewStyle(.sidebarAdaptable)
-        #if os(iOS)
-        // Owner, 2026-10-01: the tab bar shrinks while you scroll down.
-        .tabBarMinimizeBehavior(.onScrollDown)
-        .tabViewBottomAccessory(
-            isEnabled: ReaderSpeechSessionPolicy.showsMiniPlayer(
-                sessionActive: speech.isSessionActive,
-                readerOpen: speech.isReaderOpen,
-                commentAccessoryTab: router.commentAccessoryTab,
-                selectedTab: router.selection
-            )
-        ) {
-            readerSpeechAccessory
-        }
-        #endif
-        #if os(visionOS)
-            .tabViewBottomAccessory {
-                searchButton
-            }
-        #endif
-    }
+    // MARK: iOS — adaptive tab bar / sidebar (hosted in IOSTabShell inside duoLayoutProbe)
 
     #if os(iOS)
     private var readerSpeechAccessory: some View {
@@ -734,6 +702,144 @@ struct ContentView: View {
     }
     #endif
 }
+
+#if os(iOS)
+/// Reference-backed handoff flag so `.sheet`'s `Binding.set` always reads the live
+/// inspector mode rather than a value-captured `IOSTabShell` from frame 0.
+private final class DuoAccountPresentationBox {
+    var usesInspector = false
+}
+
+/// Hosts the iOS `TabView` and non-inspector Account sheet inside `duoLayoutProbe()`
+/// so both the tab bar (N3/N7) and Account presentation (N5) observe `\.duoLayout`.
+private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
+    @Environment(AppRouter.self) private var router
+    @Environment(ReaderSpeechController.self) private var speech
+    @Environment(\.duoLayout) private var duoLayout
+    @Environment(\.layoutDirection) private var layoutDirection
+    /// Once Duo has been observed, stay on `role: .prominent` across fold/rotation
+    /// transitions so a single transient layout tick never rebuilds the `TabView`.
+    @State private var latchedSeparatesSearchTab = false
+    @State private var presentationBox = DuoAccountPresentationBox()
+
+    let destination: (AppTab) -> Destination
+    @ViewBuilder let speechAccessory: () -> SpeechAccessory
+
+    private var accountPresentation: DuoAccountPresentation {
+        duoLayout.accountPresentation(rightToLeft: layoutDirection == .rightToLeft)
+    }
+
+    /// On Open/Book landscape Duo, HomeView hosts Account as a trailing inspector
+    /// while Home is selected; every other pose/device presents Account as a `.sheet`.
+    private var usesAccountInspector: Bool {
+        accountPresentation.isInspector && router.selection == .home
+    }
+
+    private var usesProminentSearchTab: Bool {
+        latchedSeparatesSearchTab || duoLayout.separatesSearchTab
+    }
+
+    private func accountSheetBinding() -> Binding<Bool> {
+        presentationBox.usesInspector = usesAccountInspector
+        let box = presentationBox
+        return Binding<Bool>(
+            get: {
+                duoLayout.presentsAccountAsSheet(
+                    isPresentingAccount: router.isPresentingAccount,
+                    onHome: router.selection == .home,
+                    rightToLeft: layoutDirection == .rightToLeft
+                )
+            },
+            set: { isPresented in
+                // Only clear `isPresentingAccount` when the sheet itself dismissed while
+                // in sheet mode — never when a pose/probe update hands off to the inspector.
+                if !isPresented, !box.usesInspector {
+                    router.isPresentingAccount = false
+                }
+            }
+        )
+    }
+
+    var body: some View {
+        @Bindable var router = router
+        let accountSheetPresented = accountSheetBinding()
+        TabView(selection: $router.selection) {
+            ForEach(router.mainTabs) { tab in
+                Tab(tab.title, systemImage: tab.symbol, value: tab) {
+                    destination(tab)
+                }
+            }
+            if #available(iOS 27.0, *), usesProminentSearchTab {
+                // Duo rail & upright tab bar (N3/N7): detach Search into its own circle
+                // beside the core tab group. Using `.prominent` from the TabView's initial
+                // build (see `.id(usesProminentSearchTab)`) avoids UIKit mutating a
+                // `UISearchTab` into a prominent `UITab` in place.
+                Tab(AppTab.search.title, systemImage: AppTab.search.symbol,
+                    value: AppTab.search, role: .prominent) {
+                    destination(.search)
+                }
+            } else {
+                Tab(AppTab.search.title, systemImage: AppTab.search.symbol,
+                    value: AppTab.search, role: .search) {
+                    destination(.search)
+                }
+            }
+        }
+        .id(usesProminentSearchTab)
+        .tabViewStyle(.sidebarAdaptable)
+        // Owner, 2026-10-01: the tab bar shrinks while you scroll down.
+        .tabBarMinimizeBehavior(.onScrollDown)
+        .tabViewBottomAccessory(
+            isEnabled: ReaderSpeechSessionPolicy.showsMiniPlayer(
+                sessionActive: speech.isSessionActive,
+                readerOpen: speech.isReaderOpen,
+                commentAccessoryTab: router.commentAccessoryTab,
+                selectedTab: router.selection
+            )
+        ) {
+            speechAccessory()
+        }
+        .onChange(of: duoLayout.separatesSearchTab, initial: true) { _, separates in
+            if separates { latchedSeparatesSearchTab = true }
+        }
+        .sheet(isPresented: accountSheetPresented, onDismiss: {
+            // Only finalize dismissal if Account actually closed — rotating from
+            // Portrait (formSheet) into Open (inspector) closes the sheet while
+            // `router.isPresentingAccount` stays true.
+            guard !router.isPresentingAccount else { return }
+            router.accountDidDismiss()
+            if router.pendingWorkLink != nil { router.isPresentingLinkedWork = true }
+        }) {
+            AccountView()
+                .duoAccountSheetSizing(isFormSheet: accountPresentation == .formSheet)
+        }
+        .onChange(of: router.selection) { _, selection in
+            // Switching tabs from the live rail while Account's inspector is open
+            // closes the inspector cleanly instead of popping a modal sheet.
+            if selection != .home, router.isPresentingAccount, accountPresentation.isInspector {
+                router.isPresentingAccount = false
+            }
+        }
+        .onChange(of: router.isPresentingAccount) { wasPresented, isPresented in
+            if wasPresented, !isPresented, usesAccountInspector {
+                router.accountDidDismiss()
+                if router.pendingWorkLink != nil { router.isPresentingLinkedWork = true }
+            }
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func duoAccountSheetSizing(isFormSheet: Bool) -> some View {
+        if isFormSheet {
+            presentationSizing(.form)
+        } else {
+            self
+        }
+    }
+}
+#endif
 
 /// Warms WebKit's shared WebContent/Networking process pool at launch instead of
 /// on first real use. The very first `WKWebView` load in a process incurs a

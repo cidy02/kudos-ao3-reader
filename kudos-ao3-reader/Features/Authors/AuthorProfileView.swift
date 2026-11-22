@@ -24,6 +24,7 @@ struct AuthorProfileView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.duoLayout) private var duoLayout
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var model: AO3AuthorProfileModel
@@ -1030,7 +1031,7 @@ private extension AuthorProfileView {
             }
         } else {
             ActionToolbar(items: leadingToolbarItems)
-            if !leadingToolbarItems.isEmpty {
+            if !leadingToolbarItems.isEmpty, !duoLayout.usesSingleRailActionGroup {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
             }
             // Board 23: Share and "…" are one glass pill (one group shares a pill).

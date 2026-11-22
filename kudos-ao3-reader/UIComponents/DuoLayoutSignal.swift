@@ -30,15 +30,46 @@ nonisolated struct DuoInspectorSplitGeometry: Equatable, Sendable {
     /// Width of the logical trailing pane occupied by `.inspector` (from the fold's
     /// clear edge on the inspector side to the window/rail edge).
     let inspectorWidth: CGFloat
+    /// Safe width from the vertical fold's centre line to the trailing safe edge (for
+    /// fold-anchored trailing panes like Account, whose content clears the rail).
+    let foldHalfWidth: CGFloat
+    /// Rail width sitting on the logical trailing edge (`railReserve` when the vertical
+    /// rail stands on the same side as the trailing pane, `0` when it stands on the
+    /// leading side). Allows a trailing pane's backdrop/wash to bleed seamlessly behind
+    /// the rail while safe-area-padding its content clear of it.
+    let trailingRailReserve: CGFloat
     /// Logical trailing inset the host content needs while `.inspector` is open so
     /// content stops at the fold's clear edge (40 pt in Open, 56 pt in Book).
     let leadingFoldClearance: CGFloat
     /// Logical trailing inset the host content needs when `.inspector` is hidden
     /// (e.g. Search bulk selection) to stay bounded to the logical leading pane.
     var leadingPaneTrailingReserve: CGFloat { inspectorWidth + leadingFoldClearance }
+    /// Total width from the fold centre line to the physical trailing window edge.
+    var fullFoldHalfWidth: CGFloat { foldHalfWidth + trailingRailReserve }
 }
 
-/// What the screen's layout says about the iPhone Duo (T-562c/h), decided from traits and
+/// How the Account screen should be presented for the current display geometry (T-562j N5).
+/// - `.inspector`: Open flat and Book-pose landscape Duo — trailing pane from fold to rail
+///   while Home stays live on the leading pane (`Duo-Open-Account`).
+/// - `.formSheet`: Upright portrait Duo — ~541 pt form sheet over Home (`Duo-Portrait-Account`).
+/// - `.sheet`: iPhone, iPad, Mac, and Duo Cover (no vertical fold).
+nonisolated enum DuoAccountPresentation: Equatable, Sendable {
+    case sheet
+    case inspector(DuoInspectorSplitGeometry)
+    case formSheet
+
+    var isInspector: Bool {
+        if case .inspector = self { return true }
+        return false
+    }
+
+    var inspectorGeometry: DuoInspectorSplitGeometry? {
+        if case let .inspector(geometry) = self { return geometry }
+        return nil
+    }
+}
+
+/// What the screen's layout says about the iPhone Duo (T-562c/h/j), decided from traits and
 /// reserved regions, never from the device: the same signal the reader's Duo chrome uses
 /// (`ReaderChromeLayout`, `verticalBarEdge` + the fold region). Every other screen reads
 /// `\.duoLayout`; on an iPhone, iPad or Mac it stays at its default (all false).
@@ -58,7 +89,45 @@ nonisolated struct DuoLayoutSignal: Equatable, Sendable {
     /// The probe's width, in the same coordinates as `verticalFold`.
     var width: CGFloat = 0
 
+    /// True once `DuoLayoutProbe` has measured a real window (`width > 0`), so callers can
+    /// avoid flashing a modal sheet on frame 0 before a Duo inspector layout is known.
+    var isMeasured: Bool { width > 0 }
+
     var isUprightFold: Bool { hasHorizontalFold && !hasVerticalBar }
+
+    /// True on any iPhone Duo pose (Cover, Open, Book, Upright), false on iPhone/iPad/Mac.
+    var isDuo: Bool { hasVerticalBar || isUprightFold }
+
+    /// On the vertical rail, actions follow one Back/Close circle in a single glass group (N9).
+    var usesSingleRailActionGroup: Bool { hasVerticalBar }
+
+    /// Duo Home boards keep only the profile button in the chrome; secondary actions stay
+    /// reachable in-page (Reading Queues Organise/New Queue, card context Select, inline reveal).
+    var hidesHomeSecondaryToolbarActions: Bool { isDuo }
+
+    /// Duo rail and upright tab bar detach Search into its own circle beside the core tabs (N3/N7).
+    var separatesSearchTab: Bool { isDuo }
+
+    /// Presentation mode for Account: trailing inspector on Open/Book, form sheet upright,
+    /// ordinary sheet on iPhone/iPad/Mac/Cover (N5).
+    func accountPresentation(rightToLeft: Bool = false) -> DuoAccountPresentation {
+        if let split = inspectorSplit(rightToLeft: rightToLeft) {
+            return .inspector(split)
+        }
+        if isUprightFold {
+            return .formSheet
+        }
+        return .sheet
+    }
+
+    /// True when the Account sheet binding should present a modal `.sheet` (wait for the
+    /// first real window measurement so Open/Book never flashes a sheet before handing off
+    /// to HomeView's trailing inspector).
+    func presentsAccountAsSheet(isPresentingAccount: Bool, onHome: Bool, rightToLeft: Bool = false) -> Bool {
+        guard isPresentingAccount, isMeasured else { return false }
+        let usesInspector = accountPresentation(rightToLeft: rightToLeft).isInspector && onHome
+        return !usesInspector
+    }
 
     init() {}
 
@@ -105,18 +174,29 @@ nonisolated struct DuoLayoutSignal: Equatable, Sendable {
         let rightRailReserve: CGFloat = isVerticalBarLeft ? 0 : Self.railReserve
 
         let paneWidth: CGFloat
+        let foldHalfWidth: CGFloat
+        let trailingRail: CGFloat
         let clearance: CGFloat
         if rightToLeft {
             // Logical trailing is physical left; host occupies baseMinX... to the right.
             paneWidth = baseMinX - leftRailReserve
+            foldHalfWidth = fold.midX - leftRailReserve
+            trailingRail = leftRailReserve
             clearance = max(0, clearMaxX - baseMinX)
         } else {
             // Logical trailing is physical right; host occupies ...baseMaxX to the left.
             paneWidth = width - baseMaxX - rightRailReserve
+            foldHalfWidth = width - fold.midX - rightRailReserve
+            trailingRail = rightRailReserve
             clearance = max(0, baseMaxX - clearMinX)
         }
         guard paneWidth >= 280 else { return nil }
-        return DuoInspectorSplitGeometry(inspectorWidth: paneWidth, leadingFoldClearance: clearance)
+        return DuoInspectorSplitGeometry(
+            inspectorWidth: paneWidth,
+            foldHalfWidth: foldHalfWidth,
+            trailingRailReserve: trailingRail,
+            leadingFoldClearance: clearance
+        )
     }
 
     func inspectorWidth(rightToLeft: Bool) -> CGFloat? {
@@ -252,8 +332,47 @@ extension View {
 }
 
 #if os(iOS)
+extension DuoLayoutSignal {
+    @MainActor
+    static func from(window: UIWindow) -> DuoLayoutSignal {
+        let bounds = window.bounds
+        guard #available(iOS 27.1, *) else {
+            var signal = DuoLayoutSignal()
+            signal.width = bounds.width
+            return signal
+        }
+        var regions = ReaderHostRegions()
+        switch window.traitCollection.verticalBarEdge {
+        case .leading:
+            regions.verticalBar = window.effectiveUserInterfaceLayoutDirection == .leftToRight ? .left : .right
+        case .trailing:
+            regions.verticalBar = window.effectiveUserInterfaceLayoutDirection == .leftToRight ? .right : .left
+        default: break
+        }
+        let divisionRegions = window.reservedRegions(kind: .division, options: .includeInactive)
+        let divisions = divisionRegions.map(\.frame)
+        regions.fold = ReaderHostRegions.foldFrame(from: divisions, in: bounds)
+        let isFoldActive = regions.fold.flatMap { fold in
+            divisionRegions.first { $0.frame == fold }?.isActive
+        } ?? false
+        return DuoLayoutSignal(
+            regions: regions, width: bounds.width, isVerticalFoldActive: isFoldActive
+        )
+    }
+
+    @MainActor
+    static func initialFromActiveWindow() -> DuoLayoutSignal {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let activeScene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first
+        guard let window = activeScene?.keyWindow ?? activeScene?.windows.first else {
+            return DuoLayoutSignal()
+        }
+        return from(window: window)
+    }
+}
+
 private struct DuoLayoutProbeModifier: ViewModifier {
-    @State private var signal = DuoLayoutSignal()
+    @State private var signal = DuoLayoutSignal.initialFromActiveWindow()
 
     func body(content: Content) -> some View {
         content
@@ -297,6 +416,11 @@ private struct DuoLayoutProbe: UIViewRepresentable {
         @available(*, unavailable)
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            report()
+        }
+
         override func layoutSubviews() {
             super.layoutSubviews()
             report()
@@ -310,23 +434,8 @@ private struct DuoLayoutProbe: UIViewRepresentable {
         }
 
         private func current() -> DuoLayoutSignal {
-            guard #available(iOS 27.1, *), let window else { return DuoLayoutSignal() }
-            var regions = ReaderHostRegions()
-            switch traitCollection.verticalBarEdge {
-            case .leading: regions.verticalBar = effectiveUserInterfaceLayoutDirection == .leftToRight ? .left : .right
-            case .trailing: regions.verticalBar = effectiveUserInterfaceLayoutDirection == .leftToRight ? .right : .left
-            default: break
-            }
-            let bounds = window.bounds
-            let divisionRegions = window.reservedRegions(kind: .division, options: .includeInactive)
-            let divisions = divisionRegions.map(\.frame)
-            regions.fold = ReaderHostRegions.foldFrame(from: divisions, in: bounds)
-            let isFoldActive = regions.fold.flatMap { fold in
-                divisionRegions.first { $0.frame == fold }?.isActive
-            } ?? false
-            return DuoLayoutSignal(
-                regions: regions, width: bounds.width, isVerticalFoldActive: isFoldActive
-            )
+            guard let window else { return DuoLayoutSignal() }
+            return DuoLayoutSignal.from(window: window)
         }
     }
 }

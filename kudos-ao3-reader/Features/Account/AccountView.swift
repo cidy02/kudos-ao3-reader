@@ -5,10 +5,16 @@ import SwiftUI
 /// moves the existing profile, Inbox, AO3 preferences, website entry, Settings
 /// and session actions here; its larger visual restyle belongs to T-470.
 struct AccountView: View {
+    /// True when hosted inside HomeView's trailing Duo inspector (Open/Book landscape):
+    /// Close sits in Home's side rail, so Account omits its own Done button and clears
+    /// the active Book fold shadow on its leading edge (`Duo-Open-Account`).
+    var inInspector: Bool = false
+
     @Environment(AO3AuthService.self) private var auth
     @Environment(AO3InboxModel.self) private var inboxModel
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.duoLayout) private var duoLayout
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -198,12 +204,14 @@ struct AccountView: View {
                 }
                 .ao3AuthorNavigation(path: $path, tab: .account)
                 .toolbar {
-                    // `.primaryAction`, not `.confirmationAction`: iOS 26 fills a
-                    // confirmation button with the tint; board 35 shows the plain glass check.
-                    ToolbarItem(placement: .primaryAction) {
-                        Button(action: dismissAccount) {
-                            Label("Done", systemImage: "checkmark")
-                                .labelStyle(.iconOnly)
+                    if !inInspector {
+                        // `.primaryAction`, not `.confirmationAction`: iOS 26 fills a
+                        // confirmation button with the tint; board 35 shows the plain glass check.
+                        ToolbarItem(placement: .primaryAction) {
+                            Button(action: dismissAccount) {
+                                Label("Done", systemImage: "checkmark")
+                                    .labelStyle(.iconOnly)
+                            }
                         }
                     }
                 }
@@ -261,7 +269,8 @@ struct AccountView: View {
                     if tab != .inbox { inboxModel.endSelection() }
                 }
         }
-        .presentationDragIndicator(.visible)
+        .safeAreaPadding(.leading, inInspector && duoLayout.isVerticalFoldActive ? DuoLayoutSignal.bookFoldInset : 0)
+        .presentationDragIndicator(inInspector ? .hidden : .visible)
     }
 
     private var standardListRoot: some View {
