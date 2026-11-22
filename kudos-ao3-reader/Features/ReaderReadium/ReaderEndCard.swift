@@ -335,20 +335,23 @@ struct ReaderEndSecondaryButton: View {
     }
 }
 
-/// Sizes itself to its content up to `maxHeight`, then scrolls. (`ViewThatFits` picked its
-/// greedy scrolling branch here and filled the cap, so the height is measured instead.)
+/// Plain content at ordinary sizes; at accessibility text sizes or a short (compact-height)
+/// screen the content scrolls inside a card capped at `maxHeight`, so no action is ever
+/// off-screen. (Measured-height and `ViewThatFits` variants both misrendered, so the plain
+/// path is untouched at ordinary sizes.)
 struct ReaderContentCappedScroll<Content: View>: View {
     let maxHeight: CGFloat
     @ViewBuilder var content: Content
-    @State private var contentHeight: CGFloat = 0
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     var body: some View {
-        ScrollView {
+        if dynamicTypeSize.isAccessibilitySize || verticalSizeClass == .compact {
+            ScrollView { content }
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(maxHeight: maxHeight)
+        } else {
             content
-                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
         }
-        .scrollBounceBehavior(.basedOnSize)
-        .frame(height: contentHeight > 0 ? min(contentHeight, maxHeight) : maxHeight)
-        .opacity(contentHeight > 0 ? 1 : 0)
     }
 }
