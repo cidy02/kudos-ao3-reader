@@ -446,8 +446,8 @@ class SyncManifestPassthroughTest {
                     listOf(
                         JsonObject(
                             base.getValue("readingSessions").jsonArray.single().jsonObject + mapOf(
-                                "activeSeconds" to JsonPrimitive("not-a-double"),
-                                "rulesVersion" to Json.parseToJsonElement("""{"broken":true}""")
+                                "futureSessionSeconds" to JsonPrimitive("not-a-double"),
+                                "futureSessionRules" to Json.parseToJsonElement("""{"broken":true}""")
                             )
                         )
                     )
@@ -497,12 +497,12 @@ class SyncManifestPassthroughTest {
             written.getValue("collections").jsonArray.single().jsonObject["lastMembershipChangedAt"]
         )
         assertEquals(
-            malformed.getValue("readingSessions").jsonArray.single().jsonObject["activeSeconds"],
-            written.getValue("readingSessions").jsonArray.single().jsonObject["activeSeconds"]
+            malformed.getValue("readingSessions").jsonArray.single().jsonObject["futureSessionSeconds"],
+            written.getValue("readingSessions").jsonArray.single().jsonObject["futureSessionSeconds"]
         )
         assertEquals(
-            malformed.getValue("readingSessions").jsonArray.single().jsonObject["rulesVersion"],
-            written.getValue("readingSessions").jsonArray.single().jsonObject["rulesVersion"]
+            malformed.getValue("readingSessions").jsonArray.single().jsonObject["futureSessionRules"],
+            written.getValue("readingSessions").jsonArray.single().jsonObject["futureSessionRules"]
         )
     }
 
@@ -1384,7 +1384,7 @@ class SyncManifestPassthroughTest {
     }
 
     @Test
-    fun connectedBackupImportKeepsPendingOverlayForNextSyncAndClearsOnFolderSwitch() = runTest {
+    fun connectedBackupImportKeepsPendingOverlayForNextSyncAndFollowsItIntoAnotherFolder() = runTest {
         val folderFixture = iosT541ManifestJson()
         val initialFolder = JsonObject(
             folderFixture.filterKeys { it != "documents" } + mapOf(
@@ -1456,15 +1456,15 @@ class SyncManifestPassthroughTest {
         assertEquals(JsonPrimitive("[{\"username\":\"carol\"}]"), syncedExtraWork["authorIdentitiesJSON"])
         assertEquals(JsonObject(mapOf("streak" to JsonPrimitive(9))), syncedExtraWork["futureWorkInsights"])
 
-        // Switching to a different folder clears any new pending import overlay so it cannot bleed across.
+        // A manual import belongs to this device: it is untagged and follows the library into
+        // whichever folder syncs next, so a folder switch must not drop its extra fields.
         val secondImport = JsonObject(
-            mapOf(
-                "version" to JsonPrimitive(8),
-                "exportedAt" to JsonPrimitive("2026-06-26T15:00:00.000Z"),
-                "writingRecovery" to JsonPrimitive("leaked-from-prior-import")
-            )
+            importedBackup + mapOf("exportedAt" to JsonPrimitive("2026-06-26T15:00:00.000Z"))
         )
         backupRepository.importV2ZipBytes(zipManifest(secondImport), mode = BackupImportMode.MERGE)
+        assertNull(
+            SyncLastManifestStore(filesRoot, BackupRepository.PENDING_IMPORT_MANIFEST_FILE).taggedFolderUri()
+        )
 
         val other = DocumentFile.fromTreeUri(context, treeUri)!!.createDirectory("FolderB")!!
         val otherKudos = other.createDirectory("KudosLibrary")!!
@@ -1498,6 +1498,61 @@ class SyncManifestPassthroughTest {
             readDocument(otherKudos.findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
         ).jsonObject
         assertEquals(JsonPrimitive("folder-b-only"), afterB["writingRecovery"])
+        assertEquals(folderFixture["documents"], afterB["documents"])
+        assertEquals(
+            JsonPrimitive("[{\"username\":\"carol\"}]"),
+            workJson(afterB, extraWorkId)["authorIdentitiesJSON"]
+        )
+    }
+
+    /** Review 7 scenario A: import under Folder A, disconnect, connect Folder B. */
+    @Test
+    fun importUnderFolderAThenDisconnectThenConnectFolderBKeepsImportedFields() = runTest {
+        val workId = "99999999-0000-4000-8000-000000000079"
+        backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
+        syncRepository.disconnect()
+
+        val other = DocumentFile.fromTreeUri(context, treeUri)!!.createDirectory("FolderBScenarioA")!!
+        val otherKudos = other.createDirectory("KudosLibrary")!!
+        writeChild(
+            otherKudos,
+            BackupPaths.MANIFEST,
+            "application/json",
+            BackupJson.encodeToString(
+                JsonObject.serializer(),
+                JsonObject(
+                    mapOf(
+                        "version" to JsonPrimitive(8),
+                        "exportedAt" to JsonPrimitive("2026-06-26T11:00:00.000Z"),
+                        "writingRecovery" to JsonPrimitive("folder-b")
+                    )
+                )
+            ).toByteArray(Charsets.UTF_8)
+        )
+        val folderBUri = android.provider.DocumentsContract.buildTreeDocumentUri(
+            FakeTempDocumentsProvider.AUTHORITY,
+            android.provider.DocumentsContract.getDocumentId(other.uri)
+        )
+        context.grantUriPermission(
+            context.packageName,
+            folderBUri,
+            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        )
+        syncRepository.connect(folderBUri)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        val afterB = Json.parseToJsonElement(
+            readDocument(otherKudos.findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
+        ).jsonObject
+        assertEquals(
+            JsonPrimitive("[{\"username\":\"ada\"}]"),
+            workJson(afterB, workId)["authorIdentitiesJSON"]
+        )
+        assertEquals(
+            "notes/backup-one.json",
+            afterB.getValue("documents").jsonArray.single().jsonObject.getValue("name").jsonPrimitive.content
+        )
     }
 
     @Test
@@ -1718,7 +1773,7 @@ class SyncManifestPassthroughTest {
     }
 
     @Test
-    fun failedTagWriteAfterBodyPublishDoesNotPairNewFolderWithOldTag() = runTest {
+    fun failedPublishWhileClearingStaleTagLeavesOldBodyAndTagTogether() = runTest {
         val dir = Files.createTempDirectory("kudos-a541-tag-crash")
         try {
             val store = SyncLastManifestStore(dir)
@@ -1726,34 +1781,91 @@ class SyncManifestPassthroughTest {
                 JsonObject(mapOf("writingRecovery" to JsonPrimitive("folder-a-body"))),
                 folderUri = "content://folder-a"
             )
-            SyncLastManifestStore.beforeTagPublish = { path ->
-                if (path.parent == dir) throw java.io.IOException("simulated crash before tag write")
-            }
+            SyncLastManifestStore.beforeFilePublish = { throw java.io.IOException("simulated crash before publish") }
             val thrown = try {
                 store.save(
-                    JsonObject(mapOf("writingRecovery" to JsonPrimitive("folder-b-body"))),
-                    folderUri = "content://folder-b"
+                    JsonObject(mapOf("writingRecovery" to JsonPrimitive("disconnected-body"))),
+                    clearStaleFolderTag = true
                 )
                 false
             } catch (_: java.io.IOException) {
                 true
             }
             assertTrue(thrown)
-            assertEquals(JsonPrimitive("folder-b-body"), store.load()!!["writingRecovery"])
-            assertFalse(store.belongsToFolder("content://folder-a"))
-            assertFalse(store.belongsToFolder("content://folder-b"))
+            // One file, so the failed publish cannot leave the old body untagged or a new body tagged.
+            assertEquals(JsonPrimitive("folder-a-body"), store.load()!!["writingRecovery"])
+            assertTrue(store.belongsToFolder("content://folder-a"))
+            SyncLastManifestStore.beforeFilePublish = null
+            store.save(
+                JsonObject(mapOf("writingRecovery" to JsonPrimitive("disconnected-body"))),
+                clearStaleFolderTag = true
+            )
+            assertEquals(JsonPrimitive("disconnected-body"), store.load()!!["writingRecovery"])
             assertNull(store.taggedFolderUri())
         } finally {
-            SyncLastManifestStore.beforeTagPublish = null
+            SyncLastManifestStore.beforeFilePublish = null
             dir.toFile().deleteRecursively()
         }
     }
 
     @Test
-    fun disconnectedImportAfterUnsyncedConnectedImportDropsStaleFolderTag() = runTest {
-        val pendingTagFile = filesRoot.resolve("${BackupRepository.PENDING_IMPORT_MANIFEST_FILE}.folder")
+    fun legacyFileAndFolderPairIsReadAndFolderFileDeletedAfterSingleFileSave() = runTest {
+        val dir = Files.createTempDirectory("kudos-a541-legacy-pair")
+        try {
+            Files.write(dir.resolve("sync-last-manifest.json"), "{\"writingRecovery\":\"legacy\"}".toByteArray())
+            Files.write(dir.resolve("sync-last-manifest.json.folder"), "content://folder-a".toByteArray())
+            val store = SyncLastManifestStore(dir)
+            assertEquals(JsonPrimitive("legacy"), store.load()!!["writingRecovery"])
+            assertTrue(store.belongsToFolder("content://folder-a"))
 
-        // 1. Connected Merge under Folder A tags the pending overlay to Folder A.
+            SyncLastManifestStore.beforeFilePublish = { throw java.io.IOException("simulated crash") }
+            runCatching { store.save(JsonObject(mapOf("k" to JsonPrimitive("v")))) }
+            SyncLastManifestStore.beforeFilePublish = null
+            assertTrue("a failed publish keeps the legacy tag", Files.exists(dir.resolve("sync-last-manifest.json.folder")))
+
+            store.save(JsonObject(mapOf("k" to JsonPrimitive("v"))))
+            assertFalse(Files.exists(dir.resolve("sync-last-manifest.json.folder")))
+            assertTrue(store.belongsToFolder("content://folder-a"))
+            assertEquals(JsonPrimitive("v"), store.load()!!["k"])
+        } finally {
+            SyncLastManifestStore.beforeFilePublish = null
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun legacyTaggedPendingOverlayIsAdoptedUntaggedByNextImportKeepingItsData() = runTest {
+        val workId = "99999999-0000-4000-8000-000000000080"
+        val pending = SyncLastManifestStore(filesRoot, BackupRepository.PENDING_IMPORT_MANIFEST_FILE)
+        Files.write(
+            filesRoot.resolve(BackupRepository.PENDING_IMPORT_MANIFEST_FILE),
+            BackupJson.encodeToString(JsonObject.serializer(), backupOneOverlay(workId)).toByteArray()
+        )
+        Files.write(
+            filesRoot.resolve("${BackupRepository.PENDING_IMPORT_MANIFEST_FILE}.folder"),
+            "content://old-folder".toByteArray()
+        )
+        val backupTwo = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T12:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("backup-two-draft")
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(backupTwo), mode = BackupImportMode.MERGE)
+        assertNull(pending.taggedFolderUri())
+        assertFalse(Files.exists(filesRoot.resolve("${BackupRepository.PENDING_IMPORT_MANIFEST_FILE}.folder")))
+        assertEquals(
+            JsonPrimitive("[{\"username\":\"ada\"}]"),
+            workJson(pending.load()!!, workId)["authorIdentitiesJSON"]
+        )
+    }
+
+    @Test
+    fun disconnectedImportAfterUnsyncedConnectedImportDropsStaleFolderTag() = runTest {
+        val pendingStore = SyncLastManifestStore(filesRoot, BackupRepository.PENDING_IMPORT_MANIFEST_FILE)
+
+        // 1. A connected Merge under Folder A writes the pending overlay untagged.
         val connectedAImport = JsonObject(
             mapOf(
                 "version" to JsonPrimitive(8),
@@ -1762,7 +1874,8 @@ class SyncManifestPassthroughTest {
             )
         )
         backupRepository.importV2ZipBytes(zipManifest(connectedAImport), mode = BackupImportMode.MERGE)
-        assertTrue(Files.isRegularFile(pendingTagFile))
+        assertNull(pendingStore.taggedFolderUri())
+        assertNotNull(pendingStore.load())
 
         // 2. Disconnect without syncing, then perform a disconnected Merge of a new backup.
         syncRepository.disconnect()
@@ -1792,10 +1905,7 @@ class SyncManifestPassthroughTest {
             )
         )
         backupRepository.importV2ZipBytes(zipManifest(disconnectedImport), mode = BackupImportMode.MERGE)
-        assertFalse(
-            "disconnected import must clear any prior folder tag on pending",
-            Files.exists(pendingTagFile)
-        )
+        assertNull("the Merge half leaves the pending overlay untagged", pendingStore.taggedFolderUri())
 
         // 3. Connecting Folder B must retain the untagged disconnected overlay and fold it on sync.
         val other = DocumentFile.fromTreeUri(context, treeUri)!!.createDirectory("FolderBForDisconnected")!!
@@ -1837,7 +1947,7 @@ class SyncManifestPassthroughTest {
 
         // 4. Connected Replace followed by disconnect + disconnected Replace also drops the stale tag.
         backupRepository.importV2ZipBytes(zipManifest(connectedAImport), mode = BackupImportMode.MERGE)
-        assertTrue(Files.isRegularFile(pendingTagFile))
+        assertNull(pendingStore.taggedFolderUri())
         syncRepository.disconnect()
         backupRepository.importV2ZipBytes(
             zipManifest(
@@ -1851,7 +1961,7 @@ class SyncManifestPassthroughTest {
             ),
             mode = BackupImportMode.REPLACE_LIBRARY
         )
-        assertFalse(Files.exists(pendingTagFile))
+        assertNull(pendingStore.taggedFolderUri())
     }
 
     @Test
@@ -1913,9 +2023,8 @@ class SyncManifestPassthroughTest {
     fun disconnectedImportSaveDoesNotEmptyPendingBeforePublish() = runTest {
         val workId = "99999999-0000-4000-8000-000000000078"
         val pendingFile = filesRoot.resolve(BackupRepository.PENDING_IMPORT_MANIFEST_FILE)
-        val pendingTagFile = filesRoot.resolve("${BackupRepository.PENDING_IMPORT_MANIFEST_FILE}.folder")
+        val pendingStore = SyncLastManifestStore(filesRoot, BackupRepository.PENDING_IMPORT_MANIFEST_FILE)
         backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
-        assertTrue(Files.isRegularFile(pendingTagFile))
         syncRepository.disconnect()
 
         val backupTwo = JsonObject(
@@ -1931,7 +2040,6 @@ class SyncManifestPassthroughTest {
 
         settingsRepository.updateSyncFolderUri(treeUri.toString())
         backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
-        assertTrue(Files.isRegularFile(pendingTagFile))
         syncRepository.disconnect()
         assertPendingBodySurvivesUntilSave(pendingFile, workId) {
             backupRepository.importV2ZipBytes(
@@ -1947,7 +2055,7 @@ class SyncManifestPassthroughTest {
                 mode = BackupImportMode.REPLACE_LIBRARY
             )
         }
-        assertFalse(Files.exists(pendingTagFile))
+        assertNull(pendingStore.taggedFolderUri())
     }
 
     private suspend fun assertPendingBodySurvivesUntilSave(
@@ -1962,7 +2070,7 @@ class SyncManifestPassthroughTest {
                     "pending overlay must still hold Backup 1 when save begins",
                     Files.isRegularFile(path) && Files.size(path) > 0L
                 )
-                val body = Json.parseToJsonElement(Files.readAllBytes(path).toString(Charsets.UTF_8)).jsonObject
+                val body = SyncLastManifestStore(path.parent, path.fileName.toString()).load()!!
                 assertEquals(
                     JsonPrimitive("[{\"username\":\"ada\"}]"),
                     workJson(body, workId)["authorIdentitiesJSON"]

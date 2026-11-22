@@ -91,10 +91,7 @@ class SyncRepository(
             uri,
             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         )
-        // Untagged pending is this device's own import and follows the folder it
-        // syncs next. A tag for a different folder is dropped so it cannot bleed.
-        val pendingTag = pendingImportManifestStore.taggedFolderUri()
-        if (pendingTag != null && pendingTag != uri.toString()) pendingImportManifestStore.clear()
+        // The pending import overlay is this device's own and follows whichever folder syncs next.
         settingsRepository.updateSyncFolderUri(uri.toString())
         // iOS records any connected folder as configured, wherever it was chosen, so a later
         // Disconnect does not bring the first-run sync prompt back (A75 #11).

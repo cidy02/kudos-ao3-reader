@@ -716,40 +716,75 @@ internal class SyncLastManifestStore(
     fileName: String = "sync-last-manifest.json"
 ) {
     val file: Path = directory.resolve(fileName)
-    private val folderFile: Path = directory.resolve("$fileName.folder")
 
-    fun load(): JsonObject? = synchronized(lock) {
+    /** Older builds kept the folder tag in this sibling file. Read once, deleted after the first single-file save. */
+    private val legacyFolderFile: Path = directory.resolve("$fileName.folder")
+
+    /** The body and the folder tag live in one file so one atomic move publishes both. */
+    private class Stored(val body: JsonObject, val folder: String?)
+
+    private fun read(): Stored? {
         if (!Files.isRegularFile(file)) return null
         val bytes = runCatching { Files.readAllBytes(file) }.getOrNull() ?: return null
-        parseJsonObjectOrNull(bytes)
+        val obj = parseJsonObjectOrNull(bytes) ?: return null
+        val body = obj[ENVELOPE_BODY] as? JsonObject
+        if (body != null) return Stored(body, (obj[ENVELOPE_FOLDER] as? JsonPrimitive)?.contentOrNull)
+        return Stored(obj, readLegacyTag())
     }
 
-    fun taggedFolderUri(): String? = synchronized(lock) { readFolderTag() }
+    private fun readLegacyTag(): String? {
+        if (!Files.isRegularFile(legacyFolderFile)) return null
+        return runCatching { Files.readAllBytes(legacyFolderFile).toString(Charsets.UTF_8) }.getOrNull()
+    }
+
+    fun load(): JsonObject? = synchronized(lock) { read()?.body }
+
+    fun taggedFolderUri(): String? = synchronized(lock) { read()?.folder ?: readLegacyTag() }
 
     fun belongsToFolder(folderUri: String): Boolean = synchronized(lock) {
-        readFolderTag() == folderUri
-    }
-
-    private fun readFolderTag(): String? {
-        if (!Files.isRegularFile(folderFile)) return null
-        return runCatching { Files.readAllBytes(folderFile).toString(Charsets.UTF_8) }.getOrNull()
+        taggedFolderUri() == folderUri
     }
 
     /**
-     * [clearStaleFolderTag] applies only when [folderUri] is null: a tag already on disk is
-     * deleted before the body moves, and no new tag is written. The body file itself is
-     * replaced in this lock, never removed first. A null URI without the flag leaves the tag.
+     * Load, transform and save in one critical section, so no other save can land between
+     * the read and the write.
      */
-    fun save(json: JsonObject, folderUri: String? = null, clearStaleFolderTag: Boolean = false) {
-        val bytes = BackupJson.encodeToString(JsonObject.serializer(), json).toByteArray(Charsets.UTF_8)
-        save(bytes, folderUri, clearStaleFolderTag)
+    fun update(
+        folderUri: String? = null,
+        clearStaleFolderTag: Boolean = false,
+        transform: (JsonObject?) -> JsonObject
+    ) = synchronized(lock) { save(transform(load()), folderUri, clearStaleFolderTag) }
+
+    /**
+     * [folderUri] non-null tags the file with it. Null keeps the tag already stored, unless
+     * [clearStaleFolderTag] asks for it to be dropped in the same publish.
+     */
+    fun save(json: JsonObject, folderUri: String? = null, clearStaleFolderTag: Boolean = false) = synchronized(lock) {
+        val tag = when {
+            folderUri != null -> folderUri
+            clearStaleFolderTag -> null
+            else -> taggedFolderUri()
+        }
+        val envelope = JsonObject(
+            buildMap {
+                if (tag != null) put(ENVELOPE_FOLDER, JsonPrimitive(tag))
+                put(ENVELOPE_BODY, json)
+            }
+        )
+        publish(BackupJson.encodeToString(JsonObject.serializer(), envelope).toByteArray(Charsets.UTF_8))
     }
 
+    /** Raw manifest bytes, tagged or untagged exactly as [json] would be. */
     fun save(
         bytes: ByteArray,
         folderUri: String? = null,
         clearStaleFolderTag: Boolean = false
-    ) = synchronized(lock) {
+    ) {
+        val body = parseJsonObjectOrNull(bytes) ?: return
+        save(body, folderUri, clearStaleFolderTag)
+    }
+
+    private fun publish(bytes: ByteArray) = synchronized(lock) {
         // Inside the lock, before the file is replaced, so a clear on any instance
         // cannot finish until this publish does, and cannot be overwritten by it.
         beforeFilePublish?.invoke(file)
@@ -758,16 +793,6 @@ internal class SyncLastManifestStore(
         val temp = Files.createTempFile(parent, ".sync-last-manifest-", ".tmp")
         try {
             Files.write(temp, bytes)
-            // Drop a differing folder tag before replacing the manifest body so a crash or
-            // write failure before the new tag moves never pairs the new body with the old folder.
-            // A disconnected import passes no URI and asks to drop a stale tag here, still
-            // before the body move, and then writes no replacement tag.
-            val existingTag = readFolderTag()
-            if (folderUri != null && existingTag != folderUri) {
-                runCatching { Files.deleteIfExists(folderFile) }
-            } else if (folderUri == null && clearStaleFolderTag && existingTag != null) {
-                Files.deleteIfExists(folderFile)
-            }
             try {
                 Files.move(temp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             } catch (_: Exception) {
@@ -776,43 +801,23 @@ internal class SyncLastManifestStore(
         } finally {
             runCatching { Files.deleteIfExists(temp) }
         }
-        // A null URI writes no tag. Without [clearStaleFolderTag] the existing tag stays
-        // (a disconnected save of the on-device store must not strip a previous sync's tag).
-        // With the flag, that tag was already removed before the body move.
-        if (folderUri != null) {
-            beforeTagPublish?.invoke(folderFile)
-            val tagTemp = Files.createTempFile(parent, ".sync-last-manifest-folder-", ".tmp")
-            try {
-                Files.write(tagTemp, folderUri.toByteArray(Charsets.UTF_8))
-                try {
-                    Files.move(
-                        tagTemp,
-                        folderFile,
-                        StandardCopyOption.ATOMIC_MOVE,
-                        StandardCopyOption.REPLACE_EXISTING
-                    )
-                } catch (_: Exception) {
-                    Files.move(tagTemp, folderFile, StandardCopyOption.REPLACE_EXISTING)
-                }
-            } finally {
-                runCatching { Files.deleteIfExists(tagTemp) }
-            }
-        }
+        // Only after the single-file move succeeded: the tag is inside it now.
+        runCatching { Files.deleteIfExists(legacyFolderFile) }
+        Unit
     }
 
     fun clear() = synchronized(lock) {
         runCatching { Files.deleteIfExists(file) }
-        runCatching { Files.deleteIfExists(folderFile) }
+        runCatching { Files.deleteIfExists(legacyFolderFile) }
         Unit
     }
 
     internal companion object {
         private val lock = Any()
+        private const val ENVELOPE_FOLDER = "kudosStoreFolder"
+        private const val ENVELOPE_BODY = "kudosStoreManifest"
 
         /** Test hook. Receives the file about to be published. Null in production. */
         internal var beforeFilePublish: ((Path) -> Unit)? = null
-
-        /** Test hook. Receives the `.folder` tag path right before it is written. Null in production. */
-        internal var beforeTagPublish: ((Path) -> Unit)? = null
     }
 }

@@ -205,34 +205,20 @@ class BackupRepository(
             return
         }
         val keepFolderTag = connectedFolderUri?.takeIf { lastImportedManifestStore.belongsToFolder(it) }
+        // A manual import belongs to this device's library: its pending overlay is never
+        // tagged, and a tag left by an older build is dropped in the same save (data kept).
         if (mode == BackupImportMode.REPLACE_LIBRARY) {
             if (rawJson != null) {
                 lastImportedManifestStore.save(rawJson, folderUri = keepFolderTag)
-                // Same lock as the body write. A disconnected Replace drops a stale folder
-                // tag there and never deletes the overlay first.
-                pendingImportManifestStore.save(
-                    rawJson,
-                    folderUri = connectedFolderUri,
-                    clearStaleFolderTag = connectedFolderUri == null
-                )
+                pendingImportManifestStore.save(rawJson, clearStaleFolderTag = true)
             } else {
                 lastImportedManifestStore.clear()
                 pendingImportManifestStore.clear()
             }
         } else if (rawJson != null) {
-            val existing = lastImportedManifestStore.load()
-            lastImportedManifestStore.save(
-                mergeImportedManifestJson(rawJson, existing),
-                folderUri = keepFolderTag
-            )
-            // Load before save. A disconnected Merge/Reconcile keeps every key the new
-            // file lacks, and drops a stale folder tag inside that same save.
-            val existingPending = pendingImportManifestStore.load()
-            pendingImportManifestStore.save(
-                mergeImportedManifestJson(rawJson, existingPending),
-                folderUri = connectedFolderUri,
-                clearStaleFolderTag = connectedFolderUri == null
-            )
+            // Load, merge and save under the store lock, so no other save lands in between.
+            lastImportedManifestStore.update(folderUri = keepFolderTag) { mergeImportedManifestJson(rawJson, it) }
+            pendingImportManifestStore.update(clearStaleFolderTag = true) { mergeImportedManifestJson(rawJson, it) }
         }
     }
 
