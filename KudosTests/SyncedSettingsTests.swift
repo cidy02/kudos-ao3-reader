@@ -623,4 +623,154 @@ struct SyncedSettingsTests {
 
         #expect(store.load().global["Wren"] == "from the backup")
     }
+
+    // MARK: Review 7 (merge with the integration branch's named settings)
+
+    private func settingsThroughJSON(_ settings: KudosBackupSettings, tweak: (inout [String: Any]) -> Void = { _ in })
+        throws -> KudosBackupSettings {
+        var object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as? [String: Any])
+        tweak(&object)
+        return try JSONDecoder().decode(KudosBackupSettings.self, from: JSONSerialization.data(withJSONObject: object))
+    }
+
+    private let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+
+    @Test func anOlderNamedValueLosesAndANewerIndependentOneWinsThroughAManifest() throws {
+        let key = InsightsOptions.Keys.countReadAloud
+        let other = InsightsOptions.Keys.discreetMode
+        let defaults = freshDefaults()
+        defaults.set(true, forKey: key)
+        defaults.set(false, forKey: other)
+        _ = KudosBackupSettings.capture(defaults: defaults)           // baseline
+        defaults.set(false, forKey: key)
+        SyncedSettingsClock.noteLocalChanges(keys: [key], in: defaults, now: t0)
+        defaults.set(true, forKey: key)
+        SyncedSettingsClock.noteLocalChanges(keys: [key], in: defaults, now: t0)
+
+        var incoming = KudosBackupSettings.capture(defaults: freshDefaults())
+        incoming.countReadAloud = false
+        incoming.discreetMode = true
+        incoming.modifiedAt = [key: t0.addingTimeInterval(-600), other: t0.addingTimeInterval(300)]
+        try settingsThroughJSON(incoming).apply(to: defaults, fromSync: true)
+        #expect(defaults.bool(forKey: key))                 // older: kept here
+        #expect(defaults.bool(forKey: other))               // newer, independent: taken
+
+        // The reader's own restore takes the file's value whatever its date.
+        try settingsThroughJSON(incoming).apply(to: defaults)
+        #expect(!defaults.bool(forKey: key))
+
+        // A stampless copy still fills a device that never touched the setting.
+        let fresh = freshDefaults()
+        incoming.modifiedAt = nil
+        try settingsThroughJSON(incoming).apply(to: fresh, fromSync: true)
+        #expect(fresh.object(forKey: key) != nil && !fresh.bool(forKey: key))
+    }
+
+    @Test func aMalformedNamedSettingNeverErasesTheOneHere() throws {
+        let key = InsightsOptions.Keys.excludedTags
+        let defaults = freshDefaults()
+        defaults.set(["Slow Burn"], forKey: key)
+        _ = KudosBackupSettings.capture(defaults: defaults)
+        var incoming = KudosBackupSettings.capture(defaults: freshDefaults())
+        incoming.modifiedAt = [key: t0.addingTimeInterval(300)]
+        let broken = try settingsThroughJSON(incoming) { $0["excludedTags"] = "Slow Burn" }
+
+        broken.apply(to: defaults, fromSync: true)
+        #expect(defaults.stringArray(forKey: key) == ["Slow Burn"])
+        broken.apply(to: defaults)                           // manual restore, whatever the stamp
+        #expect(defaults.stringArray(forKey: key) == ["Slow Burn"])
+
+        // A real omission with its own stamp is still a reset.
+        try settingsThroughJSON(incoming).apply(to: defaults, fromSync: true)
+        #expect(defaults.object(forKey: key) == nil)
+    }
+
+    @Test func theVoiceIDAndNameTravelAsOneSetting() throws {
+        let id = ReaderSpeechPreferences.voiceIDKey
+        let name = ReaderSpeechPreferences.voiceNameKey
+        func local(nameStampedAt: Date) -> UserDefaults {
+            let defaults = freshDefaults()
+            defaults.set("af_bella", forKey: id)
+            defaults.set("Bella", forKey: name)
+            _ = KudosBackupSettings.capture(defaults: defaults)
+            defaults.set("Bella ", forKey: id)
+            defaults.set("Bella!", forKey: name)
+            SyncedSettingsClock.noteLocalChanges(keys: [id, name], in: defaults, now: t0)
+            defaults.set("af_bella", forKey: id)
+            defaults.set("Bella", forKey: name)
+            SyncedSettingsClock.noteLocalChanges(keys: [id], in: defaults, now: t0)
+            SyncedSettingsClock.noteLocalChanges(keys: [name], in: defaults, now: nameStampedAt)
+            return defaults
+        }
+        var incoming = KudosBackupSettings.capture(defaults: freshDefaults())
+
+        // The same voice, its label refreshed on another device: the newer label arrives.
+        let refreshed = local(nameStampedAt: t0)
+        incoming.readerSpeechVoiceID = "af_bella"
+        incoming.readerSpeechVoiceName = "Bella (US)"
+        incoming.modifiedAt = [id: t0, name: t0.addingTimeInterval(300)]
+        try settingsThroughJSON(incoming).apply(to: refreshed, fromSync: true)
+        #expect(refreshed.string(forKey: name) == "Bella (US)")
+
+        // A different voice wins without a name: the old label goes, and that is no local edit.
+        let swapped = local(nameStampedAt: t0)
+        incoming.readerSpeechVoiceID = "bm_lewis"
+        incoming.readerSpeechVoiceName = nil
+        incoming.modifiedAt = [id: t0.addingTimeInterval(300), name: t0.addingTimeInterval(300)]
+        try settingsThroughJSON(incoming).apply(to: swapped, fromSync: true)
+        #expect(swapped.string(forKey: id) == "bm_lewis")
+        #expect(swapped.object(forKey: name) == nil)
+        #expect(!SyncedSettingsClock.stampChanges(keys: [id, name], in: swapped))
+        #expect(KudosBackupSettings.capture(defaults: swapped).modifiedAt?[name] == t0.addingTimeInterval(300))
+
+        // This device's own newer label keeps the whole pair: no new ID with the old device's label.
+        let newerHere = local(nameStampedAt: t0.addingTimeInterval(600))
+        incoming.readerSpeechVoiceID = "bm_lewis"
+        incoming.readerSpeechVoiceName = "Lewis"
+        try settingsThroughJSON(incoming).apply(to: newerHere, fromSync: true)
+        #expect(newerHere.string(forKey: id) == "af_bella")
+        #expect(newerHere.string(forKey: name) == "Bella")
+    }
+
+    @Test func settingsThatMovedOutOfExtrasStillReadFromAnEarlierT541Backup() throws {
+        let defaults = freshDefaults()
+        defaults.set(false, forKey: InsightsOptions.Keys.hideReadingTime)
+        _ = KudosBackupSettings.capture(defaults: defaults)
+        var incoming = KudosBackupSettings.capture(defaults: freshDefaults())
+        incoming.extras = [
+            "kudos.insights.discreetMode": .bool(true),
+            "kudos.insights.hideReadingTime": .bool(true),
+            "readerSpeechVoiceID": .string("af_bella")
+        ]
+        incoming.modifiedAt = [
+            "kudos.insights.discreetMode": t0, "kudos.insights.hideReadingTime": t0,
+            "readerSpeechVoiceID": t0
+        ]
+        try settingsThroughJSON(incoming).apply(to: defaults, fromSync: true)
+        #expect(defaults.bool(forKey: InsightsOptions.Keys.discreetMode))
+        #expect(defaults.bool(forKey: InsightsOptions.Keys.hideReadingTime))
+        #expect(defaults.string(forKey: ReaderSpeechPreferences.voiceIDKey) == "af_bella")
+    }
+
+    @Test func aLayoutLearnedWithoutAnEditStampStillGetsItsResetSent() throws {
+        let key = "collection.0F0F0F0F.arrangement"
+        let defaults = freshDefaults()
+        _ = KudosBackupSettings.capture(defaults: defaults)
+        var incoming = KudosBackupSettings.capture(defaults: freshDefaults())
+        incoming.extras = [key: .string("grid")]
+        try settingsThroughJSON(incoming).apply(to: defaults, fromSync: true, archiveDate: t0)
+        #expect(defaults.string(forKey: key) == "grid")
+        defaults.removeObject(forKey: key)
+        #expect(KudosBackupSettings.capture(defaults: defaults).modifiedAt?[key] != nil)
+    }
+
+    @Test func aWorksBylinesTravelInAnArchive() throws {
+        let work = SavedWork(title: "Bylines", author: "Someone")
+        work.authorIdentitiesJSON = #"[{"username":"someone","pseud":"Someone"}]"#
+        let data = try JSONEncoder().encode(KudosBackupWork(work: work))
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["authorIdentitiesJSON"] as? String == work.authorIdentitiesJSON)
+        #expect(try JSONDecoder().decode(KudosBackupWork.self, from: data).authorIdentitiesJSON
+            == work.authorIdentitiesJSON)
+    }
 }
