@@ -661,9 +661,9 @@ struct SensitiveWorkRow: View {
             .contentShape(Rectangle())
             selectingOrNavigating(for: row, title: work.title) {
                 if usesInlineNavigation {
-                    NavigationLink(value: work) { row }.buttonStyle(.plain)
+                    RemoteWorkLink(work: work) { row }.buttonStyle(.plain)
                 } else {
-                    row.cardNavigation(to: work, accessibilityLabel: work.title)
+                    row.remoteWorkNavigation(to: work)
                 }
             }
         }

@@ -250,6 +250,43 @@ extension PersistenceGateSuites {
 
         // MARK: review fixes
 
+        @Test func aLegacyRestoredSittingGainsItsTimingFromALaterMergeOrReconcile() throws {
+            let source = try makeContext()
+            let work = SavedWork(title: "W", author: "A")
+            source.insert(work)
+            let timed = timedSession(workID: work.id)
+            source.insert(timed)
+            try source.save()
+            let current = try root(try contents(works: [work], sessions: [timed]))
+            var legacy = current
+            var sessions = try #require(legacy["readingSessions"] as? [[String: Any]])
+            for key in [
+                "chapterSecondsJSON", "chapterWordsJSON", "skimmedChaptersJSON", "skimmedStoryChaptersJSON",
+                "endedAtChapterEnd", "peekedAtEnding"
+            ] {
+                sessions[0].removeValue(forKey: key)
+            }
+            legacy["readingSessions"] = sessions
+            for mode in [BackupImportMode.merge, .reconcile] {
+                let dest = try makeContext()
+                _ = try KudosBackupService.restore(try reload(legacy), into: dest, defaults: try defaults())
+                let row = try #require(try dest.fetch(FetchDescriptor<ReadingSession>()).first)
+                #expect(row.chapterSecondsJSON == nil)
+                _ = try KudosBackupService.restore(
+                    try reload(current), into: dest, defaults: try defaults(), mode: mode
+                )
+                #expect(row.chapterSeconds == [3: 120.5, 4: 80], "mode \(mode)")
+                #expect(row.skimmedChapters == [4], "mode \(mode)")
+                #expect(row.endedAtChapterEnd == true, "mode \(mode)")
+                // Existing timing is never overwritten by a fill.
+                row.chapterSeconds = [9: 1]
+                _ = try KudosBackupService.restore(
+                    try reload(current), into: dest, defaults: try defaults(), mode: mode
+                )
+                #expect(row.chapterSeconds == [9: 1], "mode \(mode)")
+            }
+        }
+
         @Test func damagedSittingValuesAreRefusedOnRestoreAndFiguresStillWork() throws {
             let source = try makeContext()
             let work = SavedWork(title: "W", author: "A")

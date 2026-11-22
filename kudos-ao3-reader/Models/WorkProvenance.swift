@@ -208,3 +208,11 @@ extension SavedWork {
         return true
     }
 }
+
+extension ReadingQueueMembershipOrigin {
+    /// A fandom page's loaded total describes the fandom only while the list is that fandom's own:
+    /// one fandom, no filter beyond it (D9). Anything else carries no size.
+    static func fandomTotal(_ total: Int?, filtered: Bool, fandomCount: Int) -> Int? {
+        filtered || fandomCount != 1 ? nil : total
+    }
+}

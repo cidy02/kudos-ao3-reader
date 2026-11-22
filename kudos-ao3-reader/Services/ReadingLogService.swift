@@ -592,6 +592,8 @@ enum ReadingLogService {
             session.leftForNext = []
             session.peekedAtEnding = false
             session.sawChapterSignal = false
+            session.currentSpine = nil
+            session.storyChapterBySpine = [:]
             openSessions[workID] = session
         }
     }

@@ -268,7 +268,14 @@ private struct AO3AuthorNavigationModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .navigationDestination(for: AO3AuthorRoute.self) { route in
-                AuthorProfileView(route: route)
+                // A work opened from an author page arrived through that author (D8).
+                AuthorProfileView(route: route).environment(
+                    \.queueMembershipOrigin,
+                    ReadingQueueMembershipOrigin(kind: .manual, importSourceHint: .author)
+                )
+            }
+            .navigationDestination(for: RemoteWorkRoute.self) { route in
+                WorkDetailView(remote: route.work).environment(\.queueMembershipOrigin, route.origin)
             }
             .navigationDestination(for: AO3SeriesSummary.self) { series in
                 AO3SeriesDetailView(series: series)
@@ -321,5 +328,49 @@ extension View {
     /// handed up by nested cards, comments, and readers in this root tab.
     func ao3AuthorNavigation(path: Binding<NavigationPath>, tab: AppTab) -> some View {
         modifier(AO3AuthorNavigationModifier(path: path, tab: tab))
+    }
+}
+
+/// A remote work tapped on a page that knows how the reader found it (Search, a fandom or tag
+/// page, an author profile). The tapped row's origin travels in the route, so a save from the
+/// detail page records that page as the source instead of Unknown (Insights D8/D9).
+struct RemoteWorkRoute: Hashable {
+    let work: AO3WorkSummary
+    let origin: ReadingQueueMembershipOrigin
+}
+
+/// Pushes `RemoteWorkRoute` when the row sits under a page origin, the plain summary otherwise.
+private struct RemoteWorkNavigationModifier: ViewModifier {
+    let work: AO3WorkSummary
+    @Environment(\.queueMembershipOrigin) private var origin
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let origin {
+            content.cardNavigation(to: RemoteWorkRoute(work: work, origin: origin), accessibilityLabel: work.title)
+        } else {
+            content.cardNavigation(to: work, accessibilityLabel: work.title)
+        }
+    }
+}
+
+/// Inline-navigation twin of `RemoteWorkNavigationModifier`.
+struct RemoteWorkLink<Label: View>: View {
+    let work: AO3WorkSummary
+    @ViewBuilder let label: () -> Label
+    @Environment(\.queueMembershipOrigin) private var origin
+
+    var body: some View {
+        if let origin {
+            NavigationLink(value: RemoteWorkRoute(work: work, origin: origin), label: label)
+        } else {
+            NavigationLink(value: work, label: label)
+        }
+    }
+}
+
+extension View {
+    func remoteWorkNavigation(to work: AO3WorkSummary) -> some View {
+        modifier(RemoteWorkNavigationModifier(work: work))
     }
 }

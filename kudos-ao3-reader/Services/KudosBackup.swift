@@ -4814,6 +4814,7 @@ enum KudosBackupService {
             let resolvedWorkID = restoredWorksByArchivedID[archived.workID]?.id ?? archived.workID
             if let local = byID[archived.id] {
                 resolvedLocalIDs.insert(local.id)
+                applyChapterTiming(archived, to: local, fillOnly: true)
                 if mode == .merge { continue }
                 guard SyncMerge.shouldApplyIncoming(
                     localModifiedAt: local.lastModifiedAt,
@@ -4914,21 +4915,30 @@ enum KudosBackupService {
 
     /// D7 fields: an absent or malformed key leaves what the row has, so a sitting re-exported by
     /// an older build or Android (which drop these keys) never wipes the chapter timing.
-    private static func applyChapterTiming(_ archived: KudosBackupReadingSession, to session: ReadingSession) {
-        if ChapterTiming.isValidSeconds(archived.chapterSecondsJSON) {
+    /// `fillOnly` writes just the members the row has none of (a matched sitting a legacy archive
+    /// restored without timing, met again in Merge or an older-clock Reconcile).
+    private static func applyChapterTiming(
+        _ archived: KudosBackupReadingSession, to session: ReadingSession, fillOnly: Bool = false
+    ) {
+        if ChapterTiming.isValidSeconds(archived.chapterSecondsJSON), !fillOnly || session.chapterSecondsJSON == nil {
             session.chapterSecondsJSON = archived.chapterSecondsJSON
         }
-        if ChapterTiming.isValidWords(archived.chapterWordsJSON) {
+        if ChapterTiming.isValidWords(archived.chapterWordsJSON), !fillOnly || session.chapterWordsJSON == nil {
             session.chapterWordsJSON = archived.chapterWordsJSON
         }
-        if ChapterTiming.isValidList(archived.skimmedChaptersJSON) {
+        if ChapterTiming.isValidList(archived.skimmedChaptersJSON), !fillOnly || session.skimmedChaptersJSON == nil {
             session.skimmedChaptersJSON = archived.skimmedChaptersJSON
         }
-        if ChapterTiming.isValidList(archived.skimmedStoryChaptersJSON) {
+        if ChapterTiming.isValidList(archived.skimmedStoryChaptersJSON),
+           !fillOnly || session.skimmedStoryChaptersJSON == nil {
             session.skimmedStoryChaptersJSON = archived.skimmedStoryChaptersJSON
         }
-        session.endedAtChapterEnd = archived.endedAtChapterEnd ?? session.endedAtChapterEnd
-        session.peekedAtEnding = archived.peekedAtEnding ?? session.peekedAtEnding
+        if !fillOnly || session.endedAtChapterEnd == nil {
+            session.endedAtChapterEnd = archived.endedAtChapterEnd ?? session.endedAtChapterEnd
+        }
+        if !fillOnly || session.peekedAtEnding == nil {
+            session.peekedAtEnding = archived.peekedAtEnding ?? session.peekedAtEnding
+        }
     }
 
     private static func apply(

@@ -27,16 +27,6 @@ struct BrowseView: View {
     @Environment(\.duoLayout) private var duoLayout
 
     @State private var path = NavigationPath()
-    /// The open fandom page's save context (Insights D8/D9). A stack-level detail destination
-    /// does not inherit the page's environment, so the page reports it here.
-    @State private var fandomOrigin: ReadingQueueMembershipOrigin?
-    /// The works that page lists: its origin applies to those only, never to a work reached
-    /// through an author profile or a tag list pushed on top of it.
-    @State private var fandomOriginWorkIDs: Set<Int> = []
-    /// `path.count` once the fandom page was pushed. Only a work detail created directly on top of
-    /// it (one level deeper) was saved from that page; the same work reached later through an
-    /// author profile or tag list is saved from there and takes no fandom origin.
-    @State private var fandomDepth = -1
     @Namespace private var cardZoomNamespace
 
     /// A pushed fandom (or sibling family) → its native work results.
@@ -59,23 +49,6 @@ struct BrowseView: View {
             ReadingLogService.markVisited(fandom: first, newestWork: nil, in: modelContext)
         }
         path.append(FandomRoute(names: names, title: title, previousVisit: previousVisit))
-        fandomDepth = path.count
-    }
-
-    /// A pushed work's detail, with the save origin fixed when it is created (a later push on top
-    /// of it must not change where this one was opened from).
-    private struct OriginScopedDetail: View {
-        let work: AO3WorkSummary
-        @State private var origin: ReadingQueueMembershipOrigin?
-
-        init(work: AO3WorkSummary, origin: ReadingQueueMembershipOrigin?) {
-            self.work = work
-            _origin = State(initialValue: origin)
-        }
-
-        var body: some View {
-            WorkDetailView(remote: work).environment(\.queueMembershipOrigin, origin)
-        }
     }
 
     var body: some View {
@@ -92,19 +65,11 @@ struct BrowseView: View {
                 }
                 .navigationDestination(for: FandomRoute.self) { route in
                     FandomWorksView(
-                        fandom: route.title, includedFandoms: route.names, previousVisit: route.previousVisit,
-                        onOriginChange: { origin, ids in
-                            fandomOrigin = origin
-                            fandomOriginWorkIDs = ids
-                        }
+                        fandom: route.title, includedFandoms: route.names, previousVisit: route.previousVisit
                     )
                 }
                 .navigationDestination(for: AO3WorkSummary.self) { work in
-                    OriginScopedDetail(
-                        work: work,
-                        origin: path.count == fandomDepth + 1 && fandomOriginWorkIDs.contains(work.id)
-                            ? fandomOrigin : nil
-                    )
+                    WorkDetailView(remote: work)
                 }
                 .ao3AuthorNavigation(path: $path, tab: .browse)
                 // A tapped AO3 tag link (e.g. in a work's preface) → native tag works.
@@ -155,8 +120,6 @@ struct FandomWorksView: View {
     let includedFandoms: [String]
     /// When the reader last opened this fandom, read before this visit overwrote it.
     let previousVisit: Date?
-    /// Reports this page's save context to the stack that hosts its work details.
-    var onOriginChange: ((ReadingQueueMembershipOrigin?, Set<Int>) -> Void)?
 
     /// The other half of the fandom-row zoom — set by BrowseView on the stack.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
@@ -211,10 +174,8 @@ struct FandomWorksView: View {
     init(
         fandom: String,
         includedFandoms: [String]? = nil,
-        previousVisit: Date? = nil,
-        onOriginChange: ((ReadingQueueMembershipOrigin?, Set<Int>) -> Void)? = nil
+        previousVisit: Date? = nil
     ) {
-        self.onOriginChange = onOriginChange
         self.fandom = fandom
         self.previousVisit = previousVisit
         let names = includedFandoms ?? [fandom]
@@ -444,15 +405,9 @@ struct FandomWorksView: View {
             }
             // Insights D9: the fandom's size, already loaded, travels with the save. Only while
             // the list is the fandom's own (no extra filters), so the total describes it.
-            .onChange(of: bulkSelection.origin, initial: true) { _, origin in
-                onOriginChange?(origin, Set(results.map(\.id)))
-            }
-            .onChange(of: results.map(\.id)) { _, ids in onOriginChange?(bulkSelection.origin, Set(ids)) }
-            .onChange(of: resultSummary?.total) { _, total in
-                guard !hasExtraFilters, includedFandoms.count == 1, var origin = bulkSelection.origin else { return }
-                origin.fandomWorks = total
-                bulkSelection.origin = origin
-            }
+            // A reload clears the summary, so a filter change also clears a total loaded before it.
+            .onChange(of: resultSummary?.total) { _, total in updateFandomTotal(total) }
+            .onChange(of: hasExtraFilters) { _, _ in updateFandomTotal(resultSummary?.total) }
             .task { await load(page: 1) }
             .task { await rankTop100.refreshAvailability() }
             .onChange(of: savedWorks.map(\.id), initial: true) { _, _ in
@@ -737,6 +692,14 @@ struct FandomWorksView: View {
             }
             requestedPage = nil
         }
+    }
+
+    private func updateFandomTotal(_ total: Int?) {
+        guard var origin = bulkSelection.origin else { return }
+        origin.fandomWorks = ReadingQueueMembershipOrigin.fandomTotal(
+            total, filtered: hasExtraFilters, fandomCount: includedFandoms.count
+        )
+        bulkSelection.origin = origin
     }
 
     /// Clear the current page (so the first-load skeleton shows) and re-run the fandom

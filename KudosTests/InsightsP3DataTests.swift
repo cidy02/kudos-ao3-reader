@@ -141,6 +141,20 @@ struct InsightsP3DataTests {
         #expect(session.peekedAtEnding == false)
     }
 
+    @Test func resettingTheLogMidSittingStartsAFreshChapterBaseline() throws {
+        ReadingLogService.resetOpenSessionsForTests()
+        let context = try context()
+        let work = longWork(in: context)
+        ReadingLogService.startSession(for: work, now: t0)
+        ReadingLogService.noteActivity(for: work, chapter: chapter(2), now: t0.addingTimeInterval(1))
+        ReadingLogService.resetOpenSessionsAfterLogReset(now: t0.addingTimeInterval(100))
+        ReadingLogService.noteActivity(for: work, chapter: chapter(3), now: t0.addingTimeInterval(101))
+        ReadingLogService.noteActivity(for: work, chapter: chapter(4), now: t0.addingTimeInterval(301))
+        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(302))
+        let session = try #require(try context.fetch(FetchDescriptor<ReadingSession>()).first)
+        #expect(session.chapterSeconds[3] == 200)
+    }
+
     @Test func aSittingWithNoChapterSignalStoresNothing() throws {
         ReadingLogService.resetOpenSessionsForTests()
         let context = try context()
@@ -454,6 +468,32 @@ struct InsightsP3DataTests {
         )
         #expect(work.importSource == .fandom)
         #expect(work.fandomWorksAtSave == 12_000)
+    }
+
+    @Test func aFilteredOrFamilyFandomPageCarriesNoFandomSize() {
+        #expect(ReadingQueueMembershipOrigin.fandomTotal(12_000, filtered: false, fandomCount: 1) == 12_000)
+        #expect(ReadingQueueMembershipOrigin.fandomTotal(12_000, filtered: true, fandomCount: 1) == nil)
+        #expect(ReadingQueueMembershipOrigin.fandomTotal(12_000, filtered: false, fandomCount: 2) == nil)
+        // A filtered page keeps its .fandom source, only the size goes.
+        var origin = ReadingQueueMembershipOrigin(kind: .search, label: "Fandom", importSourceHint: .fandom)
+        origin.fandomWorks = ReadingQueueMembershipOrigin.fandomTotal(12_000, filtered: true, fandomCount: 1)
+        #expect(WorkImportSource(origin: origin) == .fandom)
+        #expect(WorkStatsAtSave(summary: summary(1, kudos: 3), origin: origin).fandomWorks == nil)
+    }
+
+    @Test func aTappedRowsOriginTravelsInItsRouteSoADetailSaveKnowsTheSource() {
+        let work = summary(7, kudos: 1)
+        let fandom = RemoteWorkRoute(
+            work: work, origin: ReadingQueueMembershipOrigin(kind: .search, label: "Fandom", importSourceHint: .fandom)
+        )
+        let author = RemoteWorkRoute(
+            work: work, origin: ReadingQueueMembershipOrigin(kind: .manual, importSourceHint: .author)
+        )
+        let search = RemoteWorkRoute(work: work, origin: ReadingQueueMembershipOrigin(kind: .search, label: "q"))
+        #expect(Set([fandom, author, search]).count == 3)
+        #expect(WorkImportSource(origin: fandom.origin) == .fandom)
+        #expect(WorkImportSource(origin: author.origin) == .author)
+        #expect(WorkImportSource(origin: search.origin) == .search)
     }
 
     // MARK: figures
