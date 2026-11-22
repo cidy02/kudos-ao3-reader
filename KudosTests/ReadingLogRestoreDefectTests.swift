@@ -272,7 +272,7 @@ struct ReadingLogRestoreDefectTests {
             tombstones: tombstones,
             defaults: try testDefaults()
         )
-        #expect(contents.manifest.readingFavorites.isEmpty)
+        #expect(contents.manifest.readingFavorites?.isEmpty == true)
 
         let target = try context(schema)
         let localCopy = ReadingFavorite(
