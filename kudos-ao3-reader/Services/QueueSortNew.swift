@@ -86,20 +86,37 @@ struct QueueSortDropOutcome: Equatable {
     let workDeletedAt: Date?
     let membershipTombstone: QueueSortTombstoneStamp?
     let workTombstone: QueueSortTombstoneStamp?
+    /// Every tombstone for this membership or work that already existed when Drop ran
+    /// (an adopted peer delete that was since restored, say). Undo tells those apart
+    /// from one that arrives after the Drop by identity, never by timestamp: a peer's
+    /// delete that synced in later can carry an older time and must still block.
+    let priorTombstones: [QueueSortTombstoneStamp]
+    /// `SyncDeletionWitness.mark` when Drop ran: a sync merge that sees another device's
+    /// deletion of the membership or work after this has happened refuses Undo, even when
+    /// the merge kept only the newer tombstone (this device's own) and left no row to compare.
+    let syncWitnessMark: Int
 }
 
 /// Outcome of `QueueSortNew.undo(session:queue:context:isVisible:)`.
 enum QueueSortUndoResult: Equatable {
     case undone(QueueSortRecord)
+    /// Undid `record`, an earlier step: newer steps on works hidden by the mature
+    /// privacy gate were passed over (`skippedHidden` of them) and stay as decided.
+    case undoneSkippingHidden(QueueSortRecord, skippedHidden: Int)
     /// The work is currently hidden by the mature privacy gate; the record stays
     /// undoable so revealing it again lets Undo succeed.
     case hidden(QueueSortRecord)
     case blocked(QueueSortRecord)
+    /// Undo could not be saved (or other edits are still waiting to be saved). Nothing
+    /// changed and the step stays undoable: the reader can try again.
+    case saveFailed(QueueSortRecord)
     case nothingToUndo
 
     var undoneRecord: QueueSortRecord? {
-        if case let .undone(record) = self { return record }
-        return nil
+        switch self {
+        case let .undone(record), let .undoneSkippingHidden(record, _): record
+        default: nil
+        }
     }
 }
 
@@ -183,6 +200,10 @@ struct QueueSortSession: Equatable {
     /// Memberships whose Undo was refused because they changed or vanished
     /// elsewhere; stepping forward after a deeper Undo skips them cleanly.
     private(set) var unrevisitableIDs: Set<UUID> = []
+    /// Newer decisions Undo passed over (their work was hidden by the mature privacy gate)
+    /// to undo an earlier one. They no longer count as sorted, but stay undoable, newest
+    /// first, once their work can be shown again.
+    private(set) var passedOverHidden: [QueueSortRecord] = []
 
     init(queueID: UUID, membershipIDs: [UUID], requiresNewState: Bool = true) {
         self.queueID = queueID
@@ -195,7 +216,7 @@ struct QueueSortSession: Equatable {
     var sortedCount: Int { history.count }
     var isFinished: Bool { history.count >= membershipIDs.count }
     var lastUndoableIndex: Int? { history.lastIndex(where: \.isUndoable) }
-    var canUndo: Bool { lastUndoableIndex != nil }
+    var canUndo: Bool { lastUndoableIndex != nil || passedOverHidden.contains(where: \.isUndoable) }
 
     var currentMembershipID: UUID? {
         isFinished ? nil : membershipIDs[history.count]
@@ -248,6 +269,14 @@ struct QueueSortSession: Equatable {
         return "\(verb). \(nextCardAnnouncement(title: nextTitle, isConcealed: nextIsConcealed, prefixNext: true))"
     }
 
+    /// Said after Undo passed over newer steps on hidden mature works to undo an earlier one.
+    static func skippedHiddenNotice(count: Int) -> String {
+        let steps = count == 1 ? "1 newer step was" : "\(count) newer steps were"
+        let works = count == 1 ? "a work" : "works"
+        return "\(steps) on \(works) hidden by your mature content privacy settings, so Undo went back "
+            + "to the step before and left \(count == 1 ? "it" : "them") as decided."
+    }
+
     func undoAnnouncement(nextTitle: String?, nextIsConcealed: Bool) -> String {
         "Undone. \(nextCardAnnouncement(title: nextTitle, isConcealed: nextIsConcealed, prefixNext: false))"
     }
@@ -277,6 +306,8 @@ struct QueueSortSession: Equatable {
 
     mutating func record(_ record: QueueSortRecord) {
         guard record.membershipID == currentMembershipID else { return }
+        // Decided afresh: an older passed-over decision on it is stale.
+        passedOverHidden.removeAll { $0.membershipID == record.membershipID }
         history.append(record)
     }
 
@@ -292,6 +323,17 @@ struct QueueSortSession: Equatable {
     mutating func popFrom(_ index: Int) {
         guard history.indices.contains(index) else { return }
         history.removeSubrange(index...)
+    }
+
+    /// Undoes history from `index` back, but keeps `hidden` (decisions in that span whose work
+    /// is hidden) undoable instead of losing them with the rest of the span.
+    mutating func popFrom(_ index: Int, keepingHidden hidden: [QueueSortRecord]) {
+        popFrom(index)
+        passedOverHidden = hidden + passedOverHidden
+    }
+
+    mutating func removePassedOver(membershipID: UUID) {
+        passedOverHidden.removeAll { $0.membershipID == membershipID }
     }
 
     mutating func markUndoBlocked(at index: Int) {
@@ -323,10 +365,6 @@ enum QueueSortNew {
         let context: ModelContext
         let requiresNewState: Bool
         let syncDefaults: UserDefaults
-    }
-
-    private static func defaultPersist(_ context: ModelContext, _ reason: StaticString) -> Bool {
-        context.saveBestEffort(reason: reason)
     }
 
     /// Applies `action` to the session's current work and records it. Returns
@@ -381,42 +419,74 @@ enum QueueSortNew {
     }
 
     /// Undoes the last undoable decision of the session. Only rewinds the cursor
-    /// when persistence succeeds; leaves privacy-hidden works undoable once
-    /// revealed again, and marks permanently invalidated records `undoBlocked`.
+    /// when persistence succeeds and marks permanently invalidated records
+    /// `undoBlocked`. A step on a privacy-hidden work stays undoable once revealed,
+    /// but does not hold up the steps before it: Undo passes over it, undoes the
+    /// newest earlier step it can, and reports how many it passed over.
     @discardableResult
     static func undo(
         session: inout QueueSortSession,
         queue: ReadingQueue,
         context: ModelContext,
         isVisible: (SavedWork) -> Bool = { _ in true },
-        syncDefaults: UserDefaults = .standard,
-        persist: ((ModelContext, StaticString) -> Bool)? = nil
+        syncDefaults: UserDefaults = .standard
     ) -> QueueSortUndoResult {
-        guard queue.id == session.queueID, let index = session.lastUndoableIndex else {
+        guard queue.id == session.queueID, session.canUndo else {
             return .nothingToUndo
         }
-        let record = session.history[index]
         let env = UndoContext(
             queue: queue,
             context: context,
             requiresNewState: session.requiresNewState,
             syncDefaults: syncDefaults
         )
-        let outcome = undoOutcome(record, env: env, isVisible: isVisible, persist: persist ?? defaultPersist)
-        switch outcome {
-        case .undone:
-            session.popFrom(index)
-            skipMissing(session: &session, queue: queue, isVisible: isVisible)
-            return .undone(record)
-        case .hidden:
-            return .hidden(record)
-        case .blocked:
-            session.markUndoBlocked(at: index)
-            skipMissing(session: &session, queue: queue, isVisible: isVisible)
-            return .blocked(record)
-        case .nothingToUndo:
-            return .nothingToUndo
+        var firstHidden: QueueSortRecord?
+        var hiddenRecords: [QueueSortRecord] = []
+        // Newest first: decisions passed over earlier, then the live history.
+        for record in session.passedOverHidden.reversed() where record.isUndoable {
+            switch undoOutcome(record, env: env, isVisible: isVisible) {
+            case .undone, .undoneSkippingHidden:
+                // Data only: the cursor is already before it; it comes up again as New.
+                session.removePassedOver(membershipID: record.membershipID)
+                skipMissing(session: &session, queue: queue, isVisible: isVisible)
+                return .undone(record)
+            case .hidden:
+                firstHidden = firstHidden ?? record
+            case .saveFailed:
+                return .saveFailed(record)
+            case .blocked:
+                session.removePassedOver(membershipID: record.membershipID)
+                return .blocked(record)
+            case .nothingToUndo:
+                return .nothingToUndo
+            }
         }
+        for index in session.history.indices.reversed() where session.history[index].isUndoable {
+            let record = session.history[index]
+            switch undoOutcome(record, env: env, isVisible: isVisible) {
+            case .undone, .undoneSkippingHidden:
+                // Rewinds past this step and every newer one. The hidden ones passed over
+                // stay undoable (`passedOverHidden`); they are stepped over again when the
+                // cursor reaches them.
+                session.popFrom(index, keepingHidden: hiddenRecords.reversed())
+                skipMissing(session: &session, queue: queue, isVisible: isVisible)
+                return hiddenRecords.isEmpty
+                    ? .undone(record)
+                    : .undoneSkippingHidden(record, skippedHidden: hiddenRecords.count)
+            case .hidden:
+                firstHidden = firstHidden ?? record
+                hiddenRecords.append(record)
+            case .saveFailed:
+                return .saveFailed(record)
+            case .blocked:
+                session.markUndoBlocked(at: index)
+                skipMissing(session: &session, queue: queue, isVisible: isVisible)
+                return .blocked(record)
+            case .nothingToUndo:
+                return .nothingToUndo
+            }
+        }
+        return firstHidden.map { .hidden($0) } ?? .nothingToUndo
     }
 
     static func apply(
@@ -457,9 +527,13 @@ enum QueueSortNew {
             let wasPendingDeletion = work.isPendingDeletion
             let statusRaw = work.epubPreservationStatusRaw
             let preservedAt = work.preservedAt
-            let existingTombstoneIDs = Set(
-                ((try? context.fetch(FetchDescriptor<SyncTombstone>())) ?? []).map(\.id)
-            )
+            let syncWitnessMark = SyncDeletionWitness.mark
+            let existingTombstones = (try? context.fetch(FetchDescriptor<SyncTombstone>())) ?? []
+            let existingTombstoneIDs = Set(existingTombstones.map(\.id))
+            let priorTombstones = (
+                existingTombstones.filter { $0.recordType == .readingQueueMembership && $0.recordID == membershipID }
+                    + matchingWorkTombstones(for: work, in: existingTombstones)
+            ).map(QueueSortTombstoneStamp.init)
             ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(work, from: queue, in: context)
             FolderSyncService.markDirty(defaults: syncDefaults)
             let sentToRD = !wasPendingDeletion && work.isPendingDeletion
@@ -479,7 +553,9 @@ enum QueueSortNew {
                 preservedAt: preservedAt,
                 workDeletedAt: sentToRD ? work.deletedAt : nil,
                 membershipTombstone: membershipTombstone,
-                workTombstone: workTombstone
+                workTombstone: workTombstone,
+                priorTombstones: priorTombstones,
+                syncWitnessMark: syncWitnessMark
             )
             return QueueSortRecord(
                 membershipID: membershipID, workID: work.id, action: .drop,
@@ -495,8 +571,7 @@ enum QueueSortNew {
         context: ModelContext,
         requiresNewState: Bool = true,
         isVisible: (SavedWork) -> Bool = { _ in true },
-        syncDefaults: UserDefaults = .standard,
-        persist: ((ModelContext, StaticString) -> Bool)? = nil
+        syncDefaults: UserDefaults = .standard
     ) -> Bool {
         let env = UndoContext(
             queue: queue,
@@ -504,7 +579,7 @@ enum QueueSortNew {
             requiresNewState: requiresNewState,
             syncDefaults: syncDefaults
         )
-        if case .undone = undoOutcome(record, env: env, isVisible: isVisible, persist: persist ?? defaultPersist) {
+        if case .undone = undoOutcome(record, env: env, isVisible: isVisible) {
             return true
         }
         return false
@@ -513,8 +588,7 @@ enum QueueSortNew {
     private static func undoOutcome(
         _ record: QueueSortRecord,
         env: UndoContext,
-        isVisible: (SavedWork) -> Bool,
-        persist: (ModelContext, StaticString) -> Bool
+        isVisible: (SavedWork) -> Bool
     ) -> QueueSortUndoResult {
         guard env.queue.kind != .smart, env.queue.modelContext != nil, !env.queue.isPendingDeletion else {
             return .blocked(record)
@@ -528,17 +602,26 @@ enum QueueSortNew {
             guard !env.requiresNewState || membership.state == .new else { return .blocked(record) }
             return .undone(record)
         case .keep:
-            return undoKeep(record, env: env, isVisible: isVisible, persist: persist)
+            return undoKeep(record, env: env, isVisible: isVisible)
         case .drop:
-            return undoDrop(record, env: env, isVisible: isVisible, persist: persist)
+            return undoDrop(record, env: env, isVisible: isVisible)
         }
+    }
+
+    /// Undo is one transaction: its edits are made with autosave off, then committed once,
+    /// and a failed commit rolls back. `rollback()` discards every unsaved change in the
+    /// shared context, and a commit saves every one of them, so Undo only starts from a
+    /// clean context: it never commits, or throws away, changes that are not its own
+    /// (a Recently Deleted restore whose save already failed, say). Not clean means the
+    /// reader tries again once those are saved.
+    private static func contextIsClean(_ context: ModelContext) -> Bool {
+        !context.hasChanges
     }
 
     private static func undoKeep(
         _ record: QueueSortRecord,
         env: UndoContext,
-        isVisible: (SavedWork) -> Bool,
-        persist: (ModelContext, StaticString) -> Bool
+        isVisible: (SavedWork) -> Bool
     ) -> QueueSortUndoResult {
         guard let before = record.before,
               let expected = record.keepOutcome,
@@ -559,6 +642,7 @@ enum QueueSortNew {
         let previousAutosave = env.context.autosaveEnabled
         env.context.autosaveEnabled = false
         defer { env.context.autosaveEnabled = previousAutosave }
+        guard contextIsClean(env.context) else { return .saveFailed(record) }
         // Only revert the three fields Sort New changed; keep intervening
         // edits to note, origin, and queuedAt intact.
         membership.stateRaw = before.stateRaw
@@ -567,9 +651,9 @@ enum QueueSortNew {
         let now = Date()
         membership.markModified(now)
         env.queue.markMembershipChanged(now)
-        guard persist(env.context, "Undoing Sort New keep failed") else {
+        guard env.context.commitNow(reason: "Undoing Sort New keep failed") else {
             env.context.rollback()
-            return .blocked(record)
+            return .saveFailed(record)
         }
         FolderSyncService.markDirty(defaults: env.syncDefaults)
         return .undone(record)
@@ -578,8 +662,7 @@ enum QueueSortNew {
     private static func undoDrop(
         _ record: QueueSortRecord,
         env: UndoContext,
-        isVisible: (SavedWork) -> Bool,
-        persist: (ModelContext, StaticString) -> Bool
+        isVisible: (SavedWork) -> Bool
     ) -> QueueSortUndoResult {
         guard let before = record.before,
               let drop = record.dropOutcome,
@@ -608,6 +691,7 @@ enum QueueSortNew {
             work: work,
             drop: drop,
             expectedMembershipTombstone: expectedMembershipTombstone,
+            membershipID: before.id,
             membershipTombstones: membershipTombstones,
             allTombstones: allTombstones
         ) else { return .blocked(record) }
@@ -617,6 +701,7 @@ enum QueueSortNew {
         let previousAutosave = env.context.autosaveEnabled
         env.context.autosaveEnabled = false
         defer { env.context.autosaveEnabled = previousAutosave }
+        guard contextIsClean(env.context) else { return .saveFailed(record) }
 
         if drop.sentWorkToRecentlyDeleted, work.isPendingDeletion {
             PreservedWorkService.restore(work, in: env.context, save: false)
@@ -638,7 +723,8 @@ enum QueueSortNew {
         }
         let minAfter = max(
             expectedMembershipTombstone.lastModifiedAt,
-            drop.workTombstone?.lastModifiedAt ?? .distantPast
+            drop.workTombstone?.lastModifiedAt ?? .distantPast,
+            drop.priorTombstones.map(\.lastModifiedAt).max() ?? .distantPast
         ).addingTimeInterval(0.002)
         let now = max(Date(), minAfter)
         env.queue.markMembershipChanged(now)
@@ -649,27 +735,39 @@ enum QueueSortNew {
         if let statusRaw = drop.preservationStatusRaw, work.epubPreservationStatusRaw == statusRaw {
             work.preservedAt = drop.preservedAt
         }
-        guard persist(env.context, "Undoing Sort New drop failed") else {
+        guard env.context.commitNow(reason: "Undoing Sort New drop failed") else {
             env.context.rollback()
-            return .blocked(record)
+            return .saveFailed(record)
         }
         FolderSyncService.markDirty(defaults: env.syncDefaults)
         return .undone(record)
     }
 
+    /// Undo may go ahead only if the tombstones now on file for this membership and work
+    /// are the ones this Drop wrote, plus ones that already existed when it ran. Anything
+    /// else (a peer's delete that synced in after the Drop, whatever its timestamp, or one
+    /// of ours overwritten in place) blocks it.
     private static func canUndoDropTombstones(
         work: SavedWork,
         drop: QueueSortDropOutcome,
         expectedMembershipTombstone: QueueSortTombstoneStamp,
+        membershipID: UUID,
         membershipTombstones: [SyncTombstone],
         allTombstones: [SyncTombstone]
     ) -> Bool {
-        let dropStamp = expectedMembershipTombstone.lastModifiedAt
-        let relevantMembershipTombstones = membershipTombstones.filter {
-            expectedMembershipTombstone.matches($0) || $0.lastModifiedAt >= dropStamp
+        // A sync merge saw another device's deletion of either record since the Drop.
+        guard !SyncDeletionWitness.seen(
+            recordTypeRaw: SyncTombstoneRecordType.readingQueueMembership.rawValue,
+            recordID: membershipID, after: drop.syncWitnessMark
+        ), !SyncDeletionWitness.seen(
+            recordTypeRaw: SyncTombstoneRecordType.savedWork.rawValue,
+            recordID: work.id, after: drop.syncWitnessMark
+        ) else { return false }
+        func isPrior(_ tombstone: SyncTombstone) -> Bool {
+            drop.priorTombstones.contains { $0.matches(tombstone) }
         }
-        guard !relevantMembershipTombstones.isEmpty,
-              relevantMembershipTombstones.allSatisfy({ expectedMembershipTombstone.matches($0) })
+        guard membershipTombstones.contains(where: expectedMembershipTombstone.matches),
+              membershipTombstones.allSatisfy({ expectedMembershipTombstone.matches($0) || isPrior($0) })
         else { return false }
 
         let workTombstones = matchingWorkTombstones(for: work, in: allTombstones)
@@ -680,16 +778,11 @@ enum QueueSortNew {
                   abs(actualDeletedAt.timeIntervalSince(expectedDeletedAt)) <= 0.001,
                   let expectedWorkTombstone = drop.workTombstone
             else { return false }
-            let workDropStamp = min(dropStamp, expectedWorkTombstone.lastModifiedAt)
-            let relevantWorkTombstones = workTombstones.filter {
-                expectedWorkTombstone.matches($0) || $0.lastModifiedAt >= workDropStamp
-            }
-            return !relevantWorkTombstones.isEmpty
-                && relevantWorkTombstones.allSatisfy { expectedWorkTombstone.matches($0) }
+            return workTombstones.contains(where: expectedWorkTombstone.matches)
+                && workTombstones.allSatisfy { expectedWorkTombstone.matches($0) || isPrior($0) }
         }
-        // Older adopted `.savedWork` tombstones from an earlier delete+restore predate
-        // this Drop and must not refuse Undo; any tombstone at or newer than Drop still blocks.
-        return workTombstones.allSatisfy { $0.lastModifiedAt < dropStamp }
+        // A live work: only tombstones from before the Drop (an earlier delete and restore).
+        return workTombstones.allSatisfy(isPrior)
     }
 
     /// Mirrors `PreservedWorkService.retractTombstone` identity matching so a

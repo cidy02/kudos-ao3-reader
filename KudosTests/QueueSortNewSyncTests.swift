@@ -337,6 +337,60 @@ extension PersistenceGateSuites {
             #expect(tombstones.first?.signerPublicKey == peerPub)
         }
 
+        /// The real merge path: B's signed delete is OLDER than A's Drop, so the merge keeps A's
+        /// tombstone and discards B's. Undo must still know a peer deleted it.
+        @Test(arguments: [true, false])
+        func undoDropRefusesAfterFolderSyncMergesAnOlderPeerDeletion(saved: Bool) throws {
+            let previousNow = TombstoneSigning.now
+            defer { TombstoneSigning.now = previousNow }
+
+            let t0 = Date().addingTimeInterval(-300)
+            let tPeer = Date().addingTimeInterval(-120)
+            let tDrop = Date().addingTimeInterval(-60)
+            let defaultsA = try makeDefaults()
+            let defaultsB = try makeDefaults()
+            let peerKey = TombstoneSigning.makePrivateKey()
+            #expect(TombstoneTrustStore.add(TombstoneSigning.publicKeyHex(of: peerKey), defaults: defaultsA))
+
+            let deviceA = try makeContext()
+            let deviceB = try makeContext()
+            let seeded = try seedInitialQueue(in: deviceA, saved: saved, at: t0)
+            let queueA = seeded.queue
+            let workA = seeded.work
+            let membershipA = seeded.membership
+            let initial = try exportSnapshot(from: deviceA, defaults: defaultsA)
+            _ = try KudosBackupService.restore(initial, into: deviceB, defaults: defaultsB, mode: .reconcile)
+
+            var session = QueueSortSession(queueID: queueA.id, membershipIDs: [membershipA.id])
+            TombstoneSigning.now = { tDrop }
+            #expect(QueueSortNew.apply(.drop, session: &session, queue: queueA, context: deviceA))
+            TombstoneSigning.now = previousNow
+
+            // B deleted the same record earlier, offline (signed, trusted), and syncs now.
+            let workB = try #require(try deviceB.fetch(FetchDescriptor<SavedWork>()).first { $0.id == workA.id })
+            let peerTombstone = saved
+                ? SyncTombstone(
+                    recordID: membershipA.id, recordType: .readingQueueMembership,
+                    createdAt: tPeer, deletedOnDeviceID: "peer-device", deletionReason: "queueMembershipRemoved"
+                )
+                : SyncTombstone(
+                    recordID: workB.id, recordType: .savedWork,
+                    sourceURL: WorkTags.canonicalAO3WorkURL(from: workB.sourceURL) ?? workB.sourceURL,
+                    ao3WorkID: workB.ao3WorkID, createdAt: tPeer,
+                    deletedOnDeviceID: "peer-device", deletionReason: "workDeleted"
+                )
+            TombstoneSigning.sign(peerTombstone, key: peerKey)
+            deviceB.insert(peerTombstone)
+            try deviceB.save()
+            let peerBackup = try exportSnapshot(from: deviceB, defaults: defaultsB)
+            _ = try KudosBackupService.restore(peerBackup, into: deviceA, defaults: defaultsA, mode: .reconcile)
+
+            let outcome = QueueSortNew.undo(session: &session, queue: queueA, context: deviceA)
+            if case .blocked = outcome {} else { Issue.record("Expected blocked Undo, got \(outcome)") }
+            #expect(workA.isPendingDeletion == !saved)
+            #expect(QueueSortNew.membership(membershipA.id, in: queueA) == nil)
+        }
+
         @Test(arguments: [true, false])
         func undoDropSucceedsDespiteOlderAdoptedWorkTombstoneAfterPeerDeleteAndRestore(saved: Bool) throws {
             let previousNow = TombstoneSigning.now
