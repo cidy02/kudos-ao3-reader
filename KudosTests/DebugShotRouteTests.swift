@@ -27,7 +27,7 @@ struct DebugShotRouteTests {
             "availability", "pairing", "revokedevice", "backupimport", "aboutkudos",
             "authorbookmarks", "readerspeech", "libfilter", "libselect", "remoteselect",
             "expandrow", "searchfilters", "collectionaddworks", "libedit", "sortby",
-            "readerend", "welcome", "protectlibrary", "recentlydeleted",
+            "readerend", "readercaughtup", "readerchapterend", "welcome", "protectlibrary", "recentlydeleted",
             "chsettings", "challenge",
             // T-529 Sort New; not in A82's list.
             "sortnew",
