@@ -602,6 +602,11 @@ struct ReadiumReaderView: View {
             chapterStartLocators: book.positionsByReadingOrder.map(\.first)
         )
         #if DEBUG
+        if DebugLaunchRoute.takeSheet("readercaughtup") {
+            // Demo works carry no AO3 URL; give this one an id so the AO3 actions show.
+            if ao3WorkID == nil { work.sourceURL = "https://archiveofourown.org/works/9000001" }
+            book.goToPublicationEndForDebug()
+        }
         if DebugLaunchRoute.takeSheet("readerchapterend") {
             book.goToFirstChapterEndForDebug()
         }
