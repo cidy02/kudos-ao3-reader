@@ -63,6 +63,7 @@ public final class CoreMLKokoroTTSService: TTSService {
     /// Replaces scheduling the buffer and awaiting its playback; gets the sample count.
     var testPlayBuffer: ((Int) async -> Void)?
     var testDidStartPlaybackTask = false
+    var pauseWaiterCountForTests: Int { pauseWaiters.count }
     #endif
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
