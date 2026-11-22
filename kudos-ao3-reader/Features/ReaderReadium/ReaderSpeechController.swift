@@ -895,14 +895,7 @@ final class ReaderSpeechController {
     /// superseded start, a stopped session) is ignored.
     private func handleAudible(_ locator: Locator) {
         if let request = activeRequest {
-            if case .awaitingFirstOutput(let candidate) = request.stage {
-                if let index = candidate.chapterIndex, let heard = chapterIndex(of: locator), heard != index {
-                    // A start heard from the run this request replaced (drained as it was
-                    // cleared): keep what was heard, but it is not this request's output.
-                    resumeLocator = locator
-                    persistPosition(for: .utteranceBoundary)
-                    return
-                }
+            if case .awaitingFirstOutput = request.stage {
                 commitPendingRequest(request, locator: locator)
                 return
             }
@@ -1216,18 +1209,15 @@ final class ReaderSpeechController {
         }
         let releasesPublication = !isReaderOpen && publication != nil
         SpeechOwnerRegistry.shared.release(self)
-        // Stop the engine first, while the request is still live: a start the engine
-        // had already confirmed audible is drained into `handleAudible` as it stops, so
-        // a heard position survives Stop.
-        stoppedManually = true
-        ttsService?.stop()
         activeRequest = nil
         nextRequestToken &+= 1
         currentAuditionToken &+= 1
         speechErrorMessage = nil
+        stoppedManually = true
         enginePlaybackActive = false
         startTask?.cancel()
         startTask = nil
+        ttsService?.stop()
         status = ttsService == nil ? .unavailable : .stopped
         spokenText = ""
         clearSpeechEnergy()

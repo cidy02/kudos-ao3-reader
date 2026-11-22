@@ -457,9 +457,12 @@ extension ReadAloudRacesAndInsightsDigestTests {
             }
         }
 
+        /// Bounded (5 s): a path that never reaches the gate fails the expectations
+        /// that follow instead of hanging the run.
         func waitUntilEntered(count: Int = 1) async {
-            while enteredCount < count {
-                await withCheckedContinuation { enteredWaiters.append($0) }
+            let deadline = ContinuousClock.now + .seconds(5)
+            while enteredCount < count, ContinuousClock.now < deadline {
+                try? await Task.sleep(for: .milliseconds(5))
             }
         }
 
@@ -2001,93 +2004,6 @@ extension ReadAloudRacesAndInsightsDigestTests {
     }
 
     // MARK: - T-535i: heard starts survive Stop / replacement; endSession stays ended
-
-    @Test func appleStopKeepsAStartTheDelegateConfirmedBeforeItsMainActorHop() {
-        let locators = chapterLocators(count: 2)
-        let system = SystemTTSService()
-        var heard: [String] = []
-        system.onAudible = { heard.append($0.href.string) }
-        system.stageConfirmedStartForTests(TTSSpeechUnit(text: "Heard.", locator: locators[1]))
-        system.stop() // Stop lands before the delegate's hop reaches the main actor
-        #expect(heard == ["ch2.xhtml"])
-        system.deliverStagedStartHopForTests() // the late hop must not announce it twice
-        #expect(heard == ["ch2.xhtml"])
-    }
-
-    @Test func appleStopWithNoConfirmedStartAnnouncesNothing() {
-        let locators = chapterLocators(count: 2)
-        let system = SystemTTSService()
-        var heard = 0
-        system.onAudible = { _ in heard += 1 }
-        system.stop()
-        #expect(heard == 0)
-        _ = locators
-    }
-
-    @Test func coreMLStopKeepsAClipThatRenderedBeforeItsPollAnnounced() async {
-        let locators = chapterLocators(count: 2)
-        let coreML = CoreMLKokoroTTSService()
-        let playGate = AsyncGate()
-        coreML.testSetupOverride = {}
-        coreML.testSynthesize = { _ in [0.2, -0.2, 0.2] }
-        coreML.testStartAudioEngine = {}
-        coreML.testDeferAudibleAnnounce = true
-        coreML.testClipRendered = { true }
-        coreML.testPlayBuffer = { _ in await playGate.enterAndWait() }
-        let controller = seededCoreML(coreML, locators: locators, status: .stopped)
-        var moves: [String] = []
-        var saves: [String] = []
-        controller.onAdvance = { moves.append($0.href.string) }
-        controller.onSavePosition = { _, loc, _, _, date, _ in
-            saves.append(loc)
-            return .wrote(progressStamp: date)
-        }
-        controller.toggle(from: locators[1])
-        await controller.waitForStartTaskForTests()
-        await playGate.waitUntilEntered() // audio is rendering; the poll has not run
-        #expect(moves.isEmpty)
-        controller.stop()
-        playGate.release()
-        #expect(moves == ["ch2.xhtml"], "the heard start must survive Stop")
-        #expect(controller.resumeLocator?.href.string == "ch2.xhtml")
-    }
-
-    @Test func coreMLStopBeforeAnythingRenderedStillCommitsNothing() async {
-        let locators = chapterLocators(count: 2)
-        let coreML = CoreMLKokoroTTSService()
-        let playGate = AsyncGate()
-        coreML.testSetupOverride = {}
-        coreML.testSynthesize = { _ in [0.2, -0.2, 0.2] }
-        coreML.testStartAudioEngine = {}
-        coreML.testDeferAudibleAnnounce = true
-        coreML.testClipRendered = { false }
-        coreML.testPlayBuffer = { _ in await playGate.enterAndWait() }
-        let controller = seededCoreML(coreML, locators: locators, status: .stopped)
-        var moves: [String] = []
-        controller.onAdvance = { moves.append($0.href.string) }
-        controller.toggle(from: locators[1])
-        await controller.waitForStartTaskForTests()
-        await playGate.waitUntilEntered()
-        controller.stop()
-        playGate.release()
-        #expect(moves.isEmpty)
-        #expect(controller.resumeLocator?.href.string == "ch2.xhtml" || controller.resumeLocator?.href.string == "ch1.xhtml")
-    }
-
-    @Test func aHeardStartFromTheReplacedRunIsSavedButIsNotTheNewRequestsOutput() async {
-        let locators = chapterLocators(count: 3)
-        let engine = ControllableTTSService(status: .stopped)
-        let controller = await pendingStart(engine: engine, locators: [locators[1], locators[2], locators[0]])
-        var moves: [String] = []
-        controller.onAdvance = { moves.append($0.href.string) }
-        // The pending request is for ch2; the old run's last heard start (ch3) is drained.
-        engine.onAudible?(locators[2])
-        #expect(moves.isEmpty)
-        #expect(controller.resumeLocator?.href.string == "ch3.xhtml")
-        #expect(controller.isStartPending)
-        engine.emitUtterance(text: "New.", locator: locators[1])
-        #expect(moves == ["ch2.xhtml"])
-    }
 
     @Test func endSessionDuringTheFirstAudibleSaveLeavesTheSessionReleased() async {
         let locators = chapterLocators(count: 3)

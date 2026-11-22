@@ -235,42 +235,11 @@ public final class SystemTTSService: TTSService {
 
     /// `didStart`: the utterance is audible. The single place Apple speech commits.
     fileprivate func handleUtteranceStarted(utteranceID: ObjectIdentifier?) {
-        if let utteranceID {
-            // Consumes the start the delegate recorded on receipt; nil means a reset
-            // already drained it (a heard start is announced exactly once).
-            guard utteranceID == activeUtteranceID, delegateProxy.takeStart(utteranceID) else { return }
-        }
+        if let utteranceID, utteranceID != activeUtteranceID { return }
         guard let unit = activeUtteranceUnit, status != .stopped, status != .unavailable else { return }
         if let locator = unit.locator { onAudible?(locator) }
         spokenText = unit.text
     }
-
-    /// A start the delegate confirmed whose main-actor hop has not run yet: announce
-    /// it now, before Stop or a replacement clears the utterance, so a heard start is
-    /// never lost.
-    private func drainConfirmedStart() {
-        guard let id = activeUtteranceID, delegateProxy.takeStart(id),
-              let unit = activeUtteranceUnit, status != .unavailable
-        else { return }
-        if let locator = unit.locator { onAudible?(locator) }
-        spokenText = unit.text
-    }
-
-    #if DEBUG
-    /// Test seam: the delegate has confirmed `unit` started, its main-actor hop pending.
-    func stageConfirmedStartForTests(_ unit: TTSSpeechUnit) {
-        let marker = NSObject()
-        stagedMarker = marker
-        activeUtteranceID = ObjectIdentifier(marker)
-        activeUtteranceUnit = unit
-        delegateProxy.recordStart(ObjectIdentifier(marker))
-    }
-    private var stagedMarker: NSObject?
-    var stagedStartIDForTests: ObjectIdentifier? { stagedMarker.map { ObjectIdentifier($0) } }
-    func deliverStagedStartHopForTests() {
-        handleUtteranceStarted(utteranceID: stagedStartIDForTests)
-    }
-    #endif
 
     fileprivate func handleUtteranceEnded(utteranceID: ObjectIdentifier? = nil) {
         if let utteranceID, utteranceID != activeUtteranceID {
@@ -311,7 +280,6 @@ public final class SystemTTSService: TTSService {
     }
 
     private func resetPlayback(notifyStopped: Bool) {
-        drainConfirmedStart()
         playbackGeneration &+= 1
         activeTask?.cancel()
         activeTask = nil
@@ -395,26 +363,12 @@ public final class SystemTTSService: TTSService {
     /// controller; same thin-proxy pattern as the pre-Kokoro `DelegateProxy`.
     private final class DelegateProxy: NSObject, AVSpeechSynthesizerDelegate, @unchecked Sendable {
         weak var owner: SystemTTSService?
-        /// Starts recorded on the delegate's own thread, before the main-actor hop.
-        private let lock = NSLock()
-        private var starts: Set<ObjectIdentifier> = []
-
-        func recordStart(_ id: ObjectIdentifier) {
-            lock.lock(); starts.insert(id); lock.unlock()
-        }
-
-        /// True exactly once per recorded start.
-        func takeStart(_ id: ObjectIdentifier) -> Bool {
-            lock.lock(); defer { lock.unlock() }
-            return starts.remove(id) != nil
-        }
 
         func speechSynthesizer(
             _ synthesizer: AVSpeechSynthesizer,
             didStart utterance: AVSpeechUtterance
         ) {
             let utteranceID = ObjectIdentifier(utterance)
-            recordStart(utteranceID) // on receipt, before hopping to the main actor
             Task { @MainActor [weak owner] in
                 owner?.handleUtteranceStarted(utteranceID: utteranceID)
             }
