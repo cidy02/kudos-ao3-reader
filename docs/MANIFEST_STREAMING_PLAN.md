@@ -1,9 +1,9 @@
-# Streaming `manifest.json` on iOS and Android — plan v2
+# Streaming `manifest.json` on iOS and Android — plan v3
 
 Owner, 2026-11-22: "raise the limit and plan a change to stream the manifest on both platforms", then "once streaming is
 proven, no cap on either", then "once you are both satisfied [Claude and Codex], implement".
 Tasks: T-567 (iOS), A-567 (Android). v1 was reviewed by Codex (`kudos-redesign-work/out/codex-streaming-plan-review.md`,
-verdict RETHINK); v2 answers each finding (§ "Review trace" at the end).
+verdict RETHINK); v2 answered each finding; Codex re-reviewed v2 (`out/codex-streaming-plan-review2.md`, SOUND WITH CHANGES) and v3 applies its edits (§ "Review trace").
 
 ## Goal and definition of done
 
@@ -40,31 +40,34 @@ store ──► batched fetch ──► streaming writer ──► temp file ─
 ```
 
 1. **Parser** (per platform): reads the document **to EOF and validates it before anything is applied or swept**, even when
-   `version` / `exportedAt` come after the arrays. It enforces the decoder contract (§ Contract), rejects duplicate keys,
-   malformed tokens, trailing content, invalid UTF-8, wrong section kinds. It decodes each record with the existing typed
+   `version` / `exportedAt` come after the arrays. It enforces the decoder contract (§ Contract) with each existing route's behaviour as the
+   oracle (duplicate keys, escapes, UTF-8, trailing content and wrong kinds behave as the route does today). It decodes each record with the existing typed
    decoder at record boundaries (iOS `JSONDecoder` on the record's bytes; Android `decodeFromJsonElement` on the record's
    tree) so record-level semantics (defaults, timestamp clamping, unknown keys) stay the existing code's.
    - Parser choice is a P1 prototype decision: Android — the platform `android.util.JsonReader` (token stream, no new
      dependency) vs a hand-written byte scanner; iOS — no streaming JSON parser exists in Foundation or our package lockfile,
      so a hand-written tokenizer over a mapped / spooled file, **differentially tested against `JSONSerialization` and the
      current `JSONDecoder` path** on every fixture plus a malformed-input corpus.
-2. **Staging DB** (private, per import/sync run, deleted after): one table per section with the record's bytes, source
-   order, section presence (missing / null / present), and **the natural keys each consumer matches on** (record ID,
-   canonical work ID, AO3 identity, URL, case-folded font name, fandom name, favorite target, annotation passage, tombstone
-   key + stamp), indexed. Android adds the A-541a overlay schema (match keys, stamps, source precedence, opaque values).
-   SQLite is available without a new dependency on both (iOS `libsqlite3`, Android `android.database.sqlite`).
-3. **Resolve**: the merge/Replace/tombstone/remap decisions run as indexed queries over staging + the live store, in
-   dependency order (tombstones → works → dependents), producing an apply plan in staging. Same rules as today, moved from
-   arrays to tables; the existing merge tests are the oracle.
-4. **Apply**: one outer store transaction, iterating the plan in bounded batches. Atomic boundary stated explicitly (rows +
-   EPUB/original file undo all-or-nothing; settings, pronunciations, recovery documents and Android overlays keep today's
-   separate, best-effort publication and are listed as such).
-   - **Room**: staging validated *outside* the write transaction; apply inside one outer transaction with concurrency
-     revalidation and the existing recoverable file undo.
-   - **SwiftData**: today iOS flushes pending changes, disables autosave, saves once, and rolls back models and displaced
-     EPUBs on failure (`KudosBackup.swift:3197–3234, 4715–4751`). Dirty models are retained until that one save, so batched
-     fetches alone don't bound memory. **P1 measures this on a large Replace.** If it scales past budget, the gate is a
-     separately reviewed atomic-publication design (e.g. Replace into a fresh store file + atomic swap) before uncapping.
+2. **Staging DB** (private SQLite, per run, deleted after; no new dependency: iOS `libsqlite3`, Android
+   `android.database.sqlite`). Use a private staging database with run and source IDs, section presence, source order,
+   indexed natural keys (record ID, canonical work ID, AO3 identity, URL, case-folded font name, fandom name, favorite
+   target, annotation passage, tombstone key + stamp), payload references, normalized relationship rows, remaps, tombstone
+   decisions, and apply and keep tables. Android adds the A-541a overlay schema (P3). Payloads are stored as bounded
+   chunks or references to immutable spools, never one unbounded blob.
+3. **Resolve**: read live rows through supported store APIs in stable keyset batches. Stage the live projection needed for
+   cross-store joins. Revalidate the projection under the persistence gate or write transaction before applying, and
+   rebuild or defer stale decisions using today's rules. Use disk-backed absence checks and bounded cursors for sweeps.
+   Keep private staging independent of the app store's internal schema. Decisions run in dependency order (tombstones →
+   works → dependents) with today's rules; the existing merge tests are the oracle.
+4. **Apply**: preserve the existing commit and failure behavior per platform and mode. iOS uses one model save, restores
+   displaced EPUBs on throw, and keeps original-file installs best-effort (`KudosBackup.swift:3197, 4647`). Android Replace
+   uses one outer Room transaction with undo for touched EPUBs, fonts and originals (`BackupRepository.kt:533`,
+   `BackupFileUndo.kt:10`). Android Merge, Reconcile and Folder Sync retain their current row and asset boundaries and
+   retry semantics. Document post-commit settings, pronunciations, recovery documents and overlays separately. Use
+   disk-backed undo bookkeeping. Specify restart behavior separately from caught-error rollback. Any crash-atomic Replace
+   design requires a durable commit discriminator and a kill/restart test before and after commit. If SwiftData
+   dirty-model retention fails P1, block P4 for the affected paths until an atomic publication design is reviewed and
+   demonstrated on the real store. The design must cover open contexts, store sidecars, assets and restart recovery.
 5. **Export / publication**: batched fetches from the store, record-by-record writer into a temp file, then each platform's
    **existing** protocol, kept as is:
    - **iOS Folder Sync**: assets first, manifest published atomically, prune only with a current view
@@ -74,6 +77,13 @@ store ──► batched fetch ──► streaming writer ──► temp file ─
      the outgoing hash independently; spool the exact validated input for `.bak`; update digest bookkeeping only after
      successful publication (Android digests the exact bytes it wrote, so a format change does not by itself cause a
      spurious change).
+   - Hold the existing consistency gate or use a verified generation across paged export reads. Build prune membership
+     from the published view using an indexed keep table. On SAF, recheck live bytes and folder generation immediately
+     before publication, require a successful first-write rename result, and preserve the existing in-place write for an
+     existing live file. Treat the precommit reread as a change detector: an external writer can still race the
+     subsequent write. Only after successful publication retire pending overlays and folded conflicts, update the native
+     digest, and set the settled digest when the folder view is current and all required assets are settled. Exercise
+     rename failure as well as interrupted writes.
 
 ## Contract (both platforms; written as a table in P2 and tested)
 
@@ -84,8 +94,13 @@ Known today: the four `omittedKeys` arrays (collections, readingQueues, annotati
 different failure; required fields still fail when missing; Android's accepting decoder is lenient while its sync recovery
 predicate is strict; iOS first checks the live document parses before typed decode (`KudosBackup.swift:478–483,
 750–792`, `FolderSyncService.swift:756–766`; Android `BackupJson.kt:7–11`, `BackupValidator.kt:53–76`,
-`BackupVersion.kt:18–32`, `SyncRepository.kt:669–692`). Outcomes are distinct: invalid document, unsupported version,
-I/O failure, resource exhaustion — only "invalid document" may authorize `.bak` recovery; none authorizes publication.
+`BackupVersion.kt:18–32`, `SyncRepository.kt:669–692`). Record route-specific outcomes for absent input, accepted typed input, a failed whole-document predicate, a whole document
+rejected by schema or semantic validation, unsupported version, I/O failure, cancellation and resource exhaustion. Preserve
+each route's evaluation order and `.bak` eligibility. A whole live document rejected by the typed decoder or validator
+remains protected from overwrite. Missing-live handling, recovery publication and prune eligibility remain separate
+decisions. Establish duplicate-key, escaped-key, UTF-8, trailing-content and wrong-kind behavior against each existing
+route. Any deliberate compatibility change requires separate approval. Preserve lossy sections and record defaults, and
+perform cross-record validation and clock checks using the final root metadata and a fixed operation clock.
 
 ## Entry-point inventory (every one moves or is explicitly left as legacy)
 
@@ -119,40 +134,112 @@ I/O failure, resource exhaustion — only "invalid document" may authorize `.bak
   `BackupPhase2FieldsTest`, `BackupReadingLogTest`, `BackupFontCaseRestoreTest`, `OriginalsRoundTripTest`,
   `IncomingEpubGateTest`, `QueueTombstoneMergeTest`, `MacReadingPositionMergeTest`, `ImportBackupChoicesTest`,
   `BackupReplaceOfferTest`, `RestoreAndSyncReportingTest`, `Brief3hbContentTest`.
+- Track Android picker inspection and confirmation separately. Include provider directory enumeration, export snapshot
+  capture, asset staging, and retained preview and undo state in the corresponding end-to-end measurements. Account for
+  the Android archive, picker, generic ZIP-entry and manifest limits separately.
+- Also include Apple `InsightsD5D6PersistenceTests`, `HistoryHideAndQueueNotesTests`, `OmittedFieldKeepsPreferenceTests`,
+  `WorkSearchIndexTests`, `FollowedTagBackupTests`, `TagAliasBackupTests`, `QueueSourceBackupTests`,
+  `SmartQueuePersistenceTests`, `ReadingQueueSectionsTests`, and Android `AnnotationTombstoneTest` and `WorkLifecycleTest`.
+  Keep large fixtures opt-in and small compatibility and malformed fixtures in regular gates.
 
 ## Budget (what "proven" means)
 
 Measured per entry point above, on both platforms, growing **independently**: incoming rows, local rows, conflict copies,
 opaque values, assets. Sizes 8 / 32 / 128 / 256 / 512 MiB manifests. Recorded: process footprint and managed heap, peak
-temporary disk and journal, elapsed time, cancellation latency. **Pass**: footprint above the app's baseline stays under
-64 MiB at every size (flat, not just under a number), disk use bounded by ~2× manifest + assets, time roughly linear.
+temporary disk and journal, elapsed time, cancellation latency. **Pass**: per § P1 feasibility thresholds (64 MiB incremental
+footprint ceiling; ≤ 8 MiB median growth 128→512 MiB per axis; 512 MiB run ≤ 5× the 128 MiB run; a measured and enforced
+per-component disk budget). Release thresholds are set from device and provider runs before P6.
 A-566's desktop-JVM `-Xmx` numbers establish the amplification on Android only; they are not the baseline.
 
 ## Limits after the change
 
-- Removed: the manifest-specific total-byte cap (Android `MAX_MANIFEST_BYTES` in `BackupValidator`, `BackupExporter`,
-  `SyncRepository`, `PickedDocumentReader`). iOS keeps no cap in Folder Sync; the manifest entry in a `.kudosbackup` is
-  exempt from MiniZip's per-entry size cap once it is read incrementally.
-- Stays (hostile-input protection, not a manifest cap): ZIP entry count and compression-ratio checks; MiniZip's 64 GB total
-  and Android's archive limit (revisited in P5 with incremental entry I/O); EPUB/font/original per-entry caps; parser bounds
-  on nesting depth and token length; a free-disk check before staging. **No per-record size cap** — v1's 1 MiB idea would
-  reject valid iOS documents (recovery copies can be ~20 MiB decoded before base64).
-- Documented compatibility limit: older app versions keep their caps (Android 8 MiB), so a huge manifest syncs only between
-  current versions; the UI says so when an older device's read fails.
+- Remove the manifest-specific total-byte check from all manifest routes (Android `MAX_MANIFEST_BYTES` in
+  `BackupValidator`, `BackupExporter`, `SyncRepository`, `PickedDocumentReader`; iOS has none in Folder Sync) and exempt
+  `manifest.json` from the generic ZIP entry limit on both read and write (iOS `MiniZip.Limits.backup`; Android
+  `MAX_ENTRY_BYTES` incl. the ZIP writer, `BackupExporter.kt:99`).
+- Retain and document platform-specific container, archive and non-manifest asset limits. Record which routes enforce
+  entry counts and compression ratios today. Incremental archive I/O must check actual output, integrity and aggregate
+  limits. For picked backups, use streaming or a bounded disk spool under the documented backup archive policy and retain
+  the generic picked-document limit for other formats.
+- Bound parser depth, buffers and decoded in-memory fields. Process large base64 and opaque values in chunks or by file
+  range. Store payloads as bounded chunks or references to immutable spools. Stream oversized supported aggregate records
+  field by field. Any new scalar or record limit requires an explicit compatibility decision (there is no per-record cap:
+  a supported recovery copy can be ~20 MiB decoded). Reserve and account for disk throughout the operation, and treat
+  ENOSPC as resource exhaustion.
+- Document older-reader limits in current clients and release notes. Existing clients retain their shipped errors.
 
 ## Phases
 
 | Phase | Platform | Work | Done when |
 |---|---|---|---|
 | P0 ✅ | Android | A-566: desktop-JVM amplification measured (15–17×); duplicate copies removed (−8–10%); cap stays 8 MiB. | `out/a566-measure.md`; `android/rd-a541a` `7fd493a06`. |
-| P1 | both | **Measure and de-risk before building.** (a) Baseline every entry point per § Budget (iOS for the first time). (b) Prototype a large Replace on each real store: SwiftData dirty-model retention at the single save; Room apply-from-staging in one outer transaction (journal size, lock time, cancellation). (c) Parser prototypes + differential/malformed corpus. | Baseline tables; a go/no-go on SwiftData atomicity (or the swap design opened as its own reviewed task); parser chosen per platform. |
+| P1 | both | **Baseline and feasibility** — see § P1 below. | Reproducible baseline tables; store prototypes pass or a SwiftData replacement design is opened; a parser chosen per platform by route parity, resource and large-value checks. |
 | P2 | both | Contract table; validating streaming parser into staging (no consumer change yet; existing decoders stay the oracle). | Differential tests pass on every fixture and the malformed corpus; staging equals today's decoded manifest on every fixture. |
-| P3 | Android | A-541a overlay staging schema (moved ahead of Android export). | Pass-through tests unchanged; remapped work, ambiguous font, conflicting stamped map entries and a large unknown top-level value verified; overlay heap and spill measured separately. Needs A-541a landed. |
+| P3 | Android | A-541a overlay staging schema. | Match the existing overlay implementation on source precedence and ties, work ID remapping, bookmark/font/watermark/favorite identity, ambiguous matches, stamped settings and pronunciation maps, unknown record fields and top-level values, folder scope, legacy migration, pending retirement, and Replace aside recovery. Compare winner selection and output values against the current implementation. Store opaque values as ranges or chunked payloads and exercise a value larger than the memory budget without materializing it. Measure managed heap and peak spill separately. Depends on A-541a and P2's payload interface; gates Android overlay-bearing export and Folder Sync. |
 | P4 | both | Resolve + apply from staging (restore, Merge, Reconcile, Replace) in dependency order, one outer transaction. | All merge/restore/Replace tests unchanged; budget met for import at 512 MiB. |
 | P5 | both | Streaming export and publication per platform protocol; MiniZip incremental entry I/O; Android ZIP/directory import incremental; coordinated local spool when the provider can't give a stable seekable source. | Budget met for export and Folder Sync at 512 MiB; interruption tests (`.bak` write, live write, external write during assets, incomplete conflicts, missing live manifest with surviving assets, failure before prune) pass; ENOSPC, cancellation, background expiry measured. |
 | P6 | both | **Release gate**: remove the manifest cap; document remaining container/picker limits and the older-client limit; rollback and restart tests. | Every § Budget row flat to 512 MiB on both; owner sign-off. |
 
+**Dependencies.** P4 requires P1 store feasibility and P2 staging, and proves apply from a validated staged source. Run
+incremental archive and picker/provider input as a separate workstream after P2. P5 integrates that input workstream, P4,
+indexed export and provider publication. Android overlay-bearing export and Folder Sync also require P3. P6 requires
+end-to-end tests through production entry points at every applicable scale, including late failure, cancellation, restart
+and retry. Record intentional container-limit rejections separately.
+
 Each phase is its own task, branch, gate and adversarial review (per platform where it touches one). P4 is the largest.
+
+## P1 — Baseline and feasibility, with production caps enabled
+
+Pin the app revision, device and OS, provider, initial store, fixture seed and clock. Use one physical device per platform
+for feasibility, a local source for repeatable timing, and a coordinated provider on iOS and SAF provider on Android for
+interruption and reread checks. Run one warm-up and three measured runs per case. Record pre-operation baseline, peak and
+post-cleanup process footprint, Android managed heap, SwiftData memory before and during save, temporary disk high-water by
+component, wall time by stage, write-lock and main-actor stall duration, provider opens and bytes read, and cancellation
+time to quiescence. Include preview idle retention. Baseline runs pass when measurements and outcomes are reproducible.
+Existing cap rejections are recorded as outcomes.
+
+**Entry points.** On iOS measure Settings backup preview, confirmed ZIP and legacy restore in Merge/Reconcile/Replace,
+Replace safety export, manual export through `KudosBackupExport`, and `FolderSyncService.syncNow`, `syncDown` and `syncUp`
+for live, `.bak`, conflict and legacy input, upload and prune. On Android measure picked-document inspect and confirm,
+Settings preview and execute, ZIP and legacy directory import, `BackupRepository.exportV2Zip`, and `SyncRepository.runSync`
+and its worker route for live, `.bak`, conflict and legacy input, upload, precommit reread and prune. Include Android
+manual, folder-scoped and pending overlay load/save and Replace aside recovery. Measure actual capped routes at accepted
+sizes and at their cap boundaries. Use an opt-in local harness for above-cap parser and store prototypes, and label those
+results separately from end-to-end runs.
+
+**Store prototypes.** Stage deterministic fixtures outside live mutation. On the production SwiftData schema run batched
+insert, update and Replace sweep through the `KudosBackupContents.restore` save boundary with autosave disabled. Include
+both populated and empty destinations, displaced EPUBs and a mode with no asset writes to isolate dirty-model retention.
+On real Room, drive `BackupRepository`'s Replace transaction from bounded staged reads, include file undo and test a
+concurrent edit after staging. Grow incoming and existing rows separately, using row counts derived from the
+8/32/128/256/512 MiB fixtures. Check exact final rows, remaps, asset bytes and summaries against the existing
+implementation at supported sizes. Force a failure before commit and during asset installation, test cancellation near
+commit, inspect state after restart, and retry. Record any process-death result separately from ordinary rollback. A store
+prototype fails if it retains row-proportional memory, changes required state or retry behavior, or cannot establish the
+commit outcome. A SwiftData failure blocks dependent production apply work until the replacement design passes the same
+gate.
+
+**Parser and staging prototypes.** Compare Android `JsonReader` with a chunked byte tokenizer using the same corpus. On
+iOS, compare a buffered tokenizer with a mapped-spool implementation using the same chunked payload interface. Select a
+candidate only if it passes route parity, resource and large-value checks; measure mapped-page residency as part of
+process footprint. Compare the candidates against actual manual, picker and live recovery routes through EOF. Include
+root metadata after arrays, escaped and duplicate keys, malformed scalars and separators, invalid UTF-8, trailing content,
+wrong section kinds, lossy typed elements, unsupported versions, and truncated live input. Include a supported 20 MiB
+decoded recovery payload, a single opaque value larger than 64 MiB, a record with a growing nested array, and
+independently growing conflict fan-out and asset bytes. Inject cancellation and ENOSPC during spool and staging. Pass
+requires identical typed values, presence, semantic decisions and recovery eligibility on the parity corpus, plus bounded
+handling of the large-value cases and no live mutation on validation failure.
+
+**Feasibility thresholds** (proposed; no measured device baseline yet). Use 64 MiB incremental process footprint as the
+provisional ceiling for each prototype and require the median incremental peak to grow by no more than 8 MiB from 128 to
+512 MiB on each independently scaled axis. For local controlled runs with one axis scaled at a time, require the median
+512 MiB run to take no more than 5× the 128 MiB run. Measure cancellation during parser, store and provider work
+separately. In a local run, require cancellable loops to stop within one second and report rollback or commit completion
+separately. Report provider latency and non-interruptible save/commit intervals separately, then set numeric release
+thresholds from the representative device and provider runs before P6. Replace the fixed disk multiplier with a measured
+and enforced component budget for concurrent input spools, staging and indexes, apply and undo state, database journals,
+staged assets and output. Fail any run that exceeds its disk budget, leaks staging after cleanup, or mutates or publishes
+after a resource failure invalidates the operation.
 
 ## Review trace (Codex v1 review → v2)
 
@@ -163,3 +250,10 @@ SwiftData designs, SwiftData measured in P1 before anything depends on it. 3 inv
 7 cap removal → § Limits after the change, P5 archive/provider work, no per-record cap. 8 parser/storage alternatives →
 P1 prototypes (platform `JsonReader`, tokenizer), SQLite as private staging; v8 JSON stays the interchange (no shards).
 9 phasing/measurement → P1 measures first, budget per entry point with disk/time/cancellation; test inventory listed.
+
+**v3 (Codex review 2 → v3):** applied verbatim — staging/resolve with live projection and revalidation (1); per-platform
+commit and failure behaviour, disk-backed undo, durable commit discriminator, SwiftData gate (2); inventory additions (3);
+P3 operation-level criterion with chunked opaque values (4); route-specific outcomes, existing routes as oracle (5);
+consistent export view, SAF recheck, rename result, post-publication bookkeeping (6); limits incl. ZIP writer exemption,
+chunked large values, no new caps without a decision (7); parser comparison in P1 (8); phase dependencies, fixture
+additions, P1 with thresholds (9).
