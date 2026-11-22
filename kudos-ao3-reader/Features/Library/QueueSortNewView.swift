@@ -75,6 +75,7 @@ struct QueueSortNewView: View {
     @State private var pendingDecision: PendingDecision?
     @State private var containerWidth: CGFloat = 390
     @State private var undoErrorMessage: String?
+    @State private var undoNoticeMessage: String?
 
     /// Caps the card on iPad / wide macOS windows so it does not stretch edge-to-edge.
     private static let maxCardWidth: CGFloat = 560
@@ -185,6 +186,17 @@ struct QueueSortNewView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(undoErrorMessage ?? "")
+        }
+        .alert(
+            "Undone",
+            isPresented: Binding(
+                get: { undoNoticeMessage != nil },
+                set: { if !$0 { undoNoticeMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(undoNoticeMessage ?? "")
         }
     }
 
@@ -597,7 +609,7 @@ extension QueueSortNewView {
             )
         }
         switch outcome {
-        case .undone:
+        case .undone, .undoneSkippingHidden:
             let nextWork = currentMembership?.work
             let concealed = nextWork.map { gate.isConcealed($0, enabled: hideMature) } ?? false
             let message = session.undoAnnouncement(
@@ -605,6 +617,9 @@ extension QueueSortNewView {
                 nextIsConcealed: concealed
             )
             AccessibilityNotification.Announcement(message).post()
+            if case let .undoneSkippingHidden(_, skipped) = outcome {
+                undoNoticeMessage = QueueSortSession.skippedHiddenNotice(count: skipped)
+            }
         case .hidden:
             undoErrorMessage =
                 "That work is hidden by your mature content privacy settings. Show mature content to undo this step."

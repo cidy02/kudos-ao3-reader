@@ -89,6 +89,7 @@ struct WorkRow: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.workTagSearchEnabled) private var tagSearchEnabled
+    @Environment(\.workRowStacksTrailingAtAXSizes) private var sortNewByline
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
     @State private var internalExpanded = false
@@ -522,7 +523,10 @@ struct WorkRow: View {
                 font: .subheadline,
                 compact: !dynamicTypeSize.isAccessibilitySize
             )
-            .fixedSize(horizontal: false, vertical: true)
+            // Sort New only (the same flag as its stacked trailing controls): on the
+            // narrow card the byline must take its full height. Library and queue rows
+            // keep their old, truncating layout.
+            .modifier(WorkRowBylineFixedSize(applies: sortNewByline))
         }
         if expandedBinding.wrappedValue, nonemptyFandomNames.count > 1 {
             Text(nonemptyFandomNames.joined(separator: ", "))
@@ -614,5 +618,13 @@ struct WorkRowExpandedDetails<Content: View>: View {
                 $0.opacity(isVisible || reduceMotion || !animate ? 1 : 0)
             }
             .onAppear { isVisible = true }
+    }
+}
+
+/// `.fixedSize(vertical:)` only where asked: a conditional modifier that keeps one view identity.
+private struct WorkRowBylineFixedSize: ViewModifier {
+    let applies: Bool
+    func body(content: Content) -> some View {
+        content.fixedSize(horizontal: false, vertical: applies)
     }
 }

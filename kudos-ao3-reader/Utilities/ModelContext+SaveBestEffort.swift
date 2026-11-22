@@ -47,6 +47,16 @@ extension ModelContext {
     @discardableResult
     func saveBestEffort(reason: StaticString) -> Bool {
         guard autosaveEnabled else { return true }
+        return commitNow(reason: reason)
+    }
+
+    /// Saves now, even when `autosaveEnabled` is off. For a transaction that owns its commit
+    /// point and must know whether it landed (Sort New Undo turns autosave off, makes several
+    /// edits, then commits once and rolls back if this returns false): `saveBestEffort` would
+    /// report success there without saving anything. Honours the same test budget.
+    @MainActor
+    @discardableResult
+    func commitNow(reason: StaticString) -> Bool {
         if let budget = SaveBestEffortTesting.budget {
             if budget.remaining <= 0 { return false }
             budget.remaining -= 1
