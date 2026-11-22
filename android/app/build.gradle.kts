@@ -56,6 +56,7 @@ android {
         targetSdk = 37
         versionCode = 9
         versionName = "0.2.1"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Escaped for a Java string literal inside generated BuildConfig.
         buildConfigField("String", "GIT_COMMIT_SHA", "\"${gitCommitSha.replace("\"", "\\\"")}\"")
         buildConfigField("String", "GIT_BRANCH", "\"${gitBranch.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
