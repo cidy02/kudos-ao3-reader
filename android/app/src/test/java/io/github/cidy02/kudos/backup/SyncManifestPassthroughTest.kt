@@ -1866,7 +1866,7 @@ class SyncManifestPassthroughTest {
         }
         // The Replace did not commit, so the library and the overlay are both still the old ones.
         assertEquals(librarySizeBefore, database.workDao().getAllIncludingDeleted().size)
-        assertNotNull(database.workDao().getById(workId))
+        assertEquals(false, database.workDao().getById(workId)!!.isDeleted)
         assertEquals(before, pendingStore.load())
     }
 
