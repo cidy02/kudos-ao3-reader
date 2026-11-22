@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import Testing
 @testable import Kudos
 
@@ -732,24 +733,98 @@ struct SyncedSettingsTests {
         #expect(newerHere.string(forKey: name) == "Bella")
     }
 
-    @Test func settingsThatMovedOutOfExtrasStillReadFromAnEarlierT541Backup() throws {
+    private func bellaHere() -> UserDefaults {
         let defaults = freshDefaults()
-        defaults.set(false, forKey: InsightsOptions.Keys.hideReadingTime)
+        defaults.set("af_bella", forKey: ReaderSpeechPreferences.voiceIDKey)
+        defaults.set("Bella", forKey: ReaderSpeechPreferences.voiceNameKey)
         _ = KudosBackupSettings.capture(defaults: defaults)
+        defaults.set("af_bella ", forKey: ReaderSpeechPreferences.voiceIDKey)
+        SyncedSettingsClock.noteLocalChanges(
+            keys: [ReaderSpeechPreferences.voiceIDKey, ReaderSpeechPreferences.voiceNameKey],
+            in: defaults, now: t0
+        )
+        defaults.set("af_bella", forKey: ReaderSpeechPreferences.voiceIDKey)
+        SyncedSettingsClock.noteLocalChanges(
+            keys: [ReaderSpeechPreferences.voiceIDKey, ReaderSpeechPreferences.voiceNameKey],
+            in: defaults, now: t0
+        )
+        return defaults
+    }
+
+    @Test func aMalformedVoiceNameMakesTheWholeIncomingPairInvalid() throws {
+        let id = ReaderSpeechPreferences.voiceIDKey
+        let name = ReaderSpeechPreferences.voiceNameKey
         var incoming = KudosBackupSettings.capture(defaults: freshDefaults())
-        incoming.extras = [
-            "kudos.insights.discreetMode": .bool(true),
-            "kudos.insights.hideReadingTime": .bool(true),
-            "readerSpeechVoiceID": .string("af_bella")
-        ]
-        incoming.modifiedAt = [
-            "kudos.insights.discreetMode": t0, "kudos.insights.hideReadingTime": t0,
-            "readerSpeechVoiceID": t0
-        ]
-        try settingsThroughJSON(incoming).apply(to: defaults, fromSync: true)
-        #expect(defaults.bool(forKey: InsightsOptions.Keys.discreetMode))
-        #expect(defaults.bool(forKey: InsightsOptions.Keys.hideReadingTime))
-        #expect(defaults.string(forKey: ReaderSpeechPreferences.voiceIDKey) == "af_bella")
+        incoming.readerSpeechVoiceID = "bm_lewis"
+        incoming.modifiedAt = [id: t0.addingTimeInterval(-100), name: t0.addingTimeInterval(300)]
+        let broken = try settingsThroughJSON(incoming) { $0["readerSpeechVoiceName"] = 42 }
+        for fromSync in [true, false] {
+            let defaults = bellaHere()
+            broken.apply(to: defaults, fromSync: fromSync)
+            #expect(defaults.string(forKey: id) == "af_bella")
+            #expect(defaults.string(forKey: name) == "Bella")
+            #expect(!SyncedSettingsClock.stampChanges(keys: [id, name], in: defaults))
+        }
+    }
+
+    @Test func aNewerVoiceResetClearsBothAndAnOlderOneClearsNeither() throws {
+        let id = ReaderSpeechPreferences.voiceIDKey
+        let name = ReaderSpeechPreferences.voiceNameKey
+        var reset = KudosBackupSettings.capture(defaults: freshDefaults())
+        reset.modifiedAt = [id: t0.addingTimeInterval(-1), name: t0.addingTimeInterval(300)]
+        for fromSync in [true, false] {
+            let defaults = bellaHere()
+            try settingsThroughJSON(reset).apply(to: defaults, fromSync: fromSync)
+            #expect(defaults.object(forKey: id) == nil)
+            #expect(defaults.object(forKey: name) == nil)
+            #expect(!SyncedSettingsClock.stampChanges(keys: [id, name], in: defaults))
+        }
+        reset.modifiedAt = [id: t0.addingTimeInterval(-1), name: t0.addingTimeInterval(-5)]
+        let kept = bellaHere()
+        try settingsThroughJSON(reset).apply(to: kept, fromSync: true)
+        #expect(kept.string(forKey: id) == "af_bella")
+        #expect(kept.string(forKey: name) == "Bella")
+    }
+
+    @Test func aStampedLabelOmissionClearsTheLabelOfARetainedVoiceButAnUnstampedOneDoesNot() throws {
+        let name = ReaderSpeechPreferences.voiceNameKey
+        var incoming = KudosBackupSettings.capture(defaults: freshDefaults())
+        incoming.readerSpeechVoiceID = "af_bella"
+        incoming.modifiedAt = [ReaderSpeechPreferences.voiceIDKey: t0, name: t0.addingTimeInterval(300)]
+        let cleared = bellaHere()
+        try settingsThroughJSON(incoming).apply(to: cleared, fromSync: true)
+        #expect(cleared.object(forKey: name) == nil)
+
+        incoming.modifiedAt = nil
+        let kept = bellaHere()
+        try settingsThroughJSON(incoming).apply(to: kept, fromSync: true)
+        #expect(kept.string(forKey: name) == "Bella")
+    }
+
+    @Test func anArchiveWithoutBylinesLeavesALocalWorksBylinesAlone() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+        ])
+        let container = try ModelContainer(
+            for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        )
+        let context = container.mainContext
+        let id = UUID()
+        let local = SavedWork(id: id, title: "Bylines", author: "Someone")
+        local.authorIdentitiesJSON = #"[{"username":"someone","pseud":"Someone"}]"#
+        context.insert(local)
+        let older = SavedWork(id: id, title: "Bylines", author: "Someone")
+        older.lastModifiedAt = Date().addingTimeInterval(3600)   // newer than the local work, no bylines
+        let contents = try KudosBackupService.makeContents(
+            works: [older], bookmarks: [], fonts: [], readingQueues: [], defaults: freshDefaults()
+        )
+        for fromSync in [true, false] {
+            _ = try KudosBackupService.restore(contents, into: context, defaults: freshDefaults(), fromSync: fromSync)
+            let works = try context.fetch(FetchDescriptor<SavedWork>())
+            #expect(works.first?.authorIdentitiesJSON == #"[{"username":"someone","pseud":"Someone"}]"#)
+        }
     }
 
     @Test func aLayoutLearnedWithoutAnEditStampStillGetsItsResetSent() throws {
