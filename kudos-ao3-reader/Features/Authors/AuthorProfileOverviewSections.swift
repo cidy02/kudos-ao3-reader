@@ -488,8 +488,10 @@ struct AuthorProfileOverviewSections: View {
                     if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
                         SensitiveWorkCoverCard(work: work)
                     } else if !gate.isHidden(work, enabled: hideMature, mode: matureMode) {
-                        SensitiveWorkCoverCard(work: work)
-                            .remoteWorkNavigation(to: work)
+                        // A wrapping link, not the background `cardNavigation` link: that one
+                        // has an empty label, so outside a List row it has no hit area (BUG-12).
+                        RemoteWorkLink(work: work) { SensitiveWorkCoverCard(work: work) }
+                            .buttonStyle(.plain)
                     }
                 }
             }
