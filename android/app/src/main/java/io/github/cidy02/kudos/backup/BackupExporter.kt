@@ -4,6 +4,8 @@ import java.io.ByteArrayOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 
 object BackupExporter {
     /**
@@ -13,7 +15,8 @@ object BackupExporter {
      */
     fun exportV2(
         kudosBackup: KudosBackupPackage,
-        maxArchiveBytes: Long = BackupLimits.MAX_ARCHIVE_BYTES
+        maxArchiveBytes: Long = BackupLimits.MAX_ARCHIVE_BYTES,
+        baseManifestJson: JsonObject? = null
     ): ByteArray {
         val manifest = BackupValidator.validateManifest(
             kudosBackup.manifest.copy(
@@ -35,7 +38,18 @@ object BackupExporter {
                 // An entry's compressed bytes are in `output` once it is closed.
                 if (output.size().toLong() > maxArchiveBytes) throw BackupError.ArchiveTooLarge()
             }
-            val manifestBytes = BackupJson.encodeToString(manifest).toByteArray(Charsets.UTF_8)
+            val manifestBytes = if (baseManifestJson != null) {
+                val outgoingJson = BackupJson.encodeToJsonElement(
+                    KudosBackupManifest.serializer(),
+                    manifest
+                ).jsonObject
+                BackupJson.encodeToString(
+                    JsonObject.serializer(),
+                    carryUnknownRecordKeys(outgoingJson, baseManifestJson)
+                ).toByteArray(Charsets.UTF_8)
+            } else {
+                BackupJson.encodeToString(manifest).toByteArray(Charsets.UTF_8)
+            }
             if (manifestBytes.size.toLong() > BackupLimits.MAX_MANIFEST_BYTES) {
                 throw BackupError.EntryTooLarge(BackupPaths.MANIFEST)
             }

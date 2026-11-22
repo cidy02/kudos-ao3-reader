@@ -26,7 +26,9 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Captures the local library into a `.kudosbackup` ZIP and restores
@@ -45,6 +47,25 @@ class BackupRepository(
         io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore(workFileStore.worksDirectory.parent.toFile()),
     private val cacheDirectory: File? = null
 ) {
+    private val lastImportedManifestStore = SyncLastManifestStore(
+        workFileStore.worksDirectory.parent ?: workFileStore.worksDirectory
+    )
+    private val pendingImportManifestStore = SyncLastManifestStore(
+        workFileStore.worksDirectory.parent ?: workFileStore.worksDirectory,
+        fileName = PENDING_IMPORT_MANIFEST_FILE
+    )
+    init {
+        val legacy = SyncLastManifestStore(
+            workFileStore.worksDirectory.parent ?: workFileStore.worksDirectory,
+            fileName = "backup-last-manifest.json"
+        )
+        if (lastImportedManifestStore.load() == null) {
+            legacy.load()?.let(lastImportedManifestStore::save)
+        }
+        if (lastImportedManifestStore.load() != null) legacy.clear()
+    }
+
+    internal fun lastImportedManifestJson(): JsonObject? = lastImportedManifestStore.load()
     val metadataCheck = SyncMetadataCheck(now = clock) {
         persistenceGate.withLock {
             withContext(Dispatchers.IO) {
@@ -98,8 +119,12 @@ class BackupRepository(
                 fontFilesByFileName = fontFiles,
                 originalFilesByName = originalFiles
             )
-            BackupExportResult(BackupExporter.exportV2(pack), omittedBooks, omittedFonts,
-                pronunciationsUnreadable = snapshot.pronunciationsUnreadable)
+            BackupExportResult(
+                BackupExporter.exportV2(pack, baseManifestJson = lastImportedManifestStore.load()),
+                omittedBooks,
+                omittedFonts,
+                pronunciationsUnreadable = snapshot.pronunciationsUnreadable
+            )
         }
     }
 
@@ -113,6 +138,26 @@ class BackupRepository(
         bytes: ByteArray,
         mode: BackupImportMode = BackupImportMode.RECONCILE,
         admit: suspend () -> Boolean = { true }
+    ): BackupRestoreSummary = importV2ZipBytesInternal(bytes, mode, admit, replacePassthroughStore = false)
+
+    internal suspend fun importV2ZipBytesReplacingStore(
+        bytes: ByteArray,
+        admit: suspend () -> Boolean = { true },
+        folderUri: String? = null
+    ): BackupRestoreSummary = importV2ZipBytesInternal(
+        bytes = bytes,
+        mode = BackupImportMode.RECONCILE,
+        admit = admit,
+        replacePassthroughStore = true,
+        folderUri = folderUri
+    )
+
+    private suspend fun importV2ZipBytesInternal(
+        bytes: ByteArray,
+        mode: BackupImportMode,
+        admit: suspend () -> Boolean,
+        replacePassthroughStore: Boolean,
+        folderUri: String? = null
     ): BackupRestoreSummary = persistenceGate.withLock {
         if (!admit()) throw ImportDeclined()
         withContext(Dispatchers.IO) {
@@ -120,7 +165,9 @@ class BackupRepository(
             prepareForImport(mode)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode)
-            applyMergeResultLocked(merge, pack.originalFilesByName)
+            applyMergeResultLocked(merge, pack.originalFilesByName).also {
+                recordImportedManifest(pack.rawManifestJson, mode, replacePassthroughStore, folderUri)
+            }
         }
     }
 
@@ -136,8 +183,47 @@ class BackupRepository(
             prepareForImport(mode)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode, normalizeQueuePreservation)
-            applyMergeResultLocked(merge, pack.originalFilesByName)
+            applyMergeResultLocked(merge, pack.originalFilesByName).also {
+                recordImportedManifest(pack.rawManifestJson, mode)
+            }
         }
+    }
+
+    private suspend fun recordImportedManifest(
+        rawJson: JsonObject?,
+        mode: BackupImportMode,
+        replacePassthroughStore: Boolean = false,
+        folderUri: String? = null
+    ) {
+        val connectedFolderUri = folderUri ?: settingsRepository.settings.first().sync.folderUri
+        if (replacePassthroughStore) {
+            if (rawJson != null) {
+                lastImportedManifestStore.save(rawJson, folderUri = connectedFolderUri)
+            } else {
+                lastImportedManifestStore.clear()
+            }
+            return
+        }
+        val keepFolderTag = connectedFolderUri?.takeIf { lastImportedManifestStore.belongsToFolder(it) }
+        // A manual import belongs to this device's library: its pending overlay is never
+        // tagged, and a tag left by an older build is dropped in the same save (data kept).
+        if (mode == BackupImportMode.REPLACE_LIBRARY) {
+            if (rawJson != null) {
+                lastImportedManifestStore.save(rawJson, folderUri = keepFolderTag)
+                pendingImportManifestStore.save(rawJson, clearStaleFolderTag = true)
+            } else {
+                lastImportedManifestStore.clear()
+                pendingImportManifestStore.clear()
+            }
+        } else if (rawJson != null) {
+            // Load, merge and save under the store lock, so no other save lands in between.
+            lastImportedManifestStore.update(folderUri = keepFolderTag) { mergeImportedManifestJson(rawJson, it) }
+            pendingImportManifestStore.update(clearStaleFolderTag = true) { mergeImportedManifestJson(rawJson, it) }
+        }
+    }
+
+    internal companion object {
+        internal const val PENDING_IMPORT_MANIFEST_FILE = "sync-pending-import-manifest.json"
     }
 
     private suspend fun prepareForImport(mode: BackupImportMode) {
