@@ -8,6 +8,12 @@ enum ReaderEndOfWorkFacts {
         isComplete ? "The End" : "You're caught up"
     }
 
+    /// Reaching the end of the book finishes only a completed work. A work in progress stays
+    /// Reading (caught up) until the reader moves it themselves.
+    static func shouldAutoFinish(isComplete: Bool, isFinished: Bool) -> Bool {
+        isComplete && !isFinished
+    }
+
     /// Formats logged reading time in minutes or hours and minutes: e.g. "1 h 20 min", "45 min".
     /// Nil when nothing was logged: the end card never invents a time.
     static func durationString(seconds: Double) -> String? {

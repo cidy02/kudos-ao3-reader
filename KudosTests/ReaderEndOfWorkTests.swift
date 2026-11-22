@@ -9,6 +9,12 @@ struct ReaderEndOfWorkTests {
         #expect(ReaderEndOfWorkFacts.heading(isComplete: false) == "You're caught up")
     }
 
+    @Test func reachingTheEndNeverFinishesAWorkInProgress() {
+        #expect(ReaderEndOfWorkFacts.shouldAutoFinish(isComplete: true, isFinished: false))
+        #expect(!ReaderEndOfWorkFacts.shouldAutoFinish(isComplete: true, isFinished: true))
+        #expect(!ReaderEndOfWorkFacts.shouldAutoFinish(isComplete: false, isFinished: false))
+    }
+
     @Test func durationFormattingHandlesVariousIntervals() {
         #expect(ReaderEndOfWorkFacts.durationString(seconds: 4800) == "1 h 20 min")
         #expect(ReaderEndOfWorkFacts.durationString(seconds: 3600) == "1 h")
