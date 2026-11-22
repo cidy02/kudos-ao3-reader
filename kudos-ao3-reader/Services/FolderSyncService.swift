@@ -11,6 +11,17 @@ extension Notification.Name {
     static let kudosSyncRelevantSettingChanged = Notification.Name("kudosSyncRelevantSettingChanged")
 }
 
+/// A reader's change to data that travels in the snapshot but lives outside SwiftData and
+/// UserDefaults (drafts, pronunciations, mail choices, subscription scans), so Folder Sync uploads
+/// it (T-541, fifth review). Never posted by a restore's own writes: two devices would ping-pong.
+nonisolated enum LocalSnapshotChange {
+    static func post() {
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+        }
+    }
+}
+
 struct FolderSyncSnapshot: Equatable {
     var isConnected: Bool
     var folderDisplayName: String
@@ -249,7 +260,7 @@ enum FolderSyncService {
     ) throws -> FolderSyncResult {
         var result = FolderSyncResult()
         for contents in conflictContents {
-            let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults)
+            let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults, fromSync: true)
             result.absorb(summary)
             result.foldedConflicts += 1
         }
@@ -357,7 +368,7 @@ enum FolderSyncService {
                     fontFiles: assets.fontFiles,
                     originalFiles: assets.originalFiles
                 )
-                let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults)
+                let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults, fromSync: true)
                 result.absorb(summary)
             }
             assets.epubFiles.removeAll(keepingCapacity: false)
@@ -527,7 +538,7 @@ enum FolderSyncService {
             let contents = try await Task.detached {
                 try coordinatedReadLegacyContents(from: legacyURL)
             }.value
-            let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults)
+            let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults, fromSync: true)
             result.absorb(summary)
             result.didReadRemoteFile = true
             let conflictFold = try await foldConflictVersions(
@@ -587,7 +598,8 @@ enum FolderSyncService {
             let summary = try KudosBackupService.restore(
                 readResult.contents,
                 into: context,
-                defaults: defaults
+                defaults: defaults,
+                fromSync: true
             )
             outcome.result.absorb(summary)
             outcome.result.foldedConflicts += 1

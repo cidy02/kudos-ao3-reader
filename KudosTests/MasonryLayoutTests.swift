@@ -58,4 +58,26 @@ struct MasonryLayoutTests {
         #expect(resultNeg.origins == [CGPoint(x: 0, y: 0)])
         #expect(resultNeg.size == CGSize(width: 100, height: 50))
     }
+
+    @Test func explicitColumnSpansKeepFoldGutterClearAndMeasureEachColumnWidth() {
+        let spans = [
+            MasonryLayout.ColumnSpan(minX: 0, width: 439.5),
+            MasonryLayout.ColumnSpan(minX: 479.5, width: 355.5)
+        ]
+        let layout = MasonryLayout(columns: 2, spacing: 10, rowSpacing: 8, columnSpans: spans)
+        var measuredWidths: [CGFloat] = []
+        let result = layout.arrange(count: 3, width: 835) { index, columnWidth in
+            measuredWidths.append(columnWidth)
+            return CGSize(width: columnWidth, height: index == 0 ? 120 : 100)
+        }
+        #expect(measuredWidths == [439.5, 355.5, 355.5])
+        #expect(result.frames == [
+            CGRect(x: 0, y: 0, width: 439.5, height: 120),
+            CGRect(x: 479.5, y: 0, width: 355.5, height: 100),
+            CGRect(x: 479.5, y: 108, width: 355.5, height: 100)
+        ])
+        // Nothing enters the 40 pt fold clear (439.5..<479.5).
+        #expect(result.frames.allSatisfy { $0.maxX <= 439.5 || $0.minX >= 479.5 })
+        #expect(result.size == CGSize(width: 835, height: 208))
+    }
 }

@@ -16,16 +16,30 @@ struct ReaderSettingLabel: View {
     }
 }
 
-/// The reader's display options — theme, text size, layout, read-aloud and font —
-/// in the reader's options sheet (iOS) and inspector (macOS).
+/// The reader's display options — theme, text size, layout and font — in the
+/// reader's options sheet (iOS), its iPhone Duo panel, and the inspector (macOS).
 ///
-/// Settings shows the same Reader, Listening and Font sections on its own pages
-/// (`SettingsReaderPage`, `SettingsListeningPage`, `SettingsFontPage`) through the
-/// shared views below, so the two always show the same controls and stay in sync
-/// via `@AppStorage`. App-wide settings live on those pages, not here.
+/// Settings shows the same Reader and Font sections on its own pages
+/// (`SettingsReaderPage`, `SettingsFontPage`) through the shared views below, so
+/// the two always show the same controls and stay in sync via `@AppStorage`.
+/// App-wide settings live on those pages, not here.
+///
+/// Read Aloud is not here (T-562b, owner): its voice settings live in the Read
+/// Aloud controls (`ReaderSpeechSettingsSheet`, from the mini player and More ›
+/// Read Aloud Settings) and in Settings › Listening.
 struct ReaderOptionsForm: View {
     /// An additional host constraint on spreads (the macOS reader checks its width).
     var twoPageAvailable: Bool = true
+    /// Set when the form is the iPhone Duo panel (T-562b), and called by its Done.
+    /// The panel is an overlay inside the pushed reader, where a navigation stack
+    /// would take over the app's own (it popped the reader on the Duo), so the form
+    /// draws the sheet's header itself — Customize…, the title, Done — and lists
+    /// Font as one row under Text Size that opens the font list in a sheet: the
+    /// board's order (`Duo-Open-Reader`), instead of the whole list after Reading.
+    var panelDone: (() -> Void)?
+    /// False where the host reads one page whatever the setting (the Duo held
+    /// upright): the toggle stays, and the Reading footnote says where it applies.
+    var twoPageSpreadApplies: Bool = true
 
     @Environment(ThemeManager.self) private var themeManager
     #if os(iOS)
@@ -38,7 +52,70 @@ struct ReaderOptionsForm: View {
         Binding(get: { themeManager.readerTheme }, set: { themeManager.readerTheme = $0 })
     }
 
+    private var isPanel: Bool { panelDone != nil }
+
     var body: some View {
+        #if os(iOS)
+        if let panelDone {
+            VStack(spacing: 0) {
+                panelHeader(done: panelDone)
+                form
+            }
+        } else {
+            form
+        }
+        #else
+        form
+        #endif
+    }
+
+    #if os(iOS)
+    /// The sheet's navigation bar, drawn for the panel: Customize… (inline in the
+    /// form instead at accessibility sizes, as in the sheet), the title, Done.
+    @ViewBuilder
+    private func panelHeader(done: @escaping () -> Void) -> some View {
+        let title = Text("Themes & Settings")
+            .font(.headline)
+            .accessibilityAddTraits(.isHeader)
+        let doneButton = Button(action: done) {
+            Image(systemName: "checkmark")
+                .font(.body.weight(.semibold))
+                .frame(width: 30, height: 30)
+        }
+        .sheetConfirmStyle()
+        .buttonBorderShape(.circle)
+        .accessibilityLabel("Done")
+        // At accessibility sizes the centred title would run under the buttons:
+        // it leads and wraps instead (Customize… is already inline in the form).
+        if dynamicTypeSize.isAccessibilitySize {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                title.frame(maxWidth: .infinity, alignment: .leading)
+                doneButton
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            // Stops where a navigation bar's title stops growing, as in the sheet:
+            // at AX5 the header otherwise took a third of a cover-sized panel.
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+        } else {
+            // Spaced like the board's header: Customize… · title · Done.
+            HStack(spacing: 0) {
+                Button("Customize…") { showCustomize = true }
+                    .buttonStyle(.glass)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                title.lineLimit(1).minimumScaleFactor(0.8)
+                Spacer(minLength: 8)
+                doneButton
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .dynamicTypeSize(...DynamicTypeSize.xLarge)
+        }
+    }
+    #endif
+
+    private var form: some View {
         Form {
             // Group so .appThemedRows() (a .listRowBackground) reaches every section's
             // rows — it does NOT propagate from the Form container, only from a Group/
@@ -64,17 +141,21 @@ struct ReaderOptionsForm: View {
                 Section("Text Size") {
                     TextSizeSlider()
                 }
+
+                if isPanel {
+                    Section {
+                        ReaderFontRow()
+                    }
+                }
                 #endif
 
-                ReaderLayoutSection(twoPageAvailable: twoPageAvailable)
+                ReaderLayoutSection(
+                    twoPageAvailable: twoPageAvailable, twoPageSpreadApplies: twoPageSpreadApplies
+                )
 
-                #if os(iOS)
-                // Voice / rate / pitch for the Readium read-aloud mini player.
-                // macOS still uses the legacy WKWebView reader without TTS.
-                ReaderSpeechSettingsSection()
-                #endif
-
-                ReaderFontSection(onAddFont: { isImportingFonts = true })
+                if !isPanel {
+                    ReaderFontSection(onAddFont: { isImportingFonts = true })
+                }
             }
             .appThemedRows()
         }
@@ -83,7 +164,7 @@ struct ReaderOptionsForm: View {
         .readerFontImporter(isPresented: $isImportingFonts)
         #if os(iOS)
         .toolbar {
-            if !dynamicTypeSize.isAccessibilitySize {
+            if !dynamicTypeSize.isAccessibilitySize, !isPanel {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Customize…") { showCustomize = true }
                 }
@@ -99,6 +180,59 @@ struct ReaderOptionsForm: View {
         #endif
     }
 }
+
+#if os(iOS)
+/// Font, with the chosen font's name, opening the same list Settings › Font shows
+/// (in a sheet: the Duo panel has no navigation stack to push onto).
+private struct ReaderFontRow: View {
+    @Environment(ThemeManager.self) private var themeManager
+    @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
+    @AppStorage("readerFontID") private var fontID: String = "system"
+    @State private var showFonts = false
+
+    private var fontName: String {
+        ReaderFontOption.options(customFonts: customFonts).first { $0.id == fontID }?.name ?? ""
+    }
+
+    var body: some View {
+        Button {
+            showFonts = true
+        } label: {
+            LabeledContent {
+                HStack(spacing: 6) {
+                    Text(fontName)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+            } label: {
+                ReaderSettingLabel(title: "Font", systemImage: "textformat")
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showFonts) {
+            NavigationStack {
+                SettingsFontPage()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button { showFonts = false } label: {
+                                Image(systemName: "checkmark")
+                            }
+                            .sheetConfirmStyle()
+                            .accessibilityLabel("Done")
+                        }
+                    }
+            }
+            .accentTint(themeManager.effectiveTint, on: themeManager.readerChromeTheme)
+            .preferredColorScheme(themeManager.readerPage.colorScheme)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+    }
+}
+#endif
 
 /// Light/Sepia/Dark/OLED tiles on iOS; the macOS inspector keeps its segmented picker.
 struct ReaderThemePicker: View {
@@ -184,6 +318,13 @@ private struct ReaderThemeTile: View {
 struct ReaderLayoutSection: View {
     /// An additional host constraint; iOS availability also follows this view's size classes.
     var twoPageAvailable: Bool = true
+    /// False in the iPhone Duo's upright layout, which shows one page whatever the
+    /// setting: the toggle stays usable and the footnote says so.
+    var twoPageSpreadApplies: Bool = true
+
+    /// The footnote's spread line where the reader shows one page anyway.
+    static let uprightSpreadNote =
+        "Held upright, iPhone Duo shows one page. Two-page spread applies when it is open in landscape."
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -262,13 +403,20 @@ struct ReaderLayoutSection: View {
     }
 
     private var readingSectionFooter: String {
-        let spread = twoPageSpreadAvailable
-            ? "On a wide screen, Paged mode can show two pages side by side."
-            : "Choose whether you turn pages or scroll while reading."
         #if os(iOS)
+        let spread = if !twoPageSpreadAvailable {
+            "Choose whether you turn pages or scroll while reading."
+        } else if twoPageSpreadApplies {
+            "Two-page spread shows two pages side by side in Paged mode on wide screens, "
+                + "and on iPhone Duo when it is open in landscape."
+        } else {
+            Self.uprightSpreadNote
+        }
         return spread + " Page Turn applies in Paged mode."
         #else
-        return spread
+        return twoPageSpreadAvailable
+            ? "Two-page spread shows two pages side by side in Paged mode in a wide window."
+            : "Choose whether you turn pages or scroll while reading."
         #endif
     }
 }

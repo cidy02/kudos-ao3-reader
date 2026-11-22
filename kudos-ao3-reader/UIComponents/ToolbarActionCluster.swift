@@ -19,27 +19,74 @@ import SwiftUI
 /// mirroring `@ViewBuilder`).
 struct ActionToolbar: ToolbarContent {
     var items: [AnyView]
+    @Environment(\.duoLayout) private var duoLayout
 
     var body: some ToolbarContent {
-        if !items.isEmpty {
-            ToolbarItem(placement: .primaryAction) { items[0].labelStyle(.iconOnly) }
+        if duoLayout.usesSingleRailActionGroup {
+            // Duo vertical rail (N9): one Back/Close circle, then one glass group for actions.
+            if !items.isEmpty {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    if !items.isEmpty { items[0].labelStyle(.iconOnly) }
+                    if items.count > 1 { items[1].labelStyle(.iconOnly) }
+                    if items.count > 2 { items[2].labelStyle(.iconOnly) }
+                    if items.count > 3 { items[3].labelStyle(.iconOnly) }
+                    if items.count > 4 { items[4].labelStyle(.iconOnly) }
+                }
+            }
+        } else {
+            if !items.isEmpty {
+                ToolbarItem(placement: .primaryAction) { items[0].labelStyle(.iconOnly) }
+            }
+            if items.count > 1 {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+                ToolbarItem(placement: .primaryAction) { items[1].labelStyle(.iconOnly) }
+            }
+            if items.count > 2 {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+                ToolbarItem(placement: .primaryAction) { items[2].labelStyle(.iconOnly) }
+            }
+            if items.count > 3 {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+                ToolbarItem(placement: .primaryAction) { items[3].labelStyle(.iconOnly) }
+            }
+            if items.count > 4 {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+                ToolbarItem(placement: .primaryAction) { items[4].labelStyle(.iconOnly) }
+            }
         }
-        if items.count > 1 {
-            ToolbarSpacer(.fixed, placement: .primaryAction)
-            ToolbarItem(placement: .primaryAction) { items[1].labelStyle(.iconOnly) }
+    }
+}
+
+extension ToolbarContent {
+    /// Requests vertical rail placement on iOS 27.1+ for custom-view items (e.g. Home's
+    /// avatar button) that UIKit's `.automatic` axis inference otherwise keeps in the top bar.
+    @ToolbarContentBuilder
+    func duoVerticalPreferredAxis() -> some ToolbarContent {
+        #if os(iOS)
+        if #available(iOS 27.1, *) {
+            axisBehavior(.verticalPreferred)
+        } else {
+            self
         }
-        if items.count > 2 {
-            ToolbarSpacer(.fixed, placement: .primaryAction)
-            ToolbarItem(placement: .primaryAction) { items[2].labelStyle(.iconOnly) }
+        #else
+        self
+        #endif
+    }
+}
+
+extension View {
+    /// Keeps the vertical tab group visible ahead of toolbar overflow on iOS 27.1+ rail poses.
+    @ViewBuilder
+    func duoVerticalCompressionPrefersTabBar(_ enabled: Bool) -> some View {
+        #if os(iOS)
+        if #available(iOS 27.1, *), enabled {
+            toolbarVerticalCompressionBehavior(.prefersTabBar)
+        } else {
+            self
         }
-        if items.count > 3 {
-            ToolbarSpacer(.fixed, placement: .primaryAction)
-            ToolbarItem(placement: .primaryAction) { items[3].labelStyle(.iconOnly) }
-        }
-        if items.count > 4 {
-            ToolbarSpacer(.fixed, placement: .primaryAction)
-            ToolbarItem(placement: .primaryAction) { items[4].labelStyle(.iconOnly) }
-        }
+        #else
+        self
+        #endif
     }
 }
 

@@ -604,6 +604,8 @@ struct ReaderView: View {
             return
         }
         work.isFinished = true
+        // Without a stamp a sync could not tell this from the older copy in the folder (T-541).
+        work.markModified()
         try? modelContext.save()
     }
 

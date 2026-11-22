@@ -224,6 +224,21 @@ nonisolated struct LibraryPageArrangement: Codable, Equatable, Sendable, RawRepr
         )
     }
 
+    /// Partition sections across the iPhone Duo's two panes (`Duo-Open-Library-Root`):
+    /// the default `[Favourites, Collections, Downloaded]` puts Favourites and Collections
+    /// in the leading pane and Downloaded (above Shelves and On AO3) in the trailing pane.
+    /// Custom arrangements balance the leading pane against the trailing Shelves/On AO3 blocks.
+    func duoPaneSections() -> (leading: [LibraryPageSection], trailing: [LibraryPageSection]) {
+        let count = sections.count
+        let leadingCount: Int
+        if count <= 2 {
+            leadingCount = count
+        } else {
+            leadingCount = buttons.isEmpty ? (count + 1) / 2 : (count + 2) / 2
+        }
+        return (Array(sections.prefix(leadingCount)), Array(sections.dropFirst(leadingCount)))
+    }
+
     /// "214 works". One stays singular.
     static func workCountPhrase(_ count: Int) -> String {
         "\(count) work\(count == 1 ? "" : "s")"

@@ -703,6 +703,8 @@ enum DebugShots {
         ("newqueue", DebugShot(route: "queues", sheets: ["newqueue"])),
         ("editqueue", DebugShot(route: neon, sheets: ["editqueue"])),
         ("addworks", DebugShot(route: neon, sheets: ["addworks"])),
+        // T-529 Sort New over the queue page (the demo has no New works, so it sorts them all).
+        ("sortnew", DebugShot(route: neon, sheets: ["sortnew"])),
         ("queuetag", DebugShot(route: neonDetails, sheets: ["queuetag"])),
         ("queuetags", DebugShot(route: neonDetails, pushes: ["queuetags"])),
         ("queuetagedit", DebugShot(route: neonDetails, pushes: ["queuetags", "queuetagedit"])),
@@ -786,6 +788,8 @@ enum DebugShots {
         ("libedit", DebugShot(route: "library", sheets: ["libedit"])),
         ("sortby", DebugShot(route: starSearch, pushes: ["sortby"])),
         ("readerend", DebugShot(route: readRiver, sheets: ["readerend"])),
+        ("readercaughtup", DebugShot(route: readRiver, sheets: ["readercaughtup"])),
+        ("readerchapterend", DebugShot(route: readRiver, sheets: ["readerchapterend"])),
         ("welcome", DebugShot(route: "welcome")),
         ("protectlibrary", DebugShot(route: "protectlibrary")),
         ("recentlydeleted", DebugShot(route: "recentlyDeleted", sheets: ["recentlydeleted"])),

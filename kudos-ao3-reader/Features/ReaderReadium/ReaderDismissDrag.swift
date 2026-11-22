@@ -162,12 +162,14 @@ final class ReaderDismissPeelContainerController<Content: View>: UIViewControlle
     let host: UIHostingController<Content>
     let surface: ReaderDismissDragSurface
     var reduceMotion: Bool
-    var onGeometryChange: (CGSize, UIEdgeInsets) -> Void
+    var onGeometryChange: (CGSize, UIEdgeInsets, ReaderHostRegions) -> Void
     private var geometryReportPending = false
+    /// Raw `UIHinge.Status` stored as `Int?` so it does not require `@available` on the property.
+    private var lastHingeStatusRaw: Int?
 
     init(
         content: Content, surface: ReaderDismissDragSurface, reduceMotion: Bool,
-        onGeometryChange: @escaping (CGSize, UIEdgeInsets) -> Void
+        onGeometryChange: @escaping (CGSize, UIEdgeInsets, ReaderHostRegions) -> Void
     ) {
         self.host = UIHostingController(rootView: content)
         self.surface = surface
@@ -191,6 +193,51 @@ final class ReaderDismissPeelContainerController<Content: View>: UIViewControlle
         host.didMove(toParent: self)
         // Transform the container, never the hosting child.
         surface.cardView = view
+        if #available(iOS 27.1, *) {
+            // The bar can move edge without a bounds or safe-area change.
+            let barTraits = UITraitCollection.systemTraitsAffectingVerticalBarEdge
+            registerForTraitChanges(barTraits) { (controller: Self, _: UITraitCollection) in
+                controller.reportGeometryAfterLayout()
+            }
+            // Re-read division regions when hinge status flips (e.g. flat ↔ Book)
+            // without a bounds change. Angle-only updates with the same status skip.
+            let hingeInteraction = UIHingeInteraction { [weak self] _, update in
+                guard let self else { return }
+                let statusRaw = update.hinge?.status.rawValue
+                guard statusRaw != self.lastHingeStatusRaw else { return }
+                self.lastHingeStatusRaw = statusRaw
+                self.reportGeometryAfterLayout()
+            }
+            view.addInteraction(hingeInteraction)
+        }
+    }
+
+    /// The system vertical bar's physical edge, from this view's traits.
+    private var verticalBar: ReaderVerticalBar {
+        guard #available(iOS 27.1, *) else { return .none }
+        let leftToRight = view.effectiveUserInterfaceLayoutDirection == .leftToRight
+        switch view.traitCollection.verticalBarEdge {
+        case .leading: return leftToRight ? .left : .right
+        case .trailing: return leftToRight ? .right : .left
+        default: return .none
+        }
+    }
+
+    /// The bar edge, its status block, and the fold, in this view's points.
+    private var hostRegions: ReaderHostRegions {
+        var regions = ReaderHostRegions(verticalBar: verticalBar)
+        guard #available(iOS 27.1, *) else { return regions }
+        let bounds = view.bounds
+        let activeOcclusions = view.reservedRegions(kind: .occlusion)
+            .filter(\.isActive)
+            .map(\.frame)
+        regions.barStatusBottom = ReaderHostRegions.statusBottom(
+            from: activeOcclusions, in: bounds, verticalBar: regions.verticalBar
+        )
+        let divisionFrames = view.reservedRegions(kind: .division, options: .includeInactive)
+            .map(\.frame)
+        regions.fold = ReaderHostRegions.foldFrame(from: divisionFrames, in: bounds)
+        return regions
     }
 
     override func viewDidLayoutSubviews() {
@@ -221,7 +268,7 @@ final class ReaderDismissPeelContainerController<Content: View>: UIViewControlle
                 bottom: max(0, bounds.maxY - safeFrame.maxY),
                 right: max(0, bounds.maxX - safeFrame.maxX)
             )
-            self.onGeometryChange(bounds.size, safe)
+            self.onGeometryChange(bounds.size, safe, self.hostRegions)
         }
     }
 
@@ -244,13 +291,13 @@ final class ReaderDismissPeelContainerController<Content: View>: UIViewControlle
 struct ReaderDismissPeelHost<Content: View>: UIViewControllerRepresentable {
     let surface: ReaderDismissDragSurface
     let reduceMotion: Bool
-    let onGeometryChange: (CGSize, UIEdgeInsets) -> Void
+    let onGeometryChange: (CGSize, UIEdgeInsets, ReaderHostRegions) -> Void
     let content: Content
 
     init(
         surface: ReaderDismissDragSurface,
         reduceMotion: Bool,
-        onGeometryChange: @escaping (CGSize, UIEdgeInsets) -> Void,
+        onGeometryChange: @escaping (CGSize, UIEdgeInsets, ReaderHostRegions) -> Void,
         @ViewBuilder content: () -> Content
     ) {
         self.surface = surface

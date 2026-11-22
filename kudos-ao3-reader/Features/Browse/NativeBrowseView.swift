@@ -24,6 +24,7 @@ enum BrowseZoomKey: Hashable {
 struct BrowseView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.duoLayout) private var duoLayout
 
     @State private var path = NavigationPath()
     @Namespace private var cardZoomNamespace
@@ -58,6 +59,7 @@ struct BrowseView: View {
             #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)
             #endif
+                .duoVerticalCompressionPrefersTabBar(duoLayout.hasVerticalBar)
                 .navigationDestination(for: AO3MediaCategory.self) { category in
                     FandomListView(category: category, onSelect: openFandom)
                 }

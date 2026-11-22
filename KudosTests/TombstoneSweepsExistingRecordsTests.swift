@@ -443,5 +443,102 @@ struct TombstoneSweepsExistingRecordsTests {
 
         #expect(try context.fetch(FetchDescriptor<Bookmark>()).count == 1)
     }
+
+    // MARK: T-541, Codex's third review: a permanent delete reaches Recently Deleted elsewhere
+
+    private func workTombstone(
+        id: UUID, at seconds: TimeInterval, permanently: Bool, key: Curve25519.Signing.PrivateKey
+    ) -> SyncTombstone {
+        let tomb = SyncTombstone(
+            recordID: id, recordType: .savedWork, createdAt: Date(timeIntervalSince1970: seconds),
+            deletionReason: permanently ? SyncTombstones.workPermanentlyDeletedReason : "workDeleted"
+        )
+        TombstoneSigning.sign(tomb, key: key)
+        return tomb
+    }
+
+    private func recentlyDeletedWork(deletedAt seconds: TimeInterval, in context: ModelContext) throws -> SavedWork {
+        let work = SavedWork(title: "Deleted here", author: "Someone")
+        work.isPendingDeletion = true
+        work.deletedAt = Date(timeIntervalSince1970: seconds)
+        work.permanentDeletionScheduledAt = Date().addingTimeInterval(PreservedWorkService.recoveryWindow)
+        work.lastModifiedAt = Date(timeIntervalSince1970: seconds)
+        context.insert(work)
+        try context.save()
+        return work
+    }
+
+    /// Codex's fourth review: `deletionReason` is not signed, so it never shortens a recovery
+    /// window here. A copy in Recently Deleted keeps this device's countdown whatever the reason.
+    @Test func aPermanentDeleteElsewhereLeavesThisDevicesCountdownAlone() throws {
+        let defaults = try testDefaults()
+        let peer = try trustedPeer(defaults)
+        let context = try context()
+        let work = try recentlyDeletedWork(deletedAt: 100, in: context)
+        let countdown = work.permanentDeletionScheduledAt
+        let snapshot = try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], readingQueues: [],
+            tombstones: [workTombstone(id: work.id, at: 130, permanently: true, key: peer)],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults, mode: .reconcile)
+        #expect(work.permanentDeletionScheduledAt == countdown)
+        #expect(work.isPendingDeletion)
+    }
+
+    @Test func aMoveToRecentlyDeletedElsewhereKeepsThisDevicesCountdown() throws {
+        let defaults = try testDefaults()
+        let peer = try trustedPeer(defaults)
+        let context = try context()
+        let work = try recentlyDeletedWork(deletedAt: 100, in: context)
+        let countdown = work.permanentDeletionScheduledAt
+        let snapshot = try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], readingQueues: [],
+            tombstones: [workTombstone(id: work.id, at: 900, permanently: false, key: peer)],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults, mode: .reconcile)
+        #expect(work.permanentDeletionScheduledAt == countdown)
+    }
+
+    @Test func aPermanentDeleteNeverTouchesAWorkStillInTheLibrary() throws {
+        let defaults = try testDefaults()
+        let peer = try trustedPeer(defaults)
+        let context = try context()
+        let work = SavedWork(title: "Still reading", author: "Someone")
+        work.lastModifiedAt = Date(timeIntervalSince1970: 100)
+        context.insert(work)
+        try context.save()
+        let snapshot = try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], readingQueues: [],
+            tombstones: [workTombstone(id: work.id, at: 900, permanently: true, key: peer)],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults, mode: .reconcile)
+        #expect(!work.isPendingDeletion)
+        #expect(work.permanentDeletionScheduledAt == nil)
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
+    }
+
+    @Test func anArchivesRecentlyDeletedCopyStaysGoneAfterAQuickPermanentDelete() throws {
+        let defaults = try testDefaults()
+        let peer = try trustedPeer(defaults)
+        let context = try context()
+        // Another device's archive still lists the work in Recently Deleted (moved at 100), and
+        // carries the permanent delete that followed 30 s later.
+        let elsewhere = SavedWork(title: "Gone for good", author: "Someone")
+        elsewhere.isPendingDeletion = true
+        elsewhere.deletedAt = Date(timeIntervalSince1970: 100)
+        elsewhere.permanentDeletionScheduledAt = Date().addingTimeInterval(PreservedWorkService.recoveryWindow)
+        elsewhere.lastModifiedAt = Date(timeIntervalSince1970: 100)
+        let snapshot = try KudosBackupService.makeContents(
+            works: [elsewhere], bookmarks: [], fonts: [], readingQueues: [],
+            tombstones: [workTombstone(id: elsewhere.id, at: 130, permanently: true, key: peer)],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults, mode: .reconcile)
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).isEmpty)
+    }
+
 }
 }

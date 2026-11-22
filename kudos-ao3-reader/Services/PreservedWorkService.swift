@@ -172,7 +172,7 @@ enum PreservedWorkService {
     // was rescued. Silence is the whole bug; the caller must be able to speak.
 
     @discardableResult
-    static func restore(_ work: SavedWork, in context: ModelContext) -> Bool {
+    static func restore(_ work: SavedWork, in context: ModelContext, save: Bool = true) -> Bool {
         work.isPendingDeletion = false
         work.deletedAt = nil
         work.permanentDeletionScheduledAt = nil
@@ -184,6 +184,7 @@ enum PreservedWorkService {
             sourceURL: work.sourceURL,
             in: context
         )
+        guard save else { return true }
         return context.saveBestEffort(reason: "Saving restored work failed")
     }
 
@@ -241,6 +242,9 @@ enum PreservedWorkService {
     /// recovery window. Used by both `RecentlyDeletedView`'s explicit action and
     /// `sweepExpired` once the window naturally lapses.
     static func hardDelete(_ collection: WorkCollection, in context: ModelContext) {
+        // A later tombstone than the move to Recently Deleted, so an archive's Recently
+        // Deleted copy is not restored (T-541, fifth review).
+        SyncTombstones.recordDeletion(of: collection, in: context, permanently: true)
         context.delete(collection)
         context.saveBestEffort(reason: "Saving permanently-deleted collection failed")
     }
@@ -258,6 +262,7 @@ enum PreservedWorkService {
                 work.isQueuedForLater = !work.queueMemberships.isEmpty
             }
         }
+        SyncTombstones.recordDeletion(of: queue, in: context, permanently: true)
         context.delete(queue)
         context.saveBestEffort(reason: "Saving permanently-deleted queue failed")
     }

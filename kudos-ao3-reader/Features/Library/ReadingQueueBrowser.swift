@@ -21,6 +21,7 @@ struct ReadingQueueBrowserView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accentInk) private var accentInk
     @Environment(\.accentFill) private var accentFill
+    @Environment(\.duoLayout) private var duoLayout
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Environment(PrivacyGate.self) private var gate
@@ -83,6 +84,8 @@ struct ReadingQueueBrowserView: View {
     @State private var isFinishedExpanded = false
     /// Start and Read Aloud on the Up next Resume card push the reader.
     @State private var readerDestination: LocalWorkDestination?
+    /// T-529: the New section's Sort opens Sort New over the queue page.
+    @State private var sortNewRequest: QueueSortNewRequest?
 
     /// Saved for Later first, then user queues (list and smart) by `sortOrder`.
     static func orderedQueues(from queues: [ReadingQueue]) -> [ReadingQueue] {
@@ -571,6 +574,16 @@ struct ReadingQueueBrowserView: View {
                 if DebugLaunchRoute.opensQueueDetails { showingQueueDetails = true }
                 if DebugLaunchRoute.takeSheet("editqueue") { showingEdit = true }
                 if DebugLaunchRoute.takeSheet("addworks") { showingAddWorks = true }
+                if DebugLaunchRoute.takeSheet("sortnew"), let queue = selectedQueue {
+                    // The demo queues hold no New works, so the shot sorts every
+                    // visible work in the queue; a real launch only ever sorts New.
+                    let new = visiblePartition.new.map(\.membership.id)
+                    sortNewRequest = QueueSortNewRequest(
+                        queueID: queue.id,
+                        membershipIDs: new.isEmpty ? visibleMemberships.map(\.id) : new,
+                        requiresNewState: !new.isEmpty
+                    )
+                }
                 #endif
             }
             .onChange(of: selectedQueue?.id) { _, _ in startSourceCheck() }
@@ -619,6 +632,17 @@ struct ReadingQueueBrowserView: View {
                     .modifier(ScopeSurfaceAccent())
                 #endif
             }
+            #if os(iOS)
+            .fullScreenCover(item: $sortNewRequest) { request in
+                sortNewView(request)
+                    .modifier(ScopeSurfaceAccent())
+            }
+            #else
+            .sheet(item: $sortNewRequest) { request in
+                sortNewView(request)
+                    .frame(minWidth: 420, minHeight: 640)
+            }
+            #endif
             .navigationDestination(item: $readerDestination) { destination in
                 LocalWorkDestinationView(destination: destination)
             }
@@ -1016,6 +1040,7 @@ extension ReadingQueueBrowserView {
                             .foregroundStyle(.secondaryInk)
                     }
                     if canSort {
+                        sortNewButton(entries)
                         sortAllIntoLineButton(entries)
                     }
                 }
@@ -1032,7 +1057,18 @@ extension ReadingQueueBrowserView {
                     }
                     Spacer(minLength: 8)
                     if canSort {
-                        sortAllIntoLineButton(entries)
+                        // Both fit beside the title at large text; when they do
+                        // not, Sort into line folds into the pair under Sort.
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .center, spacing: 12) {
+                                sortAllIntoLineButton(entries)
+                                sortNewButton(entries)
+                            }
+                            VStack(alignment: .trailing, spacing: 4) {
+                                sortNewButton(entries)
+                                sortAllIntoLineButton(entries)
+                            }
+                        }
                     }
                 }
             }
@@ -1041,6 +1077,28 @@ extension ReadingQueueBrowserView {
         .padding(.horizontal, SubjectMetrics.gutter)
         .padding(.top, 12)
         .padding(.bottom, 4)
+    }
+
+    private func sortNewView(_ request: QueueSortNewRequest) -> some View {
+        Group {
+            if let queue = allQueues.first(where: { $0.id == request.queueID }) {
+                QueueSortNewView(queue: queue, request: request)
+            } else {
+                Color.clear.onAppear { sortNewRequest = nil }
+            }
+        }
+        .onChange(of: allQueues.map(\.id)) { _, ids in
+            if !ids.contains(request.queueID) {
+                sortNewRequest = nil
+            }
+        }
+    }
+
+    private func sortNewButton(_ entries: [ReadingQueueSectionEntry]) -> some View {
+        QueueSortNewButton(count: entries.count) {
+            guard let queue = selectedQueue else { return }
+            sortNewRequest = QueueSortNewRequest(queueID: queue.id, membershipIDs: entries.map(\.membership.id))
+        }
     }
 
     private func sortAllIntoLineButton(_ entries: [ReadingQueueSectionEntry]) -> some View {
@@ -1358,7 +1416,9 @@ extension ReadingQueueBrowserView {
                     )
                     .labelStyle(.iconOnly)
                 }
-                ToolbarSpacer(.fixed, placement: .primaryAction)
+                if !duoLayout.usesSingleRailActionGroup {
+                    ToolbarSpacer(.fixed, placement: .primaryAction)
+                }
                 ToolbarItemGroup(placement: .primaryAction) {
                     addWorksButton.labelStyle(.iconOnly)
                     WorkListMoreMenu {
@@ -1422,7 +1482,9 @@ extension ReadingQueueBrowserView {
                 )
                 .labelStyle(.iconOnly)
             }
-            ToolbarSpacer(.fixed, placement: .primaryAction)
+            if !duoLayout.usesSingleRailActionGroup {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+            }
             ToolbarItem(placement: .primaryAction) {
                 WorkListMoreMenu {
                     if hideMature {

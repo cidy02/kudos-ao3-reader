@@ -14,6 +14,8 @@ import SwiftUI
 /// list-based Library.
 struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Environment(\.modelContext) private var context
+    @Environment(\.duoLayout) private var duoLayout
+    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var gate
@@ -143,6 +145,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)
             #endif
+                .duoVerticalCompressionPrefersTabBar(duoLayout.hasVerticalBar)
                 .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
                 .navigationDestination(for: LocalWorkDestination.self) { LocalWorkDestinationView(destination: $0) }
                 .navigationDestination(for: LibrarySectionRoute.self, destination: sectionList)
@@ -219,12 +222,16 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     // The lists are drawn from what the Library can show: not a work Hide
                     // mode hides (its fandoms and tags were offered here). A queue's
                     // entry stays: the Saved for Later shelf shows it.
+                    let inspectorWidth = duoLayout.inspectorWidth(rightToLeft: layoutDirection == .rightToLeft)
                     LibraryFilterPanel(
                         filters: $filters,
                         works: works.filter(passesPrivacy),
                         userTagNames: userTagNames
                     )
-                        .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+                        .inspectorColumnWidth(
+                            min: 280, ideal: inspectorWidth ?? 320,
+                            max: max(380, inspectorWidth ?? 0)
+                        )
                 }
                 .task {
                     // ContentView already normalizes the full library at launch.
@@ -423,31 +430,67 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     private var realDashboard: some View { shelvesDashboard }
 
     private var shelvesDashboard: some View {
-        ScrollView {
-            // 26pt between sections (Rules; 1c drew 22), the chips' row included.
-            VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
-                libraryHeaderLink
-                fandomFilterBar
-                ForEach(pageArrangement.sections) { section in
-                    arrangedSection(section)
-                }
-                if !pageArrangement.buttons.isEmpty {
-                    LibraryShelfButtonGrid(
-                        buttons: pageArrangement.buttons,
-                        counts: shelfCounts,
-                        onEdit: { showingEditShelves = true },
-                        onOpen: openShelf
-                    )
-                    .dashboardLeadingRegion()
-                }
-                onAO3Panel.dashboardLeadingRegion()
-                if recentlyDeletedCount > 0 {
-                    recentlyDeletedRow.dashboardLeadingRegion()
-                }
+        let duoSplit = pageArrangement.duoPaneSections()
+        let isDuoSplitLandscape = duoLayout.isFoldSplitLandscape(rightToLeft: layoutDirection == .rightToLeft)
+        return DuoFoldAdaptiveScrollHost(onRefresh: { await refreshLibraryDashboard() }) {
+            libraryHeaderLink
+                .duoScrollAnchor("libraryHeader")
+            fandomFilterBar
+                .duoScrollAnchor("fandomFilterBar")
+            ForEach(duoSplit.leading) { section in
+                arrangedSection(section)
+                    .duoScrollAnchor("section:\(section.id.rawValue)")
             }
-            .padding(.vertical, 12)
+        } trailing: {
+            ForEach(duoSplit.trailing) { section in
+                arrangedSection(section)
+                    .duoScrollAnchor("section:\(section.id.rawValue)")
+            }
+            if !pageArrangement.buttons.isEmpty {
+                LibraryShelfButtonGrid(
+                    buttons: pageArrangement.buttons,
+                    counts: shelfCounts,
+                    forcesCompactColumns: true,
+                    onEdit: { showingEditShelves = true },
+                    onOpen: openShelf
+                )
+                .duoScrollAnchor("shelves")
+            }
+            onAO3Panel
+                .duoScrollAnchor("onAO3")
+            if recentlyDeletedCount > 0 {
+                recentlyDeletedRow
+                    .duoScrollAnchor("recentlyDeleted")
+            }
+        } fallback: {
+            libraryHeaderLink
+                .duoScrollAnchor("libraryHeader")
+            fandomFilterBar
+                .duoScrollAnchor("fandomFilterBar")
+            ForEach(pageArrangement.sections) { section in
+                arrangedSection(section)
+                    .duoScrollAnchor("section:\(section.id.rawValue)")
+            }
+            if !pageArrangement.buttons.isEmpty {
+                LibraryShelfButtonGrid(
+                    buttons: pageArrangement.buttons,
+                    counts: shelfCounts,
+                    forcesCompactColumns: isDuoSplitLandscape,
+                    onEdit: { showingEditShelves = true },
+                    onOpen: openShelf
+                )
+                .dashboardLeadingRegion()
+                .duoScrollAnchor("shelves")
+            }
+            onAO3Panel
+                .dashboardLeadingRegion()
+                .duoScrollAnchor("onAO3")
+            if recentlyDeletedCount > 0 {
+                recentlyDeletedRow
+                    .dashboardLeadingRegion()
+                    .duoScrollAnchor("recentlyDeleted")
+            }
         }
-        .refreshable { await refreshLibraryDashboard() }
     }
 
     private var onAO3Panel: some View {
@@ -1043,51 +1086,74 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             // New Collection is always there — it was the collections shelf's
             // first card (owner, 2026-10-01). Edit Shelves, Privacy and Reading
             // Insights live behind "...".
-            // Board 01: the filter, then + and ••• as one pill (adjacent items in one placement
-            // share a glass pill; the spacer keeps the filter out of it). Select lives in •••
-            // (owner, 2026-11-09), in the app's menu order: Mature · Select · page items.
-            if !works.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
-                    FilterButton(filtersActive: filters.hasActiveFilters,
-                                 showingFilters: router.isShowing(.libraryFilters),
-                                 onClearFilters: { filters = LibraryFilters() })
-                        .labelStyle(.iconOnly)
-                }
-                ToolbarSpacer(.fixed, placement: .primaryAction)
-            }
-            ToolbarItemGroup(placement: .primaryAction) {
-                ToolbarIconButton(title: "New Collection", systemImage: "plus") {
-                    showingNewCollection = true
-                }
-                .labelStyle(.iconOnly)
-                if showsMoreMenu {
-                    WorkListMoreMenu {
-                        Button {
-                            showingEditShelves = true
-                        } label: {
-                            Label("Edit Shelves", systemImage: "square.grid.2x2")
-                        }
-                        if showsMature {
-                            MatureRevealToggle()
-                        }
-                        if showsSelect {
-                            Button {
-                                enterSelectMode()
-                            } label: {
-                                Label("Select", systemImage: "checklist")
-                            }
-                        }
-                        // A page item, so after the shelf controls (pass2-2).
-                        if showsStatistics {
-                            NavigationLink(value: ReadingInsightsDestination()) {
-                                Label("Reading Insights", systemImage: "chart.bar.xaxis")
-                            }
-                        }
+            if duoLayout.usesSingleRailActionGroup {
+                // Duo vertical rail (N9): all actions sit in one glass group (no spacer split).
+                ToolbarItemGroup(placement: .primaryAction) {
+                    if !works.isEmpty {
+                        FilterButton(filtersActive: filters.hasActiveFilters,
+                                     showingFilters: router.isShowing(.libraryFilters),
+                                     onClearFilters: { filters = LibraryFilters() })
+                            .labelStyle(.iconOnly)
+                    }
+                    ToolbarIconButton(title: "New Collection", systemImage: "plus") {
+                        showingNewCollection = true
                     }
                     .labelStyle(.iconOnly)
+                    if showsMoreMenu {
+                        libraryMoreMenu(showsMature: showsMature, showsSelect: showsSelect, showsStatistics: showsStatistics)
+                    }
+                }
+            } else {
+                // Board 01: the filter, then + and ••• as one pill (adjacent items in one placement
+                // share a glass pill; the spacer keeps the filter out of it). Select lives in •••
+                // (owner, 2026-11-09), in the app's menu order: Mature · Select · page items.
+                if !works.isEmpty {
+                    ToolbarItem(placement: .primaryAction) {
+                        FilterButton(filtersActive: filters.hasActiveFilters,
+                                     showingFilters: router.isShowing(.libraryFilters),
+                                     onClearFilters: { filters = LibraryFilters() })
+                            .labelStyle(.iconOnly)
+                    }
+                    ToolbarSpacer(.fixed, placement: .primaryAction)
+                }
+                ToolbarItemGroup(placement: .primaryAction) {
+                    ToolbarIconButton(title: "New Collection", systemImage: "plus") {
+                        showingNewCollection = true
+                    }
+                    .labelStyle(.iconOnly)
+                    if showsMoreMenu {
+                        libraryMoreMenu(showsMature: showsMature, showsSelect: showsSelect, showsStatistics: showsStatistics)
+                    }
                 }
             }
         }
+    }
+
+    private func libraryMoreMenu(showsMature: Bool, showsSelect: Bool, showsStatistics: Bool) -> some View {
+        WorkListMoreMenu {
+            Button {
+                showingEditShelves = true
+            } label: {
+                Label("Edit Shelves", systemImage: "square.grid.2x2")
+            }
+            if showsMature {
+                MatureRevealToggle()
+            }
+            if showsSelect {
+                Button {
+                    enterSelectMode()
+                } label: {
+                    Label("Select", systemImage: "checklist")
+                }
+            }
+            // A page item, so after the shelf controls (pass2-2).
+            if showsStatistics {
+                NavigationLink(value: ReadingInsightsDestination()) {
+                    Label("Reading Insights", systemImage: "chart.bar.xaxis")
+                }
+            }
+        }
+        .labelStyle(.iconOnly)
     }
 
     // MARK: Loading

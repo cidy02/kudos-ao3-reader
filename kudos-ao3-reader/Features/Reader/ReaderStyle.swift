@@ -23,10 +23,8 @@ enum ReadingMode: String, CaseIterable, Identifiable {
     }
 }
 
-/// How a paged turn moves. Stored at `storageKey`. Curl is a real case so a
-/// later renderer can turn it on without a migration, and so a backup from
-/// that build still round-trips. The picker offers None, Slide and Fast Fade.
-/// Curl stays hidden until its renderer exists.
+/// How a paged turn moves. Stored at `storageKey`. Raw values match
+/// Readium's `PageTransition`, including curl.
 enum ReaderPageTurnStyle: String, CaseIterable, Identifiable {
     case none
     case slide
@@ -36,8 +34,8 @@ enum ReaderPageTurnStyle: String, CaseIterable, Identifiable {
     static let storageKey = "readerPageTurn"
     /// Used when the key is absent or the stored string is not a case.
     static let defaultStyle = ReaderPageTurnStyle.slide
-    /// None, Slide and Fast Fade. Curl stays out until its renderer exists.
-    static let pickerCases: [ReaderPageTurnStyle] = [.none, .slide, .fade]
+    /// None, Slide, Fast Fade, Curl. The order is the picker order.
+    static let pickerCases: [ReaderPageTurnStyle] = [.none, .slide, .fade, .curl]
 
     var id: String { rawValue }
 
@@ -61,12 +59,13 @@ enum ReaderPageTurnStyle: String, CaseIterable, Identifiable {
 /// Whether a directional turn (edge tap, arrow or space, `goForward` /
 /// `goBackward`) asks Readium to animate.
 ///
-/// `animated: false` forces `PageTransition.none` inside the fork, so Fast
-/// Fade has to ask for animation or the preference is ignored. Curl stays
-/// instant: the fork declares `.curl` but still paints a slide, and a stored
-/// curl must not play that fallback. Scroll mode and Reduce Motion are
-/// instant. Locator seeks are a different path and stay unanimated at the
-/// call site — this helper is not consulted for them.
+/// `animated: false` forces `PageTransition.none` inside the fork, so Slide,
+/// Fast Fade and Curl have to ask for animation or the preference is ignored.
+/// Scroll mode is instant. Reduce Motion keeps asking for Slide only: the fork
+/// resolves that request to Fast Fade, while Fast Fade and Curl stay instant.
+/// Locator seeks are a different
+/// path and stay unanimated at the call site — this helper is not consulted
+/// for them.
 enum ReaderPageTurnPolicy {
     static func animatedTransition(
         style: ReaderPageTurnStyle,
@@ -74,9 +73,11 @@ enum ReaderPageTurnPolicy {
         reduceMotion: Bool
     ) -> Bool {
         switch style {
-        case .slide, .fade:
+        case .slide:
+            readingMode == .paged
+        case .fade, .curl:
             readingMode == .paged && !reduceMotion
-        case .none, .curl:
+        case .none:
             false
         }
     }

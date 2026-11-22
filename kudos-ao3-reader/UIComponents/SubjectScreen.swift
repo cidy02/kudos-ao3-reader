@@ -281,6 +281,14 @@ extension EnvironmentValues {
     /// three-views-down reason as `ledgerKickerMuted`. The row itself does not
     /// draw the number.
     @Entry var ledgerPositionNumber: Int?
+    /// Whether tapping a work row's fandom label or tag chips triggers an AO3 search.
+    /// Off on triage cards (e.g. Sort New) so taps cannot fire hidden searches behind a cover.
+    @Entry var workTagSearchEnabled = true
+    /// Stacks `WorkPlainRow`'s Under-the-Title trailing controls (star / expand chevron)
+    /// onto their own row at accessibility text sizes. Off by default so Library, Queue,
+    /// Collection, and Search rows keep their layout; enabled only on narrow triage cards
+    /// (Sort New) where star + 44 pt chevron outgrow the card at AX5.
+    @Entry var workRowStacksTrailingAtAXSizes = false
 }
 
 /// Padding and the separator inset shared by every plain work row.
@@ -476,6 +484,7 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Byline: View, R
     @ViewBuilder var trailing: () -> Trailing
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.workRowStacksTrailingAtAXSizes) private var stacksTrailingAtAXSizes
     @AppStorage(WorkSymbolPlacement.storageKey) private var placement: WorkSymbolPlacement = .defaultValue
 
     private var stacked: Bool { dynamicTypeSize.isAccessibilitySize }
@@ -552,10 +561,23 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Byline: View, R
         let rest = lines.filter { !clusterKind.contains($0.kind) }
         return VStack(alignment: .leading, spacing: 0) {
             if showsUnderTitleTrailing {
-                HStack(alignment: .top, spacing: 6) {
+                if stacked, stacksTrailingAtAXSizes {
+                    // On narrow triage cards at accessibility sizes, star + 44 pt chevron
+                    // beside the heading or the four fixed-width symbol tiles outgrow the
+                    // card (clipped chevron / mid-word wrap at AX5). Put trailing on its own
+                    // row so heading, symbols, and byline all get the full card width.
+                    HStack {
+                        Spacer(minLength: 0)
+                        trailing()
+                    }
+                    .padding(.bottom, 6)
                     underTitleStack(cluster, padFirst: false)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    trailing()
+                } else {
+                    HStack(alignment: .top, spacing: 6) {
+                        underTitleStack(cluster, padFirst: false)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        trailing()
+                    }
                 }
             } else {
                 underTitleStack(cluster, padFirst: false)

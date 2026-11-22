@@ -641,6 +641,11 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
     /// this file inherits the source device's deletion history, instead of having zero
     /// tombstone knowledge and silently resurrecting anything deleted after export.
     let tombstones: [KudosBackupTombstone]
+    /// Unpublished writing saved for crash recovery (T-541). Additive, no version bump; nil
+    /// (and absent from the JSON) when there is none, so such a manifest is unchanged.
+    var writingRecovery: [KudosBackupRecoveryCopy]?
+    /// App data kept in files outside SwiftData (T-541): mail updates, subscription scans.
+    var documents: [KudosBackupDocument]?
 
     init(
         version: Int = currentVersion,
@@ -701,6 +706,8 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         case settings
         case pronunciations
         case tombstones
+        case writingRecovery
+        case documents
     }
 
     init(from decoder: Decoder) throws {
@@ -759,6 +766,14 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
             [KudosBackupTombstone].self,
             forKey: .tombstones
         ) ?? []
+        // Neither may stop the library itself from restoring, and one bad entry must not take
+        // the good ones with it (`LossyArray`).
+        writingRecovery = (try? container.decodeIfPresent(
+            LossyArray<KudosBackupRecoveryCopy>.self, forKey: .writingRecovery
+        ))?.values
+        documents = (try? container.decodeIfPresent(
+            LossyArray<KudosBackupDocument>.self, forKey: .documents
+        ))?.values
     }
 }
 
@@ -774,6 +789,12 @@ nonisolated struct KudosBackupPronunciations: Codable, Equatable {
     var global: [String: String]
     var fandoms: [String: [String: String]]
     var works: [String: [String: String]]
+    /// When each correction was last set or removed on the device that wrote this (T-541),
+    /// keyed by `KokoroPronunciationStore.entryID`. A stamp with no entry is a removal. Nil
+    /// from an older build or Android.
+    var stamps: [String: Date]?
+    /// True when some stamp did not decode. Not encoded. A sync then removes nothing.
+    var stampsIncomplete = false
 
     var isEmpty: Bool { global.isEmpty && fandoms.isEmpty && works.isEmpty }
 
@@ -793,9 +814,11 @@ nonisolated struct KudosBackupPronunciations: Codable, Equatable {
         store: KokoroPronunciationStore = KokoroPronunciationStore()
     ) -> KudosBackupPronunciations {
         let file = store.load()
-        return KudosBackupPronunciations(
+        var captured = KudosBackupPronunciations(
             global: file.global, fandoms: file.fandoms, works: file.works
         )
+        captured.stamps = file.stamps
+        return captured
     }
 
     /// Merge restored corrections into whatever is already on this device.
@@ -805,17 +828,78 @@ nonisolated struct KudosBackupPronunciations: Codable, Equatable {
     /// corrections in it. Entries only on this device are kept, because losing
     /// a correction that the archive simply never knew about would be a silent
     /// deletion of hand-made work.
-    func apply(to store: KokoroPronunciationStore = KokoroPronunciationStore()) throws {
-        guard !isEmpty else { return }
+    ///
+    /// T-541: that holds for a restore the reader asked for. A sync is not an explicit act,
+    /// and it used to put the folder's older correction back over one edited here. On a sync
+    /// each correction is judged on its own: the incoming one replaces the local one only
+    /// when it was set more recently, and a correction removed elsewhere is removed here. A
+    /// correction with no stamp of its own is as old as the copy it came in.
+    func apply(
+        to store: KokoroPronunciationStore = KokoroPronunciationStore(),
+        fromSync: Bool = false,
+        archiveDate: Date? = nil
+    ) throws {
+        guard !isEmpty || !(stamps ?? [:]).isEmpty else { return }
         var file = store.load()
-        global.forEach { file.global[$0.key] = $0.value }
-        for (fandom, entries) in fandoms {
-            entries.forEach { file.fandoms[fandom, default: [:]][$0.key] = $0.value }
+        let now = Date()
+        func local(_ id: String) -> SyncedSettingsClock.Stamp? {
+            if let date = file.stamps?[id] { return .init(date: date, inferred: false) }
+            return file.inferred?[id].map { .init(date: $0, inferred: true) }
         }
-        for (work, entries) in works {
-            entries.forEach { file.works[work, default: [:]][$0.key] = $0.value }
+        func own(_ id: String) -> SyncedSettingsClock.Stamp? {
+            stamps?[id].map { .init(date: KudosBackupContents.clampedArchiveDate($0, now: now), inferred: false) }
+        }
+        // A correction with no stamp of its own is as old as the copy it came in, and never
+        // beats a correction edited on this device (`SyncedSettingsClock.incomingWins`).
+        func incoming(_ id: String) -> SyncedSettingsClock.Stamp? {
+            own(id) ?? (fromSync ? archiveDate.map {
+                .init(date: KudosBackupContents.clampedArchiveDate($0, now: now), inferred: true)
+            } : nil)
+        }
+        func record(_ id: String, _ stamp: SyncedSettingsClock.Stamp?) {
+            guard let stamp else { return }
+            if stamp.inferred {
+                file.inferred = (file.inferred ?? [:]).merging([id: stamp.date]) { _, new in new }
+                file.stamps?[id] = nil
+            } else {
+                file.stamps = (file.stamps ?? [:]).merging([id: stamp.date]) { _, new in new }
+                file.inferred?[id] = nil
+            }
+        }
+        func take(_ ipa: String, _ layer: KokoroPronunciationStore.Layer, _ word: String) {
+            guard file.value(for: word, in: layer) != ipa else { return }
+            let id = KokoroPronunciationStore.entryID(layer, word)
+            guard SyncedSettingsClock.incomingWins(local: local(id), incoming: incoming(id), fromSync: fromSync)
+            else { return }
+            file.set(ipa, for: word, in: layer)
+            record(id, incoming(id))
+        }
+        for (word, ipa) in global { take(ipa, .global, word) }
+        for (fandom, entries) in fandoms { for (word, ipa) in entries { take(ipa, .fandom(fandom), word) } }
+        for (work, entries) in works { for (word, ipa) in entries { take(ipa, .work(work), word) } }
+        // A correction removed elsewhere arrives as its own stamp with no value; an explicit
+        // restore honours it too.
+        if !stampsIncomplete {
+            for id in (stamps ?? [:]).keys {
+                guard let (layer, word) = KokoroPronunciationStore.entry(from: id),
+                      value(for: word, in: layer) == nil,
+                      SyncedSettingsClock.incomingWins(local: local(id), incoming: own(id), fromSync: fromSync)
+                else { continue }
+                // The stamp is kept even where the word was never here, so this device's next
+                // sync-up carries the removal on (fifth review).
+                if file.value(for: word, in: layer) != nil { file.set(nil, for: word, in: layer) }
+                record(id, own(id))
+            }
         }
         try store.save(file)
+    }
+
+    private func value(for word: String, in layer: KokoroPronunciationStore.Layer) -> String? {
+        switch layer {
+        case .global: global[word]
+        case .fandom(let key): fandoms[key]?[word]
+        case .work(let key): works[key]?[word]
+        }
     }
 
     init(from decoder: Decoder) throws {
@@ -827,6 +911,14 @@ nonisolated struct KudosBackupPronunciations: Codable, Equatable {
         works = try container.decodeIfPresent(
             [String: [String: String]].self, forKey: .works
         ) ?? [:]
+        let decoded = try? container.decodeIfPresent(LossyMap<Date>.self, forKey: .stamps)
+        stamps = decoded?.values
+        stampsIncomplete = decoded.map(\.hadFailures) ?? container.contains(.stamps)
+    }
+
+    // `stampsIncomplete` is a reading of the archive, not data: never written back out.
+    private enum CodingKeys: String, CodingKey {
+        case global, fandoms, works, stamps
     }
 }
 
@@ -980,6 +1072,9 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     /// (`createdAt`, `isDeleted`), and a decoder that has never heard of it is
     /// unaffected.
     let epubDigest: String?
+    /// The bylines as AO3 accounts (T-541), so a restored work's authors stay tappable without
+    /// a fresh AO3 request. Nil from an older archive or Android.
+    let authorIdentitiesJSON: String?
     /// Omitted for older/Android records; absence never clears a local pin.
     let coverRecipeJSON: String?
     /// Additive D3 derived fields; omitted when empty so untouched works emit no key.
@@ -1069,6 +1164,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         legacyReaderProgress = .some(work.legacyReaderProgress)
         hiddenFromHistoryAt = .some(work.hiddenFromHistoryAt)
         epubDigest = work.epubDigest.isEmpty ? nil : work.epubDigest
+        authorIdentitiesJSON = work.authorIdentitiesJSON.isEmpty ? nil : work.authorIdentitiesJSON
         coverRecipeJSON = work.coverRecipeJSON
         chapterWordCountsJSON = work.chapterWordCountsJSON.isEmpty ? nil : work.chapterWordCountsJSON
         wordUnitRaw = work.wordUnitRaw.isEmpty ? nil : work.wordUnitRaw
@@ -1145,6 +1241,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case legacyReaderProgress
         case hiddenFromHistoryAt
         case epubDigest
+        case authorIdentitiesJSON
         case coverRecipeJSON
         case chapterWordCountsJSON
         case wordUnitRaw
@@ -1242,6 +1339,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         hiddenFromHistoryAt = container.contains(.hiddenFromHistoryAt)
             ? .some(try container.decode(Date?.self, forKey: .hiddenFromHistoryAt)) : nil
         epubDigest = try container.decodeIfPresent(String.self, forKey: .epubDigest)
+        authorIdentitiesJSON = try? container.decodeIfPresent(String.self, forKey: .authorIdentitiesJSON)
         coverRecipeJSON = try container.decodeIfPresent(String.self, forKey: .coverRecipeJSON)
         chapterWordCountsJSON = try container.decodeIfPresent(String.self, forKey: .chapterWordCountsJSON)
         wordUnitRaw = try container.decodeIfPresent(String.self, forKey: .wordUnitRaw)
@@ -1708,6 +1806,8 @@ nonisolated struct KudosBackupCollection: Codable, Equatable {
     /// archive or Android means "never reordered", which is the state they were
     /// written in.
     let workOrderRaw: String?
+    /// When a work last joined or left the shelf (T-541). Nil from an older archive or Android.
+    let lastMembershipChangedAt: Date?
 
     @MainActor
     init(collection: WorkCollection) {
@@ -1728,6 +1828,7 @@ nonisolated struct KudosBackupCollection: Codable, Equatable {
         keepsWorksOffline = collection.keepsWorksOffline
         showsOnHome = collection.showsOnHome
         workOrderRaw = collection.workOrderRaw
+        lastMembershipChangedAt = collection.lastMembershipChangedAt
     }
 }
 
@@ -1911,6 +2012,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     private static let defaultReaderMargin: Double = 28
 
     var readerFontID: String
+    /// Set by restore when `readerFontID` names a custom font whose file is not on this
+    /// device: the font is then left as it is here. Never encoded.
+    var skipsReaderFont = false
     var readerMode: String
     var readerTwoPage: Bool
     var readerCustomize: Bool
@@ -1970,6 +2074,145 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     var excludedFandoms: [String]?
     var excludedTags: [String]?
     var excludedWorkIDs: [String]?
+
+    /// When each setting last changed on the device that wrote this (T-541), keyed by its
+    /// `UserDefaults` key. Nil from an older build or Android. See `SyncedSettingsClock`.
+    var modifiedAt: [String: Date]?
+    /// Settings carried by key rather than as a named field (T-541): only stored choices, and
+    /// only keys on `extraKeys`.
+    var extras: [String: KudosBackupSettingValue]?
+    /// True when some entry of `extras` did not decode. Not encoded. A sync then removes no
+    /// setting, since a missing value might be the one that failed.
+    var extrasIncomplete = false
+    /// `UserDefaults` keys of named settings whose value was present in the copy but did not
+    /// decode (seventh T-541 review). Not encoded. Such a field is neither applied nor taken
+    /// for a reset, whatever its stamp: unreadable is not the same as removed.
+    var malformedNamed: Set<String> = []
+
+    /// Settings a restore assigns by recency. The four privacy gates are not here: a restore
+    /// may tighten them and never loosen them, whatever its date. `readerFontID` is local.
+    static let recencyKeys = [
+        "readerMode", "readerTwoPage", "readerCustomize", "readerBoldText", "readerFontPt",
+        "readerLineHeight", "readerLetterSpacing", "readerWordSpacing", "readerMargin",
+        "readerJustify", "appTheme", "readerTheme", "matchAppReaderTheme", "accentColorHex",
+        "autoPreserveSmallSeriesOnSaveForLater", "autoPreserveSeriesWorkThreshold",
+        "library.page.arrangement", "workSymbolPlacement", "readerFontID",
+        // Named fields the integration branch added after T-541 forked: they travel under
+        // their own keys (Android and older builds read those) and are stamped like the rest.
+        "useEmbeddedCoverArt", "checksSavedSeriesWeekly", "readerPageTurn", "readerSpeechVoiceID",
+        "readerSpeechVoiceName", "lastAddedReadingQueueID",
+        "kudos.insights.discreetMode", "kudos.insights.hideReadingTime",
+        "kudos.insights.countRereads", "kudos.insights.countReadAloud",
+        "kudos.insights.askAboutUntouched", "kudos.insights.untouchedDays",
+        "kudos.insights.excludedFandoms", "kudos.insights.excludedTags",
+        "kudos.insights.excludedWorkIDs"
+    ]
+
+    /// Everything else the reader chose, carried by key since T-541 (owner, 2026-11-16: "backups
+    /// and sync folders should be a complete snapshot of all the data of the app - everything
+    /// except login data or cookies"). Literal keys: the types that own them are main-actor,
+    /// and `SyncedSettingsTests` checks each against its owner.
+    ///
+    /// Deliberately not here, and why (see docs/DATA_AND_PERSISTENCE_INVARIANTS.md): sign-in
+    /// state; this device's own wiring (the sync folder connection, device and signing ids,
+    /// migration flags, crash counters, which voice pack this device downloaded, the open
+    /// tab, onboarding); AO3 politeness timers, which belong to this device's traffic; and the
+    /// developer-only demo and debug switches.
+
+    static let extraKeys: [String: KudosBackupSettingValue.Kind] = [
+        "keepScreenAwake": .bool,
+        "workExportIncludesCover": .bool,
+        "showsZeroStats": .bool,
+        "downloadOnSubscribe": .bool,
+        "keepsWorksYouRead": .bool,
+        "browse.fandoms.groupsVariants": .bool,
+        "search.showSummaries": .bool,
+        "browse.fandomWorks.showSummaries": .bool,
+        "browse.tagWorks.showSummaries": .bool,
+        "author.lists.showSummaries": .bool,
+        "series.showSummaries": .bool,
+        "account.yourWorks.arrangement": .string,
+        "readerSpeechRate": .number,
+        "readerSpeechPitch": .number,
+        "readerSpeechReadAuthorNotes": .bool,
+        "workDetailTagsExpanded": .bool,
+        "workDetailSeriesExpanded": .bool,
+        "workDetailMyCopyExpanded": .bool,
+        "readerCustomPaperHex": .string,
+        "account.markedForLater.arrangement": .string,
+        "account.bookmarks.arrangement": .string,
+        "account.ao3History.arrangement": .string,
+        "library.allWorks.arrangement": .string,
+        "library.imported.arrangement": .string,
+        "account.displayMode": .string,
+        "authorProfile.displayMode": .string,
+        "collection.displayMode": .string,
+        "library.favorites.order": .string,
+        "library.favorites.scope": .string,
+        "library.favorites.quickFilter": .string,
+        "library.favorites.authorQuickFilter": .string,
+        "library.favorites.tagsUnreadOnly": .bool,
+        "library.history.scope": .string,
+        "library.queueOrganizer.tagFilter": .string,
+        "library.readingQueueBrowser.lastSelectedID": .string,
+        "readerHighlightColor": .string,
+        "readerSpeechEngine": .string,
+        "ttsDevContinuationPause": .number,
+        "ttsDevLinePause": .number,
+        "ttsDevParagraphPause": .number,
+        "ttsDevScenePause": .number,
+        "ttsDevChapterPause": .number,
+        "ttsDevPackTarget": .number,
+        "ttsDevPackMin": .number,
+        "ttsDevPackMax": .number,
+        "ttsDevSplitThreshold": .number,
+        "ttsDevDialogueBarrier": .bool,
+        "ttsDevLineBreakPauses": .bool,
+        "account.shortcuts": .string,
+        "writing.recentTags.v1": .data,
+        "ao3PostingPseudByUsername": .stringMap,
+        "ao3CommentDrafts": .stringMap,
+        "ao3.subscriptions.watermarks": .data,
+        "ao3.markedForLater.watermarks": .data,
+        "ao3.search.lastSeenKudos": .data
+    ]
+
+    /// Per-list layouts whose key names a list (a shelf, a queue, a collection), as prefix and
+    /// suffix. `library.page.arrangement` is a named field above.
+    static let extraKeyPatterns: [(prefix: String, suffix: String, kind: KudosBackupSettingValue.Kind)] = [
+        ("library.", ".arrangement", .string),
+        ("home.", ".arrangement", .string),
+        ("collection.", ".arrangement", .string),
+        ("account.ao3Collection.", ".arrangement", .string),
+        ("library.readingQueueBrowser.arrangement.", "", .string)
+    ]
+
+    static func extraKind(for key: String) -> KudosBackupSettingValue.Kind? {
+        if let kind = extraKeys[key] { return kind }
+        guard key != "library.page.arrangement", key.count <= 200 else { return nil }
+        return extraKeyPatterns.first { key.hasPrefix($0.prefix) && key.hasSuffix($0.suffix)
+            && key.count > $0.prefix.count + $0.suffix.count }?.kind
+    }
+
+    /// The settings this device tracks: the named ones, the listed extras, and every stored
+    /// per-list layout, plus any extra an incoming copy names. Map-valued ones separately.
+    static func observedKeys(
+        in defaults: UserDefaults, adding incoming: [String] = []
+    ) -> (keys: [String], maps: Set<String>) {
+        let patterned = defaults.dictionaryRepresentation().keys.filter {
+            extraKeys[$0] == nil && extraKind(for: $0) != nil
+        }
+        // A patterned key this device once knew (stamped, learned from a copy, or seen) but has
+        // since removed stays observed, so the clock can see it vanish and record the removal
+        // (sixth and seventh T-541 reviews).
+        let stamped = SyncedSettingsClock.knownIDs(in: defaults).compactMap { id -> String? in
+            let key = SyncedSettingsClock.entry(from: id)?.key ?? id
+            return extraKind(for: key) != nil ? key : nil
+        }
+        let all = Set(recencyKeys + extraKeys.keys + patterned + stamped + incoming.filter { extraKind(for: $0) != nil })
+        let maps = Set(all.filter { extraKind(for: $0) == .stringMap })
+        return (all.sorted(), maps)
+    }
 
     init(
         readerFontID: String,
@@ -2075,6 +2318,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         case autoPreserveSeriesWorkThreshold
         case libraryPageArrangement
         case workSymbolPlacement
+        case modifiedAt
+        case extras
         case useEmbeddedCoverArt
         case checksSavedSeriesWeekly
         case readerPageTurn
@@ -2171,9 +2416,61 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             excludedTags: (try? container.decodeIfPresent([String].self, forKey: .excludedTags)) ?? nil,
             excludedWorkIDs: (try? container.decodeIfPresent([String].self, forKey: .excludedWorkIDs)) ?? nil
         )
+        // Entry by entry: one bad entry must not drop the rest, and must not read as the
+        // whole map being absent, which a removal would take as "reset everywhere".
+        let stamps = try? container.decodeIfPresent(LossyMap<Date>.self, forKey: .modifiedAt)
+        modifiedAt = stamps?.values
+        let decodedExtras = try? container.decodeIfPresent(LossyMap<KudosBackupSettingValue>.self, forKey: .extras)
+        extras = decodedExtras?.values
+        extrasIncomplete = decodedExtras.map(\.hadFailures) ?? container.contains(.extras)
+        let named: [(CodingKeys, String, Bool)] = [
+            (.accentColorHex, "accentColorHex", accentColorHex == nil),
+            (.libraryPageArrangement, LibraryPageArrangement.storageKey, libraryPageArrangement == nil),
+            (.workSymbolPlacement, WorkSymbolPlacement.storageKey, workSymbolPlacement == nil),
+            (.useEmbeddedCoverArt, "useEmbeddedCoverArt", useEmbeddedCoverArt == nil),
+            (.checksSavedSeriesWeekly, "checksSavedSeriesWeekly", checksSavedSeriesWeekly == nil),
+            (.readerPageTurn, ReaderPageTurnStyle.storageKey, readerPageTurn == nil),
+            (.readerSpeechVoiceID, ReaderSpeechPreferences.voiceIDKey, readerSpeechVoiceID == nil),
+            (.readerSpeechVoiceName, ReaderSpeechPreferences.voiceNameKey, readerSpeechVoiceName == nil),
+            (.lastAddedReadingQueueID, "lastAddedReadingQueueID", lastAddedReadingQueueID == nil),
+            (.discreetMode, InsightsOptions.Keys.discreetMode, discreetMode == nil),
+            (.hideReadingTime, InsightsOptions.Keys.hideReadingTime, hideReadingTime == nil),
+            (.countRereads, InsightsOptions.Keys.countRereads, countRereads == nil),
+            (.countReadAloud, InsightsOptions.Keys.countReadAloud, countReadAloud == nil),
+            (.askAboutUntouched, InsightsOptions.Keys.askAboutUntouched, askAboutUntouched == nil),
+            (.untouchedDays, InsightsOptions.Keys.untouchedDays, untouchedDays == nil),
+            (.excludedFandoms, InsightsOptions.Keys.excludedFandoms, excludedFandoms == nil),
+            (.excludedTags, InsightsOptions.Keys.excludedTags, excludedTags == nil),
+            (.excludedWorkIDs, InsightsOptions.Keys.excludedWorkIDs, excludedWorkIDs == nil)
+        ]
+        for (codingKey, defaultsKey, isNil) in named
+        where isNil && container.contains(codingKey) && ((try? container.decodeNil(forKey: codingKey)) != true) {
+            malformedNamed.insert(defaultsKey)
+        }
     }
 
     static func capture(defaults: UserDefaults = .standard) -> Self {
+        var settings = values(defaults: defaults)
+        // Stamp what changed here since the last check, then send the real edit stamps with
+        // the values so the reader's other devices can tell newer from older.
+        let observed = observedKeys(in: defaults)
+        SyncedSettingsClock.noteLocalChanges(keys: observed.keys, mapKeys: observed.maps, in: defaults)
+        // Any key this build knows, held here or not: a reset adopted from elsewhere travels on.
+        let stamps = SyncedSettingsClock.stamps(in: defaults).filter { id, _ in
+            let key = SyncedSettingsClock.entry(from: id)?.key ?? id
+            return observed.keys.contains(key) || extraKind(for: key) != nil
+        }
+        settings.modifiedAt = stamps.isEmpty ? nil : stamps
+        var extras: [String: KudosBackupSettingValue] = [:]
+        for key in observed.keys {
+            guard let kind = extraKind(for: key) else { continue }
+            extras[key] = KudosBackupSettingValue.stored(key, kind: kind, in: defaults)
+        }
+        settings.extras = extras.isEmpty ? nil : extras
+        return settings
+    }
+
+    private static func values(defaults: UserDefaults) -> Self {
         let capturedVoiceID = nonEmptyString(defaults, ReaderSpeechPreferences.voiceIDKey)
         let capturedVoiceName = capturedVoiceID == nil
             ? nil
@@ -2264,24 +2561,83 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         )
     }
 
-    func apply(to defaults: UserDefaults = .standard) {
-        // M21. Never assign the archive's readerFontID — the font selection is local-only.
-        // A custom font refers to a file name that may not exist on this device (the
-        // archive might carry a font the user never installed here, or folder-sync
-        // might push one that hasn't been validated yet). Silently switching the reader
-        // to a missing font breaks rendering until the user notices and resets it in
-        // Settings. The user picks their font on each device; sync carries the *files*,
-        // not the selection.
-        defaults.set(readerMode, forKey: "readerMode")
-        defaults.set(readerTwoPage, forKey: "readerTwoPage")
-        defaults.set(readerCustomize, forKey: "readerCustomize")
-        defaults.set(readerBoldText, forKey: "readerBoldText")
-        defaults.set(readerFontPt, forKey: "readerFontPt")
-        defaults.set(readerLineHeight, forKey: "readerLineHeight")
-        defaults.set(readerLetterSpacing, forKey: "readerLetterSpacing")
-        defaults.set(readerWordSpacing, forKey: "readerWordSpacing")
-        defaults.set(readerMargin, forKey: "readerMargin")
-        defaults.set(readerJustify, forKey: "readerJustify")
+    func apply(to defaults: UserDefaults = .standard, fromSync: Bool = false, archiveDate: Date? = nil) {
+        // Restored `ttsDev*` tuning must reach a reader that already read it (fifth review).
+        defer { if defaults === UserDefaults.standard { ReaderSpeechTuning.invalidate() } }
+        // T-541. Until now every restore assigned every setting, so each sync-down put the
+        // folder's copy over whatever had been changed here since. Now a sync writes a setting
+        // only when its stamp is newer than this device's (`SyncedSettingsClock.incomingWins`).
+        // Keys named only by a reset's stamp count too, so a device that never held them keeps it.
+        let resetKeys = (modifiedAt ?? [:]).keys.map { SyncedSettingsClock.entry(from: $0)?.key ?? $0 }
+        let observed = Self.observedKeys(in: defaults, adding: Array((extras ?? [:]).keys) + resetKeys)
+        let localStamps = SyncedSettingsClock.noteLocalChanges(
+            keys: observed.keys, mapKeys: observed.maps, in: defaults
+        )
+        let now = Date()
+        // A value's own stamp is a real edit time. Without one (an older build, Android) it is
+        // as old as the copy it came in, and says so. Explicit restores need no date.
+        func ownStamp(_ id: String) -> SyncedSettingsClock.Stamp? {
+            modifiedAt?[id].map { .init(date: KudosBackupContents.clampedArchiveDate($0, now: now), inferred: false) }
+        }
+        func stamp(_ id: String) -> SyncedSettingsClock.Stamp? {
+            ownStamp(id) ?? (fromSync ? archiveDate.map {
+                .init(date: KudosBackupContents.clampedArchiveDate($0, now: now), inferred: true)
+            } : nil)
+        }
+        func wins(_ id: String, _ incoming: SyncedSettingsClock.Stamp?) -> Bool {
+            SyncedSettingsClock.incomingWins(local: localStamps[id], incoming: incoming, fromSync: fromSync)
+        }
+        @discardableResult
+        func write(_ value: Any, _ key: String) -> Bool {
+            let incoming = stamp(key)
+            guard wins(key, incoming) else { return false }
+            defaults.set(value, forKey: key)
+            SyncedSettingsClock.adopt(key: key, stamp: incoming, in: defaults)
+            return true
+        }
+        // A map setting merges entry by entry: comment drafts typed on two devices both stay.
+        func merge(_ incoming: [String: String], into key: String) {
+            let stored = defaults.dictionary(forKey: key) as? [String: String]
+            var local = stored ?? [:]
+            var adopted: [(String, SyncedSettingsClock.Stamp?)] = []
+            for (entry, value) in incoming where local[entry] != value {
+                let id = SyncedSettingsClock.entryID(key, entry)
+                guard wins(id, stamp(id)) else { continue }
+                local[entry] = value
+                adopted.append((entry, stamp(id)))
+            }
+            // An entry removed elsewhere arrives as its own stamp with no value.
+            if !extrasIncomplete {
+                for id in (modifiedAt ?? [:]).keys {
+                    guard let (owner, entry) = SyncedSettingsClock.entry(from: id), owner == key,
+                          incoming[entry] == nil, wins(id, ownStamp(id)) else { continue }
+                    // Kept even where the entry was never here, so the removal travels on.
+                    local[entry] = nil
+                    adopted.append((entry, ownStamp(id)))
+                }
+            }
+            guard !adopted.isEmpty else { return }
+            if local != (stored ?? [:]) { defaults.set(local, forKey: key) }
+            for (entry, stamp) in adopted {
+                SyncedSettingsClock.adopt(key: key, entry: entry, value: local[entry], stamp: stamp, in: defaults)
+            }
+        }
+        // The reader font travels like any setting since T-541 (owner, 2026-11-16: a complete
+        // snapshot; Codex's third review). M21's reason for keeping it local still holds, so a
+        // custom font is taken only when its file is on this device (the caller checks after
+        // the font files are restored, and sets `skipsReaderFont` otherwise): the reader is
+        // never switched to a font it cannot draw, and this device's choice stays.
+        if !skipsReaderFont { write(readerFontID, "readerFontID") }
+        write(readerMode, "readerMode")
+        write(readerTwoPage, "readerTwoPage")
+        write(readerCustomize, "readerCustomize")
+        write(readerBoldText, "readerBoldText")
+        write(readerFontPt, "readerFontPt")
+        write(readerLineHeight, "readerLineHeight")
+        write(readerLetterSpacing, "readerLetterSpacing")
+        write(readerWordSpacing, "readerWordSpacing")
+        write(readerMargin, "readerMargin")
+        write(readerJustify, "readerJustify")
         // M3. These four are safety gates, and until the 2026-08 audit an archive could
         // *relax* every one of them by blind assignment. That is not only an import-time
         // problem: `KudosBackupService.restore` always ends here (it is the last thing it
@@ -2312,74 +2668,169 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             let stricter = (localMode == .hide || incomingMode == .hide) ? MaturePrivacyMode.hide : incomingMode
             defaults.set(stricter.rawValue, forKey: "matureContentMode")
         }
-        defaults.set(appTheme, forKey: "appTheme")
-        defaults.set(readerTheme, forKey: "readerTheme")
-        defaults.set(matchAppReaderTheme, forKey: "matchAppReaderTheme")
+        write(appTheme, "appTheme")
+        write(readerTheme, "readerTheme")
+        write(matchAppReaderTheme, "matchAppReaderTheme")
         // Absent (or JSON null, which decodes as nil) leaves the local accent.
         // `#990000` in any case is the pre-2026-10-29 default, not a choice.
         // Any other present value is applied as stored, including a custom colour.
         if let accentColorHex, !ThemeManager.isLegacyUnchosenAccent(accentColorHex) {
-            defaults.set(accentColorHex, forKey: "accentColorHex")
+            write(accentColorHex, "accentColorHex")
         }
-        defaults.set(autoPreserveSmallSeriesOnSaveForLater, forKey: "autoPreserveSmallSeriesOnSaveForLater")
-        defaults.set(autoPreserveSeriesWorkThreshold, forKey: "autoPreserveSeriesWorkThreshold")
+        write(autoPreserveSmallSeriesOnSaveForLater, "autoPreserveSmallSeriesOnSaveForLater")
+        write(autoPreserveSeriesWorkThreshold, "autoPreserveSeriesWorkThreshold")
         // An absent or malformed key stays nil. An older archive, or a folder
         // sync from Android, must leave the reader's own Library layout alone.
         if let libraryPageArrangement {
-            defaults.set(libraryPageArrangement.rawValue, forKey: LibraryPageArrangement.storageKey)
+            write(libraryPageArrangement.rawValue, LibraryPageArrangement.storageKey)
         }
         // Same rule; a value this build does not know is ignored.
         if let workSymbolPlacement, WorkSymbolPlacement(rawValue: workSymbolPlacement) != nil {
-            defaults.set(workSymbolPlacement, forKey: WorkSymbolPlacement.storageKey)
+            write(workSymbolPlacement, WorkSymbolPlacement.storageKey)
         }
-        if let useEmbeddedCoverArt { defaults.set(useEmbeddedCoverArt, forKey: "useEmbeddedCoverArt") }
-        if let checksSavedSeriesWeekly { defaults.set(checksSavedSeriesWeekly, forKey: "checksSavedSeriesWeekly") }
+        // Only keys this build knows, and only a value of the kind it expects.
+        for (key, value) in extras ?? [:] where Self.extraKind(for: key) == value.kind {
+            if case .stringMap(let map) = value {
+                merge(map, into: key)
+            } else {
+                write(value.object, key)
+            }
+        }
+        // A map emptied elsewhere is absent from `extras` but its entries' removal stamps are not.
+        for key in observed.maps where extras?[key] == nil && Self.extraKind(for: key) != nil {
+            merge([:], into: key)
+        }
+        // A choice reset on another device arrives as a stamp with no value. It is removed
+        // here only on the key's own real stamp (a copy that does not know the key carries
+        // neither, and that is not a reset), never when part of the copy was unreadable, and on
+        // an explicit restore as well as a sync, so a restore reproduces the snapshot (Codex's
+        // third review).
+        // The three named settings that may be absent follow the same rule (Codex's fourth
+        // review): absent with their own stamp is a reset, absent without one is an older or
+        // unaware writer.
+        let namedOptional: [(key: String, absent: Bool)] = [
+            ("accentColorHex", accentColorHex == nil),
+            (LibraryPageArrangement.storageKey, libraryPageArrangement == nil),
+            (WorkSymbolPlacement.storageKey, workSymbolPlacement == nil)
+        ]
+        // The stamp is adopted even where the value was never set here, so this device's next
+        // sync-up carries the reset on instead of dropping it (fifth review).
+        for named in namedOptional where named.absent && !malformedNamed.contains(named.key) {
+            guard let own = ownStamp(named.key), wins(named.key, own) else { continue }
+            defaults.removeObject(forKey: named.key)
+            SyncedSettingsClock.adopt(key: named.key, stamp: own, in: defaults)
+        }
+        // The integration's named fields are not part of `extras`, so an unreadable entry there
+        // does not stop them.
+        // The voice id and its label are one setting (seventh and eighth T-541 reviews): one
+        // effective stamp per side (the later of the two), applied or reset together, and the
+        // result adopted into the clock so a cleanup made here by a sync is never a local edit.
+        // A copy whose id or label is present but unreadable is ignored whole.
+        func applyVoicePair() {
+            let idKey = ReaderSpeechPreferences.voiceIDKey
+            let nameKey = ReaderSpeechPreferences.voiceNameKey
+            guard !malformedNamed.contains(idKey), !malformedNamed.contains(nameKey) else { return }
+            func later(_ a: SyncedSettingsClock.Stamp?, _ b: SyncedSettingsClock.Stamp?) -> SyncedSettingsClock.Stamp? {
+                guard let a else { return b }
+                guard let b else { return a }
+                if a.inferred != b.inferred { return a.inferred ? b : a }
+                return a.date >= b.date ? a : b
+            }
+            let local = later(localStamps[idKey], localStamps[nameKey])
+            if let voiceID = Self.trimmedNonEmpty(readerSpeechVoiceID) {
+                let incoming = later(stamp(idKey), stamp(nameKey))
+                guard SyncedSettingsClock.incomingWins(local: local, incoming: incoming, fromSync: fromSync)
+                else { return }
+                let localID = Self.nonEmptyString(defaults, idKey)
+                defaults.set(voiceID, forKey: idKey)
+                if let name = Self.trimmedNonEmpty(readerSpeechVoiceName) {
+                    defaults.set(name, forKey: nameKey)
+                } else if localID != voiceID || ownStamp(nameKey) != nil {
+                    // A new voice has no label of its own here, and a stamped omission is a
+                    // reset of the label; an unstamped one is an older writer that never sent it.
+                    defaults.removeObject(forKey: nameKey)
+                }
+                SyncedSettingsClock.adopt(key: idKey, stamp: incoming, in: defaults)
+                SyncedSettingsClock.adopt(key: nameKey, stamp: incoming, in: defaults)
+            } else if Self.trimmedNonEmpty(readerSpeechVoiceName) == nil {
+                // Reset: only on a real stamp, compared once for the pair, clearing both.
+                guard let own = later(ownStamp(idKey), ownStamp(nameKey)),
+                      SyncedSettingsClock.incomingWins(local: local, incoming: own, fromSync: fromSync)
+                else { return }
+                defaults.removeObject(forKey: idKey)
+                defaults.removeObject(forKey: nameKey)
+                SyncedSettingsClock.adopt(key: idKey, stamp: own, in: defaults)
+                SyncedSettingsClock.adopt(key: nameKey, stamp: own, in: defaults)
+            }
+        }
+        applyNamedByRecency(
+            write: { write($0, $1) },
+            reset: { key, absent in
+                // A field that was present but unreadable is never a reset.
+                guard absent, !malformedNamed.contains(key), let own = ownStamp(key), wins(key, own) else { return }
+                defaults.removeObject(forKey: key)
+                SyncedSettingsClock.adopt(key: key, stamp: own, in: defaults)
+            },
+            applyVoice: applyVoicePair
+        )
+        guard !extrasIncomplete else { return }
+        for key in observed.keys where !observed.maps.contains(key) && Self.extraKind(for: key) != nil
+            && extras?[key] == nil {
+            guard let own = ownStamp(key), wins(key, own) else { continue }
+            defaults.removeObject(forKey: key)
+            SyncedSettingsClock.adopt(key: key, stamp: own, in: defaults)
+        }
+    }
+
+    /// The named fields the integration branch added: written by recency like every other
+    /// setting, and reset when the sender's own stamp says it removed the value.
+    private func applyNamedByRecency(
+        write: (Any, String) -> Bool, reset: (String, Bool) -> Void, applyVoice: () -> Void
+    ) {
+        @discardableResult func put(_ value: Any, _ key: String) -> Bool { write(value, key) }
+        if let useEmbeddedCoverArt { put(useEmbeddedCoverArt, "useEmbeddedCoverArt") }
+        if let checksSavedSeriesWeekly { put(checksSavedSeriesWeekly, "checksSavedSeriesWeekly") }
         // Absent leaves the local page-turn style. A string this build does not
         // know stays in the archive (capture keeps it) but is not written.
         if let readerPageTurn, ReaderPageTurnStyle(rawValue: readerPageTurn) != nil {
-            defaults.set(readerPageTurn, forKey: ReaderPageTurnStyle.storageKey)
+            put(readerPageTurn, ReaderPageTurnStyle.storageKey)
         }
-        // Apply the display name only together with its voice id; an archive
-        // with a name alone must never label a different local voice id.
-        if let voiceID = Self.trimmedNonEmpty(readerSpeechVoiceID) {
-            let localVoiceID = Self.nonEmptyString(defaults, ReaderSpeechPreferences.voiceIDKey)
-            defaults.set(voiceID, forKey: ReaderSpeechPreferences.voiceIDKey)
-            if let voiceName = Self.trimmedNonEmpty(readerSpeechVoiceName) {
-                defaults.set(voiceName, forKey: ReaderSpeechPreferences.voiceNameKey)
-            } else if localVoiceID != voiceID {
-                defaults.removeObject(forKey: ReaderSpeechPreferences.voiceNameKey)
-            }
-        }
+        applyVoice()
         if let lastAddedReadingQueueID, UUID(uuidString: lastAddedReadingQueueID) != nil {
-            defaults.set(lastAddedReadingQueueID, forKey: "lastAddedReadingQueueID")
+            put(lastAddedReadingQueueID, "lastAddedReadingQueueID")
         }
-        if let discreetMode {
-            defaults.set(discreetMode, forKey: InsightsOptions.Keys.discreetMode)
-        }
-        if let hideReadingTime {
-            defaults.set(hideReadingTime, forKey: InsightsOptions.Keys.hideReadingTime)
-        }
-        if let countRereads {
-            defaults.set(countRereads, forKey: InsightsOptions.Keys.countRereads)
-        }
-        if let countReadAloud {
-            defaults.set(countReadAloud, forKey: InsightsOptions.Keys.countReadAloud)
-        }
-        if let askAboutUntouched {
-            defaults.set(askAboutUntouched, forKey: InsightsOptions.Keys.askAboutUntouched)
-        }
+        if let discreetMode { put(discreetMode, InsightsOptions.Keys.discreetMode) }
+        if let hideReadingTime { put(hideReadingTime, InsightsOptions.Keys.hideReadingTime) }
+        if let countRereads { put(countRereads, InsightsOptions.Keys.countRereads) }
+        if let countReadAloud { put(countReadAloud, InsightsOptions.Keys.countReadAloud) }
+        if let askAboutUntouched { put(askAboutUntouched, InsightsOptions.Keys.askAboutUntouched) }
         if let untouchedDays {
-            defaults.set(InsightsOptions.clampUntouchedDays(untouchedDays), forKey: InsightsOptions.Keys.untouchedDays)
+            put(InsightsOptions.clampUntouchedDays(untouchedDays), InsightsOptions.Keys.untouchedDays)
         }
         if let excludedFandoms {
-            defaults.set(InsightsOptions.normalizedNames(excludedFandoms), forKey: InsightsOptions.Keys.excludedFandoms)
+            put(InsightsOptions.normalizedNames(excludedFandoms), InsightsOptions.Keys.excludedFandoms)
         }
         if let excludedTags {
-            defaults.set(InsightsOptions.normalizedNames(excludedTags), forKey: InsightsOptions.Keys.excludedTags)
+            put(InsightsOptions.normalizedNames(excludedTags), InsightsOptions.Keys.excludedTags)
         }
         if let excludedWorkIDs {
-            defaults.set(InsightsOptions.normalizedWorkIDs(excludedWorkIDs), forKey: InsightsOptions.Keys.excludedWorkIDs)
+            put(InsightsOptions.normalizedWorkIDs(excludedWorkIDs), InsightsOptions.Keys.excludedWorkIDs)
         }
+        // Absent with the sender's own stamp is a reset there; absent without one is an older
+        // build or Android that never wrote the field.
+        reset("useEmbeddedCoverArt", useEmbeddedCoverArt == nil)
+        reset("checksSavedSeriesWeekly", checksSavedSeriesWeekly == nil)
+        reset(ReaderPageTurnStyle.storageKey, readerPageTurn == nil)
+        reset("lastAddedReadingQueueID", lastAddedReadingQueueID == nil)
+        reset(InsightsOptions.Keys.discreetMode, discreetMode == nil)
+        reset(InsightsOptions.Keys.hideReadingTime, hideReadingTime == nil)
+        reset(InsightsOptions.Keys.countRereads, countRereads == nil)
+        reset(InsightsOptions.Keys.countReadAloud, countReadAloud == nil)
+        reset(InsightsOptions.Keys.askAboutUntouched, askAboutUntouched == nil)
+        reset(InsightsOptions.Keys.untouchedDays, untouchedDays == nil)
+        reset(InsightsOptions.Keys.excludedFandoms, excludedFandoms == nil)
+        reset(InsightsOptions.Keys.excludedTags, excludedTags == nil)
+        reset(InsightsOptions.Keys.excludedWorkIDs, excludedWorkIDs == nil)
     }
 
     private static func trimmedNonEmpty(_ value: String?) -> String? {
@@ -2630,7 +3081,7 @@ enum KudosBackupService {
             }
         }
 
-        let manifest = KudosBackupManifest(
+        var manifest = KudosBackupManifest(
             works: works.map(KudosBackupWork.init),
             bookmarks: bookmarks.map(KudosBackupBookmark.init),
             fonts: fonts.map(KudosBackupFont.init),
@@ -2648,6 +3099,10 @@ enum KudosBackupService {
             pronunciations: .capture(),
             tombstones: tombstones.map(KudosBackupTombstone.init)
         )
+        let recovery = KudosBackupRecoveryCopy.capture()
+        manifest.writingRecovery = recovery.isEmpty ? nil : recovery
+        let documents = KudosBackupDocument.capture()
+        manifest.documents = documents.isEmpty ? nil : documents
         return KudosBackupContents(
             manifest: manifest,
             epubFiles: epubFiles,
@@ -2679,7 +3134,8 @@ enum KudosBackupService {
         _ contents: KudosBackupContents,
         into context: ModelContext,
         defaults: UserDefaults = .standard,
-        mode: BackupImportMode = .reconcile
+        mode: BackupImportMode = .reconcile,
+        fromSync: Bool = false
     ) throws -> KudosBackupRestoreSummary {
         // Flush anything the caller had pending, so the rollback below can only ever
         // discard changes this restore made.
@@ -2698,7 +3154,8 @@ enum KudosBackupService {
         let journal = EPUBDisplacementJournal()
         do {
             let summary = try restoreIsolatedContents(
-                contents, into: context, defaults: defaults, mode: mode, journal: journal
+                contents, into: context, defaults: defaults, mode: mode, fromSync: fromSync,
+                journal: journal
             )
             journal.discard()
             if summary.reconciledCoverPins > 0 {
@@ -2824,6 +3281,7 @@ enum KudosBackupService {
         into context: ModelContext,
         defaults: UserDefaults,
         mode: BackupImportMode,
+        fromSync: Bool,
         journal: EPUBDisplacementJournal
     ) throws -> KudosBackupRestoreSummary {
         let existingWorks = try context.fetch(FetchDescriptor<SavedWork>())
@@ -2881,15 +3339,26 @@ enum KudosBackupService {
             adopted.lastModifiedAt = min(adopted.lastModifiedAt, contents.manifest.exportedAt)
 
             if let held = tombstonesByKey[key] {
+                // A deletion that differs from the one held (another device's, whichever is
+                // newer) is remembered for Sort New's Undo before it can be dropped below.
+                if adopted.signature != held.signature || adopted.deletedOnDeviceID != held.deletedOnDeviceID {
+                    SyncDeletionWitness.record(recordTypeRaw: archived.recordTypeRaw, recordID: archived.recordID)
+                }
                 // Newest deletion wins. An older one is not evidence that the
                 // later one did not happen, and the record only stays deleted
                 // for as long as the widest tombstone says it does. Carried onto
                 // the row already on file rather than inserted beside it, so the
                 // device keeps one tombstone per record and the next restore
                 // starts from the later date too.
-                guard adopted.lastModifiedAt > held.lastModifiedAt else { continue }
+                guard adopted.lastModifiedAt > held.lastModifiedAt
+                    || (adopted.lastModifiedAt == held.lastModifiedAt
+                        && SyncTombstones.isPermanent(adopted) && !SyncTombstones.isPermanent(held))
+                else { continue }
                 held.createdAt = adopted.createdAt
                 held.lastModifiedAt = adopted.lastModifiedAt
+                // The reason goes with the date: a later "deleted for good" must not keep the
+                // earlier "moved to Recently Deleted" reason (sixth T-541 review).
+                held.deletionReason = adopted.deletionReason
                 // The signature travels with the date it signs, or the row stops
                 // verifying. `shouldAdopt` already vouched for this pair.
                 held.signerPublicKey = adopted.signerPublicKey
@@ -3128,6 +3597,13 @@ enum KudosBackupService {
             }
         }
 
+        // Not done here (Codex's fourth T-541 review): finishing a copy that is in Recently
+        // Deleted because another device deleted it for good. The only thing that says "for
+        // good" is `deletionReason`, which the signature does not cover and Android does not
+        // write, so acting on it could end a recovery window on a forged or misread record.
+        // Until permanence is signed on both platforms (T-541b), such a copy runs out its own
+        // window here, and the archive's copy of it is still refused by the rule below.
+
         let existingCollections = try context.fetch(FetchDescriptor<WorkCollection>())
         var collectionsByID = Dictionary(
             existingCollections.map { ($0.id, $0) },
@@ -3154,7 +3630,8 @@ enum KudosBackupService {
             } else {
                 switch tombstones.collectionResolution(
                     id: archived.id,
-                    incomingModifiedAt: incomingModifiedAt
+                    incomingModifiedAt: incomingModifiedAt,
+                    archived: archived
                 ) {
                 case .suppressStaleData:
                     suppressedCollections += 1
@@ -3223,6 +3700,10 @@ enum KudosBackupService {
             collection.dateAdded = min(collection.dateAdded, archived.dateAdded)
             if let archivedCreatedAt = archived.createdAt {
                 collection.createdAt = min(collection.createdAt, archivedCreatedAt)
+            }
+            if let archivedChange = archived.lastMembershipChangedAt {
+                let incoming = KudosBackupContents.clampedArchiveDate(archivedChange)
+                collection.lastMembershipChangedAt = max(collection.lastMembershipChangedAt ?? incoming, incoming)
             }
             // A brand-new collection's `lastModifiedAt` is the restore clock.
             // `max` with that placeholder would make the restored shelf newer
@@ -3369,7 +3850,8 @@ enum KudosBackupService {
             let hadExistingQueue = queuesByID[archived.id] != nil
             let resolution = kind == .savedForLater ? .noTombstone : tombstones.queueResolution(
                 id: archived.id,
-                incomingModifiedAt: incomingModifiedAt
+                incomingModifiedAt: incomingModifiedAt,
+                archived: archived
             )
             if kind == .savedForLater {
                 queue = savedForLaterQueue
@@ -3989,6 +4471,10 @@ enum KudosBackupService {
         }
 
         var restoredFonts = 0
+        // Archived file name → the name it landed under, so the reader font can follow a font
+        // restored under a collision-safe name (Codex's fourth review; Android's
+        // `retargetRenamedFont` does the same).
+        var restoredFontNames: [String: String] = [:]
         for (archived, data) in validatedFonts {
             let foldedName = archived.fileName.lowercased()
             let existingMatches = fontsByFoldedFileName[foldedName] ?? []
@@ -4049,6 +4535,7 @@ enum KudosBackupService {
             if shouldWrite {
                 try data.write(to: font.fileURL, options: .atomic)
             }
+            restoredFontNames[archived.fileName] = font.fileName
             restoredFonts += 1
         }
 
@@ -4159,15 +4646,26 @@ enum KudosBackupService {
         try context.save()
         if mode != .replaceLibrary {
             var settings = contents.manifest.settings
+            // M21 still holds for the font the reader is switched to: a built-in family this
+            // build knows, or a custom font whose file is here. Anything else leaves this
+            // device's choice alone.
+            if !settings.readerFontID.hasPrefix("custom:"),
+               !ReaderFontOption.builtIns.contains(where: { $0.id == settings.readerFontID }) {
+                settings.skipsReaderFont = true
+            }
+            if settings.readerFontID.hasPrefix("custom:"),
+               let landed = restoredFontNames[String(settings.readerFontID.dropFirst("custom:".count))] {
+                settings.readerFontID = "custom:" + landed
+            }
             if settings.readerFontID.hasPrefix("custom:") {
                 let fileName = String(settings.readerFontID.dropFirst("custom:".count))
                 if !FileManager.default.fileExists(
                     atPath: Storage.fontsDirectory.appendingPathComponent(fileName).path
                 ) {
-                    settings.readerFontID = "system"
+                    settings.skipsReaderFont = true
                 }
             }
-            settings.apply(to: defaults)
+            settings.apply(to: defaults, fromSync: fromSync, archiveDate: contents.manifest.exportedAt)
         }
         // Applied on every mode, including replaceLibrary. Corrections are not
         // library content — they are how the reader wants words said — so a
@@ -4175,7 +4673,13 @@ enum KudosBackupService {
         // swallowed for the same reason the export tolerates a missing file:
         // losing a restore over a pronunciation write would be the worse
         // outcome by a wide margin.
-        try? contents.manifest.pronunciations.apply()
+        try? contents.manifest.pronunciations.apply(
+            fromSync: fromSync, archiveDate: contents.manifest.exportedAt
+        )
+        // Same reasoning, every mode: unpublished writing and app data files are not library
+        // content, and each only ever adds or replaces with something newer.
+        KudosBackupRecoveryCopy.apply(contents.manifest.writingRecovery ?? [])
+        KudosBackupDocument.apply(contents.manifest.documents ?? [])
         return KudosBackupRestoreSummary(
             // Count what was actually applied — tombstone-suppressed works are skipped
             // and must not inflate the user-facing "N works restored" confirmation.
@@ -5132,37 +5636,35 @@ enum KudosBackupService {
         }
 
         private mutating func indexNewest(_ tombstone: SyncTombstone, byID id: UUID) {
-            if let existing = savedWorkTombstonesByID[id], existing.lastModifiedAt >= tombstone.lastModifiedAt {
+            if let existing = savedWorkTombstonesByID[id], !SyncTombstones.replaces(tombstone, existing) {
                 return
             }
             savedWorkTombstonesByID[id] = tombstone
         }
 
         private mutating func indexNewest(_ tombstone: SyncTombstone, byAO3WorkID id: Int) {
-            if let existing = savedWorkTombstonesByAO3WorkID[id],
-               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+            if let existing = savedWorkTombstonesByAO3WorkID[id], !SyncTombstones.replaces(tombstone, existing) {
                 return
             }
             savedWorkTombstonesByAO3WorkID[id] = tombstone
         }
 
         private mutating func indexNewest(_ tombstone: SyncTombstone, byCanonicalURL url: String) {
-            if let existing = savedWorkTombstonesByCanonicalURL[url],
-               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+            if let existing = savedWorkTombstonesByCanonicalURL[url], !SyncTombstones.replaces(tombstone, existing) {
                 return
             }
             savedWorkTombstonesByCanonicalURL[url] = tombstone
         }
 
         private mutating func indexNewest(_ tombstone: SyncTombstone, byCollectionID id: UUID) {
-            if let existing = collectionTombstonesByID[id], existing.lastModifiedAt >= tombstone.lastModifiedAt {
+            if let existing = collectionTombstonesByID[id], !SyncTombstones.replaces(tombstone, existing) {
                 return
             }
             collectionTombstonesByID[id] = tombstone
         }
 
         private mutating func indexNewest(_ tombstone: SyncTombstone, byQueueID id: UUID) {
-            if let existing = queueTombstonesByID[id], existing.lastModifiedAt >= tombstone.lastModifiedAt {
+            if let existing = queueTombstonesByID[id], !SyncTombstones.replaces(tombstone, existing) {
                 return
             }
             queueTombstonesByID[id] = tombstone
@@ -5267,21 +5769,70 @@ enum KudosBackupService {
             }
             guard let tombstone else { return false }
             let archivedModifiedAt = archived.lastModifiedAt ?? archived.dateAdded
+            // T-541. Moving a work to Recently Deleted records a tombstone in the same moment
+            // it stamps the work, so the archive's own copy of a recently deleted work always
+            // looked "older than its deletion" and was dropped: on a new device, Recently
+            // Deleted came back empty. That copy is the deletion, not something it predates.
+            // Restore it into Recently Deleted (`apply` keeps it pending) while its recovery
+            // window is open, unless a later tombstone (a permanent delete) follows it.
+            // Not for a permanent delete (Codex's third T-541 review): within the 120 seconds a
+            // "Delete Permanently" right after the move to Recently Deleted looked like the move
+            // itself, and the archive's copy came back.
+            if archived.isDeleted == true, let deletedAt = archived.deletedAt,
+               tombstone.deletionReason != SyncTombstones.workPermanentlyDeletedReason {
+                let scheduled = archived.permanentDeletionScheduledAt
+                    ?? deletedAt.addingTimeInterval(PreservedWorkService.recoveryWindow)
+                if scheduled > Date(),
+                   tombstone.lastModifiedAt <= max(archivedModifiedAt, deletedAt).addingTimeInterval(120) {
+                    return false
+                }
+            }
             return tombstone.lastModifiedAt >= archivedModifiedAt
         }
 
-        func collectionResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {
-            SyncMerge.tombstoneResolution(
+        func collectionResolution(
+            id: UUID, incomingModifiedAt: Date?, archived: KudosBackupCollection? = nil
+        ) -> SyncMerge.TombstoneResolution {
+            let tombstone = collectionTombstonesByID[id]
+            if let archived, Self.isRecentlyDeletedCopy(
+                isDeleted: archived.isDeleted, deletedAt: archived.deletedAt,
+                scheduledAt: archived.permanentDeletionScheduledAt, modifiedAt: incomingModifiedAt,
+                tombstone: tombstone, permanentReason: SyncTombstones.collectionPermanentlyDeletedReason
+            ) { return .noTombstone }
+            return SyncMerge.tombstoneResolution(
                 incomingModifiedAt: incomingModifiedAt,
-                tombstoneDeletedAt: collectionTombstonesByID[id]?.lastModifiedAt
+                tombstoneDeletedAt: tombstone?.lastModifiedAt
             )
         }
 
-        func queueResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {
-            SyncMerge.tombstoneResolution(
+        func queueResolution(
+            id: UUID, incomingModifiedAt: Date?, archived: KudosBackupReadingQueue? = nil
+        ) -> SyncMerge.TombstoneResolution {
+            let tombstone = queueTombstonesByID[id]
+            if let archived, Self.isRecentlyDeletedCopy(
+                isDeleted: archived.isDeleted, deletedAt: archived.deletedAt,
+                scheduledAt: archived.permanentDeletionScheduledAt, modifiedAt: incomingModifiedAt,
+                tombstone: tombstone, permanentReason: SyncTombstones.queuePermanentlyDeletedReason
+            ) { return .noTombstone }
+            return SyncMerge.tombstoneResolution(
                 incomingModifiedAt: incomingModifiedAt,
-                tombstoneDeletedAt: queueTombstonesByID[id]?.lastModifiedAt
+                tombstoneDeletedAt: tombstone?.lastModifiedAt
             )
+        }
+
+        /// The works rule in `suppressesResurrection`, for collections and queues (fifth T-541
+        /// review): an archive's copy of something moved to Recently Deleted is the deletion
+        /// itself, not data it predates, so it is restored into Recently Deleted while its
+        /// window is open — unless a permanent delete followed.
+        private static func isRecentlyDeletedCopy(
+            isDeleted: Bool?, deletedAt: Date?, scheduledAt: Date?, modifiedAt: Date?,
+            tombstone: SyncTombstone?, permanentReason: String
+        ) -> Bool {
+            guard isDeleted == true, let deletedAt, let tombstone,
+                  tombstone.deletionReason != permanentReason else { return false }
+            let scheduled = scheduledAt ?? deletedAt.addingTimeInterval(PreservedWorkService.recoveryWindow)
+            return scheduled > Date()
+                && tombstone.lastModifiedAt <= max(modifiedAt ?? deletedAt, deletedAt).addingTimeInterval(120)
         }
 
         func annotationResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {
@@ -5591,6 +6142,11 @@ enum KudosBackupService {
             work.hiddenFromHistoryAt = archivedHidden
         }
         work.isComplete = incomingWins ? archived.isComplete : work.isComplete
+        // Fill-in, or newer wins; an absent value never clears bylines learned here.
+        if let identities = archived.authorIdentitiesJSON, !identities.isEmpty,
+           incomingWins || work.authorIdentitiesJSON.isEmpty {
+            work.authorIdentitiesJSON = identities
+        }
         work.deletedAt = newest(work.deletedAt, archived.deletedAt)
         // incomingWins-gated like the flags above — a device that already called restore()
         // must win over a stale device that hasn't synced the restore yet. The *schedule*

@@ -9,6 +9,7 @@ struct WritingView: View {
     @Environment(AO3InboxModel.self) private var inboxModel
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.duoLayout) private var duoLayout
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var localWorks: [SavedWork]
 
     @State private var path = NavigationPath()
@@ -51,6 +52,7 @@ struct WritingView: View {
             #if os(iOS)
             .toolbarTitleDisplayMode(.inlineLarge)
             #endif
+            .duoVerticalCompressionPrefersTabBar(duoLayout.hasVerticalBar)
             // Not `subjectScreenWash`: that hides the tab bar, for pushed screens.
             // This is a tab root, so there would be no way out of it.
             .subjectScreenSurface(.content, palette: theme.scopePalette)

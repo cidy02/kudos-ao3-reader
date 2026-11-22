@@ -43,6 +43,17 @@ enum AppTab: String, Hashable, CaseIterable, Identifiable {
         case .search: "magnifyingglass"
         }
     }
+
+    var selectedSymbol: String {
+        switch self {
+        case .home: "house.fill"
+        case .library: "books.vertical.fill"
+        case .writing: "square.and.pencil"
+        case .browse: "safari.fill"
+        case .account: "person.crop.circle.fill"
+        case .search: "magnifyingglass"
+        }
+    }
 }
 
 /// The four AO3-managed reading lists now grouped under Library > On AO3.
@@ -370,8 +381,16 @@ final class AppRouter {
 
     /// The tab the focused Search mode returns to when its Back button is tapped.
     var lastNonSearchTab: AppTab = .library
-    /// Home presents Account as a sheet; it is no longer a root tab.
+    /// Home presents Account as a sheet (or trailing inspector on Open/Book Duo);
+    /// it is no longer a root tab.
     var isPresentingAccount = false
+    /// Shared Account navigation stack so rotating or folding between the Duo
+    /// inspector and sheet hosts preserves the active destination (including deep links).
+    var accountNavigationPath = NavigationPath()
+    /// True while Home is at its root and out of Select mode, so its rail toolbar can
+    /// host Account's Close button (`Duo-Open-Account`). When false, Account falls back
+    /// to a modal sheet with its own Done button instead of showing without Close.
+    var isHomeReadyForAccountInspector = true
     private var opensWebsiteAfterAccountDismiss = false
     private var websiteURLAfterAccountDismiss: URL?
     var pendingAccountRoute: AccountSheetRoute?
@@ -886,6 +905,9 @@ final class AppRouter {
     }
 
     func showAccount(_ route: AccountSheetRoute? = nil) {
+        if !isPresentingAccount {
+            accountNavigationPath = NavigationPath()
+        }
         selection = .home
         pendingAccountRoute = route
         isPresentingAccount = true
@@ -898,6 +920,7 @@ final class AppRouter {
     }
 
     func accountDidDismiss() {
+        accountNavigationPath = NavigationPath()
         guard opensWebsiteAfterAccountDismiss else { return }
         let url = websiteURLAfterAccountDismiss
         opensWebsiteAfterAccountDismiss = false
@@ -906,6 +929,16 @@ final class AppRouter {
             open(url)
         } else {
             openWebsite()
+        }
+    }
+
+    /// Runs the full post-dismissal cleanup once Account has finished leaving screen:
+    /// resets Account's stack, opens any queued AO3 website URL, and delivers any
+    /// queued AO3 work link.
+    func finalizeAccountDismissal() {
+        accountDidDismiss()
+        if pendingWorkLink != nil {
+            isPresentingLinkedWork = true
         }
     }
 

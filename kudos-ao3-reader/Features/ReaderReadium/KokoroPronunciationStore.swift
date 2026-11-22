@@ -11,6 +11,73 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         var global: [String: String]
         var fandoms: [String: [String: String]]
         var works: [String: [String: String]]
+        /// When each correction was last set or removed here (T-541), keyed by `entryID`.
+        /// A sync uses it to tell a newer edit from an older one, entry by entry; a stamp
+        /// with no entry records a removal. Nil in a file written before it existed.
+        var stamps: [String: Date]?
+        /// Corrections that came from a copy with no stamps of their own, dated by that copy's
+        /// export (T-541). They order such copies among themselves and never beat `stamps`.
+        var inferred: [String: Date]?
+
+        func value(for word: String, in layer: Layer) -> String? {
+            switch layer {
+            case .global: global[word]
+            case .fandom(let key): fandoms[key]?[word]
+            case .work(let key): works[key]?[word]
+            }
+        }
+
+        /// Sets or (with nil) removes one entry, dropping a layer's dictionary when it empties.
+        mutating func set(_ ipa: String?, for word: String, in layer: Layer) {
+            switch layer {
+            case .global:
+                global[word] = ipa
+            case .fandom(let key):
+                fandoms[key, default: [:]][word] = ipa
+                if fandoms[key]?.isEmpty == true { fandoms[key] = nil }
+            case .work(let key):
+                works[key, default: [:]][word] = ipa
+                if works[key]?.isEmpty == true { works[key] = nil }
+            }
+        }
+
+        mutating func stamp(_ words: [String], in layer: Layer, at date: Date = Date()) {
+            var all = stamps ?? [:]
+            for word in words {
+                let id = KokoroPronunciationStore.entryID(layer, word)
+                all[id] = date
+                inferred?[id] = nil
+            }
+            stamps = all
+        }
+    }
+
+    /// The separator the first version of these identifiers used. Still read, never written:
+    /// a word or key containing it could not be told apart.
+    private static let legacySeparator = "\u{1F}"
+
+    /// One correction's identity across devices: its layer, the layer's key, and the word, as
+    /// a JSON array, so whatever characters a word or key holds, it reads back exactly.
+    static func entryID(_ layer: Layer, _ word: String) -> String {
+        let parts = switch layer {
+        case .global: ["g", word]
+        case .fandom(let key): ["f", key, word]
+        case .work(let key): ["w", key, word]
+        }
+        guard let data = try? JSONEncoder().encode(parts) else { return parts.joined(separator: legacySeparator) }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    static func entry(from id: String) -> (Layer, String)? {
+        let parts = id.hasPrefix("[")
+            ? ((try? JSONDecoder().decode([String].self, from: Data(id.utf8))) ?? [])
+            : id.components(separatedBy: legacySeparator)
+        switch (parts.first, parts.count) {
+        case ("g", 2): return (.global, parts[1])
+        case ("f", 3): return (.fandom(parts[1]), parts[2])
+        case ("w", 3): return (.work(parts[1]), parts[2])
+        default: return nil
+        }
     }
 
     static let empty = File(version: 1, global: [:], fandoms: [:], works: [:])
@@ -85,7 +152,9 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         var file = try loadForEditing()
         for word in words { file.global[word] = nil }
         file.global.merge(overrides) { _, new in new }
+        file.stamp(words + Array(overrides.keys), in: .global)
         try save(file)
+        LocalSnapshotChange.post()
     }
 
     /// Which layer an override belongs to. Work beats fandom beats global,
@@ -118,7 +187,9 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         case .fandom(let key): file.fandoms[key, default: [:]][word] = ipa
         case .work(let key): file.works[key, default: [:]][word] = ipa
         }
+        file.stamp([word], in: layer)
         try save(file)
+        LocalSnapshotChange.post()
     }
 
     /// Remove one override, and drop the layer's dictionary when it empties
@@ -135,7 +206,9 @@ nonisolated struct KokoroPronunciationStore: Sendable {
             file.works[key]?[word] = nil
             if file.works[key]?.isEmpty == true { file.works[key] = nil }
         }
+        file.stamp([word], in: layer)
         try save(file)
+        LocalSnapshotChange.post()
     }
 
     /// Merges layers. Work wins over fandom over global. Exact spelling is

@@ -19,6 +19,8 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @Environment(AO3InboxModel.self) private var inboxModel
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.duoLayout) private var duoLayout
+    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
@@ -114,8 +116,12 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     }
 
     private func enterSelectMode(selecting work: SavedWork? = nil) {
+        if isShowingAccountInspector {
+            router.isPresentingAccount = false
+        }
         if let work { selection.insert(work.id) }
         isSelecting = true
+        syncHomeInspectorReadiness()
     }
 
     private func selectAction(for work: SavedWork) -> (() -> Void)? {
@@ -125,6 +131,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     private func exitSelectMode() {
         isSelecting = false
         selection = []
+        syncHomeInspectorReadiness()
+    }
+
+    private func syncHomeInspectorReadiness() {
+        router.isHomeReadyForAccountInspector = path.isEmpty && !isSelecting
     }
 
     private var allLocalSelected: Bool {
@@ -197,36 +208,80 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         readingStats = HomeReadingStats.calculate(facts: facts)
     }
 
+    private var accountInspectorGeometry: DuoInspectorSplitGeometry? {
+        duoLayout.accountPresentation(rightToLeft: layoutDirection == .rightToLeft).inspectorGeometry
+    }
+
+    private var isShowingAccountInspector: Bool {
+        accountInspectorGeometry != nil
+            && router.selection == .home
+            && router.isHomeReadyForAccountInspector
+            && router.isPresentingAccount
+    }
+
     var body: some View {
+        #if os(iOS)
+        // Keep `homeNavigationStack` full-width so its toolbar (`×` Close / Profile) stays
+        // attached to the vertical rail on Open/Book Duo; inset Home's scroll content to
+        // the leading pane while Account occupies the trailing pane from fold to screen edge
+        // (with trailing safe-area padding clearing the rail so its wash bleeds seamlessly
+        // behind the vertical bar, N5 / Duo-Open-Account).
+        ZStack(alignment: .trailing) {
+            homeNavigationStack
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if let split = accountInspectorGeometry, isShowingAccountInspector {
+                // Span from the fold centre to the physical trailing edge so the hairline
+                // sits squarely on the fold and Account's wash bleeds seamlessly behind the
+                // vertical rail while `safeAreaPadding` keeps its cards clear of the rail.
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    AccountView(inInspector: true)
+                        .safeAreaPadding(.trailing, split.trailingRailReserve)
+                        .frame(width: split.fullFoldHalfWidth)
+                        .frame(maxHeight: .infinity)
+                        .overlay(alignment: .leading) {
+                            Rectangle()
+                                .fill(Color.primary.opacity(0.14))
+                                .frame(width: 0.5)
+                                .ignoresSafeArea(edges: [.top, .bottom])
+                        }
+                }
+                .ignoresSafeArea(edges: .trailing)
+                .transition(.move(edge: .trailing))
+            }
+        }
+        .animation(
+            accountInspectorGeometry != nil ? .snappy(duration: 0.25) : nil,
+            value: isShowingAccountInspector
+        )
+        #else
+        homeNavigationStack
+        #endif
+    }
+
+    private var homeNavigationStack: some View {
         NavigationStack(path: $path) {
             Group {
                 if hasSectionCache {
                     DashboardRegionHost {
                         ScrollViewReader { proxy in
-                            ScrollView {
-                                // 26pt between sections (Rules; 1b drew 22).
-                                VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
-                                    statsLine
-                                    resumeSection
-                                    newChaptersSection
-                                        .id("chapters")
-                                    readingQueuesSection
-                                        .id("queues")
-                                    let shelves = HomeCollectionShelves.shelves(homeCollections)
-                                    ForEach(Array(shelves.enumerated()), id: \.element.id) { index, collection in
-                                        HomeCollectionShelf(
-                                            collection: collection,
-                                            works: HomeCollectionShelves.works(in: collection, visible: passesPrivacy),
-                                            onSeeAll: { path.append(collection) }
-                                        )
-                                        .id(index == 0 ? "collections" : "collection:\(collection.id)")
-                                    }
-                                    subscriptionsSection
-                                        .id("subscriptions")
-                                }
-                                .padding(.vertical, 12)
+                            DuoFoldAdaptiveScrollHost(onRefresh: { await refreshHome() }) {
+                                duoLeadingHomeSections
+                            } trailing: {
+                                duoTrailingHomeSections
+                            } fallback: {
+                                statsLine
+                                    .duoScrollAnchor("stats")
+                                resumeSection
+                                    .duoScrollAnchor("resume")
+                                newChaptersSection
+                                    .duoScrollAnchor("chapters")
+                                readingQueuesSection
+                                    .duoScrollAnchor("queues")
+                                pinnedCollectionShelves
+                                subscriptionsSection
+                                    .duoScrollAnchor("subscriptions")
                             }
-                            .refreshable { await refreshHome() }
                             #if os(iOS)
                             .task { await mailDriver.refreshIfNeeded() }
                             #endif
@@ -250,11 +305,13 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     )
                 }
             }
+            .padding(.trailing, isShowingAccountInspector ? (accountInspectorGeometry?.foldHalfWidth ?? 0) : 0)
             .background(themeManager.appTheme.contentBackdrop.ignoresSafeArea())
             .navigationTitle("Home")
             #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)
             #endif
+                .duoVerticalCompressionPrefersTabBar(duoLayout.hasVerticalBar)
                 .navigationDestination(for: SavedWork.self) { HomeWorkDestination(work: $0) }
                 .navigationDestination(for: ReadingInsightsDestination.self) { _ in
                     ReadingInsightsView(libraryWorks: works)
@@ -343,7 +400,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         cancelHomeTagCheck()
                     }
                 }
-                .onChange(of: path.isEmpty) { _, isEmpty in
+                .onChange(of: path.isEmpty, initial: true) { _, isEmpty in
+                    if !isEmpty, isShowingAccountInspector {
+                        router.isPresentingAccount = false
+                    }
+                    syncHomeInspectorReadiness()
                     if isEmpty {
                         startHomeTagCheckIfNeeded()
                     } else {
@@ -390,6 +451,37 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                             WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
                         }
                         #endif
+                    } else if duoLayout.hasVerticalBar {
+                        // Duo rail (N4 / N5): only the profile button sits at the top of the rail
+                        // (replaced by Close while Account's trailing inspector is open). Home has
+                        // no other toolbar items; New Queue stays in Reading Queues › Organise / New
+                        // Queue, Select on card context menus, Mature reveal inline or in Library.
+                        #if os(iOS)
+                        if isShowingAccountInspector {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button {
+                                    router.isPresentingAccount = false
+                                } label: {
+                                    Label("Close Account", systemImage: "xmark")
+                                        .labelStyle(.iconOnly)
+                                }
+                                .tint(Color.primary)
+                            }
+                            .duoVerticalPreferredAxis()
+                        } else {
+                            ToolbarItem(placement: .topBarLeading) {
+                                profileButton
+                            }
+                            .sharedBackgroundVisibility(.hidden)
+                            .duoVerticalPreferredAxis()
+                        }
+                        #endif
+                    } else if duoLayout.hidesHomeSecondaryToolbarActions {
+                        // Duo upright portrait (N8 / Duo-Portrait-Home): large title "Home" with
+                        // only the profile button at the top right (no +, no …).
+                        ToolbarItem(placement: .primaryAction) {
+                            profileButton
+                        }
                     } else {
                         let hasMature = hideMature
                         // Gated as a whole, not just its inner pieces — an empty HStack
@@ -455,7 +547,10 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     /// T-460 replaces the Account tab with this persistent Home identity control.
     /// Its badge shares the Inbox model with the sheet, so reads clear immediately.
     private var profileButton: some View {
-        Button {
+        let onRail = duoLayout.hasVerticalBar
+        let avatarSize: CGFloat = onRail ? 46 : 30
+        let targetSize: CGFloat = onRail ? 48 : 44
+        return Button {
             router.showAccount()
         } label: {
             ZStack(alignment: .topTrailing) {
@@ -465,23 +560,29 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         username: auth.username,
                         identity: auth.username.map {
                             themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: $0))
-                        }
+                        },
+                        size: avatarSize
                     )
                 }
-                .frame(width: 30, height: 30)
+                .frame(width: avatarSize, height: avatarSize)
 
                 if let unreadCount = inboxModel.unreadCount, unreadCount > 0 {
                     Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
                         .font(.caption2.bold())
                         .foregroundStyle(.white)
                         .padding(.horizontal, unreadCount > 9 ? 4 : 3)
-                        .frame(minWidth: 15, minHeight: 15)
+                        .frame(minWidth: onRail ? 18 : 15, minHeight: onRail ? 18 : 15)
                         .background(.accentFill, in: Capsule())
-                        .offset(x: 7, y: -6)
+                        .overlay {
+                            if onRail {
+                                Capsule().strokeBorder(themeManager.appTheme.contentBackdrop, lineWidth: 2)
+                            }
+                        }
+                        .offset(x: onRail ? 3 : 7, y: onRail ? -3 : -6)
                         .accessibilityHidden(true)
                 }
             }
-            .frame(width: 44, height: 44)
+            .frame(width: targetSize, height: targetSize)
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -540,37 +641,143 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         .buttonStyle(.plain)
     }
 
+    /// Open & Book Duo leading pane (`Duo-Open-Home`, `Duo-Book-Home`):
+    /// weekly stats, Resume card, Reading Now ("Also Reading") carousel, then pinned collections.
+    @ViewBuilder
+    private var duoLeadingHomeSections: some View {
+        statsLine
+            .duoScrollAnchor("stats")
+        if readingNow.isEmpty {
+            resumeEmptySection
+                .duoScrollAnchor("resume")
+        } else {
+            let heroWork = readingNow[0]
+            let carouselWorks = Array(readingNow.dropFirst().prefix(HomeReadingNowCount.carouselLimit))
+            let counts = HomeReadingNowCount.shelfCounts(total: readingNow.count)
+            HomeResumeHero(
+                work: heroWork,
+                isSelecting: isSelecting,
+                isSelected: selection.contains(heroWork.id),
+                onToggleSelection: { toggleSelection(heroWork) },
+                onSelect: selectAction(for: heroWork),
+                onPrimary: { path.append(LocalWorkDestination.reader(heroWork)) },
+                onReadAloud: { path.append(LocalWorkDestination.readerReadAloud(heroWork)) }
+            )
+            .downloadDimmed(heroWork)
+            .padding(.horizontal, 16)
+            .duoScrollAnchor("resume")
+
+            if !carouselWorks.isEmpty {
+                WorkCarouselSection(
+                    title: "Reading Now",
+                    hasItems: true,
+                    itemCount: counts.sectionCount,
+                    visibleCount: counts.visibleCount,
+                    onSeeAll: { router.showLibrarySection(.readingNow, from: "Home") }
+                ) {
+                    readingNowCarouselCards(carouselWorks)
+                } emptyState: {
+                    EmptyView()
+                }
+                .duoScrollAnchor("readingNow")
+            }
+        }
+        pinnedCollectionShelves
+    }
+
+    /// Open & Book Duo trailing pane (`Duo-Open-Home`, `Duo-Book-Home`):
+    /// New Chapters, Reading Queues, and Subscriptions.
+    @ViewBuilder
+    private var duoTrailingHomeSections: some View {
+        newChaptersSection
+            .duoScrollAnchor("chapters")
+        readingQueuesSection
+            .duoScrollAnchor("queues")
+        subscriptionsSection
+            .duoScrollAnchor("subscriptions")
+    }
+
+    @ViewBuilder
+    private var pinnedCollectionShelves: some View {
+        let shelves = HomeCollectionShelves.shelves(homeCollections)
+        ForEach(Array(shelves.enumerated()), id: \.element.id) { index, collection in
+            HomeCollectionShelf(
+                collection: collection,
+                works: HomeCollectionShelves.works(in: collection, visible: passesPrivacy),
+                onSeeAll: { path.append(collection) }
+            )
+            .duoScrollAnchor(index == 0 ? "collections" : "collection:\(collection.id)")
+        }
+    }
+
+    private var resumeEmptySection: some View {
+        // Strong empty state (Synthesis v2): section chrome + CTAs, not a
+        // dead hero-shaped hole. Same header weight as other Home rows.
+        VStack(alignment: .leading, spacing: 11) {
+            SectionRuleHeader(title: "Continue Reading")
+                .dashboardLeadingRegion()
+
+            SectionEmptyState(
+                message: HomeSectionKind.readingNow.emptyMessage,
+                systemImage: HomeSectionKind.readingNow.emptyIcon
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .dashboardLeadingRegion()
+
+            HStack(spacing: 12) {
+                Button("Browse AO3") {
+                    router.selection = .browse
+                }
+                .buttonStyle(.kudosPrimary)
+
+                Button("Open Library") {
+                    router.selection = .library
+                }
+                .buttonStyle(.kudosSecondary)
+            }
+            .padding(.horizontal, 16)
+            .dashboardLeadingRegion()
+        }
+    }
+
+    @ViewBuilder
+    private func readingNowCarouselCards(_ carouselWorks: [SavedWork]) -> some View {
+        ForEach(carouselWorks) { work in
+            if isSelecting {
+                SensitiveWorkCoverCard(
+                    work: work,
+                    footer: footer(.readingNow, work),
+                    progress: progress(.readingNow, work),
+                    isSelecting: true,
+                    isSelected: selection.contains(work.id),
+                    onToggleSelection: { toggleSelection(work) }
+                )
+                .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+            } else if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+                SensitiveWorkCoverCard(
+                    work: work,
+                    footer: footer(.readingNow, work),
+                    progress: progress(.readingNow, work)
+                )
+            } else {
+                NavigationLink(value: LocalWorkDestination.reader(work)) {
+                    SensitiveWorkCoverCard(
+                        work: work,
+                        footer: footer(.readingNow, work),
+                        progress: progress(.readingNow, work)
+                    )
+                }
+                .buttonStyle(.plain)
+                .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+            }
+        }
+    }
+
     private var resumeSection: some View {
         Group {
             if readingNow.isEmpty {
-                // Strong empty state (Synthesis v2): section chrome + CTAs, not a
-                // dead hero-shaped hole. Same header weight as other Home rows.
-                VStack(alignment: .leading, spacing: 11) {
-                    SectionRuleHeader(title: "Continue Reading")
-                        .dashboardLeadingRegion()
-
-                    SectionEmptyState(
-                        message: HomeSectionKind.readingNow.emptyMessage,
-                        systemImage: HomeSectionKind.readingNow.emptyIcon
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .dashboardLeadingRegion()
-
-                    HStack(spacing: 12) {
-                        Button("Browse AO3") {
-                            router.selection = .browse
-                        }
-                        .buttonStyle(.kudosPrimary)
-
-                        Button("Open Library") {
-                            router.selection = .library
-                        }
-                        .buttonStyle(.kudosSecondary)
-                    }
-                    .padding(.horizontal, 16)
-                    .dashboardLeadingRegion()
-                }
+                resumeEmptySection
             } else {
                 let heroWork = readingNow[0]
                 let carouselWorks = Array(readingNow.dropFirst().prefix(HomeReadingNowCount.carouselLimit))
@@ -593,35 +800,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     )
                     .downloadDimmed(heroWork)
                 } next: {
-                    ForEach(carouselWorks) { work in
-                        if isSelecting {
-                            SensitiveWorkCoverCard(
-                                work: work,
-                                footer: footer(.readingNow, work),
-                                progress: progress(.readingNow, work),
-                                isSelecting: true,
-                                isSelected: selection.contains(work.id),
-                                onToggleSelection: { toggleSelection(work) }
-                            )
-                            .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
-                        } else if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
-                            SensitiveWorkCoverCard(
-                                work: work,
-                                footer: footer(.readingNow, work),
-                                progress: progress(.readingNow, work)
-                            )
-                        } else {
-                            NavigationLink(value: LocalWorkDestination.reader(work)) {
-                                SensitiveWorkCoverCard(
-                                    work: work,
-                                    footer: footer(.readingNow, work),
-                                    progress: progress(.readingNow, work)
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
-                        }
-                    }
+                    readingNowCarouselCards(carouselWorks)
                 }
             }
         }
@@ -694,10 +873,17 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             SectionRuleHeader(
                 title: "Reading Queues",
                 count: customQueues.count,
-                actionTitle: customQueues.count > 3 ? "See All" : "Organise",
+                actionTitle: customQueues.isEmpty && duoLayout.hidesHomeSecondaryToolbarActions
+                    ? "New Queue"
+                    : (customQueues.count > 3 ? "See All" : "Organise"),
                 onSeeAll: !customQueues.isEmpty
                     ? { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
-                    : nil
+                    : (duoLayout.hidesHomeSecondaryToolbarActions
+                        ? {
+                            newQueueName = ""
+                            showingNewQueue = true
+                        }
+                        : nil)
             )
             .dashboardLeadingRegion()
 
@@ -1040,6 +1226,7 @@ private struct HomeProfileAvatar: View {
     let username: String?
     /// The account's identity colour (board 56: a solid circle). Nil keeps the tinted fallback.
     let identity: SubjectPalette?
+    var size: CGFloat = 30
 
     @Environment(\.accentFill) private var accentFill
     @Environment(\.accentInk) private var accentInk
@@ -1053,7 +1240,7 @@ private struct HomeProfileAvatar: View {
                 fallback
             }
         }
-        .frame(width: 30, height: 30)
+        .frame(width: size, height: size)
         .background(identity?.accent ?? accentFill.opacity(0.16))
         .clipShape(Circle())
         .task(id: url) { cachedImage = Self.cachedImage(for: url) }
@@ -1078,12 +1265,12 @@ private struct HomeProfileAvatar: View {
     private var fallback: some View {
         if let initial = username?.first {
             Text(String(initial).uppercased())
-                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .font(.system(size: size >= 40 ? 20 : 15, weight: .bold, design: .rounded))
                 // Black or white by contrast: Dark/OLED's identity accent is a light tint.
                 .foregroundStyle(identity?.labelOnAccent ?? accentInk)
         } else {
             Image(systemName: "person.crop.circle")
-                .font(.system(size: 27, weight: .regular))
+                .font(.system(size: size >= 40 ? 34 : 27, weight: .regular))
                 .foregroundStyle(.primary)
         }
     }

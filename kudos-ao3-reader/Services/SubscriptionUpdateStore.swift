@@ -29,6 +29,9 @@ struct SubscriptionDecision: Codable, Equatable, Sendable {
 
     var workID: UInt64
     var action: Action
+    /// When the reader made the choice (T-541): two devices' lists merge choice by choice and
+    /// the later one wins. Nil in a file written before it existed.
+    var decidedAt: Date? = nil
 }
 
 struct SubscriptionUpdateState: Codable, Equatable, Sendable {
@@ -77,6 +80,44 @@ struct SubscriptionUpdateState: Codable, Equatable, Sendable {
         try container.encode(decisions, forKey: .decisions)
     }
 
+    /// Two devices' copies of the list as one (T-541, Codex's third review). The file used to
+    /// travel whole, ordered by its modification date, so a stale device that merely refreshed
+    /// its mail replaced a newer device's list and dropped the reader's later Save and Not for
+    /// me choices. Now: updates are the union by mail uid; a choice is kept unless the other
+    /// copy holds a later one for the same work (an undated choice never beats a dated one,
+    /// and between two undated ones this device's stands); the refresh dates take the later.
+    static func merged(local: Self, incoming: Self) -> Self {
+        var result = local
+        result.updates = local.updates + incoming.updates
+        result.lastRefreshAt = [local.lastRefreshAt, incoming.lastRefreshAt].compactMap { $0 }.max()
+        result.since = local.since ?? incoming.since
+        for theirs in incoming.decisions {
+            guard let index = result.decisions.firstIndex(where: { $0.workID == theirs.workID }) else {
+                result.decisions.append(theirs)
+                continue
+            }
+            let ours = result.decisions[index]
+            let theirsIsLater = switch (ours.decidedAt, theirs.decidedAt) {
+            case let (mine?, other?): other > mine
+            case (nil, _?): true
+            default: false
+            }
+            if theirsIsLater {
+                result.decisions.remove(at: index)
+                result.decisions.append(theirs)
+            }
+        }
+        // `capped` keeps the last `limit`, so the list must run oldest to newest; appending
+        // the other copy's choices put older ones last (fifth review). Undated count as oldest.
+        result.decisions = result.decisions.enumerated().sorted { left, right in
+            let l = left.element.decidedAt ?? .distantPast, r = right.element.decidedAt ?? .distantPast
+            return l == r ? left.offset < right.offset : l < r
+        }.map(\.element)
+        // A device that has never refreshed has no counts of its own to keep.
+        if local.updates.isEmpty, local.lastRefreshAt == nil { result.counts = incoming.counts }
+        return result.capped()
+    }
+
     func capped() -> Self {
         var seen = Set<UInt32>()
         var copy = self
@@ -108,8 +149,10 @@ protocol SubscriptionUpdateStoring {
     func delete() throws
 }
 
-/// Derived mail state in Application Support, excluded from device backups and
-/// deliberately outside SwiftData, folder sync, and `.kudosbackup` exports.
+/// Mail state in Application Support, outside SwiftData and excluded from the device's own
+/// iCloud backup. Since T-541 `updates.json` (with the reader's Save / Not for me choices)
+/// travels in `.kudosbackup` and folder sync (`KudosBackupDocument`, newer file wins);
+/// `cursor.json`, the read position of the mail sign-in, stays on this device.
 struct FileSubscriptionUpdateStore: SubscriptionUpdateStoring {
     private let directoryURL: URL
     private var stateURL: URL { directoryURL.appendingPathComponent("updates.json") }

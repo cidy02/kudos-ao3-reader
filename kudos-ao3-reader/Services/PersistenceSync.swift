@@ -411,7 +411,28 @@ enum PersistenceMigrationService {
 
 @MainActor
 enum SyncTombstones {
-    static func recordDeletion(of work: SavedWork, in context: ModelContext) {
+    /// The reason a work's tombstone carries when it is gone for good, not moved to Recently
+    /// Deleted (T-541). Restore reads it for one thing only: an archive's Recently Deleted copy
+    /// of such a work is not restored. Not part of the signed payload and not written by
+    /// Android, so nothing destructive is ever decided on it (Codex's fourth review); a signed
+    /// marker on both platforms is T-541b.
+    nonisolated static let workPermanentlyDeletedReason = "workPermanentlyDeleted"
+    /// The same, for a collection or a reading queue (fifth T-541 review).
+    nonisolated static let collectionPermanentlyDeletedReason = "collectionPermanentlyDeleted"
+    nonisolated static let queuePermanentlyDeletedReason = "queuePermanentlyDeleted"
+
+    static func isPermanent(_ tombstone: SyncTombstone) -> Bool {
+        [workPermanentlyDeletedReason, collectionPermanentlyDeletedReason, queuePermanentlyDeletedReason]
+            .contains(tombstone.deletionReason)
+    }
+
+    /// The newer tombstone wins; on a tie, "deleted for good" beats "moved to Recently Deleted".
+    static func replaces(_ incoming: SyncTombstone, _ existing: SyncTombstone) -> Bool {
+        incoming.lastModifiedAt > existing.lastModifiedAt
+            || (incoming.lastModifiedAt == existing.lastModifiedAt && isPermanent(incoming) && !isPermanent(existing))
+    }
+
+    static func recordDeletion(of work: SavedWork, in context: ModelContext, permanently: Bool = false) {
         insertSigned(
             SyncTombstone(
                 recordID: work.id,
@@ -420,33 +441,33 @@ enum SyncTombstones {
                 ao3WorkID: work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL),
                 createdAt: TombstoneSigning.now(),
                 deletedOnDeviceID: PersistenceDevice.currentID(),
-                deletionReason: "workDeleted"
+                deletionReason: permanently ? workPermanentlyDeletedReason : "workDeleted"
             ),
             in: context
         )
     }
 
-    static func recordDeletion(of collection: WorkCollection, in context: ModelContext) {
+    static func recordDeletion(of collection: WorkCollection, in context: ModelContext, permanently: Bool = false) {
         insertSigned(
             SyncTombstone(
                 recordID: collection.id,
                 recordType: .workCollection,
                 createdAt: TombstoneSigning.now(),
                 deletedOnDeviceID: PersistenceDevice.currentID(),
-                deletionReason: "collectionDeleted"
+                deletionReason: permanently ? collectionPermanentlyDeletedReason : "collectionDeleted"
             ),
             in: context
         )
     }
 
-    static func recordDeletion(of queue: ReadingQueue, in context: ModelContext) {
+    static func recordDeletion(of queue: ReadingQueue, in context: ModelContext, permanently: Bool = false) {
         insertSigned(
             SyncTombstone(
                 recordID: queue.id,
                 recordType: .readingQueue,
                 createdAt: TombstoneSigning.now(),
                 deletedOnDeviceID: PersistenceDevice.currentID(),
-                deletionReason: "queueDeleted"
+                deletionReason: permanently ? queuePermanentlyDeletedReason : "queueDeleted"
             ),
             in: context
         )
