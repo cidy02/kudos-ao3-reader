@@ -1431,7 +1431,8 @@ extension ReadAloudRacesAndInsightsDigestTests {
 
         // Pressing Play resumes the held first utterance: now it commits and speaks.
         controller.toggle(from: nil)
-        await spokenGate.enterAndWait()
+        // Bounded: a broken Resume fails here instead of hanging the run.
+        await waitUntil { !enqueuedTexts.isEmpty }
         #expect(enqueuedTexts == ["First spoken sentence in chapter three."])
         #expect(moves == ["ch3.xhtml"])
         #expect(controller.resumeLocator?.href.string == "ch3.xhtml")
@@ -1997,6 +1998,118 @@ extension ReadAloudRacesAndInsightsDigestTests {
         #expect(coreML.status == .unavailable)
         #expect(coreML.pauseWaiterCountForTests == 0)
         #expect(controller.status == .unavailable)
+    }
+
+    // MARK: - T-535i: heard starts survive Stop / replacement; endSession stays ended
+
+    @Test func appleStopKeepsAStartTheDelegateConfirmedBeforeItsMainActorHop() {
+        let locators = chapterLocators(count: 2)
+        let system = SystemTTSService()
+        var heard: [String] = []
+        system.onAudible = { heard.append($0.href.string) }
+        system.stageConfirmedStartForTests(TTSSpeechUnit(text: "Heard.", locator: locators[1]))
+        system.stop() // Stop lands before the delegate's hop reaches the main actor
+        #expect(heard == ["ch2.xhtml"])
+        system.deliverStagedStartHopForTests() // the late hop must not announce it twice
+        #expect(heard == ["ch2.xhtml"])
+    }
+
+    @Test func appleStopWithNoConfirmedStartAnnouncesNothing() {
+        let locators = chapterLocators(count: 2)
+        let system = SystemTTSService()
+        var heard = 0
+        system.onAudible = { _ in heard += 1 }
+        system.stop()
+        #expect(heard == 0)
+        _ = locators
+    }
+
+    @Test func coreMLStopKeepsAClipThatRenderedBeforeItsPollAnnounced() async {
+        let locators = chapterLocators(count: 2)
+        let coreML = CoreMLKokoroTTSService()
+        let playGate = AsyncGate()
+        coreML.testSetupOverride = {}
+        coreML.testSynthesize = { _ in [0.2, -0.2, 0.2] }
+        coreML.testStartAudioEngine = {}
+        coreML.testDeferAudibleAnnounce = true
+        coreML.testClipRendered = { true }
+        coreML.testPlayBuffer = { _ in await playGate.enterAndWait() }
+        let controller = seededCoreML(coreML, locators: locators, status: .stopped)
+        var moves: [String] = []
+        var saves: [String] = []
+        controller.onAdvance = { moves.append($0.href.string) }
+        controller.onSavePosition = { _, loc, _, _, date, _ in
+            saves.append(loc)
+            return .wrote(progressStamp: date)
+        }
+        controller.toggle(from: locators[1])
+        await controller.waitForStartTaskForTests()
+        await playGate.waitUntilEntered() // audio is rendering; the poll has not run
+        #expect(moves.isEmpty)
+        controller.stop()
+        playGate.release()
+        #expect(moves == ["ch2.xhtml"], "the heard start must survive Stop")
+        #expect(controller.resumeLocator?.href.string == "ch2.xhtml")
+    }
+
+    @Test func coreMLStopBeforeAnythingRenderedStillCommitsNothing() async {
+        let locators = chapterLocators(count: 2)
+        let coreML = CoreMLKokoroTTSService()
+        let playGate = AsyncGate()
+        coreML.testSetupOverride = {}
+        coreML.testSynthesize = { _ in [0.2, -0.2, 0.2] }
+        coreML.testStartAudioEngine = {}
+        coreML.testDeferAudibleAnnounce = true
+        coreML.testClipRendered = { false }
+        coreML.testPlayBuffer = { _ in await playGate.enterAndWait() }
+        let controller = seededCoreML(coreML, locators: locators, status: .stopped)
+        var moves: [String] = []
+        controller.onAdvance = { moves.append($0.href.string) }
+        controller.toggle(from: locators[1])
+        await controller.waitForStartTaskForTests()
+        await playGate.waitUntilEntered()
+        controller.stop()
+        playGate.release()
+        #expect(moves.isEmpty)
+        #expect(controller.resumeLocator?.href.string == "ch2.xhtml" || controller.resumeLocator?.href.string == "ch1.xhtml")
+    }
+
+    @Test func aHeardStartFromTheReplacedRunIsSavedButIsNotTheNewRequestsOutput() async {
+        let locators = chapterLocators(count: 3)
+        let engine = ControllableTTSService(status: .stopped)
+        let controller = await pendingStart(engine: engine, locators: [locators[1], locators[2], locators[0]])
+        var moves: [String] = []
+        controller.onAdvance = { moves.append($0.href.string) }
+        // The pending request is for ch2; the old run's last heard start (ch3) is drained.
+        engine.onAudible?(locators[2])
+        #expect(moves.isEmpty)
+        #expect(controller.resumeLocator?.href.string == "ch3.xhtml")
+        #expect(controller.isStartPending)
+        engine.emitUtterance(text: "New.", locator: locators[1])
+        #expect(moves == ["ch2.xhtml"])
+    }
+
+    @Test func endSessionDuringTheFirstAudibleSaveLeavesTheSessionReleased() async {
+        let locators = chapterLocators(count: 3)
+        let engine = ControllableTTSService(status: .playing)
+        engine.autoEmitFirstUtterance = false
+        let controller = ReaderSpeechController()
+        controller.onSavePosition = { _, _, _, _, _, _ in .endSession }
+        controller.seedSessionForTests(
+            workID: UUID(), status: .playing, isReaderOpen: true, ttsService: engine,
+            unitProvider: { [TTSSpeechUnit(text: "Prose.", locator: $0)] },
+            resumeLocator: locators[0], chapterStartLocators: locators
+        )
+        _ = controller.readerDidClose(workID: controller.openReaderWorkID ?? UUID())
+        controller.reanchor(to: locators[1], resumePlaying: true, direction: .forward)
+        await controller.waitForStartTaskForTests()
+        var moves = 0
+        controller.onAdvance = { _ in moves += 1 }
+        engine.emitUtterance(text: "Heard.", locator: locators[1])
+        #expect(controller.status == .unavailable)
+        #expect(controller.transportForTests == "none")
+        #expect(!controller.remoteCommandsInstalledForTests)
+        #expect(moves == 0)
     }
 
     @Test func pauseAssemblerDoesNotPadAnEmptySynthesis() {

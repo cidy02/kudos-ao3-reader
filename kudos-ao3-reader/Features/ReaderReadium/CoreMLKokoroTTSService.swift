@@ -63,6 +63,10 @@ public final class CoreMLKokoroTTSService: TTSService {
     /// Replaces scheduling the buffer and awaiting its playback; gets the sample count.
     var testPlayBuffer: ((Int) async -> Void)?
     var testDidStartPlaybackTask = false
+    /// Skip the immediate audible announcement so the poll / drain path is exercised,
+    /// and say whether the clip has rendered frames.
+    var testDeferAudibleAnnounce = false
+    var testClipRendered: (() -> Bool)?
     var pauseWaiterCountForTests: Int { pauseWaiters.count }
     #endif
     private let engine = AVAudioEngine()
@@ -531,6 +535,7 @@ public final class CoreMLKokoroTTSService: TTSService {
     }
 
     private func resetPlayback(notifyStopped: Bool) {
+        drainConfirmedStart()
         playbackGeneration &+= 1
         activeTask?.cancel()
         activeTask = nil
@@ -621,7 +626,11 @@ public final class CoreMLKokoroTTSService: TTSService {
         #if DEBUG
         if let testPlayBuffer {
             // Stands in for the player node rendering the clip.
-            announceAudible(utterance, generation: generation)
+            currentPlay = utterance
+            defer { currentPlay = nil }
+            if !testDeferAudibleAnnounce {
+                announceAudible(utterance, generation: generation)
+            }
             await testPlayBuffer(samples.count)
             return
         }
@@ -668,6 +677,8 @@ public final class CoreMLKokoroTTSService: TTSService {
         }
         defer { renderWatcher.cancel() }
 
+        currentPlay = utterance
+        defer { currentPlay = nil }
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             playerNode.scheduleBuffer(buffer) {
                 continuation.resume()
@@ -675,6 +686,31 @@ public final class CoreMLKokoroTTSService: TTSService {
             if !playerNode.isPlaying { playerNode.play() }
         }
         announceAudible(utterance, generation: generation)
+    }
+
+    /// The clip being played, until it ends or is reset.
+    private var currentPlay: KokoroUtterance?
+
+    private func isClipRendered() -> Bool {
+        #if DEBUG
+        if let testClipRendered { return testClipRendered() }
+        #endif
+        guard playerNode.isPlaying, let last = playerNode.lastRenderTime,
+              let time = playerNode.playerTime(forNodeTime: last)
+        else { return false }
+        return time.sampleTime > 0
+    }
+
+    /// A clip that has rendered frames but whose poll has not announced it yet: announce
+    /// it before a reset clears it, so a heard start is never lost to Stop or a replacement.
+    private func drainConfirmedStart() {
+        guard let utterance = currentPlay, !clipAnnounced, status != .unavailable,
+              isClipRendered()
+        else { return }
+        clipAnnounced = true
+        if let locator = utterance.locator { onAudible?(locator) }
+        spokenText = utterance.text
+        if let locator = utterance.locator { onSpokenRange?(locator) }
     }
 
     /// Whether the current clip has already announced itself (`onAudible` fires once).
