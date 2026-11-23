@@ -42,7 +42,7 @@ Reading guide: "today" = v8 snapshot merge (`KudosBackupService.restore`, defaul
 | Cover pin | coverRecipeJSON (own `pinnedAt` clock) | adopt by `pinnedAt` only, never by work clock (`KB:6400-6414`, `6322-6330`) | opaque | opaque |
 | Insights provenance | importSourceRaw/Since, kudos/hits/bookmarksAtSave, statsSavedAt, ageDaysAtSave, fandomWorksAtSave | set-once (`mergeProvenance`, `KB:6166-6187`) | opaque | opaque |
 | Chapter word counts | chapterWordCountsJSON, wordUnitRaw | adopt when valid and (empty or incomingWins) (`KB:6332-6337`) | opaque | opaque |
-| Asset facts | hasEPUB, remoteEPUBPending, epubDigest, assetIdentifier, freedAt | device-local: `hasEPUB`/`remoteEPUBPending` follow disk (`KB:3640-3660`); `epubDigest` deliberately **not** restored, left to the bytes-install path (`KB:6358-6374`, `RQS:1250`); `freedAt` not in backup | `hasEpub` from disk (`BMS:244-250`); `epubDigest` **copied when nonblank** from the archive although disk facts are applied separately (`BMS:852`); `freedAt` kept local (`BMS:836`) | X-2f |
+| Asset facts | hasEPUB, remoteEPUBPending, epubDigest, assetIdentifier, freedAt | device-local: `hasEPUB`/`remoteEPUBPending` follow disk (`KB:3640-3660`); `epubDigest` deliberately **not** restored, left to the bytes-install path (`KB:6358-6374`, `RQS:1250`); `freedAt` not in backup | `hasEpub` from disk (`BMS:244-250`); `epubDigest` **the mapped nonblank digest is copied on a winning snapshot** although installed bytes and disk facts are applied separately (`BMS:852`, `244-250`); `freedAt` kept local (`BMS:836`) | X-2f |
 | Authors | authorIdentitiesJSON | insert: archive value; overlap: nonempty archive value if newer or local empty; absent never clears (`KB:6272-6276`) | insert: mapped archive record (`BMS:196-210`); overlap: keeps local (`BMS:836`) | **X-2c** (overlap only) |
 | Download date | downloadedAt | insert: archive; Merge overlap: untouched; Reconcile: archive if newer or local nil (`KB:6208-6213`) | insert: archive; **Merge overlap fills a nil local value** (`BMS:231-232`); Reconcile as iOS (`BMS:884-890`) | **X-3** |
 | Derived/device | searchText, searchIndexVersion, syncStatusRaw, lastSyncAttemptAt, lastSyncError, lastTagRefreshAttemptAt, SavedSeries | never synced (`DATA_AND_PERSISTENCE_INVARIANTS.md` Source of truth) | `lastTagRefreshAttemptAt` is in the entity only | no |
@@ -95,7 +95,7 @@ Reading guide: "today" = v8 snapshot merge (`KudosBackupService.restore`, defaul
 - **X-2c** `authorIdentitiesJSON`: Android keeps local bylines on overlap (`BMS:836`) but takes the mapped archive record on insert (`BMS:196-210`); iOS takes a nonempty byline when newer or local empty (`KB:6272-6276`).
 - **X-2d** `ao3WorkID` ownership on an archive win (table 1.1).
 - **X-2e** `deletedAt` after a winning live record (table 1.1).
-- **X-2f** `epubDigest` copied by Android, deliberately not restored on iOS (table 1.1).
+- **X-2f** `epubDigest`: on a winning snapshot Android copies the **mapped** nonblank digest, a field distinct from the digest of installed bytes; iOS deliberately never restores it (table 1.1).
 - **X-3** Android fills a missing `downloadedAt` on an overlapping File Merge (`BMS:231-232`); iOS' Merge overlap branch exits before applying archive metadata (`KB:3470-3527`). In Reconcile both update `downloadedAt` when newer or local is nil, so "fill-only" is a Merge-route property.
 - **X-4 Membership identity (confirmed)** iOS matches `(queue, work)` and keeps the local membership id (`KB:4182-4222`); Android matches membership id (`BMS:1815-1864`), removal sweep `BMS:1866-1872`.
 - **X-5 Replace omission (confirmed)** iOS guards at `KB:4681-4711` and `4880-4884` (sessions: `4873-4877`). Android lists default to `[]` (`BM:21-37`, no omitted-key record), so it drops omitted collections (`BMS:1286-1313`) and queues (`BMS:1874ff`), removes omitted annotations (`BMS:2256-2262`) and mints omitted-session/favorite/watermark tombstones even for an absent key (`BMS:2004-2021`). An absent top-level collection key is distinct from a per-work `userTags` presence rule.
@@ -203,80 +203,79 @@ Computed from the retained summaries, sorted, as `(kind, K, latestOpId)`: `unaut
 
 ## 3. The matrix
 
-Columns follow plan § D4: (1) command and capture intent; (2) target identity and generation; (3) value group; (4) absence/null/reset; (5) prerequisites (named op ids or `fact-first`, §2.1); (6) concurrent outcome and tie-break; (7) stale/duplicate; (8) checkpoint state.
-"Stale/duplicate" columns state the *projection* result; nothing is discarded. A duplicate op id is an idempotent no-op on the fact set.
+Columns follow plan § D4: (1) command and capture intent; (2) target identity and lineage; (3) value group; (4) absence/null/reset; (5) prerequisites (named op ids or `fact-first`, §2.1); (6) concurrent outcome and tie-break; (7) stale/duplicate; (8) checkpoint state (`S(K)` parts of §2.1).
+"Stale/duplicate" states the *projection* result; nothing is discarded. A duplicate op id is an idempotent no-op on the fact set. `scope` is the set of lineage ids captured with a command (DEC-4).
 
 ### 3.1 Work lifecycle, content and assets (slices a and c)
 
-| Op | Command / capture intent | Target / gen | Value group | Absence · null · reset | Prerequisite | Concurrent outcome · tie-break | Stale / duplicate | Checkpoint state |
+| Op | Command / capture intent | Target / lineage | Value group | Absence · null · reset | Prerequisite | Concurrent outcome · tie-break | Stale / duplicate | Checkpoint state |
 |---|---|---|---|---|---|---|---|---|
-| **W1 work.create** | Save/import/download with no identity match (`importEPUB` re-check, `INVARIANTS` Identity). One op initialises every group of §3.1b with a register fact each. | new entity, `g0` = op id | all groups of §3.1b + identity evidence | absent group = no fact | none | same entity key twice impossible; identity match with another entity → component (DEC-11) | duplicate op: no-op | all initial register facts; evidence |
-| **W2 work.delete** | `PWS.softDelete` (`PWS:116`): deletion fact `D`, EPUB kept, memberships stay. Today also a signed tombstone (`PS:435`). | entity, `observedGen` | lifecycle | none | none (fact-first on the entity create) | DEC-1: any uncleared `D` ⇒ deleted; two `D`s both retained, deadline from the max `deletedAt` | `D` after explicit purge: retained, projects nothing (diagnostic) | all D facts with stamps and `deletedAt` |
-| **W3 work.restore** | `PWS.restore` (`PWS:175`), Recently Deleted Restore, DEC-7 re-acquisition, Merge undo of parking (`KB:3470-3490`) | entity, `observedGen`; successor label `succ(observedGen)` | lifecycle | none | **the named deletion ops** (all must be applied/covered) | clears exactly the named `D`; concurrent `R{D1}`/`R{D2}` converge on one successor; unnamed `D` stays effective | `R` after explicit purge: retained, projects nothing | all R facts with names |
-| **W4 work.purge(explicit)** | Delete Permanently / `WL.hardDelete` (`WL:178`); native envelope (DEC-8) | lineage | lifecycle | none | the named basis deletions | terminal, wins any order; two explicit purges: greatest stamp is the witness | duplicate: no-op; unauthorized: retained, ignored | witness + basis + envelope |
-| **W4x work.purge(expired)** | Sweep after `deadline` (`PWS:296`), emitter holds full `U` | lineage | lifecycle | none | basis deletions | valid iff basis = `U` (DEC-1.2); loses to any restore naming a basis deletion or to an unseen deletion | invalid expiry: retained, projects nothing | expiry facts + basis |
-| **W5 work.acquire** | Any acquisition path with identity match | matched entity or new `g0` + `supersedes` | lifecycle/asset via W2/W3/W8 | — | purge witness id only when `supersedes` | DEC-7 | — | `supersedes` link |
+| **W1 work.create** | Save/import/download with no identity match (`importEPUB` re-check, `INVARIANTS` Identity). One op initialises every group of §3.1b with a register fact each; may carry `supersedes` (DEC-8) | new lineage = op's entity key | all §3.1b groups + identity evidence | absent group = no fact | none; `supersedes` names a purge op (prerequisite) | identity match with another lineage → component (DEC-14) | duplicate op: no-op | create fact, evidence, registers |
+| **W2 work.delete** | `PWS.softDelete` (`PWS:116`) on the **visible** work: capture the observed component's lineage ids as `scope`. Today also a signed tombstone (`PS:435`). | each lineage in `scope`; `observedGen` provenance | lifecycle | none | none (fact-first on each lineage) | DEC-2: any uncleared valid `D` ⇒ deleted; deadline = latest `deletedAt` over all members (DEC-5); a member outside `scope` survives (diagnostic) | `D` after explicit purge: retained, projects nothing | uncleared `D` `{id, scope, deletedAt}`; cleared `{id, scope}` |
+| **W3 work.restore** | Recently Deleted Restore (`PWS:175`); re-acquisition of a deleted work (DEC-8); Merge undo of parking (`KB:3470-3490`). `scope` = union of the named deletions' scopes; records `observedExpiry` | each lineage in `scope` | lifecycle | none | **the named deletion ops** (nonempty; each valid for the lineage, DEC-1) | clears exactly named `D`; restore after observing expiry and offline restore both effective (DEC-3); unnamed `D` stays effective | names a deletion outside the lineage: `invalidReference`, no effect; restore after explicit purge: retained, hidden | merged restore fact (union of names, latest op, observedExpiry) |
+| **W4 work.purge(explicit)** | Delete Now / Delete Permanently (`WL:178`) on a Recently Deleted item; `scope` = the item's recorded scope; v9 envelope (DEC-11). **Legacy-evidence-only form** for MC-7: empty basis, evidence digest, fixed scope, authorized adopter, **no synthetic deletion** | `scope` | lifecycle | none | basis deletions (or legacy evidence digest) | terminal, wins any order; two explicit purges: greatest stamp is the displayed witness, both retained | unauthorized: retained, ignored, diagnostic; duplicate: no-op | all purge facts with authority evidence |
+| **W4x work.purge(expired)** | Sweep after the deadline (`PWS:296`), emitter holds the full `U` of every member in scope | `scope` | lifecycle | none | nonempty basis deletions | valid only while `basis = U` (DEC-2.2); reactivates if `U` returns to the basis | invalid expiry: retained, `expiryInvalidated` | all purge facts |
+| **W5 re-acquire** | Any acquisition with an identity match: matched `deleted`/`purged(expired)` ⇒ W3; matched only `purged(explicit)` ⇒ W1 with `supersedes` | per DEC-8 | lifecycle / asset | — | the named purge op | DEC-8 eligibility is against the named purge | purge later unauthorized ⇒ `supersedesIneligible` | the `supersedes` link |
 | **W6 heldCopy** (local) | `WL:33-75` | — | `freedAt` | — | — | — | — | none |
-| **W7 work.edit** | A user or refresh edit of one or more groups of §3.1b (one fact per group, same op) | entity (lineage-scoped), `observedGen` recorded | one or more content groups | absent group = no effect; `null` = reset only where §3.1b allows | none (fact-first) | per group by register kind; across delete/restore/purge DEC-5 | edit to purged lineage: retained, not projected, diagnostic | per register winner |
-| **W8 asset.write** | `replaceEPUB` (`RQS:1227`), user re-import, update refresh. Fact per DEC-19 | `(owner, kind)` | `asset.epub` | no remove for ordinary replace | its `observedBase` version fact (named) | heads/alternates by DEC-19; same-digest write advances stamp; concurrent branches: greatest-stamp head wins, others alternates | duplicate digest + higher stamp: new winner fact (not a no-op); older stamp: kept as superseded/alternate by ancestry | version facts per DEC-19 |
+| **W7 work.edit** | A user or refresh edit of one or more §3.1b groups (one fact per group) | lineage | one or more groups | absent no effect; `null` resets where §3.1b allows | none (fact-first) | per register kind (§2.8) | edit to purged lineage: retained, hidden, diagnostic `editToPurgedLineage(latest)` | per-group winner + greatest content fact |
+| **W8 asset.write** | `replaceEPUB` (`RQS:1227`), user re-import, update refresh | `(owner lineage, kind)`; owner derived from the base | `asset.epub` etc. | — | its `observedBase` version (named; same owner and kind, DEC-23) | heads, alternates per lineage, winner by stamp; same-digest write advances the winner | duplicate digest, higher stamp: new fact; older stamp: kept (ancestry decides) | version facts incl. ancestry |
+| **W9 asset.remove** | shared reference removal (not eviction) | named versions' owner | asset version visibility | — | the named version ops | hides named versions, keeps their supersession (DEC-24) | remove of removed: no-op | removal facts |
 
 #### 3.1b W1 initial groups and native update policies
 
 | Group | Fields | Register kind (v8 rule mirrored) | Reset |
 |---|---|---|---|
 | identity | id, ao3WorkID, canonical URL | grow-only evidence (`WII:39-53`) | none |
-| text metadata | title, author, summary, rating, language, datePublished, dateUpdated, chapters, seriesTitle, seriesURL | LWW per field; capture never emits blank (v8 `mergedText`, `KB:6417`) | none |
-| counters | wordCount, kudos, comments, bookmarks, hits, seriesPosition, knownChapterCount | LWW per field; capture never emits ≤0 (v8 `mergedPositive`, `KB:6423`; series position max) | none |
+| text metadata | title, author, summary, rating, language, datePublished, dateUpdated, chapters, seriesTitle, seriesURL | LWW per field; capture never emits blank (`KB:6417`) | none |
+| counters | wordCount, kudos, comments, bookmarks, hits, knownChapterCount | LWW per field; capture never emits ≤0 (`KB:6423`) | none |
+| series position | seriesPosition | max-rank, max (`KB:6314`) | none |
 | flags | isFavorite, isSaved, isFinished, isComplete | LWW | explicit false is a value |
-| monotonic | hasGivenKudos, ao3Unavailable, workTagsFetched, isQueuedForLater (derived from memberships) | grow-only OR (`KB:6248`, `6340-6342`) | none |
-| reading status | status, stop*, stack*, statusWasRecorded, statusChangedAt, stoppedAt (atomic) + keepInProgressOverride + hiddenFromHistoryAt | LWW per atomic group (`KB:6252-6270`) | `hiddenFromHistoryAt` null |
-| progress | lastSpineIndex, lastScrollFraction, readiumLocator, lastReadDate, progressModifiedAt, legacyReaderProgress (atomic) | LWW on its own stamp; `locator ""` = reset, absent = unchanged (`PS:716-760`) | `legacyReaderProgress` null |
+| monotonic | hasGivenKudos, ao3Unavailable, workTagsFetched, isQueuedForLater (derived) | grow-only OR (`KB:6248`, `6340`) | none |
+| reading status | status, stop*, stack*, statusWasRecorded, statusChangedAt, stoppedAt (atomic) + keepInProgressOverride + hiddenFromHistoryAt | LWW per atomic group | `hiddenFromHistoryAt` null |
+| progress | lastSpineIndex, lastScrollFraction, readiumLocator, lastReadDate, progressModifiedAt, legacyReaderProgress (atomic) | LWW; `locator ""` = reset, absent = unchanged (`PS:716-760`) | `legacyReaderProgress` null |
 | cover pin | coverRecipeJSON | value-ordered (`KB:6400-6414`) | none |
-| provenance | importSource*, *AtSave, statsSavedAt | set-once (lowest stamp) (`KB:6166-6187`) | none |
-| preservation | status (rank: preserved > others), preservedAt, attempt dates | monotonic rank / max date (`KB:6350-6380`) | none |
-| tag lists | warnings, categories, tags, fandoms, characters, relationships, freeforms | grow-only union (`TagMerge`) | none |
-| user tags | Tag names attached to the work | epoch-scoped presence (T1) | detach |
-| chapter data | chapterWordCountsJSON + wordUnitRaw | LWW pair, paired with `asset.epub` digest of the write that produced it | none |
+| provenance | importSource*, *AtSave, statsSavedAt | set-once | none |
+| preservation | status, preservedAt, attempt dates | max-rank: `notPreserved < queued < preserving < preserved`; dates max (`KB:6350-6380`) | none |
+| tag lists | warnings, categories, tags, fandoms, characters, relationships, freeforms | grow-only union | none |
+| user tags | Tag names attached | epoch-scoped presence (T1) | detach |
+| chapter data | chapterWordCountsJSON + wordUnitRaw | LWW facts with `forDigest`; projected for the winning digest (DEC-25) | none |
 | authors | authorIdentitiesJSON | LWW, nonempty only (`KB:6272`) | none |
 | download date | downloadedAt | LWW | none |
-| asset | `asset.epub`, `asset.original` bundle | DEC-19/20 | none |
+| asset | `asset.epub`, `asset.original` bundle | DEC-23..25 | none |
 
 ### 3.2 Identity, memberships, annotations, sessions, favorites
 
-| Op | Command / capture intent | Target / gen | Value group | Absence · null · reset | Prerequisite | Concurrent outcome · tie-break | Stale / duplicate | Checkpoint state |
+| Op | Command / capture intent | Target / lineage | Value group | Absence · null · reset | Prerequisite | Concurrent outcome · tie-break | Stale / duplicate | Checkpoint state |
 |---|---|---|---|---|---|---|---|---|
-| **I1 identity.evidence** (replaces the round-1 alias op) | Carried by W1 and by a later `work.edit` that fills `ao3WorkID`/URL; no separate op | entity | identity | grow-only | none | components by DEC-11; survivor lowest UUID | duplicate: set union | evidence per entity |
-| **M1 membership.add** | `ReadingQueueService` add; endpoints `(queue, work)`; epoch = op id; carries initial rank/note | `(queue, work)` | epoch + first register facts | — | none (fact-first on both endpoints) | two adds = two live epochs (DEC-14) | add after remove: a new epoch, live | epoch ids |
-| **M1r membership.remove** | remove from queue (`PS:476`) | the observed epochs | presence | — | the named add ops | ends exactly named epochs; an unseen epoch stays live | remove of an unknown epoch: waits (prerequisite) | removals naming epochs |
-| **M2 membership.move** | reorder (`RQS:1270`): one fact per moved member naming observed epochs | epoch-scoped | `rank` | — | named epochs (add ops) | max stamp among facts hitting a live epoch; equal ranks by `(rank, work key)` | move naming only dead epochs: retained, not projected | per live epoch register |
-| **M3 membership.note/state/origin** | note, state, origin edits | epoch-scoped | three groups | note `""` is a value; origin null = reset | named epochs | as M2 per group | as M2 | per group |
-| **M4 collection.membership add/remove** | same epoch rule, no rank (`PS:602`) | `(collection, work)` | presence | — | as M1/M1r | as M1 | — | epochs |
-| **A1 annotation.add** | In-book bookmark/highlight/note | source id | source add fact + note version 0 | `note ""` is a version | none (fact-first on work) | DEC-17 dedupe projection | duplicate id: no-op | source facts |
-| **A2 annotation.edit** | note / color / locator edit | source id | note version (source-addressed) / color | absent unchanged | none | per DEC-16/17: edit to a loser source feeds fallback/parked sets | — | note versions retained |
-| **A3 annotation.delete** | delete one visible annotation (`PS:489`) | observed group of sources | lifecycle of each named source | — | the named source adds | deletes exactly the named sources; unseen concurrent member stays and may become visible | delete of a source added later: waits | delete facts |
-| **S1 session.append** | `ReadingSession` finalize (`ReadingSession.swift:9`); id is the uniqueness key | session id | full row; timing groups (`chapterSeconds/Words/skimmed*`, `endedAtChapterEnd`, `peekedAtEnding`) are set-once (lowest stamp) | old rows keep nil, never backfilled | none (fact-first on work) | two appends with the same id and different row bytes: same-writer impossible; cross-writer same id = repair condition `sessionIdCollision`; fill-only groups: lowest stamp wins deterministically | duplicate: no-op | session row + set-once groups |
-| **S2 session.delete** | immediate-delete (`PS:530`) | id | lifecycle | — | none | delete holds | — | delete fact |
-| **F1 favorite.set / clear** | star/unstar (`PS:545`) | `(kind, target)`; `.work` target = original work key mapped at projection | presence + displayName (LWW) | clear = stamped null | none | LWW by stamp | alias collapses duplicate keys by projection | per key |
-| **F2 watermark.set / clear** | `PS:558` | fandom name | `{lastVisitedAt, newestWorkIDSeen, title}` atomic | clear stamp | none | LWW (not max-date) | — | per name |
+| **I1 identity.evidence** (no op) | Carried by W1 and by a W7 that fills ao3 id/URL | lineage | identity | grow-only | none | components by DEC-14 | duplicate: set union | evidence set |
+| **M1 membership.add** | `ReadingQueueService` add; original endpoint `(queue key, work key)`; epoch = op id; carries the epoch's first rank/note facts | endpoint | epoch + first facts | — | none (fact-first on both endpoints) | two adds = two live epochs (DEC-17) | add after remove: a new live epoch | epoch ids |
+| **M1r membership.remove** | remove from queue (`PS:476`) | the observed epochs | presence | — | the named add ops | ends exactly named epochs; unseen epoch stays live | unknown epoch: waits | removal facts naming epochs |
+| **M2 membership.move** | reorder (`RQS:1270`): one fact per moved member naming observed epochs | per original epoch | `rank` | — | named epochs | per-epoch maxima (DEC-18); equal ranks by `(rank, work key)` | move naming only dead epochs: retained | per-`(epoch, group)` max while endpoint missing/hidden |
+| **M3 membership.note/state/origin** | note, state, origin edits | per original epoch | three groups | note `""` is a value; origin null = reset | named epochs | as M2 per group | as M2 | per-`(epoch, group)` max |
+| **M4 collection.membership add/remove** | epoch rule, no rank (`PS:602`) | `(collection, work)` | presence | — | as M1/M1r | as M1 | — | epochs |
+| **A1 annotation.add** | In-book bookmark/highlight/note | source id | source add + note version | `note ""` is a version | none (fact-first on work) | DEC-21 | duplicate id: no-op | source facts (§2.1) |
+| **A2 annotation.edit** | note / color / locator edit | source id | note version; color; locator (LWW) | absent unchanged | none | LWW per register; every edit raises the source's rank (DEC-19) | — | latest + greatest-nonempty note, latest locator/color |
+| **A3 annotation.delete** | delete one visible annotation (`PS:489`) | observed group of sources | lifecycle of each | — | the named source add ops | deletes exactly the named group | delete of unseen source: waits | delete facts |
+| **S1 session.append** | `ReadingSession` finalize (`ReadingSession.swift:9`); id is the key | session id | full row; timing groups set-once (lowest stamp) | old rows keep nil, never backfilled | none (fact-first) | same id cross-writer ⇒ `sessionIdCollision` (repair); fill-only groups: lowest stamp | duplicate: no-op | row + set-once groups |
+| **S2 session.delete** | immediate-delete (`PS:530`) | id (epoch rule, DEC-28) | lifecycle | — | named epoch | delete holds against that epoch; a later put is a new epoch | — | epochs |
+| **F1 favorite.set/clear** | `PS:545` | `(kind, target)`; `.work` target = original work key | presence + displayName | clear = stamped null (epoch rule) | none | LWW; alias collapses keys by projection | — | per key |
+| **F2 watermark.set/clear** | `PS:558` | fandom name | atomic `{lastVisitedAt, newestWorkIDSeen, title}` | clear stamp | none | LWW | — | per name |
 
 ### 3.3 Settings, tags, queues and collections, recovery, fonts, originals, authorization
 
-| Op | Command / capture intent | Target / gen | Value group | Absence · null · reset | Prerequisite | Concurrent outcome · tie-break | Stale / duplicate | Checkpoint state |
+| Op | Command / capture intent | Target / lineage | Value group | Absence · null · reset | Prerequisite | Concurrent outcome · tie-break | Stale / duplicate | Checkpoint state |
 |---|---|---|---|---|---|---|---|---|
-| **P1 setting.set/reset** | named/extras setting (`SSC.noteLocalChanges`, `KB:2628`); explicit stamps only | setting key | one group per key; voice id+name and hue+hex are pairs | absent unchanged; reset = null fact; malformed ignored | none | LWW | — | winner or reset |
-| **P2 setting.entry.set/reset** | map settings (drafts, Posting As) | `(key, entry)` | entry presence | reset retained | none | per entry LWW | — | per-entry fact incl. resets |
-| **P3 pronunciation.set/reset** | `KB:853-935`; work layer key = original work key mapped by DEC-12 | `(layer, word)` | entry presence | reset retained | none | LWW | — | per-entry incl. resets |
-| **T1 userTag.attach/detach** | user tag on a work (`Tag.name`, `M:887`) | `(work component, tag)` | epoch-scoped presence | detach names attach epochs | named attaches | as memberships (§2.5). v8 had union only; adapter never infers detach from absence | — | epochs |
-| **T2 queue/collection.edit** | name; colour{hue,hex}; pin; keepsWorksOffline; notes; smartRules; searchSources + searchSourcesModifiedAt; **queue tags** (grow-only + detach, T1 rule); **collection description**; **collection sortOrder**; showsOnHome; workOrderRaw | queue/collection entity | one group each | colour hue null never clears; others reset by null | none | LWW per group (colour pair by `SyncMerge.chosenColor`, `PS:656-666`: hue fills, hex travels with the winning hue) | — | per group |
-| **Q1 queue/collection.create/delete/restore/purge** | as W1-W4x for entities `queue`/`collection`; Saved for Later is matched by kind and never deleted or aliased by id (`BMS:1700`, `KB:3950`). Each entity has its own `g0`; memberships stay attached while deleted; purge cascades per DEC-4 | entity | lifecycle | — | named deletions | DEC-1 | — | as W2-W4x |
-| **R1 recoveryDoc.put** | writing recovery copy or `documents` file (`BackupAppState.swift:25-140`). Key = **file name** (already digest of account/target/field + session id, so equal key ⇔ same session) | file name | `{entry, savedAt payload}` register | never removed | none | LWW by stamp (v8: replace only with newer save of the same session; never remove) | — | per name |
-| **FN1 font.add / FN2 font.remove** | `M:923` | font id (add op id) | asset version + display name | remove names add ids | blob for `available` only | DEC-21 collision mapping | — | adds, removals |
-| **O1 original.set** | converted import original + sidecar | `(work, original)` | bundle (DEC-20) | — | none | set-once: lowest-stamp bundle current | — | all bundles |
-| **L1a savedSearch.put/delete** | `PS:517` | id | content LWW (name, filters, lastOpenedAt) | delete = lifecycle fact | none | LWW; delete holds | — | per id |
-| **L1b bookmark.put/delete** | `PS:504` | URL (natural key) | title, dateAdded LWW | delete names URL | none | two ids for one URL collapse by URL; delete scope = URL | — | per URL |
-| **L1c followedTag.put/delete** | `PS:571` | `ao3TagID` (natural key) | flags LWW, seen ids grow-only | delete | none | 20-cap: survivors ordered by earliest follow stamp, the rest are retained facts not projected | — | per tag |
-| **L1d tagAlias.put/delete** | `PS:585` | natural key `(normalized name, kind)` | canonicalName LWW, parentFandoms grow-only | delete | none | LWW | — | per key |
-| **E1 writer.enroll/revoke** | pairing/revocation UI (`TombstoneTrustStore`), founders in bootstrap | writer key | authorization | — | none | DEC-9 | — | all |
+| **P1 setting.set/reset** | named/extras setting (`SSC.noteLocalChanges`, `KB:2628`); explicit stamps only | setting key | one group per key; voice id+name and hue+hex are pairs | reset = null fact; malformed ignored | none | LWW | — | winner or reset |
+| **P2 setting.entry.set/reset** | map settings (drafts, Posting As) | `(key, entry)` | entry presence | reset retained | none | per-entry LWW | — | per-entry fact incl. resets |
+| **P3 pronunciation.set/reset** | `KB:853-935`; work layer key = original work key, projected by DEC-15 | `(layer, word)` | entry presence | reset retained | none | LWW (counter tie → incarnation) | — | per-entry incl. resets |
+| **T1 userTag.attach/detach** | user tag on a work (`Tag.name`, `M:887`) | `(work lineage, tag)` | epoch presence | detach names attach epochs | named attaches | as memberships; v8 union only: adapter never infers detach from absence | — | epochs |
+| **T2 queue/collection.edit** | name; colour{hue,hex}; pin; keepsWorksOffline; notes; smartRules; searchSources (+modifiedAt); **queue tags** (observed-remove set: add epochs, remove names epochs); **collection description**; sortOrder; showsOnHome; workOrderRaw | queue/collection lineage | one group each | hue null never clears; others reset by null | none (tags: named epochs) | LWW per group; colour pair by `chosenColor` (`PS:656-666`) | — | per group; tag epochs |
+| **Q1 queue/collection lifecycle** | W2–W4x rules for `queue`/`collection` lineages; Saved for Later keyed `queue:savedForLater`, never deleted or aliased by id; memberships stay attached while deleted; purge cascade DEC-2 | lineage + scope | lifecycle | — | named deletions | DEC-2 | — | as W2–W4x |
+| **R1 recoveryDoc.put** | writing recovery copy or `documents` file (`BackupAppState.swift:25-140`); key = **file name** (digest of account/target/field + session id ⇒ equal key ⇔ same session) | file name | `{entry, savedAt}` register | never removed | none | LWW by stamp; v8 = replace only with a newer save of the same session | — | per name |
+| **FN1 font.add / FN2 font.remove** | `M:923` | font = coalesced add facts (DEC-26) | asset version + display name | remove names all observed add ids | blob for `available` only | DEC-26 name reservation | — | adds, removals |
+| **O1 original.set** | converted import original + sidecar | `(work lineage, original)` | bundle (DEC-25) | — | none | set-once, lowest stamp | — | all bundles |
+| **L1a savedSearch** / **L1b bookmark** / **L1c followedTag** / **L1d tagAlias** put/delete | `PS:504-585`; natural keys: bookmark URL, followedTag `ao3TagID`, tagAlias `(normalized name, kind)`, savedSearch id | key | content LWW; grow-only seen ids / parentFandoms | delete names observed epochs; **re-add after delete = new epoch, live** (DEC-28) | named epochs | LWW; 20-tag follow cap resolved by earliest follow stamp, the rest retained not projected | — | epochs + content |
+| **E1 writer.enroll/revoke** | pairing/revocation UI (`TombstoneTrustStore`); founders in bootstrap | subject key | authorization | — | `authority` enroll op or `root` | DEC-9..12 | — | all authorization facts |
 
 Smart (derived) memberships are never ops (`INVARIANTS` Queues); the adapter skips `kind=smart` as `KB:4194-4203` does.
 
@@ -285,7 +284,7 @@ Smart (derived) memberships are never ops (`INVARIANTS` Queues); the adapter ski
 A **legacy adapter** turns a v8 manifest (and its assets) into v9 operations. It runs in three separate steps so that "what today's app would do" is never confused with "what v9 additionally changes":
 
 1. **Accept via the named shipped route.** Run the route exactly as the shipped build on the importing device does (iOS `KudosBackupService.restore`, Android `BackupMergeService.merge`), including its date, fill, dedupe, tombstone and membership behaviour. The only injection is the clock value the shipped code already takes (`now`) and the trust set; the adapter records both. Result = the **accepted result** (post-merge normalized state).
-2. **Apply explicitly approved migration changes.** A fixed list of named changes `MC-n` (§4.3), each independently approved by the owner or engineering default; a change not approved is not applied. Default list = empty, so step 2 is the identity.
+2. **Apply explicitly approved migration changes.** A fixed list of named changes `MC-n` (§4.3), each independently approved; a change not approved is not applied. MC-4 (omitted keys) is mandatory for v9; otherwise the default list is empty. A change that needs data the shipped route discarded is applied by **replaying the route over the retained original inputs** (§4.5), not by editing the accepted result.
 3. **Translate to defined v9 ops** (§4.4): ordinary operation kinds of §3, diffed against the **accepted baseline cut**, in a defined order, with reserved ids and bytes. Never per-field history reconstructed from a record's `lastModifiedAt`.
 
 Routes: **Merge** (file import, add-only), **Reconcile** (folder sync-down, conflict-version folds, the pre-2026 package fold; default mode), **Replace** (file import, snapshot), **v8 folder import** (seed of the v9 library, and the explicit reviewed import of post-handoff v8 edits; plan § C Namespace and cutover). Both platforms expose the same three modes (`KB:3086`, `KudosBackup.kt:59-75`); sync-down is Reconcile on both (`FS:371`, `SR:784`).
@@ -319,45 +318,59 @@ Routes: **Merge** (file import, add-only), **Reconcile** (folder sync-down, conf
 | Replace | snapshot: forces progress and cover pin; omission §4.5; settings untouched; pronunciations, recovery docs and documents still applied (`KB:4737-4751`) | snapshot; settings untouched (`BMS:449`) |
 | v8 folder import | = Reconcile per manifest version including folded conflicts and the pre-2026 package (`FS:519-615`, `SR:340-400`); assets read when size or digest differ (`FS:837-854`, `SR:867`) | same |
 
-### 4.3 Migration changes (step 2), all proposed and **off by default**
+### 4.3 Migration changes (step 2), all proposed and **off by default**, except MC-4
 
-| ID | Change | Resolves | Needs |
-|---|---|---|---|
-| MC-1 | Date normalization `min(d, min(exportedAt, opClock+24h))`, never reject | X-1, X-21 | owner (Android whole-import rejection becomes a clamp, Q-5) |
-| MC-2 | Never replace known text/counters with blank/zero | X-2 | owner (Android manual import acceptance, Q-6) |
-| MC-3 | Match memberships by `(queue, work)` | X-4 | engineering |
-| MC-4 | Record omitted keys before defaulting; omitted ⇒ no delete (T-563) | X-5 | owner for a shipped Android Replace change (Q-7); required for the v9 adapter |
-| MC-5 | Import an archive's Recently Deleted copy per the iOS rule | X-6 | engineering |
-| MC-6 | Tombstone tie: newest, permanent wins | X-7 | engineering |
-| MC-7 | Mint a native purge from *verified permanent* legacy evidence when the adopter is authorized (DEC-10) | N-1 | owner (Q-8 wording) |
-| MC-8 | Blank/whitespace anchors never dedupe | X-10 | engineering |
-| MC-9 | Never rename on collision | X-12 | engineering |
-| MC-10 | Compare originals by bytes on publish | X-16 | engineering |
+An approved change is **never** a transformation of the accepted result when the shipped route discarded the input. It is a **replay of the route over the retained original inputs** (the manifest fragment and the local pre-merge fragment with presence bits, §4.5) under the changed predicate, or a transformation using explicitly retained pre-loss facts.
+
+| ID | Change | Resolves | Replay input needed | Needs |
+|---|---|---|---|---|
+| MC-1 | Date normalization `min(d, min(exportedAt, opClock+24h))`, never reject | X-1, X-21 | raw manifest dates | owner (Q-5 resolved: separate from shipped import) |
+| MC-2 | Never replace known text/counters with blank/zero | X-2 | both sides' pre-merge values | owner for Android manual import |
+| MC-3 | Match memberships by `(queue, work)` | X-4 | both membership lists | engineering |
+| MC-4 | Record omitted keys before defaulting; omitted ⇒ no delete (T-563). **Mandatory for every v9 translation**; the shipped compatibility baseline (the v8 fixtures) is kept separate | X-5 | presence bits of every top-level key | required |
+| MC-5 | Import an archive's Recently Deleted copy per the iOS rule (an Android-suppressed work is **recovered by replaying the work loop** from the retained fragment, not from the accepted result) | X-6 | the suppressed archive record and the tombstones | engineering |
+| MC-6 | Tombstone tie: newest, permanent wins | X-7 | all tombstone candidates | engineering |
+| MC-7 | Legacy-evidence-only explicit purge (below) | N-1 | verified tombstone + adopter authority | owner wording (Q-8) |
+| MC-8 | Blank/whitespace anchors never dedupe (an iOS-deduped annotation is **recovered by replaying the dedupe** from the retained local and incoming annotation lists); the v9 nonblank-anchor rule itself is DEC-24 and holds even when MC-8 is off | X-10 | both annotation lists | engineering |
+| MC-9 | Never rename on collision | X-12 | both name sets | engineering |
+| MC-10 | Compare originals by bytes on publish | X-16 | both byte sets | engineering |
+
+**MC-7 policy.** For a *verified permanent* legacy tombstone the adopter, **if authorized**, may mint one explicit purge in the **legacy-evidence-only form**: empty basis, `legacyEvidenceDigest`, and a `scope` fixed at the baseline cut to the lineages whose identity evidence matches the tombstone. No deletion fact is fabricated. If MC-7 is off, or the adopter is not authorized, the outcome is **held-live**: the evidence is stored, the work stays (shipped behaviour, N-1), and diagnostic `legacyPurgeNotAdopted` is raised.
 
 ### 4.4 Translation (step 3)
 
-Inputs: accepted result (after step 2) and the local v9 projection at the **accepted baseline cut**. Output ordered list of ops; for each entity (sorted by canonical key) and each group (fixed order of §3.1b, then memberships, annotations, sessions/favorites/watermarks, settings, assets) emit an op only where accepted ≠ baseline. Replace is "forced" in acceptance, so differences are more frequent, but equal values emit nothing.
+Inputs: accepted result (after step 2) and the local v9 projection at the **accepted baseline cut**. Output: an ordered list of ops; for each lineage (sorted by canonical key) and each group (order of §3.1b, then memberships, annotations, sessions/favorites/watermarks, settings, assets) emit an op only where accepted ≠ baseline. Replace is forced at acceptance, so differences are more frequent, but equal values emit nothing.
 
 | Accepted transition | Op |
 |---|---|
-| new entity | W1 create (+ evidence); archive record dates are payload only |
+| new entity | W1 create (+ evidence); archive dates are payload only |
 | group value differs | W7 edit of that group, or the kind's own op (P1, F1, L1…); no per-field history |
-| live → deleted | W2 delete with `deletedAt` from the archive record |
-| deleted → live (newer snapshot, Merge undo of parking) | W3 restore naming **every uncleared deletion fact in the baseline**; a deletion that is not a fact cannot exist in a v9 library (the seed run created deletion facts from the archive's own `isDeleted`/`deletedAt`), so no deletion evidence is ever fabricated |
-| revival of an entity projected `purged(expired)` | W3 restore |
-| revival of an entity projected `purged(explicit)` | W5 acquire (new entity, `supersedes`) |
-| verified permanent legacy tombstone, adopter authorized, MC-7 on | W4 purge(explicit) citing the legacy evidence digest; otherwise the evidence is stored and nothing else happens (v8 behaviour, N-1) |
-| membership present/ranked/removed | M1 add, M2 move, M1r remove naming baseline epochs |
-| annotation new/changed/hidden | A1, A2 (source-addressed), A3 naming the observed source group; the accepted same-passage dedupe is **not** translated (projection) |
-| EPUB bytes installed (digest differs) | W8 with `observedBase` = current winner version; bytes staged to the blob pool |
+| live → deleted | W2 delete, `scope` = the lineages the accepted result deleted, `deletedAt` from the archive record |
+| deleted → live (newer snapshot, Merge undo of parking) | W3 restore naming **every uncleared deletion fact of those lineages at the baseline** (nonempty); a deleted lineage always has a deletion fact (the seed run created it from the archive's own `isDeleted`/`deletedAt`), so no evidence is fabricated; with none, no restore is emitted |
+| revival of a lineage projected `purged(expired)` | W3 restore |
+| revival of a lineage projected `purged(explicit)` | W1 create with `supersedes` |
+| verified permanent legacy tombstone | MC-7 only, per the policy above; otherwise nothing |
+| membership present/ranked/removed | M1, M2, M1r naming baseline epochs |
+| annotation new/changed/hidden | A1, A2, A3 naming the observed source group; accepted same-passage dedupe is **not** translated (projection) |
+| EPUB bytes installed | W8 with `observedBase` = the baseline winner version of that lineage; bytes staged to the pool |
 | original + sidecar installed | O1 bundle |
-| Replace omission | explicit delete ops per §4.5 only for keys the archive carries |
+| Replace omission | delete ops per §4.6, only for keys the archive carries (MC-4) |
 
-### 4.5 Durability, ordering, local edits
+### 4.5 Durability, ordering, conflicts
 
-A **run record** is stored durably before anything is published: route, shipped build id, trust set, `opClock`, `sourceManifestDigest`, **baseline cut** (applied cut + checkpoint id), `acceptedResultDigest`, approved MC ids, the **ordered translation list** and, per op, the **reserved op id `(writer, seq)` with its content hash**, plus **asset inputs** `{workKey, digest, size, stagedBlobPath}`. Publishing retries the same bytes (plan § C Operations). A crash after acceptance resumes from the record and never re-runs step 1 against moved local state.
+A **run record** is stored durably before anything is published: route, shipped build id, trust set, `opClock`, `sourceManifestDigest`, **baseline cut** (applied cut + checkpoint id), **the original fragments and presence bits** (manifest fragment, local pre-merge fragment, which top-level keys were present), `acceptedResultDigest`, approved MC ids, the **ordered translation list**, and per op the **reserved op id `(writer, seq)` with its exact canonical bytes** (not only a hash; if an encoder version is stored instead, the immutable inputs plus that versioned encoder must reproduce identical bytes), and the **asset inputs** `{lineage, digest, size, stagedBlobPath}`. Publishing retries the same bytes (plan § C). A crash after acceptance resumes from the record; step 1 never re-runs against moved local state.
 
-**Stamps are assigned at reservation** (counter above everything applied and everything already reserved). A **local edit that commits after reservation** therefore carries a greater stamp and wins every LWW/epoch register against the migration op; a **local edit that committed between acceptance and reservation** is detected at reservation by comparing each `(entity, group)` register with the baseline cut: if local facts exist beyond the baseline, that group's translation is dropped and recorded `localEditWins`; a local delete in that window stays uncleared because W3 names only deletions known at the baseline cut. The seed run is the same pipeline with an empty baseline. Unknown manifest keys are preserved verbatim as opaque facts (Android overlay rule becomes universal).
+**Stamps are assigned at reservation.** A local edit committed after reservation has a greater stamp and wins registers and epochs against the migration op. A local change committed **between acceptance and reservation** is detected at reservation, per kind, by comparing local facts beyond the baseline cut with the translation:
+
+| Kind | Conflict test | Result |
+|---|---|---|
+| scalar/LWW group | a local fact on `(lineage, group)` beyond baseline | drop that group's op, diagnostic `localEditWins` |
+| lifecycle | any local `D`, `R` or `P` on the lineage beyond baseline | drop the lifecycle op; a restore still names only baseline deletions, so a newer local delete stays uncleared |
+| membership | a local add/remove/move on the endpoint beyond baseline, or a named baseline epoch no longer live | drop the op for that endpoint |
+| asset | a local version fact on `(lineage, kind)` beyond baseline | drop the W8/O1; the staged blob stays referenced by the run record |
+| annotation | a local source fact or delete on a named source beyond baseline | drop the op |
+
+The seed run is the same pipeline with an empty baseline. Unknown manifest keys are preserved verbatim as opaque facts (Android overlay rule becomes universal).
 
 ### 4.6 Replace-only omission rules
 
