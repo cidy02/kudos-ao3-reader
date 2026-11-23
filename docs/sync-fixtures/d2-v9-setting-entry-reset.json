@@ -104,6 +104,7 @@
    ],
    "events": [],
    "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
     "orders": "allInterleavings",
     "orderCount": 6,
     "duplicates": [
@@ -160,6 +161,11 @@
        "b1"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 1
+       },
+       "pending": [],
        "works": {},
        "diagnostics": []
       }
@@ -170,7 +176,7 @@
      "orders": 24,
      "cutsChecked": 120,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },

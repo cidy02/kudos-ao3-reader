@@ -182,6 +182,7 @@
    ],
    "events": [],
    "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
     "orders": "allInterleavings",
     "orderCount": 3,
     "duplicates": [
@@ -234,6 +235,10 @@
        "m1"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 6
+       },
+       "pending": [],
        "works": {
         "X": {
          "lifecycle": "live"
@@ -254,7 +259,7 @@
      "orders": 6,
      "cutsChecked": 24,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -450,6 +455,7 @@
    ],
    "events": [],
    "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
     "orders": "allInterleavings",
     "orderCount": 1,
     "duplicates": [
@@ -484,7 +490,7 @@
      "orders": 1,
      "cutsChecked": 2,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -787,7 +793,7 @@
      "orders": 120,
      "cutsChecked": 720,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -1092,6 +1098,12 @@
        "m2"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 4,
+        "inc-b": 1,
+        "inc-c": 1
+       },
+       "pending": [],
        "works": {
         "Y": {
          "lifecycle": "live"
@@ -1109,7 +1121,7 @@
      "orders": 120,
      "cutsChecked": 720,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -1227,6 +1239,7 @@
    ],
    "events": [],
    "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
     "orders": "allInterleavings",
     "orderCount": 2,
     "duplicates": [
@@ -1266,7 +1279,7 @@
      "orders": 2,
      "cutsChecked": 6,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -1453,6 +1466,7 @@
    ],
    "events": [],
    "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
     "orders": "allInterleavings",
     "orderCount": 2,
     "duplicates": [
@@ -1499,6 +1513,10 @@
        "m1"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 6
+       },
+       "pending": [],
        "works": {
         "X": {
          "lifecycle": "live"
@@ -1519,7 +1537,7 @@
      "orders": 2,
      "cutsChecked": 6,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -1743,6 +1761,10 @@
        "q0"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 3
+       },
+       "pending": [],
        "works": {
         "q1": {
          "lifecycle": "live"
@@ -1757,7 +1779,7 @@
      "orders": 24,
      "cutsChecked": 120,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },

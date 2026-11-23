@@ -244,7 +244,7 @@
      "orders": 24,
      "cutsChecked": 120,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -536,6 +536,13 @@
        "p1b"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 1,
+        "inc-c": 1,
+        "inc-e": 1
+       },
+       "pending": [],
        "works": {
         "W-A": {
          "lifecycle": "purged",
@@ -552,7 +559,7 @@
      "orders": 24,
      "cutsChecked": 120,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -692,14 +699,15 @@
       "gen": "g0",
       "deletions": [
        "d1"
-      ],
-      "expiries": [
+      ]
+     },
+     "payload": {
+      "observedExpiry": [
        "p2"
       ]
      },
      "requires": [
-      "d1",
-      "p2"
+      "d1"
      ]
     }
    ],
@@ -760,23 +768,6 @@
        "d1"
       ],
       "finalPending": []
-     },
-     {
-      "name": "withhold p2",
-      "withheld": [
-       "p2"
-      ],
-      "order": [
-       "d1",
-       "r1"
-      ],
-      "expectedPendingAtEnd": [
-       "r1"
-      ],
-      "thenDeliver": [
-       "p2"
-      ],
-      "finalPending": []
      }
     ],
     "checkpoints": [],
@@ -785,7 +776,7 @@
      "orders": 6,
      "cutsChecked": 24,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -1027,7 +1018,7 @@
      "orders": 6,
      "cutsChecked": 24,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -1041,8 +1032,6 @@
         "W-B"
        ],
        "groups": {
-        "isFavorite": false,
-        "progress": 0.1,
         "title": "T"
        }
       }

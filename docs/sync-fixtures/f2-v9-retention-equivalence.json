@@ -278,6 +278,11 @@
        "r1"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 2,
+        "inc-b": 2
+       },
+       "pending": [],
        "works": {
         "W-A": {
          "lifecycle": "live"
@@ -295,7 +300,7 @@
      "orders": 120,
      "cutsChecked": 720,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -337,10 +342,10 @@
     "pending": [],
     "diagnostics": [
      {
-      "kind": "invalidReference",
-      "key": "W-A",
+      "kind": "invalidCommand",
+      "key": "rbad",
       "witness": "rbad",
-      "detail": "restore"
+      "detail": "restore:unrelatedName"
      }
     ]
    }
@@ -547,6 +552,11 @@
        "e2"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 3,
+        "inc-b": 1
+       },
+       "pending": [],
        "works": {
         "W-A": {
          "lifecycle": "deleted",
@@ -562,7 +572,7 @@
      "orders": 24,
      "cutsChecked": 120,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -696,6 +706,7 @@
    ],
    "events": [],
    "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
     "orders": "allInterleavings",
     "orderCount": 10,
     "duplicates": [
@@ -763,6 +774,11 @@
        "y1"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 3,
+        "inc-b": 1
+       },
+       "pending": [],
        "works": {
         "W-A": {
          "lifecycle": "live"
@@ -777,7 +793,7 @@
      "orders": 120,
      "cutsChecked": 720,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -982,6 +998,10 @@
        "r1"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 3
+       },
+       "pending": [],
        "works": {
         "W-A": {
          "lifecycle": "live"
@@ -996,7 +1016,7 @@
      "orders": 2,
      "cutsChecked": 6,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -1090,6 +1110,7 @@
    ],
    "events": [],
    "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
     "orders": "allInterleavings",
     "orderCount": 2,
     "duplicates": [
@@ -1136,6 +1157,10 @@
        "e1"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-b": 1
+       },
+       "pending": [],
        "works": {},
        "diagnostics": []
       }
@@ -1146,7 +1171,7 @@
      "orders": 2,
      "cutsChecked": 6,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -1328,14 +1353,13 @@
       "gen": "g0",
       "deletions": [
        "d1"
-      ],
-      "expiries": [
-       "p2"
       ]
      },
-     "requires": [
-      "p2"
-     ]
+     "payload": {
+      "observedExpiry": [
+       "p2"
+      ]
+     }
     }
    ],
    "events": [],
@@ -1440,27 +1464,6 @@
        "m1"
       ],
       "finalPending": []
-     },
-     {
-      "name": "withhold p2",
-      "withheld": [
-       "p2"
-      ],
-      "order": [
-       "q0",
-       "w1",
-       "m1",
-       "m2",
-       "d1",
-       "r1"
-      ],
-      "expectedPendingAtEnd": [
-       "r1"
-      ],
-      "thenDeliver": [
-       "p2"
-      ],
-      "finalPending": []
      }
     ],
     "checkpoints": [
@@ -1486,6 +1489,12 @@
        "w1"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 4,
+        "inc-b": 1,
+        "inc-c": 1
+       },
+       "pending": [],
        "works": {
         "W-A": {
          "lifecycle": "purged",
@@ -1505,7 +1514,7 @@
      "orders": 40,
      "cutsChecked": 320,
      "seed": 7,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -1702,6 +1711,11 @@
        "p2"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 1
+       },
+       "pending": [],
        "works": {},
        "diagnostics": []
       }
@@ -1712,7 +1726,7 @@
      "orders": 6,
      "cutsChecked": 24,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -1869,6 +1883,10 @@
        "p1"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 2
+       },
+       "pending": [],
        "works": {},
        "diagnostics": []
       }
@@ -1879,7 +1897,7 @@
      "orders": 6,
      "cutsChecked": 24,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -2096,6 +2114,11 @@
        "t1"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 2
+       },
+       "pending": [],
        "works": {
         "W-A": {
          "lifecycle": "live"
@@ -2110,7 +2133,7 @@
      "orders": 120,
      "cutsChecked": 720,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -2199,6 +2222,7 @@
    ],
    "events": [],
    "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
     "orders": "allInterleavings",
     "orderCount": 2,
     "duplicates": [
@@ -2245,6 +2269,10 @@
        "c0"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1
+       },
+       "pending": [],
        "works": {
         "W-A": {
          "lifecycle": "live"
@@ -2259,7 +2287,7 @@
      "orders": 2,
      "cutsChecked": 6,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -2287,6 +2315,681 @@
     },
     "pending": [],
     "diagnostics": []
+   }
+  },
+  {
+   "name": "max-rank-register-survives-the-checkpoint",
+   "description": "seriesPosition 9, then 3, checkpoint, then 4: max-rank gives 9, an LWW retention would give 4",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "progress": 0.1,
+        "isFavorite": false
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
+   "ops": [
+    {
+     "id": "e1",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "payload": {
+      "groups": {
+       "seriesPosition": 9
+      }
+     }
+    },
+    {
+     "id": "e2",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      3,
+      "inc-a",
+      3
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "payload": {
+      "groups": {
+       "seriesPosition": 3
+      }
+     }
+    },
+    {
+     "id": "e3",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      4,
+      "inc-b",
+      1
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "payload": {
+      "groups": {
+       "seriesPosition": 4
+      }
+     }
+    },
+    {
+     "id": "e4",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      5,
+      "inc-c",
+      1
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "payload": {
+      "groups": {
+       "preservationStatus": "preserved"
+      }
+     }
+    },
+    {
+     "id": "e5",
+     "writer": "inc-c",
+     "seq": 2,
+     "stamp": [
+      6,
+      "inc-c",
+      2
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "payload": {
+      "groups": {
+       "preservationStatus": "queued"
+      }
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
+    "orders": "allInterleavings",
+    "orderCount": 30,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "e1",
+       "e1",
+       "e2",
+       "e2",
+       "e3",
+       "e3",
+       "e4",
+       "e4",
+       "e5",
+       "e5"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "e1",
+       "e2",
+       "e3",
+       "e4",
+       "e5",
+       "e1",
+       "e2",
+       "e3",
+       "e4",
+       "e5"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "e1",
+       "e2",
+       "e3",
+       "e4",
+       "e5"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": [
+     {
+      "name": "checkpoint after e1,e2,e4,e5, then e3",
+      "cutAfter": [
+       "e1",
+       "e2",
+       "e4",
+       "e5"
+      ],
+      "thenOrder": [
+       "e3"
+      ],
+      "checkpointCut": [
+       "e1",
+       "e2",
+       "e4",
+       "e5"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 3,
+        "inc-c": 2
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "live"
+        }
+       },
+       "diagnostics": []
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 120,
+     "cutsChecked": 720,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "preservationStatus": "preserved",
+        "progress": 0.1,
+        "seriesPosition": 9
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 1,
+     "inc-c": 2
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "value-ordered-set-once-and-grow-only-registers",
+   "description": "coverPin by canonical value, importSource set-once by lowest stamp, hasGivenKudos OR",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "progress": 0.1,
+        "isFavorite": false
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
+   "ops": [
+    {
+     "id": "c1",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "payload": {
+      "groups": {
+       "coverPin": {
+        "tier": 2,
+        "pinnedAt": 0
+       },
+       "importSource": "fileA",
+       "hasGivenKudos": false
+      }
+     }
+    },
+    {
+     "id": "c2",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-b",
+      1
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "payload": {
+      "groups": {
+       "coverPin": {
+        "tier": 1,
+        "pinnedAt": 0
+       },
+       "importSource": "fileB",
+       "hasGivenKudos": true
+      }
+     }
+    },
+    {
+     "id": "c3",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      4,
+      "inc-c",
+      1
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "payload": {
+      "groups": {
+       "hasGivenKudos": false,
+       "importSource": "fileC"
+      }
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
+    "orders": "allInterleavings",
+    "orderCount": 6,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "c1",
+       "c1",
+       "c2",
+       "c2",
+       "c3",
+       "c3"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "c1",
+       "c2",
+       "c3",
+       "c1",
+       "c2",
+       "c3"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "c1",
+       "c2",
+       "c3"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": [
+     {
+      "name": "checkpoint after c1,c2, then c3",
+      "cutAfter": [
+       "c1",
+       "c2"
+      ],
+      "thenOrder": [
+       "c3"
+      ],
+      "checkpointCut": [
+       "c1",
+       "c2"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 2,
+        "inc-b": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "live"
+        }
+       },
+       "diagnostics": []
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 6,
+     "cutsChecked": 24,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "coverPin": {
+         "tier": 2,
+         "pinnedAt": 0
+        },
+        "hasGivenKudos": true,
+        "importSource": "fileA",
+        "isFavorite": false,
+        "progress": 0.1
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 2,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "malformed-group-witness",
+   "description": "A malformed setting then a valid one: the dropped group keeps a durable witness, so the diagnostic survives the checkpoint",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
+   "ops": [
+    {
+     "id": "s1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-a",
+      1
+     ],
+     "kind": "setting.entry.set",
+     "target": "readerFontPt",
+     "payload": {
+      "value": "NaN",
+      "malformed": true
+     }
+    },
+    {
+     "id": "s2",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-b",
+      1
+     ],
+     "kind": "setting.entry.set",
+     "target": "readerFontPt",
+     "payload": {
+      "value": 18
+     }
+    },
+    {
+     "id": "w0",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      3,
+      "inc-a",
+      2
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "w1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      4,
+      "inc-c",
+      1
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "payload": {
+      "groups": {
+       "progress": "bad",
+       "isFavorite": true
+      },
+      "malformed": [
+       "progress"
+      ]
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
+    "orders": "allInterleavings",
+    "orderCount": 12,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "s1",
+       "s1",
+       "s2",
+       "s2",
+       "w0",
+       "w0",
+       "w1",
+       "w1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "s1",
+       "s2",
+       "w0",
+       "w1",
+       "s1",
+       "s2",
+       "w0",
+       "w1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "s1",
+       "s2",
+       "w0",
+       "w1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": [
+     {
+      "name": "checkpoint after both settings, then the work edit",
+      "cutAfter": [
+       "s1",
+       "s2"
+      ],
+      "thenOrder": [
+       "w0",
+       "w1"
+      ],
+      "checkpointCut": [
+       "s1",
+       "s2"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 1
+       },
+       "pending": [],
+       "works": {},
+       "diagnostics": [
+        {
+         "kind": "malformedGroup",
+         "key": "readerFontPt|value",
+         "witness": "s1"
+        }
+       ]
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "isFavorite": true,
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {
+      "readerFontPt": 18
+     },
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 2,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "malformedGroup",
+      "key": "W-A|progress",
+      "witness": "w1"
+     },
+     {
+      "kind": "malformedGroup",
+      "key": "readerFontPt|value",
+      "witness": "s1"
+     }
+    ]
    }
   }
  ]

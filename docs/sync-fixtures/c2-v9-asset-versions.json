@@ -114,6 +114,7 @@
    ],
    "events": [],
    "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
     "orders": "allInterleavings",
     "orderCount": 2,
     "duplicates": [
@@ -160,6 +161,11 @@
        "s1"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 2,
+        "inc-b": 1
+       },
+       "pending": [],
        "works": {
         "W-A": {
          "lifecycle": "deleted",
@@ -175,7 +181,7 @@
      "orders": 2,
      "cutsChecked": 6,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -385,7 +391,7 @@
      "orders": 6,
      "cutsChecked": 24,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -608,7 +614,7 @@
      "orders": 6,
      "cutsChecked": 24,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -743,6 +749,7 @@
    ],
    "events": [],
    "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
     "orders": "allInterleavings",
     "orderCount": 2,
     "duplicates": [
@@ -782,7 +789,7 @@
      "orders": 2,
      "cutsChecked": 6,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -1020,6 +1027,11 @@
        "r3"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 3,
+        "inc-c": 1
+       },
+       "pending": [],
        "works": {
         "W-A": {
          "lifecycle": "live"
@@ -1041,7 +1053,7 @@
      "orders": 6,
      "cutsChecked": 24,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -1174,6 +1186,10 @@
        "r1"
       ]
      },
+     "payload": {
+      "owner": "W-A",
+      "assetKind": "epub"
+     },
      "requires": [
       "r1"
      ]
@@ -1244,6 +1260,11 @@
        "rm1"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 3,
+        "inc-b": 1
+       },
+       "pending": [],
        "works": {
         "W-A": {
          "lifecycle": "live"
@@ -1258,7 +1279,7 @@
      "orders": 2,
      "cutsChecked": 6,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -1376,6 +1397,10 @@
        "r1"
       ]
      },
+     "payload": {
+      "owner": "W-A",
+      "assetKind": "epub"
+     },
      "requires": [
       "r1"
      ]
@@ -1469,7 +1494,7 @@
      "orders": 6,
      "cutsChecked": 24,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -1605,6 +1630,7 @@
    ],
    "events": [],
    "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
     "orders": "allInterleavings",
     "orderCount": 1,
     "duplicates": [
@@ -1639,7 +1665,7 @@
      "orders": 1,
      "cutsChecked": 2,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -1831,6 +1857,7 @@
    ],
    "events": [],
    "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
     "orders": "allInterleavings",
     "orderCount": 12,
     "duplicates": [
@@ -1880,7 +1907,7 @@
      "orders": 24,
      "cutsChecked": 120,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -1993,6 +2020,7 @@
    ],
    "events": [],
    "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
     "orders": "allInterleavings",
     "orderCount": 2,
     "duplicates": [
@@ -2032,7 +2060,7 @@
      "orders": 2,
      "cutsChecked": 6,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -2245,7 +2273,7 @@
      "orders": 120,
      "cutsChecked": 720,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -2434,6 +2462,10 @@
        "r2"
       ]
      },
+     "payload": {
+      "owner": "W-A",
+      "assetKind": "epub"
+     },
      "requires": [
       "r2"
      ]
@@ -2529,6 +2561,11 @@
        "r2"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 4,
+        "inc-b": 2
+       },
+       "pending": [],
        "works": {
         "W-A": {
          "lifecycle": "live"
@@ -2550,7 +2587,7 @@
      "orders": 120,
      "cutsChecked": 720,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -2800,7 +2837,7 @@
      "orders": 6,
      "cutsChecked": 24,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -2948,6 +2985,10 @@
        "r1"
       ]
      },
+     "payload": {
+      "owner": "W-A",
+      "assetKind": "epub"
+     },
      "requires": [
       "r1"
      ]
@@ -3050,6 +3091,11 @@
        "rm1"
       ],
       "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 3,
+        "inc-b": 1
+       },
+       "pending": [],
        "works": {
         "W-A": {
          "lifecycle": "live"
@@ -3064,7 +3110,7 @@
      "orders": 6,
      "cutsChecked": 24,
      "seed": null,
-     "compared": "normalized projection and diagnostics",
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
@@ -3099,6 +3145,258 @@
     },
     "pending": [],
     "diagnostics": []
+   }
+  },
+  {
+   "name": "mixed-target-removal-rejected-as-a-unit",
+   "description": "A removal naming a version of another owner is rejected as a unit: nothing is hidden",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     {
+      "id": "i2",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-A",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "d1",
+       "size": 1000
+      }
+     },
+     {
+      "id": "i3",
+      "writer": "inc-a",
+      "seq": 3,
+      "stamp": [
+       3,
+       "inc-a",
+       3
+      ],
+      "kind": "work.create",
+      "target": "W-C",
+      "payload": {
+       "ao3WorkID": 999,
+       "urls": [
+        "https://archiveofourown.org/works/999"
+       ],
+       "groups": {
+        "title": "U"
+       }
+      }
+     },
+     {
+      "id": "i4",
+      "writer": "inc-a",
+      "seq": 4,
+      "stamp": [
+       4,
+       "inc-a",
+       4
+      ],
+      "kind": "asset.write",
+      "target": "W-C",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "dC",
+       "size": 10
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
+   "ops": [
+    {
+     "id": "r1",
+     "writer": "inc-a",
+     "seq": 5,
+     "stamp": [
+      5,
+      "inc-a",
+      5
+     ],
+     "kind": "asset.write",
+     "target": "W-A",
+     "observed": {
+      "base": "i2"
+     },
+     "payload": {
+      "assetKind": "epub",
+      "digest": "d2",
+      "size": 1200
+     }
+    },
+    {
+     "id": "rm1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      6,
+      "inc-b",
+      1
+     ],
+     "kind": "asset.remove",
+     "observed": {
+      "names": [
+       "r1",
+       "i4"
+      ]
+     },
+     "payload": {
+      "owner": "W-A",
+      "assetKind": "epub"
+     },
+     "requires": [
+      "i4",
+      "r1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 2,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "r1",
+       "r1",
+       "rm1",
+       "rm1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "r1",
+       "rm1",
+       "r1",
+       "rm1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "r1",
+       "rm1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold r1",
+      "withheld": [
+       "r1"
+      ],
+      "order": [
+       "rm1"
+      ],
+      "expectedPendingAtEnd": [
+       "rm1"
+      ],
+      "thenDeliver": [
+       "r1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 2,
+     "cutsChecked": 6,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "title": "T"
+       },
+       "asset": {
+        "epub": {
+         "digest": "d2",
+         "alternates": []
+        }
+       }
+      },
+      "W-C": {
+       "lifecycle": "live",
+       "members": [
+        "W-C"
+       ],
+       "groups": {
+        "title": "U"
+       },
+       "asset": {
+        "epub": {
+         "digest": "dC",
+         "alternates": []
+        }
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 5,
+     "inc-b": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "invalidCommand",
+      "key": "rm1",
+      "witness": "rm1",
+      "detail": "assetRemove"
+     }
+    ]
    }
   }
  ]
