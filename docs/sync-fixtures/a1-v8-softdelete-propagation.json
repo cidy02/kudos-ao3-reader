@@ -1,0 +1,69 @@
+{
+  "schema": "kudos.sync-fixture/1",
+  "id": "a1",
+  "slice": "a",
+  "kind": "v8-compat",
+  "route": "reconcile",
+  "opClock": "2026-10-03T00:00:00Z",
+  "title": "Soft delete on another device reaches a live copy; the file's deletion schedule is never copied",
+  "refs": [
+    "W2",
+    "DEC-5",
+    "KB:6147-6164",
+    "BMS:812-816",
+    "BMap:98-117"
+  ],
+  "local": {
+    "works": [
+      {
+        "key": "11111111-1111-4111-8111-111111111111",
+        "ao3WorkID": 111,
+        "lifecycle": "live",
+        "lastModifiedAt": "2026-10-01T10:00:00Z"
+      }
+    ]
+  },
+  "incoming": {
+    "works": [
+      {
+        "key": "11111111-1111-4111-8111-111111111111",
+        "ao3WorkID": 111,
+        "isDeleted": true,
+        "deletedAt": "2026-10-02T09:00:00Z",
+        "permanentDeletionScheduledAt": "2026-01-01T00:00:00Z",
+        "lastModifiedAt": "2026-10-02T09:00:00Z"
+      }
+    ]
+  },
+  "expected": {
+    "ios": {
+      "works": [
+        {
+          "key": "11111111-1111-4111-8111-111111111111",
+          "lifecycle": "deleted",
+          "deletedAt": "2026-10-02T09:00:00Z",
+          "deadline": "2027-01-01T00:00:00Z"
+        }
+      ]
+    },
+    "android": {
+      "works": [
+        {
+          "key": "11111111-1111-4111-8111-111111111111",
+          "lifecycle": "deleted",
+          "deletedAt": "2026-10-02T09:00:00Z",
+          "deadline": "2027-01-01T00:00:00Z"
+        }
+      ]
+    }
+  },
+  "agree": true,
+  "note": "Deadline is opClock+90d on both (receive time, not deletion time); a hostile past schedule is ignored.",
+  "v9Outcome": {
+    "ops": [
+      "work.softDelete(deletedAt=2026-10-02T09:00:00Z)"
+    ],
+    "deadline": "2026-12-31T09:00:00Z",
+    "change": "deadline anchors to the deletion, not to the receiver (DEC-5)"
+  }
+}

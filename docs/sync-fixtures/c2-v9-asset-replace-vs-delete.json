@@ -1,0 +1,175 @@
+{
+  "schema": "kudos.sync-fixture/1",
+  "id": "c2",
+  "slice": "c",
+  "kind": "v9-concurrency",
+  "title": "EPUB replacement racing soft delete, purge and restore",
+  "refs": [
+    "W7",
+    "DEC-12",
+    "DEC-14",
+    "DEC-15"
+  ],
+  "initial": {
+    "works": [
+      {
+        "key": "11111111-1111-4111-8111-111111111111",
+        "gen": "g0",
+        "lifecycle": "live",
+        "asset": {
+          "epub": {
+            "digest": "d1",
+            "alternates": []
+          }
+        }
+      }
+    ],
+    "blobs": [
+      "d1",
+      "d2"
+    ]
+  },
+  "ops": [
+    {
+      "id": "r1",
+      "writer": "inc-a",
+      "stamp": [
+        5,
+        "inc-a",
+        1
+      ],
+      "kind": "asset.replace",
+      "target": "11111111-1111-4111-8111-111111111111",
+      "payload": {
+        "assetKind": "epub",
+        "digest": "d2",
+        "baseDigest": "d1"
+      },
+      "gen": "g0"
+    },
+    {
+      "id": "s1",
+      "writer": "inc-b",
+      "stamp": [
+        6,
+        "inc-b",
+        1
+      ],
+      "kind": "work.softDelete",
+      "target": "11111111-1111-4111-8111-111111111111",
+      "payload": {
+        "deletedAt": "2026-10-02T12:00:00Z"
+      },
+      "gen": "g0"
+    },
+    {
+      "id": "p1",
+      "writer": "inc-b",
+      "stamp": [
+        7,
+        "inc-b",
+        2
+      ],
+      "kind": "work.purge",
+      "target": "11111111-1111-4111-8111-111111111111",
+      "payload": {
+        "reason": "explicit"
+      },
+      "requires": [
+        "s1"
+      ],
+      "gen": "g0"
+    },
+    {
+      "id": "t1",
+      "writer": "inc-b",
+      "stamp": [
+        7,
+        "inc-b",
+        2
+      ],
+      "kind": "work.restore",
+      "target": "11111111-1111-4111-8111-111111111111",
+      "payload": {
+        "deletions": [
+          "s1"
+        ]
+      },
+      "requires": [
+        "s1"
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "replace vs delete",
+      "ops": [
+        "r1",
+        "s1"
+      ],
+      "expected": {
+        "works": [
+          {
+            "key": "11111111-1111-4111-8111-111111111111",
+            "lifecycle": "deleted",
+            "gen": "g0",
+            "asset": {
+              "epub": {
+                "digest": "d2",
+                "alternates": []
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "replace vs delete then purge",
+      "ops": [
+        "r1",
+        "s1",
+        "p1"
+      ],
+      "expected": {
+        "works": [
+          {
+            "key": "11111111-1111-4111-8111-111111111111",
+            "lifecycle": "purged"
+          }
+        ],
+        "blobs": [
+          "d1",
+          "d2"
+        ],
+        "note": "blob reclaim disabled: bytes stay in the pool, reference dropped",
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "replace vs delete then restore",
+      "ops": [
+        "r1",
+        "s1",
+        "t1"
+      ],
+      "expected": {
+        "works": [
+          {
+            "key": "11111111-1111-4111-8111-111111111111",
+            "lifecycle": "live",
+            "gen": "r(s1)",
+            "asset": {
+              "epub": {
+                "digest": "d2",
+                "alternates": []
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "orders": "allInterleavings (same-writer order fixed)",
+  "duplicates": "deliver every op twice",
+  "expectedCut": "all delivered ops applied; replace to a purged lineage counts as applied-stale, not pending"
+}

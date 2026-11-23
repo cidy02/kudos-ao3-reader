@@ -1,0 +1,94 @@
+{
+  "schema": "kudos.sync-fixture/1",
+  "id": "d2",
+  "slice": "ext",
+  "kind": "v9-concurrency",
+  "title": "Entry-level reset beats an older set (settings map entry and a pronunciation)",
+  "refs": [
+    "P2",
+    "P3",
+    "DEC-16"
+  ],
+  "initial": {
+    "settings": {
+      "commentDrafts": {
+        "e1": "hello"
+      }
+    },
+    "pronunciations": {}
+  },
+  "ops": [
+    {
+      "id": "a1",
+      "writer": "inc-a",
+      "stamp": [
+        3,
+        "inc-a",
+        1
+      ],
+      "kind": "setting.entry.set",
+      "target": "commentDrafts|e1",
+      "payload": {
+        "value": "hi"
+      }
+    },
+    {
+      "id": "a2",
+      "writer": "inc-a",
+      "stamp": [
+        5,
+        "inc-a",
+        2
+      ],
+      "kind": "pronunciation.reset",
+      "target": "global|tomato",
+      "payload": {}
+    },
+    {
+      "id": "b1",
+      "writer": "inc-b",
+      "stamp": [
+        4,
+        "inc-b",
+        1
+      ],
+      "kind": "setting.entry.reset",
+      "target": "commentDrafts|e1",
+      "payload": {}
+    },
+    {
+      "id": "b2",
+      "writer": "inc-b",
+      "stamp": [
+        4,
+        "inc-b",
+        2
+      ],
+      "kind": "pronunciation.set",
+      "target": "global|tomato",
+      "payload": {
+        "ipa": "x"
+      }
+    }
+  ],
+  "orders": "allInterleavings",
+  "duplicates": "deliver every op twice",
+  "expected": {
+    "settings": {
+      "commentDrafts": {}
+    },
+    "pronunciations": {},
+    "retainedResets": {
+      "commentDrafts|e1": [
+        4,
+        "inc-b",
+        1
+      ],
+      "global|tomato": [
+        5,
+        "inc-a",
+        2
+      ]
+    }
+  }
+}

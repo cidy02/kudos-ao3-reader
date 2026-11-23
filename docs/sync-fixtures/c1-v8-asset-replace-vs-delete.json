@@ -1,0 +1,143 @@
+{
+  "schema": "kudos.sync-fixture/1",
+  "id": "c1",
+  "slice": "c",
+  "kind": "v8-compat",
+  "route": "reconcile",
+  "opClock": "2026-10-04T00:00:00Z",
+  "title": "An EPUB replacement on one device races a soft delete and a restore on another; the metadata clock stands in for byte freshness",
+  "refs": [
+    "W7",
+    "N-4",
+    "N-5",
+    "KB:6100-6130",
+    "BMS:2775-2797",
+    "FS:837-854",
+    "FS:1003"
+  ],
+  "cases": [
+    {
+      "name": "replacement newer than deletion",
+      "local": {
+        "works": [
+          {
+            "key": "11111111-1111-4111-8111-111111111111",
+            "lifecycle": "deleted",
+            "lastModifiedAt": "2026-10-02T12:00:00Z",
+            "epub": "d1"
+          }
+        ]
+      },
+      "incoming": {
+        "works": [
+          {
+            "key": "11111111-1111-4111-8111-111111111111",
+            "lifecycle": "live",
+            "lastModifiedAt": "2026-10-02T13:00:00Z",
+            "epub": "d2"
+          }
+        ]
+      },
+      "expected": {
+        "ios": {
+          "works": [
+            {
+              "key": "11111111-1111-4111-8111-111111111111",
+              "lifecycle": "live",
+              "epub": "d2"
+            }
+          ]
+        },
+        "android": {
+          "works": [
+            {
+              "key": "11111111-1111-4111-8111-111111111111",
+              "lifecycle": "live",
+              "epub": "d2"
+            }
+          ]
+        }
+      },
+      "defect": "N-4: the refresh revives a deleted work"
+    },
+    {
+      "name": "replacement older than deletion",
+      "local": {
+        "works": [
+          {
+            "key": "11111111-1111-4111-8111-111111111111",
+            "lifecycle": "deleted",
+            "lastModifiedAt": "2026-10-02T12:00:00Z",
+            "epub": "d1"
+          }
+        ]
+      },
+      "incoming": {
+        "works": [
+          {
+            "key": "11111111-1111-4111-8111-111111111111",
+            "lifecycle": "live",
+            "lastModifiedAt": "2026-10-02T11:00:00Z",
+            "epub": "d2"
+          }
+        ]
+      },
+      "expected": {
+        "ios": {
+          "works": [
+            {
+              "key": "11111111-1111-4111-8111-111111111111",
+              "lifecycle": "deleted",
+              "epub": "d1"
+            }
+          ]
+        },
+        "android": {
+          "works": [
+            {
+              "key": "11111111-1111-4111-8111-111111111111",
+              "lifecycle": "deleted",
+              "epub": "d1"
+            }
+          ]
+        }
+      },
+      "defect": "newer bytes d2 are never installed on the deleted copy"
+    },
+    {
+      "name": "later restore of the stale copy overwrites newer bytes",
+      "local": {
+        "works": [
+          {
+            "key": "11111111-1111-4111-8111-111111111111",
+            "lifecycle": "live",
+            "lastModifiedAt": "2026-10-03T00:00:00Z",
+            "epub": "d1"
+          }
+        ]
+      },
+      "afterIncomingFrom": "device holding d2 with lastModifiedAt 2026-10-02T13:00:00Z",
+      "expected": {
+        "ios": {
+          "works": [
+            {
+              "key": "11111111-1111-4111-8111-111111111111",
+              "epub": "d1"
+            }
+          ]
+        },
+        "android": {
+          "works": [
+            {
+              "key": "11111111-1111-4111-8111-111111111111",
+              "epub": "d1"
+            }
+          ]
+        }
+      },
+      "defect": "N-5: the device holding d2 is replaced by d1 (unless the work is preserved)"
+    }
+  ],
+  "agree": true,
+  "v9Outcome": "asset reference has its own stamp (DEC-15): d2 stays the reference in every case; deletion and restore never touch it; see c2"
+}

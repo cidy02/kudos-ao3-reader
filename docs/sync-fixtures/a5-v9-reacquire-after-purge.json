@@ -1,0 +1,92 @@
+{
+  "schema": "kudos.sync-fixture/1",
+  "id": "a5",
+  "slice": "a",
+  "kind": "v9-concurrency",
+  "title": "Deliberate re-acquisition after a permanent delete, and a stale edit to the old lineage",
+  "refs": [
+    "W5",
+    "DEC-7"
+  ],
+  "initial": {
+    "works": [
+      {
+        "key": "11111111-1111-4111-8111-111111111111",
+        "ao3WorkID": 111,
+        "gen": "g0",
+        "lifecycle": "deleted"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "id": "p1",
+      "writer": "inc-a",
+      "stamp": [
+        7,
+        "inc-a",
+        1
+      ],
+      "kind": "work.purge",
+      "target": "11111111-1111-4111-8111-111111111111",
+      "gen": "g0",
+      "payload": {
+        "reason": "explicit"
+      }
+    },
+    {
+      "id": "n1",
+      "writer": "inc-b",
+      "stamp": [
+        8,
+        "inc-b",
+        1
+      ],
+      "kind": "work.acquire",
+      "target": "22222222-2222-4222-8222-222222222222",
+      "payload": {
+        "ao3WorkID": 111
+      },
+      "requires": [
+        "p1"
+      ],
+      "supersedes": "p1"
+    },
+    {
+      "id": "s1",
+      "writer": "inc-c",
+      "stamp": [
+        7,
+        "inc-c",
+        1
+      ],
+      "kind": "work.edit",
+      "target": "11111111-1111-4111-8111-111111111111",
+      "gen": "g0",
+      "payload": {
+        "isFavorite": true
+      }
+    }
+  ],
+  "expected": {
+    "works": [
+      {
+        "key": "22222222-2222-4222-8222-222222222222",
+        "ao3WorkID": 111,
+        "lifecycle": "live",
+        "gen": "g0:n1"
+      },
+      {
+        "key": "11111111-1111-4111-8111-111111111111",
+        "lifecycle": "purged"
+      }
+    ],
+    "aliases": {},
+    "diagnostics": [
+      "edit s1 stale: lineage purged"
+    ]
+  },
+  "orders": "allInterleavings",
+  "duplicates": "deliver every op twice",
+  "note": "A purged lineage never takes part in alias matching, so WB is a new entity, not an alias of WA."
+}

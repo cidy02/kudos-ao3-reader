@@ -1,0 +1,207 @@
+{
+  "schema": "kudos.sync-fixture/1",
+  "id": "b2",
+  "slice": "b",
+  "kind": "v9-concurrency",
+  "title": "Required test: two devices create the same AO3 work under different UUIDs, with annotations and queue moves; any order, identical state",
+  "refs": [
+    "I1",
+    "M1",
+    "M2",
+    "A1",
+    "DEC-8",
+    "DEC-9",
+    "DEC-10",
+    "DEC-11"
+  ],
+  "initial": {
+    "queues": [
+      {
+        "key": "q1"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "id": "a1",
+      "writer": "inc-a",
+      "stamp": [
+        1,
+        "inc-a",
+        1
+      ],
+      "kind": "work.create",
+      "target": "11111111-1111-4111-8111-111111111111",
+      "payload": {
+        "ao3WorkID": 111,
+        "title": "T"
+      }
+    },
+    {
+      "id": "a2",
+      "writer": "inc-a",
+      "stamp": [
+        2,
+        "inc-a",
+        2
+      ],
+      "kind": "annotation.add",
+      "target": "annA",
+      "payload": {
+        "work": "11111111-1111-4111-8111-111111111111",
+        "kind": "highlight",
+        "locator": "epubcfi(/6/4!/4/2)",
+        "note": "x"
+      },
+      "requires": [
+        "a1"
+      ]
+    },
+    {
+      "id": "a3",
+      "writer": "inc-a",
+      "stamp": [
+        3,
+        "inc-a",
+        3
+      ],
+      "kind": "queue.membership.add",
+      "target": "q1|11111111-1111-4111-8111-111111111111",
+      "payload": {},
+      "requires": [
+        "a1"
+      ]
+    },
+    {
+      "id": "a4",
+      "writer": "inc-a",
+      "stamp": [
+        4,
+        "inc-a",
+        4
+      ],
+      "kind": "queue.membership.move",
+      "target": "q1|11111111-1111-4111-8111-111111111111",
+      "payload": {
+        "rank": 2
+      }
+    },
+    {
+      "id": "b1",
+      "writer": "inc-b",
+      "stamp": [
+        1,
+        "inc-b",
+        1
+      ],
+      "kind": "work.create",
+      "target": "22222222-2222-4222-8222-222222222222",
+      "payload": {
+        "ao3WorkID": 111,
+        "title": "T"
+      }
+    },
+    {
+      "id": "b2",
+      "writer": "inc-b",
+      "stamp": [
+        2,
+        "inc-b",
+        2
+      ],
+      "kind": "annotation.add",
+      "target": "annB",
+      "payload": {
+        "work": "22222222-2222-4222-8222-222222222222",
+        "kind": "highlight",
+        "locator": "epubcfi(/6/4!/4/2)",
+        "note": "y"
+      },
+      "requires": [
+        "b1"
+      ]
+    },
+    {
+      "id": "b3",
+      "writer": "inc-b",
+      "stamp": [
+        3,
+        "inc-b",
+        3
+      ],
+      "kind": "queue.membership.add",
+      "target": "q1|22222222-2222-4222-8222-222222222222",
+      "payload": {},
+      "requires": [
+        "b1"
+      ]
+    },
+    {
+      "id": "b4",
+      "writer": "inc-b",
+      "stamp": [
+        4,
+        "inc-b",
+        4
+      ],
+      "kind": "queue.membership.move",
+      "target": "q1|22222222-2222-4222-8222-222222222222",
+      "payload": {
+        "rank": 1
+      }
+    }
+  ],
+  "orders": "allInterleavings of [a1..a4] and [b1..b4] (70 orders) in both exchange directions",
+  "duplicates": "deliver every op twice, and again after a checkpoint taken at a random cut",
+  "derived": [
+    "work.alias(22222222-2222-4222-8222-222222222222 -> 11111111-1111-4111-8111-111111111111) emitted idempotently by either device after both creates apply"
+  ],
+  "expected": {
+    "works": [
+      {
+        "key": "11111111-1111-4111-8111-111111111111",
+        "ao3WorkID": 111,
+        "title": "T",
+        "lifecycle": "live",
+        "gen": "g0:a1"
+      }
+    ],
+    "aliases": {
+      "22222222-2222-4222-8222-222222222222": "11111111-1111-4111-8111-111111111111"
+    },
+    "annotations": [
+      {
+        "id": "annB",
+        "work": "11111111-1111-4111-8111-111111111111",
+        "note": "y",
+        "live": true,
+        "why": "greater stamp (2,inc-b,2) > (2,inc-a,2)"
+      },
+      {
+        "id": "annA",
+        "live": false,
+        "dedupeAlias": "annB"
+      },
+      {
+        "id": "uuidv5(ns,annA|sha256(x))",
+        "live": false,
+        "parkedNote": "x"
+      }
+    ],
+    "memberships": [
+      {
+        "queue": "q1",
+        "work": "11111111-1111-4111-8111-111111111111",
+        "present": true,
+        "rank": 1,
+        "why": "rank stamp (4,inc-b,4) wins"
+      }
+    ],
+    "pending": [],
+    "appliedCut": {
+      "inc-a": 4,
+      "inc-b": 4
+    }
+  },
+  "survivorRule": "lowest canonical UUID (DEC-9, Q-4)"
+}

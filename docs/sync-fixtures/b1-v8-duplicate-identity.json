@@ -1,0 +1,179 @@
+{
+  "schema": "kudos.sync-fixture/1",
+  "id": "b1",
+  "slice": "b",
+  "kind": "v8-compat",
+  "route": "reconcile",
+  "opClock": "2026-10-03T00:00:00Z",
+  "title": "Same AO3 work created on two devices under different UUIDs, with a queue membership and a same-passage annotation each",
+  "refs": [
+    "I1",
+    "M1",
+    "A1",
+    "N-3",
+    "X-4",
+    "X-10",
+    "KB:4182",
+    "BMS:1815",
+    "KB:5627",
+    "BMS:2291"
+  ],
+  "local": {
+    "device": "B",
+    "works": [
+      {
+        "key": "22222222-2222-4222-8222-222222222222",
+        "ao3WorkID": 111
+      }
+    ],
+    "queues": [
+      {
+        "key": "q1",
+        "name": "Later"
+      }
+    ],
+    "memberships": [
+      {
+        "id": "mB",
+        "queue": "q1",
+        "work": "22222222-2222-4222-8222-222222222222",
+        "rank": 1,
+        "lastModifiedAt": "2026-10-01T10:00:00Z"
+      }
+    ],
+    "annotations": [
+      {
+        "id": "annB",
+        "work": "22222222-2222-4222-8222-222222222222",
+        "locator": "epubcfi(/6/4!/4/2)",
+        "note": "y",
+        "lastModifiedAt": "2026-10-01T10:05:00Z"
+      }
+    ]
+  },
+  "incoming": {
+    "device": "A",
+    "works": [
+      {
+        "key": "11111111-1111-4111-8111-111111111111",
+        "ao3WorkID": 111,
+        "lastModifiedAt": "2026-10-01T10:10:00Z"
+      }
+    ],
+    "queues": [
+      {
+        "key": "q1",
+        "name": "Later"
+      }
+    ],
+    "memberships": [
+      {
+        "id": "mA",
+        "queue": "q1",
+        "work": "11111111-1111-4111-8111-111111111111",
+        "rank": 2,
+        "lastModifiedAt": "2026-10-01T10:10:00Z"
+      }
+    ],
+    "annotations": [
+      {
+        "id": "annA",
+        "work": "11111111-1111-4111-8111-111111111111",
+        "locator": "epubcfi(/6/4!/4/2)",
+        "note": "x",
+        "lastModifiedAt": "2026-10-01T10:06:00Z"
+      }
+    ]
+  },
+  "expected": {
+    "ios": {
+      "works": [
+        "22222222-2222-4222-8222-222222222222"
+      ],
+      "memberships": [
+        {
+          "id": "mB",
+          "queue": "q1",
+          "work": "22222222-2222-4222-8222-222222222222",
+          "rank": 2
+        }
+      ],
+      "annotations": [
+        {
+          "id": "annA",
+          "work": "22222222-2222-4222-8222-222222222222",
+          "note": "x",
+          "live": true
+        },
+        {
+          "id": "annB",
+          "live": false,
+          "softDeleted": true,
+          "tombstone": "samePassageDeduped"
+        },
+        {
+          "id": "random",
+          "live": false,
+          "note": "y",
+          "parkedSibling": true
+        }
+      ]
+    },
+    "android": {
+      "works": [
+        "22222222-2222-4222-8222-222222222222"
+      ],
+      "memberships": [
+        {
+          "id": "mB",
+          "queue": "q1",
+          "work": "22222222-2222-4222-8222-222222222222",
+          "rank": 1
+        },
+        {
+          "id": "mA",
+          "queue": "q1",
+          "work": "22222222-2222-4222-8222-222222222222",
+          "rank": 2
+        }
+      ],
+      "annotations": [
+        {
+          "id": "annA",
+          "work": "22222222-2222-4222-8222-222222222222",
+          "note": "x",
+          "live": true
+        },
+        {
+          "id": "annB",
+          "live": false,
+          "softDeleted": true,
+          "tombstone": "samePassageDeduped"
+        },
+        {
+          "id": "random",
+          "live": false,
+          "note": "y",
+          "parkedSibling": true
+        }
+      ]
+    }
+  },
+  "agree": false,
+  "disagreement": "X-4 (two memberships for one (queue, work) on Android)",
+  "unconvergedToday": "Each device keeps its own work UUID and re-homes the other's (N-3); parked sibling ids are random (N-2).",
+  "v9Outcome": {
+    "survivor": "11111111-1111-4111-8111-111111111111",
+    "alias": {
+      "22222222-2222-4222-8222-222222222222": "11111111-1111-4111-8111-111111111111"
+    },
+    "memberships": [
+      {
+        "queue": "q1",
+        "work": "11111111-1111-4111-8111-111111111111",
+        "rank": "by stamp"
+      }
+    ],
+    "see": "b2"
+  }
+}
