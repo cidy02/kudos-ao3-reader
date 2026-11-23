@@ -67,7 +67,10 @@ class ManifestTokenizerTest {
     }
 
     @Test fun rejectsATopLevelScalarArrayOrNothing() {
-        for (text in listOf("", " \n", "5", "\"x\"", "null", "true", "[]", "[{}]")) invalid(text)
+        for (text in listOf("", " \n", "5", "\"x\"", "null", "true")) invalid(text)
+        // a complete array is well-formed JSON but not a manifest: schema, not syntax
+        for (text in listOf("[]", "[{}]", " [1,[2,{\"a\":[]}],]  ")) invalid(text, syntactic = false)
+        for (text in listOf("[", "[1,", "[] x", "[1 2]", "[{\"a\"}]")) invalid(text)
     }
 
     @Test fun rejectsAnyContentAfterTheDocument() {
@@ -94,9 +97,22 @@ class ManifestTokenizerTest {
     @Test fun nestingLimitIsFiveHundredTwelveContainers() {
         fun nested(containers: Int) = "{\"a\":" + "[".repeat(containers - 1) + "]".repeat(containers - 1) + "}" // the root object counts as one
         assertEquals(1025, parse(nested(512)).events.size) // {, k:a, 511 x [, 511 x ], } : 512 containers are accepted
-        for (doc in listOf(nested(513), "{\"a\":" + "{\"a\":".repeat(600) + "1" + "}".repeat(600) + "}", "{\"a\":" + "[".repeat(100_000))) {
+        for (doc in listOf(nested(513), "{\"a\":" + "{\"a\":".repeat(600) + "1" + "}".repeat(600) + "}")) {
             try { parse(doc); fail("accepted") } catch (e: ManifestStageException.ResourceExhausted) { /* depth policy is a resource outcome, not malformed */ }
         }
+    }
+
+    @Test fun scanningContinuesPastTheDepthLimitSoAMalformedTailReportsSyntax() {
+        val deep = "{\"a\":" + "[".repeat(600) + "]".repeat(600)
+        invalid("$deep,\"b\":}")                 // malformed after the deep value
+        invalid("{\"a\":" + "[".repeat(100_000)) // unterminated deep value
+        invalid("{\"a\":" + "[".repeat(600) + "]".repeat(599) + "}")  // one close short
+        invalid("{\"a\":" + "[".repeat(600) + "}".repeat(600) + "}") // mismatched brackets
+        invalid("{\"a\":" + "{\"k\":".repeat(600) + "1" + "}".repeat(600) + ",}x")
+        try { parse("$deep}"); fail("accepted") } catch (e: ManifestStageException.ResourceExhausted) { /* a complete deep file is resource, not syntax */ }
+        val t = Trace()
+        try { ManifestTokenizer(ByteArrayInputStream("{\"a\":[1],\"b\":${"[".repeat(600)}${"]".repeat(600)},\"c\":2}".toByteArray()), t).parseDocument() } catch (e: ManifestStageException.ResourceExhausted) { }
+        assertTrue("no event after the limit was hit", t.events.none { it == "k:c" || it == "l:2" })
     }
 
     @Test fun stringsLeaveInBoundedPiecesAndNeverSplitASurrogatePair() {

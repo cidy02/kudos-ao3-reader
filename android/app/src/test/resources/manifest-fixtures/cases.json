@@ -88,8 +88,8 @@
   {
    "id": "root-array",
    "file": "root-array.json",
-   "expect": "syntax",
-   "note": "complete array root (iOS classifies it as schema)"
+   "expect": "schema",
+   "note": "a complete array root is well-formed JSON: schema failure on both platforms"
   },
   {
    "id": "bare-word-value",
@@ -305,7 +305,7 @@
     "suffix": "\"}]}"
    },
    "expect": "resource",
-   "note": "32 MiB + 1 byte record: over the typed budget"
+   "note": "32 MiB + 1 byte record: over the typed budget (8 MiB)"
   },
   {
    "id": "record-32MiB-exact-valid-ok",
@@ -316,8 +316,8 @@
     "count": 33554374,
     "suffix": "\"}]}"
    },
-   "expect": "ok",
-   "note": "exactly 32 MiB, valid"
+   "expect": "resource",
+   "note": "kept id: exactly 32 MiB is now far over the 8 MiB strict budget"
   },
   {
    "id": "record-over-budget-then-malformed-tail-syntax",
@@ -342,6 +342,60 @@
    },
    "expect": "resource",
    "note": "an earlier schema error does not hide a later budget failure"
+  },
+  {
+   "id": "record-8MiB-exact-valid-ok",
+   "gen": {
+    "wrap": false,
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"id\":\"00000001-0000-4000-8000-000000000001\",\"summary\":\"",
+    "unit": "a",
+    "count": 8388550,
+    "suffix": "\"}]}"
+   },
+   "expect": "ok",
+   "note": "exactly 8 MiB, valid: the largest accepted strict record"
+  },
+  {
+   "id": "record-8MiB-plus-1-valid-resource",
+   "gen": {
+    "wrap": false,
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"id\":\"00000001-0000-4000-8000-000000000001\",\"summary\":\"",
+    "unit": "a",
+    "count": 8388551,
+    "suffix": "\"}]}"
+   },
+   "expect": "resource",
+   "note": "8 MiB + 1 byte, valid: over the strict budget"
+  },
+  {
+   "id": "depth-513-then-malformed-tail-syntax",
+   "file": "depth-513-then-malformed-tail-syntax.json",
+   "expect": "syntax",
+   "note": "scanning continues after the depth hit; a malformed tail reports syntax first"
+  },
+  {
+   "id": "depth-unterminated-100000-syntax",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":",
+    "unit": "[",
+    "count": 100000,
+    "suffix": ""
+   },
+   "expect": "syntax",
+   "note": "an unterminated deep value is a syntax error, found by scanning without recursion"
+  },
+  {
+   "id": "array-root-truncated",
+   "file": "array-root-truncated.json",
+   "expect": "syntax",
+   "note": "a truncated array root is a syntax error"
+  },
+  {
+   "id": "array-root-then-garbage",
+   "file": "array-root-then-garbage.json",
+   "expect": "syntax",
+   "note": "trailing content after an array root is a syntax error"
   }
  ]
 }

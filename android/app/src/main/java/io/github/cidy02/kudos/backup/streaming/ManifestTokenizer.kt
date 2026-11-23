@@ -67,6 +67,7 @@ internal class ManifestTokenizer(
     private var keyOverflow = false
     private val token = StringBuilder()
     private var deferred: String? = null
+    private var muted = false
     override var valueStart = 0L
         private set
 
@@ -120,11 +121,70 @@ internal class ManifestTokenizer(
     fun parseDocument() {
         if (peek() == BOM) pos++
         ws()
-        if (peek() != '{'.code) fail("the document is not an object")
-        value(0)
+        val arrayRoot = peek() == '['.code
+        if (arrayRoot) {
+            muted = true
+            skipValue() // a complete array is well-formed JSON: it is a schema failure, not a syntax error
+        } else {
+            if (peek() != '{'.code) fail("the document is not an object")
+            value(0)
+        }
         ws()
         if (peek() != -1) fail("unexpected content after the document")
         deferred?.let { throw ManifestStageException.ResourceExhausted(it) }
+        if (arrayRoot) throw ManifestStageException.Invalid("the document is an array, not an object", syntactic = false)
+    }
+
+    /** Depth beyond the ceiling is a resource outcome, but the rest of the document is still scanned (no events, no retention) so a malformed tail reports syntax first. */
+    private fun tooDeep() {
+        defer("nesting is deeper than $MAX_DEPTH containers")
+        muted = true
+        skipValue()
+    }
+
+    private fun skipKey() {
+        ws()
+        if (peek() != '"'.code) fail("expected a quoted key")
+        key()
+        ws()
+        if (next() != ':'.code) fail("expected ':'")
+    }
+
+    /** Validates one value (at the current position) without recursion or events: a stack of one bit per open container. */
+    private fun skipValue() {
+        val isObject = java.util.BitSet()
+        var sp = 0
+        var expectValue = true
+        while (true) {
+            if (expectValue) {
+                ws()
+                when (peek()) {
+                    '{'.code -> {
+                        pos++; isObject.set(sp++); ws()
+                        if (peek() == '}'.code) { pos++; sp--; expectValue = false } else skipKey()
+                    }
+                    '['.code -> {
+                        pos++; isObject.clear(sp++); ws()
+                        if (peek() == ']'.code) { pos++; sp--; expectValue = false }
+                    }
+                    '"'.code -> { string(); expectValue = false }
+                    else -> { scalar(); expectValue = false }
+                }
+            } else {
+                if (sp == 0) return
+                ws()
+                val obj = isObject[sp - 1]
+                val c = next()
+                when {
+                    c == ','.code -> {
+                        ws()
+                        if (peek() == (if (obj) '}'.code else ']'.code)) { pos++; sp-- } else { if (obj) skipKey(); expectValue = true }
+                    }
+                    c == (if (obj) '}'.code else ']'.code) -> sp--
+                    else -> fail(if (obj) "expected ',' or '}'" else "expected ',' or ']'")
+                }
+            }
+        }
     }
 
     private fun value(depth: Int) {
@@ -132,9 +192,9 @@ internal class ManifestTokenizer(
         valueStart = sourceBytes()
         when (peek()) {
             '{'.code -> {
-                if (depth + 1 > MAX_DEPTH) throw ManifestStageException.ResourceExhausted("nesting is deeper than $MAX_DEPTH containers")
+                if (depth + 1 > MAX_DEPTH) { tooDeep(); return }
                 pos++
-                events.beginObject()
+                if (!muted) events.beginObject()
                 ws()
                 if (peek() == '}'.code) {
                     pos++
@@ -144,7 +204,7 @@ internal class ManifestTokenizer(
                         ws()
                         if (peek() != '"'.code) fail("expected a quoted key")
                         if (++members == MAX_MEMBERS + 1) defer("an object has more than $MAX_MEMBERS members")
-                        events.name(key())
+                        key().let { if (!muted) events.name(it) }
                         ws()
                         if (next() != ':'.code) fail("expected ':'")
                         value(depth + 1)
@@ -159,12 +219,12 @@ internal class ManifestTokenizer(
                         }
                     }
                 }
-                events.endObject()
+                if (!muted) events.endObject()
             }
             '['.code -> {
-                if (depth + 1 > MAX_DEPTH) throw ManifestStageException.ResourceExhausted("nesting is deeper than $MAX_DEPTH containers")
+                if (depth + 1 > MAX_DEPTH) { tooDeep(); return }
                 pos++
-                events.beginArray()
+                if (!muted) events.beginArray()
                 ws()
                 if (peek() == ']'.code) {
                     pos++
@@ -182,10 +242,10 @@ internal class ManifestTokenizer(
                         }
                     }
                 }
-                events.endArray()
+                if (!muted) events.endArray()
             }
             '"'.code -> string()
-            else -> events.literal(scalar())
+            else -> scalar().let { if (!muted) events.literal(it) }
         }
     }
 
@@ -257,7 +317,7 @@ internal class ManifestTokenizer(
                 }
             }
         } else {
-            events.stringChunk(chunk, 0, n, last)
+            if (!muted) events.stringChunk(chunk, 0, n, last)
         }
         if (carry) {
             chunk[0] = chunk[n]

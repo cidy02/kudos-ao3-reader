@@ -113,7 +113,7 @@ object ManifestStager {
         }, isCancelled).parseDocument()
         RecoveryVerdict.WELL_FORMED
     } catch (e: ManifestStageException.Invalid) {
-        RecoveryVerdict.MALFORMED
+        if (e.syntactic) RecoveryVerdict.MALFORMED else RecoveryVerdict.PROTECT // a complete array is a schema failure: protected like any rejected whole document
     } catch (e: ManifestStageException) {
         RecoveryVerdict.PROTECT
     }

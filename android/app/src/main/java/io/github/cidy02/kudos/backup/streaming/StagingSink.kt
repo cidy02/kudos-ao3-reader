@@ -345,7 +345,7 @@ internal class StagingSink(
 
     companion object {
         /** Source bytes of one strict record: larger is resource exhaustion (shared decision 5), decided after EOF. */
-        const val TYPED_BUDGET_BYTES = 32L * 1024 * 1024
+        const val TYPED_BUDGET_BYTES = 8L * 1024 * 1024
 
         /** Source bytes of one known non-array root value (including whitespace inside it). */
         const val MAX_ROOT_VALUE_BYTES = 16L * 1024 * 1024

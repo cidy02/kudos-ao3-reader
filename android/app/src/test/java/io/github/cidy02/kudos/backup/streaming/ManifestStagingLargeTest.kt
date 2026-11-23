@@ -93,7 +93,7 @@ class ManifestStagingLargeTest {
             })
             f.delete()
         }
-        for (tags in listOf(500_000, 2_000_000)) {
+        for (tags in listOf(180_000, 500_000, 2_000_000)) {
             val f = File(dir, "n$tags.json")
             f.bufferedWriter().use { w ->
                 w.write("{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"id\":\"${A567Corpus.uuid(1)}\",\"title\":\"big\",\"dateAdded\":\"2026-01-01T00:00:00.000Z\",\"workTags\":[")
@@ -106,9 +106,11 @@ class ManifestStagingLargeTest {
                 assertEquals(emptyList<String>(), root.list()?.toList().orEmpty())
                 t.append("| one work with $tags tags (${f.length() shr 20} MiB) | over the typed budget: ResourceExhausted, nothing left | | | | | | |\n")
             } else {
-                add(median("one work with $tags tags (${f.length() shr 20} MiB)", 1, f, root) { s ->
+                val row = median("one work with $tags tags (${f.length() shr 20} MiB, accepted strict record)", 1, f, root) { s ->
                     s.db.rawQuery("SELECT oversize, typed_ok, chars FROM s_works", null).use { c -> c.moveToFirst(); assertEquals(1, c.getInt(0)); assertEquals(1, c.getInt(1)); "oversize record chars=${c.getLong(2)}, decoded under the budget" }
-                })
+                }
+                add(row)
+                assertTrue("largest accepted strict record peaked ${row.peakMiB} MiB over baseline", row.peakMiB <= 64)
             }
             f.delete()
         }

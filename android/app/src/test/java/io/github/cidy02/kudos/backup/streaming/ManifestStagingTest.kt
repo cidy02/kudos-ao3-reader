@@ -266,7 +266,9 @@ class ManifestStagingTest {
         fun verdict(text: String) = ManifestStager.recoveryVerdict(ByteArrayInputStream(text.toByteArray()))
         assertEquals(RecoveryVerdict.WELL_FORMED, verdict(doc("\"works\":[],")))
         assertEquals(RecoveryVerdict.WELL_FORMED, verdict("{\"version\":99}"))
-        assertEquals(RecoveryVerdict.MALFORMED, verdict("[]"))
+        assertEquals(RecoveryVerdict.PROTECT, verdict("[]")) // a complete array is a schema failure: protected like any rejected whole document
+        assertEquals(RecoveryVerdict.MALFORMED, verdict("[1,"))
+        assertEquals(RecoveryVerdict.MALFORMED, verdict(doc("\"deep\":" + "[".repeat(600) + "]".repeat(599))))
         assertEquals(RecoveryVerdict.MALFORMED, verdict("{a:1}"))
         assertEquals(RecoveryVerdict.MALFORMED, verdict(doc("\"works\":[")))
         // a complete live file beyond the depth ceiling, or past any limit, must never be replaced from .bak
