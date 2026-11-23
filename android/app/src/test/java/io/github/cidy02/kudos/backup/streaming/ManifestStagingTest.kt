@@ -1,0 +1,263 @@
+package io.github.cidy02.kudos.backup.streaming
+
+import io.github.cidy02.kudos.backup.A567Corpus
+import io.github.cidy02.kudos.backup.BackupValidator
+import java.io.ByteArrayInputStream
+import java.io.File
+import java.io.IOException
+import java.io.InputStream
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
+class ManifestStagingTest {
+    @get:Rule val tmp = TemporaryFolder()
+
+    private val root get() = File(tmp.root, "staging")
+
+    private fun stage(text: String, options: ManifestStageOptions = ManifestStageOptions()) =
+        ManifestStager.stage(ByteArrayInputStream(text.toByteArray()), root, options)
+
+    private fun stage(bytes: ByteArray, options: ManifestStageOptions = ManifestStageOptions()) =
+        ManifestStager.stage(ByteArrayInputStream(bytes), root, options)
+
+    private fun leftovers() = root.list()?.toList().orEmpty()
+
+    private fun doc(body: String, version: String = "8") =
+        """{"version":$version,"exportedAt":"2026-06-01T00:00:00.000Z",$body}"""
+
+    private fun work(id: Int = 1, extra: String = "") =
+        """{"id":"${A567Corpus.uuid(id)}","title":"T","dateAdded":"2026-01-01T00:00:00.000Z"$extra}"""
+
+    private inline fun <reified T : ManifestStageException> failing(input: () -> StagedManifest): T {
+        try {
+            input().close()
+        } catch (e: ManifestStageException) {
+            assertTrue("expected ${T::class.simpleName}, got $e", e is T)
+            assertEquals("staging left files behind after $e", emptyList<String>(), leftovers())
+            return e as T
+        }
+        fail("accepted")
+        error("unreachable")
+    }
+
+    @Test fun reconstructsTheTypedManifestAndRawViewTodaysRouteProduces() {
+        val bytes = A567Corpus.manifestBytesOfSize(300_000)
+        val (today, todayRaw) = BackupValidator.decodeManifestWithRaw(bytes)
+        stage(bytes).use { staged ->
+            val (typed, raw) = staged.reconstruct()
+            assertEquals(today, BackupValidator.validateManifest(typed))
+            assertEquals(todayRaw, raw)
+            assertEquals(8, staged.version)
+            assertEquals(today.works.size.toLong(), staged.count("works"))
+            assertEquals(today.readingSessions.size.toLong(), staged.count("readingSessions"))
+            assertEquals(today.annotations.size.toLong(), staged.count("annotations"))
+        }
+        assertEquals(emptyList<String>(), leftovers().filter { false })
+    }
+
+    @Test fun rootMetadataAfterTheArraysIsStillSeen() {
+        val bytes = java.io.ByteArrayOutputStream().also { A567Corpus.writeManifest(it, works = 20, sessionsPerWork = 2, annotations = 5, metaAfter = true) }.toByteArray()
+        stage(bytes).use { staged ->
+            assertEquals(8, staged.version)
+            assertEquals(listOf("works", "readingSessions", "annotations", "iosFutureTopLevel", "version", "exportedAt"), staged.rootEntries().map { it.key })
+            assertEquals(false, staged.rootEntries().first { it.key == "iosFutureTopLevel" }.known)
+        }
+    }
+
+    @Test fun anUnsupportedVersionAfterTheArraysIsReportedOnlyAfterEof() {
+        val e = failing<ManifestStageException.UnsupportedVersion> { stage("""{"works":[${work()}],"version":9,"exportedAt":"2026-06-01T00:00:00.000Z"}""") }
+        assertEquals(9, e.version)
+        // a syntax error after the version wins over it, as the whole document is read first
+        failing<ManifestStageException.Invalid> { stage("""{"version":9,"exportedAt":"2026-06-01T00:00:00.000Z","works":[}""") }
+    }
+
+    @Test fun aTypedDecodeFailureBeatsAnUnsupportedVersion() {
+        val e = failing<ManifestStageException.Invalid> { stage(doc("\"works\":[{\"title\":\"no id\"}]", "9")) }
+        assertEquals(false, e.syntactic)
+    }
+
+    @Test fun invalidSyntaxIsFlaggedSyntactic() {
+        assertEquals(true, failing<ManifestStageException.Invalid> { stage(doc("\"works\":[") + "x") }.syntactic)
+    }
+
+    @Test fun aWrongKindSectionOrNullElementIsASchemaFailure() {
+        for (body in listOf("\"works\":{}", "\"works\":\"x\"", "\"works\":[1]", "\"annotations\":[null]", "\"settings\":[]", "\"readingSessions\":5")) {
+            val e = failing<ManifestStageException.Invalid> { stage(doc(body)) }
+            assertEquals(body, false, e.syntactic)
+        }
+        stage(doc("\"works\":null")).use { assertEquals(0L, it.count("works")) } // null section: today's default
+    }
+
+    @Test fun theFirstValueOfADuplicateKeyWins() {
+        stage("""{"version":8,"version":99,"exportedAt":"2026-06-01T00:00:00.000Z","exportedAt":"x","works":[${work(1)}],"works":[${work(2)}]}""").use { s ->
+            assertEquals(8, s.version)
+            val raw = s.reconstructRaw()
+            assertEquals("2026-06-01T00:00:00.000Z", raw["exportedAt"]!!.jsonPrimitive.content)
+            assertEquals(listOf(A567Corpus.uuid(1)), (raw["works"] as JsonArray).map { (it as JsonObject)["id"]!!.jsonPrimitive.content })
+            assertEquals(1L, s.count("works"))
+        }
+        stage(doc("\"works\":[{\"id\":\"${A567Corpus.uuid(1)}\",\"title\":\"a\",\"title\":\"b\",\"future\":{\"x\":1,\"x\":2,\"y\":[{\"z\":1,\"z\":2}]}}]")).use { s ->
+            val rec = Json.parseToJsonElement(s.recordText("works", 0)) as JsonObject
+            assertEquals("a", rec["title"]!!.jsonPrimitive.content)
+            assertEquals("""{"x":1,"y":[{"z":1}]}""", rec["future"].toString())
+        }
+    }
+
+    @Test fun aSkippedDuplicateValueIsStillValidated() {
+        failing<ManifestStageException.Invalid> { stage("""{"version":8,"version":[1,2,,3],"exportedAt":"x","works":[]}""") }
+        failing<ManifestStageException.Invalid> { stage("""{"version":8,"exportedAt":"x","works":[],"works":["\ud800"]}""") }
+    }
+
+    @Test fun naturalKeysAreStagedNormalisedAndIndexed() {
+        val upper = A567Corpus.uuid(255).uppercase()
+        val body = "\"works\":[{\"id\":\"$upper\",\"title\":\"T\",\"dateAdded\":\"2026-01-01T00:00:00.000Z\",\"ao3WorkID\":12345,\"sourceURL\":\"https://archiveofourown.org/works/12345\"}]," +
+            "\"fonts\":[{\"name\":\"Fancy Font\",\"fileName\":\"Café.ttf\",\"dateAdded\":\"2026-01-01T00:00:00.000Z\"}]," +
+            "\"annotations\":[{\"id\":\"${A567Corpus.uuid(2)}\",\"workID\":\"$upper\",\"locatorString\":\"loc-1\"}]," +
+            "\"readingFavorites\":[{\"id\":\"${A567Corpus.uuid(3)}\",\"kindRaw\":\"fandom\",\"targetKey\":\"Some Fandom\"}]," +
+            "\"fandomReadWatermarks\":[{\"id\":\"${A567Corpus.uuid(4)}\",\"fandomName\":\"Some Fandom\"}]," +
+            "\"tombstones\":[{\"id\":\"${A567Corpus.uuid(5)}\",\"recordID\":\"$upper\",\"recordTypeRaw\":\"work\",\"lastModifiedAt\":\"2026-02-01T00:00:00.000Z\"}]"
+        stage(doc(body)).use { s ->
+            fun one(sql: String) = s.db.rawQuery(sql, null).use { c -> c.moveToFirst(); c.getString(0) }
+            val lower = A567Corpus.uuid(255)
+            assertEquals(lower, one("SELECT k_id FROM s_works WHERE k_id = '$lower'"))
+            assertEquals("12345", one("SELECT k_ao3 FROM s_works"))
+            assertEquals("https://archiveofourown.org/works/12345", one("SELECT k_url FROM s_works"))
+            assertEquals(java.text.Normalizer.normalize("Café.ttf", java.text.Normalizer.Form.NFC).lowercase(), one("SELECT k_file FROM s_fonts"))
+            assertEquals("fancy font", one("SELECT k_name FROM s_fonts"))
+            assertEquals("$lower\u0000loc-1", one("SELECT k_passage FROM s_annotations"))
+            assertEquals("fandom\u0000Some Fandom", one("SELECT k_target FROM s_readingFavorites"))
+            assertEquals("Some Fandom", one("SELECT k_fandom FROM s_fandomReadWatermarks"))
+            assertEquals("work\u0000$lower", one("SELECT k_record FROM s_tombstones"))
+            assertEquals("2026-02-01T00:00:00.000Z", one("SELECT k_stamp FROM s_tombstones"))
+            for ((table, column) in listOf("s_works" to "k_id", "s_works" to "k_ao3", "s_works" to "k_url", "s_annotations" to "k_passage", "s_tombstones" to "k_record", "s_fonts" to "k_file")) {
+                val plan = s.db.rawQuery("EXPLAIN QUERY PLAN SELECT ord FROM $table WHERE $column = 'x'", null).use { c ->
+                    buildString { while (c.moveToNext()) append(c.getString(c.getColumnIndexOrThrow("detail"))).append(';') }
+                }
+                assertTrue("$table.$column not served by an index: $plan", plan.contains("USING INDEX ${table}_$column") || plan.contains("USING COVERING INDEX ${table}_$column"))
+            }
+        }
+    }
+
+    @Test fun anOverlongOrNonScalarKeyFieldLeavesTheColumnNull() {
+        val long = "x".repeat(ManifestSections.MAX_KEY_CHARS + 1)
+        stage(doc("\"works\":[{\"id\":\"${A567Corpus.uuid(1)}\",\"sourceURL\":\"$long\",\"ao3WorkID\":{\"n\":1}}]")).use { s ->
+            s.db.rawQuery("SELECT k_url, k_ao3, k_id FROM s_works", null).use { c ->
+                c.moveToFirst()
+                assertTrue(c.isNull(0)); assertTrue(c.isNull(1)); assertEquals(A567Corpus.uuid(1), c.getString(2))
+            }
+        }
+    }
+
+    @Test fun unknownMembersOfARecordAreRecordedAsRangesOfItsCompactText() {
+        stage(doc("\"works\":[${work(1, ",\"future\":{\"a\":[1,2,{\"b\":null}]},\"zzz\":\"x\\u00e9\\n\",\"summary\":\"known\"")}]")).use { s ->
+            val ranges = s.unknownRanges("works", 0)
+            assertEquals(listOf("future", "zzz"), ranges.map { it.name })
+            assertEquals("\"future\":{\"a\":[1,2,{\"b\":null}]}", s.recordRange("works", 0, ranges[0].start, ranges[0].stop))
+            assertEquals("\"zzz\":\"xé\\n\"", s.recordRange("works", 0, ranges[1].start, ranges[1].stop))
+            assertEquals(emptyList<StagedUnknownRange>(), stage(doc("\"works\":[${work(2)}]")).use { it.unknownRanges("works", 0) })
+        }
+    }
+
+    @Test fun anOversizeRecordStreamsInChunksAndIsDecodedOnRead() {
+        val blob = "QUJD".repeat(600_000) // 2.4M chars, over the in-memory decode limit
+        stage(doc("\"works\":[${work(1, ",\"hugeUnknown\":\"$blob\"")},${work(2)}]")).use { s ->
+            s.db.rawQuery("SELECT oversize, typed_ok, chars FROM s_works ORDER BY ord", null).use { c ->
+                c.moveToFirst(); assertEquals(1, c.getInt(0)); assertEquals(-1, c.getInt(1)); assertTrue(c.getLong(2) > 2_400_000)
+                c.moveToNext(); assertEquals(0, c.getInt(0)); assertEquals(1, c.getInt(1))
+            }
+            val chunks = s.db.rawQuery("SELECT COUNT(*), MAX(len) FROM s_works_chunk WHERE ord = 0", null).use { c -> c.moveToFirst(); c.getLong(0) to c.getLong(1) }
+            assertTrue(chunks.first >= 2_400_000 / StagingWriter.CHUNK_CHARS)
+            assertTrue(chunks.second <= StagingWriter.CHUNK_CHARS)
+            val r = s.unknownRanges("works", 0).single()
+            assertEquals("\"hugeUnknown\":\"$blob\"", s.recordRange("works", 0, r.start, r.stop))
+            assertEquals(blob, (Json.parseToJsonElement(s.recordText("works", 0)) as JsonObject)["hugeUnknown"]!!.jsonPrimitive.content)
+            s.reconstruct() // typed decode of the oversize element happens here
+        }
+    }
+
+    @Test fun aHugeUnknownTopLevelValueIsChunkedWithNoSizeLimit() {
+        val blob = "A".repeat(3_000_000)
+        stage(doc("\"works\":[],\"iosOpaque\":\"$blob\"")).use { s ->
+            val entry = s.rootEntries().first { it.key == "iosOpaque" }
+            assertTrue(entry.oversize); assertEquals(false, entry.known)
+            assertEquals("\"$blob\"", s.rootText("iosOpaque"))
+        }
+    }
+
+    @Test fun escapesAndSurrogatePairsRoundTripThroughTheStagedText() {
+        val title = "q\\\"b\\\\s\\/\\b\\f\\n\\r\\t\\u0000\\u001f \\ud83d\\ude00 😀 物語"
+        val body = "\"works\":[{\"id\":\"${A567Corpus.uuid(1)}\",\"title\":\"$title\"}]"
+        val bytes = doc(body).toByteArray()
+        val (_, todayRaw) = BackupValidator.decodeManifestWithRaw(bytes)
+        stage(bytes).use { assertEquals(todayRaw, it.reconstructRaw()) }
+    }
+
+    @Test fun depthFiveHundredTwelveStagesAndFiveHundredThirteenFails() {
+        fun deep(containers: Int) = doc("\"works\":[],\"deep\":" + "[".repeat(containers - 1) + "]".repeat(containers - 1)).replaceFirst("{", "{")
+        stage(deep(512)).use { s -> assertEquals(512 - 1, s.rootText("deep").count { it == '[' }) } // root + the value = 512 containers
+        failing<ManifestStageException.Invalid> { stage(deep(513)) }
+    }
+
+    @Test fun everyFailureOutcomeDeletesTheStagingDirectory() {
+        failing<ManifestStageException.Invalid> { stage("not json") }
+        failing<ManifestStageException.UnsupportedVersion> { stage(doc("\"works\":[]", "9")) }
+        failing<ManifestStageException.Io> {
+            val head = doc("\"works\":[" + (1..3000).joinToString(",") { work(it) }).toByteArray()
+            ManifestStager.stage(object : InputStream() {
+                val inner = ByteArrayInputStream(head)
+                override fun read(): Int = throw IOException("disk gone")
+                override fun read(b: ByteArray, off: Int, len: Int): Int = if (inner.available() > 0) inner.read(b, off, len) else throw IOException("disk gone")
+            }, root)
+        }
+        failing<ManifestStageException.Cancelled> { stage(A567Corpus.manifestBytesOfSize(2_000_000), ManifestStageOptions(isCancelled = { true })) }
+        failing<ManifestStageException.ResourceExhausted> { stage("{}", ManifestStageOptions(freeSpace = { 0L })) }
+        stage(A567Corpus.manifestBytesOfSize(100_000)).close()
+        assertEquals(emptyList<String>(), leftovers())
+    }
+
+    @Test fun aDiskThatFillsMidRunIsResourceExhaustion() {
+        var calls = 0
+        val e = failing<ManifestStageException.ResourceExhausted> {
+            stage(A567Corpus.manifestBytesOfSize(3_000_000), ManifestStageOptions(freeSpace = { if (calls++ < 3) 1L shl 40 else 1024L }))
+        }
+        assertTrue(e.reason, e.reason.contains("disk"))
+    }
+
+    @Test fun theUpFrontCheckUsesTheExpectedSize() {
+        val seen = mutableListOf<Long>()
+        failing<ManifestStageException.ResourceExhausted> {
+            ManifestStager.stage(ByteArrayInputStream(ByteArray(0)), root, ManifestStageOptions(expectedBytes = 100L shl 20, freeSpace = { seen += 250L shl 20; 250L shl 20 }))
+        }
+        assertEquals(1, seen.size) // refused before any directory or database was created
+    }
+
+    @Test fun cancellationMidRunStopsAfterTheCurrentCommit() {
+        val bytes = A567Corpus.manifestBytesOfSize(4_000_000)
+        var polls = 0
+        val e = failing<ManifestStageException.Cancelled> { stage(bytes, ManifestStageOptions(isCancelled = { ++polls > 5 })) }
+        assertNotNull(e)
+        assertTrue("stopped promptly, polls=$polls", polls < 60)
+    }
+
+    @Test fun wellFormednessMatchesTheSharedContract() {
+        fun ok(text: String) = ManifestStager.isWellFormedObject(ByteArrayInputStream(text.toByteArray()))
+        assertTrue(ok(doc("\"works\":[],")))
+        assertTrue(ok("{\"version\":99}"))
+        assertTrue(!ok("[]"))
+        assertTrue(!ok("{a:1}"))
+    }
+}
