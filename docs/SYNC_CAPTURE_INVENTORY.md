@@ -409,3 +409,38 @@ Entry: `importPackage` `:174`, `importV2ZipBytesInternal` `:155`, `applyMergeRes
 
 Reading the table. A row is one write site or one tightly coupled group of sites (same function, same commit). The strategy column counts the FIRST strategy each row names; many rows name a second one (`TRG+DAO`, `CMD` plus `SNAP` for a device-local group inside it), so the counts are a shape, not a plan. iOS: 133 rows, of which `CMD` is the default and `SNAP`/`NONE` are derived or device-local. Android: 78 rows. Counts of raw call sites behind them: iOS 291 `save`/`saveBestEffort`/`commitNow`/`insert`/`delete` sites in 56 files (+ autosave-only assignments), Android 286 DAO/transaction call sites in 24 non-DAO files, 58 of them in `KudosDatabaseMigrations.kt`. Not counted as rows: the several hundred `@AppStorage` / `DataStore.edit` setting writes (one row per mechanism, I-I01 and A-I01), and debug-only seeding (one row each).
 
+
+## 5. Highest-risk paths for G-capture
+
+1. **The shared main `ModelContext` (iOS, every row marked MC).** One autosave-ON context is written by views, services, the detached read-aloud saver (I-A06), restore (I-G01) and, via a second context, the BG task (I-G21). An outbox row staged by one command can be committed by another writer's `save()`, and seven writers call `rollback()` on it (listed in § 0). `saveBestEffort` is not a boundary: it returns true without saving when autosave is off (`ModelContext+SaveBestEffort.swift:48-51`). Sort New Undo (I-D08) is the only writer that checks the context is clean first.
+2. **Restore / sync apply (I-G*, A-G*).** Bulk, changed-or-not writes with no origin tag; iOS commits once on the shared MC after a pre-flush that commits other writers' dirty state (`KudosBackup.swift:3205-3207`); Android upserts every row of the snapshot in one transaction (A-G01), so a per-row trigger fires for unchanged rows. Settings, pronunciations and recovery files are applied after the commit (I-G18..20, A-G12/13).
+3. **Reader progress (I-A02, A-A02).** Highest frequency, a deliberate non-stamp on iOS (`lastModifiedAt` untouched, so every `lastModifiedAt` diff misses it), and a whole-row read-modify-write on Android with a documented lost-update race.
+4. **Relationship cascades and implicit memberships.** iOS: `SavedWork.collections`, `SavedWork.tags`, `ReadingQueue.tags` have no row; work hard-delete nullifies collection links with no tombstone (I-B23, I-C07). Android: FK `ON DELETE CASCADE` removes tag and collection cross-refs on work delete (A-B10), and REPLACE inserts (A-B11, A-C02, A-E01/03/04) defeat delete triggers.
+5. **Writers that change synced data without a clock bump (`H-nostamp`):** I-A07, I-B15 (tag rename), I-B17 (cover pin), I-B19, I-B24, I-D09, I-F04 (progress reset without `progressModifiedAt`); Android user tags (A-B11) and `restoreHeldCopy`-style device-local writes that DO bump it (A-B04/05).
+6. **Non-atomic multi-statement commands on Android:** `softDelete` and restore (A-B08/09), `addWork` (A-D04), collection soft/hard delete (A-C04), saved-search delete (A-E02), user tags (A-B11).
+7. **Launch/bulk passes that would flood the outbox:** `normalizeAllQueuedWorks` (I-D14), `migrateMetadata` (I-H01), cover backfills (I-H04), Android `repairMissingEpubFlags` and the `lastModifiedAt`-stamping device-local writers.
+
+## 6. What must change before capture can be enabled
+
+iOS
+- Introduce command functions (one per D4 operation) and route every view-level edit through them. Direct-edit views today: collection details (I-C02), queue settings (I-D11), note/colour editor (I-A10), five duplicated favourite toggles (I-B08), bulk bars (I-B09), tag manager (I-B15), `HomeView`/`HomeCards` update-seen (I-B19), quick-add (I-F12).
+- Give commands an isolated, autosave-disabled context (or a clean-context guard like I-D08) and one explicit throwing save; remove `try?` saves on synced paths (about 40 sites).
+- Fix stamp gaps (§ 5 item 5) or classify them as ops that carry their own clock.
+- Give relationship memberships (collections, user tags, queue tags) intent records (tombstones/ops) before capture.
+- Tag restore/sync apply with an origin and write rows plus outbox in the one commit at `KudosBackup.swift:4715`; make the BG task and `@ModelActor` backfills use the same boundary; decide that migrations/backfills (I-H*) are `NONE`.
+- Settings: keep the `SyncedSettingsClock` diff, but commit stamps with the outbox. Files and non-model stores (I-I02..I-I08) need their own durable ops.
+
+Android
+- Replace REPLACE inserts (Bookmark, SavedSearch, CustomFont, Tag, cross-refs) with `@Upsert`/explicit ops, or prove trigger behaviour with `recursive_triggers` on supported connections.
+- Wrap multi-statement commands in `withTransaction` (§ 5 item 6) and add a transactional origin/intent record.
+- Replace whole-row `workDao.upsert(copy)` progress/flag writes with column-scoped updates, or guard triggers per value group with `OLD IS NOT NEW`; exclude derived and device-local columns (`searchText`, `freedAt`, `hasEpub`, `epubDigest`).
+- Make restore diff-aware so unchanged rows do not fire; add an origin flag for remote apply.
+- Settings, pronunciations and overlay files need stamping and a crash contract (A-I01..A-I03); install and test triggers on fresh and migrated DBs (A-H03).
+
+## 7. Not verified, and open questions
+
+- Static read only; nothing was built or run. Frequencies are from code, not measurement.
+- The several hundred `@AppStorage`/`UserDefaults.set` and 68 `DataStore.edit` sites are one row per mechanism, not enumerated per key. `AO3`-write features (Writing, Challenges, Comments) were not read for synced-state writes.
+- I-A06 speech-save frequency is unmeasured. Android favourites having no UI writer (A-A10) rests on a grep of DAO callers.
+- Whether `SavedSeries.isSubscribed` (I-E12), Android comment drafts (A-I06) and writing recovery on Android (A-I05) should sync is a D4 scope question.
+- iOS tree is the integration branch at `985027170`; the D4 matrix cites `22aeca1a1`; I did not diff the two.
