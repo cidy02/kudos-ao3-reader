@@ -1,122 +1,215 @@
 {
-  "schema": "kudos.sync-fixture/1",
-  "id": "c3",
-  "slice": "c",
-  "kind": "v9-concurrency",
-  "title": "Metadata commits with a pending asset reference; availability follows verified bytes",
-  "refs": [
-    "DEC-13",
-    "plan v3.1 \u00a7 C Assets"
-  ],
-  "initial": {
-    "works": [
-      {
-        "key": "11111111-1111-4111-8111-111111111111",
-        "gen": "g0",
-        "lifecycle": "live",
-        "asset": {
-          "epub": {
-            "digest": "d1",
-            "available": true
-          }
-        }
-      }
-    ],
-    "blobs": [
-      "d1"
-    ]
-  },
-  "ops": [
-    {
-      "id": "r1",
+ "schema": "kudos.sync-fixture/2",
+ "id": "c3",
+ "slice": "c",
+ "kind": "v9-concurrency",
+ "title": "Pending asset reference and verified installation",
+ "refs": [
+  "DEC-22",
+  "plan v3.1 \u00a7 C Assets"
+ ],
+ "ids": {
+  "W-A": "11111111-1111-4111-8111-111111111111",
+  "W-B": "22222222-2222-4222-8222-222222222222",
+  "W-C": "33333333-3333-4333-8333-333333333333"
+ },
+ "universes": [
+  {
+   "name": "pending-reference",
+   "description": "Metadata commits with a pending reference; local availability follows verified bytes (device-local, not journal state)",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
       "writer": "inc-a",
+      "seq": 1,
       "stamp": [
-        2,
-        "inc-a",
-        1
+       1,
+       "inc-a",
+       1
       ],
-      "kind": "asset.replace",
-      "target": "11111111-1111-4111-8111-111111111111",
+      "kind": "work.create",
+      "target": "W-A",
       "payload": {
-        "assetKind": "epub",
-        "digest": "d2",
-        "baseDigest": "d1",
-        "size": 1200
-      },
-      "gen": "g0"
-    }
-  ],
-  "events": [
+       "ao3WorkID": 111,
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     {
+      "id": "i2",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-A",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "d1",
+       "size": 1000
+      }
+     }
+    ]
+   },
+   "authorization": [
     {
-      "id": "blob",
-      "kind": "blobVisible",
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "r1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      5,
+      "inc-a",
+      3
+     ],
+     "kind": "asset.write",
+     "target": "W-A",
+     "observed": {
+      "base": "i2"
+     },
+     "payload": {
+      "assetKind": "epub",
       "digest": "d2",
-      "verified": true
+      "size": 1200
+     }
+    }
+   ],
+   "events": [
+    {
+     "id": "blob",
+     "kind": "blobVisible",
+     "digest": "d2",
+     "verified": true,
+     "installed": true
     },
     {
-      "id": "badblob",
-      "kind": "blobVisible",
-      "digest": "d2",
-      "verified": false,
-      "note": "size or digest mismatch: stays pending, retried"
+     "id": "badblob",
+     "kind": "blobVisible",
+     "digest": "d2",
+     "verified": false
     }
-  ],
-  "orders": [
-    [
+   ],
+   "schedules": {
+    "orders": [
+     [
       "r1",
       "blob"
-    ],
-    [
+     ],
+     [
       "blob",
       "r1"
-    ],
-    [
+     ],
+     [
       "r1",
       "badblob",
       "blob"
-    ]
-  ],
-  "duplicates": "deliver every op twice",
-  "expected": {
-    "afterEachPrefix": {
-      "[r1]": {
-        "epub": {
-          "digest": "d2",
-          "available": false,
-          "state": "pending"
-        },
-        "readerKeepsOpening": "d1 local copy"
-      },
-      "[blob]": {
-        "epub": {
-          "digest": "d1"
-        },
-        "note": "blob known, no reference yet"
-      },
-      "[r1,blob] or [blob,r1]": {
-        "epub": {
-          "digest": "d2",
-          "available": true
-        }
-      }
-    },
-    "final": {
-      "works": [
-        {
-          "key": "11111111-1111-4111-8111-111111111111",
-          "asset": {
-            "epub": {
-              "digest": "d2",
-              "available": true
-            }
-          }
-        }
+     ],
+     [
+      "badblob",
+      "r1",
+      "blob"
+     ]
+    ],
+    "orderCount": 1,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "r1",
+       "r1"
       ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "r1",
+       "r1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "r1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": []
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "title": "T"
+       },
+       "asset": {
+        "epub": {
+         "digest": "d2",
+         "alternates": []
+        }
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
     },
     "appliedCut": {
-      "inc-a": 1
+     "inc-a": 3
     },
-    "pending": []
-  },
-  "note": "`available` is device-local and never synced; the reference is."
+    "pending": [],
+    "diagnostics": []
+   },
+   "deviceLocalMaterialization": {
+    "afterEachPrefix": [
+     {
+      "prefix": [
+       "r1"
+      ],
+      "epub": "pending"
+     },
+     {
+      "prefix": [
+       "blob"
+      ],
+      "epub": "blobKnownNoReference"
+     },
+     {
+      "prefix": [
+       "r1",
+       "badblob"
+      ],
+      "epub": "pending (verification failed, retry)"
+     },
+     {
+      "prefix": [
+       "r1",
+       "blob"
+      ],
+      "epub": "available"
+     }
+    ],
+    "note": "`pending` here is device-local; the journal `pending` list is empty because r1 applied."
+   }
+  }
+ ]
 }

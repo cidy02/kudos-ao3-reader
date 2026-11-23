@@ -1,0 +1,1504 @@
+{
+ "schema": "kudos.sync-fixture/2",
+ "id": "b2",
+ "slice": "b",
+ "kind": "v9-concurrency",
+ "title": "Duplicate identity: alias as projection, epoch memberships, source-addressed annotations",
+ "refs": [
+  "DEC-11",
+  "DEC-12",
+  "DEC-14",
+  "DEC-15",
+  "DEC-16",
+  "DEC-17",
+  "I1",
+  "M1",
+  "M2",
+  "A1",
+  "A2",
+  "A3"
+ ],
+ "ids": {
+  "W-A": "11111111-1111-4111-8111-111111111111",
+  "W-B": "22222222-2222-4222-8222-222222222222",
+  "W-C": "33333333-3333-4333-8333-333333333333"
+ },
+ "universes": [
+  {
+   "name": "duplicate-identity-both-directions",
+   "description": "",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": [
+    {
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-b",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-B",
+     "payload": {
+      "ao3WorkID": 111,
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "a2",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "annotation.add",
+     "target": "annA",
+     "payload": {
+      "work": "W-A",
+      "akind": "highlight",
+      "locator": "epubcfi(/6/4!/4/2)",
+      "note": "x"
+     }
+    },
+    {
+     "id": "b2",
+     "writer": "inc-b",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-b",
+      2
+     ],
+     "kind": "annotation.add",
+     "target": "annB",
+     "payload": {
+      "work": "W-B",
+      "akind": "highlight",
+      "locator": "epubcfi(/6/4!/4/2)",
+      "note": "y"
+     }
+    },
+    {
+     "id": "a3",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      3,
+      "inc-a",
+      3
+     ],
+     "kind": "queue.membership.add",
+     "target": "q1|W-A",
+     "payload": {
+      "rank": 5
+     }
+    },
+    {
+     "id": "b3",
+     "writer": "inc-b",
+     "seq": 3,
+     "stamp": [
+      3,
+      "inc-b",
+      3
+     ],
+     "kind": "queue.membership.add",
+     "target": "q1|W-B",
+     "payload": {
+      "rank": 6
+     }
+    },
+    {
+     "id": "a4",
+     "writer": "inc-a",
+     "seq": 4,
+     "stamp": [
+      4,
+      "inc-a",
+      4
+     ],
+     "kind": "queue.membership.move",
+     "target": "q1|W-A",
+     "observed": {
+      "epochs": [
+       "a3"
+      ]
+     },
+     "payload": {
+      "rank": 2
+     }
+    },
+    {
+     "id": "b4",
+     "writer": "inc-b",
+     "seq": 4,
+     "stamp": [
+      4,
+      "inc-b",
+      4
+     ],
+     "kind": "queue.membership.move",
+     "target": "q1|W-B",
+     "observed": {
+      "epochs": [
+       "b3"
+      ]
+     },
+     "payload": {
+      "rank": 1
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 70,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1",
+       "a2",
+       "a2",
+       "b2",
+       "b2",
+       "a3",
+       "a3",
+       "b3",
+       "b3",
+       "a4",
+       "a4",
+       "b4",
+       "b4"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "a2",
+       "b2",
+       "a3",
+       "b3",
+       "a4",
+       "b4",
+       "a1",
+       "b1",
+       "a2",
+       "b2",
+       "a3",
+       "b3",
+       "a4",
+       "b4"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1",
+       "a2",
+       "b2",
+       "a3",
+       "b3",
+       "a4",
+       "b4"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold b3",
+      "withheld": [
+       "b3"
+      ],
+      "order": [
+       "a1",
+       "b1",
+       "a2",
+       "b2",
+       "a3",
+       "a4",
+       "b4"
+      ],
+      "expectedPendingAtEnd": [
+       "b4"
+      ],
+      "thenDeliver": [
+       "b3"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold a3",
+      "withheld": [
+       "a3"
+      ],
+      "order": [
+       "a1",
+       "b1",
+       "a2",
+       "b2",
+       "b3",
+       "a4",
+       "b4"
+      ],
+      "expectedPendingAtEnd": [
+       "a4"
+      ],
+      "thenDeliver": [
+       "a3"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after all creates and annotations, then the rest",
+      "cutAfter": [
+       "a1",
+       "b1",
+       "a2",
+       "b2"
+      ],
+      "thenOrder": [
+       "a3",
+       "b3",
+       "a4",
+       "b4"
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A",
+        "W-B"
+       ],
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [
+      {
+       "queue": "q1",
+       "work": "W-A",
+       "present": true,
+       "rank": 1
+      }
+     ],
+     "annotations": [
+      {
+       "id": "annB",
+       "work": "W-A",
+       "note": "y",
+       "live": true
+      },
+      {
+       "id": "uuidv5(ns,annA|a2)",
+       "live": false,
+       "parkedNote": "x"
+      }
+     ],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 4,
+     "inc-b": 4
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "late-loser-edit-across-checkpoint",
+   "description": "",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": [
+    {
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-b",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-B",
+     "payload": {
+      "ao3WorkID": 111,
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "a2",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "annotation.add",
+     "target": "annA",
+     "payload": {
+      "work": "W-A",
+      "akind": "highlight",
+      "locator": "epubcfi(/6/4!/4/2)",
+      "note": "x"
+     }
+    },
+    {
+     "id": "b2",
+     "writer": "inc-b",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-b",
+      2
+     ],
+     "kind": "annotation.add",
+     "target": "annB",
+     "payload": {
+      "work": "W-B",
+      "akind": "highlight",
+      "locator": "epubcfi(/6/4!/4/2)",
+      "note": "y"
+     }
+    },
+    {
+     "id": "a3",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      3,
+      "inc-a",
+      3
+     ],
+     "kind": "queue.membership.add",
+     "target": "q1|W-A",
+     "payload": {
+      "rank": 5
+     }
+    },
+    {
+     "id": "b3",
+     "writer": "inc-b",
+     "seq": 3,
+     "stamp": [
+      3,
+      "inc-b",
+      3
+     ],
+     "kind": "queue.membership.add",
+     "target": "q1|W-B",
+     "payload": {
+      "rank": 6
+     }
+    },
+    {
+     "id": "a4",
+     "writer": "inc-a",
+     "seq": 4,
+     "stamp": [
+      4,
+      "inc-a",
+      4
+     ],
+     "kind": "queue.membership.move",
+     "target": "q1|W-A",
+     "observed": {
+      "epochs": [
+       "a3"
+      ]
+     },
+     "payload": {
+      "rank": 2
+     }
+    },
+    {
+     "id": "b4",
+     "writer": "inc-b",
+     "seq": 4,
+     "stamp": [
+      4,
+      "inc-b",
+      4
+     ],
+     "kind": "queue.membership.move",
+     "target": "q1|W-B",
+     "observed": {
+      "epochs": [
+       "b3"
+      ]
+     },
+     "payload": {
+      "rank": 1
+     }
+    },
+    {
+     "id": "a5",
+     "writer": "inc-a",
+     "seq": 5,
+     "stamp": [
+      5,
+      "inc-a",
+      5
+     ],
+     "kind": "annotation.edit",
+     "target": "annA",
+     "observed": {
+      "source": "annA"
+     },
+     "payload": {
+      "note": "x2"
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 126,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1",
+       "a2",
+       "a2",
+       "b2",
+       "b2",
+       "a3",
+       "a3",
+       "b3",
+       "b3",
+       "a4",
+       "a4",
+       "b4",
+       "b4",
+       "a5",
+       "a5"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "a2",
+       "b2",
+       "a3",
+       "b3",
+       "a4",
+       "b4",
+       "a5",
+       "a1",
+       "b1",
+       "a2",
+       "b2",
+       "a3",
+       "b3",
+       "a4",
+       "b4",
+       "a5"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1",
+       "a2",
+       "b2",
+       "a3",
+       "b3",
+       "a4",
+       "b4",
+       "a5"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold b3",
+      "withheld": [
+       "b3"
+      ],
+      "order": [
+       "a1",
+       "b1",
+       "a2",
+       "b2",
+       "a3",
+       "a4",
+       "b4",
+       "a5"
+      ],
+      "expectedPendingAtEnd": [
+       "b4"
+      ],
+      "thenDeliver": [
+       "b3"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold a3",
+      "withheld": [
+       "a3"
+      ],
+      "order": [
+       "a1",
+       "b1",
+       "a2",
+       "b2",
+       "b3",
+       "a4",
+       "b4",
+       "a5"
+      ],
+      "expectedPendingAtEnd": [
+       "a4",
+       "a5"
+      ],
+      "thenDeliver": [
+       "a3"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after the eight base ops, then the late edit",
+      "cutAfter": [
+       "a1",
+       "b1",
+       "a2",
+       "b2",
+       "a3",
+       "b3",
+       "a4",
+       "b4"
+      ],
+      "thenOrder": [
+       "a5"
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A",
+        "W-B"
+       ],
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [
+      {
+       "queue": "q1",
+       "work": "W-A",
+       "present": true,
+       "rank": 1
+      }
+     ],
+     "annotations": [
+      {
+       "id": "annA",
+       "work": "W-A",
+       "note": "x2",
+       "live": true
+      },
+      {
+       "id": "uuidv5(ns,annB|b2)",
+       "live": false,
+       "parkedNote": "y"
+      }
+     ],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 5,
+     "inc-b": 4
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "salvage-orders",
+   "description": "",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": [
+    {
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-b",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-c",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "c0",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "x1",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "annotation.add",
+     "target": "annA",
+     "payload": {
+      "work": "W-A",
+      "locator": "epubcfi(/6/4!/4/2)",
+      "note": "n1"
+     }
+    },
+    {
+     "id": "x2",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-b",
+      1
+     ],
+     "kind": "annotation.add",
+     "target": "annB",
+     "payload": {
+      "work": "W-A",
+      "locator": "epubcfi(/6/4!/4/2)",
+      "note": ""
+     }
+    },
+    {
+     "id": "x3",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      4,
+      "inc-c",
+      1
+     ],
+     "kind": "annotation.add",
+     "target": "annC",
+     "payload": {
+      "work": "W-A",
+      "locator": "epubcfi(/6/4!/4/2)",
+      "note": "n3"
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 12,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "c0",
+       "c0",
+       "x1",
+       "x1",
+       "x2",
+       "x2",
+       "x3",
+       "x3"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "c0",
+       "x1",
+       "x2",
+       "x3",
+       "c0",
+       "x1",
+       "x2",
+       "x3"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "c0",
+       "x1",
+       "x2",
+       "x3"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": []
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [
+      {
+       "id": "annC",
+       "work": "W-A",
+       "note": "n3",
+       "live": true
+      },
+      {
+       "id": "uuidv5(ns,annA|x1)",
+       "live": false,
+       "parkedNote": "n1"
+      }
+     ],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 2,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "user-delete-scope",
+   "description": "",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": [
+    {
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-b",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "c0",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "x1",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "annotation.add",
+     "target": "annA",
+     "payload": {
+      "work": "W-A",
+      "locator": "epubcfi(/6/4!/4/2)",
+      "note": "a"
+     }
+    },
+    {
+     "id": "x2",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-b",
+      1
+     ],
+     "kind": "annotation.add",
+     "target": "annB",
+     "payload": {
+      "work": "W-A",
+      "locator": "epubcfi(/6/4!/4/2)",
+      "note": "b"
+     }
+    },
+    {
+     "id": "del",
+     "writer": "inc-b",
+     "seq": 2,
+     "stamp": [
+      4,
+      "inc-b",
+      2
+     ],
+     "kind": "annotation.delete",
+     "target": "annB",
+     "observed": {
+      "sources": [
+       "annB"
+      ],
+      "adds": [
+       "x2"
+      ]
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 6,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "c0",
+       "c0",
+       "x1",
+       "x1",
+       "x2",
+       "x2",
+       "del",
+       "del"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "c0",
+       "x1",
+       "x2",
+       "del",
+       "c0",
+       "x1",
+       "x2",
+       "del"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "c0",
+       "x1",
+       "x2",
+       "del"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold x2",
+      "withheld": [
+       "x2"
+      ],
+      "order": [
+       "c0",
+       "x1",
+       "del"
+      ],
+      "expectedPendingAtEnd": [
+       "del"
+      ],
+      "thenDeliver": [
+       "x2"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": []
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [
+      {
+       "id": "annA",
+       "work": "W-A",
+       "note": "a",
+       "live": true
+      }
+     ],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 2,
+     "inc-b": 2
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "delete-scope-saw-both",
+   "description": "",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": [
+    {
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-b",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-c",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "c0",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "x1",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "annotation.add",
+     "target": "annA",
+     "payload": {
+      "work": "W-A",
+      "locator": "epubcfi(/6/4!/4/2)",
+      "note": "a"
+     }
+    },
+    {
+     "id": "x2",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-b",
+      1
+     ],
+     "kind": "annotation.add",
+     "target": "annB",
+     "payload": {
+      "work": "W-A",
+      "locator": "epubcfi(/6/4!/4/2)",
+      "note": "b"
+     }
+    },
+    {
+     "id": "del",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      4,
+      "inc-c",
+      1
+     ],
+     "kind": "annotation.delete",
+     "target": "annB",
+     "observed": {
+      "sources": [
+       "annA",
+       "annB"
+      ],
+      "adds": [
+       "x1",
+       "x2"
+      ]
+     },
+     "requires": [
+      "x1",
+      "x2"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 12,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "c0",
+       "c0",
+       "x1",
+       "x1",
+       "x2",
+       "x2",
+       "del",
+       "del"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "c0",
+       "x1",
+       "x2",
+       "del",
+       "c0",
+       "x1",
+       "x2",
+       "del"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "c0",
+       "x1",
+       "x2",
+       "del"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold x1",
+      "withheld": [
+       "x1"
+      ],
+      "order": [
+       "c0",
+       "x2",
+       "del"
+      ],
+      "expectedPendingAtEnd": [
+       "del"
+      ],
+      "thenDeliver": [
+       "x1"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold x2",
+      "withheld": [
+       "x2"
+      ],
+      "order": [
+       "c0",
+       "x1",
+       "del"
+      ],
+      "expectedPendingAtEnd": [
+       "del"
+      ],
+      "thenDeliver": [
+       "x2"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": []
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 2,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "alias-then-purge-either-order",
+   "description": "",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": [
+    {
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-b",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-c",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-B",
+     "payload": {
+      "ao3WorkID": 111,
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-b",
+      2
+     ],
+     "kind": "work.delete",
+     "target": "W-B",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "p1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-B",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ]
+     },
+     "payload": {
+      "reason": "explicit"
+     },
+     "requires": [
+      "d1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 12,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1",
+       "d1",
+       "d1",
+       "p1",
+       "p1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "d1",
+       "p1",
+       "a1",
+       "b1",
+       "d1",
+       "p1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1",
+       "d1",
+       "p1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "a1",
+       "b1",
+       "p1"
+      ],
+      "expectedPendingAtEnd": [
+       "p1"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": []
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "title": "T"
+       }
+      },
+      "W-B": {
+       "lifecycle": "purged",
+       "reason": "explicit"
+      }
+     },
+     "witnesses": [
+      {
+       "entity": "W-B",
+       "reason": "explicit",
+       "op": "p1"
+      }
+     ],
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 2,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  }
+ ]
+}

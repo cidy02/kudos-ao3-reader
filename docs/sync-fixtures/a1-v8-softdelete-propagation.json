@@ -1,69 +1,123 @@
 {
-  "schema": "kudos.sync-fixture/1",
-  "id": "a1",
-  "slice": "a",
-  "kind": "v8-compat",
-  "route": "reconcile",
+ "schema": "kudos.sync-fixture/2",
+ "id": "a1",
+ "slice": "a",
+ "kind": "v8-compat",
+ "route": "reconcile",
+ "title": "Soft delete on another device reaches a live copy; the file's deletion schedule is never copied",
+ "refs": [
+  "W2",
+  "DEC-3",
+  "KB:6147-6164",
+  "BMS:812-816",
+  "BMap:98-117"
+ ],
+ "ids": {
+  "W-A": "11111111-1111-4111-8111-111111111111",
+  "W-B": "22222222-2222-4222-8222-222222222222"
+ },
+ "harness": {
   "opClock": "2026-10-03T00:00:00Z",
-  "title": "Soft delete on another device reaches a live copy; the file's deletion schedule is never copied",
-  "refs": [
-    "W2",
-    "DEC-5",
-    "KB:6147-6164",
-    "BMS:812-816",
-    "BMap:98-117"
-  ],
-  "local": {
+  "trust": [],
+  "signatureValid": true,
+  "preserved": {},
+  "assetBytes": {},
+  "clockSubstitution": "verification passes opClock as `now` into iOS archivedDeletionState/clampedArchiveDate/resurrection test and Android BackupMappers.restoredDeletionState/merge(now:)"
+ },
+ "cases": [
+  {
+   "name": "deleted record is newer",
+   "local": {
     "works": [
-      {
-        "key": "11111111-1111-4111-8111-111111111111",
-        "ao3WorkID": 111,
-        "lifecycle": "live",
-        "lastModifiedAt": "2026-10-01T10:00:00Z"
-      }
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "lifecycle": "live",
+      "lastModifiedAt": "2026-10-01T10:00:00Z"
+     }
     ]
-  },
-  "incoming": {
+   },
+   "incoming": {
     "works": [
-      {
-        "key": "11111111-1111-4111-8111-111111111111",
-        "ao3WorkID": 111,
-        "isDeleted": true,
-        "deletedAt": "2026-10-02T09:00:00Z",
-        "permanentDeletionScheduledAt": "2026-01-01T00:00:00Z",
-        "lastModifiedAt": "2026-10-02T09:00:00Z"
-      }
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "isDeleted": true,
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "permanentDeletionScheduledAt": "2026-01-01T00:00:00Z",
+      "lastModifiedAt": "2026-10-02T09:00:00Z"
+     }
     ]
-  },
-  "expected": {
+   },
+   "expected": {
     "ios": {
-      "works": [
-        {
-          "key": "11111111-1111-4111-8111-111111111111",
-          "lifecycle": "deleted",
-          "deletedAt": "2026-10-02T09:00:00Z",
-          "deadline": "2027-01-01T00:00:00Z"
-        }
-      ]
+     "works": [
+      {
+       "key": "W-A",
+       "lifecycle": "deleted",
+       "deletedAt": "2026-10-02T09:00:00Z",
+       "deadline": "2027-01-01T00:00:00Z"
+      }
+     ]
     },
     "android": {
-      "works": [
-        {
-          "key": "11111111-1111-4111-8111-111111111111",
-          "lifecycle": "deleted",
-          "deletedAt": "2026-10-02T09:00:00Z",
-          "deadline": "2027-01-01T00:00:00Z"
-        }
-      ]
+     "works": [
+      {
+       "key": "W-A",
+       "lifecycle": "deleted",
+       "deletedAt": "2026-10-02T09:00:00Z",
+       "deadline": "2027-01-01T00:00:00Z"
+      }
+     ]
     }
+   }
   },
-  "agree": true,
-  "note": "Deadline is opClock+90d on both (receive time, not deletion time); a hostile past schedule is ignored.",
-  "v9Outcome": {
-    "ops": [
-      "work.softDelete(deletedAt=2026-10-02T09:00:00Z)"
-    ],
-    "deadline": "2026-12-31T09:00:00Z",
-    "change": "deadline anchors to the deletion, not to the receiver (DEC-5)"
+  {
+   "name": "deleted record is older than local edit",
+   "local": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "lifecycle": "live",
+      "lastModifiedAt": "2026-10-02T10:00:00Z"
+     }
+    ]
+   },
+   "incoming": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "isDeleted": true,
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "lastModifiedAt": "2026-10-02T09:00:00Z"
+     }
+    ]
+   },
+   "expected": {
+    "ios": {
+     "works": [
+      {
+       "key": "W-A",
+       "lifecycle": "live"
+      }
+     ]
+    },
+    "android": {
+     "works": [
+      {
+       "key": "W-A",
+       "lifecycle": "live"
+      }
+     ]
+    }
+   }
   }
+ ],
+ "agree": true,
+ "v9Outcome": {
+  "case1": "W2 work.delete with deletedAt payload 2026-10-02T09:00:00Z; deadline 2026-12-31T09:00:00Z (anchored to the deletion, DEC-3); v8 deadline is receive time + 90 d",
+  "case2": "no op (accepted = baseline)"
+ }
 }

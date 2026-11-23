@@ -1,65 +1,147 @@
 {
-  "schema": "kudos.sync-fixture/1",
-  "id": "a2",
-  "slice": "a",
-  "kind": "v8-compat",
-  "route": "reconcile",
+ "schema": "kudos.sync-fixture/2",
+ "id": "a2",
+ "slice": "a",
+ "kind": "v8-compat",
+ "route": "reconcile",
+ "title": "A new device receives a work moved to Recently Deleted, with and without its tombstone",
+ "refs": [
+  "W2",
+  "X-6",
+  "KB:5861-5890",
+  "BMS:2644-2662"
+ ],
+ "ids": {
+  "W-A": "11111111-1111-4111-8111-111111111111",
+  "W-B": "22222222-2222-4222-8222-222222222222"
+ },
+ "harness": {
   "opClock": "2026-10-03T00:00:00Z",
-  "title": "A new device receives a work that was moved to Recently Deleted, with its tombstone",
-  "refs": [
-    "W2",
-    "X-6",
-    "KB:5876-5889",
-    "BMS:2644-2662"
+  "trust": [
+   "signer-1"
   ],
-  "local": {
-    "works": [],
-    "tombstones": []
-  },
-  "incoming": {
+  "signatureValid": true,
+  "preserved": {},
+  "assetBytes": {},
+  "clockSubstitution": "verification passes opClock as `now` into iOS archivedDeletionState/clampedArchiveDate/resurrection test and Android BackupMappers.restoredDeletionState/merge(now:)"
+ },
+ "cases": [
+  {
+   "name": "trusted non-permanent tombstone within the window",
+   "local": {
+    "works": []
+   },
+   "incoming": {
     "works": [
-      {
-        "key": "11111111-1111-4111-8111-111111111111",
-        "ao3WorkID": 111,
-        "isDeleted": true,
-        "deletedAt": "2026-10-02T09:00:00Z",
-        "permanentDeletionScheduledAt": "2027-01-01T00:00:00Z",
-        "lastModifiedAt": "2026-10-02T09:00:00Z"
-      }
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "isDeleted": true,
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "permanentDeletionScheduledAt": "2027-01-01T00:00:00Z",
+      "lastModifiedAt": "2026-10-02T09:00:00Z"
+     }
     ],
     "tombstones": [
-      {
-        "recordID": "11111111-1111-4111-8111-111111111111",
-        "type": "savedWork",
-        "createdAt": "2026-10-02T09:00:30Z",
-        "reason": "workDeleted",
-        "signer": "trusted"
-      }
+     {
+      "recordID": "W-A",
+      "type": "savedWork",
+      "createdAt": "2026-10-02T09:00:30Z",
+      "reason": "workDeleted",
+      "signer": "signer-1"
+     }
     ]
-  },
-  "expected": {
+   },
+   "expected": {
     "ios": {
-      "works": [
-        {
-          "key": "11111111-1111-4111-8111-111111111111",
-          "lifecycle": "deleted",
-          "deletedAt": "2026-10-02T09:00:00Z",
-          "deadline": "2027-01-01T00:00:00Z"
-        }
-      ]
+     "works": [
+      {
+       "key": "W-A",
+       "lifecycle": "deleted",
+       "deadline": "2027-01-01T00:00:00Z"
+      }
+     ]
     },
     "android": {
-      "works": []
+     "works": []
     }
+   },
+   "agree": false,
+   "disagreement": "X-6"
   },
-  "agree": false,
-  "disagreement": "X-6",
-  "v9Outcome": {
-    "ops": [
-      "work.create",
-      "work.softDelete"
+  {
+   "name": "control: no tombstone",
+   "local": {
+    "works": []
+   },
+   "incoming": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "isDeleted": true,
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "lastModifiedAt": "2026-10-02T09:00:00Z"
+     }
+    ]
+   },
+   "expected": {
+    "ios": {
+     "works": [
+      {
+       "key": "W-A",
+       "lifecycle": "deleted",
+       "deadline": "2027-01-01T00:00:00Z"
+      }
+     ]
+    },
+    "android": {
+     "works": [
+      {
+       "key": "W-A",
+       "lifecycle": "deleted",
+       "deadline": "2027-01-01T00:00:00Z"
+      }
+     ]
+    }
+   },
+   "agree": true
+  },
+  {
+   "name": "control: permanent-reason tombstone",
+   "local": {
+    "works": []
+   },
+   "incoming": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "isDeleted": true,
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "lastModifiedAt": "2026-10-02T09:00:00Z"
+     }
     ],
-    "state": "deleted, deadline 2026-12-31T09:00:00Z",
-    "rule": "iOS (restore into Recently Deleted)"
+    "tombstones": [
+     {
+      "recordID": "W-A",
+      "type": "savedWork",
+      "createdAt": "2026-10-02T09:00:30Z",
+      "reason": "workPermanentlyDeleted",
+      "signer": "signer-1"
+     }
+    ]
+   },
+   "expected": {
+    "ios": {
+     "works": []
+    },
+    "android": {
+     "works": []
+    }
+   },
+   "agree": true
   }
+ ],
+ "v9Outcome": "first case under MC-5 (iOS rule): W1 create + W2 delete with deletedAt payload; without MC-5 the Android baseline is kept"
 }

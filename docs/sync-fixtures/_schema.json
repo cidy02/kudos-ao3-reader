@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "kudos.sync-fixture/2",
+  "title": "Kudos sync fixture",
+  "type": "object",
+  "required": ["schema", "id", "slice", "kind", "title", "ids"],
+  "properties": {
+    "schema": {"const": "kudos.sync-fixture/2"},
+    "id": {"type": "string"},
+    "slice": {"enum": ["a", "b", "c", "ext"]},
+    "kind": {"enum": ["v8-compat", "v9-concurrency"]},
+    "title": {"type": "string"},
+    "refs": {"type": "array", "items": {"type": "string"}},
+    "ids": {"type": "object", "description": "symbolic name -> fixed canonical lowercase UUID; the lowest UUID of a component is its survivor", "additionalProperties": {"type": "string"}},
+    "route": {"enum": ["merge", "reconcile", "replace", "folderImport"]},
+    "harness": {"type": "object", "description": "v8 only: opClock, trust (signer names), signatureValid, preserved{work:bool}, assetBytes{digest:desc}, clockSubstitution (text)"},
+    "cases": {"type": "array", "items": {"$ref": "#/definitions/v8case"}},
+    "local": {"type": "object"}, "incoming": {"type": "object"},
+    "expected": {"type": "object"}, "agree": {"type": "boolean"}, "disagreement": {"type": "string"},
+    "v9Outcome": {},
+    "universes": {"type": "array", "items": {"$ref": "#/definitions/universe"}}
+  },
+  "definitions": {
+    "v8case": {
+      "type": "object", "required": ["name", "expected"],
+      "properties": {"name": {"type": "string"}, "route": {"type": "string"}, "harness": {"type": "object"},
+        "local": {"type": "object"}, "incoming": {"type": "object", "description": "manifest fragment spec, built by _v8-builder.json; the string \"<absent>\" for a key means the key is physically omitted"},
+        "expected": {"type": "object", "required": ["ios", "android"]}, "agree": {"type": "boolean"}}
+    },
+    "op": {
+      "type": "object", "required": ["id", "writer", "seq", "stamp", "kind"],
+      "properties": {
+        "id": {"type": "string", "description": "unique within the universe"},
+        "writer": {"type": "string"},
+        "seq": {"type": "integer", "minimum": 1, "description": "contiguous per writer across initial+ops; never reused within a universe"},
+        "stamp": {"type": "array", "minItems": 3, "maxItems": 3, "description": "[logicalCounter, writerIncarnation, seq]; counter strictly above the writer's previous counter and above the counter of every op named below"},
+        "kind": {"type": "string"}, "target": {"type": "string"},
+        "observed": {"type": "object", "description": "named evidence: gen, deletions, basis, epochs, base, sources, adds, supersedes; every value that is an op id is a semantic prerequisite"},
+        "payload": {"type": "object"},
+        "requires": {"type": "array", "items": {"type": "string"}, "description": "cross-writer prerequisites only; same-writer order is implicit and not repeated"}
+      }
+    },
+    "universe": {
+      "type": "object", "required": ["name", "initial", "ops", "schedules", "expected"],
+      "properties": {
+        "name": {"type": "string"}, "description": {"type": "string"},
+        "initial": {"type": "object", "description": "either {createHistory:[op...]} (valid ops applied before the universe) or {checkpoint:{cut, facts}}"},
+        "authorization": {"type": "array"},
+        "ops": {"type": "array", "items": {"$ref": "#/definitions/op"}},
+        "events": {"type": "array"},
+        "schedules": {"type": "object", "required": ["orders", "duplicates", "restarts", "missingPrerequisite", "checkpoints"],
+          "properties": {
+            "orders": {"description": "\"allInterleavings\" (same-writer order fixed) or explicit lists"}, "orderCount": {"type": "integer"},
+            "duplicates": {"type": "array", "description": "{name, order} with repeated ids"},
+            "restarts": {"type": "array", "description": "{name, order, restartAfter:'every'|[index]}: kill and reload from durable state"},
+            "missingPrerequisite": {"type": "array", "description": "{name, withheld[], order, expectedPendingAtEnd[], thenDeliver[], finalPending[]}"},
+            "checkpoints": {"type": "array", "description": "{name, cutAfter[], thenOrder[]}: install a checkpoint at the cut, then deliver thenOrder"}}},
+        "expected": {"type": "object", "required": ["state", "appliedCut", "pending", "diagnostics"],
+          "description": "identical for every complete schedule; state = normalized projection (works, memberships, annotations, assets, settings, pronunciations, witnesses); diagnostics derived from final facts and sorted"}
+      }
+    }
+  }
+}

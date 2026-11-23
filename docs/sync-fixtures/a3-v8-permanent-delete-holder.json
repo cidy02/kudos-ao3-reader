@@ -1,98 +1,114 @@
 {
-  "schema": "kudos.sync-fixture/1",
-  "id": "a3",
-  "slice": "a",
-  "kind": "v8-compat",
-  "route": "reconcile",
+ "schema": "kudos.sync-fixture/2",
+ "id": "a3",
+ "slice": "a",
+ "kind": "v8-compat",
+ "route": "reconcile",
+ "title": "A permanent delete does not remove a held copy; it only stops the work coming back",
+ "refs": [
+  "W4",
+  "N-1",
+  "KB:3469",
+  "BMS:154-164"
+ ],
+ "ids": {
+  "W-A": "11111111-1111-4111-8111-111111111111",
+  "W-B": "22222222-2222-4222-8222-222222222222"
+ },
+ "harness": {
   "opClock": "2026-10-06T00:00:00Z",
-  "title": "A permanent delete does not reach a device that still holds the work",
-  "refs": [
-    "W4",
-    "N-1",
-    "KB:4256-4356",
-    "BMS:2626"
+  "trust": [
+   "signer-1"
   ],
-  "cases": [
-    {
-      "name": "holder receives deleter's manifest",
-      "local": {
-        "works": [
-          {
-            "key": "11111111-1111-4111-8111-111111111111",
-            "lifecycle": "live",
-            "lastModifiedAt": "2026-09-01T00:00:00Z"
-          }
-        ]
-      },
-      "incoming": {
-        "works": [],
-        "tombstones": [
-          {
-            "recordID": "11111111-1111-4111-8111-111111111111",
-            "type": "savedWork",
-            "createdAt": "2026-10-05T00:00:00Z",
-            "reason": "workPermanentlyDeleted",
-            "signer": "trusted"
-          }
-        ]
-      },
-      "expected": {
-        "ios": {
-          "works": [
-            {
-              "key": "11111111-1111-4111-8111-111111111111",
-              "lifecycle": "live"
-            }
-          ]
-        },
-        "android": {
-          "works": [
-            {
-              "key": "11111111-1111-4111-8111-111111111111",
-              "lifecycle": "live"
-            }
-          ]
-        }
+  "signatureValid": true,
+  "preserved": {},
+  "assetBytes": {},
+  "clockSubstitution": "verification passes opClock as `now` into iOS archivedDeletionState/clampedArchiveDate/resurrection test and Android BackupMappers.restoredDeletionState/merge(now:)"
+ },
+ "cases": [
+  {
+   "name": "holder receives deleter's manifest",
+   "local": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "lifecycle": "live",
+      "lastModifiedAt": "2026-09-01T00:00:00Z"
+     }
+    ]
+   },
+   "incoming": {
+    "works": [],
+    "tombstones": [
+     {
+      "recordID": "W-A",
+      "type": "savedWork",
+      "createdAt": "2026-10-05T00:00:00Z",
+      "reason": "workPermanentlyDeleted",
+      "signer": "signer-1"
+     }
+    ]
+   },
+   "expected": {
+    "ios": {
+     "works": [
+      {
+       "key": "W-A",
+       "lifecycle": "live"
       }
+     ]
     },
-    {
-      "name": "deleter receives holder's manifest",
-      "local": {
-        "works": [],
-        "tombstones": [
-          {
-            "recordID": "11111111-1111-4111-8111-111111111111",
-            "type": "savedWork",
-            "createdAt": "2026-10-05T00:00:00Z",
-            "reason": "workPermanentlyDeleted"
-          }
-        ]
-      },
-      "incoming": {
-        "works": [
-          {
-            "key": "11111111-1111-4111-8111-111111111111",
-            "lifecycle": "live",
-            "lastModifiedAt": "2026-09-01T00:00:00Z"
-          }
-        ]
-      },
-      "expected": {
-        "ios": {
-          "works": []
-        },
-        "android": {
-          "works": []
-        }
+    "android": {
+     "works": [
+      {
+       "key": "W-A",
+       "lifecycle": "live"
       }
+     ]
     }
-  ],
-  "agree": true,
-  "v9Outcome": {
-    "ops": [
-      "work.purge(explicit)"
-    ],
-    "state": "holder ends purged; witness retained",
-    "change": "closes N-1 (Q-8)"
+   }
+  },
+  {
+   "name": "deleter receives holder's manifest",
+   "local": {
+    "works": [],
+    "tombstones": [
+     {
+      "recordID": "W-A",
+      "type": "savedWork",
+      "createdAt": "2026-10-05T00:00:00Z",
+      "reason": "workPermanentlyDeleted",
+      "signer": "signer-1"
+     }
+    ]
+   },
+   "incoming": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "lifecycle": "live",
+      "lastModifiedAt": "2026-09-01T00:00:00Z"
+     }
+    ]
+   },
+   "expected": {
+    "ios": {
+     "works": []
+    },
+    "android": {
+     "works": []
+    }
+   }
   }
+ ],
+ "agree": true,
+ "v9Outcome": {
+  "ops": [
+   "W2 work.delete d1 (named basis)",
+   "W4 work.purge explicit, basis [d1], v9 envelope, citing legacy evidence digest (MC-7)"
+  ],
+  "state": "holder converges to purged(explicit) once it applies W4 and the adopter was authorized; the legacy signature alone is never authority (DEC-8, DEC-10)"
+ }
 }

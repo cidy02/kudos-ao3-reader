@@ -1,0 +1,1155 @@
+{
+ "schema": "kudos.sync-fixture/2",
+ "id": "c2",
+ "slice": "c",
+ "kind": "v9-concurrency",
+ "title": "EPUB version facts racing deletion, restore and purge; alternates from retained version facts",
+ "refs": [
+  "W8",
+  "DEC-19",
+  "DEC-5"
+ ],
+ "ids": {
+  "W-A": "11111111-1111-4111-8111-111111111111",
+  "W-B": "22222222-2222-4222-8222-222222222222",
+  "W-C": "33333333-3333-4333-8333-333333333333"
+ },
+ "universes": [
+  {
+   "name": "replace-vs-delete",
+   "description": "A replacement and a soft delete: the deleted copy keeps the newer reference; no alternate",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     {
+      "id": "i2",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-A",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "d1",
+       "size": 1000
+      }
+     }
+    ]
+   },
+   "authorization": [
+    {
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-b",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "r1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      5,
+      "inc-a",
+      3
+     ],
+     "kind": "asset.write",
+     "target": "W-A",
+     "observed": {
+      "base": "i2"
+     },
+     "payload": {
+      "assetKind": "epub",
+      "digest": "d2",
+      "size": 1200
+     }
+    },
+    {
+     "id": "s1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      6,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 2,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "r1",
+       "r1",
+       "s1",
+       "s1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "r1",
+       "s1",
+       "r1",
+       "s1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "r1",
+       "s1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": [
+     {
+      "name": "checkpoint after delete, then replace",
+      "cutAfter": [
+       "s1"
+      ],
+      "thenOrder": [
+       "r1"
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "deleted",
+       "members": [
+        "W-A"
+       ],
+       "deadline": "2026-12-31T09:00:00Z",
+       "groups": {
+        "title": "T"
+       },
+       "asset": {
+        "epub": {
+         "digest": "d2",
+         "alternates": []
+        }
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "replace-delete-restore",
+   "description": "Restore returns the newer reference",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     {
+      "id": "i2",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-A",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "d1",
+       "size": 1000
+      }
+     }
+    ]
+   },
+   "authorization": [
+    {
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-b",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "r1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      5,
+      "inc-a",
+      3
+     ],
+     "kind": "asset.write",
+     "target": "W-A",
+     "observed": {
+      "base": "i2"
+     },
+     "payload": {
+      "assetKind": "epub",
+      "digest": "d2",
+      "size": 1200
+     }
+    },
+    {
+     "id": "s1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      6,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "t1",
+     "writer": "inc-b",
+     "seq": 2,
+     "stamp": [
+      7,
+      "inc-b",
+      2
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "s1"
+      ]
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 3,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "r1",
+       "r1",
+       "s1",
+       "s1",
+       "t1",
+       "t1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "r1",
+       "s1",
+       "t1",
+       "r1",
+       "s1",
+       "t1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "r1",
+       "s1",
+       "t1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold s1",
+      "withheld": [
+       "s1"
+      ],
+      "order": [
+       "r1",
+       "t1"
+      ],
+      "expectedPendingAtEnd": [
+       "t1"
+      ],
+      "thenDeliver": [
+       "s1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": []
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "title": "T"
+       },
+       "asset": {
+        "epub": {
+         "digest": "d2",
+         "alternates": []
+        }
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 2
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "replace-delete-explicit-purge",
+   "description": "Purge hides the reference; blobs d1 and d2 stay in the pool (reclaim disabled)",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     {
+      "id": "i2",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-A",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "d1",
+       "size": 1000
+      }
+     }
+    ]
+   },
+   "authorization": [
+    {
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-b",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-c",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "r1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      5,
+      "inc-a",
+      3
+     ],
+     "kind": "asset.write",
+     "target": "W-A",
+     "observed": {
+      "base": "i2"
+     },
+     "payload": {
+      "assetKind": "epub",
+      "digest": "d2",
+      "size": 1200
+     }
+    },
+    {
+     "id": "s1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      6,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "p1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      7,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "s1"
+      ]
+     },
+     "payload": {
+      "reason": "explicit"
+     },
+     "requires": [
+      "s1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 6,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "r1",
+       "r1",
+       "s1",
+       "s1",
+       "p1",
+       "p1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "r1",
+       "s1",
+       "p1",
+       "r1",
+       "s1",
+       "p1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "r1",
+       "s1",
+       "p1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold s1",
+      "withheld": [
+       "s1"
+      ],
+      "order": [
+       "r1",
+       "p1"
+      ],
+      "expectedPendingAtEnd": [
+       "p1"
+      ],
+      "thenDeliver": [
+       "s1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": []
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "purged",
+       "reason": "explicit"
+      }
+     },
+     "witnesses": [
+      {
+       "entity": "W-A",
+       "reason": "explicit",
+       "op": "p1"
+      }
+     ],
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {},
+     "blobsRetained": [
+      "d1",
+      "d2"
+     ]
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "concurrent-replacements",
+   "description": "Two replacements observing the same base are competing branches: the greater stamp wins, the other is an alternate",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     {
+      "id": "i2",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-A",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "d1",
+       "size": 1000
+      }
+     }
+    ]
+   },
+   "authorization": [
+    {
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-b",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "r1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      5,
+      "inc-a",
+      3
+     ],
+     "kind": "asset.write",
+     "target": "W-A",
+     "observed": {
+      "base": "i2"
+     },
+     "payload": {
+      "assetKind": "epub",
+      "digest": "d2",
+      "size": 1200
+     }
+    },
+    {
+     "id": "r2",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      5,
+      "inc-b",
+      1
+     ],
+     "kind": "asset.write",
+     "target": "W-A",
+     "observed": {
+      "base": "i2"
+     },
+     "payload": {
+      "assetKind": "epub",
+      "digest": "d3",
+      "size": 1200
+     },
+     "requires": [
+      "i2"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 2,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "r1",
+       "r1",
+       "r2",
+       "r2"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "r1",
+       "r2",
+       "r1",
+       "r2"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "r1",
+       "r2"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": []
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "title": "T"
+       },
+       "asset": {
+        "epub": {
+         "digest": "d3",
+         "alternates": [
+          "d2"
+         ]
+        }
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "same-digest-higher-stamp",
+   "description": "d2@10 repeats d2@5 as a successor; d3@7 branches from d1: d2 wins in every order",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     {
+      "id": "i2",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-A",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "d1",
+       "size": 1000
+      }
+     }
+    ]
+   },
+   "authorization": [
+    {
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-b",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-c",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "r1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      5,
+      "inc-a",
+      3
+     ],
+     "kind": "asset.write",
+     "target": "W-A",
+     "observed": {
+      "base": "i2"
+     },
+     "payload": {
+      "assetKind": "epub",
+      "digest": "d2",
+      "size": 1200
+     }
+    },
+    {
+     "id": "r2",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      10,
+      "inc-b",
+      1
+     ],
+     "kind": "asset.write",
+     "target": "W-A",
+     "observed": {
+      "base": "r1"
+     },
+     "payload": {
+      "assetKind": "epub",
+      "digest": "d2",
+      "size": 1200
+     },
+     "requires": [
+      "r1"
+     ]
+    },
+    {
+     "id": "r3",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      7,
+      "inc-c",
+      1
+     ],
+     "kind": "asset.write",
+     "target": "W-A",
+     "observed": {
+      "base": "i2"
+     },
+     "payload": {
+      "assetKind": "epub",
+      "digest": "d3",
+      "size": 1200
+     },
+     "requires": [
+      "i2"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 6,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "r1",
+       "r1",
+       "r2",
+       "r2",
+       "r3",
+       "r3"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "r1",
+       "r2",
+       "r3",
+       "r1",
+       "r2",
+       "r3"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "r1",
+       "r2",
+       "r3"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold r1",
+      "withheld": [
+       "r1"
+      ],
+      "order": [
+       "r2",
+       "r3"
+      ],
+      "expectedPendingAtEnd": [
+       "r2"
+      ],
+      "thenDeliver": [
+       "r1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after r1 and r3 (heads d2@5, d3@7), then r2",
+      "cutAfter": [
+       "r1",
+       "r3"
+      ],
+      "thenOrder": [
+       "r2"
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "title": "T"
+       },
+       "asset": {
+        "epub": {
+         "digest": "d2",
+         "alternates": [
+          "d3"
+         ]
+        }
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "original-bundle-set-once",
+   "description": "",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "groups": {
+        "title": "T"
+       }
+      }
+     }
+    ]
+   },
+   "authorization": [
+    {
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-b",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-c",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "o1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      6,
+      "inc-b",
+      1
+     ],
+     "kind": "original.set",
+     "target": "W-A",
+     "payload": {
+      "original": "dA.pdf",
+      "sidecar": "rA"
+     }
+    },
+    {
+     "id": "o2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      7,
+      "inc-c",
+      1
+     ],
+     "kind": "original.set",
+     "target": "W-A",
+     "payload": {
+      "original": "dB.pdf",
+      "sidecar": "rB"
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 2,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "o1",
+       "o1",
+       "o2",
+       "o2"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "o1",
+       "o2",
+       "o1",
+       "o2"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "o1",
+       "o2"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": []
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {},
+     "original": {
+      "current": {
+       "original": "dA.pdf",
+       "sidecar": "rA",
+       "fact": "o1"
+      },
+      "alternates": [
+       {
+        "original": "dB.pdf",
+        "sidecar": "rB",
+        "fact": "o2"
+       }
+      ]
+     }
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  }
+ ]
+}

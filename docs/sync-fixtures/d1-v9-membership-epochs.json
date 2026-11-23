@@ -1,0 +1,719 @@
+{
+ "schema": "kudos.sync-fixture/2",
+ "id": "d1",
+ "slice": "ext",
+ "kind": "v9-concurrency",
+ "title": "Membership epochs: observed-epoch moves, concurrent initial adds, removal evidence",
+ "refs": [
+  "DEC-14",
+  "DEC-15",
+  "M1",
+  "M1r",
+  "M2"
+ ],
+ "ids": {
+  "W-A": "11111111-1111-4111-8111-111111111111",
+  "W-B": "22222222-2222-4222-8222-222222222222",
+  "W-C": "33333333-3333-4333-8333-333333333333"
+ },
+ "universes": [
+  {
+   "name": "move-on-dead-epoch",
+   "description": "",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "x1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "queue.membership.add",
+      "target": "q1|X",
+      "payload": {
+       "rank": 1
+      }
+     },
+     {
+      "id": "y1",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "queue.membership.add",
+      "target": "q1|Y",
+      "payload": {
+       "rank": 2
+      }
+     }
+    ]
+   },
+   "authorization": [
+    {
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-b",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "m1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      5,
+      "inc-a",
+      3
+     ],
+     "kind": "queue.membership.remove",
+     "target": "q1|Y",
+     "observed": {
+      "epochs": [
+       "y1"
+      ]
+     }
+    },
+    {
+     "id": "m2",
+     "writer": "inc-a",
+     "seq": 4,
+     "stamp": [
+      6,
+      "inc-a",
+      4
+     ],
+     "kind": "queue.membership.add",
+     "target": "q1|Y",
+     "payload": {
+      "rank": 2
+     }
+    },
+    {
+     "id": "m3",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      100,
+      "inc-b",
+      1
+     ],
+     "kind": "queue.membership.move",
+     "target": "q1|Y",
+     "observed": {
+      "epochs": [
+       "y1"
+      ]
+     },
+     "payload": {
+      "rank": 0
+     },
+     "requires": [
+      "y1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 3,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "m1",
+       "m1",
+       "m2",
+       "m2",
+       "m3",
+       "m3"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "m1",
+       "m2",
+       "m3",
+       "m1",
+       "m2",
+       "m3"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "m1",
+       "m2",
+       "m3"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": [
+     {
+      "name": "checkpoint after the removal, then the old-epoch move and the re-add",
+      "cutAfter": [
+       "m1"
+      ],
+      "thenOrder": [
+       "m3",
+       "m2"
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "state": {
+     "works": {},
+     "memberships": [
+      {
+       "queue": "q1",
+       "work": "X",
+       "present": true,
+       "rank": 1
+      },
+      {
+       "queue": "q1",
+       "work": "Y",
+       "present": true,
+       "rank": 2
+      }
+     ],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 4,
+     "inc-b": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "move-on-live-epoch",
+   "description": "",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "x1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "queue.membership.add",
+      "target": "q1|X",
+      "payload": {
+       "rank": 1
+      }
+     },
+     {
+      "id": "y1",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "queue.membership.add",
+      "target": "q1|Y",
+      "payload": {
+       "rank": 2
+      }
+     }
+    ]
+   },
+   "authorization": [
+    {
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-b",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "m3",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      100,
+      "inc-b",
+      1
+     ],
+     "kind": "queue.membership.move",
+     "target": "q1|Y",
+     "observed": {
+      "epochs": [
+       "y1"
+      ]
+     },
+     "payload": {
+      "rank": 0
+     },
+     "requires": [
+      "y1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 1,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "m3",
+       "m3"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "m3",
+       "m3"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "m3"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": []
+   },
+   "expected": {
+    "state": {
+     "works": {},
+     "memberships": [
+      {
+       "queue": "q1",
+       "work": "X",
+       "present": true,
+       "rank": 1
+      },
+      {
+       "queue": "q1",
+       "work": "Y",
+       "present": true,
+       "rank": 0
+      }
+     ],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 2,
+     "inc-b": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "concurrent-initial-adds",
+   "description": "",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": [
+    {
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-b",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "queue.membership.add",
+     "target": "q1|Y",
+     "payload": {
+      "rank": 3
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "queue.membership.add",
+     "target": "q1|Y",
+     "payload": {
+      "rank": 4
+     }
+    },
+    {
+     "id": "a2",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      3,
+      "inc-a",
+      2
+     ],
+     "kind": "queue.membership.move",
+     "target": "q1|Y",
+     "observed": {
+      "epochs": [
+       "a1"
+      ]
+     },
+     "payload": {
+      "rank": 7
+     }
+    },
+    {
+     "id": "b2",
+     "writer": "inc-b",
+     "seq": 2,
+     "stamp": [
+      3,
+      "inc-b",
+      2
+     ],
+     "kind": "queue.membership.move",
+     "target": "q1|Y",
+     "observed": {
+      "epochs": [
+       "b1"
+      ]
+     },
+     "payload": {
+      "rank": 8
+     }
+    },
+    {
+     "id": "a3",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      4,
+      "inc-a",
+      3
+     ],
+     "kind": "queue.membership.remove",
+     "target": "q1|Y",
+     "observed": {
+      "epochs": [
+       "a1"
+      ]
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 10,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1",
+       "a2",
+       "a2",
+       "b2",
+       "b2",
+       "a3",
+       "a3"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "a2",
+       "b2",
+       "a3",
+       "a1",
+       "b1",
+       "a2",
+       "b2",
+       "a3"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1",
+       "a2",
+       "b2",
+       "a3"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold b1",
+      "withheld": [
+       "b1"
+      ],
+      "order": [
+       "a1",
+       "a2",
+       "b2",
+       "a3"
+      ],
+      "expectedPendingAtEnd": [
+       "b2"
+      ],
+      "thenDeliver": [
+       "b1"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold a1",
+      "withheld": [
+       "a1"
+      ],
+      "order": [
+       "b1",
+       "a2",
+       "b2",
+       "a3"
+      ],
+      "expectedPendingAtEnd": [
+       "a2",
+       "a3"
+      ],
+      "thenDeliver": [
+       "a1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": []
+   },
+   "expected": {
+    "state": {
+     "works": {},
+     "memberships": [
+      {
+       "queue": "q1",
+       "work": "Y",
+       "present": true,
+       "rank": 8
+      }
+     ],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 2
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "removal-evidence-after-checkpoint",
+   "description": "",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "x1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "queue.membership.add",
+      "target": "q1|X",
+      "payload": {
+       "rank": 1
+      }
+     },
+     {
+      "id": "y1",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "queue.membership.add",
+      "target": "q1|Y",
+      "payload": {
+       "rank": 2
+      }
+     }
+    ]
+   },
+   "authorization": [
+    {
+     "writer": "inc-a",
+     "enrolledAtCounter": 0
+    },
+    {
+     "writer": "inc-b",
+     "enrolledAtCounter": 0
+    }
+   ],
+   "ops": [
+    {
+     "id": "m1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      5,
+      "inc-a",
+      3
+     ],
+     "kind": "queue.membership.remove",
+     "target": "q1|Y",
+     "observed": {
+      "epochs": [
+       "y1"
+      ]
+     }
+    },
+    {
+     "id": "m3",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      100,
+      "inc-b",
+      1
+     ],
+     "kind": "queue.membership.move",
+     "target": "q1|Y",
+     "observed": {
+      "epochs": [
+       "y1"
+      ]
+     },
+     "payload": {
+      "rank": 0
+     },
+     "requires": [
+      "y1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 2,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "m1",
+       "m1",
+       "m3",
+       "m3"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "m1",
+       "m3",
+       "m1",
+       "m3"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "m1",
+       "m3"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": [
+     {
+      "name": "checkpoint after the removal, then the late move",
+      "cutAfter": [
+       "m1"
+      ],
+      "thenOrder": [
+       "m3"
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "state": {
+     "works": {},
+     "memberships": [
+      {
+       "queue": "q1",
+       "work": "X",
+       "present": true,
+       "rank": 1
+      }
+     ],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  }
+ ]
+}

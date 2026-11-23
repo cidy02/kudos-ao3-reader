@@ -1,0 +1,16 @@
+{
+  "schema": "kudos.sync-fixture-builder/1",
+  "description": "Deterministic construction of a v8 manifest fragment from a fixture's `local`/`incoming` spec. A record names only what the case varies; everything else is the default below, so a harness builds byte-identical manifests on every run.",
+  "ids": "A symbolic key (\"W-A\") maps through the fixture's `ids` to its canonical UUID, written uppercase on iOS-shaped manifests and lowercase on Android-shaped ones (both platforms read either). Any other id (\"mA\", \"annA\", \"x1\", \"q1\", \"s1\") is UUIDv5(namespace 6b0b8f0e-6a4c-4a45-9c1c-9e6f1f2d7a10, fixture id + \"/\" + name).",
+  "manifest": {"version": 8, "exportedAt": "2026-10-03T00:00:00Z", "settings": "defaults of KudosBackupSettings / BackupSettingsPayload", "omitKeys": "keys listed here are not written at all; the string value \"<absent>\" on a key does the same"},
+  "defaults": {
+    "work": {"title": "T", "author": "A", "summary": "", "sourceURL": "https://archiveofourown.org/works/<ao3WorkID>", "dateAdded": "2026-09-01T00:00:00Z", "createdAt": "2026-09-01T00:00:00Z", "lastModifiedAt": "= dateAdded", "hasEPUB": true, "epubDigest": "per `epub` digest if named", "isDeleted": false, "workTags": [], "userTags": [], "readiumLocator": null, "lastSpineIndex": 0, "lastScrollFraction": 0, "wordCount": 1000, "kudos": 1, "isFavorite": false, "isSaved": true, "isFinished": false, "epubPreservationStatusRaw": "notPreserved unless harness.preserved says true, then preserved"},
+    "queue": {"name": "Later", "kindRaw": "custom", "sortOrder": 1, "dateCreated": "2026-09-01T00:00:00Z", "dateUpdated": "= max of its memberships' lastModifiedAt, else dateCreated"},
+    "membership": {"queuedAt": "2026-09-01T00:00:00Z", "lastModifiedAt": "= queuedAt", "sortOrderInQueue": "= rank", "note": ""},
+    "annotation": {"kindRaw": "highlight unless `kind` is bookmark", "colorRaw": "yellow", "selectedText": "", "progression": 0, "spineIndex": 0, "chapterTitle": "", "createdAt": "2026-09-01T00:00:00Z", "lastModifiedAt": "= createdAt", "isPendingDeletion": false},
+    "tombstone": {"createdAt": "named", "deletedOnDeviceID": "dev-1", "deletionReason": "named reason", "signature": "valid Ed25519 over the iOS payload (TS:48-65) by the key named in harness.trust when signatureValid, else 64 zero bytes", "signerPublicKey": "the named signer's public key"},
+    "readingSession": {"startedAt": "2026-09-01T00:00:00Z", "endedAt": "2026-09-01T00:30:00Z", "durationSeconds": 1800, "modeRaw": "read", "lastModifiedAt": "= endedAt"}
+  },
+  "assets": "A work naming `epub: <digest>` gets `Works/<UUID>.epub` whose bytes are the harness.assetBytes entry (a minimal valid EPUB package of the stated size whose SHA-256 is recorded as the digest label); a work naming none gets no file and hasEPUB false.",
+  "expectedNormalization": "Compare normalized records: work key, lifecycle (live|deleted|absent), deadline = opClock + 90 d for a locally started countdown, epub digest label, membership rows by (queue, work) with their ids/ranks, annotation rows by id with live/softDeleted/hardDeleted/hidden, a generated parked sibling matched by provenance and note text, tombstones minted by (type, record, reason)."
+}
