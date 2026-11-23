@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 @testable import Kudos
@@ -246,7 +247,8 @@ struct ManifestStagingTests {
     /// A valid manifest (P1's generated one) with `members` spliced in before the final brace.
     static func withMembers(_ members: String) throws -> Data {
         let corpus = Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())
-        var text = String(decoding: try #require(corpus["gen:works"]), as: UTF8.self)
+        let baseData = try #require(corpus["gen:works"])
+        var text = String(decoding: baseData, as: UTF8.self)
         let brace = try #require(text.lastIndex(of: "}"))
         text.insert(contentsOf: "," + members, at: brace)
         return Data(text.utf8)
@@ -255,7 +257,8 @@ struct ManifestStagingTests {
     @Test func firstValueWinsAtEveryDepthBeforeTypedDecode() throws {
         let scratch = Scratch()
         let corpus = Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())
-        let base = String(decoding: try #require(corpus["gen:works"]), as: UTF8.self)
+        let baseData = try #require(corpus["gen:works"])
+        let base = String(decoding: baseData, as: UTF8.self)
         // Nested duplicates, plain and escaped, inside a record: the scanner cuts the later ones, so the typed decoder sees first-wins.
         let edited = base.replacingOccurrences(of: "\"title\" : \"Fixture Work 1 ", with: "\"title\" : \"FIRST\", \"\\u0074itle\" : \"SECOND\", \"title\" : \"THIRD\", \"zz\" : {\"a\":1,\"a\":2}, \"zz\" : 5, \"titleX\" : \"Fixture Work 1 ")
         #expect(edited != base)
@@ -269,14 +272,16 @@ struct ManifestStagingTests {
         defer { accented.discard() }
         let names = try accented.memberNames()
         #expect(names.contains("\u{00E9}") && names.contains("e\u{0301}") && names.contains("a") && names.contains("a\u{0}"))
-        #expect(names.filter { $0.unicodeScalars.first == "e" || $0.unicodeScalars.first == "\u{00E9}" }.count == 2)
+        #expect(names.filter { $0 == "\u{00E9}" || $0 == "e\u{0301}" }.count == 2)
+        run.discard(); accented.discard()
         #expect(scratch.leftovers.isEmpty)
     }
 
     @Test func generatedDefaultsAreMaterialisedOnceAndKeysSurviveNulAndPairs() throws {
         let scratch = Scratch()
         let corpus = Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())
-        var obj = try #require(JSONSerialization.jsonObject(with: try #require(corpus["gen:works"])) as? [String: Any])
+        let baseData = try #require(corpus["gen:works"])
+        var obj = try #require(JSONSerialization.jsonObject(with: baseData) as? [String: Any])
         // A pre-G6 bookmark (no id) and a session with only an id: today's decoder mints fresh UUIDs/dates on every decode.
         obj["bookmarks"] = [["title": "", "urlString": "https://x", "dateAdded": "2026-01-01T00:00:00Z"]]
         obj["readingSessions"] = [["id": "11111111-1111-4111-8111-111111111111"]]
@@ -306,7 +311,8 @@ struct ManifestStagingTests {
         var options = scratch.options
         options.typedRecordBudget = 8192
         let corpus = Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())
-        var obj = try #require(JSONSerialization.jsonObject(with: try #require(corpus["gen:works"])) as? [String: Any])
+        let baseData = try #require(corpus["gen:works"])
+        var obj = try #require(JSONSerialization.jsonObject(with: baseData) as? [String: Any])
         // An early schema error and an oversized strict record: resource exhaustion, whatever the member order.
         obj["bookmarks"] = [["junk": 1]]
         obj["works"] = [["summary": String(repeating: "y", count: 12000)]]
@@ -324,7 +330,8 @@ struct ManifestStagingTests {
         let chopped = ChoppedInput(ManifestDataInput(bom), window: 2)
         let run = try ManifestStager.stage(chopped, options: scratch.options)
         defer { run.discard() }
-        #expect(try run.manifest() == KudosBackupContents.decodeManifest(small) || todaysOutcome(small) != todaysOutcome(small))
+        #expect(try run.manifest().works.count == KudosBackupContents.decodeManifest(small).works.count)
+        run.discard()
         #expect(scratch.leftovers.isEmpty)
     }
 
@@ -397,7 +404,8 @@ struct ManifestStagingTests {
         let scratch = Scratch()
         var options = scratch.options
         options.chunkSize = 64
-        let data = try #require(Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())["gen:works"])
+        let corpus = Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())
+        let data = try #require(corpus["gen:works"])
         let run = try ManifestStager.stage(ManifestDataInput(data), options: options)
         defer { run.discard() }
         var seqs: [Int] = []
@@ -436,7 +444,8 @@ struct ManifestStagingTests {
 
     @Test func staleSweepSparesOpenRunsAndSurfacesFailures() throws {
         let scratch = Scratch()
-        let open = try ManifestStager.stage(ManifestDataInput(try Self.withMembers("\"zz\":1")), options: scratch.options)
+        let openData = try Self.withMembers("\"zz\":1")
+        let open = try ManifestStager.stage(ManifestDataInput(openData), options: scratch.options)
         let openName = open.db.directory.lastPathComponent
         try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -7200)], ofItemAtPath: open.db.directory.path)
         ManifestStager.removeStale(in: scratch.options.parentDirectory)
@@ -451,6 +460,55 @@ struct ManifestStagingTests {
         let failures = ManifestStager.removeStale(in: scratch.options.parentDirectory)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: stuck.path)
         #expect(failures.map { $0.0.lastPathComponent } == ["run-stuck"])
+    }
+
+    // MARK: Shared byte fixtures (docs/manifest-fixtures, read by the Android suite too)
+
+    @Test func sharedFixtureCasesHoldExactly() throws {
+        let scratch = Scratch()
+        let folder = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("docs/manifest-fixtures")
+        let index = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("cases.json"))) as? [String: Any])
+        let cases = try #require(index["cases"] as? [[String: Any]])
+        #expect(cases.count >= 30)
+        let baseText = try String(contentsOf: folder.appendingPathComponent("base.json"), encoding: .utf8)
+        var failures: [String] = []
+        for c in cases {
+            let id = try #require(c["id"] as? String)
+            let input = try #require(c["input"] as? [String: Any])
+            let data: Data
+            if let file = input["file"] as? String {
+                data = try Data(contentsOf: folder.appendingPathComponent(file))
+            } else {
+                let splice = try #require(input["splice"] as? [String: Any])
+                var members = splice["members"] as? String ?? ""
+                if let r = splice["repeat"] as? [String: Any] {
+                    let unit = r["unit"] as? String ?? "", count = r["count"] as? Int ?? 1, separator = r["separator"] as? String ?? ""
+                    members += (r["prefix"] as? String ?? "") + Array(repeating: unit, count: count).joined(separator: separator) + (r["suffix"] as? String ?? "")
+                }
+                let brace = try #require(baseText.lastIndex(of: "}"))
+                data = Data((baseText[..<brace] + "," + members + baseText[brace...]).utf8)
+            }
+            let expected = try #require(c["outcome"] as? String)
+            var actual = "ok"
+            do {
+                let run = try ManifestStager.stage(ManifestDataInput(data), options: scratch.options)
+                defer { run.discard() }
+                let manifest = try run.manifest()
+                let projection = "version=\(manifest.version);works=" + manifest.works.map { "\($0.id.uuidString.lowercased())|\($0.title)" }.joined(separator: ",")
+                    + ";omitted=" + manifest.omittedKeys.sorted().joined(separator: ",")
+                let digest = SHA256.hash(data: Data(projection.utf8)).map { String(format: "%02x", $0) }.joined()
+                if expected == "ok", digest != c["digest"] as? String { actual = "ok but projection \(projection)" }
+            } catch ManifestStreamError.invalidDocument(.notJSON) { actual = "notJSON"
+            } catch ManifestStreamError.invalidDocument(.schema) { actual = "schema"
+            } catch ManifestStreamError.invalidDocument(.depth) { actual = "depth"
+            } catch ManifestStreamError.unsupportedVersion { actual = "unsupportedVersion"
+            } catch ManifestStreamError.resourceExhausted { actual = "resource"
+            } catch { actual = "other \(error)" }
+            if actual != expected { failures.append("\(id): expected \(expected), got \(actual)") }
+        }
+        #expect(failures.isEmpty, "\(failures)")
+        #expect(scratch.leftovers.isEmpty)
     }
 
     // MARK: Resource limits (shared with Android)

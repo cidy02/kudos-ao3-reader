@@ -1,0 +1,51 @@
+{
+  "version": 8,
+  "exportedAt": "2026-06-26T12:00:00.000Z",
+  "works": {},
+  "bookmarks": [],
+  "fonts": [],
+  "settings": {
+    "readerFontID": "system",
+    "readerMode": "scroll",
+    "readerTwoPage": false,
+    "readerCustomize": false,
+    "readerBoldText": false,
+    "readerFontPt": 18.0,
+    "readerLineHeight": 1.65,
+    "readerLetterSpacing": 0.0,
+    "readerWordSpacing": 0.0,
+    "readerMargin": 28.0,
+    "readerJustify": false,
+    "confirmBeforeDelete": true,
+    "hideMatureContent": true,
+    "matureContentMode": "obscure",
+    "requireBiometricToReveal": false,
+    "appTheme": "light",
+    "readerTheme": "light",
+    "matchAppReaderTheme": true,
+    "accentColorHex": "#990000",
+    "autoPreserveSmallSeriesOnSaveForLater": false,
+    "autoPreserveSeriesWorkThreshold": 5
+  },
+  "exportedBy": {
+    "app": "Kudos",
+    "platform": "android",
+    "appVersion": "0.2.1",
+    "schemaVersion": 8
+  },
+  "pronunciations": {
+    "global": {
+      "Nico": "n\u02c8iko\u028a"
+    },
+    "fandoms": {
+      "Portable Fandom": {
+        "Sam": "s\u00e6m"
+      }
+    },
+    "works": {
+      "820002": {
+        "Sam": "s\u0251m"
+      }
+    }
+  }
+}
