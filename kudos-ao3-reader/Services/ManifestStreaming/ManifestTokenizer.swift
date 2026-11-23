@@ -51,6 +51,9 @@ nonisolated struct ManifestTokenizer {
     /// Source ranges of later duplicate members (`,"k":v`), at any depth, so a record can be rewritten first-wins before typed decode.
     private(set) var removals: [Range<Int>] = []
     private var whitespaceRun = 0
+    /// A container beyond `ManifestLimits.maxDepth` was met. Scanning goes on (iteratively, remembering nothing) so a malformed
+    /// tail still reports syntax first; the stager reports the depth outcome at EOF and stages nothing from then on.
+    private(set) var depthExceeded = false
 
     init(input: ManifestInput, at position: Int = 0) {
         self.input = input
@@ -101,7 +104,7 @@ nonisolated struct ManifestTokenizer {
         let start = pos
         switch b {
         case UInt8(ascii: "{"):
-            guard depth < ManifestLimits.maxDepth else { throw ManifestScanError.tooDeep }
+            guard depth < ManifestLimits.maxDepth else { try skipDeep(); return (.object, start ..< pos) }
             pos += 1
             skipWhitespace()
             if peek() == UInt8(ascii: "}") { pos += 1; return (.object, start ..< pos) }
@@ -129,7 +132,7 @@ nonisolated struct ManifestTokenizer {
                 if peek() == UInt8(ascii: "}") { pos += 1; return (.object, start ..< pos) } // lenient, as today's route
             }
         case UInt8(ascii: "["):
-            guard depth < ManifestLimits.maxDepth else { throw ManifestScanError.tooDeep }
+            guard depth < ManifestLimits.maxDepth else { try skipDeep(); return (.array, start ..< pos) }
             pos += 1
             skipWhitespace()
             if peek() == UInt8(ascii: "]") { pos += 1; return (.array, start ..< pos) }
@@ -151,6 +154,56 @@ nonisolated struct ManifestTokenizer {
         default:
             try number()
             return (.number, start ..< pos)
+        }
+    }
+
+    /// Validates one container nested past the limit without recursion and without keeping keys (an explicit one-byte-per-level
+    /// stack, itself capped), so hostile nesting cannot overflow the call stack and a malformed tail is still found.
+    private mutating func skipDeep() throws {
+        depthExceeded = true
+        var stack: [UInt8] = [] // 1 object, 0 array
+        var expectValue = true
+        func closer(_ isObject: Bool) -> UInt8 { isObject ? UInt8(ascii: "}") : UInt8(ascii: "]") }
+        func key(_ t: inout ManifestTokenizer) throws {
+            t.skipWhitespace()
+            guard t.peek() == UInt8(ascii: "\"") else { throw t.fail("object key") }
+            _ = try t.skipString()
+            t.skipWhitespace()
+            guard t.peek() == UInt8(ascii: ":") else { throw t.fail("colon") }
+            t.pos += 1
+        }
+        while true {
+            if Task.isCancelled { throw ManifestScanError.cancelled }
+            skipWhitespace()
+            if expectValue {
+                guard let b = peek() else { throw ManifestScanError.unexpectedEnd }
+                switch b {
+                case UInt8(ascii: "{"), UInt8(ascii: "["):
+                    guard stack.count < 1 << 24 else { throw ManifestScanError.tooDeep }
+                    let isObject = b == UInt8(ascii: "{")
+                    pos += 1
+                    skipWhitespace()
+                    stack.append(isObject ? 1 : 0)
+                    if peek() == closer(isObject) { pos += 1; stack.removeLast(); expectValue = false; continue }
+                    if isObject { try key(&self) }
+                case UInt8(ascii: "\""): _ = try skipString(); expectValue = false
+                case UInt8(ascii: "t"): try literal("true"); expectValue = false
+                case UInt8(ascii: "f"): try literal("false"); expectValue = false
+                case UInt8(ascii: "n"): try literal("null"); expectValue = false
+                default: try number(); expectValue = false
+                }
+            } else {
+                guard let top = stack.last else { return }
+                let isObject = top == 1
+                guard let c = peek() else { throw ManifestScanError.unexpectedEnd }
+                pos += 1
+                if c == closer(isObject) { stack.removeLast(); continue }
+                guard c == UInt8(ascii: ",") else { throw fail("separator") }
+                skipWhitespace()
+                if peek() == closer(isObject) { pos += 1; stack.removeLast(); continue } // trailing comma, as elsewhere
+                if isObject { try key(&self) }
+                expectValue = true
+            }
         }
     }
 

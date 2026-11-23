@@ -22,9 +22,9 @@ One contract for both platforms (owner, 2026-11-22, `docs/REDESIGN_DECISIONS.md`
 | Escapes | `\" \\ \/ \b \f \n \r \t \uXXXX`. A lone high or low surrogate escape is rejected; a valid pair is accepted. Raw control characters (< 0x20) in a string are rejected; `0x7F` is allowed. |
 | Numbers | JSON grammar (no leading `+`, no leading zeros, no `NaN`/`Infinity`, digits required after `.` and `e`). Value range is decided by the typed decode (`99999999999999999999` as `version` is a schema failure, not a syntax one). |
 | Not accepted | Comments, single quotes, unquoted tokens, `;`/`=` separators (Android's lenient decoder accepted some; it stops). |
-| Top level | An object is a manifest candidate. An array is JSON but not a manifest (schema failure; Android reports it as a syntax error: unpinned difference, not part of the shared fixtures). A scalar is not JSON (`notJSON`). Empty input is `notJSON`. |
+| Top level | An object is a manifest candidate. An array is JSON but not a manifest (**schema** on both platforms, shared decision 16). A scalar is not JSON (`notJSON`). Empty input is `notJSON`. |
 | Trailing content | Anything but whitespace after the top-level value is `notJSON`. |
-| Depth | At most **512 containers on any path, the root included** (a 513th is rejected). This differs from today's `JSONSerialization` by one (it allows 513); the shared decision (`briefs/p2-round3-shared.md` 1) follows Android's convention. A depth rejection of a complete file is its own outcome (`invalidDocument(.depth)`), **not** `notJSON`: it never makes a live manifest eligible for `.bak` replacement (§ 3). Real manifests nest about 5 deep. |
+| Depth | At most **512 containers on any path, the root included** (a 513th is rejected). This differs from today's `JSONSerialization` by one (it allows 513); the shared decision (`briefs/p2-round3-shared.md` 1) follows Android's convention. Scanning goes on past the limit (iteratively, retaining nothing), so a malformed tail still reports syntax first; a depth rejection of a complete file is its own outcome (`invalidDocument(.depth)`), **not** `notJSON`: it never makes a live manifest eligible for `.bak` replacement (§ 3). Real manifests nest about 5 deep. |
 | Key equality | Exact sequence of UTF-16 code units after unescaping, **no Unicode normalisation** (`"é"` and `"e"+U+0301` are different keys, as in `NSString`/`JSONSerialization`). **First value wins at every depth**, enforced by the scanner: a later equal key inside a record is cut out of the bytes the typed decoder (and the stored payload) sees, so nothing depends on how Foundation resolves a repeated key. |
 | Strings | Raw control characters U+0000–U+001F inside a string and malformed UTF-8 are syntax errors; escape hex digits are ASCII only (`\uFF10` style is rejected); `0x7F` is allowed. |
 | Resource limits | Same on both platforms (new, **pending owner approval**; each is one named constant in `ManifestLimits`): object key <= 64 Ki **UTF-16 code units of the decoded key**; number token <= 64 Ki source characters (incremental JSON number grammar: a bare word is a syntax error, not an over-long number); <= 262,144 **source members** per object at every depth, counted before first-wins dedupe and including inside skipped duplicate values; a known root value (`version`, `exportedAt`, `settings`, `pronunciations`, `exportedBy`, or a known section holding the wrong kind of value) <= 16 Mi **source bytes as written** (whitespace included); decoded keys held at once for dedupe across all open objects <= 32 MiB (total live key memory). Over a limit is **resource exhaustion**, decided at EOF. Record arrays, records and unknown values have no size limit. Tested at the limit and one over. |
@@ -95,8 +95,7 @@ and exist as the oracle for tests.
 
 ### Record sizes
 
-A record or single value up to `typedRecordBudget` (32 MiB of source bytes by default; a supported ~20 MiB recovery copy decodes at about
-twice its size) is decoded with the production type while staging. Payloads are stored as rows of at most `chunkSize` (256 KiB)
+A record or single value up to `typedRecordBudget` (**8 MiB** of source bytes, shared with Android; a single-value member such as `settings` uses the 16 MiB root-value limit instead; real strict records are KBs, and a 22 MiB strict record decoded to a 166 MiB peak on Android) is decoded with the production type while staging. Payloads are stored as rows of at most `chunkSize` (256 KiB)
 bytes, never one blob. There is no per-record cap, with these rules above the budget:
 
 - **Lossy** sections (`writingRecovery`, `documents`): the element is syntax-validated and stored in chunks (`status = deferred`,
@@ -142,8 +141,12 @@ All in `KudosTests/ManifestStreaming/ManifestStagingTests.swift` (normal gate un
   (`fileInputAndTinyChunksAndDeferredRecordsRebuildTheSameManifest`). The depth boundary is the one deliberate difference from today's route.
 - **Presence, order, status, keys, indexes**: `presenceOrderStatusAndNaturalKeysAreStaged`.
 - **Chunked oversized value**: `oversizedValuesAreStoredInBoundedChunks`.
-- **Shared byte fixtures** (`docs/manifest-fixtures/cases.json`, read by both platforms): `sharedFixtureCasesHoldExactly` (every case's
-  outcome class and, for accepted ones, the digest of the staged projection).
+- **Shared byte fixtures**: `docs/manifest-fixtures/` is Android's set copied byte-identical (`cases.json` + byte files; `wrapper` with
+  `BODY` and `gen` recipes), run by `sharedFixtureCasesHoldExactly`. Every non-`ok` case matches (iOS reports the depth policy as
+  `depth`, compared as Android's `resource`). **Reported, not changed:** every `ok` case is a *schema* failure on iOS because the
+  shared wrapper has only `version`, `exportedAt` and `works` while iOS requires `bookmarks`, `fonts` and `settings`; with those
+  members spliced in, all but `record-8MiB-exact-valid-ok` are `ok` (that record is `{id, summary}`, not a valid iOS work). The test
+  pins both lists exactly.
 - **Depth** (512 containers, root included) and the `.bak` eligibility rule: `nestingLimitIsFiveHundredTwelveContainersIncludingTheRoot`.
   **First wins at every depth, no normalisation**: `firstValueWinsAtEveryDepthBeforeTypedDecode`. **Generated defaults materialised
   once, NUL-safe keys, pair identities**: `generatedDefaultsAreMaterialisedOnceAndKeysSurviveNulAndPairs`.

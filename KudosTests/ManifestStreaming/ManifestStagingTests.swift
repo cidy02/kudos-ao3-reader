@@ -145,6 +145,7 @@ struct ManifestStagingTests {
         var options = scratch.options
         options.chunkSize = 1024
         options.typedRecordBudget = 8192
+        options.typedValueBudget = 8192
         let corpus = Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())
         let base = try #require(corpus["gen:works"])
         var obj = try #require(JSONSerialization.jsonObject(with: base) as? [String: Any])
@@ -184,7 +185,12 @@ struct ManifestStagingTests {
         #expect(ManifestStreamError.io("x").isBakEligible == false)
         #expect(ManifestStreamError.resourceExhausted("x").isBakEligible == false)
         #expect(try outcome("{\"version\":8,\"x\":[") == .invalidDocument(.notJSON)) // truncated: eligible
-        #expect(try outcome("{\"version\":8,\"x\":\(nested(512))") == .invalidDocument(.depth)) // deep and cut: protected too
+        // Precedence holds through a depth overflow: scanning goes on, so a malformed tail still reports syntax (eligible), and a
+        // deeper-than-the-iterative-guard-allows tail does not crash the scanner.
+        #expect(try outcome("{\"version\":8,\"x\":\(nested(512))") == .invalidDocument(.notJSON))
+        #expect(try outcome("{\"version\":8,\"x\":\(nested(512))]") == .invalidDocument(.notJSON))
+        #expect(try outcome("{\"version\":8,\"x\":\(String(repeating: "{\"a\":[", count: 20_000))1\(String(repeating: "]}", count: 20_000))}") == .invalidDocument(.depth))
+        #expect(try outcome("{\"version\":8,\"x\":\(String(repeating: "{\"a\":[", count: 20_000))1\(String(repeating: "]}", count: 20_000))}x") == .invalidDocument(.notJSON))
         #expect(scratch.leftovers.isEmpty)
     }
 
@@ -201,6 +207,7 @@ struct ManifestStagingTests {
         let scratch = Scratch()
         var options = scratch.options
         options.typedRecordBudget = 8192
+        options.typedValueBudget = 8192
         let corpus = Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())
         let base = try #require(corpus["gen:works"])
         var obj = try #require(JSONSerialization.jsonObject(with: base) as? [String: Any])
@@ -462,52 +469,71 @@ struct ManifestStagingTests {
         #expect(failures.map { $0.0.lastPathComponent } == ["run-stuck"])
     }
 
-    // MARK: Shared byte fixtures (docs/manifest-fixtures, read by the Android suite too)
+    // MARK: Shared byte fixtures (docs/manifest-fixtures: Android's set, byte-identical; its suite reads the same cases.json)
+
+    /// Shared cases whose expectation iOS cannot meet, reported to the orchestrator and not changed. The shared wrapper has
+    /// `version`, `exportedAt` and `works` only, so every case that expects `ok` is a **schema** failure on iOS (`bookmarks`,
+    /// `fonts` and `settings` are required here); `augmentedKnownDisagreements` are the ones still not `ok` once those members
+    /// are added, i.e. a real difference in what a valid record is (Android's model is looser).
+    static let knownFixtureDisagreements: Set<String> = [
+        "bom-ok", "depth-512-total-ok", "key-32768-emoji-root-ok", "key-65536-ascii-nested-ok", "key-escaped-duplicate-first-wins",
+        "key-nfc-nfd-distinct", "members-262144-nested-ok", "number-65536-digits-ok", "record-8MiB-exact-valid-ok",
+        "settings-16MiB-source-ok", "surrogate-pair-ok", "trailing-commas-ok",
+    ]
+    static let augmentedKnownDisagreements: Set<String> = ["record-8MiB-exact-valid-ok"]
+
+    static func outcomeName(_ data: Data, _ options: ManifestStagingOptions) -> String {
+        do {
+            try ManifestStager.stage(ManifestDataInput(data), options: options).discard()
+            return "ok"
+        } catch ManifestStreamError.invalidDocument(.notJSON) { return "syntax"
+        } catch ManifestStreamError.invalidDocument(.schema) { return "schema"
+        } catch ManifestStreamError.invalidDocument(.depth) { return "resource" // Android's class for the depth policy; iOS names it `depth`
+        } catch ManifestStreamError.unsupportedVersion { return "unsupportedVersion"
+        } catch ManifestStreamError.resourceExhausted { return "resource"
+        } catch { return "other \(error)" }
+    }
 
     @Test func sharedFixtureCasesHoldExactly() throws {
         let scratch = Scratch()
         let folder = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("docs/manifest-fixtures")
         let index = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("cases.json"))) as? [String: Any])
+        let wrapper = try #require(index["wrapper"] as? String)
         let cases = try #require(index["cases"] as? [[String: Any]])
-        #expect(cases.count >= 30)
-        let baseText = try String(contentsOf: folder.appendingPathComponent("base.json"), encoding: .utf8)
-        var failures: [String] = []
+        #expect(cases.count >= 37)
+        let required = "\"works\":[],\"bookmarks\":[],\"fonts\":[],"
+        var disagreements: Set<String> = [], stillDisagreeing: Set<String> = []
         for c in cases {
             let id = try #require(c["id"] as? String)
-            let input = try #require(c["input"] as? [String: Any])
-            let data: Data
-            if let file = input["file"] as? String {
+            let expected = try #require(c["expect"] as? String)
+            var text: String?
+            var data: Data
+            if let file = c["file"] as? String {
                 data = try Data(contentsOf: folder.appendingPathComponent(file))
             } else {
-                let splice = try #require(input["splice"] as? [String: Any])
-                var members = splice["members"] as? String ?? ""
-                if let r = splice["repeat"] as? [String: Any] {
-                    let unit = r["unit"] as? String ?? "", count = r["count"] as? Int ?? 1, separator = r["separator"] as? String ?? ""
-                    members += (r["prefix"] as? String ?? "") + Array(repeating: unit, count: count).joined(separator: separator) + (r["suffix"] as? String ?? "")
-                }
-                let brace = try #require(baseText.lastIndex(of: "}"))
-                data = Data((baseText[..<brace] + "," + members + baseText[brace...]).utf8)
+                let gen = try #require(c["gen"] as? [String: Any])
+                let body = (gen["prefix"] as? String ?? "") + String(repeating: gen["unit"] as? String ?? "", count: gen["count"] as? Int ?? 1)
+                    + (gen["suffix"] as? String ?? "")
+                let wrap = gen["wrap"] as? Bool ?? false
+                text = wrap ? wrapper.replacingOccurrences(of: "BODY", with: body) : body
+                data = Data(text!.utf8)
             }
-            let expected = try #require(c["outcome"] as? String)
-            var actual = "ok"
-            do {
-                let run = try ManifestStager.stage(ManifestDataInput(data), options: scratch.options)
-                defer { run.discard() }
-                let manifest = try run.manifest()
-                let projection = "version=\(manifest.version);works=" + manifest.works.map { "\($0.id.uuidString.lowercased())|\($0.title)" }.joined(separator: ",")
-                    + ";omitted=" + manifest.omittedKeys.sorted().joined(separator: ",")
-                let digest = SHA256.hash(data: Data(projection.utf8)).map { String(format: "%02x", $0) }.joined()
-                if expected == "ok", digest != c["digest"] as? String { actual = "ok but projection \(projection)" }
-            } catch ManifestStreamError.invalidDocument(.notJSON) { actual = "notJSON"
-            } catch ManifestStreamError.invalidDocument(.schema) { actual = "schema"
-            } catch ManifestStreamError.invalidDocument(.depth) { actual = "depth"
-            } catch ManifestStreamError.unsupportedVersion { actual = "unsupportedVersion"
-            } catch ManifestStreamError.resourceExhausted { actual = "resource"
-            } catch { actual = "other \(error)" }
-            if actual != expected { failures.append("\(id): expected \(expected), got \(actual)") }
+            let actual = Self.outcomeName(data, scratch.options)
+            guard actual != expected else { continue }
+            disagreements.insert(id)
+            guard expected == "ok", actual == "schema" else { stillDisagreeing.insert(id); continue }
+            // Does it become `ok` once iOS's required members are present? (Textual splice after `"works":[],`; bytes otherwise as shared.)
+            var augmented = data
+            if let range = data.range(of: Data("\"works\":[],".utf8)) {
+                let hasSettings = data.range(of: Data("\"settings\":".utf8)) != nil
+                let extra = required.dropFirst("\"works\":[],".count) + (hasSettings ? "" : "\"settings\":{\"readerFontID\":\"system\"},")
+                augmented.replaceSubrange(range.upperBound ..< range.upperBound, with: Data(extra.utf8))
+            }
+            if Self.outcomeName(augmented, scratch.options) != "ok" { stillDisagreeing.insert(id) }
         }
-        #expect(failures.isEmpty, "\(failures)")
+        #expect(disagreements == Self.knownFixtureDisagreements, "\(disagreements.sorted())")
+        #expect(stillDisagreeing == Self.augmentedKnownDisagreements, "\(stillDisagreeing.sorted())")
         #expect(scratch.leftovers.isEmpty)
     }
 

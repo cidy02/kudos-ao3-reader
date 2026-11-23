@@ -5,7 +5,9 @@ nonisolated struct ManifestStagingOptions {
     /// A larger lossy element is syntax-validated and stored in chunks (`ManifestRecordStatus.deferred`). A larger strict
     /// record or value is resource exhaustion, decided when the run reaches EOF (so a malformed tail still reports its own
     /// class first). The supported ~20 MiB recovery copy decodes at about twice its size (P1), so the default keeps it typed.
-    var typedRecordBudget = 32 << 20
+    var typedRecordBudget = 8 << 20
+    /// Same for one single-value member (`settings`, `pronunciations`); the root-value limit (16 MiB) is its natural ceiling.
+    var typedValueBudget = ManifestLimits.maxRootValueBytes
     /// Payloads are stored as rows of at most this many bytes.
     var chunkSize = 256 << 10
     /// Where the per-run directory is created. Default: the system temporary directory.
@@ -150,7 +152,7 @@ nonisolated final class ManifestStagingPass {
     }
 
     /// Whatever has gone wrong so far, staging more would not change the outcome: keep scanning, stop writing.
-    private var abandoned: Bool { schemaFailed || tokenizer.limitHit != nil }
+    private var abandoned: Bool { schemaFailed || tokenizer.limitHit != nil || tokenizer.depthExceeded }
 
     /// Returns the manifest `version`; throws a `ManifestStreamError` or a `ManifestScanError`.
     func run() throws -> Int {
@@ -171,6 +173,7 @@ nonisolated final class ManifestStagingPass {
         if let failure = input.failure { throw ManifestStreamError.io(failure) }
         if Task.isCancelled { throw ManifestStreamError.cancelled }
         if let message = tokenizer.limitHit { throw ManifestStreamError.resourceExhausted(message) }
+        if tokenizer.depthExceeded { throw ManifestStreamError.invalidDocument(.depth) }
         // `JSONSerialization` takes only an object or an array at the top level; an array is JSON but not a manifest.
         if rootKind != .object { throw ManifestStreamError.invalidDocument(rootKind == .array ? .schema : .notJSON) }
 
@@ -258,7 +261,7 @@ nonisolated final class ManifestStagingPass {
             try recordMember(spec.name, .null, kind, 0, range.count)
             return
         }
-        if range.count > options.typedRecordBudget { tokenizer.noteLimit("\(spec.name) of \(range.count) bytes exceeds the typed-decode budget") }
+        if range.count > options.typedValueBudget { tokenizer.noteLimit("\(spec.name) of \(range.count) bytes exceeds the typed-decode budget") }
         if !abandoned {
             let data = firstWins(input.read(range), base: range.lowerBound, cuts: cuts)
             if let failure = input.failure { throw ManifestStreamError.io(failure) }

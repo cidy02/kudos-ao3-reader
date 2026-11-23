@@ -1,393 +1,401 @@
 {
- "schemaVersion": 1,
- "about": "Shared byte fixtures for the manifest.json staging readers (iOS T-567 P2, Android A-567 P2). Regenerate with generate.py.",
- "outcomeClasses": {
-  "ok": "staged; `digest` is sha256 of `projection`",
-  "notJSON": "syntax error (eligible for .bak replacement)",
-  "schema": "valid JSON, not a decodable manifest",
-  "unsupportedVersion": "version outside 1...8",
-  "resource": "resource exhaustion (a ManifestLimits value exceeded)",
-  "depth": "more than 512 containers, root included (policy; not .bak-eligible)"
- },
- "projection": "version=<n>;works=<id lowercase>|<title>,...;omitted=<sorted names among collections, readingQueues, annotations, savedSearches that are missing or null, comma separated>",
- "input": {
-  "file": "bytes of that file next to cases.json",
-  "splice": "document = base.json with its final \"}\" replaced by \",\" + members + \"}\", where members = splice.members followed by repeat (if present) = prefix + unit repeated count times joined by separator (default empty) + suffix; all strings UTF-8"
- },
+ "wrapper": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[],BODY}",
  "cases": [
   {
-   "id": "base-ok",
-   "input": {
-    "file": "base.json"
-   },
-   "outcome": "ok",
-   "note": "a minimal valid manifest; the four omittable arrays are missing",
-   "projection": "version=8;works=3000abcd-0000-4000-8000-00000000000a|Folder Sync 3001;omitted=annotations,collections,readingQueues,savedSearches",
-   "digest": "9829192504c95806ccbf00709dc7d9d287eefff8faf080711b02cc57828b404a"
+   "id": "depth-512-total-ok",
+   "file": "depth-512-total-ok.json",
+   "expect": "ok",
+   "note": "root + 511 arrays = 512 containers"
   },
   {
-   "id": "bom",
-   "input": {
-    "file": "bom.json"
-   },
-   "outcome": "ok",
-   "note": "leading UTF-8 BOM accepted",
-   "projection": "version=8;works=3000abcd-0000-4000-8000-00000000000a|Folder Sync 3001;omitted=annotations,collections,readingQueues,savedSearches",
-   "digest": "9829192504c95806ccbf00709dc7d9d287eefff8faf080711b02cc57828b404a"
-  },
-  {
-   "id": "trailing-comma-object",
-   "input": {
-    "file": "trailing-comma-object.json"
-   },
-   "outcome": "ok",
-   "note": "a trailing comma in an object",
-   "projection": "version=8;works=3000abcd-0000-4000-8000-00000000000a|Folder Sync 3001;omitted=annotations,collections,readingQueues,savedSearches",
-   "digest": "9829192504c95806ccbf00709dc7d9d287eefff8faf080711b02cc57828b404a"
-  },
-  {
-   "id": "trailing-comma-array",
-   "input": {
-    "file": "trailing-comma-array.json"
-   },
-   "outcome": "notJSON",
-   "note": "a lone comma in an array is not a trailing comma"
-  },
-  {
-   "id": "root-duplicate-first-wins",
-   "input": {
-    "splice": {
-     "members": "\"version\":99"
-    }
-   },
-   "outcome": "ok",
-   "note": "a later duplicate root key is ignored (first wins), even with a different value",
-   "projection": "version=8;works=3000abcd-0000-4000-8000-00000000000a|Folder Sync 3001;omitted=annotations,collections,readingQueues,savedSearches",
-   "digest": "9829192504c95806ccbf00709dc7d9d287eefff8faf080711b02cc57828b404a"
-  },
-  {
-   "id": "nested-duplicate-first-wins",
-   "input": {
-    "file": "nested-duplicate-first-wins.json"
-   },
-   "outcome": "ok",
-   "note": "inside a record the first of two equal keys wins",
-   "projection": "version=8;works=3000abcd-0000-4000-8000-00000000000a|Folder Sync 3001;omitted=annotations,collections,readingQueues,savedSearches",
-   "digest": "9829192504c95806ccbf00709dc7d9d287eefff8faf080711b02cc57828b404a"
-  },
-  {
-   "id": "nested-escaped-duplicate-first-wins",
-   "input": {
-    "file": "nested-escaped-duplicate-first-wins.json"
-   },
-   "outcome": "ok",
-   "note": "an escaped spelling of the same key is the same key",
-   "projection": "version=8;works=3000abcd-0000-4000-8000-00000000000a|Folder Sync 3001;omitted=annotations,collections,readingQueues,savedSearches",
-   "digest": "9829192504c95806ccbf00709dc7d9d287eefff8faf080711b02cc57828b404a"
-  },
-  {
-   "id": "unicode-keys-not-normalised",
-   "input": {
-    "splice": {
-     "members": "\"é\":1,\"é\":2"
-    }
-   },
-   "outcome": "ok",
-   "note": "a precomposed and a decomposed key are different keys (exact UTF-16, no normalisation)",
-   "projection": "version=8;works=3000abcd-0000-4000-8000-00000000000a|Folder Sync 3001;omitted=annotations,collections,readingQueues,savedSearches",
-   "digest": "9829192504c95806ccbf00709dc7d9d287eefff8faf080711b02cc57828b404a"
+   "id": "depth-513-total-resource",
+   "file": "depth-513-total-resource.json",
+   "expect": "resource",
+   "note": "513 containers; depth policy is not a syntax error"
   },
   {
    "id": "raw-lf-in-string",
-   "input": {
-    "splice": {
-     "members": "\"x\":\"a\nb\""
-    }
-   },
-   "outcome": "notJSON",
-   "note": "raw control characters inside a string are syntax errors"
+   "file": "raw-lf-in-string.json",
+   "expect": "syntax",
+   "note": "raw control character U+000A"
   },
   {
    "id": "raw-nul-in-string",
-   "input": {
-    "splice": {
-     "members": "\"x\":\"a\u0000b\""
-    }
-   },
-   "outcome": "notJSON",
-   "note": "raw U+0000 inside a string"
+   "file": "raw-nul-in-string.json",
+   "expect": "syntax",
+   "note": "raw control character U+0000"
   },
   {
-   "id": "invalid-utf8-byte",
-   "input": {
-    "file": "invalid-utf8-byte.json"
-   },
-   "outcome": "notJSON",
-   "note": "malformed UTF-8 is a syntax error (never replaced)"
+   "id": "invalid-utf8-ff",
+   "file": "invalid-utf8-ff.json",
+   "expect": "syntax",
+   "note": "byte FF is not UTF-8"
+  },
+  {
+   "id": "truncated-utf8-before-quote",
+   "file": "truncated-utf8-before-quote.json",
+   "expect": "syntax",
+   "note": "truncated multibyte sequence"
   },
   {
    "id": "fullwidth-hex-escape",
-   "input": {
-    "splice": {
-     "members": "\"x\":\"\\u００４１\""
-    }
-   },
-   "outcome": "notJSON",
-   "note": "escape hex digits are ASCII only"
+   "file": "fullwidth-hex-escape.json",
+   "expect": "syntax",
+   "note": "escape digits are ASCII only"
   },
   {
-   "id": "lone-surrogate-escape",
-   "input": {
-    "splice": {
-     "members": "\"x\":\"\\ud800\""
-    }
-   },
-   "outcome": "notJSON",
-   "note": "a lone surrogate escape is rejected"
+   "id": "key-nfc-nfd-distinct",
+   "file": "key-nfc-nfd-distinct.json",
+   "expect": "ok",
+   "note": "no normalization: two distinct keys"
   },
   {
-   "id": "leading-zero-number",
-   "input": {
-    "splice": {
-     "members": "\"x\":08"
-    }
-   },
-   "outcome": "notJSON",
-   "note": "JSON number grammar: no leading zero"
+   "id": "key-escaped-duplicate-first-wins",
+   "file": "key-escaped-duplicate-first-wins.json",
+   "expect": "ok",
+   "note": "an escaped spelling of a key is the same key; first wins"
   },
   {
-   "id": "missing-comma",
-   "input": {
-    "splice": {
-     "members": "\"x\":1 \"y\":2"
-    }
-   },
-   "outcome": "notJSON",
-   "note": "a missing separator is a syntax error"
+   "id": "lone-high-surrogate",
+   "file": "lone-high-surrogate.json",
+   "expect": "syntax",
+   "note": "lone high surrogate escape"
   },
   {
-   "id": "trailing-content",
-   "input": {
-    "file": "trailing-content.json"
-   },
-   "outcome": "notJSON",
-   "note": "anything but whitespace after the root"
+   "id": "lone-low-surrogate",
+   "file": "lone-low-surrogate.json",
+   "expect": "syntax",
+   "note": "lone low surrogate escape"
   },
   {
-   "id": "scalar-root",
-   "input": {
-    "file": "scalar-root.json"
-   },
-   "outcome": "notJSON",
-   "note": "a top-level scalar is not JSON for this reader"
+   "id": "surrogate-pair-ok",
+   "file": "surrogate-pair-ok.json",
+   "expect": "ok",
+   "note": "a pair is fine"
   },
   {
-   "id": "unsupported-version",
-   "input": {
-    "file": "unsupported-version.json"
-   },
-   "outcome": "unsupportedVersion",
-   "note": "version outside 1...8, everything else valid"
+   "id": "trailing-commas-ok",
+   "file": "trailing-commas-ok.json",
+   "expect": "ok",
+   "note": "one trailing comma in object and array"
   },
   {
-   "id": "works-missing",
-   "input": {
-    "file": "works-missing.json"
-   },
-   "outcome": "schema",
-   "note": "a required array is missing"
+   "id": "bom-ok",
+   "file": "bom-ok.json",
+   "expect": "ok",
+   "note": "leading UTF-8 BOM"
   },
   {
-   "id": "works-wrong-kind",
-   "input": {
-    "file": "works-wrong-kind.json"
-   },
-   "outcome": "schema",
-   "note": "a required array holds an object"
+   "id": "root-array",
+   "file": "root-array.json",
+   "expect": "schema",
+   "note": "a complete array root is well-formed JSON: schema failure on both platforms"
   },
   {
-   "id": "documents-wrong-kind-is-absent",
-   "input": {
-    "splice": {
-     "members": "\"documents\":\"x\""
-    }
-   },
-   "outcome": "ok",
-   "note": "a lossy section with the wrong kind is absent, not a failure",
-   "projection": "version=8;works=3000abcd-0000-4000-8000-00000000000a|Folder Sync 3001;omitted=annotations,collections,readingQueues,savedSearches",
-   "digest": "9829192504c95806ccbf00709dc7d9d287eefff8faf080711b02cc57828b404a"
+   "id": "bare-word-value",
+   "file": "bare-word-value.json",
+   "expect": "syntax",
+   "note": "bare word"
   },
   {
-   "id": "depth-512-containers",
-   "input": {
-    "splice": {
-     "members": "\"x\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"
-    }
-   },
-   "outcome": "ok",
-   "note": "the root plus 511 arrays = 512 containers, the last accepted",
-   "projection": "version=8;works=3000abcd-0000-4000-8000-00000000000a|Folder Sync 3001;omitted=annotations,collections,readingQueues,savedSearches",
-   "digest": "9829192504c95806ccbf00709dc7d9d287eefff8faf080711b02cc57828b404a"
+   "id": "leading-zero",
+   "file": "leading-zero.json",
+   "expect": "syntax",
+   "note": "leading zero"
   },
   {
-   "id": "depth-513-containers",
-   "input": {
-    "splice": {
-     "members": "\"x\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"
-    }
+   "id": "key-65536-ascii-nested-ok",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":{\"",
+    "unit": "a",
+    "count": 65536,
+    "suffix": "\":1}"
    },
-   "outcome": "depth",
-   "note": "the root plus 512 arrays = 513 containers: policy rejection; never eligible for .bak replacement"
+   "expect": "ok",
+   "note": "key of exactly 65,536 UTF-16 units"
   },
   {
-   "id": "key-65536-units",
-   "input": {
-    "splice": {
-     "repeat": {
-      "prefix": "\"",
-      "unit": "k",
-      "count": 65536,
-      "suffix": "\":1"
-     }
-    }
+   "id": "key-65537-ascii-nested-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":{\"",
+    "unit": "a",
+    "count": 65537,
+    "suffix": "\":1}"
    },
-   "outcome": "ok",
-   "note": "a key of exactly 65,536 UTF-16 units",
-   "projection": "version=8;works=3000abcd-0000-4000-8000-00000000000a|Folder Sync 3001;omitted=annotations,collections,readingQueues,savedSearches",
-   "digest": "9829192504c95806ccbf00709dc7d9d287eefff8faf080711b02cc57828b404a"
+   "expect": "resource",
+   "note": "key of 65,537 UTF-16 units"
   },
   {
-   "id": "key-65537-units",
-   "input": {
-    "splice": {
-     "repeat": {
-      "prefix": "\"",
-      "unit": "k",
-      "count": 65537,
-      "suffix": "\":1"
-     }
-    }
+   "id": "key-32768-emoji-root-ok",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"",
+    "unit": "\ud83d\ude00",
+    "count": 32768,
+    "suffix": "\":1"
    },
-   "outcome": "resource",
-   "note": "one unit over"
+   "expect": "ok",
+   "note": "65,536 UTF-16 units at the root"
   },
   {
-   "id": "key-emoji-65536-units",
-   "input": {
-    "splice": {
-     "repeat": {
-      "prefix": "\"",
-      "unit": "😀",
-      "count": 32768,
-      "suffix": "\":1"
-     }
-    }
+   "id": "key-32768-emoji-plus-a-root-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"",
+    "unit": "\ud83d\ude00",
+    "count": 32768,
+    "suffix": "a\":1"
    },
-   "outcome": "ok",
-   "note": "32,768 emoji are 65,536 UTF-16 units (not graphemes, not bytes)",
-   "projection": "version=8;works=3000abcd-0000-4000-8000-00000000000a|Folder Sync 3001;omitted=annotations,collections,readingQueues,savedSearches",
-   "digest": "9829192504c95806ccbf00709dc7d9d287eefff8faf080711b02cc57828b404a"
+   "expect": "resource",
+   "note": "65,537 UTF-16 units at the root"
   },
   {
-   "id": "key-emoji-65537-units",
-   "input": {
-    "splice": {
-     "repeat": {
-      "prefix": "\"",
-      "unit": "😀",
-      "count": 32768,
-      "suffix": "a\":1"
-     }
-    }
+   "id": "members-262144-nested-ok",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":{",
+    "unit": "\"a\":0,",
+    "count": 262143,
+    "suffix": "\"a\":0}"
    },
-   "outcome": "resource",
-   "note": "one unit over, in a key"
+   "expect": "ok",
+   "note": "262,144 source members (duplicates count)"
   },
   {
-   "id": "members-262144",
-   "input": {
-    "splice": {
-     "members": "\"x\":",
-     "repeat": {
-      "prefix": "{",
-      "unit": "\"a\":0",
-      "separator": ",",
-      "count": 262144,
-      "suffix": "}"
-     }
-    }
+   "id": "members-262145-nested-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":{",
+    "unit": "\"a\":0,",
+    "count": 262144,
+    "suffix": "\"a\":0}"
    },
-   "outcome": "ok",
-   "note": "a nested object with exactly 262,144 source members (equal keys count)",
-   "projection": "version=8;works=3000abcd-0000-4000-8000-00000000000a|Folder Sync 3001;omitted=annotations,collections,readingQueues,savedSearches",
-   "digest": "9829192504c95806ccbf00709dc7d9d287eefff8faf080711b02cc57828b404a"
+   "expect": "resource",
+   "note": "262,145 source members"
   },
   {
-   "id": "members-262145",
-   "input": {
-    "splice": {
-     "members": "\"x\":",
-     "repeat": {
-      "prefix": "{",
-      "unit": "\"a\":0",
-      "separator": ",",
-      "count": 262145,
-      "suffix": "}"
-     }
-    }
+   "id": "members-262145-in-skipped-duplicate-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":0,\"x\":{",
+    "unit": "\"a\":0,",
+    "count": 262144,
+    "suffix": "\"a\":0}"
    },
-   "outcome": "resource",
-   "note": "one over: source members are counted before first-wins dedupe, at every depth"
+   "expect": "resource",
+   "note": "members inside a skipped duplicate value count"
   },
   {
-   "id": "number-65536-digits",
-   "input": {
-    "splice": {
-     "members": "\"x\":",
-     "repeat": {
-      "prefix": "",
-      "unit": "1",
-      "count": 65536,
-      "suffix": ""
-     }
-    }
+   "id": "number-65536-digits-ok",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":",
+    "unit": "1",
+    "count": 65536,
+    "suffix": ""
    },
-   "outcome": "ok",
-   "note": "a number token of exactly 65,536 characters",
-   "projection": "version=8;works=3000abcd-0000-4000-8000-00000000000a|Folder Sync 3001;omitted=annotations,collections,readingQueues,savedSearches",
-   "digest": "9829192504c95806ccbf00709dc7d9d287eefff8faf080711b02cc57828b404a"
+   "expect": "ok",
+   "note": "a 65,536-character number"
   },
   {
-   "id": "number-65537-digits",
-   "input": {
-    "splice": {
-     "members": "\"x\":",
-     "repeat": {
-      "prefix": "",
-      "unit": "1",
-      "count": 65537,
-      "suffix": ""
-     }
-    }
+   "id": "number-65537-digits-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":",
+    "unit": "1",
+    "count": 65537,
+    "suffix": ""
    },
-   "outcome": "resource",
-   "note": "one over"
+   "expect": "resource",
+   "note": "a 65,537-character number"
   },
   {
-   "id": "bare-word-is-syntax",
-   "input": {
-    "splice": {
-     "members": "\"x\":",
-     "repeat": {
-      "prefix": "",
-      "unit": "a",
-      "count": 65537,
-      "suffix": ""
-     }
-    }
+   "id": "bare-word-65537-syntax",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":",
+    "unit": "a",
+    "count": 65537,
+    "suffix": ""
    },
-   "outcome": "notJSON",
-   "note": "a bare word is a syntax error, not an oversized number"
+   "expect": "syntax",
+   "note": "a long bare word is a syntax error, not an oversized number"
+  },
+  {
+   "id": "settings-16MiB-source-ok",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"settings\":{\"readerFontID\":\"system\"",
+    "unit": " ",
+    "count": 16777191,
+    "suffix": "}"
+   },
+   "expect": "ok",
+   "note": "settings value of exactly 16 MiB source bytes (spaces count)"
+  },
+  {
+   "id": "settings-16MiB-plus-1-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"settings\":{\"readerFontID\":\"system\"",
+    "unit": " ",
+    "count": 16777192,
+    "suffix": "}"
+   },
+   "expect": "resource",
+   "note": "16 MiB + 1 source bytes"
+  },
+  {
+   "id": "settings-multibyte-16MiB-plus-1-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"settings\":{\"readerFontID\":\"  ",
+    "unit": "\ud83d\ude00",
+    "count": 4194299,
+    "suffix": "\"}"
+   },
+   "expect": "resource",
+   "note": "4-byte characters count as 4 source bytes each"
+  },
+  {
+   "id": "exportedBy-16MiB-plus-1-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"exportedBy\":{\"platform\":\"x\",\"appVersion\":\"1\"",
+    "unit": " ",
+    "count": 16777184,
+    "suffix": "}"
+   },
+   "expect": "resource",
+   "note": "exportedBy has the same limit"
+  },
+  {
+   "id": "works-wrong-kind-huge-resource",
+   "gen": {
+    "wrap": false,
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":\"",
+    "unit": "a",
+    "count": 16777216,
+    "suffix": "\"}"
+   },
+   "expect": "resource",
+   "note": "a huge wrong-kind known root value is resource exhaustion"
+  },
+  {
+   "id": "record-1MiB-plus-1-missing-id-schema",
+   "gen": {
+    "wrap": false,
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"x\":\"",
+    "unit": "a",
+    "count": 1048569,
+    "suffix": "\"}]}"
+   },
+   "expect": "schema",
+   "note": "1 MiB + 1 byte, no id: strict decode fails"
+  },
+  {
+   "id": "record-32MiB-plus-1-resource",
+   "gen": {
+    "wrap": false,
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"x\":\"",
+    "unit": "a",
+    "count": 33554425,
+    "suffix": "\"}]}"
+   },
+   "expect": "resource",
+   "note": "32 MiB + 1 byte record: over the typed budget (8 MiB)"
+  },
+  {
+   "id": "record-32MiB-exact-valid-ok",
+   "gen": {
+    "wrap": false,
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"id\":\"00000001-0000-4000-8000-000000000001\",\"summary\":\"",
+    "unit": "a",
+    "count": 33554374,
+    "suffix": "\"}]}"
+   },
+   "expect": "resource",
+   "note": "kept id: exactly 32 MiB is now far over the 8 MiB strict budget"
+  },
+  {
+   "id": "record-over-budget-then-malformed-tail-syntax",
+   "gen": {
+    "wrap": false,
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"x\":\"",
+    "unit": "a",
+    "count": 33554425,
+    "suffix": "\"}]}x"
+   },
+   "expect": "syntax",
+   "note": "a malformed tail reports syntax before the budget"
+  },
+  {
+   "id": "record-schema-error-then-over-budget-resource",
+   "gen": {
+    "wrap": false,
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"title\":\"no id\"},{\"x\":\"",
+    "unit": "a",
+    "count": 33554425,
+    "suffix": "\"}]}"
+   },
+   "expect": "resource",
+   "note": "an earlier schema error does not hide a later budget failure"
+  },
+  {
+   "id": "record-8MiB-exact-valid-ok",
+   "gen": {
+    "wrap": false,
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"id\":\"00000001-0000-4000-8000-000000000001\",\"summary\":\"",
+    "unit": "a",
+    "count": 8388550,
+    "suffix": "\"}]}"
+   },
+   "expect": "ok",
+   "note": "exactly 8 MiB, valid: the largest accepted strict record"
+  },
+  {
+   "id": "record-8MiB-plus-1-valid-resource",
+   "gen": {
+    "wrap": false,
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"id\":\"00000001-0000-4000-8000-000000000001\",\"summary\":\"",
+    "unit": "a",
+    "count": 8388551,
+    "suffix": "\"}]}"
+   },
+   "expect": "resource",
+   "note": "8 MiB + 1 byte, valid: over the strict budget"
+  },
+  {
+   "id": "depth-513-then-malformed-tail-syntax",
+   "file": "depth-513-then-malformed-tail-syntax.json",
+   "expect": "syntax",
+   "note": "scanning continues after the depth hit; a malformed tail reports syntax first"
+  },
+  {
+   "id": "depth-unterminated-100000-syntax",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":",
+    "unit": "[",
+    "count": 100000,
+    "suffix": ""
+   },
+   "expect": "syntax",
+   "note": "an unterminated deep value is a syntax error, found by scanning without recursion"
+  },
+  {
+   "id": "array-root-truncated",
+   "file": "array-root-truncated.json",
+   "expect": "syntax",
+   "note": "a truncated array root is a syntax error"
+  },
+  {
+   "id": "array-root-then-garbage",
+   "file": "array-root-then-garbage.json",
+   "expect": "syntax",
+   "note": "trailing content after an array root is a syntax error"
   }
  ]
 }
