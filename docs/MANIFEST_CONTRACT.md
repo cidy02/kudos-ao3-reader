@@ -25,7 +25,7 @@ One contract for both platforms (owner, 2026-11-22, `docs/REDESIGN_DECISIONS.md`
 | Top level | An object is a manifest candidate. An array is JSON but not a manifest (schema failure). A scalar is not JSON (`notJSON`). Empty input is `notJSON`. |
 | Trailing content | Anything but whitespace after the top-level value is `notJSON`. |
 | Depth | 512 levels of nesting below the top-level value (a 513th nested container is rejected). Measured against `JSONSerialization` at 508–516 in both object and array roots; they agree. Real manifests nest about 5 deep. |
-| Resource limits | Same on both platforms (new, **pending owner approval**; each is one named constant in `ManifestLimits`): object key <= 64 Ki chars; number token <= 64 Ki chars; <= 262,144 distinct keys in the top-level object; a known single root value (`version`, `exportedAt`, `settings`, `pronunciations`) <= 16 Mi chars. Over a limit is **resource exhaustion**, not an invalid document. Record arrays, records and unknown values have no size limit. Keys inside records are not counted (the typed decoder reads them). Tested at the limit and one over. |
+| Resource limits | Same on both platforms (new, **pending owner approval**; each is one named constant in `ManifestLimits`): object key <= 64 Ki chars; number token <= 64 Ki chars; <= 262,144 keys in **any one object, at any depth** (counted per open object while scanning; the top-level object counts distinct keys); a known single root value (`version`, `exportedAt`, `settings`, `pronunciations`) <= 16 Mi chars. Over a limit is **resource exhaustion**, not an invalid document. Record arrays, records and unknown values have no size limit. Tested at the limit and one over. |
 | Leading zeros, missing comma | Rejected as syntax (`08`, `{"a":1 "b":2}`): already so on iOS, identical on Android. |
 | Evaluation order | Syntax first, through EOF (a bad record early plus a truncated tail is `notJSON`, not `schema`), then record and key checks, then version. |
 | Key order | Free. `version` and `exportedAt` may follow the arrays (the exporter writes them last, `sortedKeys`), so nothing is applied or swept before EOF. |
@@ -75,11 +75,15 @@ are there, indexed, in source order (`seq`).
 ### Record sizes
 
 A record or single value up to `typedRecordBudget` (32 MiB of JSON by default; a supported ~20 MiB recovery copy decodes at about
-twice its size) is decoded with the production type while staging. A larger one is syntax-validated and stored as chunks
-(`status = deferred`, no natural keys; a known single root value is instead capped, see Resource limits) and its schema is **not** checked while staging; whoever reads it decodes it (P4 streams
-oversized supported records field by field). Payloads are stored as rows of at most `chunkSize` (256 KiB) bytes, never one blob.
-There is no per-record cap. A strict section's deferred record that would not have decoded is therefore a schema failure found
-later, not at staging; this exists only above the budget and is the one place the streaming reader is looser than today.
+twice its size) is decoded with the production type while staging. Payloads are stored as rows of at most `chunkSize` (256 KiB)
+bytes, never one blob. There is no per-record cap, with these rules above the budget:
+
+- **Lossy** sections (`writingRecovery`, `documents`): the element is syntax-validated and stored in chunks (`status = deferred`,
+  no natural keys); whoever reads it decodes it, and a bad one is skipped then, as today. This cannot accept anything today's
+  decoder rejects, because today's decoder skips it too.
+- **Strict** records and single values (`works`, `settings`, ...): **resource exhaustion**, never accepted. A record the existing
+  decoder would reject must not slip through unchecked, and decoding an oversized strict record field by field is P4 work. Nothing
+  real is near the budget (the largest real records are the lossy ones).
 
 ## 3. Outcomes and what each route does
 
@@ -125,8 +129,8 @@ All in `KudosTests/ManifestStreaming/ManifestStagingTests.swift` (normal gate un
 ## 5. Not covered here
 
 - Android: the same table filled from `BackupJson.kt` / `BackupValidator.kt` / `SyncRepository.kt` (**see A-567 P2**).
-- Deflated `manifest.json` ZIP entries (the prototype and `ManifestFileInput` read stored entries by byte range; every export
-  writes stored). A streaming inflater is P5 work.
+- **P5 item:** deflated `manifest.json` ZIP entries. `ManifestFileInput` reads a stored entry by byte range, which is what every
+  export writes; a deflated entry needs a streaming inflater (and the same limits on output size) and is out of scope for P2.
 - A mid-file ENOSPC is mapped (`SQLITE_FULL` → resource exhaustion) but cannot be injected safely on the host disk; the disk
   preflight is tested instead.
 - The staging reader is synchronous; callers run it off the main actor inside a `Task` so cancellation reaches it.

@@ -127,7 +127,6 @@ nonisolated final class ManifestStagingPass {
         guard let version else { throw ManifestStreamError.invalidDocument(.schema) }
         guard KudosBackupManifest.supportedVersions.contains(version) else { throw ManifestStreamError.unsupportedVersion(version) }
         try db.exec("COMMIT")
-        try createIndexes()
         return version
     }
 
@@ -268,6 +267,7 @@ nonisolated final class ManifestStagingPass {
                 + ManifestRecordKeys.columns.map { "\($0) \($0 == "k_ao3" ? "INTEGER" : $0 == "k_stamp" ? "REAL" : "TEXT")" }.joined(separator: ", ") + ");"
         }
         try db.exec(sql)
+        try createIndexes() // built up front: incremental inserts stay inside the page cache, a bulk build at the end (sorter) peaked above it
     }
 
     private func createIndexes() throws {
