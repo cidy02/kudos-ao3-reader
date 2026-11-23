@@ -3,10 +3,11 @@
  "id": "d1",
  "slice": "ext",
  "kind": "v9-concurrency",
- "title": "Membership epochs: observed-epoch moves, concurrent initial adds, removal evidence",
+ "title": "Membership epochs: observed-epoch moves, per-epoch maxima, concurrent adds, system queue key, removal evidence",
  "refs": [
-  "DEC-14",
-  "DEC-15",
+  "DEC-16",
+  "DEC-17",
+  "DEC-18",
   "M1",
   "M1r",
   "M2"
@@ -14,22 +15,84 @@
  "ids": {
   "W-A": "11111111-1111-4111-8111-111111111111",
   "W-B": "22222222-2222-4222-8222-222222222222",
-  "W-C": "33333333-3333-4333-8333-333333333333"
+  "W-C": "33333333-3333-4333-8333-333333333333",
+  "W-Z": "44444444-4444-4444-8444-444444444444",
+  "X": "55555555-5555-4555-8555-555555555555",
+  "Y": "66666666-6666-4666-8666-666666666666"
  },
  "universes": [
   {
    "name": "move-on-dead-epoch",
-   "description": "",
+   "description": "A move naming the removed epoch cannot affect the re-added epoch, whatever its stamp",
    "initial": {
     "createHistory": [
      {
-      "id": "x1",
+      "id": "q0",
       "writer": "inc-a",
       "seq": 1,
       "stamp": [
        1,
        "inc-a",
        1
+      ],
+      "kind": "queue.create",
+      "target": "q1",
+      "payload": {
+       "groups": {
+        "name": "Later"
+       }
+      }
+     },
+     {
+      "id": "wx",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "work.create",
+      "target": "X",
+      "payload": {
+       "ao3WorkID": 1,
+       "urls": [
+        "https://archiveofourown.org/works/1"
+       ],
+       "groups": {
+        "title": "X"
+       }
+      }
+     },
+     {
+      "id": "wy",
+      "writer": "inc-a",
+      "seq": 3,
+      "stamp": [
+       3,
+       "inc-a",
+       3
+      ],
+      "kind": "work.create",
+      "target": "Y",
+      "payload": {
+       "ao3WorkID": 2,
+       "urls": [
+        "https://archiveofourown.org/works/2"
+       ],
+       "groups": {
+        "title": "Y"
+       }
+      }
+     },
+     {
+      "id": "x1",
+      "writer": "inc-a",
+      "seq": 4,
+      "stamp": [
+       4,
+       "inc-a",
+       4
       ],
       "kind": "queue.membership.add",
       "target": "q1|X",
@@ -40,11 +103,11 @@
      {
       "id": "y1",
       "writer": "inc-a",
-      "seq": 2,
+      "seq": 5,
       "stamp": [
-       2,
+       5,
        "inc-a",
-       2
+       5
       ],
       "kind": "queue.membership.add",
       "target": "q1|Y",
@@ -54,25 +117,21 @@
      }
     ]
    },
-   "authorization": [
-    {
-     "writer": "inc-a",
-     "enrolledAtCounter": 0
-    },
-    {
-     "writer": "inc-b",
-     "enrolledAtCounter": 0
-    }
-   ],
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
    "ops": [
     {
      "id": "m1",
      "writer": "inc-a",
-     "seq": 3,
+     "seq": 6,
      "stamp": [
-      5,
+      6,
       "inc-a",
-      3
+      6
      ],
      "kind": "queue.membership.remove",
      "target": "q1|Y",
@@ -85,11 +144,11 @@
     {
      "id": "m2",
      "writer": "inc-a",
-     "seq": 4,
+     "seq": 7,
      "stamp": [
-      6,
+      7,
       "inc-a",
-      4
+      7
      ],
      "kind": "queue.membership.add",
      "target": "q1|Y",
@@ -170,25 +229,66 @@
       "thenOrder": [
        "m3",
        "m2"
+      ],
+      "checkpointCut": [
+       "m1"
       ]
      }
-    ]
+    ],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
    },
    "expected": {
     "state": {
-     "works": {},
+     "works": {
+      "X": {
+       "lifecycle": "live",
+       "members": [
+        "X"
+       ],
+       "groups": {
+        "title": "X"
+       }
+      },
+      "Y": {
+       "lifecycle": "live",
+       "members": [
+        "Y"
+       ],
+       "groups": {
+        "title": "Y"
+       }
+      },
+      "q1": {
+       "lifecycle": "live",
+       "members": [
+        "q1"
+       ],
+       "groups": {
+        "name": "Later"
+       }
+      }
+     },
      "memberships": [
       {
        "queue": "q1",
        "work": "X",
        "present": true,
-       "rank": 1
+       "rank": 1,
+       "epochs": [
+        "x1"
+       ]
       },
       {
        "queue": "q1",
        "work": "Y",
        "present": true,
-       "rank": 2
+       "rank": 2,
+       "epochs": [
+        "m2"
+       ]
       }
      ],
      "annotations": [],
@@ -196,7 +296,7 @@
      "pronunciations": {}
     },
     "appliedCut": {
-     "inc-a": 4,
+     "inc-a": 7,
      "inc-b": 1
     },
     "pending": [],
@@ -205,17 +305,76 @@
   },
   {
    "name": "move-on-live-epoch",
-   "description": "",
+   "description": "The same high-stamp move on a live epoch wins",
    "initial": {
     "createHistory": [
      {
-      "id": "x1",
+      "id": "q0",
       "writer": "inc-a",
       "seq": 1,
       "stamp": [
        1,
        "inc-a",
        1
+      ],
+      "kind": "queue.create",
+      "target": "q1",
+      "payload": {
+       "groups": {
+        "name": "Later"
+       }
+      }
+     },
+     {
+      "id": "wx",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "work.create",
+      "target": "X",
+      "payload": {
+       "ao3WorkID": 1,
+       "urls": [
+        "https://archiveofourown.org/works/1"
+       ],
+       "groups": {
+        "title": "X"
+       }
+      }
+     },
+     {
+      "id": "wy",
+      "writer": "inc-a",
+      "seq": 3,
+      "stamp": [
+       3,
+       "inc-a",
+       3
+      ],
+      "kind": "work.create",
+      "target": "Y",
+      "payload": {
+       "ao3WorkID": 2,
+       "urls": [
+        "https://archiveofourown.org/works/2"
+       ],
+       "groups": {
+        "title": "Y"
+       }
+      }
+     },
+     {
+      "id": "x1",
+      "writer": "inc-a",
+      "seq": 4,
+      "stamp": [
+       4,
+       "inc-a",
+       4
       ],
       "kind": "queue.membership.add",
       "target": "q1|X",
@@ -226,11 +385,11 @@
      {
       "id": "y1",
       "writer": "inc-a",
-      "seq": 2,
+      "seq": 5,
       "stamp": [
-       2,
+       5,
        "inc-a",
-       2
+       5
       ],
       "kind": "queue.membership.add",
       "target": "q1|Y",
@@ -240,16 +399,12 @@
      }
     ]
    },
-   "authorization": [
-    {
-     "writer": "inc-a",
-     "enrolledAtCounter": 0
-    },
-    {
-     "writer": "inc-b",
-     "enrolledAtCounter": 0
-    }
-   ],
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
    "ops": [
     {
      "id": "m3",
@@ -305,23 +460,61 @@
      }
     ],
     "missingPrerequisite": [],
-    "checkpoints": []
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
    },
    "expected": {
     "state": {
-     "works": {},
+     "works": {
+      "X": {
+       "lifecycle": "live",
+       "members": [
+        "X"
+       ],
+       "groups": {
+        "title": "X"
+       }
+      },
+      "Y": {
+       "lifecycle": "live",
+       "members": [
+        "Y"
+       ],
+       "groups": {
+        "title": "Y"
+       }
+      },
+      "q1": {
+       "lifecycle": "live",
+       "members": [
+        "q1"
+       ],
+       "groups": {
+        "name": "Later"
+       }
+      }
+     },
      "memberships": [
       {
        "queue": "q1",
        "work": "X",
        "present": true,
-       "rank": 1
+       "rank": 1,
+       "epochs": [
+        "x1"
+       ]
       },
       {
        "queue": "q1",
        "work": "Y",
        "present": true,
-       "rank": 0
+       "rank": 0,
+       "epochs": [
+        "y1"
+       ]
       }
      ],
      "annotations": [],
@@ -329,7 +522,7 @@
      "pronunciations": {}
     },
     "appliedCut": {
-     "inc-a": 2,
+     "inc-a": 5,
      "inc-b": 1
     },
     "pending": [],
@@ -338,29 +531,64 @@
   },
   {
    "name": "concurrent-initial-adds",
-   "description": "",
+   "description": "Two devices add the same endpoint: two live epochs; removing one leaves the member",
    "initial": {
-    "createHistory": []
+    "createHistory": [
+     {
+      "id": "q0",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "queue.create",
+      "target": "q1",
+      "payload": {
+       "groups": {
+        "name": "Later"
+       }
+      }
+     },
+     {
+      "id": "wy",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "work.create",
+      "target": "Y",
+      "payload": {
+       "ao3WorkID": 2,
+       "urls": [
+        "https://archiveofourown.org/works/2"
+       ],
+       "groups": {
+        "title": "Y"
+       }
+      }
+     }
+    ]
    },
-   "authorization": [
-    {
-     "writer": "inc-a",
-     "enrolledAtCounter": 0
-    },
-    {
-     "writer": "inc-b",
-     "enrolledAtCounter": 0
-    }
-   ],
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
    "ops": [
     {
      "id": "a1",
      "writer": "inc-a",
-     "seq": 1,
+     "seq": 3,
      "stamp": [
-      1,
+      3,
       "inc-a",
-      1
+      3
      ],
      "kind": "queue.membership.add",
      "target": "q1|Y",
@@ -386,11 +614,11 @@
     {
      "id": "a2",
      "writer": "inc-a",
-     "seq": 2,
+     "seq": 4,
      "stamp": [
-      3,
+      4,
       "inc-a",
-      2
+      4
      ],
      "kind": "queue.membership.move",
      "target": "q1|Y",
@@ -408,7 +636,7 @@
      "writer": "inc-b",
      "seq": 2,
      "stamp": [
-      3,
+      4,
       "inc-b",
       2
      ],
@@ -426,11 +654,11 @@
     {
      "id": "a3",
      "writer": "inc-a",
-     "seq": 3,
+     "seq": 5,
      "stamp": [
-      4,
+      5,
       "inc-a",
-      3
+      5
      ],
      "kind": "queue.membership.remove",
      "target": "q1|Y",
@@ -492,25 +720,6 @@
     ],
     "missingPrerequisite": [
      {
-      "name": "withhold b1",
-      "withheld": [
-       "b1"
-      ],
-      "order": [
-       "a1",
-       "a2",
-       "b2",
-       "a3"
-      ],
-      "expectedPendingAtEnd": [
-       "b2"
-      ],
-      "thenDeliver": [
-       "b1"
-      ],
-      "finalPending": []
-     },
-     {
       "name": "withhold a1",
       "withheld": [
        "a1"
@@ -529,19 +738,64 @@
        "a1"
       ],
       "finalPending": []
+     },
+     {
+      "name": "withhold b1",
+      "withheld": [
+       "b1"
+      ],
+      "order": [
+       "a1",
+       "a2",
+       "b2",
+       "a3"
+      ],
+      "expectedPendingAtEnd": [
+       "b2"
+      ],
+      "thenDeliver": [
+       "b1"
+      ],
+      "finalPending": []
      }
     ],
-    "checkpoints": []
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
    },
    "expected": {
     "state": {
-     "works": {},
+     "works": {
+      "Y": {
+       "lifecycle": "live",
+       "members": [
+        "Y"
+       ],
+       "groups": {
+        "title": "Y"
+       }
+      },
+      "q1": {
+       "lifecycle": "live",
+       "members": [
+        "q1"
+       ],
+       "groups": {
+        "name": "Later"
+       }
+      }
+     },
      "memberships": [
       {
        "queue": "q1",
        "work": "Y",
        "present": true,
-       "rank": 8
+       "rank": 8,
+       "epochs": [
+        "b1"
+       ]
       }
      ],
      "annotations": [],
@@ -549,7 +803,7 @@
      "pronunciations": {}
     },
     "appliedCut": {
-     "inc-a": 3,
+     "inc-a": 5,
      "inc-b": 2
     },
     "pending": [],
@@ -557,18 +811,529 @@
    }
   },
   {
-   "name": "removal-evidence-after-checkpoint",
-   "description": "",
+   "name": "multi-epoch-move-keeps-per-epoch-maxima",
+   "description": "A move naming {a,b} still wins for b after a newer move naming only a and the removal of a",
    "initial": {
     "createHistory": [
      {
-      "id": "x1",
+      "id": "q0",
       "writer": "inc-a",
       "seq": 1,
       "stamp": [
        1,
        "inc-a",
        1
+      ],
+      "kind": "queue.create",
+      "target": "q1",
+      "payload": {
+       "groups": {
+        "name": "Later"
+       }
+      }
+     },
+     {
+      "id": "wy",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "work.create",
+      "target": "Y",
+      "payload": {
+       "ao3WorkID": 2,
+       "urls": [
+        "https://archiveofourown.org/works/2"
+       ],
+       "groups": {
+        "title": "Y"
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      3,
+      "inc-a",
+      3
+     ],
+     "kind": "queue.membership.add",
+     "target": "q1|Y",
+     "payload": {
+      "rank": 3
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "queue.membership.add",
+     "target": "q1|Y",
+     "payload": {
+      "rank": 4
+     }
+    },
+    {
+     "id": "m1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      5,
+      "inc-c",
+      1
+     ],
+     "kind": "queue.membership.move",
+     "target": "q1|Y",
+     "observed": {
+      "epochs": [
+       "a1",
+       "b1"
+      ]
+     },
+     "payload": {
+      "rank": 9
+     },
+     "requires": [
+      "a1",
+      "b1"
+     ]
+    },
+    {
+     "id": "m2",
+     "writer": "inc-a",
+     "seq": 4,
+     "stamp": [
+      6,
+      "inc-a",
+      4
+     ],
+     "kind": "queue.membership.move",
+     "target": "q1|Y",
+     "observed": {
+      "epochs": [
+       "a1"
+      ]
+     },
+     "payload": {
+      "rank": 3
+     }
+    },
+    {
+     "id": "m3",
+     "writer": "inc-a",
+     "seq": 5,
+     "stamp": [
+      7,
+      "inc-a",
+      5
+     ],
+     "kind": "queue.membership.remove",
+     "target": "q1|Y",
+     "observed": {
+      "epochs": [
+       "a1"
+      ]
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 20,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1",
+       "m1",
+       "m1",
+       "m2",
+       "m2",
+       "m3",
+       "m3"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "m1",
+       "m2",
+       "m3",
+       "a1",
+       "b1",
+       "m1",
+       "m2",
+       "m3"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1",
+       "m1",
+       "m2",
+       "m3"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold a1",
+      "withheld": [
+       "a1"
+      ],
+      "order": [
+       "b1",
+       "m1",
+       "m2",
+       "m3"
+      ],
+      "expectedPendingAtEnd": [
+       "m1",
+       "m2",
+       "m3"
+      ],
+      "thenDeliver": [
+       "a1"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold b1",
+      "withheld": [
+       "b1"
+      ],
+      "order": [
+       "a1",
+       "m1",
+       "m2",
+       "m3"
+      ],
+      "expectedPendingAtEnd": [
+       "m1"
+      ],
+      "thenDeliver": [
+       "b1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after both moves, then the removal of a",
+      "cutAfter": [
+       "a1",
+       "b1",
+       "m1",
+       "m2"
+      ],
+      "thenOrder": [
+       "m3"
+      ],
+      "checkpointCut": [
+       "a1",
+       "b1",
+       "m1",
+       "m2"
+      ]
+     }
+    ],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "Y": {
+       "lifecycle": "live",
+       "members": [
+        "Y"
+       ],
+       "groups": {
+        "title": "Y"
+       }
+      },
+      "q1": {
+       "lifecycle": "live",
+       "members": [
+        "q1"
+       ],
+       "groups": {
+        "name": "Later"
+       }
+      }
+     },
+     "memberships": [
+      {
+       "queue": "q1",
+       "work": "Y",
+       "present": true,
+       "rank": 9,
+       "epochs": [
+        "b1"
+       ]
+      }
+     ],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 5,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "saved-for-later-endpoint-key",
+   "description": "Two platforms' system queues have different UUIDs; both write the fixed endpoint key queue:savedForLater",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "wy",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "Y",
+      "payload": {
+       "ao3WorkID": 2,
+       "urls": [
+        "https://archiveofourown.org/works/2"
+       ],
+       "groups": {
+        "title": "Y"
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "queue.membership.add",
+     "target": "queue:savedForLater|Y",
+     "payload": {
+      "rank": 1
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "queue.membership.add",
+     "target": "queue:savedForLater|Y",
+     "payload": {
+      "rank": 2
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 2,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "a1",
+       "b1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "Y": {
+       "lifecycle": "live",
+       "members": [
+        "Y"
+       ],
+       "groups": {
+        "title": "Y"
+       }
+      }
+     },
+     "memberships": [
+      {
+       "queue": "queue:savedForLater",
+       "work": "Y",
+       "present": true,
+       "rank": 1,
+       "epochs": [
+        "a1",
+        "b1"
+       ]
+      }
+     ],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 2,
+     "inc-b": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "removal-evidence-after-checkpoint",
+   "description": "A checkpoint of the removed state keeps the removal; a late move naming the removed epoch changes nothing",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "q0",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "queue.create",
+      "target": "q1",
+      "payload": {
+       "groups": {
+        "name": "Later"
+       }
+      }
+     },
+     {
+      "id": "wx",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "work.create",
+      "target": "X",
+      "payload": {
+       "ao3WorkID": 1,
+       "urls": [
+        "https://archiveofourown.org/works/1"
+       ],
+       "groups": {
+        "title": "X"
+       }
+      }
+     },
+     {
+      "id": "wy",
+      "writer": "inc-a",
+      "seq": 3,
+      "stamp": [
+       3,
+       "inc-a",
+       3
+      ],
+      "kind": "work.create",
+      "target": "Y",
+      "payload": {
+       "ao3WorkID": 2,
+       "urls": [
+        "https://archiveofourown.org/works/2"
+       ],
+       "groups": {
+        "title": "Y"
+       }
+      }
+     },
+     {
+      "id": "x1",
+      "writer": "inc-a",
+      "seq": 4,
+      "stamp": [
+       4,
+       "inc-a",
+       4
       ],
       "kind": "queue.membership.add",
       "target": "q1|X",
@@ -579,11 +1344,11 @@
      {
       "id": "y1",
       "writer": "inc-a",
-      "seq": 2,
+      "seq": 5,
       "stamp": [
-       2,
+       5,
        "inc-a",
-       2
+       5
       ],
       "kind": "queue.membership.add",
       "target": "q1|Y",
@@ -593,25 +1358,21 @@
      }
     ]
    },
-   "authorization": [
-    {
-     "writer": "inc-a",
-     "enrolledAtCounter": 0
-    },
-    {
-     "writer": "inc-b",
-     "enrolledAtCounter": 0
-    }
-   ],
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
    "ops": [
     {
      "id": "m1",
      "writer": "inc-a",
-     "seq": 3,
+     "seq": 6,
      "stamp": [
-      5,
+      6,
       "inc-a",
-      3
+      6
      ],
      "kind": "queue.membership.remove",
      "target": "q1|Y",
@@ -688,19 +1449,274 @@
       ],
       "thenOrder": [
        "m3"
+      ],
+      "checkpointCut": [
+       "m1"
       ]
      }
-    ]
+    ],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
    },
    "expected": {
     "state": {
-     "works": {},
+     "works": {
+      "X": {
+       "lifecycle": "live",
+       "members": [
+        "X"
+       ],
+       "groups": {
+        "title": "X"
+       }
+      },
+      "Y": {
+       "lifecycle": "live",
+       "members": [
+        "Y"
+       ],
+       "groups": {
+        "title": "Y"
+       }
+      },
+      "q1": {
+       "lifecycle": "live",
+       "members": [
+        "q1"
+       ],
+       "groups": {
+        "name": "Later"
+       }
+      }
+     },
      "memberships": [
       {
        "queue": "q1",
        "work": "X",
        "present": true,
-       "rank": 1
+       "rank": 1,
+       "epochs": [
+        "x1"
+       ]
+      }
+     ],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 6,
+     "inc-b": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "endpoint-created-last",
+   "description": "Memberships arrive before the work and queue exist (fact-first); same result in every order",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
+   "ops": [
+    {
+     "id": "q0",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "queue.create",
+     "target": "q1",
+     "payload": {
+      "groups": {
+       "name": "Later"
+      }
+     }
+    },
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "queue.membership.add",
+     "target": "q1|W-Z",
+     "payload": {
+      "rank": 4
+     }
+    },
+    {
+     "id": "a2",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      3,
+      "inc-a",
+      3
+     ],
+     "kind": "queue.membership.move",
+     "target": "q1|W-Z",
+     "observed": {
+      "epochs": [
+       "a1"
+      ]
+     },
+     "payload": {
+      "rank": 2
+     }
+    },
+    {
+     "id": "z1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-Z",
+     "payload": {
+      "ao3WorkID": 5,
+      "urls": [],
+      "groups": {
+       "title": "Z"
+      }
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 4,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "q0",
+       "q0",
+       "a1",
+       "a1",
+       "a2",
+       "a2",
+       "z1",
+       "z1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "q0",
+       "a1",
+       "a2",
+       "z1",
+       "q0",
+       "a1",
+       "a2",
+       "z1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "q0",
+       "a1",
+       "a2",
+       "z1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold a1",
+      "withheld": [
+       "a1"
+      ],
+      "order": [
+       "q0",
+       "a2",
+       "z1"
+      ],
+      "expectedPendingAtEnd": [
+       "a2"
+      ],
+      "thenDeliver": [
+       "a1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint holding the membership facts before the create",
+      "cutAfter": [
+       "q0",
+       "a1",
+       "a2"
+      ],
+      "thenOrder": [
+       "z1"
+      ],
+      "checkpointCut": [
+       "a1",
+       "a2",
+       "q0"
+      ]
+     }
+    ],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-Z": {
+       "lifecycle": "live",
+       "members": [
+        "W-Z"
+       ],
+       "groups": {
+        "title": "Z"
+       }
+      },
+      "q1": {
+       "lifecycle": "live",
+       "members": [
+        "q1"
+       ],
+       "groups": {
+        "name": "Later"
+       }
+      }
+     },
+     "memberships": [
+      {
+       "queue": "q1",
+       "work": "W-Z",
+       "present": true,
+       "rank": 2,
+       "epochs": [
+        "a1"
+       ]
       }
      ],
      "annotations": [],

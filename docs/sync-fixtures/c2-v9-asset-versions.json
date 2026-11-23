@@ -3,21 +3,27 @@
  "id": "c2",
  "slice": "c",
  "kind": "v9-concurrency",
- "title": "EPUB version facts racing deletion, restore and purge; alternates from retained version facts",
+ "title": "Asset version facts, removal, owner validation, chapter data, bundles, fonts",
  "refs": [
   "W8",
-  "DEC-19",
-  "DEC-5"
+  "W9",
+  "DEC-23",
+  "DEC-24",
+  "DEC-25",
+  "DEC-26"
  ],
  "ids": {
   "W-A": "11111111-1111-4111-8111-111111111111",
   "W-B": "22222222-2222-4222-8222-222222222222",
-  "W-C": "33333333-3333-4333-8333-333333333333"
+  "W-C": "33333333-3333-4333-8333-333333333333",
+  "W-Z": "44444444-4444-4444-8444-444444444444",
+  "X": "55555555-5555-4555-8555-555555555555",
+  "Y": "66666666-6666-4666-8666-666666666666"
  },
  "universes": [
   {
    "name": "replace-vs-delete",
-   "description": "A replacement and a soft delete: the deleted copy keeps the newer reference; no alternate",
+   "description": "A replacement and a soft delete: the deleted copy keeps the newer reference",
    "initial": {
     "createHistory": [
      {
@@ -33,6 +39,9 @@
       "target": "W-A",
       "payload": {
        "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
        "groups": {
         "title": "T"
        }
@@ -57,16 +66,12 @@
      }
     ]
    },
-   "authorization": [
-    {
-     "writer": "inc-a",
-     "enrolledAtCounter": 0
-    },
-    {
-     "writer": "inc-b",
-     "enrolledAtCounter": 0
-    }
-   ],
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
    "ops": [
     {
      "id": "r1",
@@ -150,9 +155,16 @@
       ],
       "thenOrder": [
        "r1"
+      ],
+      "checkpointCut": [
+       "s1"
       ]
      }
-    ]
+    ],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
    },
    "expected": {
     "state": {
@@ -205,6 +217,9 @@
       "target": "W-A",
       "payload": {
        "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
        "groups": {
         "title": "T"
        }
@@ -229,16 +244,12 @@
      }
     ]
    },
-   "authorization": [
-    {
-     "writer": "inc-a",
-     "enrolledAtCounter": 0
-    },
-    {
-     "writer": "inc-b",
-     "enrolledAtCounter": 0
-    }
-   ],
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
    "ops": [
     {
      "id": "r1",
@@ -355,7 +366,11 @@
       "finalPending": []
      }
     ],
-    "checkpoints": []
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
    },
    "expected": {
     "state": {
@@ -391,7 +406,7 @@
   },
   {
    "name": "replace-delete-explicit-purge",
-   "description": "Purge hides the reference; blobs d1 and d2 stay in the pool (reclaim disabled)",
+   "description": "Purge hides the reference; ancestry and blobs are retained; the asset write is diagnosed from final facts",
    "initial": {
     "createHistory": [
      {
@@ -407,6 +422,9 @@
       "target": "W-A",
       "payload": {
        "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
        "groups": {
         "title": "T"
        }
@@ -431,20 +449,13 @@
      }
     ]
    },
-   "authorization": [
-    {
-     "writer": "inc-a",
-     "enrolledAtCounter": 0
-    },
-    {
-     "writer": "inc-b",
-     "enrolledAtCounter": 0
-    },
-    {
-     "writer": "inc-c",
-     "enrolledAtCounter": 0
-    }
-   ],
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
    "ops": [
     {
      "id": "r1",
@@ -567,23 +578,21 @@
       "finalPending": []
      }
     ],
-    "checkpoints": []
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
    },
    "expected": {
     "state": {
      "works": {
       "W-A": {
        "lifecycle": "purged",
-       "reason": "explicit"
+       "reason": "explicit",
+       "witness": "p1"
       }
      },
-     "witnesses": [
-      {
-       "entity": "W-A",
-       "reason": "explicit",
-       "op": "p1"
-      }
-     ],
      "memberships": [],
      "annotations": [],
      "settings": {},
@@ -599,12 +608,14 @@
      "inc-c": 1
     },
     "pending": [],
-    "diagnostics": []
+    "diagnostics": [
+     "assetToPurgedLineage(W-A,r1)"
+    ]
    }
   },
   {
    "name": "concurrent-replacements",
-   "description": "Two replacements observing the same base are competing branches: the greater stamp wins, the other is an alternate",
+   "description": "Two replacements observing the same base are competing branches: greater stamp wins, the other is an alternate (assetConflict)",
    "initial": {
     "createHistory": [
      {
@@ -620,6 +631,9 @@
       "target": "W-A",
       "payload": {
        "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
        "groups": {
         "title": "T"
        }
@@ -644,16 +658,12 @@
      }
     ]
    },
-   "authorization": [
-    {
-     "writer": "inc-a",
-     "enrolledAtCounter": 0
-    },
-    {
-     "writer": "inc-b",
-     "enrolledAtCounter": 0
-    }
-   ],
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
    "ops": [
     {
      "id": "r1",
@@ -734,7 +744,11 @@
      }
     ],
     "missingPrerequisite": [],
-    "checkpoints": []
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
    },
    "expected": {
     "state": {
@@ -767,12 +781,14 @@
      "inc-b": 1
     },
     "pending": [],
-    "diagnostics": []
+    "diagnostics": [
+     "assetConflict(W-A,epub,r1+r2)"
+    ]
    }
   },
   {
    "name": "same-digest-higher-stamp",
-   "description": "d2@10 repeats d2@5 as a successor; d3@7 branches from d1: d2 wins in every order",
+   "description": "d2@10 repeats d2@5 as its successor; d3@7 branches from d1: d2 wins in every order (late base arrives as a prerequisite)",
    "initial": {
     "createHistory": [
      {
@@ -788,6 +804,9 @@
       "target": "W-A",
       "payload": {
        "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
        "groups": {
         "title": "T"
        }
@@ -812,20 +831,13 @@
      }
     ]
    },
-   "authorization": [
-    {
-     "writer": "inc-a",
-     "enrolledAtCounter": 0
-    },
-    {
-     "writer": "inc-b",
-     "enrolledAtCounter": 0
-    },
-    {
-     "writer": "inc-c",
-     "enrolledAtCounter": 0
-    }
-   ],
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
    "ops": [
     {
      "id": "r1",
@@ -961,9 +973,17 @@
       ],
       "thenOrder": [
        "r2"
+      ],
+      "checkpointCut": [
+       "r1",
+       "r3"
       ]
      }
-    ]
+    ],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
    },
    "expected": {
     "state": {
@@ -997,12 +1017,14 @@
      "inc-c": 1
     },
     "pending": [],
-    "diagnostics": []
+    "diagnostics": [
+     "assetConflict(W-A,epub,r2+r3)"
+    ]
    }
   },
   {
-   "name": "original-bundle-set-once",
-   "description": "",
+   "name": "shared-remove-hides-head-keeps-supersession",
+   "description": "Removing v2 of v1->v2 leaves no reference; v1 stays superseded",
    "initial": {
     "createHistory": [
      {
@@ -1018,6 +1040,819 @@
       "target": "W-A",
       "payload": {
        "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     {
+      "id": "i2",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-A",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "d1",
+       "size": 1000
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
+   "ops": [
+    {
+     "id": "r1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      5,
+      "inc-a",
+      3
+     ],
+     "kind": "asset.write",
+     "target": "W-A",
+     "observed": {
+      "base": "i2"
+     },
+     "payload": {
+      "assetKind": "epub",
+      "digest": "d2",
+      "size": 1200
+     }
+    },
+    {
+     "id": "rm1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      6,
+      "inc-b",
+      1
+     ],
+     "kind": "asset.remove",
+     "observed": {
+      "names": [
+       "r1"
+      ]
+     },
+     "requires": [
+      "r1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 2,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "r1",
+       "r1",
+       "rm1",
+       "rm1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "r1",
+       "rm1",
+       "r1",
+       "rm1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "r1",
+       "rm1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold r1",
+      "withheld": [
+       "r1"
+      ],
+      "order": [
+       "rm1"
+      ],
+      "expectedPendingAtEnd": [
+       "rm1"
+      ],
+      "thenDeliver": [
+       "r1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after the removal, then nothing",
+      "cutAfter": [
+       "r1",
+       "rm1"
+      ],
+      "thenOrder": [],
+      "checkpointCut": [
+       "r1",
+       "rm1"
+      ]
+     }
+    ],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "write-on-a-removed-base",
+   "description": "A later write may name the removed version as base: it becomes the head",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     {
+      "id": "i2",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-A",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "d1",
+       "size": 1000
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
+   "ops": [
+    {
+     "id": "r1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      5,
+      "inc-a",
+      3
+     ],
+     "kind": "asset.write",
+     "target": "W-A",
+     "observed": {
+      "base": "i2"
+     },
+     "payload": {
+      "assetKind": "epub",
+      "digest": "d2",
+      "size": 1200
+     }
+    },
+    {
+     "id": "rm1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      6,
+      "inc-b",
+      1
+     ],
+     "kind": "asset.remove",
+     "observed": {
+      "names": [
+       "r1"
+      ]
+     },
+     "requires": [
+      "r1"
+     ]
+    },
+    {
+     "id": "r2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      7,
+      "inc-c",
+      1
+     ],
+     "kind": "asset.write",
+     "target": "W-A",
+     "observed": {
+      "base": "r1"
+     },
+     "payload": {
+      "assetKind": "epub",
+      "digest": "d3",
+      "size": 1200
+     },
+     "requires": [
+      "r1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 6,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "r1",
+       "r1",
+       "rm1",
+       "rm1",
+       "r2",
+       "r2"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "r1",
+       "rm1",
+       "r2",
+       "r1",
+       "rm1",
+       "r2"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "r1",
+       "rm1",
+       "r2"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold r1",
+      "withheld": [
+       "r1"
+      ],
+      "order": [
+       "rm1",
+       "r2"
+      ],
+      "expectedPendingAtEnd": [
+       "r2",
+       "rm1"
+      ],
+      "thenDeliver": [
+       "r1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "title": "T"
+       },
+       "asset": {
+        "epub": {
+         "digest": "d3",
+         "alternates": []
+        }
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "base-of-another-owner-is-invalid",
+   "description": "A write whose base is a version of a different lineage is retained, not projected, and diagnosed",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     {
+      "id": "i3",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "work.create",
+      "target": "W-C",
+      "payload": {
+       "ao3WorkID": 999,
+       "urls": [
+        "https://archiveofourown.org/works/999"
+       ],
+       "groups": {
+        "title": "U"
+       }
+      }
+     },
+     {
+      "id": "i2",
+      "writer": "inc-a",
+      "seq": 3,
+      "stamp": [
+       3,
+       "inc-a",
+       3
+      ],
+      "kind": "asset.write",
+      "target": "W-A",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "d1",
+       "size": 1000
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
+   "ops": [
+    {
+     "id": "bad",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      5,
+      "inc-b",
+      1
+     ],
+     "kind": "asset.write",
+     "target": "W-C",
+     "observed": {
+      "base": "i2"
+     },
+     "payload": {
+      "assetKind": "epub",
+      "digest": "d9",
+      "size": 1200
+     },
+     "requires": [
+      "i2"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 1,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "bad",
+       "bad"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "bad",
+       "bad"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "bad"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "title": "T"
+       },
+       "asset": {
+        "epub": {
+         "digest": "d1",
+         "alternates": []
+        }
+       }
+      },
+      "W-C": {
+       "lifecycle": "live",
+       "members": [
+        "W-C"
+       ],
+       "groups": {
+        "title": "U"
+       },
+       "asset": {
+        "epub": {
+         "digest": "d9",
+         "alternates": []
+        }
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "chapter-data-follows-the-winning-digest",
+   "description": "Chapter metadata is selected for the winning digest, not the latest edit",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     {
+      "id": "i2",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-A",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "d1",
+       "size": 1000
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
+   "ops": [
+    {
+     "id": "r1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      5,
+      "inc-a",
+      3
+     ],
+     "kind": "asset.write",
+     "target": "W-A",
+     "observed": {
+      "base": "i2"
+     },
+     "payload": {
+      "assetKind": "epub",
+      "digest": "d2",
+      "size": 1200
+     }
+    },
+    {
+     "id": "ch1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-b",
+      1
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "payload": {
+      "groups": {
+       "chapterWordCounts": [
+        1,
+        2,
+        3
+       ]
+      },
+      "forDigest": "d1"
+     }
+    },
+    {
+     "id": "ch2",
+     "writer": "inc-b",
+     "seq": 2,
+     "stamp": [
+      6,
+      "inc-b",
+      2
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "payload": {
+      "groups": {
+       "chapterWordCounts": [
+        4,
+        5,
+        6
+       ]
+      },
+      "forDigest": "d2"
+     }
+    },
+    {
+     "id": "ch3",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      7,
+      "inc-c",
+      1
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "payload": {
+      "groups": {
+       "chapterWordCounts": [
+        9
+       ]
+      },
+      "forDigest": "d1"
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 12,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "r1",
+       "r1",
+       "ch1",
+       "ch1",
+       "ch2",
+       "ch2",
+       "ch3",
+       "ch3"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "r1",
+       "ch1",
+       "ch2",
+       "ch3",
+       "r1",
+       "ch1",
+       "ch2",
+       "ch3"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "r1",
+       "ch1",
+       "ch2",
+       "ch3"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "title": "T",
+        "chapterWordCounts": [
+         4,
+         5,
+         6
+        ]
+       },
+       "asset": {
+        "epub": {
+         "digest": "d2",
+         "alternates": []
+        }
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 2,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "original-bundle-set-once",
+   "description": "Original + sidecar are one bundle; the lowest stamp is current, the other an alternate; files never pair across imports",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
        "groups": {
         "title": "T"
        }
@@ -1025,20 +1860,13 @@
      }
     ]
    },
-   "authorization": [
-    {
-     "writer": "inc-a",
-     "enrolledAtCounter": 0
-    },
-    {
-     "writer": "inc-b",
-     "enrolledAtCounter": 0
-    },
-    {
-     "writer": "inc-c",
-     "enrolledAtCounter": 0
-    }
-   ],
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
    "ops": [
     {
      "id": "o1",
@@ -1108,7 +1936,11 @@
      }
     ],
     "missingPrerequisite": [],
-    "checkpoints": []
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
    },
    "expected": {
     "state": {
@@ -1120,32 +1952,232 @@
        ],
        "groups": {
         "title": "T"
+       },
+       "original": {
+        "current": {
+         "original": "dA.pdf",
+         "sidecar": "rA",
+         "fact": "o1"
+        },
+        "alternates": [
+         {
+          "original": "dB.pdf",
+          "sidecar": "rB",
+          "fact": "o2"
+         }
+        ]
        }
       }
      },
      "memberships": [],
      "annotations": [],
      "settings": {},
-     "pronunciations": {},
-     "original": {
-      "current": {
-       "original": "dA.pdf",
-       "sidecar": "rA",
-       "fact": "o1"
-      },
-      "alternates": [
-       {
-        "original": "dB.pdf",
-        "sidecar": "rB",
-        "fact": "o2"
-       }
-      ]
-     }
+     "pronunciations": {}
     },
     "appliedCut": {
      "inc-a": 1,
      "inc-b": 1,
      "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "fonts-name-reservation-and-coalescing",
+   "description": "Generated suffixes avoid literal names; equal digests coalesce; removal names every observed add",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d"
+    ]
+   },
+   "ops": [
+    {
+     "id": "f1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      5,
+      "inc-a",
+      1
+     ],
+     "kind": "font.add",
+     "payload": {
+      "name": "foo.ttf",
+      "digest": "fa"
+     }
+    },
+    {
+     "id": "f2",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      6,
+      "inc-b",
+      1
+     ],
+     "kind": "font.add",
+     "payload": {
+      "name": "Foo.ttf",
+      "digest": "fb"
+     }
+    },
+    {
+     "id": "f3",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      7,
+      "inc-c",
+      1
+     ],
+     "kind": "font.add",
+     "payload": {
+      "name": "foo-restored-1.ttf",
+      "digest": "fc"
+     }
+    },
+    {
+     "id": "f4",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      5,
+      "inc-d",
+      1
+     ],
+     "kind": "font.add",
+     "payload": {
+      "name": "foo.ttf",
+      "digest": "fa"
+     }
+    },
+    {
+     "id": "fr1",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      8,
+      "inc-a",
+      2
+     ],
+     "kind": "font.remove",
+     "observed": {
+      "names": [
+       "f1"
+      ]
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 60,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "f1",
+       "f1",
+       "f2",
+       "f2",
+       "f3",
+       "f3",
+       "f4",
+       "f4",
+       "fr1",
+       "fr1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "f1",
+       "f2",
+       "f3",
+       "f4",
+       "fr1",
+       "f1",
+       "f2",
+       "f3",
+       "f4",
+       "fr1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "f1",
+       "f2",
+       "f3",
+       "f4",
+       "fr1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold f1",
+      "withheld": [
+       "f1"
+      ],
+      "order": [
+       "f2",
+       "f3",
+       "f4",
+       "fr1"
+      ],
+      "expectedPendingAtEnd": [
+       "fr1"
+      ],
+      "thenDeliver": [
+       "f1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {},
+     "memberships": [],
+     "annotations": [],
+     "fonts": [
+      {
+       "name": "Foo-restored-2.ttf",
+       "digest": "fb"
+      },
+      {
+       "name": "foo-restored-1.ttf",
+       "digest": "fc"
+      },
+      {
+       "name": "foo.ttf",
+       "digest": "fa"
+      }
+     ],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 2,
+     "inc-b": 1,
+     "inc-c": 1,
+     "inc-d": 1
     },
     "pending": [],
     "diagnostics": []

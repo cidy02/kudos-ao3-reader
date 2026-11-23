@@ -3,21 +3,24 @@
  "id": "d2",
  "slice": "ext",
  "kind": "v9-concurrency",
- "title": "Entry-level reset beats an older set; a counter tie is broken by writer incarnation",
+ "title": "Entry-level reset beats an older set",
  "refs": [
   "P2",
   "P3",
-  "DEC-23"
+  "DEC-27"
  ],
  "ids": {
   "W-A": "11111111-1111-4111-8111-111111111111",
   "W-B": "22222222-2222-4222-8222-222222222222",
-  "W-C": "33333333-3333-4333-8333-333333333333"
+  "W-C": "33333333-3333-4333-8333-333333333333",
+  "W-Z": "44444444-4444-4444-8444-444444444444",
+  "X": "55555555-5555-4555-8555-555555555555",
+  "Y": "66666666-6666-4666-8666-666666666666"
  },
  "universes": [
   {
    "name": "entry-reset-beats-older-set",
-   "description": "",
+   "description": "A reset carries its own stamp; a later older set cannot revive it; a counter tie breaks by incarnation",
    "initial": {
     "createHistory": [
      {
@@ -37,16 +40,12 @@
      }
     ]
    },
-   "authorization": [
-    {
-     "writer": "inc-a",
-     "enrolledAtCounter": 0
-    },
-    {
-     "writer": "inc-b",
-     "enrolledAtCounter": 0
-    }
-   ],
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
    "ops": [
     {
      "id": "a1",
@@ -148,7 +147,24 @@
      }
     ],
     "missingPrerequisite": [],
-    "checkpoints": []
+    "checkpoints": [
+     {
+      "name": "checkpoint after the winning reset, then the older set",
+      "cutAfter": [
+       "b1"
+      ],
+      "thenOrder": [
+       "a1"
+      ],
+      "checkpointCut": [
+       "b1"
+      ]
+     }
+    ],
+    "retentionEquivalence": {
+     "checked": "every cut of 40 orders",
+     "rule": "project(retain(prefix)+suffix) == project(all)"
+    }
    },
    "expected": {
     "state": {
@@ -160,22 +176,26 @@
      },
      "pronunciations": {
       "global|tomato": "x"
-     },
-     "retainedResets": {
-      "commentDrafts|e1": [
-       4,
-       "inc-b",
-       1
-      ]
-     },
-     "tieBreak": "pronunciation: reset (5,inc-a,2) loses to set (5,inc-b,2) because \"inc-b\" > \"inc-a\"; both facts retained"
+     }
     },
     "appliedCut": {
      "inc-a": 3,
      "inc-b": 2
     },
     "pending": [],
-    "diagnostics": []
+    "diagnostics": [],
+    "retainedMetadata": {
+     "commentDrafts|e1": {
+      "winningReset": [
+       4,
+       "inc-b",
+       2
+      ]
+     },
+     "global|tomato": {
+      "note": "set (5,inc-b,3) wins the tie over reset (5,inc-a,3): \"inc-b\" > \"inc-a\"; both facts in the live log, only the winner is retained in a checkpoint"
+     }
+    }
    }
   }
  ]
