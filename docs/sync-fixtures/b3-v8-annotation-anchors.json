@@ -273,5 +273,5 @@
    "disagreement": "X-5"
   }
  ],
- "v9Outcome": "DEC-24 (blank and whitespace-only anchors never dedupe) holds in v9 even when MC-8 is off; MC-4: an absent key emits no delete"
+ "v9Outcome": "DEC-21 (blank and whitespace-only anchors never dedupe) holds in v9 even when MC-8 is off; MC-4: an absent key emits no delete"
 }
