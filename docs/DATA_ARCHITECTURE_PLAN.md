@@ -1,4 +1,4 @@
-# Data storage and sync architecture — plan v3
+# Data storage and sync architecture — plan v3.1
 
 Owner, 2026-11-22: "build the most architecturally sound data storage and sync possible … design incremental sync … implement
 it, all of it" — not to store all of AO3, but so no part of storage, sync or backup has a ceiling a real reader can hit.
@@ -56,12 +56,13 @@ v1 was reviewed by Codex (`kudos-redesign-work/out/codex-data-arch-review1.md`, 
 ## B. Change capture (T-569a)
 
 - **iOS default: a same-store transactional outbox.** Every supported mutation command writes its outbox rows (operation, entity,
-  field group, before/after values as needed, origin) in the **same save** as the change. SwiftData persistent history is only a
-  feasibility and coverage probe (dirty hints, audits), because it cannot reliably recover exact committed values, intent or old
+  field group, before/after values as needed, origin) in the **same save** as the change. SwiftData persistent history is optional — a
+  diagnostic at most (see Save boundary), because it cannot reliably recover exact committed values, intent or old
   relationship keys, and a separately committed outbox has a history-token retention problem. Before claiming coverage, inventory
   every write path: direct `ModelContext` writes, autosave, imports, reader checkpoints, sweeps, migrations, remote apply
   (`FolderSyncObserver.swift:12`).
-- **Android: SQLite triggers** on synced Room tables writing the outbox in the same transaction, tested for old/new null-safe
+- **Android: SQLite triggers** on synced Room tables writing the outbox in the same transaction — or explicit DAO operations
+  where trigger behaviour can't be proven — tested for old/new null-safe
   diffs, `REPLACE`, cascades, join-table rank changes, bulk paths, fresh installs and every supported migration
   (`CollectionDao.kt:24`).
 - **Save boundary (part of G-capture).** D6 inventories each writer with its context or transaction owner, commit path, origin and
@@ -112,9 +113,9 @@ adapter. G-journal tests clock skew in both directions and requires identical re
 seq range, logical-stamp range, dependency summary), records, trailer checksum. A segment without a valid trailer, a seq gap, or a missing
 dependency is **pending**, never skipped.
 
-**Assets.** Immutable blobs stored **by digest** (`blobs/<sha256>`); the logical asset reference (work generation → digest) is a
-versioned field in the operation matrix. A segment referencing a blob not yet visible is pending; size and hash are verified before
-dependent state becomes visible. Durable staging covers file install + database commit, including a cancellation reported after
+**Assets.** Immutable blobs stored **by digest** (`blobs/<sha256>`); the logical asset reference ((owner generation, asset kind) → digest) is a
+versioned field in the operation matrix. Metadata may commit with pending asset references. Only D5-defined atomic groups wait for
+required bytes. Verify size and digest and complete recoverable local installation before marking an asset available. Durable staging covers file install + database commit, including a cancellation reported after
 commit. **Blob reclaim is disabled** until reachability is provable from retained checkpoints, segments and supported restore points.
 
 D4 specifies asset references by owner generation and asset kind, including EPUBs, originals and their sidecars, and fonts.
@@ -180,7 +181,7 @@ bootstrap; compare normalized logical state, merge metadata, applied cuts and pe
 
 Listings, file opens, bytes read/written, local spool and database WAL, retained segments, metadata per entity, asset versions —
 for no-op sync, normal delta, bootstrap, year-offline catch-up and a permanently lagging device. Backpressure: pending work is
-reported to the reader before disk fills; small high-frequency writes (reading progress) are coalesced per segment.
+reported to the reader before disk fills.
 
 D5 specifies bounded writer discovery, point lookup or bounded pages for the next writer range, and sharded digest lookup. Discovery
 hints may be stale and cannot establish that a range is absent. Measure no-op work against increasing retained history. Coalesce
@@ -198,9 +199,9 @@ and record the supported limits separately from the manifest cap.
 | D2 | Manifest streaming (P1b → P6); streaming apply gated on the store decision; cap removal on streaming P6 only. | in progress |
 | D3 | Store-layer gate (§ A) on iOS; Room re-proven on Pixel. | P1b, D0 |
 | D4 | Operation matrix + legacy adapters (§ D) with golden fixtures and replay permutations. Each matrix row identifies the command and capture intent, target identity and generation, value group, absence/null/reset semantics, prerequisites, concurrent outcome and tie-break, stale or duplicate behavior, and checkpoint state required for replay. The legacy route table records platform-specific tie and normalization rules and durably saves the adapter's accepted result for retry. Verify legacy results against current behavior in separate fixtures from v9 convergence. Start with work create/delete/restore, duplicate identity with queue moves and annotations, and an asset replacement racing deletion. | can start now (spec only) |
-| D5 | v9 wire spec `docs/SYNC_JOURNAL_FORMAT.md` (§ C), cross-platform fixtures, reviewed. | D4 | Operation matrix + legacy adapters (§ D) with golden fixtures and replay permutations. Each matrix row identifies the command and capture intent, target identity and generation, value group, absence/null/reset semantics, prerequisites, concurrent outcome and tie-break, stale or duplicate behavior, and checkpoint state required for replay. The legacy route table records platform-specific tie and normalization rules and durably saves the adapter's accepted result for retry. Verify legacy results against current behavior in separate fixtures from v9 convergence. Start with work create/delete/restore, duplicate identity with queue moves and annotations, and an asset replacement racing deletion. | can start now (spec only) |
+| D5 | v9 wire spec `docs/SYNC_JOURNAL_FORMAT.md` (§ C), cross-platform fixtures, reviewed. | D4 |
 | D6 | Capture + outbox (§ B) on both platforms; verified against snapshot diffs; no sync behaviour change. | D3, D4 |
-| D7 | Journal apply + publish + immutable bootstrap checkpoints, **reclamation disabled**, explicit v8 cutover; kill/restart, offline, permutation, clock-admission and gap tests. | D5, D6 |
+| D7 | Journal apply + publish + immutable bootstrap checkpoints, **reclamation disabled**, explicit v8 cutover; kill/restart, offline, permutation, clock-skew and gap tests. | D5, D6 |
 | D8 | Reclamation: epoch/authority protocol, retirement and rejoin — separately reviewed and demonstrated. | D7 |
 | D9 | Backup restore points (§ E). | stable blob + checkpoint interface (D7) |
 | D10 | Remaining HIGH/MEDIUM scale fixes and incremental derived data with watermarks. | D1, D6 |
@@ -208,20 +209,23 @@ and record the supported limits separately from the manifest cap.
 ## Acceptance gates (replace v1's open questions)
 
 - **G-store** (D3): one design passes § A's end-to-end gate on device.
-- **G-capture** (D6): every write path in the inventory emits outbox rows with correct origin; reconciliation of a forced gap passes.
+- **G-capture** (D6): on both platforms, § B's save-boundary and reconciliation requirements pass: every write path in the inventory
+  emits outbox rows with correct origin in its own transaction; reconciliation of a forced gap passes and reports ambiguity where intent
+  can't be recovered.
 - **G-matrix** (D4/D5): exhaustively permute arrival order for bounded fixtures; use seeded generated schedules for larger histories;
   exercise duplicate delivery, restart, missing prerequisites, late operations to aliases and checkpoint bootstrap; normalized logical
   state, merge metadata, applied cuts and pending outcomes identical across platforms.
 - **G-journal** (D7): kill/restart at every publish/apply step, a segment before its blob, a seq gap, divergent content at the same
-  seq, clock skew past the admission bound, a year-offline device and a restored device with a new incarnation — all converge or wait,
-  never lose or duplicate.
+  seq (must halt the incarnation and surface a repair condition), clock skew in both directions with identical replay outcomes, a
+  year-offline device, a restored device with a new incarnation, and Principle 4's provider publication cases (interrupted writes,
+  unavailable rename, stale listings, duplicate names, out-of-order visibility) — all converge or wait, never lose or duplicate.
 - **G-reclaim** (D8): no data needed by any non-retired device or retained restore point is ever deleted.
 - **G-budget**: every § Budgets row within its device threshold at 15k and 50k.
 
 ## Review trace
 
 v1 → v2 (Codex review 1): 1 operation ids, contiguous ranges, dependencies, transactional cursors, same-bytes retry, clock admission,
-new incarnation on restore → § C Operations/Causality/Clock admission. 2 checkpoints → immutable vector-cut checkpoints; reclamation
+new incarnation on restore → § C Operations/Causality/Conflict ordering. 2 checkpoints → immutable vector-cut checkpoints; reclamation
 disabled; no lease authority; retirement/rejoin → § C, D8. 3 v8 writable projection → v9 namespace + explicit cutover; `.kudosbackup`
 stays v8. 4 lifecycle → generations in § D. 5 identity/memberships/annotations → § D. 6 assets → digest blobs, versioned references,
 pending, reclaim disabled. 7 capture → transactional outbox default, history as probe, write-path inventory, origin, non-table
