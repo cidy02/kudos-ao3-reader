@@ -1,4 +1,4 @@
-# Data storage and sync architecture — plan v2
+# Data storage and sync architecture — plan v3
 
 Owner, 2026-11-22: "build the most architecturally sound data storage and sync possible … design incremental sync … implement
 it, all of it" — not to store all of AO3, but so no part of storage, sync or backup has a ceiling a real reader can hit.
@@ -6,7 +6,7 @@ Scale requirement (`docs/REDESIGN_DECISIONS.md`): release gate at 15k and 50k wo
 independently of works) and representative asset volumes; an opt-in 1M-work run is a diagnostic only. Devices up to 2 TB.
 Tasks: T-568 (scale), T-567/A-567 (manifest streaming, `docs/MANIFEST_STREAMING_PLAN.md`), T-569 (incremental sync), T-570
 (backup restore points), T-571 (store layer). One wire format for iOS/iPadOS/macOS (SwiftData) and Android (Room).
-v1 was reviewed by Codex (`kudos-redesign-work/out/codex-data-arch-review1.md`, RETHINK); v2 applies every finding (§ Review trace).
+v1 was reviewed by Codex (`kudos-redesign-work/out/codex-data-arch-review1.md`, RETHINK); v2 applied every finding; review 2 (`out/codex-data-arch-review2.md`, SOUND WITH CHANGES) → v3 applies its edits verbatim (§ Review trace).
 
 ## Principles
 
@@ -17,12 +17,10 @@ v1 was reviewed by Codex (`kudos-redesign-work/out/codex-data-arch-review1.md`, 
    and a stated freshness target (how stale a count or shelf may be, and for how long).
 3. **Measured steady-state budgets** (§ Budgets), not "cost ∝ changes" as a slogan: no-op sync, normal delta, bootstrap,
    year-offline catch-up and one permanently lagging device each have listing / open / byte / disk / time budgets.
-4. **Immutable publication**: anything another device reads is written once, content-hashed, published by rename, verified on
-   read; a crash leaves the old state or the new; recovery is tested by kill/restart.
-5. **Merge outcomes are specified, not inherited**: explicit per-route legacy adapters reproduce today's v8 results; a normative
-   v9 operation matrix (§ D) defines concurrent outcomes; golden fixtures prove both.
-6. **Every task ships with its device benchmark** at 15k/50k (iPhone and Pixel), before and after. Static audit estimates and host
-   (simulator / desktop JVM) results are labelled as such.
+4. **Immutable publication**: publish immutable, verifiable objects. Provider rename is an optimization where supported. Readers
+   accept a commit descriptor only after verifying its format, identity and the size and digest of every object needed for the
+   requested visibility level. Retry temporarily missing or incomplete objects. Never replace verified content at an immutable key.
+   Test interrupted writes, unavailable rename, stale listings, duplicate names and out-of-order visibility on supported providers.
 
 ## Current state
 
@@ -66,36 +64,63 @@ v1 was reviewed by Codex (`kudos-redesign-work/out/codex-data-arch-review1.md`, 
 - **Android: SQLite triggers** on synced Room tables writing the outbox in the same transaction, tested for old/new null-safe
   diffs, `REPLACE`, cascades, join-table rank changes, bulk paths, fresh installs and every supported migration
   (`CollectionDao.kt:24`).
+- **Save boundary (part of G-capture).** D6 inventories each writer with its context or transaction owner, commit path, origin and
+  reconciliation strategy. On SwiftData, a supported syncable command owns an explicit save on an isolated, autosave-disabled
+  context. It stages the mutation and outbox rows in the same store and rolls both back on failure. UI editing uses drafts or
+  commands, and bulk generation switches preserve or explicitly rebase unsent outbox rows and receiver cursors before activation. Use
+  snapshot reconciliation to detect coverage gaps. Persistent history is an optional diagnostic, with retention, expired-token,
+  delete-payload and churn probes only if the diagnostic is adopted. On Room, install and verify triggers on fresh and migrated
+  databases. Record row changes and command intent under the same transaction scope, with rollback-safe origin and grouping. Prove
+  `REPLACE`, cascade and recursive-trigger behavior on supported connections, or replace affected DAO writes with explicit operations
+  before enabling capture. Reconciliation must report ambiguity where a snapshot cannot recover intent.
+  (`ModelContext+SaveBestEffort.swift:21` gives "autosave off" a different meaning today; it is not the boundary.)
 - **Origin and grouping** are transaction-scoped: remote apply never echoes back out; a user restore still emits intentional changes.
 - **Sources outside the model tables** (preferences, pronunciation maps, drafts, recovery documents, assets, Android opaque overlay
   data) each get durable capture with an interruption and reconciliation contract.
 
 ## C. Journal sync v9 (T-569b spec, T-569c+ implementation)
 
-**Namespace.** v9 lives in its own directory, outside every legacy prune path (`KudosLibrary/v9/`). The v8 `manifest.json` and its
-assets are never written by v9 code after cutover.
+**Namespace and cutover.** v9 uses a distinct sync root outside the legacy folder. One designated device seeds the v9 library from
+a validated v8 manifest, including folded conflicts, opaque data and verified assets. Before seeding, confirm that intended legacy
+writers have synced and stopped writing, or record which devices were unavailable and warn that their later writes stay in the legacy
+folder. Publish a verified bootstrap descriptor that names the library ID, source manifest digest and checkpoint. Other devices join
+that descriptor. Interrupted setup resumes the same bootstrap, and a second initializer fails closed if it detects a conflicting
+bootstrap. Preserve the legacy folder for recovery. Edits made there after the handoff can be recovered through an explicit reviewed
+import. Standalone `.kudosbackup` and manual v8 import/export remain supported.
 
 **Operations.** Each operation has an id `(libraryID, writerIncarnation, seq)`. A writer's operations form **contiguous sequence
 ranges**; each published range is bound to a content hash. A restored or reinstalled device gets a **new writer incarnation**
 (historical session device ids are kept as data). Outbound ranges are reserved durably before publishing; an ambiguous publish is
 retried with **the same bytes**.
 
-**Causality.** HLCs order competing values; they do not define a log prefix. Operations that depend on others (edit-after-create,
-alias-after-merge, restore-after-delete, rank-move-after-membership) carry explicit dependencies; an operation is applied only when
-its dependencies are present, otherwise held pending. Commuting operations are listed in the matrix. A receiver persists its
-per-writer cursors, accepted clock state and the merge result **in one store transaction**.
+**Causality.** D4 assigns each operation kind its semantic prerequisites. The contiguous writer prefix implies same-writer
+ordering. Encode cross-writer operation IDs only where the matrix requires a prerequisite, such as the deletion named by an explicit
+restore. An installed checkpoint covers prerequisite IDs at or below its cut and retains the generations, aliases, deletion evidence
+and other merge state needed to evaluate those operations. Apply the matrix to decide whether a covered prerequisite makes the
+operation valid, stale or a no-op. Persist effects, the contiguous applied prefix and the logical clock in one transaction. Keep gaps
+pending and retry when a prerequisite or checkpoint arrives. Conflicting verified bytes at one writer sequence halt that incarnation
+and surface a repair condition. D5 specifies selection and replay for incomparable checkpoint cuts, with fixtures that preserve
+applied work and unpublished local edits.
 
-**Clock admission.** An HLC more than a fixed bound ahead of the receiver's admitted clock is **quarantined deterministically**
-(same decision on every receiver), never clamped per receiver; the affected writer has a documented recovery (re-stamp on rejoin).
+**Conflict ordering (no wall-clock admission).** Conflict stamps are ordered by `(logicalCounter, writerIncarnation, seq)` using
+the same encoded ordering on both platforms. A writer durably advances its counter above its previous counter and every counter it
+has applied before minting an operation. Wall-clock dates remain payload fields and may produce local diagnostics. Apply eligibility
+is independent of receiver wall time. Published operation bytes are immutable. Legacy date normalization occurs in the legacy
+adapter. G-journal tests clock skew in both directions and requires identical replay outcomes.
 
 **Segments.** Immutable `segments/<incarnation>/<firstSeq>-<lastSeq>-<hash>.seg`: header (format version, library, incarnation,
-seq range, HLC range, dependency summary), records, trailer checksum. A segment without a valid trailer, a seq gap, or a missing
+seq range, logical-stamp range, dependency summary), records, trailer checksum. A segment without a valid trailer, a seq gap, or a missing
 dependency is **pending**, never skipped.
 
 **Assets.** Immutable blobs stored **by digest** (`blobs/<sha256>`); the logical asset reference (work generation → digest) is a
 versioned field in the operation matrix. A segment referencing a blob not yet visible is pending; size and hash are verified before
 dependent state becomes visible. Durable staging covers file install + database commit, including a cancellation reported after
 commit. **Blob reclaim is disabled** until reachability is provable from retained checkpoints, segments and supported restore points.
+
+D4 specifies asset references by owner generation and asset kind, including EPUBs, originals and their sidecars, and fonts.
+Ordinary download eviction is device-local. A shared reference removal is an explicit operation subject to generation rules.
+Metadata may commit with an explicit pending asset reference. Mark bytes available only after verification and recoverable local
+installation. D5 defines the atomic groups that must wait for bytes and records metadata apply separately from asset materialization.
 
 **Checkpoints.** Immutable, hash-addressed v9 checkpoints built from a consistent store view, containing a **per-writer sequence
 vector** (the exact cut), merge metadata (field stamps, generations, aliases, retained deletions and witnesses), membership and
@@ -108,16 +133,15 @@ past a retention bound is **retired** under an explicit rule and rejoins by boot
 Acknowledgements name the committed cut and distinguish "applied locally" from "seen". Deletion and alias information is kept until
 stale operations can be rejected safely.
 
-**v8 coexistence: none for writes.** Upgrade is an explicit **cutover** per sync folder from a validated v8 view, after which v8
-builds can't write to it (they see a read-only projection at most, or nothing). Mixed-version writing would need its own bridge design
-proving the exact baseline of each legacy write and asset safety with shipped clients; it is out of scope. Standalone `.kudosbackup`
-stays v8 (streamed, T-567). Manual v8 import/export keeps working.
+**v8 coexistence:** none for writes — see Namespace and cutover above (no bridge; shipped v8 builds keep writing only the
+legacy folder, which v9 never prunes or writes).
 
 ## D. Operation matrix and legacy adapters (normative, written before production capture)
 
-A table, reviewed and backed by cross-platform golden fixtures and replay permutations (every arrival order) before the wire format
-is frozen, covering:
-- **Field groups and policies** per entity: LWW-by-HLC, fill-only, monotonic (`hasGivenKudos`), positive counters, atomic value
+A table, reviewed and backed by cross-platform golden fixtures and replay permutations before the wire format is frozen (exhaustively permute arrival order for bounded fixtures; seeded
+generated schedules for larger histories; duplicate delivery, restart, missing prerequisites, late operations to aliases and checkpoint
+bootstrap; compare normalized logical state, merge metadata, applied cuts and pending outcomes across platforms), covering:
+- **Field groups and policies** per entity: LWW by logical stamp, fill-only, monotonic (`hasGivenKudos`), positive counters, atomic value
   groups (reading progress; deletion state + deadline; voice id + name; hue + exact colour), absent vs `null` vs reset; settings and
   pronunciation maps with entry-level presence and reset operations, explicit vs inferred stamps, malformed values, unknown passthrough.
 - **Lifecycle generations**: a delete targets an entity generation and wins over ordinary concurrent edits to it; an explicit restore
@@ -146,6 +170,11 @@ is frozen, covering:
   closure is verified before publication and again before restore. Backup retention is separate from sync, so nothing on the sync
   mesh can delete a backup's dependencies. Delta chains only if measured metadata cost demands them, with pinned bases, verified
   parents, and consolidation that commits a complete new base before retiring anything.
+- Build each point from one consistent store view and pin its exact asset versions through publication. Publish a point descriptor
+  only after verifying the complete closure. Restore stages and verifies that closure before activating the replacement through the
+  store gate, with a recoverable pre-restore state. For the initial release, assign one writer to each backup pool and retain its
+  blobs. Reuse a validated inventory and stream-hash newly written or suspect objects. Measure metadata rewrite, validation and
+  retained storage costs. Gate shared-pool collection and bounded delta chains on separate designs and measured need.
 
 ## Budgets (set from D0 device runs; tracked per release)
 
@@ -153,16 +182,23 @@ Listings, file opens, bytes read/written, local spool and database WAL, retained
 for no-op sync, normal delta, bootstrap, year-offline catch-up and a permanently lagging device. Backpressure: pending work is
 reported to the reader before disk fills; small high-frequency writes (reading progress) are coalesced per segment.
 
+D5 specifies bounded writer discovery, point lookup or bounded pages for the next writer range, and sharded digest lookup. Discovery
+hints may be stale and cannot establish that a range is absent. Measure no-op work against increasing retained history. Coalesce
+compatible local intents before assigning operation IDs and reserving immutable bytes. Set explicit pending-age, bytes and
+retained-object limits for D7 with reclamation disabled. Define how sync pauses before exceeding those limits while local edits remain
+durable. Run the archive export-to-picker-to-restore route, including the pre-Replace safety copy, against the target asset envelope
+and record the supported limits separately from the manifest cap.
+
 ## Phases
 
 | Phase | Work | Gate / depends on |
 |---|---|---|
 | D0 | Archivist fixture (15k/50k + 300k sessions; 1M opt-in diagnostic) in the real stores + device benchmark harness. | running |
-| D1 | Scale BLOCKER fixes from the audits, each proven by D0 before/after; then HIGH. Independent of sync. | D0 |
+| D1 | Scale BLOCKER fixes from the audits, then HIGH, each proven by D0 before/after. | D0 baseline per affected route. Start independent UI, query and lookup fixes as their baselines land. Preserve identity, deletion, membership, and import semantics. Coordinate changes to archive, picker, safety-copy and Replace paths with D2 and the relevant store gate. |
 | D2 | Manifest streaming (P1b → P6); streaming apply gated on the store decision; cap removal on streaming P6 only. | in progress |
 | D3 | Store-layer gate (§ A) on iOS; Room re-proven on Pixel. | P1b, D0 |
-| D4 | Operation matrix + legacy adapters (§ D) with golden fixtures and replay permutations. | — (can start now, spec only) |
-| D5 | v9 wire spec `docs/SYNC_JOURNAL_FORMAT.md` (§ C), cross-platform fixtures, reviewed. | D4 |
+| D4 | Operation matrix + legacy adapters (§ D) with golden fixtures and replay permutations. Each matrix row identifies the command and capture intent, target identity and generation, value group, absence/null/reset semantics, prerequisites, concurrent outcome and tie-break, stale or duplicate behavior, and checkpoint state required for replay. The legacy route table records platform-specific tie and normalization rules and durably saves the adapter's accepted result for retry. Verify legacy results against current behavior in separate fixtures from v9 convergence. Start with work create/delete/restore, duplicate identity with queue moves and annotations, and an asset replacement racing deletion. | can start now (spec only) |
+| D5 | v9 wire spec `docs/SYNC_JOURNAL_FORMAT.md` (§ C), cross-platform fixtures, reviewed. | D4 | Operation matrix + legacy adapters (§ D) with golden fixtures and replay permutations. Each matrix row identifies the command and capture intent, target identity and generation, value group, absence/null/reset semantics, prerequisites, concurrent outcome and tie-break, stale or duplicate behavior, and checkpoint state required for replay. The legacy route table records platform-specific tie and normalization rules and durably saves the adapter's accepted result for retry. Verify legacy results against current behavior in separate fixtures from v9 convergence. Start with work create/delete/restore, duplicate identity with queue moves and annotations, and an asset replacement racing deletion. | can start now (spec only) |
 | D6 | Capture + outbox (§ B) on both platforms; verified against snapshot diffs; no sync behaviour change. | D3, D4 |
 | D7 | Journal apply + publish + immutable bootstrap checkpoints, **reclamation disabled**, explicit v8 cutover; kill/restart, offline, permutation, clock-admission and gap tests. | D5, D6 |
 | D8 | Reclamation: epoch/authority protocol, retirement and rejoin — separately reviewed and demonstrated. | D7 |
@@ -173,7 +209,9 @@ reported to the reader before disk fills; small high-frequency writes (reading p
 
 - **G-store** (D3): one design passes § A's end-to-end gate on device.
 - **G-capture** (D6): every write path in the inventory emits outbox rows with correct origin; reconciliation of a forced gap passes.
-- **G-matrix** (D4/D5): golden fixtures and all replay permutations converge identically on both platforms.
+- **G-matrix** (D4/D5): exhaustively permute arrival order for bounded fixtures; use seeded generated schedules for larger histories;
+  exercise duplicate delivery, restart, missing prerequisites, late operations to aliases and checkpoint bootstrap; normalized logical
+  state, merge metadata, applied cuts and pending outcomes identical across platforms.
 - **G-journal** (D7): kill/restart at every publish/apply step, a segment before its blob, a seq gap, divergent content at the same
   seq, clock skew past the admission bound, a year-offline device and a restored device with a new incarnation — all converge or wait,
   never lose or duplicate.
@@ -190,3 +228,10 @@ pending, reclaim disabled. 7 capture → transactional outbox default, history a
 sources → § B. 8 field LWW → policy table + legacy adapters + golden fixtures → § D. 9 store gate → end-to-end comparison incl.
 SQLite migration design → § A. 10 backup chains → immutable restore points over a blob pool → § E. 11 budgets/backpressure/derived
 watermarks; cap removal tied to streaming P6 only → § Budgets, D2, D10. 12 evidence labels and scope → Principles 6, Current state.
+
+v2 → v3 (Codex review 2, SOUND WITH CHANGES; 2/4/5/9/10/12 ADDRESSED, the rest PARTLY): applied verbatim — conflict ordering by
+logical counter with no wall-clock admission (1); dependency contract with checkpoint rule and halt on conflicting bytes (2); v8
+cutover to a distinct sync root with a bootstrap descriptor (3); SwiftData command-owned save boundary and Room trigger rules (4);
+verifiable publication independent of rename, asset kinds, pending asset references (5); restore-point activation and pool ownership
+(6); bounded discovery, coalescing before IDs, D7 limits and archive-route measurement (7); finite permutation scope (8); D4 row
+contract and D1 coordination.
