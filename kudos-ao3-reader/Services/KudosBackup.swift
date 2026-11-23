@@ -559,7 +559,8 @@ nonisolated struct KudosBackupContents {
         min(date, now.addingTimeInterval(maxFutureTimestampSkew))
     }
 
-    private nonisolated static func makeDecoder() -> JSONDecoder {
+    /// Internal: the streaming staging pass (T-567) decodes records with exactly this decoder.
+    nonisolated static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
