@@ -10,17 +10,19 @@ nonisolated struct ManifestRecordKeys {
     /// Case-folded where the platforms match case-insensitively (font name, fandom name, tag name).
     var name: String?
     var text: String?
+    /// A second text key where the identity is a pair (favorites: kind + target), so no separator is needed.
+    var text2: String?
     var stamp: Double?
 
-    static let columns = ["k_id", "k_work", "k_ref", "k_ao3", "k_url", "k_name", "k_text", "k_stamp"]
+    static let columns = ["k_id", "k_work", "k_ref", "k_ao3", "k_url", "k_name", "k_text", "k_text2", "k_stamp"]
 
     var binds: [ManifestStagingDB.Bind] {
         func s(_ v: String?) -> ManifestStagingDB.Bind { v.map { .text($0) } ?? .null }
-        return [s(id), s(work), s(ref), ao3.map { .int(Int64($0)) } ?? .null, s(url), s(name), s(text), stamp.map { .double($0) } ?? .null]
+        return [s(id), s(work), s(ref), ao3.map { .int(Int64($0)) } ?? .null, s(url), s(name), s(text), s(text2), stamp.map { .double($0) } ?? .null]
     }
 
     init(id: UUID? = nil, work: UUID? = nil, ref: UUID? = nil, ao3: Int? = nil, url: String? = nil, name: String? = nil,
-         text: String? = nil, stamp: Date? = nil) {
+         text: String? = nil, text2: String? = nil, stamp: Date? = nil) {
         self.id = id?.uuidString.lowercased()
         self.work = work?.uuidString.lowercased()
         self.ref = ref?.uuidString.lowercased()
@@ -28,6 +30,7 @@ nonisolated struct ManifestRecordKeys {
         self.url = url
         self.name = name?.lowercased()
         self.text = text
+        self.text2 = text2
         self.stamp = stamp?.timeIntervalSince1970
     }
 }
@@ -47,25 +50,29 @@ nonisolated struct ManifestSectionSpec {
     let policy: Policy
     /// Names of the key columns this section fills (each is indexed).
     let indexed: [String]
-    /// Decodes one element with the oracle decoder; nil when it does not decode.
-    let decode: (JSONDecoder, Data) -> ManifestRecordKeys?
+    /// Decodes one element with the oracle decoder; nil when it does not decode. `canonical` is the record re-encoded from the
+    /// decoded value, for types whose decoder generates defaults (a missing id or date): the default is materialised once, here,
+    /// and every later reader decodes the stored bytes, so the index and the apply see the same value.
+    let decode: (JSONDecoder, JSONEncoder, Data) -> (keys: ManifestRecordKeys, canonical: Data?)?
 
     var table: String { "rec_" + name }
 
-    private static func make<T: Decodable>(
-        _ name: String, _ policy: Policy, _ indexed: [String], _: T.Type, _ keys: @escaping (T) -> ManifestRecordKeys
+    private static func make<T: Codable>(
+        _ name: String, _ policy: Policy, _ indexed: [String], _: T.Type, generatesDefaults: Bool = false,
+        _ keys: @escaping (T) -> ManifestRecordKeys
     ) -> ManifestSectionSpec {
-        ManifestSectionSpec(name: name, policy: policy, indexed: indexed) { decoder, data in
-            (try? decoder.decode(T.self, from: data)).map(keys)
+        ManifestSectionSpec(name: name, policy: policy, indexed: indexed) { decoder, encoder, data in
+            guard let value = try? decoder.decode(T.self, from: data) else { return nil }
+            return (keys(value), generatesDefaults ? try? encoder.encode(value) : nil)
         }
     }
 
     // Order is the order of `KudosBackupManifest.init(from:)`.
     static let all: [ManifestSectionSpec] = [
-        make("works", .required, ["k_id", "k_ao3", "k_url"], KudosBackupWork.self) {
+        make("works", .required, ["k_id", "k_ao3", "k_url"], KudosBackupWork.self, generatesDefaults: true) {
             .init(id: $0.id, ao3: $0.ao3WorkID, url: $0.sourceURL)
         },
-        make("bookmarks", .required, ["k_id", "k_url"], KudosBackupBookmark.self) { .init(id: $0.id, url: $0.urlString) },
+        make("bookmarks", .required, ["k_id", "k_url"], KudosBackupBookmark.self, generatesDefaults: true) { .init(id: $0.id, url: $0.urlString) },
         make("fonts", .required, ["k_name"], KudosBackupFont.self) { .init(name: $0.name, text: $0.fileName) },
         make("collections", .optional, ["k_id", "k_name"], KudosBackupCollection.self) { .init(id: $0.id, name: $0.name) },
         make("readingQueues", .optional, ["k_id", "k_name"], KudosBackupReadingQueue.self) { .init(id: $0.id, name: $0.name) },
@@ -76,19 +83,19 @@ nonisolated struct ManifestSectionSpec {
             .init(id: $0.id, work: $0.workID, text: $0.locatorString)
         },
         make("savedSearches", .optional, ["k_id", "k_name"], KudosBackupSavedSearch.self) { .init(id: $0.id, name: $0.name) },
-        make("readingSessions", .optional, ["k_id", "k_work", "k_ao3"], KudosBackupReadingSession.self) {
+        make("readingSessions", .optional, ["k_id", "k_work", "k_ao3"], KudosBackupReadingSession.self, generatesDefaults: true) {
             .init(id: $0.id, work: $0.workID, ao3: $0.ao3WorkID, url: $0.sourceURL)
         },
-        make("readingFavorites", .optional, ["k_id", "k_text"], KudosBackupReadingFavorite.self) {
-            .init(id: $0.id, text: "\($0.kindRaw)\u{1F}\($0.targetKey)")
+        make("readingFavorites", .optional, ["k_id", "k_text", "k_text2"], KudosBackupReadingFavorite.self, generatesDefaults: true) {
+            .init(id: $0.id, text: $0.kindRaw, text2: $0.targetKey)
         },
-        make("fandomReadWatermarks", .optional, ["k_id", "k_name"], KudosBackupFandomReadWatermark.self) {
+        make("fandomReadWatermarks", .optional, ["k_id", "k_name"], KudosBackupFandomReadWatermark.self, generatesDefaults: true) {
             .init(id: $0.id, name: $0.fandomName)
         },
-        make("followedTags", .optional, ["k_id", "k_ao3", "k_name"], KudosBackupFollowedTag.self) {
+        make("followedTags", .optional, ["k_id", "k_ao3", "k_name"], KudosBackupFollowedTag.self, generatesDefaults: true) {
             .init(id: $0.id, ao3: $0.ao3TagID, name: $0.name)
         },
-        make("tagAliases", .optional, ["k_id", "k_name"], KudosBackupTagAlias.self) {
+        make("tagAliases", .optional, ["k_id", "k_name"], KudosBackupTagAlias.self, generatesDefaults: true) {
             .init(id: $0.id, name: $0.name, text: $0.canonicalName)
         },
         make("tombstones", .optional, ["k_id", "k_work", "k_ao3", "k_url"], KudosBackupTombstone.self) {

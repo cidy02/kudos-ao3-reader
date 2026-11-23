@@ -14,7 +14,11 @@ nonisolated final class ManifestStagingDB {
         func isNull(_ i: Int32) -> Bool { sqlite3_column_type(stmt, i) == SQLITE_NULL }
         func int(_ i: Int32) -> Int { Int(sqlite3_column_int64(stmt, i)) }
         func double(_ i: Int32) -> Double { sqlite3_column_double(stmt, i) }
-        func text(_ i: Int32) -> String { sqlite3_column_text(stmt, i).map { String(cString: $0) } ?? "" }
+        /// Read with the stored byte length: a NUL inside a key is part of the key, not the end of it.
+        func text(_ i: Int32) -> String {
+            guard let p = sqlite3_column_text(stmt, i) else { return "" }
+            return String(decoding: UnsafeBufferPointer(start: p, count: Int(sqlite3_column_bytes(stmt, i))), as: UTF8.self)
+        }
         func data(_ i: Int32) -> Data {
             Data(bytes: sqlite3_column_blob(stmt, i) ?? UnsafeRawPointer(bitPattern: 1)!, count: Int(sqlite3_column_bytes(stmt, i)))
         }
@@ -39,7 +43,12 @@ nonisolated final class ManifestStagingDB {
             throw ManifestStreamError.io("sqlite open: \(message)")
         }
         // Private, disposable, rebuilt from the source on failure: no journal, no fsync, a small page cache.
-        try exec("PRAGMA journal_mode = OFF; PRAGMA synchronous = OFF; PRAGMA cache_size = -4096; PRAGMA temp_store = FILE")
+        do {
+            try exec("PRAGMA journal_mode = OFF; PRAGMA synchronous = OFF; PRAGMA cache_size = -4096; PRAGMA temp_store = FILE")
+        } catch {
+            close() // an initializer that throws must not leave the handle open
+            throw error
+        }
     }
 
     deinit { close() }
@@ -51,10 +60,12 @@ nonisolated final class ManifestStagingDB {
         handle = nil
     }
 
-    /// Closes and deletes the whole staging directory. Safe to call twice.
-    func destroy() {
+    /// Closes and deletes the whole staging directory. Safe to call twice. A failure to delete is returned, not swallowed.
+    @discardableResult
+    func destroy() -> Error? {
         close()
-        try? FileManager.default.removeItem(at: directory)
+        guard FileManager.default.fileExists(atPath: directory.path) else { return nil }
+        do { try FileManager.default.removeItem(at: directory); return nil } catch { return error }
     }
 
     private func failure(_ what: String) -> ManifestStreamError {
@@ -84,7 +95,9 @@ nonisolated final class ManifestStagingDB {
             switch value {
             case let .int(v): rc = sqlite3_bind_int64(stmt, i, v)
             case let .double(v): rc = sqlite3_bind_double(stmt, i, v)
-            case let .text(v): rc = sqlite3_bind_text(stmt, i, v, -1, Self.transient)
+            case let .text(v): // explicit byte length, never a C string: a NUL inside a key must not truncate it
+                var copy = v
+                rc = copy.withUTF8 { sqlite3_bind_text(stmt, i, UnsafeRawPointer($0.baseAddress ?? UnsafePointer(bitPattern: 1)!).assumingMemoryBound(to: CChar.self), Int32($0.count), Self.transient) }
             case let .blob(v): rc = sqlite3_bind_blob(stmt, i, v.baseAddress ?? UnsafeRawPointer(bitPattern: 1), Int32(v.count), Self.transient)
             case .null: rc = sqlite3_bind_null(stmt, i)
             }

@@ -526,7 +526,7 @@ nonisolated struct KudosBackupContents {
         return formatter
     }()
 
-    private nonisolated static func makeEncoder() -> JSONEncoder {
+    nonisolated static func makeEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .custom { date, encoder in
             var container = encoder.singleValueContainer()

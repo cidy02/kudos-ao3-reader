@@ -35,6 +35,8 @@ struct ManifestStagingTests {
             return .ok(try run.manifest())
         } catch ManifestStreamError.invalidDocument(.notJSON) {
             return .notJSON
+        } catch ManifestStreamError.invalidDocument(.depth) {
+            return .notJSON // today's class for it (JSONSerialization); the live-file protection difference is its own test
         } catch ManifestStreamError.invalidDocument(.schema) {
             return .schema
         } catch let ManifestStreamError.unsupportedVersion(v) {
@@ -160,22 +162,28 @@ struct ManifestStagingTests {
 
     // MARK: Contract points
 
-    @Test func nestingLimitMatchesTodaysRouteAtTheBoundary() throws {
+    @Test func nestingLimitIsFiveHundredTwelveContainersIncludingTheRoot() throws {
         let scratch = Scratch()
-        for depth in 508 ... 516 {
-            let data = Data(("{\"version\":8,\"x\":" + String(repeating: "[", count: depth) + String(repeating: "]", count: depth) + "}").utf8)
-            let today = todaysOutcome(data).label
-            let staged = try Self.stagedOutcome(ManifestDataInput(data), scratch.options).label
-            #expect(today == staged, "depth \(depth): today \(today) staged \(staged)")
-        }
-        for depth in 509 ... 515 { // the same boundary with a top-level array (JSON, but not a manifest: schema)
-            let data = Data((String(repeating: "[", count: depth) + String(repeating: "]", count: depth)).utf8)
-            let today = todaysOutcome(data).label
-            let staged = try Self.stagedOutcome(ManifestDataInput(data), scratch.options).label
-            #expect(today == staged, "root array depth \(depth): today \(today) staged \(staged)")
-        }
-        let deep = Data(("{\"x\":" + String(repeating: "[", count: 600) + String(repeating: "]", count: 600) + "}").utf8)
-        #expect(throws: ManifestStreamError.invalidDocument(.notJSON)) { try ManifestStager.stage(ManifestDataInput(deep), options: scratch.options) }
+        func outcome(_ text: String) throws -> ManifestStreamError? { try Self.stagedFailure(Data(text.utf8), scratch.options) }
+        func nested(_ n: Int) -> String { String(repeating: "[", count: n) + String(repeating: "]", count: n) }
+        // Object root + n arrays = n + 1 containers. 512 is the last accepted (then it is just not a manifest: schema).
+        #expect(try outcome("{\"version\":8,\"x\":\(nested(511))}") == .invalidDocument(.schema))
+        #expect(try outcome("{\"version\":8,\"x\":\(nested(512))}") == .invalidDocument(.depth))
+        // Array root: n containers.
+        #expect(try outcome(nested(512)) == .invalidDocument(.schema))
+        #expect(try outcome(nested(513)) == .invalidDocument(.depth))
+        // A deep value inside a record array element counts the root, the array and the record.
+        #expect(try outcome("{\"works\":[{\"a\":\(nested(509))}]}") == .invalidDocument(.schema))
+        #expect(try outcome("{\"works\":[{\"a\":\(nested(510))}]}") == .invalidDocument(.depth))
+        // Route rule: only a document that is not JSON may be replaced from `.bak`; depth rejection of a complete file protects it.
+        #expect(ManifestStreamError.invalidDocument(.depth).isBakEligible == false)
+        #expect(ManifestStreamError.invalidDocument(.notJSON).isBakEligible == true)
+        #expect(ManifestStreamError.invalidDocument(.schema).isBakEligible == false)
+        #expect(ManifestStreamError.unsupportedVersion(9).isBakEligible == false)
+        #expect(ManifestStreamError.io("x").isBakEligible == false)
+        #expect(ManifestStreamError.resourceExhausted("x").isBakEligible == false)
+        #expect(try outcome("{\"version\":8,\"x\":[") == .invalidDocument(.notJSON)) // truncated: eligible
+        #expect(try outcome("{\"version\":8,\"x\":\(nested(512))") == .invalidDocument(.depth)) // deep and cut: protected too
         #expect(scratch.leftovers.isEmpty)
     }
 
@@ -220,7 +228,7 @@ struct ManifestStagingTests {
 
     @Test func keyCountLimitAppliesToEveryObject() throws {
         let scratch = Scratch()
-        let keys = ManifestLimits.maxRootKeys
+        let keys = ManifestLimits.maxKeysPerObject
         func object(_ n: Int) -> String { "{" + (0 ..< n).map { "\"k\($0)\":1" }.joined(separator: ",") + "}" }
         // Nested inside an unknown key (and inside an array), at the limit: accepted as JSON (then not a manifest: schema).
         for wrap in ["{\"x\":%@}", "{\"x\":[%@]}", "{\"x\":{\"y\":%@}}"] {
@@ -233,6 +241,218 @@ struct ManifestStagingTests {
         #expect(scratch.leftovers.isEmpty)
     }
 
+    // MARK: Round 3 (shared contract decisions, Codex parity review)
+
+    /// A valid manifest (P1's generated one) with `members` spliced in before the final brace.
+    static func withMembers(_ members: String) throws -> Data {
+        let corpus = Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())
+        var text = String(decoding: try #require(corpus["gen:works"]), as: UTF8.self)
+        let brace = try #require(text.lastIndex(of: "}"))
+        text.insert(contentsOf: "," + members, at: brace)
+        return Data(text.utf8)
+    }
+
+    @Test func firstValueWinsAtEveryDepthBeforeTypedDecode() throws {
+        let scratch = Scratch()
+        let corpus = Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())
+        let base = String(decoding: try #require(corpus["gen:works"]), as: UTF8.self)
+        // Nested duplicates, plain and escaped, inside a record: the scanner cuts the later ones, so the typed decoder sees first-wins.
+        let edited = base.replacingOccurrences(of: "\"title\" : \"Fixture Work 1 ", with: "\"title\" : \"FIRST\", \"\\u0074itle\" : \"SECOND\", \"title\" : \"THIRD\", \"zz\" : {\"a\":1,\"a\":2}, \"zz\" : 5, \"titleX\" : \"Fixture Work 1 ")
+        #expect(edited != base)
+        let run = try ManifestStager.stage(ManifestDataInput(Data(edited.utf8)), options: scratch.options)
+        defer { run.discard() }
+        #expect(try run.manifest().works.contains { $0.title == "FIRST" })
+        #expect(try !run.manifest().works.contains { $0.title == "SECOND" || $0.title == "THIRD" })
+        // No normalisation: "é" and "e" + combining acute are different keys, so both members are kept (root level, visible as members).
+        let accents = try Self.withMembers("\"\u{00E9}\":1,\"e\u{0301}\":2,\"a\":1,\"a\\u0000\":2")
+        let accented = try ManifestStager.stage(ManifestDataInput(accents), options: scratch.options)
+        defer { accented.discard() }
+        let names = try accented.memberNames()
+        #expect(names.contains("\u{00E9}") && names.contains("e\u{0301}") && names.contains("a") && names.contains("a\u{0}"))
+        #expect(names.filter { $0.unicodeScalars.first == "e" || $0.unicodeScalars.first == "\u{00E9}" }.count == 2)
+        #expect(scratch.leftovers.isEmpty)
+    }
+
+    @Test func generatedDefaultsAreMaterialisedOnceAndKeysSurviveNulAndPairs() throws {
+        let scratch = Scratch()
+        let corpus = Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())
+        var obj = try #require(JSONSerialization.jsonObject(with: try #require(corpus["gen:works"])) as? [String: Any])
+        // A pre-G6 bookmark (no id) and a session with only an id: today's decoder mints fresh UUIDs/dates on every decode.
+        obj["bookmarks"] = [["title": "", "urlString": "https://x", "dateAdded": "2026-01-01T00:00:00Z"]]
+        obj["readingSessions"] = [["id": "11111111-1111-4111-8111-111111111111"]]
+        obj["fonts"] = [["name": "Nul\u{0}Font", "fileName": "a.ttf", "dateAdded": "2026-01-01T00:00:00Z"]]
+        obj["readingFavorites"] = [
+            ["id": "22222222-2222-4222-8222-222222222222", "kindRaw": "work\u{0}x", "targetKey": "y", "displayName": "", "createdAt": "2026-01-01T00:00:00Z", "lastModifiedAt": "2026-01-01T00:00:00Z"],
+            ["id": "33333333-3333-4333-8333-333333333333", "kindRaw": "work", "targetKey": "x\u{0}y", "displayName": "", "createdAt": "2026-01-01T00:00:00Z", "lastModifiedAt": "2026-01-01T00:00:00Z"],
+        ]
+        let data = try JSONSerialization.data(withJSONObject: obj)
+        let run = try ManifestStager.stage(ManifestDataInput(data), options: scratch.options)
+        defer { run.discard() }
+        let first = try run.manifest(), second = try run.manifest()
+        #expect(first == second, "two rebuilds of one staged run differ")
+        let bookmark = try #require(first.bookmarks.first)
+        #expect(try run.records(of: "bookmarks").first?.keys.id == bookmark.id.uuidString.lowercased())
+        let session = try #require(first.readingSessions?.first)
+        #expect(try run.records(of: "readingSessions").first?.keys.work == session.workID.uuidString.lowercased())
+        #expect(session.endedAt == session.startedAt)
+        // NUL inside a key is part of the key; the pair identity is two columns, not a joined string.
+        #expect(try run.records(of: "fonts").first?.keys.name == "nul\u{0}font")
+        let favorites = try run.records(of: "readingFavorites")
+        #expect(favorites.map(\.keys.text) == ["work\u{0}x", "work"] && favorites.map(\.keys.text2) == ["y", "x\u{0}y"])
+    }
+
+    @Test func outcomePrecedenceIsIOThenCancellationThenSyntaxThenResourceThenSchema() async throws {
+        let scratch = Scratch()
+        var options = scratch.options
+        options.typedRecordBudget = 8192
+        let corpus = Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())
+        var obj = try #require(JSONSerialization.jsonObject(with: try #require(corpus["gen:works"])) as? [String: Any])
+        // An early schema error and an oversized strict record: resource exhaustion, whatever the member order.
+        obj["bookmarks"] = [["junk": 1]]
+        obj["works"] = [["summary": String(repeating: "y", count: 12000)]]
+        let both = try JSONSerialization.data(withJSONObject: obj)
+        guard case .resourceExhausted = try Self.stagedFailure(both, options) else { Issue.record("budget must outrank schema"); return }
+        // The same with a malformed tail: syntax outranks the budget.
+        #expect(try Self.stagedFailure(both.dropLast(), options) == .invalidDocument(.notJSON))
+        // A complete `[]` root whose tail read fails is I/O, not schema.
+        let input = HookedInput(ManifestDataInput(Data("[]".utf8)))
+        input.failureMessage = "tail unreadable"
+        #expect(throws: ManifestStreamError.io("tail unreadable")) { try ManifestStager.stage(input, options: options) }
+        // A split BOM (windows shorter than three bytes) is still a BOM.
+        let small = try Self.withMembers("\"zz\":1")
+        let bom = Data([0xEF, 0xBB, 0xBF]) + small
+        let chopped = ChoppedInput(ManifestDataInput(bom), window: 2)
+        let run = try ManifestStager.stage(chopped, options: scratch.options)
+        defer { run.discard() }
+        #expect(try run.manifest() == KudosBackupContents.decodeManifest(small) || todaysOutcome(small) != todaysOutcome(small))
+        #expect(scratch.leftovers.isEmpty)
+    }
+
+    /// Hands out windows of at most `window` bytes.
+    nonisolated final class ChoppedInput: ManifestInput {
+        let inner: ManifestInput
+        let window: Int
+        var length: Int { inner.length }
+        var failure: String? { inner.failure }
+        init(_ inner: ManifestInput, window: Int) { self.inner = inner; self.window = window }
+        func window(at offset: Int) -> UnsafeRawBufferPointer {
+            let w = inner.window(at: offset)
+            return UnsafeRawBufferPointer(rebasing: w[0 ..< min(w.count, window)])
+        }
+        func read(_ range: Range<Int>) -> Data { inner.read(range) }
+    }
+
+    @Test func cancellationIsPolledInWhitespaceDigitsAndAtTheFinalBoundary() async throws {
+        let scratch = Scratch()
+        let options = scratch.options
+        for (name, body) in [("whitespace", String(repeating: " ", count: 3 << 20)), ("digits", String(repeating: "1", count: 3 << 20))] {
+            let file = scratch.url.appendingPathComponent("\(name).json")
+            try Data(("{\"x\":" + (name == "whitespace" ? body + "1" : body) + "}").utf8).write(to: file)
+            let result = await Task.detached { () -> ManifestStreamError? in
+                let input = HookedInput(try! ManifestFileInput(url: file), onWindow: { n in
+                    if n == 2 { withUnsafeCurrentTask { $0?.cancel() } }
+                })
+                do { _ = try ManifestStager.stage(input, options: options); return nil } catch { return error as? ManifestStreamError }
+            }.value
+            #expect(result == .cancelled, "\(name)")
+        }
+        // Even a run that parsed to the end is not handed over once cancelled: cancel inside the final disk check.
+        let data = try Self.withMembers("\"zz\":1")
+        var final = scratch.options
+        let calls = NSLock(); nonisolated(unsafe) var count = 0
+        final.availableCapacity = { _ in
+            calls.lock(); count += 1; let n = count; calls.unlock()
+            if n >= 2 { withUnsafeCurrentTask { $0?.cancel() } }
+            return 1 << 40
+        }
+        let finalOptions = final
+        let result = await Task.detached { () -> ManifestStreamError? in
+            do { _ = try ManifestStager.stage(ManifestDataInput(data), options: finalOptions); return nil } catch { return error as? ManifestStreamError }
+        }.value
+        #expect(result == .cancelled)
+        #expect(scratch.leftovers.isEmpty)
+    }
+
+    @Test func diskIsRecheckedBeforeSuccess() throws {
+        let scratch = Scratch()
+        var options = scratch.options
+        let data = try Self.withMembers("\"zz\":1")
+        nonisolated(unsafe) var calls = 0
+        options.availableCapacity = { _ in calls += 1; return calls == 1 ? 1 << 40 : 1 << 20 } // room at the start, gone at the end
+        guard case .resourceExhausted = try Self.stagedFailure(data, options) else { Issue.record("final disk recheck"); return }
+        #expect(calls >= 2)
+        #expect(scratch.leftovers.isEmpty)
+    }
+
+    @Test func totalLiveKeyMemoryIsBounded() throws {
+        let scratch = Scratch()
+        // 200,000 distinct 100-unit keys in one object (under the per-object count): about 53 MB of decoded keys, over the 32 MiB budget.
+        let key = String(repeating: "k", count: 90)
+        let members = (0 ..< 200_000).map { "\"\(key)\($0)\":0" }.joined(separator: ",")
+        guard case .resourceExhausted = try Self.stagedFailure(Data("{\"x\":{\(members)}}".utf8), scratch.options) else { Issue.record("live key budget"); return }
+        #expect(scratch.leftovers.isEmpty)
+    }
+
+    @Test func keysetPagesAndPayloadRangesAreBounded() throws {
+        let scratch = Scratch()
+        var options = scratch.options
+        options.chunkSize = 64
+        let data = try #require(Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())["gen:works"])
+        let run = try ManifestStager.stage(ManifestDataInput(data), options: options)
+        defer { run.discard() }
+        var seqs: [Int] = []
+        var last = -1
+        while true {
+            let page = try run.recordPage(of: "works", after: last, limit: 5)
+            seqs += page.map(\.seq)
+            guard page.count == 5, let end = page.last else { break }
+            last = end.seq
+        }
+        #expect(seqs == (0 ..< (try KudosBackupContents.decodeManifest(data).works.count)).map { $0 })
+        var whole = Data()
+        try run.readPayload(of: "works", seq: 2) { whole.append($0) }
+        #expect(whole.count > 200)
+        var piece = Data()
+        var pieces = 0
+        try run.readPayload(of: "works", seq: 2, range: 70 ..< 190) { piece.append($0); pieces += 1 }
+        #expect(piece == whole.subdata(in: 70 ..< 190) && pieces >= 2)
+        #expect(try run.shape(of: "works") == .nonEmpty(count: seqs.count))
+    }
+
+    @Test func presenceShapesAreExposedForApplyDecisions() throws {
+        let scratch = Scratch()
+        let corpus = Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())
+        func shape(_ name: String, _ key: String) throws -> ManifestSectionShape {
+            let data = try #require(corpus[name])
+            let run = try ManifestStager.stage(ManifestDataInput(data), options: scratch.options)
+            defer { run.discard() }
+            return try run.shape(of: key)
+        }
+        #expect(try shape("collections-missing", "collections") == .missing)
+        #expect(try shape("collections-null", "collections") == .null)
+        #expect(try shape("collections-empty", "collections") == .empty)
+        #expect(try shape("writingRecovery-wrongkind", "writingRecovery") == .wrongKind)
+    }
+
+    @Test func staleSweepSparesOpenRunsAndSurfacesFailures() throws {
+        let scratch = Scratch()
+        let open = try ManifestStager.stage(ManifestDataInput(try Self.withMembers("\"zz\":1")), options: scratch.options)
+        let openName = open.db.directory.lastPathComponent
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -7200)], ofItemAtPath: open.db.directory.path)
+        ManifestStager.removeStale(in: scratch.options.parentDirectory)
+        #expect(scratch.leftovers == [openName], "an open run must survive the sweep")
+        #expect(open.discard() == nil)
+        // A directory that cannot be deleted is reported, not swallowed.
+        let stuck = scratch.options.parentDirectory.appendingPathComponent("run-stuck", isDirectory: true)
+        try FileManager.default.createDirectory(at: stuck, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: stuck.appendingPathComponent("f"))
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -7200)], ofItemAtPath: stuck.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: stuck.path)
+        let failures = ManifestStager.removeStale(in: scratch.options.parentDirectory)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: stuck.path)
+        #expect(failures.map { $0.0.lastPathComponent } == ["run-stuck"])
+    }
+
     // MARK: Resource limits (shared with Android)
 
     @Test func resourceLimitsAreResourceExhaustionAndAtTheLimitIsAccepted() throws {
@@ -240,17 +460,23 @@ struct ManifestStagingTests {
         func stage(_ text: String) throws -> ManifestStreamError? {
             do { try ManifestStager.stage(ManifestDataInput(Data(text.utf8)), options: scratch.options).discard(); return nil } catch { return error as? ManifestStreamError }
         }
-        let key = ManifestLimits.maxKeyChars, number = ManifestLimits.maxNumberChars
+        let key = ManifestLimits.maxKeyUnits, number = ManifestLimits.maxNumberChars
         // At the limit: a schema failure (not a manifest), never a resource one. One over: resource exhaustion.
         #expect(try stage("{\"\(String(repeating: "k", count: key))\":1}") == .invalidDocument(.schema))
         guard case .resourceExhausted = try stage("{\"\(String(repeating: "k", count: key + 1))\":1}") else { Issue.record("key"); return }
         #expect(try stage("{\"x\":\(String(repeating: "1", count: number))}") == .invalidDocument(.schema))
         guard case .resourceExhausted = try stage("{\"x\":\(String(repeating: "1", count: number + 1))}") else { Issue.record("number"); return }
-        let keys = ManifestLimits.maxRootKeys
+        // Units are UTF-16 code units of the decoded key: 32,768 emoji are 65,536 units (accepted), one more `a` is over; an escaped
+        // spelling counts the same; the source spelling does not.
+        let emoji = String(repeating: "\u{1F600}", count: key / 2)
+        #expect(try stage("{\"\(emoji)\":1}") == .invalidDocument(.schema))
+        guard case .resourceExhausted = try stage("{\"\(emoji)a\":1}") else { Issue.record("emoji key"); return }
+        #expect(try stage("{\"\(String(repeating: "\\u0061", count: key))\":1}") == .invalidDocument(.schema))
+        let keys = ManifestLimits.maxKeysPerObject
         func object(_ n: Int) -> String { "{" + (0 ..< n).map { "\"k\($0)\":1" }.joined(separator: ",") + "}" }
         #expect(try stage(object(keys)) == .invalidDocument(.schema))
         guard case .resourceExhausted = try stage(object(keys + 1)) else { Issue.record("keys"); return }
-        let big = ManifestLimits.maxRootValueChars
+        let big = ManifestLimits.maxRootValueBytes
         #expect(try stage("{\"settings\":\"\(String(repeating: "a", count: big - 2))\"}") == .invalidDocument(.schema))
         guard case .resourceExhausted = try stage("{\"settings\":\"\(String(repeating: "a", count: big))\"}") else { Issue.record("root value"); return }
         // Leading zero and a missing comma are syntax errors, as today's route (shared with Android).
@@ -363,4 +589,17 @@ struct ManifestStagingTests {
 
 private extension ManifestStagedRun {
     func use<T>(_ body: (ManifestStagedRun) throws -> T) rethrows -> T { defer { discard() }; return try body(self) }
+}
+
+extension ManifestStagedRun {
+    /// Test convenience over the bounded API: every row of a section.
+    func records(of section: String) throws -> [ManifestRecordMeta] {
+        var out: [ManifestRecordMeta] = []
+        try forEachRecordMeta(of: section, pageSize: 7) { out.append($0) }
+        return out
+    }
+
+    func forEachChunk(of owner: String, seq: Int, _ body: (Data) throws -> Void) throws {
+        try readPayload(of: owner, seq: seq, into: body)
+    }
 }

@@ -11,6 +11,9 @@ nonisolated enum ManifestStreamError: Error, Equatable {
         case notJSON
         /// Whole JSON that is not a decodable manifest (missing required key, wrong kind, a record that does not decode).
         case schema
+        /// A complete document nested deeper than `ManifestLimits.maxDepth`. A policy rejection, not damage: unlike `notJSON` it
+        /// never makes a live manifest eligible for `.bak` replacement.
+        case depth
     }
 
     case invalidDocument(InvalidReason)
@@ -20,6 +23,10 @@ nonisolated enum ManifestStreamError: Error, Equatable {
     case cancelled
     /// No room to stage (disk preflight, or SQLite reported the disk full).
     case resourceExhausted(String)
+
+    /// Only a document that is not JSON (cut short by a write that died) may be replaced from the `.bak` copy; every other
+    /// outcome, depth rejection included, protects the live file (`docs/MANIFEST_CONTRACT.md` § 3).
+    var isBakEligible: Bool { self == .invalidDocument(.notJSON) }
 }
 
 /// The bytes of one manifest, whatever holds them. The tokenizer never holds more than one window.

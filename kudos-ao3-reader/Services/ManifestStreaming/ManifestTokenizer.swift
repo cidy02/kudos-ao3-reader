@@ -6,21 +6,33 @@ nonisolated enum ManifestScanError: Error, Equatable {
     case tooDeep
     case unexpectedEnd
     case cancelled
-    /// A resource limit (`ManifestLimits`); reported as `resourceExhausted`, not as an invalid document.
-    case limit(String)
 }
 
 /// Resource limits shared with Android (A-567 P2). New limits, pending owner approval: one constant each so they are easy to change.
 /// Real manifests are nowhere near any of them. Record arrays, records and unknown values have no size limit.
 nonisolated enum ManifestLimits {
-    /// Characters in one object key.
-    static let maxKeyChars = 64 * 1024
-    /// Characters in one number token.
+    /// UTF-16 code units of one decoded object key.
+    static let maxKeyUnits = 64 * 1024
+    /// Source characters of one number token.
     static let maxNumberChars = 64 * 1024
-    /// Keys in any one object (the top-level one counts distinct keys; the duplicate-key set is in memory).
-    static let maxRootKeys = 262_144 // per object, at any depth
-    /// Characters in a known single root value (`version`, `exportedAt`, `settings`, `pronunciations`): it is decoded in memory.
-    static let maxRootValueChars = 16 * 1024 * 1024
+    /// Source members (before first-wins dedupe) in any one object, at any depth, including inside skipped duplicate values.
+    static let maxKeysPerObject = 262_144
+    /// Source bytes of a known root value as written (whitespace included): `version`, `exportedAt`, `settings`,
+    /// `pronunciations`, `exportedBy`, and a known section holding the wrong kind of value.
+    static let maxRootValueBytes = 16 * 1024 * 1024
+    /// Total bytes of decoded keys held at once for first-wins dedupe across all open objects.
+    static let maxLiveKeyBytes = 32 * 1024 * 1024
+    /// Nesting: containers on the path from the root, the root included.
+    static let maxDepth = 512
+}
+
+/// What one open object remembers while it is scanned: its keys (exact UTF-16 sequences, no normalisation) for first-wins.
+nonisolated struct ManifestObjectScan {
+    var seen = Set<[UInt16]>()
+    var cost = 0
+    var members = 0
+    /// Position of the comma before the current member, -1 for the first.
+    var separator = -1
 }
 
 nonisolated enum ManifestValueKind: Equatable { case object, array, string, number, bool, null }
@@ -32,7 +44,13 @@ nonisolated struct ManifestTokenizer {
     private var base: UnsafeRawPointer?
     private var windowStart = 0
     private var windowEnd = 0
-    static let maxDepth = 512
+    /// The first resource limit met. Scanning goes on (a syntax error later still wins, `docs/MANIFEST_CONTRACT.md` § precedence)
+    /// but nothing more is remembered or staged.
+    private(set) var limitHit: String?
+    private var liveKeyBytes = 0
+    /// Source ranges of later duplicate members (`,"k":v`), at any depth, so a record can be rewritten first-wins before typed decode.
+    private(set) var removals: [Range<Int>] = []
+    private var whitespaceRun = 0
 
     init(input: ManifestInput, at position: Int = 0) {
         self.input = input
@@ -51,8 +69,21 @@ nonisolated struct ManifestTokenizer {
         return base!.load(fromByteOffset: pos - windowStart, as: UInt8.self)
     }
 
+    mutating func noteLimit(_ message: String) { if limitHit == nil { limitHit = message } }
+
+    /// Cancellation is polled here too (a gigabyte of whitespace is an unbounded loop); a poll that sees it makes the next
+    /// token fail, and the stager reports cancellation ahead of any syntax outcome.
     mutating func skipWhitespace() {
-        while let b = peek(), b == 0x20 || b == 0x09 || b == 0x0A || b == 0x0D { pos += 1 }
+        while let b = peek(), b == 0x20 || b == 0x09 || b == 0x0A || b == 0x0D {
+            pos += 1
+            whitespaceRun += 1
+            if whitespaceRun & 0xFFFF == 0, Task.isCancelled { pos = Int.max / 2; return }
+        }
+    }
+
+    mutating func takeRemovals() -> [Range<Int>] {
+        defer { removals.removeAll(keepingCapacity: true) }
+        return removals
     }
 
     func fail(_ message: String) -> ManifestScanError { .syntax(pos, message) }
@@ -70,32 +101,35 @@ nonisolated struct ManifestTokenizer {
         let start = pos
         switch b {
         case UInt8(ascii: "{"):
-            guard depth <= Self.maxDepth else { throw ManifestScanError.tooDeep }
+            guard depth < ManifestLimits.maxDepth else { throw ManifestScanError.tooDeep }
             pos += 1
             skipWhitespace()
             if peek() == UInt8(ascii: "}") { pos += 1; return (.object, start ..< pos) }
-            var keys = 0 // per object, on the call stack: every object obeys the key-count limit (shared with Android)
+            var scan = ManifestObjectScan()
+            defer { liveKeyBytes -= scan.cost }
             while true {
                 skipWhitespace()
                 guard peek() == UInt8(ascii: "\"") else { throw fail("object key") }
-                keys += 1
-                if keys > ManifestLimits.maxRootKeys { throw ManifestScanError.limit("more than \(ManifestLimits.maxRootKeys) keys in one object") }
                 let keyRange = try skipString()
-                if keyRange.count > 6 * ManifestLimits.maxKeyChars + 2 { throw ManifestScanError.limit("object key too long") }
+                let duplicate = try noteKey(keyRange, in: &scan).duplicate
                 skipWhitespace()
                 guard peek() == UInt8(ascii: ":") else { throw fail("colon") }
                 pos += 1
-                _ = try skipValue(depth: depth + 1)
+                let (_, value) = try skipValue(depth: depth + 1)
+                if duplicate, scan.separator >= 0 {
+                    if removals.count >= 1 << 20 { noteLimit("too many duplicate members") } else { removals.append(scan.separator ..< value.upperBound) }
+                }
                 skipWhitespace()
                 guard let c = peek() else { throw ManifestScanError.unexpectedEnd }
                 pos += 1
                 if c == UInt8(ascii: "}") { return (.object, start ..< pos) }
                 guard c == UInt8(ascii: ",") else { throw fail("object separator") }
+                scan.separator = pos - 1
                 skipWhitespace()
                 if peek() == UInt8(ascii: "}") { pos += 1; return (.object, start ..< pos) } // lenient, as today's route
             }
         case UInt8(ascii: "["):
-            guard depth <= Self.maxDepth else { throw ManifestScanError.tooDeep }
+            guard depth < ManifestLimits.maxDepth else { throw ManifestScanError.tooDeep }
             pos += 1
             skipWhitespace()
             if peek() == UInt8(ascii: "]") { pos += 1; return (.array, start ..< pos) }
@@ -129,7 +163,13 @@ nonisolated struct ManifestTokenizer {
 
     private mutating func digits(min: Int) throws {
         var n = 0
-        while let b = peek(), b >= 0x30, b <= 0x39 { pos += 1; n += 1 }
+        while let b = peek(), b >= 0x30, b <= 0x39 {
+            pos += 1; n += 1
+            if n & 0xFFFF == 0 {
+                if Task.isCancelled { throw ManifestScanError.cancelled }
+                if n > ManifestLimits.maxNumberChars { noteLimit("number token longer than \(ManifestLimits.maxNumberChars)") }
+            }
+        }
         if n < min { throw fail("digits") }
     }
 
@@ -144,7 +184,79 @@ nonisolated struct ManifestTokenizer {
             if let s = peek(), s == UInt8(ascii: "+") || s == UInt8(ascii: "-") { pos += 1 }
             try digits(min: 1)
         }
-        if pos - numberStart > ManifestLimits.maxNumberChars { throw ManifestScanError.limit("number token longer than \(ManifestLimits.maxNumberChars)") }
+        if pos - numberStart > ManifestLimits.maxNumberChars { noteLimit("number token longer than \(ManifestLimits.maxNumberChars)") }
+    }
+
+    // MARK: Keys
+
+    /// Registers one object key (already scanned at `range`): counts the member, enforces the limits and returns whether an
+    /// equal key came earlier in this object (the later value then loses). Equality is the exact UTF-16 sequence after
+    /// unescaping, with no Unicode normalisation.
+    mutating func noteKey(_ range: Range<Int>, in scan: inout ManifestObjectScan) throws -> (units: [UInt16]?, duplicate: Bool) {
+        scan.members += 1
+        if scan.members > ManifestLimits.maxKeysPerObject { noteLimit("more than \(ManifestLimits.maxKeysPerObject) members in one object") }
+        guard limitHit == nil else { return (nil, false) }
+        guard let units = try keyUnits(range) else { return (nil, false) }
+        let cost = units.count * 2 + 64
+        guard liveKeyBytes + cost <= ManifestLimits.maxLiveKeyBytes else {
+            noteLimit("decoded keys held at once exceed \(ManifestLimits.maxLiveKeyBytes) bytes")
+            return (nil, false)
+        }
+        guard scan.seen.insert(units).inserted else { return (units, true) }
+        liveKeyBytes += cost
+        scan.cost += cost
+        return (units, false)
+    }
+
+    /// Releases an object's key memory (the nested path does this itself; the stager's root loop calls it at the end).
+    mutating func release(_ scan: ManifestObjectScan) { liveKeyBytes -= scan.cost }
+
+    /// The decoded key as UTF-16 units; nil (and a limit noted) when it is over the unit limit.
+    mutating func keyUnits(_ range: Range<Int>) throws -> [UInt16]? {
+        guard range.count <= 6 * ManifestLimits.maxKeyUnits + 2 else { noteLimit("object key longer than \(ManifestLimits.maxKeyUnits) UTF-16 units"); return nil }
+        var units: [UInt16] = []
+        func decode(_ b: UnsafeRawBufferPointer) {
+            let inner = UnsafeRawBufferPointer(rebasing: b[1 ..< b.count - 1])
+            if !inner.contains(UInt8(ascii: "\\")) { units = Array(String(decoding: inner, as: UTF8.self).utf16); return }
+            var bytes: [UInt8] = []
+            var i = 0
+            func hex4(_ at: Int) -> UInt32 { (0 ..< 4).reduce(0) { $0 << 4 | UInt32(Self.hexValue(inner[at + $1])) } }
+            while i < inner.count {
+                let c = inner[i]
+                guard c == UInt8(ascii: "\\") else { bytes.append(c); i += 1; continue }
+                let e = inner[i + 1]
+                switch e {
+                case UInt8(ascii: "b"): bytes.append(8); i += 2
+                case UInt8(ascii: "f"): bytes.append(12); i += 2
+                case UInt8(ascii: "n"): bytes.append(10); i += 2
+                case UInt8(ascii: "r"): bytes.append(13); i += 2
+                case UInt8(ascii: "t"): bytes.append(9); i += 2
+                case UInt8(ascii: "u"):
+                    var scalar = hex4(i + 2)
+                    i += 6
+                    if (0xD800 ... 0xDBFF).contains(scalar) { scalar = 0x10000 + ((scalar - 0xD800) << 10) + (hex4(i + 2) - 0xDC00); i += 6 }
+                    bytes.append(contentsOf: Array(String(Unicode.Scalar(scalar) ?? "\u{FFFD}").utf8))
+                default: bytes.append(e); i += 2 // \" \\ \/
+                }
+            }
+            units = Array(String(decoding: bytes, as: UTF8.self).utf16)
+        }
+        if windowStart <= range.lowerBound, range.upperBound <= windowEnd, let base {
+            decode(UnsafeRawBufferPointer(start: base + (range.lowerBound - windowStart), count: range.count))
+        } else {
+            let data = input.read(range)
+            data.withUnsafeBytes { decode($0) }
+        }
+        if units.count > ManifestLimits.maxKeyUnits { noteLimit("object key longer than \(ManifestLimits.maxKeyUnits) UTF-16 units"); return nil }
+        return units
+    }
+
+    private static func hexValue(_ h: UInt8) -> UInt8 {
+        switch h {
+        case 0x30 ... 0x39: h - 0x30
+        case 0x41 ... 0x46: h - 0x41 + 10
+        default: h - 0x61 + 10
+        }
     }
 
     /// Scans a string with a UTF-8 DFA whose state survives window refills. The hot loop runs over the current window.
@@ -243,8 +355,9 @@ nonisolated struct ManifestTokenizer {
     }
 
 
-    /// A UTF-8 BOM at the very start is accepted (today's `JSONSerialization` route accepts it).
+    /// A UTF-8 BOM at the very start is accepted (today's `JSONSerialization` route accepts it). The three bytes are read
+    /// directly, so a first window shorter than three bytes does not hide one.
     mutating func skipBOM() {
-        if pos == 0, input.window(at: 0).starts(with: [0xEF, 0xBB, 0xBF]) { pos = 3; base = nil; windowEnd = 0 }
+        if pos == 0, input.length >= 3, input.read(0 ..< 3).elementsEqual([0xEF, 0xBB, 0xBF]) { pos = 3; base = nil; windowEnd = 0 }
     }
 }
