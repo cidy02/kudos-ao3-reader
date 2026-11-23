@@ -19,7 +19,7 @@ import kotlinx.serialization.json.JsonObject
 class ManifestStageOptions(
     /** Size of the input when known; used for the up-front free-disk check. */
     val expectedBytes: Long? = null,
-    /** Polled while reading and at every commit; true stops the run with [ManifestStageException.Cancelled]. */
+    /** Polled at every read-buffer refill (16 Ki chars); true stops the run with [ManifestStageException.Cancelled]. */
     val isCancelled: () -> Boolean = { false },
     /** Free bytes where the staging directory lives (overridable so a full disk can be tested). */
     val freeSpace: (File) -> Long = { it.usableSpace },
@@ -55,7 +55,7 @@ object ManifestStager {
                 throw ManifestStageException.ResourceExhausted("not enough free disk space to stage the manifest")
             }
             val dir = Files.createTempDirectory(stagingRoot.toPath(), "manifest-").toFile().also { directory = it }
-            val w = StagingWriter(File(dir, "staging.db"), { options.freeSpace(dir) }, options.isCancelled, options.checkpoint).also { writer = it }
+            val w = StagingWriter(File(dir, "staging.db"), { options.freeSpace(dir) }, options.checkpoint).also { writer = it }
             val sink = StagingSink(w) { w.maybeCommit() }
             ManifestTokenizer(input, sink, options.isCancelled).parseDocument()
             w.commitAll()
@@ -111,7 +111,7 @@ object ManifestStager {
         return sb.toString()
     }
 
-    private fun map(t: Throwable): Throwable = when (t) {
+    internal fun map(t: Throwable): Throwable = when (t) {
         is ManifestStageException -> t
         is SQLiteFullException -> ManifestStageException.ResourceExhausted("the disk is full", t)
         is SQLiteDiskIOException, is SQLiteDatabaseCorruptException, is SQLiteException -> ManifestStageException.Io(t)

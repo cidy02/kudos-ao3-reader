@@ -106,17 +106,17 @@ class ManifestStagingLargeTest {
             f.delete()
         }
         // cancellation latency during staging of the largest run that fits the budget
-        val cancelMib = sizes.filter { it >= 8 }.min().coerceAtLeast(minOf(128, sizes.max()))
+        val cancelMib = if (128L in sizes) 128L else sizes.max()
         val big = File(dir, "cancel.json").also { A567Corpus.manifestFileOfSize(it, cancelMib shl 20) }
         val start = System.nanoTime()
-        val flagAt = start + 400_000_000L
+        val flagAt = start + 50_000_000L
         var seen = 0L
         try {
             big.inputStream().buffered(1 shl 16).use { ManifestStager.stage(it, root, ManifestStageOptions(isCancelled = { (System.nanoTime() >= flagAt).also { hit -> if (hit && seen == 0L) seen = System.nanoTime() } })).close() }
             error("not cancelled")
         } catch (e: ManifestStageException.Cancelled) {
             val latencyMs = (System.nanoTime() - seen) / 1_000_000
-            t.append("\nCancellation during staging of $cancelMib MiB: flag set at 400 ms, quiescent (directory deleted) ${latencyMs} ms after the first poll that saw it.\n")
+            t.append("\nCancellation during staging of $cancelMib MiB: flag set 50 ms in, quiescent (directory deleted) ${latencyMs} ms after the first poll that saw it.\n")
             assertTrue("cancellation latency $latencyMs ms", latencyMs < 1000)
         }
         assertEquals(emptyList<String>(), root.list()?.toList().orEmpty())

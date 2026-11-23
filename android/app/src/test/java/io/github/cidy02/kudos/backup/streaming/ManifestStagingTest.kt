@@ -266,4 +266,34 @@ class ManifestStagingTest {
         assertTrue(!ok("[]"))
         assertTrue(!ok("{a:1}"))
     }
+
+    @Test fun failuresAreMappedToTheirOwnOutcome() {
+        assertTrue(ManifestStager.map(android.database.sqlite.SQLiteFullException("database or disk is full")) is ManifestStageException.ResourceExhausted)
+        assertTrue(ManifestStager.map(OutOfMemoryError()) is ManifestStageException.ResourceExhausted)
+        assertTrue(ManifestStager.map(android.database.sqlite.SQLiteDiskIOException("io")) is ManifestStageException.Io)
+        assertTrue(ManifestStager.map(android.database.sqlite.SQLiteException("x")) is ManifestStageException.Io)
+        assertTrue(ManifestStager.map(IOException("x")) is ManifestStageException.Io)
+        assertTrue(ManifestStager.map(kotlin.coroutines.cancellation.CancellationException("x")) is ManifestStageException.Cancelled)
+        val other = IllegalStateException("a bug")
+        assertTrue(ManifestStager.map(other) === other) // not swallowed into an outcome
+    }
+
+    @Test fun aSurrogatePairOnAChunkBoundaryIsNeverSplitAcrossRows() {
+        val emoji = "\uD83D\uDE00"
+        val head = work(1).dropLast(1) + ",\"hugeUnknown\":\""
+        val atBoundary = StagingWriter.CHUNK_CHARS - 1 // index of the high surrogate: last char of the first chunk
+        for (shift in 0..1) {
+            val record = head + "a".repeat(atBoundary - head.length + shift) + emoji + "b".repeat(1_200_000) + "\"}"
+            stage(doc("\"works\":[$record]")).use { s ->
+                s.db.rawQuery("SELECT data FROM s_works_chunk WHERE ord = 0 ORDER BY seq", null).use { c ->
+                    while (c.moveToNext()) {
+                        val d = c.getString(0)
+                        assertTrue("shift=$shift chunk ends in a lone high surrogate", !Character.isHighSurrogate(d.last()))
+                        assertTrue("shift=$shift chunk starts with a lone low surrogate", !Character.isLowSurrogate(d.first()))
+                    }
+                }
+                assertEquals(record, s.recordText("works", 0))
+            }
+        }
+    }
 }

@@ -21,7 +21,6 @@ import java.io.File
 internal class StagingWriter(
     file: File,
     private val freeSpace: () -> Long,
-    private val isCancelled: () -> Boolean,
     private val checkpoint: (Long) -> Unit
 ) {
     val db: SQLiteDatabase = SQLiteDatabase.openOrCreateDatabase(file, null)
@@ -98,10 +97,9 @@ internal class StagingWriter(
         maybeCommit()
     }
 
-    /** Commits in bounded transactions, polls cancellation and refuses to continue on a nearly full disk. */
+    /** Commits in bounded transactions and refuses to continue on a nearly full disk. Cancellation is polled by the tokenizer. */
     fun maybeCommit() {
         if (pendingRows < COMMIT_ROWS && pendingChars < COMMIT_CHARS) return
-        if (isCancelled()) throw ManifestStageException.Cancelled()
         committedRows += pendingRows
         pendingRows = 0
         pendingChars = 0
