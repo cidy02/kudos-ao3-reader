@@ -1,0 +1,347 @@
+{
+ "wrapper": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[],BODY}",
+ "cases": [
+  {
+   "id": "depth-512-total-ok",
+   "file": "depth-512-total-ok.json",
+   "expect": "ok",
+   "note": "root + 511 arrays = 512 containers"
+  },
+  {
+   "id": "depth-513-total-resource",
+   "file": "depth-513-total-resource.json",
+   "expect": "resource",
+   "note": "513 containers; depth policy is not a syntax error"
+  },
+  {
+   "id": "raw-lf-in-string",
+   "file": "raw-lf-in-string.json",
+   "expect": "syntax",
+   "note": "raw control character U+000A"
+  },
+  {
+   "id": "raw-nul-in-string",
+   "file": "raw-nul-in-string.json",
+   "expect": "syntax",
+   "note": "raw control character U+0000"
+  },
+  {
+   "id": "invalid-utf8-ff",
+   "file": "invalid-utf8-ff.json",
+   "expect": "syntax",
+   "note": "byte FF is not UTF-8"
+  },
+  {
+   "id": "truncated-utf8-before-quote",
+   "file": "truncated-utf8-before-quote.json",
+   "expect": "syntax",
+   "note": "truncated multibyte sequence"
+  },
+  {
+   "id": "fullwidth-hex-escape",
+   "file": "fullwidth-hex-escape.json",
+   "expect": "syntax",
+   "note": "escape digits are ASCII only"
+  },
+  {
+   "id": "key-nfc-nfd-distinct",
+   "file": "key-nfc-nfd-distinct.json",
+   "expect": "ok",
+   "note": "no normalization: two distinct keys"
+  },
+  {
+   "id": "key-escaped-duplicate-first-wins",
+   "file": "key-escaped-duplicate-first-wins.json",
+   "expect": "ok",
+   "note": "an escaped spelling of a key is the same key; first wins"
+  },
+  {
+   "id": "lone-high-surrogate",
+   "file": "lone-high-surrogate.json",
+   "expect": "syntax",
+   "note": "lone high surrogate escape"
+  },
+  {
+   "id": "lone-low-surrogate",
+   "file": "lone-low-surrogate.json",
+   "expect": "syntax",
+   "note": "lone low surrogate escape"
+  },
+  {
+   "id": "surrogate-pair-ok",
+   "file": "surrogate-pair-ok.json",
+   "expect": "ok",
+   "note": "a pair is fine"
+  },
+  {
+   "id": "trailing-commas-ok",
+   "file": "trailing-commas-ok.json",
+   "expect": "ok",
+   "note": "one trailing comma in object and array"
+  },
+  {
+   "id": "bom-ok",
+   "file": "bom-ok.json",
+   "expect": "ok",
+   "note": "leading UTF-8 BOM"
+  },
+  {
+   "id": "root-array",
+   "file": "root-array.json",
+   "expect": "syntax",
+   "note": "complete array root (iOS classifies it as schema)"
+  },
+  {
+   "id": "bare-word-value",
+   "file": "bare-word-value.json",
+   "expect": "syntax",
+   "note": "bare word"
+  },
+  {
+   "id": "leading-zero",
+   "file": "leading-zero.json",
+   "expect": "syntax",
+   "note": "leading zero"
+  },
+  {
+   "id": "key-65536-ascii-nested-ok",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":{\"",
+    "unit": "a",
+    "count": 65536,
+    "suffix": "\":1}"
+   },
+   "expect": "ok",
+   "note": "key of exactly 65,536 UTF-16 units"
+  },
+  {
+   "id": "key-65537-ascii-nested-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":{\"",
+    "unit": "a",
+    "count": 65537,
+    "suffix": "\":1}"
+   },
+   "expect": "resource",
+   "note": "key of 65,537 UTF-16 units"
+  },
+  {
+   "id": "key-32768-emoji-root-ok",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"",
+    "unit": "\ud83d\ude00",
+    "count": 32768,
+    "suffix": "\":1"
+   },
+   "expect": "ok",
+   "note": "65,536 UTF-16 units at the root"
+  },
+  {
+   "id": "key-32768-emoji-plus-a-root-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"",
+    "unit": "\ud83d\ude00",
+    "count": 32768,
+    "suffix": "a\":1"
+   },
+   "expect": "resource",
+   "note": "65,537 UTF-16 units at the root"
+  },
+  {
+   "id": "members-262144-nested-ok",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":{",
+    "unit": "\"a\":0,",
+    "count": 262143,
+    "suffix": "\"a\":0}"
+   },
+   "expect": "ok",
+   "note": "262,144 source members (duplicates count)"
+  },
+  {
+   "id": "members-262145-nested-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":{",
+    "unit": "\"a\":0,",
+    "count": 262144,
+    "suffix": "\"a\":0}"
+   },
+   "expect": "resource",
+   "note": "262,145 source members"
+  },
+  {
+   "id": "members-262145-in-skipped-duplicate-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":0,\"x\":{",
+    "unit": "\"a\":0,",
+    "count": 262144,
+    "suffix": "\"a\":0}"
+   },
+   "expect": "resource",
+   "note": "members inside a skipped duplicate value count"
+  },
+  {
+   "id": "number-65536-digits-ok",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":",
+    "unit": "1",
+    "count": 65536,
+    "suffix": ""
+   },
+   "expect": "ok",
+   "note": "a 65,536-character number"
+  },
+  {
+   "id": "number-65537-digits-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":",
+    "unit": "1",
+    "count": 65537,
+    "suffix": ""
+   },
+   "expect": "resource",
+   "note": "a 65,537-character number"
+  },
+  {
+   "id": "bare-word-65537-syntax",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":",
+    "unit": "a",
+    "count": 65537,
+    "suffix": ""
+   },
+   "expect": "syntax",
+   "note": "a long bare word is a syntax error, not an oversized number"
+  },
+  {
+   "id": "settings-16MiB-source-ok",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"settings\":{\"readerFontID\":\"system\"",
+    "unit": " ",
+    "count": 16777191,
+    "suffix": "}"
+   },
+   "expect": "ok",
+   "note": "settings value of exactly 16 MiB source bytes (spaces count)"
+  },
+  {
+   "id": "settings-16MiB-plus-1-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"settings\":{\"readerFontID\":\"system\"",
+    "unit": " ",
+    "count": 16777192,
+    "suffix": "}"
+   },
+   "expect": "resource",
+   "note": "16 MiB + 1 source bytes"
+  },
+  {
+   "id": "settings-multibyte-16MiB-plus-1-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"settings\":{\"readerFontID\":\"  ",
+    "unit": "\ud83d\ude00",
+    "count": 4194299,
+    "suffix": "\"}"
+   },
+   "expect": "resource",
+   "note": "4-byte characters count as 4 source bytes each"
+  },
+  {
+   "id": "exportedBy-16MiB-plus-1-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"exportedBy\":{\"platform\":\"x\",\"appVersion\":\"1\"",
+    "unit": " ",
+    "count": 16777184,
+    "suffix": "}"
+   },
+   "expect": "resource",
+   "note": "exportedBy has the same limit"
+  },
+  {
+   "id": "works-wrong-kind-huge-resource",
+   "gen": {
+    "wrap": false,
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":\"",
+    "unit": "a",
+    "count": 16777216,
+    "suffix": "\"}"
+   },
+   "expect": "resource",
+   "note": "a huge wrong-kind known root value is resource exhaustion"
+  },
+  {
+   "id": "record-1MiB-plus-1-missing-id-schema",
+   "gen": {
+    "wrap": false,
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"x\":\"",
+    "unit": "a",
+    "count": 1048569,
+    "suffix": "\"}]}"
+   },
+   "expect": "schema",
+   "note": "1 MiB + 1 byte, no id: strict decode fails"
+  },
+  {
+   "id": "record-32MiB-plus-1-resource",
+   "gen": {
+    "wrap": false,
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"x\":\"",
+    "unit": "a",
+    "count": 33554425,
+    "suffix": "\"}]}"
+   },
+   "expect": "resource",
+   "note": "32 MiB + 1 byte record: over the typed budget"
+  },
+  {
+   "id": "record-32MiB-exact-valid-ok",
+   "gen": {
+    "wrap": false,
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"id\":\"00000001-0000-4000-8000-000000000001\",\"summary\":\"",
+    "unit": "a",
+    "count": 33554374,
+    "suffix": "\"}]}"
+   },
+   "expect": "ok",
+   "note": "exactly 32 MiB, valid"
+  },
+  {
+   "id": "record-over-budget-then-malformed-tail-syntax",
+   "gen": {
+    "wrap": false,
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"x\":\"",
+    "unit": "a",
+    "count": 33554425,
+    "suffix": "\"}]}x"
+   },
+   "expect": "syntax",
+   "note": "a malformed tail reports syntax before the budget"
+  },
+  {
+   "id": "record-schema-error-then-over-budget-resource",
+   "gen": {
+    "wrap": false,
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"title\":\"no id\"},{\"x\":\"",
+    "unit": "a",
+    "count": 33554425,
+    "suffix": "\"}]}"
+   },
+   "expect": "resource",
+   "note": "an earlier schema error does not hide a later budget failure"
+  }
+ ]
+}

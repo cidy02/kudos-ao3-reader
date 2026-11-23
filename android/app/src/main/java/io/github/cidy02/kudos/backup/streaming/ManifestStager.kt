@@ -17,9 +17,9 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
 class ManifestStageOptions(
-    /** Size of the input when known; used for the up-front free-disk check. */
+    /** Size of the input when known; sizes the up-front disk reservation and the staging budget. */
     val expectedBytes: Long? = null,
-    /** Polled at every read-buffer refill (16 Ki chars); true stops the run with [ManifestStageException.Cancelled]. */
+    /** Polled at every read-buffer refill (16 Ki chars), after the parse, between finalization steps and before returning. */
     val isCancelled: () -> Boolean = { false },
     /** Free bytes where the staging directory lives (overridable so a full disk can be tested). */
     val freeSpace: (File) -> Long = { it.usableSpace },
@@ -27,52 +27,81 @@ class ManifestStageOptions(
     val checkpoint: (Long) -> Unit = {}
 )
 
+/** What the sync recovery predicate may conclude about a live document (a complete file is never replaced from `.bak` unless MALFORMED). */
+enum class RecoveryVerdict { WELL_FORMED, MALFORMED, PROTECT }
+
 /**
  * Validates a manifest to EOF under the shared input contract and stages it in a private SQLite database.
  * Not called by any production path yet (A-567 P2). On every failure the staging directory is deleted
- * before the exception leaves; on success the caller owns the returned [StagedManifest] and must close it.
+ * before the exception leaves (a directory that cannot be deleted is attached as a suppressed `IOException`);
+ * on success the caller owns the returned [StagedManifest] and must close it.
  *
- * Evaluation order (today's route, `BackupValidator.decodeManifestWithRaw`): the document is parsed
- * completely (I/O, cancellation and syntax outcomes first), then every element and the root fields are
- * decoded with the existing kotlinx types, then the version is checked. Cross-record and clock
- * validation (`BackupValidator.validateManifest`) is a separate step on the staged data.
+ * Precedence, decided once the whole document has been read: I/O > cancellation > syntax > resource > schema
+ * (typed decode of every record and of the root fields) > unsupported version. Depth beyond 512 is the one resource
+ * outcome raised as soon as it is seen. `BackupValidator.validateManifest` is a separate step ([StagedManifest.validate]).
  *
- * shortcut: the root fields (version, exportedAt, settings, exportedBy, pronunciations) are decoded in memory,
- * so a known root value over [MAX_ROOT_VALUE_CHARS] is rejected as resource exhaustion; unknown top-level
- * values and record arrays are chunked and have no such limit. Revisit if settings can legitimately grow.
+ * shortcut: the root fields (version, exportedAt, settings, exportedBy, pronunciations) are decoded in memory, so each is
+ * limited to [StagingSink.MAX_ROOT_VALUE_BYTES] source bytes; record arrays and unknown top-level values have no such limit.
  */
 object ManifestStager {
-    const val MAX_ROOT_VALUE_CHARS = 16L * 1024 * 1024
-    private const val BYTES_FACTOR = 3L
+    /** Measured staging high-water is about 1.5x the input; the reservation and the budget are 1.7x + 16 MiB. */
+    private const val DISK_FACTOR = 1.7
+    private const val DISK_EXTRA = 16L * 1024 * 1024
 
     fun stage(input: InputStream, stagingRoot: File, options: ManifestStageOptions = ManifestStageOptions()): StagedManifest {
         var directory: File? = null
         var writer: StagingWriter? = null
         try {
             stagingRoot.mkdirs()
-            val needed = (options.expectedBytes ?: 0L) * BYTES_FACTOR + StagingWriter.MIN_FREE_BYTES
+            val budget = options.expectedBytes?.let { (it * DISK_FACTOR).toLong() + DISK_EXTRA }
+            val needed = budget ?: StagingWriter.MIN_FREE_BYTES
             if (options.freeSpace(stagingRoot) < needed) {
                 throw ManifestStageException.ResourceExhausted("not enough free disk space to stage the manifest")
             }
             val dir = Files.createTempDirectory(stagingRoot.toPath(), "manifest-").toFile().also { directory = it }
-            val w = StagingWriter(File(dir, "staging.db"), { options.freeSpace(dir) }, options.checkpoint).also { writer = it }
-            val sink = StagingSink(w) { w.maybeCommit() }
-            ManifestTokenizer(input, sink, options.isCancelled).parseDocument()
+            val w = StagingWriter(dir, { options.freeSpace(dir) }, budget, options.checkpoint).also { writer = it }
+            val holder = SourceHolder()
+            val cancelled = { if (options.isCancelled()) throw ManifestStageException.Cancelled() }
+            val sink = StagingSink(w, holder) { w.maybeCommit() }
+            val tokenizer = ManifestTokenizer(input, sink, options.isCancelled)
+            holder.source = tokenizer
+            try {
+                tokenizer.parseDocument()
+            } catch (e: ManifestStageException.Invalid) {
+                if (options.isCancelled()) throw ManifestStageException.Cancelled() // cancellation outranks syntax
+                throw e
+            }
+            cancelled()
+            sink.resourceFailure?.let { throw ManifestStageException.ResourceExhausted(it) }
             w.commitAll()
+            cancelled()
             sink.pendingFailure?.let { throw ManifestStageException.Invalid(it, syntactic = false) }
             val manifest = decodeRoot(w)
             if (!BackupVersion.isSupported(manifest.version)) throw ManifestStageException.UnsupportedVersion(manifest.version)
-            w.finish(mapOf("version" to manifest.version.toString(), "exportedAt" to manifest.exportedAt))
+            w.finish(mapOf("version" to manifest.version.toString(), "exportedAt" to manifest.exportedAt), cancelled)
+            cancelled()
             return StagedManifest(dir, w.db, manifest.version)
         } catch (t: Throwable) {
             writer?.abandon()
-            directory?.deleteRecursively()
-            throw map(t)
+            val mapped = map(t)
+            val dir = directory
+            if (dir != null && dir.exists() && !dir.deleteRecursively()) mapped.addSuppressed(IOException("could not delete the staging directory $dir"))
+            throw mapped
         }
     }
 
-    /** True when the bytes are well formed under the shared contract (the sync recovery predicate); stages nothing durable. */
-    fun isWellFormedObject(input: InputStream, isCancelled: () -> Boolean = { false }): Boolean = try {
+    /** One tokenizer position shared with the sink, which is built before the tokenizer. */
+    private class SourceHolder : SourcePosition {
+        var source: SourcePosition? = null
+        override fun sourceBytes() = source!!.sourceBytes()
+        override val valueStart get() = source!!.valueStart
+    }
+
+    /**
+     * Verdict for a live document: [RecoveryVerdict.MALFORMED] only for a syntax error (the sole case that may be replaced
+     * from `.bak`). Depth beyond the ceiling, any resource limit, an I/O failure or cancellation protect the live file.
+     */
+    fun recoveryVerdict(input: InputStream, isCancelled: () -> Boolean = { false }): RecoveryVerdict = try {
         ManifestTokenizer(input, object : ManifestEvents {
             override fun beginObject() {}
             override fun endObject() {}
@@ -82,19 +111,36 @@ object ManifestStager {
             override fun stringChunk(buffer: CharArray, offset: Int, length: Int, last: Boolean) {}
             override fun literal(text: String) {}
         }, isCancelled).parseDocument()
-        true
+        RecoveryVerdict.WELL_FORMED
     } catch (e: ManifestStageException.Invalid) {
-        false
+        RecoveryVerdict.MALFORMED
+    } catch (e: ManifestStageException) {
+        RecoveryVerdict.PROTECT
     }
+
+    /**
+     * Deletes staging runs under [stagingRoot] that a crashed process left behind: directories named `manifest-*` that carry
+     * the run marker and have not been touched for [staleAfterMillis] (a live run refreshes its marker at every commit).
+     * Call once at startup. Returns the deleted directories and the ones that could not be deleted.
+     */
+    fun sweepStaleRuns(stagingRoot: File, staleAfterMillis: Long = 60L * 60 * 1000, now: Long = System.currentTimeMillis()): SweepResult {
+        val deleted = mutableListOf<File>()
+        val failed = mutableListOf<File>()
+        stagingRoot.listFiles { f -> f.isDirectory && f.name.startsWith("manifest-") }.orEmpty().forEach { dir ->
+            val marker = File(dir, StagingWriter.MARKER)
+            if (!marker.isFile || now - marker.lastModified() < staleAfterMillis) return@forEach
+            if (dir.deleteRecursively()) deleted += dir else failed += dir
+        }
+        return SweepResult(deleted, failed)
+    }
+
+    class SweepResult(val deleted: List<File>, val failed: List<File>)
 
     /** Typed decode of the root fields (every known key that is not a record array); the arrays decode to their defaults. */
     private fun decodeRoot(w: StagingWriter): KudosBackupManifest {
         val slim = LinkedHashMap<String, JsonElement>()
-        w.db.rawQuery("SELECT ord, key, chars, oversize FROM root WHERE known = 1 AND kind != 'records' ORDER BY ord", null).use { c ->
-            while (c.moveToNext()) {
-                if (c.getLong(2) > MAX_ROOT_VALUE_CHARS) throw ManifestStageException.ResourceExhausted("the value of '${c.getString(1)}' is too large to decode")
-                slim[c.getString(1)] = Json.parseToJsonElement(rootText(w, c.getLong(0)))
-            }
+        w.db.rawQuery("SELECT ord, key FROM root WHERE known = 1 AND kind != 'records' ORDER BY ord", null).use { c ->
+            while (c.moveToNext()) slim[c.getString(1)] = Json.parseToJsonElement(w.readText("root_chunk", c.getLong(0)))
         }
         return try {
             BackupJson.decodeFromJsonElement(KudosBackupManifest.serializer(), JsonObject(slim))
@@ -103,12 +149,6 @@ object ManifestStager {
         } catch (e: IllegalArgumentException) {
             throw ManifestStageException.Invalid(e.message ?: "typed decode failed", syntactic = false)
         }
-    }
-
-    private fun rootText(w: StagingWriter, ord: Long): String {
-        val sb = StringBuilder()
-        w.db.rawQuery("SELECT data FROM root_chunk WHERE ord = ? ORDER BY seq", arrayOf(ord.toString())).use { c -> while (c.moveToNext()) sb.append(c.getString(0)) }
-        return sb.toString()
     }
 
     internal fun map(t: Throwable): Throwable = when (t) {

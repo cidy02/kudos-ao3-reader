@@ -3,11 +3,12 @@ package io.github.cidy02.kudos.backup.streaming
 import io.github.cidy02.kudos.backup.BackupJson
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
 
-/** A compact-JSON text being built: held in memory while small, written to chunk rows once it grows. */
+/** A compact-JSON text being built: held in memory while small, written to chunk rows (addressed by char offset) once it grows. */
 internal class StagedText(private val w: StagingWriter, private val chunkTable: String, private val ord: Long) {
     val sb = StringBuilder()
-    private var seq = 0
+    private var written = 0L
     var spilled = false
         private set
 
@@ -49,7 +50,7 @@ internal class StagedText(private val w: StagingWriter, private val chunkTable: 
     }
 
     private fun grown() {
-        if (!spilled && sb.length <= DECODE_LIMIT) return
+        if (!spilled && sb.length <= SPILL_AT) return
         spilled = true
         while (sb.length >= StagingWriter.CHUNK_CHARS) writeChunk(StagingWriter.CHUNK_CHARS)
     }
@@ -57,45 +58,52 @@ internal class StagedText(private val w: StagingWriter, private val chunkTable: 
     private fun writeChunk(max: Int) {
         var cut = minOf(max, sb.length)
         if (cut > 1 && Character.isHighSurrogate(sb[cut - 1])) cut-- // never split a pair across rows
-        w.chunk(chunkTable, ord, seq++, sb.substring(0, cut))
+        w.chunk(chunkTable, ord, written, sb.substring(0, cut))
+        written += cut
         sb.delete(0, cut)
     }
 
-    /** Writes whatever is left; returns the number of chunk rows. */
-    fun close(): Int {
+    /** Writes whatever is left. */
+    fun close() {
         while (sb.isNotEmpty()) writeChunk(StagingWriter.CHUNK_CHARS)
-        return seq
     }
 
     companion object {
-        /** Elements up to this many chars are decoded with the typed model while staging; larger ones are decoded on read. */
-        const val DECODE_LIMIT = 1 shl 20
+        /** Elements up to this many chars are held in memory until complete; larger ones stream to chunk rows as they grow. */
+        const val SPILL_AT = 1 shl 20
         private val HEX = "0123456789abcdef".toCharArray()
     }
 }
 
 /**
- * Turns tokenizer events into staging rows. Duplicate keys (at any depth) keep the first value: the
- * later value is read and validated but not staged. Memory is bounded by [StagedText.DECODE_LIMIT], the
- * 16 KiB read buffer and one key set per open object.
+ * Turns tokenizer events into staging rows. Duplicate keys (at any depth) keep the first value: the later
+ * value is read and validated but not staged. Memory is bounded by [StagedText.SPILL_AT], the 16 KiB read
+ * buffer, one key set per open object (all together under [MAX_LIVE_KEY_CHARS]) and, while one record is
+ * decoded, the record itself (at most [TYPED_BUDGET_BYTES] of source). Resource limits found here are
+ * remembered in [resourceFailure] and thrown by the caller once the whole document has been read.
  */
 internal class StagingSink(
     private val w: StagingWriter,
+    private val src: SourcePosition,
     private val tick: () -> Unit
 ) : ManifestEvents {
     private class Frame(val isObject: Boolean, val kind: Int) {
         var count = 0
         var keys: HashSet<String>? = null
+        var keyChars = 0L
     }
 
     private val stack = ArrayList<Frame>()
     private var skipBase = -1
+    private var liveKeyChars = 0L
 
     private var rootKey = ""
     private var rootOrd = 0L
     private var rootKind = ""
+    private var rootStart = 0L
     private var rootSection: SectionSpec? = null
     private var sectionOrd = 0L
+    private var elementStart = 0L
     private var out: StagedText? = null
     private var elementKind = ""
     private var inString = false
@@ -108,11 +116,19 @@ internal class StagingSink(
     private val captured = HashMap<String, String?>()
     private val unknowns = ArrayList<Triple<String, Long, Long>>()
 
-    /** First typed-decode failure found while staging; thrown after EOF so I/O and syntax outcomes keep their precedence. */
+    /** First typed-decode failure; decided after EOF so I/O, cancellation, syntax and resource outcomes keep precedence. */
     var pendingFailure: String? = null
+        private set
+
+    /** First resource limit hit here (record over the typed budget, root value over its limit, key memory). */
+    var resourceFailure: String? = null
         private set
     var records = 0L
         private set
+
+    private fun resource(reason: String) {
+        if (resourceFailure == null) resourceFailure = reason
+    }
 
     private fun skipping() = skipBase >= 0
 
@@ -123,6 +139,7 @@ internal class StagingSink(
         when (top.kind) {
             ROOT -> {
                 rootKind = kind
+                rootStart = src.valueStart
                 val section = ManifestSections.byName[rootKey]
                 if (section != null && kind == "array") {
                     rootSection = section
@@ -137,6 +154,7 @@ internal class StagingSink(
                 val s = rootSection!!
                 out = StagedText(w, s.chunkTable, sectionOrd)
                 elementKind = kind
+                elementStart = src.valueStart
                 captured.clear()
                 unknowns.clear()
                 field = null
@@ -146,7 +164,7 @@ internal class StagingSink(
                     if (top.count++ > 0) out!!.append(',')
                 } else if (top.kind == RECORD) {
                     val f = field!!
-                    capturing = (kind == "string" || kind == "number") && rootSection!!.keys.any { f in it.fields }
+                    capturing = (kind == "string" || kind == "number") && rootSection!!.keys.any { it.field == f }
                     capBuf.setLength(0)
                     capOverflow = false
                 }
@@ -175,14 +193,20 @@ internal class StagingSink(
         val spec = rootSection!!
         val o = out!!
         val ord = sectionOrd
+        val sourceBytes = src.sourceBytes() - elementStart
         val oversize = o.spilled
-        var typedOk = -1
-        if (!oversize) {
-            typedOk = if (decodes(spec.serializer, o.sb.toString())) 1 else 0
-            if (typedOk == 0 && pendingFailure == null) pendingFailure = "${spec.name}[$ord] is not a valid ${spec.name} record"
+        var typedOk = 0
+        when {
+            elementKind != "object" -> pendingFailure = pendingFailure ?: "${spec.name}[$ord] is not an object"
+            sourceBytes > TYPED_BUDGET_BYTES -> resource("a ${spec.name} record is larger than the typed budget of $TYPED_BUDGET_BYTES bytes")
+            else -> {
+                val text = if (oversize) { o.close(); w.readText(spec.chunkTable, ord) } else o.sb.toString()
+                typedOk = if (decodes(spec.serializer, text)) 1 else 0
+                if (typedOk == 0 && pendingFailure == null) pendingFailure = "${spec.name}[$ord] is not a valid ${spec.name} record"
+            }
         }
         o.close()
-        val keys = spec.keys.map { k -> k.make(k.fields.map { captured[it] }) }
+        val keys = spec.keys.map { k -> k.make(captured[k.field]) }
         w.record(spec, ord, elementKind, o.length, oversize, typedOk, keys)
         for ((name, start, stop) in unknowns) w.unknown(spec.name, ord, name, start, stop)
         sectionOrd++
@@ -199,7 +223,11 @@ internal class StagingSink(
             val o = out!!
             val oversize = o.spilled
             o.close()
-            w.root(rootOrd, rootKey, rootKind, rootKey in ManifestSections.knownRootKeys, oversize, o.length, 0)
+            val known = rootKey in ManifestSections.knownRootKeys
+            if (known && src.sourceBytes() - rootStart > MAX_ROOT_VALUE_BYTES) {
+                resource("the value of '$rootKey' is larger than $MAX_ROOT_VALUE_BYTES source bytes")
+            }
+            w.root(rootOrd, rootKey, rootKind, known, oversize, o.length, 0)
         }
         rootOrd++
         rootSection = null
@@ -207,9 +235,10 @@ internal class StagingSink(
         tick()
     }
 
+    /** The same path as today's reader: a tree from the text, then `decodeFromJsonElement`. */
     @Suppress("UNCHECKED_CAST")
     private fun decodes(serializer: KSerializer<*>, text: String): Boolean = try {
-        BackupJson.decodeFromString(serializer as KSerializer<Any>, text)
+        BackupJson.decodeFromJsonElement(serializer as KSerializer<Any>, Json.parseToJsonElement(text))
         true
     } catch (_: SerializationException) {
         false
@@ -226,9 +255,15 @@ internal class StagingSink(
         stack += Frame(true, if (parent == SECTION) RECORD else PLAIN)
     }
 
-    override fun endObject() {
-        if (skipping()) { stack.removeAt(stack.size - 1); if (stack.size == skipBase) skipBase = -1; return }
+    private fun pop(): Frame {
         val frame = stack.removeAt(stack.size - 1)
+        liveKeyChars -= frame.keyChars
+        return frame
+    }
+
+    override fun endObject() {
+        if (skipping()) { pop(); if (stack.size == skipBase) skipBase = -1; return }
+        val frame = pop()
         if (frame.kind == ROOT) return
         out!!.append('}')
         endValue()
@@ -247,8 +282,8 @@ internal class StagingSink(
     }
 
     override fun endArray() {
-        if (skipping()) { stack.removeAt(stack.size - 1); if (stack.size == skipBase) skipBase = -1; return }
-        val frame = stack.removeAt(stack.size - 1)
+        if (skipping()) { pop(); if (stack.size == skipBase) skipBase = -1; return }
+        val frame = pop()
         if (frame.kind != SECTION) out!!.append(']')
         endValue()
     }
@@ -257,8 +292,15 @@ internal class StagingSink(
         if (skipping()) return
         val top = stack.last()
         val keys = top.keys ?: HashSet<String>().also { top.keys = it }
-        if (!keys.add(name)) { skipBase = stack.size; return }
-        if (keys.size > MAX_KEYS_PER_OBJECT) throw ManifestStageException.ResourceExhausted("an object has more than $MAX_KEYS_PER_OBJECT keys")
+        if (resourceFailure == null && !keys.contains(name)) {
+            keys.add(name)
+            top.keyChars += name.length
+            liveKeyChars += name.length
+            if (liveKeyChars > MAX_LIVE_KEY_CHARS) resource("open objects hold more than $MAX_LIVE_KEY_CHARS key characters")
+        } else if (keys.contains(name)) {
+            skipBase = stack.size
+            return
+        }
         if (top.kind == ROOT) {
             rootKey = name
             return
@@ -302,11 +344,18 @@ internal class StagingSink(
         endValue()
     }
 
-    private companion object {
-        const val ROOT = 0
-        const val PLAIN = 1
-        const val SECTION = 2
-        const val RECORD = 3
-        const val MAX_KEYS_PER_OBJECT = 262_144
+    companion object {
+        /** Source bytes of one strict record: larger is resource exhaustion (shared decision 5), decided after EOF. */
+        const val TYPED_BUDGET_BYTES = 32L * 1024 * 1024
+
+        /** Source bytes of one known non-array root value (including whitespace inside it). */
+        const val MAX_ROOT_VALUE_BYTES = 16L * 1024 * 1024
+
+        /** UTF-16 units of keys held by all open objects at once. */
+        const val MAX_LIVE_KEY_CHARS = 16L * 1024 * 1024
+        private const val ROOT = 0
+        private const val PLAIN = 1
+        private const val SECTION = 2
+        private const val RECORD = 3
     }
 }

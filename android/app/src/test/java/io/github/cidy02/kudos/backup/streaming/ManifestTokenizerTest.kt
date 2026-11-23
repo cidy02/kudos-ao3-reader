@@ -94,9 +94,9 @@ class ManifestTokenizerTest {
     @Test fun nestingLimitIsFiveHundredTwelveContainers() {
         fun nested(containers: Int) = "{\"a\":" + "[".repeat(containers - 1) + "]".repeat(containers - 1) + "}" // the root object counts as one
         assertEquals(1025, parse(nested(512)).events.size) // {, k:a, 511 x [, 511 x ], } : 512 containers are accepted
-        invalid(nested(513))
-        invalid("{\"a\":" + "{\"a\":".repeat(600) + "1" + "}".repeat(600) + "}")
-        invalid("{\"a\":" + "[".repeat(100_000))
+        for (doc in listOf(nested(513), "{\"a\":" + "{\"a\":".repeat(600) + "1" + "}".repeat(600) + "}", "{\"a\":" + "[".repeat(100_000))) {
+            try { parse(doc); fail("accepted") } catch (e: ManifestStageException.ResourceExhausted) { /* depth policy is a resource outcome, not malformed */ }
+        }
     }
 
     @Test fun stringsLeaveInBoundedPiecesAndNeverSplitASurrogatePair() {
@@ -116,23 +116,67 @@ class ManifestTokenizerTest {
         assertTrue(big.chunks >= 5_000_000 / ManifestTokenizer.CHUNK)
     }
 
-    @Test fun controlCharactersInStringsAndMalformedUtf8AreAcceptedLikeToday() {
-        assertEquals("s:a\nb\tc", parse("{\"k\":\"a\nb\tc\"}").events.last { it.startsWith("s:") })
-        val bad = "{\"k\":\"T".toByteArray() + byteArrayOf(0xFF.toByte()) + "\"}".toByteArray()
-        assertEquals("s:T\uFFFD", parse(bad).events.last { it.startsWith("s:") })
+    @Test fun rawControlCharactersAndMalformedUtf8AreSyntaxErrors() {
+        for (c in listOf(0x00, 0x09, 0x0A, 0x0D, 0x1F)) invalid("{\"k\":\"a${c.toChar()}b\"}".toByteArray(), "raw U+%04X".format(c))
+        invalid("{\"k\":\"T".toByteArray() + byteArrayOf(0xFF.toByte()) + "\"}".toByteArray(), "byte FF")
+        invalid("{\"k\":\"T".toByteArray() + byteArrayOf(0xE2.toByte()) + "\"}".toByteArray(), "truncated sequence")
+        invalid("{\"k\":\"T".toByteArray() + byteArrayOf(0xC0.toByte(), 0xAF.toByte()) + "\"}".toByteArray(), "overlong")
+        invalid("{\"k".toByteArray() + byteArrayOf(0xED.toByte(), 0xA0.toByte(), 0x80.toByte()) + "\":1}".toByteArray(), "encoded surrogate in a key")
+        invalid("{\"k\":\"T".toByteArray() + byteArrayOf(0xE2.toByte()), "truncated sequence at EOF")
+        assertEquals("s:a\\nb", parse("{\"k\":\"a\\nb\"}").events.last { it.startsWith("s:") }.replace("\n", "\\n"))
+    }
+
+    @Test fun escapeDigitsAreAsciiOnly() {
+        invalid("{\"k\":\"\\u\uFF10\uFF10\uFF14\uFF11\"}")
+        invalid("{\"k\":\"\\u00g1\"}")
+        assertEquals("s:AA", parse("{\"k\":\"\\u0041\\u0041\"}").events.last { it.startsWith("s:") })
+        assertEquals("s:\u00ab", parse("{\"k\":\"\\u00aB\"}").events.last { it.startsWith("s:") })
+    }
+
+    @Test fun aBomSplitAcrossReadsIsStillABom() {
+        val doc = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + "{\"a\":1}".toByteArray()
+        val oneByteAtATime = object : InputStream() {
+            var i = 0
+            override fun read(): Int = if (i < doc.size) doc[i++].toInt() and 0xFF else -1
+            override fun read(b: ByteArray, off: Int, len: Int): Int { val c = read(); if (c < 0) return -1; b[off] = c.toByte(); return 1 }
+        }
+        val t = Trace()
+        ManifestTokenizer(oneByteAtATime, t).parseDocument()
+        assertEquals(listOf("{", "k:a", "l:1", "}"), t.events)
+    }
+
+    @Test fun numbersAreScannedByGrammarAndBoundedWithoutBecomingBareWords() {
+        for (ok in listOf("0", "-0", "7", "-12", "1.5", "1e5", "1E+5", "1.5e-3", "0.0")) assertEquals("l:$ok", parse("{\"k\":$ok}").events[2])
+        for (bad in listOf("-", "-a", "1.", ".1", "1e", "1e+", "0x1", "1_0", "00", "-01", "1.2.3")) invalid("{\"k\":$bad}")
+        assertEquals(1 + 65_536, parse("{\"k\":" + "1".repeat(65_536) + "}").events[2].length)
+        try { parse("{\"k\":" + "1".repeat(65_537) + "}"); fail("accepted") } catch (e: ManifestStageException.ResourceExhausted) { /* expected */ }
+        invalid("{\"k\":" + "a".repeat(65_537) + "}") // a bare word is syntax, not an oversized number
+    }
+
+    @Test fun membersAreCountedBeforeDuplicateRemovalAtEveryDepth() {
+        fun members(n: Int) = "\"a\":0,".repeat(n - 1) + "\"a\":0"
+        parse("{${members(ManifestTokenizer.MAX_MEMBERS)}}")
+        for (doc in listOf("{${members(ManifestTokenizer.MAX_MEMBERS + 1)}}", "{\"x\":{${members(ManifestTokenizer.MAX_MEMBERS + 1)}}}", "{\"x\":0,\"x\":{${members(ManifestTokenizer.MAX_MEMBERS + 1)}}}")) {
+            try { parse(doc); fail("accepted") } catch (e: ManifestStageException.ResourceExhausted) { /* expected */ }
+        }
+    }
+
+    @Test fun aKeyIsMeasuredInUtf16UnitsOfItsDecodedValue() {
+        parse("{\"" + "a".repeat(ManifestTokenizer.MAX_KEY) + "\":1}")
+        parse("{\"" + "\uD83D\uDE00".repeat(ManifestTokenizer.MAX_KEY / 2) + "\":1}")
+        parse("{\"" + "\\ud83d\\ude00".repeat(ManifestTokenizer.MAX_KEY / 2) + "\":1}")
+        for (key in listOf("a".repeat(ManifestTokenizer.MAX_KEY + 1), "\uD83D\uDE00".repeat(ManifestTokenizer.MAX_KEY / 2) + "a")) {
+            try { parse("{\"$key\":1}"); fail("accepted") } catch (e: ManifestStageException.ResourceExhausted) { /* expected */ }
+        }
+    }
+
+    @Test fun aMalformedTailReportsSyntaxEvenAfterALimitWasHit() {
+        invalid("{\"" + "k".repeat(ManifestTokenizer.MAX_KEY + 1) + "\":1} x")
+        invalid("{\"k\":" + "1".repeat(65_537) + ",}}")
     }
 
     @Test fun unterminatedAndTruncatedInputIsInvalid() {
         for (text in listOf("{", "{\"a\"", "{\"a\":", "{\"a\":1", "{\"a\":[", "{\"a\":\"x", "{\"a\":\"x\\", "{\"a\":\"\\u12")) invalid(text)
-    }
-
-    @Test fun anOverlongKeyIsResourceExhaustionNotInvalid() {
-        try {
-            parse("{\"" + "k".repeat(ManifestTokenizer.MAX_KEY + 1) + "\":1}")
-            fail("accepted")
-        } catch (e: ManifestStageException.ResourceExhausted) {
-            // expected
-        }
     }
 
     @Test fun readsToEofBeforeReturningSoALateErrorStillFails() {

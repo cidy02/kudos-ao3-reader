@@ -1,14 +1,19 @@
 package io.github.cidy02.kudos.backup.streaming
 
 import android.database.sqlite.SQLiteDatabase
+import io.github.cidy02.kudos.backup.BackupError
 import io.github.cidy02.kudos.backup.BackupJson
+import io.github.cidy02.kudos.backup.BackupValidator
 import io.github.cidy02.kudos.backup.KudosBackupManifest
 import java.io.File
+import java.io.IOException
+import java.time.Instant
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /** One top-level key of the staged document. [kind] is `records` for a known array of records, else the JSON kind of its value. */
 data class StagedRootEntry(val ord: Long, val key: String, val kind: String, val known: Boolean, val oversize: Boolean, val chars: Long, val records: Long)
@@ -16,9 +21,20 @@ data class StagedRootEntry(val ord: Long, val key: String, val kind: String, val
 /** A direct member of a record that the typed model does not know, as a char range `[start, stop)` of the record's compact text. */
 data class StagedUnknownRange(val name: String, val start: Long, val stop: Long)
 
+/** Row metadata of one staged element; the payload is read only through [StagedManifest.readRecord]. */
+data class StagedRecordMeta(val ord: Long, val kind: String, val chars: Long, val oversize: Boolean, val keys: Map<String, String?>)
+
+/** How a section appeared in the document: the apply view Replace needs (missing and null are not the same as `[]`). */
+enum class SectionPresence { MISSING, NULL, EMPTY, POPULATED }
+
 /**
- * A manifest that has been read to EOF, validated against the shared input contract and staged on disk.
+ * A manifest that has been read to EOF, validated against the shared input contract and staged on disk. Every
+ * record was decoded under the typed budget before this handle existed, so a staged run is never partly unchecked.
  * Closing it (or a failed stage) deletes the private directory. Nothing here is wired to a caller yet.
+ *
+ * Bounded access for P3/P4: [records] (keyset over row metadata), [readRecord] / [readRoot] (a char range to a sink,
+ * one chunk row at a time), [unknownRanges]. The `*InMemory` functions and [reconstruct] hold whole texts and trees:
+ * tests and small inputs only.
  */
 class StagedManifest internal constructor(
     val directory: File,
@@ -35,54 +51,112 @@ class StagedManifest internal constructor(
 
     fun count(section: String): Long = db.rawQuery("SELECT COUNT(*) FROM ${spec(section).table}", null).use { it.moveToFirst(); it.getLong(0) }
 
-    /** Elements of a section in source order, each as its compact JSON text, in keyset batches. */
-    fun forEachRecord(section: String, batch: Int = 200, body: (ord: Long, text: String) -> Unit) {
-        val s = spec(section)
-        var last = -1L
-        while (true) {
-            val ords = db.rawQuery("SELECT ord FROM ${s.table} WHERE ord > ? ORDER BY ord LIMIT $batch", arrayOf(last.toString())).use { c ->
-                buildList { while (c.moveToNext()) add(c.getLong(0)) }
-            }
-            if (ords.isEmpty()) return
-            for (ord in ords) body(ord, text(s.chunkTable, ord, 0, Long.MAX_VALUE))
-            last = ords.last()
+    /** missing / null / `[]` / populated, from the root row, for the apply view (see [ReplacePolicy]). */
+    fun presence(section: String): SectionPresence {
+        spec(section)
+        val row = db.rawQuery("SELECT kind, records FROM root WHERE key = ?", arrayOf(section)).use { c ->
+            if (c.moveToFirst()) c.getString(0) to c.getLong(1) else null
+        } ?: return SectionPresence.MISSING
+        return when {
+            row.first == "null" -> SectionPresence.NULL
+            row.second == 0L -> SectionPresence.EMPTY
+            else -> SectionPresence.POPULATED
         }
     }
 
-    fun recordText(section: String, ord: Long): String = text(spec(section).chunkTable, ord, 0, Long.MAX_VALUE)
+    /** Row metadata after [afterOrd] in source order, at most [limit] rows: a keyset cursor, no payloads. */
+    fun records(section: String, afterOrd: Long = -1, limit: Int = 500): List<StagedRecordMeta> {
+        val s = spec(section)
+        val cols = s.keys.joinToString("") { ", ${it.column}" }
+        return db.rawQuery("SELECT ord, kind, chars, oversize$cols FROM ${s.table} WHERE ord > ? ORDER BY ord LIMIT $limit", arrayOf(afterOrd.toString())).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    add(StagedRecordMeta(c.getLong(0), c.getString(1), c.getLong(2), c.getInt(3) == 1, s.keys.withIndex().associate { (i, k) -> k.column to if (c.isNull(4 + i)) null else c.getString(4 + i) }))
+                }
+            }
+        }
+    }
 
-    /** The chars `[start, stop)` of a record's compact text: only the chunk rows that overlap are read. */
-    fun recordRange(section: String, ord: Long, start: Long, stop: Long): String = text(spec(section).chunkTable, ord, start, stop)
+    /** The chars `[from, to)` of a record's compact text handed to [sink] one chunk slice at a time (at most 64 Ki chars each). */
+    fun readRecord(section: String, ord: Long, from: Long = 0, to: Long = Long.MAX_VALUE, sink: (CharSequence) -> Unit) =
+        range(spec(section).chunkTable, ord, from, to, sink)
 
-    fun rootText(key: String): String {
+    fun readRoot(key: String, from: Long = 0, to: Long = Long.MAX_VALUE, sink: (CharSequence) -> Unit) {
         val ord = db.rawQuery("SELECT ord FROM root WHERE key = ?", arrayOf(key)).use { c -> if (c.moveToFirst()) c.getLong(0) else null }
             ?: throw NoSuchElementException(key)
-        return text("root_chunk", ord, 0, Long.MAX_VALUE)
+        range("root_chunk", ord, from, to, sink)
     }
 
     fun unknownRanges(section: String, ord: Long): List<StagedUnknownRange> = db.rawQuery(
         "SELECT name, start, stop FROM unknown_range WHERE section = ? AND ord = ? ORDER BY start", arrayOf(section, ord.toString())
     ).use { c -> buildList { while (c.moveToNext()) add(StagedUnknownRange(c.getString(0), c.getLong(1), c.getLong(2))) } }
 
+    /** Whole record text: tests and small records only. */
+    fun recordTextInMemory(section: String, ord: Long, from: Long = 0, to: Long = Long.MAX_VALUE): String =
+        StringBuilder().also { sb -> readRecord(section, ord, from, to) { sb.append(it) } }.toString()
+
+    fun rootTextInMemory(key: String): String = StringBuilder().also { sb -> readRoot(key) { sb.append(it) } }.toString()
+
+    /** Whole section, one record text at a time: tests and small inputs only. */
+    fun forEachRecordTextInMemory(section: String, body: (ord: Long, text: String) -> Unit) {
+        var last = -1L
+        while (true) {
+            val batch = records(section, last, 200)
+            if (batch.isEmpty()) return
+            for (r in batch) body(r.ord, recordTextInMemory(section, r.ord))
+            last = batch.last().ord
+        }
+    }
+
+    /**
+     * Semantic validation over the final staged metadata (today's `BackupValidator.validateManifest` rules, with the clock
+     * fixed by [now]): per-record checks in bounded batches, and duplicate ids over the whole section through the indexed key
+     * columns, so two works with one id in different batches are still caught. Call before any mutation.
+     */
+    fun validate(now: Instant = Instant.now()) {
+        val head = BackupValidator.validateManifest(KudosBackupManifest(version = version, exportedAt = exportedAt()), now)
+        for (name in listOf("works", "bookmarks", "fonts", "collections", "savedSearches")) {
+            var last = -1L
+            while (true) {
+                val batch = records(name, last, 200)
+                if (batch.isEmpty()) break
+                val texts = batch.map { recordTextInMemory(name, it.ord) }
+                val array = JsonArray(texts.map { Json.parseToJsonElement(it) })
+                val partial = BackupJson.decodeFromJsonElement(KudosBackupManifest.serializer(), JsonObject(mapOf(
+                    "version" to JsonPrimitive(head.version), "exportedAt" to JsonPrimitive(head.exportedAt), name to array
+                )))
+                BackupValidator.validateManifest(partial, now)
+                last = batch.last().ord
+            }
+            val idColumn = spec(name).keys.firstOrNull { it.column == "k_id" }?.column ?: spec(name).keys.first().column
+            val dup = db.rawQuery("SELECT $idColumn FROM s_$name WHERE $idColumn IS NOT NULL GROUP BY $idColumn HAVING COUNT(*) > 1 LIMIT 1", null).use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+            if (dup != null && name != "bookmarks") throw BackupError.InvalidPackage("Duplicate ${if (name == "works") "work" else name} id: $dup")
+        }
+    }
+
+    private fun exportedAt(): String = db.rawQuery("SELECT v FROM meta WHERE k = 'exportedAt'", null).use { it.moveToFirst(); it.getString(0) }
+
     /**
      * The raw document as a tree: top-level keys in source order, each record array rebuilt from its
-     * staged elements. Holds the whole library in memory: for tests and bounded-size callers only.
+     * staged elements. Holds the whole library in memory: tests and bounded-size callers only.
      */
     fun reconstructRaw(): JsonObject {
         val map = LinkedHashMap<String, JsonElement>()
         for (entry in rootEntries()) {
             map[entry.key] = if (entry.kind == "records") {
                 val items = ArrayList<JsonElement>()
-                forEachRecord(entry.key) { _, text -> items += Json.parseToJsonElement(text) }
+                forEachRecordTextInMemory(entry.key) { _, text -> items += Json.parseToJsonElement(text) }
                 JsonArray(items)
             } else {
-                Json.parseToJsonElement(rootText(entry.key))
+                Json.parseToJsonElement(rootTextInMemory(entry.key))
             }
         }
         return JsonObject(map)
     }
 
-    /** The typed manifest (not yet through `BackupValidator.validateManifest`) and the raw view it was decoded from. */
+    /** The typed manifest (not yet through `validateManifest`) and the raw view it was decoded from, as today's reader decodes them. */
     fun reconstruct(): Pair<KudosBackupManifest, JsonObject> {
         val raw = reconstructRaw()
         val manifest = try {
@@ -97,33 +171,45 @@ class StagedManifest internal constructor(
 
     fun stagedBytes(): Long = directory.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
+    /** Closes the database and deletes the directory; a directory that cannot be deleted is reported, not ignored. */
     override fun close() {
         runCatching { db.close() }
-        directory.deleteRecursively()
+        if (directory.exists() && !directory.deleteRecursively()) throw IOException("could not delete the staging directory $directory")
     }
 
     private fun spec(section: String) = ManifestSections.byName[section] ?: throw IllegalArgumentException("unknown section $section")
 
-    private fun text(table: String, ord: Long, start: Long, stop: Long): String {
-        val sb = StringBuilder()
-        var offset = 0L
-        db.rawQuery("SELECT seq, len FROM $table WHERE ord = ? ORDER BY seq", arrayOf(ord.toString())).use { c ->
-            val parts = ArrayList<Pair<Int, Long>>()
-            while (c.moveToNext()) parts += c.getInt(0) to c.getLong(1)
-            for ((seq, len) in parts) {
-                val chunkStart = offset
-                offset += len
-                if (offset <= start) continue
-                if (chunkStart >= stop) break
-                db.rawQuery("SELECT data FROM $table WHERE ord = ? AND seq = ?", arrayOf(ord.toString(), seq.toString())).use { d ->
-                    d.moveToFirst()
-                    val data = d.getString(0)
-                    val from = (start - chunkStart).coerceAtLeast(0).toInt()
-                    val to = (stop - chunkStart).coerceAtMost(len).toInt()
-                    sb.append(data, from, to)
-                }
-            }
+    /** Streams `[from, to)` of one staged text: finds the first overlapping chunk by its indexed start, then walks forward one row at a time. */
+    private fun range(table: String, ord: Long, from: Long, to: Long, sink: (CharSequence) -> Unit) {
+        var at = from
+        while (at < to) {
+            val chunk = db.rawQuery("SELECT start, data FROM $table WHERE ord = ? AND start <= ? ORDER BY start DESC LIMIT 1", arrayOf(ord.toString(), at.toString())).use { c ->
+                if (c.moveToFirst()) c.getLong(0) to c.getString(1) else null
+            } ?: return
+            val end = chunk.first + chunk.second.length
+            if (end <= at) return // past the last chunk
+            val a = (at - chunk.first).toInt()
+            val b = (minOf(to, end) - chunk.first).toInt()
+            sink(chunk.second.subSequence(a, b))
+            at = chunk.first + b
         }
-        return sb.toString()
     }
+}
+
+/**
+ * Replace's handling of a section by how it appeared, decided here and tested before anything is wired (A-567 review,
+ * Android finding). Today Android collapses missing, `null` and `[]` into an empty list and `replaceCollections` and its
+ * siblings then drop every local row the manifest does not list. The policy is the plan's contract (iOS T-563): for the four
+ * guarded sections a missing or `null` section never sweeps local rows, and only a present `[]` (or a populated list) does.
+ */
+object ReplacePolicy {
+    val guardedSections: Set<String> = setOf("collections", "readingQueues", "annotations", "savedSearches")
+
+    /** True when a Replace may remove local rows of [section] that the incoming manifest does not list. */
+    fun sweepsLocalRows(section: String, presence: SectionPresence): Boolean =
+        section !in guardedSections || presence == SectionPresence.EMPTY || presence == SectionPresence.POPULATED
+
+    /** Local ids that survive a Replace of [section] given what the manifest listed. */
+    fun survivors(section: String, presence: SectionPresence, localIds: Set<String>, incomingIds: Set<String>): Set<String> =
+        if (sweepsLocalRows(section, presence)) localIds.intersect(incomingIds) else localIds
 }

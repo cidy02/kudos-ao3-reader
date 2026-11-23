@@ -18,14 +18,20 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
 
 /**
- * One natural-key column of a staged section: built from direct scalar members of the record
- * ([fields], in order; a missing, null or non-scalar member is null). A null result, or a member longer
- * than [MAX_KEY_CHARS], leaves the column NULL: the resolver falls back to the record payload.
+ * One natural-key column of a staged section, built from one direct scalar member of the record. A missing,
+ * null or non-scalar member, or one longer than [ManifestSections.MAX_KEY_CHARS], leaves the column NULL: the
+ * resolver falls back to the record payload. Composite identities are separate columns (never one joined
+ * string, which two different pairs could produce) with a composite index over them.
  */
-internal class KeyColumn(val column: String, val fields: List<String>, val make: (List<String?>) -> String?)
+internal class KeyColumn(val column: String, val field: String, val make: (String?) -> String? = { it })
 
 /** A top-level array of records the manifest knows by name. */
-internal class SectionSpec(val name: String, val serializer: KSerializer<*>, val keys: List<KeyColumn>) {
+internal class SectionSpec(
+    val name: String,
+    val serializer: KSerializer<*>,
+    val keys: List<KeyColumn>,
+    val compositeIndexes: List<List<String>> = emptyList()
+) {
     val table = "s_$name"
     val chunkTable = "s_${name}_chunk"
 
@@ -38,43 +44,32 @@ internal object ManifestSections {
     const val MAX_KEY_CHARS = 2048
 
     private fun id(value: String?) = value?.let(BackupPaths::normalizeIdForComparison)
-    private fun one(column: String, field: String, make: (String?) -> String? = { it }) =
-        KeyColumn(column, listOf(field)) { make(it[0]) }
+    private fun key(column: String, field: String, make: (String?) -> String? = { it }) = KeyColumn(column, field, make)
+    private fun idKey(column: String, field: String = "id") = key(column, field, ::id)
 
     val all: List<SectionSpec> = listOf(
-        SectionSpec("works", BackupWork.serializer(), listOf(
-            one("k_id", "id", ::id), one("k_ao3", "ao3WorkID"), one("k_url", "sourceURL")
-        )),
-        SectionSpec("bookmarks", BackupBookmark.serializer(), listOf(one("k_id", "id", ::id), one("k_url", "urlString"))),
+        SectionSpec("works", BackupWork.serializer(), listOf(idKey("k_id"), key("k_ao3", "ao3WorkID"), key("k_url", "sourceURL"))),
+        SectionSpec("bookmarks", BackupBookmark.serializer(), listOf(idKey("k_id"), key("k_url", "urlString"))),
         SectionSpec("fonts", BackupFont.serializer(), listOf(
-            one("k_file", "fileName") { it?.let(BackupPaths::fontFileNameKey) }, one("k_name", "name") { it?.lowercase() }
+            key("k_file", "fileName") { it?.let(BackupPaths::fontFileNameKey) }, key("k_name", "name") { it?.lowercase() }
         )),
-        SectionSpec("collections", BackupCollection.serializer(), listOf(one("k_id", "id", ::id))),
-        SectionSpec("savedSearches", BackupSavedSearch.serializer(), listOf(one("k_id", "id", ::id))),
-        SectionSpec("readingQueues", BackupReadingQueue.serializer(), listOf(one("k_id", "id", ::id))),
+        SectionSpec("collections", BackupCollection.serializer(), listOf(idKey("k_id"))),
+        SectionSpec("savedSearches", BackupSavedSearch.serializer(), listOf(idKey("k_id"))),
+        SectionSpec("readingQueues", BackupReadingQueue.serializer(), listOf(idKey("k_id"))),
         SectionSpec("readingQueueMemberships", BackupReadingQueueMembership.serializer(), listOf(
-            one("k_id", "id", ::id), one("k_queue", "queueID", ::id), one("k_work", "workID", ::id)
-        )),
+            idKey("k_id"), idKey("k_queue", "queueID"), idKey("k_work", "workID")
+        ), listOf(listOf("k_queue", "k_work"))),
         SectionSpec("annotations", BackupAnnotation.serializer(), listOf(
-            one("k_id", "id", ::id),
-            one("k_work", "workID", ::id),
-            KeyColumn("k_passage", listOf("workID", "locatorString")) { v ->
-                if (v[0] == null || v[1] == null) null else "${id(v[0])}\u0000${v[1]}"
-            }
-        )),
-        SectionSpec("readingSessions", BackupReadingSession.serializer(), listOf(one("k_id", "id", ::id), one("k_work", "workID", ::id))),
+            idKey("k_id"), idKey("k_work", "workID"), key("k_locator", "locatorString")
+        ), listOf(listOf("k_work", "k_locator"))),
+        SectionSpec("readingSessions", BackupReadingSession.serializer(), listOf(idKey("k_id"), idKey("k_work", "workID"))),
         SectionSpec("readingFavorites", BackupReadingFavorite.serializer(), listOf(
-            one("k_id", "id", ::id),
-            KeyColumn("k_target", listOf("kindRaw", "targetKey")) { v -> if (v[1] == null) null else "${v[0] ?: "work"}\u0000${v[1]}" }
-        )),
-        SectionSpec("fandomReadWatermarks", BackupFandomReadWatermark.serializer(), listOf(
-            one("k_id", "id", ::id), one("k_fandom", "fandomName")
-        )),
+            idKey("k_id"), key("k_kind", "kindRaw"), key("k_target", "targetKey")
+        ), listOf(listOf("k_kind", "k_target"))),
+        SectionSpec("fandomReadWatermarks", BackupFandomReadWatermark.serializer(), listOf(idKey("k_id"), key("k_fandom", "fandomName"))),
         SectionSpec("tombstones", BackupTombstone.serializer(), listOf(
-            one("k_id", "id", ::id),
-            KeyColumn("k_record", listOf("recordTypeRaw", "recordID")) { v -> if (v[1] == null) null else "${v[0] ?: ""}\u0000${id(v[1])}" },
-            one("k_stamp", "lastModifiedAt")
-        ))
+            idKey("k_id"), key("k_rtype", "recordTypeRaw"), idKey("k_rid", "recordID"), key("k_stamp", "lastModifiedAt")
+        ), listOf(listOf("k_rtype", "k_rid")))
     )
 
     val byName: Map<String, SectionSpec> = all.associateBy { it.name }
