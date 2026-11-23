@@ -201,7 +201,9 @@ class ManifestRound2Test {
     @Test fun diskIsCheckedAtTheFinalCommitAndDuringIndexBuildEvenForATinyManifest() {
         var calls = 0
         stage(doc("\"works\":[${work(1)}]"), ManifestStageOptions(freeSpace = { calls++; 1L shl 40 })).close()
-        assertTrue("final boundary checks happen ($calls)", calls >= 5)
+        // preflight, the post-parse commit, one check before each of the indexes and after the last two steps: no boundary may drop out
+        val indexes = ManifestSections.all.sumOf { it.keys.size + it.compositeIndexes.size }
+        assertEquals(1 + 1 + indexes + 2, calls)
         for (lowFrom in listOf(1, 2, calls - 1)) {
             var n = 0
             val e = fails<ManifestStageException.ResourceExhausted> { stage(doc("\"works\":[${work(1)}]"), ManifestStageOptions(freeSpace = { if (n++ < lowFrom) 1L shl 40 else 1024L })) }

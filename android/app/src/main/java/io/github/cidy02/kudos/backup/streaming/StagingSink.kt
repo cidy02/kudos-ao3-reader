@@ -197,7 +197,6 @@ internal class StagingSink(
         val oversize = o.spilled
         var typedOk = 0
         when {
-            elementKind != "object" -> pendingFailure = pendingFailure ?: "${spec.name}[$ord] is not an object"
             sourceBytes > TYPED_BUDGET_BYTES -> resource("a ${spec.name} record is larger than the typed budget of $TYPED_BUDGET_BYTES bytes")
             else -> {
                 val text = if (oversize) { o.close(); w.readText(spec.chunkTable, ord) } else o.sb.toString()
