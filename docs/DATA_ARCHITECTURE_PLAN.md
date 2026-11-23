@@ -1,4 +1,4 @@
-# Data storage and sync architecture — plan v3.2
+# Data storage and sync architecture — plan v3.3
 
 Owner, 2026-11-22: "build the most architecturally sound data storage and sync possible … design incremental sync … implement
 it, all of it" — not to store all of AO3, but so no part of storage, sync or backup has a ceiling a real reader can hit.
@@ -102,6 +102,8 @@ operation valid, stale or a no-op. Persist effects, the contiguous applied prefi
 pending and retry when a prerequisite or checkpoint arrives. Conflicting verified bytes at one writer sequence halt that incarnation
 and surface a repair condition. D5 specifies selection and replay for incomparable checkpoint cuts, with fixtures that preserve
 applied work and unpublished local edits.
+A coverage vector releases a wait only; the installed checkpoint must still establish the dependency's kind, owner and validity
+(`docs/SYNC_OPERATION_MATRIX.md` § 2.1).
 
 **Conflict ordering (no wall-clock admission).** Conflict stamps are ordered by `(logicalCounter, writerIncarnation, seq)` using
 the same encoded ordering on both platforms. A writer durably advances its counter above its previous counter and every counter it
@@ -127,12 +129,16 @@ installation. D5 defines the atomic groups that must wait for bytes and records 
 vector** (the exact cut), merge metadata (field stamps, lineages and provenance generations, identity evidence, retained deletions, restores and witnesses — per the per-key retention rule in `docs/SYNC_OPERATION_MATRIX.md` § 2.1, so a checkpoint carries semantic evidence, not only coverage), membership and
 deletion state, and the asset closure. Readers choose among checkpoints by cut; incomparable cuts are resolved by the rule in the
 spec. Checkpoints are for bootstrap and catch-up first.
+**Checkpoint invariant** (D4 § 2.1, per-reducer retention table): `project(retain(prefix) + suffix) == project(all)` for projection,
+diagnostics, applied cut and pending behaviour; retained state is causally closed; state, cut and logical clock are committed atomically.
 
 **Reclamation is disabled at first.** Segment and blob deletion is enabled only after a separately reviewed epoch/authority protocol
 (no expiry lease as deletion authority — leases cannot fence a partitioned stale compactor on iCloud Drive/SAF). A device offline
 past a retention bound is **retired** under an explicit rule and rejoins by bootstrap + a documented rebase of its pending edits.
 Acknowledgements name the committed cut and distinguish "applied locally" from "seen". Deletion and alias information is kept until
 stale operations can be rejected safely.
+Retirement is a fenced transition under a named authority epoch; rejoin outcomes are defined per intent class and never drop or
+rewrite named references (D4 § 7).
 
 **v8 coexistence:** none for writes — see Namespace and cutover above (no bridge; shipped v8 builds keep writing only the
 legacy folder, which v9 never prunes or writes).
@@ -163,6 +169,10 @@ bootstrap; compare normalized logical state, merge metadata, applied cuts and pe
   fabricated per-field history from a record stamp.
 - Required test: two devices create the same AO3 work under different UUIDs, each with annotations and queue moves; exchange in both
   orders; identical final state.
+  Expiry bases are evaluated per lineage (`basis_K`); a malformed command is `invalidCommand`. Authority: purge, enroll and revoke
+  name and sign their authority head; evaluation in stamp order over valid earlier revocations; founders are not revocable;
+  re-enrolment is allowed (D4 DEC-8–12).
+  Records keyed by observed put/add epochs with per-epoch maxima (D4 § 2.1, DEC-28).
 
 ## E. Backups (T-570)
 
@@ -190,6 +200,9 @@ compatible local intents before assigning operation IDs and reserving immutable 
 retained-object limits for D7 with reclamation disabled. Define how sync pauses before exceeding those limits while local edits remain
 durable. Run the archive export-to-picker-to-restore route, including the pre-Replace safety copy, against the target asset envelope
 and record the supported limits separately from the manifest cap.
+
+D7 carries retained-object and byte budgets with backpressure; the supported 15k/50k envelope is established by device
+measurement in D8 (D4 § 7), not by the illustrative growth estimate.
 
 ## Phases
 
@@ -243,3 +256,6 @@ contract and D1 coordination.
 
 v3.1 → v3.2: wording aligned with D4 round 3 (`docs/SYNC_OPERATION_MATRIX.md` § 8): lineage as merge target, restores reference observed
 deletions, component-scoped deletes, per-key checkpoint retention, AO3-id-first component survivor.
+
+v3.2 → v3.3: aligned with D4 round 4 (§ 8): checkpoint invariant and per-reducer retention, coverage vs dependency validity, fenced
+retirement and rejoin, per-lineage expiry bases, signed authority heads, observed-epoch records, D7 byte budgets.
