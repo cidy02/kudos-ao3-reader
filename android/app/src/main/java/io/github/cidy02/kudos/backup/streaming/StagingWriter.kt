@@ -22,7 +22,8 @@ internal class StagingWriter(
     private val directory: File,
     private val freeSpace: () -> Long,
     private val budgetBytes: Long?,
-    private val checkpoint: (Long) -> Unit
+    private val checkpoint: (Long) -> Unit,
+    onOpened: (SQLiteDatabase) -> Unit = {}
 ) {
     private val file = File(directory, "staging.db")
     val db: SQLiteDatabase = SQLiteDatabase.openOrCreateDatabase(file, null)
@@ -34,6 +35,7 @@ internal class StagingWriter(
 
     init {
         try {
+            onOpened(db)
             File(directory, MARKER).writeText("run")
             db.execSQL("PRAGMA synchronous=OFF")
             db.execSQL("CREATE TABLE meta(k TEXT PRIMARY KEY, v TEXT)")

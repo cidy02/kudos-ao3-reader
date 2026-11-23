@@ -44,6 +44,8 @@ class ManifestStagingDifferentialTest {
         Outcome("InvalidJson")
     } catch (e: ManifestStageException.UnsupportedVersion) {
         Outcome("UnsupportedVersion")
+    } catch (e: ManifestStageException.ResourceExhausted) {
+        Outcome("ResourceExhausted")
     } catch (e: BackupError) {
         Outcome(e::class.simpleName!!)
     }
@@ -74,7 +76,12 @@ class ManifestStagingDifferentialTest {
         "duplicate key: version 99 then 8" to Triple("ok", "UnsupportedVersion", "owner: the first duplicate wins"),
         "duplicate key: works twice" to Triple("ok", "ok", "owner: the first duplicate wins (different works kept)"),
         "duplicate key inside a record" to Triple("ok", "ok", "owner: the first duplicate wins (different title kept)"),
-        "nesting depth 600 (unknown key)" to Triple("ok", "InvalidJson", "owner: depth limit 512"),
+        "nesting depth 600 (unknown key)" to Triple("ok", "ResourceExhausted", "owner: depth limit 512 (a resource outcome, not malformed)"),
+        "raw newline inside string" to Triple("ok", "InvalidJson", "shared decision 6: raw controls are syntax errors"),
+        "raw tab inside string" to Triple("ok", "InvalidJson", "shared decision 6: raw controls are syntax errors"),
+        "invalid UTF-8: 0xFF in title" to Triple("ok", "InvalidJson", "shared decision 6: malformed UTF-8 is a syntax error"),
+        "invalid UTF-8: truncated multibyte before quote" to Triple("ok", "InvalidJson", "shared decision 6: malformed UTF-8 is a syntax error"),
+        "invalid UTF-8: overlong slash in key" to Triple("ok", "InvalidJson", "shared decision 6: malformed UTF-8 is a syntax error"),
         "lenient: unquoted keys" to Triple("ok", "InvalidJson", "owner: unquoted tokens are dropped"),
         "missing comma between members" to Triple("ok", "InvalidJson", "owner: the kotlinx lenient fallback is dropped (it accepted a missing comma)"),
         "version = leading zero" to Triple("ok", "InvalidJson", "RFC 8259 number grammar: a leading zero is not a number (iOS rejects it too)")
@@ -84,7 +91,8 @@ class ManifestStagingDifferentialTest {
     private val strictDiffers = setOf(
         "UTF-8 BOM prefix", "trailing comma in object", "trailing comma in array", "escapes: lone high surrogate",
         "nesting depth 600 (unknown key)", "version = leading zero", "version = plus sign", "version = bare fraction",
-        "version = NaN", "version = bare minus", "version = Infinity"
+        "version = NaN", "version = bare minus", "version = Infinity", "raw newline inside string", "raw tab inside string",
+        "invalid UTF-8: 0xFF in title", "invalid UTF-8: truncated multibyte before quote", "invalid UTF-8: overlong slash in key"
     )
 
     @Test fun everyCaseHasTheSameOutcomeExceptTheApprovedOnes() {
@@ -114,7 +122,7 @@ class ManifestStagingDifferentialTest {
         val unexpected = mutableListOf<String>()
         for ((name, bytes) in cases) {
             val today = isStrictJsonObject(bytes)
-            val mine = ManifestStager.isWellFormedObject(ByteArrayInputStream(bytes))
+            val mine = ManifestStager.recoveryVerdict(ByteArrayInputStream(bytes)) == RecoveryVerdict.WELL_FORMED
             if ((today == mine) == (name in strictDiffers)) unexpected += "$name: today=$today mine=$mine"
         }
         assertTrue(unexpected.joinToString("\n"), unexpected.isEmpty())
@@ -148,5 +156,27 @@ class ManifestStagingDifferentialTest {
             assertEquals(name, "ok", t.cls)
             assertEquals(name, t, mine(bytes))
         }
+    }
+
+    private val fixedNow = java.time.Instant.parse("2026-06-15T00:00:00Z")
+
+    @Test fun boundedValidationReachesTheSameOutcomeAsValidateManifest() {
+        val unexpected = mutableListOf<String>()
+        var checked = 0
+        for ((name, bytes) in cases) {
+            val staged = try {
+                ManifestStager.stage(ByteArrayInputStream(bytes), File(tmp.root, "stage"))
+            } catch (e: ManifestStageException) {
+                continue
+            }
+            staged.use {
+                val today = runCatching { BackupValidator.validateManifest(it.reconstruct().first, fixedNow) }.fold({ "ok" }, { e -> e::class.simpleName!! })
+                val bounded = runCatching { it.validate(fixedNow) }.fold({ "ok" }, { e -> e::class.simpleName!! })
+                checked++
+                if (today != bounded) unexpected += "$name: validateManifest=$today bounded=$bounded"
+            }
+        }
+        assertTrue("checked $checked", checked > 30)
+        assertTrue(unexpected.joinToString("\n"), unexpected.isEmpty())
     }
 }

@@ -56,7 +56,7 @@ class ManifestStagingLargeTest {
 
     private fun worksCheck(staged: StagedManifest): String {
         val n = staged.count("works")
-        listOf(0L, n / 2, n - 1).forEach { BackupJson.decodeFromString(BackupWork.serializer(), staged.recordText("works", it)) }
+        listOf(0L, n / 2, n - 1).forEach { BackupJson.decodeFromString(BackupWork.serializer(), staged.recordTextInMemory("works", it)) }
         return "works=$n sessions=${staged.count("readingSessions")} annotations=${staged.count("annotations")}"
     }
 
@@ -100,9 +100,16 @@ class ManifestStagingLargeTest {
                 for (i in 0 until tags) { if (i > 0) w.write(","); w.write("\"tag number $i of the growing nested array\"") }
                 w.write("]}]}")
             }
-            add(median("one work with $tags tags (${f.length() shr 20} MiB)", 1, f, root) { s ->
-                s.db.rawQuery("SELECT oversize, typed_ok, chars FROM s_works", null).use { c -> c.moveToFirst(); assertEquals(1, c.getInt(0)); assertEquals(-1, c.getInt(1)); "oversize record chars=${c.getLong(2)}" }
-            })
+            if (f.length() > StagingSink.TYPED_BUDGET_BYTES) {
+                // over the 32 MiB typed budget: resource exhaustion after EOF, nothing left behind
+                try { f.inputStream().buffered(1 shl 16).use { ManifestStager.stage(it, root).close() }; error("accepted") } catch (e: ManifestStageException.ResourceExhausted) { /* expected */ }
+                assertEquals(emptyList<String>(), root.list()?.toList().orEmpty())
+                t.append("| one work with $tags tags (${f.length() shr 20} MiB) | over the typed budget: ResourceExhausted, nothing left | | | | | | |\n")
+            } else {
+                add(median("one work with $tags tags (${f.length() shr 20} MiB)", 1, f, root) { s ->
+                    s.db.rawQuery("SELECT oversize, typed_ok, chars FROM s_works", null).use { c -> c.moveToFirst(); assertEquals(1, c.getInt(0)); assertEquals(1, c.getInt(1)); "oversize record chars=${c.getLong(2)}, decoded under the budget" }
+                })
+            }
             f.delete()
         }
         // cancellation latency during staging of the largest run that fits the budget

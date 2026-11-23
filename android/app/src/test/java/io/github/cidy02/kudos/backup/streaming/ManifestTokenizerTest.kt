@@ -148,7 +148,7 @@ class ManifestTokenizerTest {
     @Test fun numbersAreScannedByGrammarAndBoundedWithoutBecomingBareWords() {
         for (ok in listOf("0", "-0", "7", "-12", "1.5", "1e5", "1E+5", "1.5e-3", "0.0")) assertEquals("l:$ok", parse("{\"k\":$ok}").events[2])
         for (bad in listOf("-", "-a", "1.", ".1", "1e", "1e+", "0x1", "1_0", "00", "-01", "1.2.3")) invalid("{\"k\":$bad}")
-        assertEquals(1 + 65_536, parse("{\"k\":" + "1".repeat(65_536) + "}").events[2].length)
+        assertEquals(2 + 65_536, parse("{\"k\":" + "1".repeat(65_536) + "}").events[2].length)
         try { parse("{\"k\":" + "1".repeat(65_537) + "}"); fail("accepted") } catch (e: ManifestStageException.ResourceExhausted) { /* expected */ }
         invalid("{\"k\":" + "a".repeat(65_537) + "}") // a bare word is syntax, not an oversized number
     }

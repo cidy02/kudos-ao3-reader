@@ -111,7 +111,7 @@ class ManifestStagingTest {
             assertEquals(1L, s.count("works"))
         }
         stage(doc("\"works\":[{\"id\":\"${A567Corpus.uuid(1)}\",\"title\":\"a\",\"title\":\"b\",\"future\":{\"x\":1,\"x\":2,\"y\":[{\"z\":1,\"z\":2}]}}]")).use { s ->
-            val rec = Json.parseToJsonElement(s.recordText("works", 0)) as JsonObject
+            val rec = Json.parseToJsonElement(s.recordTextInMemory("works", 0)) as JsonObject
             assertEquals("a", rec["title"]!!.jsonPrimitive.content)
             assertEquals("""{"x":1,"y":[{"z":1}]}""", rec["future"].toString())
         }
@@ -138,12 +138,15 @@ class ManifestStagingTest {
             assertEquals("https://archiveofourown.org/works/12345", one("SELECT k_url FROM s_works"))
             assertEquals(java.text.Normalizer.normalize("Café.ttf", java.text.Normalizer.Form.NFC).lowercase(), one("SELECT k_file FROM s_fonts"))
             assertEquals("fancy font", one("SELECT k_name FROM s_fonts"))
-            assertEquals("$lower\u0000loc-1", one("SELECT k_passage FROM s_annotations"))
-            assertEquals("fandom\u0000Some Fandom", one("SELECT k_target FROM s_readingFavorites"))
+            assertEquals("loc-1", one("SELECT k_locator FROM s_annotations"))
+            assertEquals(lower, one("SELECT k_work FROM s_annotations"))
+            assertEquals("fandom", one("SELECT k_kind FROM s_readingFavorites"))
+            assertEquals("Some Fandom", one("SELECT k_target FROM s_readingFavorites"))
             assertEquals("Some Fandom", one("SELECT k_fandom FROM s_fandomReadWatermarks"))
-            assertEquals("work\u0000$lower", one("SELECT k_record FROM s_tombstones"))
+            assertEquals("work", one("SELECT k_rtype FROM s_tombstones"))
+            assertEquals(lower, one("SELECT k_rid FROM s_tombstones"))
             assertEquals("2026-02-01T00:00:00.000Z", one("SELECT k_stamp FROM s_tombstones"))
-            for ((table, column) in listOf("s_works" to "k_id", "s_works" to "k_ao3", "s_works" to "k_url", "s_annotations" to "k_passage", "s_tombstones" to "k_record", "s_fonts" to "k_file")) {
+            for ((table, column) in listOf("s_works" to "k_id", "s_works" to "k_ao3", "s_works" to "k_url", "s_annotations" to "k_work", "s_tombstones" to "k_rid", "s_fonts" to "k_file")) {
                 val plan = s.db.rawQuery("EXPLAIN QUERY PLAN SELECT ord FROM $table WHERE $column = 'x'", null).use { c ->
                     buildString { while (c.moveToNext()) append(c.getString(c.getColumnIndexOrThrow("detail"))).append(';') }
                 }
@@ -166,8 +169,8 @@ class ManifestStagingTest {
         stage(doc("\"works\":[${work(1, ",\"future\":{\"a\":[1,2,{\"b\":null}]},\"zzz\":\"x\\u00e9\\n\",\"summary\":\"known\"")}]")).use { s ->
             val ranges = s.unknownRanges("works", 0)
             assertEquals(listOf("future", "zzz"), ranges.map { it.name })
-            assertEquals("\"future\":{\"a\":[1,2,{\"b\":null}]}", s.recordRange("works", 0, ranges[0].start, ranges[0].stop))
-            assertEquals("\"zzz\":\"xé\\u000a\"", s.recordRange("works", 0, ranges[1].start, ranges[1].stop))
+            assertEquals("\"future\":{\"a\":[1,2,{\"b\":null}]}", s.recordTextInMemory("works", 0, ranges[0].start, ranges[0].stop))
+            assertEquals("\"zzz\":\"xé\\u000a\"", s.recordTextInMemory("works", 0, ranges[1].start, ranges[1].stop))
             assertEquals(emptyList<StagedUnknownRange>(), stage(doc("\"works\":[${work(2)}]")).use { it.unknownRanges("works", 0) })
         }
     }
@@ -176,16 +179,16 @@ class ManifestStagingTest {
         val blob = "QUJD".repeat(600_000) // 2.4M chars, over the in-memory decode limit
         stage(doc("\"works\":[${work(1, ",\"hugeUnknown\":\"$blob\"")},${work(2)}]")).use { s ->
             s.db.rawQuery("SELECT oversize, typed_ok, chars FROM s_works ORDER BY ord", null).use { c ->
-                c.moveToFirst(); assertEquals(1, c.getInt(0)); assertEquals(-1, c.getInt(1)); assertTrue(c.getLong(2) > 2_400_000)
+                c.moveToFirst(); assertEquals(1, c.getInt(0)); assertEquals(1, c.getInt(1)); assertTrue(c.getLong(2) > 2_400_000)
                 c.moveToNext(); assertEquals(0, c.getInt(0)); assertEquals(1, c.getInt(1))
             }
             val chunks = s.db.rawQuery("SELECT COUNT(*), MAX(len) FROM s_works_chunk WHERE ord = 0", null).use { c -> c.moveToFirst(); c.getLong(0) to c.getLong(1) }
             assertTrue(chunks.first >= 2_400_000 / StagingWriter.CHUNK_CHARS)
             assertTrue(chunks.second <= StagingWriter.CHUNK_CHARS)
             val r = s.unknownRanges("works", 0).single()
-            assertEquals("\"hugeUnknown\":\"$blob\"", s.recordRange("works", 0, r.start, r.stop))
-            assertEquals(blob, (Json.parseToJsonElement(s.recordText("works", 0)) as JsonObject)["hugeUnknown"]!!.jsonPrimitive.content)
-            s.reconstruct() // typed decode of the oversize element happens here
+            assertEquals("\"hugeUnknown\":\"$blob\"", s.recordTextInMemory("works", 0, r.start, r.stop))
+            assertEquals(blob, (Json.parseToJsonElement(s.recordTextInMemory("works", 0)) as JsonObject)["hugeUnknown"]!!.jsonPrimitive.content)
+            s.reconstruct()
         }
     }
 
@@ -194,7 +197,7 @@ class ManifestStagingTest {
         stage(doc("\"works\":[],\"iosOpaque\":\"$blob\"")).use { s ->
             val entry = s.rootEntries().first { it.key == "iosOpaque" }
             assertTrue(entry.oversize); assertEquals(false, entry.known)
-            assertEquals("\"$blob\"", s.rootText("iosOpaque"))
+            assertEquals("\"$blob\"", s.rootTextInMemory("iosOpaque"))
         }
     }
 
@@ -208,8 +211,8 @@ class ManifestStagingTest {
 
     @Test fun depthFiveHundredTwelveStagesAndFiveHundredThirteenFails() {
         fun deep(containers: Int) = doc("\"works\":[],\"deep\":" + "[".repeat(containers - 1) + "]".repeat(containers - 1))
-        stage(deep(512)).use { s -> assertEquals(512 - 1, s.rootText("deep").count { it == '[' }) } // root + the value = 512 containers
-        failing<ManifestStageException.Invalid> { stage(deep(513)) }
+        stage(deep(512)).use { s -> assertEquals(512 - 1, s.rootTextInMemory("deep").count { it == '[' }) } // root + the value = 512 containers
+        failing<ManifestStageException.ResourceExhausted> { stage(deep(513)) }
     }
 
     @Test fun everyFailureOutcomeDeletesTheStagingDirectory() {
@@ -246,7 +249,7 @@ class ManifestStagingTest {
     @Test fun theUpFrontCheckUsesTheExpectedSize() {
         val seen = mutableListOf<Long>()
         failing<ManifestStageException.ResourceExhausted> {
-            ManifestStager.stage(ByteArrayInputStream(ByteArray(0)), root, ManifestStageOptions(expectedBytes = 100L shl 20, freeSpace = { seen += 250L shl 20; 250L shl 20 }))
+            ManifestStager.stage(ByteArrayInputStream(ByteArray(0)), root, ManifestStageOptions(expectedBytes = 100L shl 20, freeSpace = { seen += 150L shl 20; 150L shl 20 }))
         }
         assertEquals(1, seen.size) // refused before any directory or database was created
     }
@@ -259,12 +262,17 @@ class ManifestStagingTest {
         assertTrue("stopped promptly, polls=$polls", polls < 60)
     }
 
-    @Test fun wellFormednessMatchesTheSharedContract() {
-        fun ok(text: String) = ManifestStager.isWellFormedObject(ByteArrayInputStream(text.toByteArray()))
-        assertTrue(ok(doc("\"works\":[],")))
-        assertTrue(ok("{\"version\":99}"))
-        assertTrue(!ok("[]"))
-        assertTrue(!ok("{a:1}"))
+    @Test fun recoveryVerdictProtectsEverythingButAMalformedFile() {
+        fun verdict(text: String) = ManifestStager.recoveryVerdict(ByteArrayInputStream(text.toByteArray()))
+        assertEquals(RecoveryVerdict.WELL_FORMED, verdict(doc("\"works\":[],")))
+        assertEquals(RecoveryVerdict.WELL_FORMED, verdict("{\"version\":99}"))
+        assertEquals(RecoveryVerdict.MALFORMED, verdict("[]"))
+        assertEquals(RecoveryVerdict.MALFORMED, verdict("{a:1}"))
+        assertEquals(RecoveryVerdict.MALFORMED, verdict(doc("\"works\":[")))
+        // a complete live file beyond the depth ceiling, or past any limit, must never be replaced from .bak
+        assertEquals(RecoveryVerdict.PROTECT, verdict(doc("\"deep\":" + "[".repeat(600) + "]".repeat(600))))
+        assertEquals(RecoveryVerdict.PROTECT, verdict(doc("\"k\":" + "1".repeat(70_000))))
+        assertEquals(RecoveryVerdict.PROTECT, ManifestStager.recoveryVerdict(ByteArrayInputStream("{}".toByteArray()), isCancelled = { true }))
     }
 
     @Test fun failuresAreMappedToTheirOwnOutcome() {
@@ -285,14 +293,14 @@ class ManifestStagingTest {
         for (shift in 0..1) {
             val record = head + "a".repeat(atBoundary - head.length + shift) + emoji + "b".repeat(1_200_000) + "\"}"
             stage(doc("\"works\":[$record]")).use { s ->
-                s.db.rawQuery("SELECT data FROM s_works_chunk WHERE ord = 0 ORDER BY seq", null).use { c ->
+                s.db.rawQuery("SELECT data FROM s_works_chunk WHERE ord = 0 ORDER BY start", null).use { c ->
                     while (c.moveToNext()) {
                         val d = c.getString(0)
                         assertTrue("shift=$shift chunk ends in a lone high surrogate", !Character.isHighSurrogate(d.last()))
                         assertTrue("shift=$shift chunk starts with a lone low surrogate", !Character.isLowSurrogate(d.first()))
                     }
                 }
-                assertEquals(record, s.recordText("works", 0))
+                assertEquals(record, s.recordTextInMemory("works", 0))
             }
         }
     }
