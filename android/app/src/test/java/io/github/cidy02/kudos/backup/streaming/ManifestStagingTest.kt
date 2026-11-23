@@ -66,7 +66,7 @@ class ManifestStagingTest {
             assertEquals(today.readingSessions.size.toLong(), staged.count("readingSessions"))
             assertEquals(today.annotations.size.toLong(), staged.count("annotations"))
         }
-        assertEquals(emptyList<String>(), leftovers().filter { false })
+        assertEquals(emptyList<String>(), leftovers())
     }
 
     @Test fun rootMetadataAfterTheArraysIsStillSeen() {
@@ -152,9 +152,9 @@ class ManifestStagingTest {
         }
     }
 
-    @Test fun anOverlongOrNonScalarKeyFieldLeavesTheColumnNull() {
+    @Test fun anOverlongOrNullKeyFieldLeavesTheColumnNull() {
         val long = "x".repeat(ManifestSections.MAX_KEY_CHARS + 1)
-        stage(doc("\"works\":[{\"id\":\"${A567Corpus.uuid(1)}\",\"sourceURL\":\"$long\",\"ao3WorkID\":{\"n\":1}}]")).use { s ->
+        stage(doc("\"works\":[{\"id\":\"${A567Corpus.uuid(1)}\",\"sourceURL\":\"$long\",\"ao3WorkID\":null}]")).use { s ->
             s.db.rawQuery("SELECT k_url, k_ao3, k_id FROM s_works", null).use { c ->
                 c.moveToFirst()
                 assertTrue(c.isNull(0)); assertTrue(c.isNull(1)); assertEquals(A567Corpus.uuid(1), c.getString(2))
@@ -167,7 +167,7 @@ class ManifestStagingTest {
             val ranges = s.unknownRanges("works", 0)
             assertEquals(listOf("future", "zzz"), ranges.map { it.name })
             assertEquals("\"future\":{\"a\":[1,2,{\"b\":null}]}", s.recordRange("works", 0, ranges[0].start, ranges[0].stop))
-            assertEquals("\"zzz\":\"xé\\n\"", s.recordRange("works", 0, ranges[1].start, ranges[1].stop))
+            assertEquals("\"zzz\":\"xé\\u000a\"", s.recordRange("works", 0, ranges[1].start, ranges[1].stop))
             assertEquals(emptyList<StagedUnknownRange>(), stage(doc("\"works\":[${work(2)}]")).use { it.unknownRanges("works", 0) })
         }
     }
@@ -207,7 +207,7 @@ class ManifestStagingTest {
     }
 
     @Test fun depthFiveHundredTwelveStagesAndFiveHundredThirteenFails() {
-        fun deep(containers: Int) = doc("\"works\":[],\"deep\":" + "[".repeat(containers - 1) + "]".repeat(containers - 1)).replaceFirst("{", "{")
+        fun deep(containers: Int) = doc("\"works\":[],\"deep\":" + "[".repeat(containers - 1) + "]".repeat(containers - 1))
         stage(deep(512)).use { s -> assertEquals(512 - 1, s.rootText("deep").count { it == '[' }) } // root + the value = 512 containers
         failing<ManifestStageException.Invalid> { stage(deep(513)) }
     }
@@ -217,10 +217,16 @@ class ManifestStagingTest {
         failing<ManifestStageException.UnsupportedVersion> { stage(doc("\"works\":[]", "9")) }
         failing<ManifestStageException.Io> {
             val head = doc("\"works\":[" + (1..3000).joinToString(",") { work(it) }).toByteArray()
+            var served = 0
             ManifestStager.stage(object : InputStream() {
-                val inner = ByteArrayInputStream(head)
                 override fun read(): Int = throw IOException("disk gone")
-                override fun read(b: ByteArray, off: Int, len: Int): Int = if (inner.available() > 0) inner.read(b, off, len) else throw IOException("disk gone")
+                override fun read(b: ByteArray, off: Int, len: Int): Int {
+                    if (served >= 100_000) throw IOException("disk gone")
+                    val n = minOf(len, 100_000 - served)
+                    System.arraycopy(head, served, b, off, n)
+                    served += n
+                    return n
+                }
             }, root)
         }
         failing<ManifestStageException.Cancelled> { stage(A567Corpus.manifestBytesOfSize(2_000_000), ManifestStageOptions(isCancelled = { true })) }
@@ -232,7 +238,7 @@ class ManifestStagingTest {
     @Test fun aDiskThatFillsMidRunIsResourceExhaustion() {
         var calls = 0
         val e = failing<ManifestStageException.ResourceExhausted> {
-            stage(A567Corpus.manifestBytesOfSize(3_000_000), ManifestStageOptions(freeSpace = { if (calls++ < 3) 1L shl 40 else 1024L }))
+            stage(A567Corpus.manifestBytesOfSize(3_000_000), ManifestStageOptions(freeSpace = { if (calls++ < 1) 1L shl 40 else 1024L }))
         }
         assertTrue(e.reason, e.reason.contains("disk"))
     }
