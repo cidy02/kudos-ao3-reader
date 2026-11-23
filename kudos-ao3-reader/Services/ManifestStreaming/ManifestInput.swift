@@ -103,15 +103,14 @@ nonisolated final class ManifestDataInput: ManifestInput {
 }
 
 extension ManifestInput {
-    /// The chunked-payload view of a value: bounded pieces, never the whole value.
-    func forEachChunk(of range: Range<Int>, size: Int, _ body: (UnsafeRawBufferPointer) throws -> Void) rethrows {
+    /// The chunked-payload view of a value: bounded pieces, never the whole value. Uses `read`, so it does not disturb
+    /// the window the tokenizer is holding.
+    func forEachChunk(of range: Range<Int>, size: Int, _ body: (Data) throws -> Void) rethrows {
         var offset = range.lowerBound
-        while offset < range.upperBound {
-            let w = window(at: offset)
-            guard !w.isEmpty else { return }
-            let n = min(size, w.count, range.upperBound - offset)
-            try body(UnsafeRawBufferPointer(rebasing: w[0 ..< n]))
-            offset += n
+        while offset < range.upperBound, failure == nil {
+            let end = min(offset + size, range.upperBound)
+            try body(read(offset ..< end))
+            offset = end
         }
     }
 }

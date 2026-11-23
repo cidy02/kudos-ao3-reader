@@ -55,7 +55,7 @@ nonisolated struct ManifestTokenizer {
         let start = pos
         switch b {
         case UInt8(ascii: "{"):
-            guard depth < Self.maxDepth else { throw ManifestScanError.tooDeep }
+            guard depth <= Self.maxDepth else { throw ManifestScanError.tooDeep }
             pos += 1
             skipWhitespace()
             if peek() == UInt8(ascii: "}") { pos += 1; return (.object, start ..< pos) }
@@ -76,7 +76,7 @@ nonisolated struct ManifestTokenizer {
                 if peek() == UInt8(ascii: "}") { pos += 1; return (.object, start ..< pos) } // lenient, as today's route
             }
         case UInt8(ascii: "["):
-            guard depth < Self.maxDepth else { throw ManifestScanError.tooDeep }
+            guard depth <= Self.maxDepth else { throw ManifestScanError.tooDeep }
             pos += 1
             skipWhitespace()
             if peek() == UInt8(ascii: "]") { pos += 1; return (.array, start ..< pos) }

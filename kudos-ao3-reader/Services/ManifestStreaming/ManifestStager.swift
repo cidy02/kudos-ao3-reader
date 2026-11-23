@@ -279,29 +279,31 @@ nonisolated final class ManifestStagingPass {
         try rowWritten()
     }
 
+    private func insertChunk(_ owner: String, _ seq: Int, _ chunk: Int, _ data: Data) throws {
+        try data.withUnsafeBytes {
+            try db.run("INSERT INTO payload (owner, seq, chunk, bytes) VALUES (?, ?, ?, ?)",
+                       [.text(owner), .int(Int64(seq)), .int(Int64(chunk)), .blob($0)])
+        }
+        try rowWritten()
+    }
+
     private func storeChunks(owner: String, seq: Int, data: Data) throws {
         var chunk = 0
         var offset = 0
         repeat {
             let n = min(options.chunkSize, data.count - offset)
-            try data.withUnsafeBytes {
-                try db.run("INSERT INTO payload (owner, seq, chunk, bytes) VALUES (?, ?, ?, ?)",
-                           [.text(owner), .int(Int64(seq)), .int(Int64(chunk)), .blob(UnsafeRawBufferPointer(rebasing: $0[offset ..< offset + n]))])
-            }
+            try insertChunk(owner, seq, chunk, data.subdata(in: offset ..< offset + n))
             chunk += 1
             offset += n
         } while offset < data.count
-        try rowWritten()
     }
 
-    /// An oversized value: copied window by window, never held whole.
+    /// An oversized value: copied piece by piece, never held whole.
     private func storeChunks(owner: String, seq: Int, from range: Range<Int>) throws {
         var chunk = 0
         try input.forEachChunk(of: range, size: options.chunkSize) { piece in
-            try db.run("INSERT INTO payload (owner, seq, chunk, bytes) VALUES (?, ?, ?, ?)",
-                       [.text(owner), .int(Int64(seq)), .int(Int64(chunk)), .blob(piece)])
+            try insertChunk(owner, seq, chunk, piece)
             chunk += 1
-            try rowWritten()
         }
         if let failure = input.failure { throw ManifestStreamError.io(failure) }
     }
