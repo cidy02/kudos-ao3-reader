@@ -101,6 +101,12 @@ decisions. Establish duplicate-key, escaped-key, UTF-8, trailing-content and wro
 route. Any deliberate compatibility change requires separate approval. Preserve lossy sections and record defaults, and
 perform cross-record validation and clock checks using the final root metadata and a fixed operation clock.
 
+**Owner decisions (2026-11-22, `docs/REDESIGN_DECISIONS.md`)**: both streaming parsers implement one shared accepted-input
+contract equal to iOS today — leading UTF-8 BOM accepted, trailing commas accepted, first value wins for a duplicate key, lone
+surrogate rejected, top-level scalar not a manifest; Android drops its extra lenient acceptance (single quotes, comments, `;`/`=`,
+unquoted tokens). Nesting depth limit 512 on both. These replace "each existing route as the oracle" for exactly these cases; every
+other behaviour still follows today's routes.
+
 ## Entry-point inventory (every one moves or is explicitly left as legacy)
 
 - **iOS reads**: Folder Sync live (`FolderSyncService.swift:742, 762–763` — today a full `JSONSerialization` object, then
