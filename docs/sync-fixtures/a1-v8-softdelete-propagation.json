@@ -22,7 +22,19 @@
   "signatureValid": true,
   "preserved": {},
   "assetBytes": {},
-  "clockSubstitution": "verification passes opClock as `now` into iOS archivedDeletionState/clampedArchiveDate/resurrection test and Android BackupMappers.restoredDeletionState/merge(now:)"
+  "clockSubstitution": {
+   "ios": {
+    "function": "KudosBackupService.archivedDeletionState(now:)",
+    "also": [
+     "clampedArchiveDate(now:)",
+     "TombstoneIndex.suppressesResurrection scheduled > now (KB:5884-5887)"
+    ]
+   },
+   "android": {
+    "function": "BackupMappers.restoredDeletionState",
+    "change": "add a parameter now: Instant = Instant.now() and pass the harness opClock (BMap:98-107); merge(now:) already takes it (BMS:46)"
+   }
+  }
  },
  "cases": [
   {

@@ -100,7 +100,8 @@
      "queue": "q1",
      "work": "W-A",
      "count": 1,
-     "id": "mA"
+     "id": "mA",
+     "rank": 2
     }
    ],
    "annotations": [
@@ -131,7 +132,15 @@
     {
      "queue": "q1",
      "work": "W-A",
-     "count": 2
+     "count": 2,
+     "ids": [
+      "mA",
+      "mB"
+     ],
+     "ranks": {
+      "mA": 2,
+      "mB": 1
+     }
     }
    ],
    "annotations": [
@@ -158,5 +167,6 @@
  "agree": false,
  "disagreement": "X-4",
  "note": "Both directions keep the local key: the two devices end with different survivors (demonstrated outcome). Whether the shared manifest alternates keys is not asserted.",
- "v9Outcome": "one survivor W-A (lowest UUID) on both devices (DEC-11)"
+ "v9Outcome": "one survivor W-A (lowest UUID) on both devices (DEC-11)",
+ "compare": "a generated sibling is compared by provenance (parked from annB) and content, not id"
 }

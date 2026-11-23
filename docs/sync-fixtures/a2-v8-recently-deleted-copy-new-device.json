@@ -23,7 +23,27 @@
   "signatureValid": true,
   "preserved": {},
   "assetBytes": {},
-  "clockSubstitution": "verification passes opClock as `now` into iOS archivedDeletionState/clampedArchiveDate/resurrection test and Android BackupMappers.restoredDeletionState/merge(now:)"
+  "clockSubstitution": {
+   "ios": {
+    "function": "KudosBackupService.archivedDeletionState(now:)",
+    "also": [
+     "clampedArchiveDate(now:)",
+     "TombstoneIndex.suppressesResurrection scheduled > now (KB:5884-5887)"
+    ]
+   },
+   "android": {
+    "function": "BackupMappers.restoredDeletionState",
+    "change": "add a parameter now: Instant = Instant.now() and pass the harness opClock (BMap:98-107); merge(now:) already takes it (BMS:46)"
+   }
+  },
+  "signing": {
+   "signer-1": {
+    "seed": "SHA-256(\"kudos-fixture-signer/signer-1\")",
+    "algorithm": "Ed25519",
+    "payload": "TombstoneSigning.payload (TS:48-65): recordType, ao3WorkID, canonical URL, recordID lowercase, createdAt as yyyy-MM-dd'T'HH:mm:ss'Z', signerPublicKey, joined by \\n"
+   }
+  },
+  "tombstoneIdentity": "recordID = ids[W-A]; ao3WorkID 111; sourceURL = canonical work URL; id = UUIDv5(builder namespace, fixture id/tombstone/<index>)"
  },
  "cases": [
   {

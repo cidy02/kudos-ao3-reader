@@ -1583,12 +1583,6 @@
        ],
        "groups": {
         "title": "U"
-       },
-       "asset": {
-        "epub": {
-         "digest": "d9",
-         "alternates": []
-        }
        }
       }
      },
@@ -1602,7 +1596,9 @@
      "inc-b": 1
     },
     "pending": [],
-    "diagnostics": []
+    "diagnostics": [
+     "invalidReference(W-C,bad)"
+    ]
    }
   },
   {

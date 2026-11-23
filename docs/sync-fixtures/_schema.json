@@ -3,60 +3,537 @@
   "$id": "kudos.sync-fixture/2",
   "title": "Kudos sync fixture",
   "type": "object",
-  "required": ["schema", "id", "slice", "kind", "title", "ids"],
+  "required": [
+    "schema",
+    "id",
+    "slice",
+    "kind",
+    "title",
+    "ids"
+  ],
   "properties": {
-    "schema": {"const": "kudos.sync-fixture/2"},
-    "id": {"type": "string"},
-    "slice": {"enum": ["a", "b", "c", "ext"]},
-    "kind": {"enum": ["v8-compat", "v9-concurrency"]},
-    "title": {"type": "string"},
-    "refs": {"type": "array", "items": {"type": "string"}},
-    "ids": {"type": "object", "description": "symbolic name -> fixed canonical lowercase UUID; the lowest UUID of a component is its survivor", "additionalProperties": {"type": "string"}},
-    "route": {"enum": ["merge", "reconcile", "replace", "folderImport"]},
-    "harness": {"type": "object", "description": "v8 only: opClock, trust (signer names), signatureValid, preserved{work:bool}, assetBytes{digest:desc}, clockSubstitution (text)"},
-    "cases": {"type": "array", "items": {"$ref": "#/definitions/v8case"}},
-    "local": {"type": "object"}, "incoming": {"type": "object"},
-    "expected": {"type": "object"}, "agree": {"type": "boolean"}, "disagreement": {"type": "string"},
-    "v9Outcome": {},
-    "universes": {"type": "array", "items": {"$ref": "#/definitions/universe"}}
+    "schema": {
+      "const": "kudos.sync-fixture/2"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "slice": {
+      "enum": [
+        "a",
+        "b",
+        "c",
+        "ext"
+      ]
+    },
+    "kind": {
+      "enum": [
+        "v8-compat",
+        "v9-concurrency"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ids": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      }
+    }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "v8-compat"
+          }
+        }
+      },
+      "then": {
+        "$ref": "#/definitions/v8fixture"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "v9-concurrency"
+          }
+        }
+      },
+      "then": {
+        "$ref": "#/definitions/v9fixture"
+      }
+    }
+  ],
   "definitions": {
+    "instant": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "v8fixture": {
+      "type": "object",
+      "required": [
+        "harness"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "harness",
+            "cases",
+            "v9Outcome"
+          ]
+        },
+        {
+          "required": [
+            "harness",
+            "local",
+            "incoming",
+            "expected",
+            "agree",
+            "v9Outcome"
+          ]
+        }
+      ],
+      "properties": {
+        "route": {
+          "enum": [
+            "merge",
+            "reconcile",
+            "replace",
+            "folderImport"
+          ]
+        },
+        "harness": {
+          "type": "object",
+          "required": [
+            "opClock",
+            "trust",
+            "signatureValid",
+            "preserved",
+            "assetBytes",
+            "clockSubstitution"
+          ],
+          "properties": {
+            "opClock": {
+              "$ref": "#/definitions/instant"
+            },
+            "trust": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "signatureValid": {
+              "type": "boolean"
+            },
+            "preserved": {
+              "type": "object"
+            },
+            "assetBytes": {
+              "type": "object"
+            }
+          }
+        },
+        "cases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/v8case"
+          }
+        },
+        "local": {
+          "type": "object"
+        },
+        "incoming": {
+          "type": "object"
+        },
+        "expected": {
+          "$ref": "#/definitions/v8expected"
+        },
+        "agree": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v8expected": {
+      "type": "object",
+      "required": [
+        "ios",
+        "android"
+      ],
+      "properties": {
+        "ios": {
+          "type": "object",
+          "minProperties": 1
+        },
+        "android": {
+          "type": "object",
+          "minProperties": 1
+        }
+      }
+    },
     "v8case": {
-      "type": "object", "required": ["name", "expected"],
-      "properties": {"name": {"type": "string"}, "route": {"type": "string"}, "harness": {"type": "object"},
-        "local": {"type": "object"}, "incoming": {"type": "object", "description": "manifest fragment spec, built by _v8-builder.json; the string \"<absent>\" for a key means the key is physically omitted"},
-        "expected": {"type": "object", "required": ["ios", "android"]}, "agree": {"type": "boolean"}}
+      "type": "object",
+      "required": [
+        "name",
+        "local",
+        "incoming",
+        "expected"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "route": {
+          "enum": [
+            "merge",
+            "reconcile",
+            "replace",
+            "folderImport"
+          ]
+        },
+        "harness": {
+          "type": "object"
+        },
+        "local": {
+          "type": "object"
+        },
+        "incoming": {
+          "type": "object"
+        },
+        "expected": {
+          "$ref": "#/definitions/v8expected"
+        },
+        "agree": {
+          "type": "boolean"
+        },
+        "disagreement": {
+          "type": "string"
+        },
+        "defect": {
+          "type": "string"
+        }
+      }
+    },
+    "stamp": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "integer",
+          "minimum": 1
+        }
+      ],
+      "additionalItems": false
     },
     "op": {
-      "type": "object", "required": ["id", "writer", "seq", "stamp", "kind"],
+      "type": "object",
+      "required": [
+        "id",
+        "writer",
+        "seq",
+        "stamp",
+        "kind"
+      ],
+      "additionalProperties": false,
       "properties": {
-        "id": {"type": "string", "description": "unique within the universe"},
-        "writer": {"type": "string"},
-        "seq": {"type": "integer", "minimum": 1, "description": "contiguous per writer across initial+ops; never reused within a universe"},
-        "stamp": {"type": "array", "minItems": 3, "maxItems": 3, "description": "[logicalCounter, writerIncarnation, seq]; counter strictly above the writer's previous counter and above the counter of every op named below"},
-        "kind": {"type": "string"}, "target": {"type": "string"},
-        "observed": {"type": "object", "description": "named evidence: gen, deletions, basis, epochs, base, sources, adds, supersedes; every value that is an op id is a semantic prerequisite"},
-        "payload": {"type": "object"},
-        "requires": {"type": "array", "items": {"type": "string"}, "description": "cross-writer prerequisites only; same-writer order is implicit and not repeated"}
+        "id": {
+          "type": "string"
+        },
+        "writer": {
+          "type": "string"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stamp": {
+          "$ref": "#/definitions/stamp"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "observed": {
+          "type": "object",
+          "description": "every string or string-array value that names an op id is a semantic prerequisite; gen is provenance only"
+        },
+        "payload": {
+          "type": "object"
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "derived: cross-writer named ops; same-writer order is implicit and never repeated"
+        }
+      }
+    },
+    "orderList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "v9fixture": {
+      "type": "object",
+      "required": [
+        "universes"
+      ],
+      "properties": {
+        "universes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/universe"
+          }
+        }
       }
     },
     "universe": {
-      "type": "object", "required": ["name", "initial", "ops", "schedules", "expected"],
+      "type": "object",
+      "required": [
+        "name",
+        "initial",
+        "authorization",
+        "ops",
+        "schedules",
+        "expected"
+      ],
       "properties": {
-        "name": {"type": "string"}, "description": {"type": "string"},
-        "initial": {"type": "object", "description": "either {createHistory:[op...]} (valid ops applied before the universe) or {checkpoint:{cut, facts}}"},
-        "authorization": {"type": "array"},
-        "ops": {"type": "array", "items": {"$ref": "#/definitions/op"}},
-        "events": {"type": "array"},
-        "schedules": {"type": "object", "required": ["orders", "duplicates", "restarts", "missingPrerequisite", "checkpoints"],
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "initial": {
+          "type": "object",
+          "required": [
+            "createHistory"
+          ],
+          "additionalProperties": false,
           "properties": {
-            "orders": {"description": "\"allInterleavings\" (same-writer order fixed) or explicit lists"}, "orderCount": {"type": "integer"},
-            "duplicates": {"type": "array", "description": "{name, order} with repeated ids"},
-            "restarts": {"type": "array", "description": "{name, order, restartAfter:'every'|[index]}: kill and reload from durable state"},
-            "missingPrerequisite": {"type": "array", "description": "{name, withheld[], order, expectedPendingAtEnd[], thenDeliver[], finalPending[]}"},
-            "checkpoints": {"type": "array", "description": "{name, cutAfter[], thenOrder[]}: install a checkpoint at the cut, then deliver thenOrder"}}},
-        "expected": {"type": "object", "required": ["state", "appliedCut", "pending", "diagnostics"],
-          "description": "identical for every complete schedule; state = normalized projection (works, memberships, annotations, assets, settings, pronunciations, witnesses); diagnostics derived from final facts and sorted"}
+            "createHistory": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/op"
+              }
+            }
+          }
+        },
+        "authorization": {
+          "type": "object",
+          "required": [
+            "founders"
+          ],
+          "properties": {
+            "founders": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "ops": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/op"
+          }
+        },
+        "events": {
+          "type": "array"
+        },
+        "deviceLocal": {
+          "type": "object"
+        },
+        "schedules": {
+          "type": "object",
+          "required": [
+            "orders",
+            "orderCount",
+            "duplicates",
+            "restarts",
+            "missingPrerequisite",
+            "checkpoints",
+            "retentionEquivalence"
+          ],
+          "properties": {
+            "orders": {
+              "oneOf": [
+                {
+                  "const": "allInterleavings"
+                },
+                {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "#/definitions/orderList"
+                  }
+                }
+              ]
+            },
+            "orderCount": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "duplicates": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "order"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "order": {
+                    "$ref": "#/definitions/orderList"
+                  }
+                }
+              }
+            },
+            "restarts": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "order",
+                  "restartAfter"
+                ]
+              }
+            },
+            "missingPrerequisite": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "withheld",
+                  "order",
+                  "expectedPendingAtEnd",
+                  "thenDeliver",
+                  "finalPending"
+                ]
+              }
+            },
+            "checkpoints": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "cutAfter",
+                  "thenOrder"
+                ],
+                "properties": {
+                  "cutAfter": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "thenOrder": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "retentionEquivalence": {
+              "type": "object",
+              "required": [
+                "checked",
+                "rule"
+              ]
+            },
+            "incomparableCuts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "localCut",
+                  "localApplied",
+                  "localUnpublished",
+                  "incomingCheckpointCut",
+                  "procedure",
+                  "finalCut"
+                ]
+              }
+            }
+          }
+        },
+        "expected": {
+          "type": "object",
+          "required": [
+            "state",
+            "appliedCut",
+            "pending",
+            "diagnostics"
+          ],
+          "properties": {
+            "state": {
+              "type": "object",
+              "required": [
+                "works",
+                "memberships",
+                "annotations",
+                "settings",
+                "pronunciations"
+              ]
+            },
+            "appliedCut": {
+              "type": "object",
+              "minProperties": 1
+            },
+            "pending": {
+              "type": "array"
+            },
+            "diagnostics": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z.]+\\(.*\\)$"
+              }
+            }
+          }
+        }
       }
     }
   }

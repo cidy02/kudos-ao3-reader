@@ -23,7 +23,13 @@
   "signatureValid": true,
   "preserved": {},
   "assetBytes": {},
-  "clockSubstitution": "verification passes opClock as `now` into iOS archivedDeletionState/clampedArchiveDate/resurrection test and Android BackupMappers.restoredDeletionState/merge(now:)"
+  "clockSubstitution": "verification passes opClock as `now` into iOS archivedDeletionState/clampedArchiveDate/resurrection test and Android BackupMappers.restoredDeletionState/merge(now:)",
+  "signing": {
+   "signer-1": {
+    "seed": "SHA-256(\"kudos-fixture-signer/signer-1\")",
+    "algorithm": "Ed25519"
+   }
+  }
  },
  "cases": [
   {
@@ -105,10 +111,13 @@
  ],
  "agree": true,
  "v9Outcome": {
+  "policy": "MC-7 legacy-evidence-only explicit purge",
+  "baseline": "holder lineage W-A live at the baseline cut, no deletion fact",
   "ops": [
-   "W2 work.delete d1 (named basis)",
-   "W4 work.purge explicit, basis [d1], v9 envelope, citing legacy evidence digest (MC-7)"
+   "work.purge(reason=explicit, basis=[], legacyEvidenceDigest=<tombstone digest>, scope=[W-A])  -- no synthetic work.delete"
   ],
-  "state": "holder converges to purged(explicit) once it applies W4 and the adopter was authorized; the legacy signature alone is never authority (DEC-8, DEC-10)"
+  "authority": "adopter is authorized (DEC-10) and MC-7 approved; verified tombstone trust decision stored in the run record",
+  "withoutMC7OrAuthority": "held-live: the work stays, evidence stored, diagnostic legacyPurgeNotAdopted",
+  "projection": "W-A purged(explicit), witness = the native purge"
  }
 }

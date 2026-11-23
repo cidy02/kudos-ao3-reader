@@ -34,8 +34,14 @@
      }
     ],
     "readingSessions": [
-     "s1",
-     "s2"
+     {
+      "id": "s1",
+      "work": "W-A"
+     },
+     {
+      "id": "s2",
+      "work": "W-A"
+     }
     ]
    },
    "incoming": {
@@ -75,8 +81,14 @@
      }
     ],
     "readingSessions": [
-     "s1",
-     "s2"
+     {
+      "id": "s1",
+      "work": "W-A"
+     },
+     {
+      "id": "s2",
+      "work": "W-A"
+     }
     ]
    },
    "incoming": {
