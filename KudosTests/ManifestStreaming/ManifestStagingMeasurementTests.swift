@@ -38,17 +38,21 @@ final class ManifestStagingMeasurementTests: XCTestCase {
                     let sampler = T567Sampler(diskRoots: [parentDirectory])
                     sampler.start()
                     let t0 = DispatchTime.now()
-                    var outcome = "ok", records = 0, deferred = 0, dbBytes = 0
+                    var outcome = "ok", records = 0, deferred = 0, dbBytes = 0, wall = 0.0
+                    var sampled: (peakBytes: Int, diskHighWater: Int, timeline: [(t: Double, bytes: Int)])?
                     do {
                         let staged = try ManifestStager.stage(input, options: options)
                         records = try staged.db.scalar("SELECT sum(count) FROM member")
                         deferred = try ManifestSectionSpec.all.reduce(0) { $0 + (try staged.db.scalar("SELECT count(*) FROM \($1.table) WHERE status = 2")) }
                         dbBytes = T567Sampler.diskUse([parentDirectory])
+                        wall = Double(DispatchTime.now().uptimeNanoseconds - t0.uptimeNanoseconds) / 1e9
+                        sampled = sampler.stop()
+                        // Outside the measured window: materialising the whole manifest is the oracle, not the product.
                         if mib <= 8 { XCTAssertEqual(try staged.manifest(), try KudosBackupContents.decodeManifest(Data(contentsOf: set.manifestURL))) }
                         staged.discard()
                     } catch { outcome = "error: \(error)" }
-                    let wall = Double(DispatchTime.now().uptimeNanoseconds - t0.uptimeNanoseconds) / 1e9
-                    let r = sampler.stop()
+                    if sampled == nil { wall = Double(DispatchTime.now().uptimeNanoseconds - t0.uptimeNanoseconds) / 1e9; sampled = sampler.stop() }
+                    let r = sampled!
                     let above = Double(r.peakBytes - before) / miB
                     let leftovers = (try? fm.contentsOfDirectory(atPath: parentDirectory.path))?.count ?? 0
                     T567Recorder.append("ios-staging.jsonl", meta.merging([
