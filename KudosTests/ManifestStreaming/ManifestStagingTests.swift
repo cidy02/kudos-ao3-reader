@@ -68,7 +68,6 @@ struct ManifestStagingTests {
         let scratch = Scratch()
         var options = scratch.options
         options.chunkSize = 97 // many chunks per record, a chunk boundary inside multi-byte text
-        options.typedRecordBudget = 300 // most records exceed it: stored deferred, decoded later by whoever reads them
         var rebuilt = 0
         for (name, data) in try ManifestParserDifferentialTests.corpus() {
             let today = todaysOutcome(data)
@@ -142,7 +141,7 @@ struct ManifestStagingTests {
         let scratch = Scratch()
         var options = scratch.options
         options.chunkSize = 1024
-        options.typedRecordBudget = 2048
+        options.typedRecordBudget = 8192
         let corpus = Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())
         let base = try #require(corpus["gen:works"])
         var obj = try #require(JSONSerialization.jsonObject(with: base) as? [String: Any])
@@ -186,6 +185,51 @@ struct ManifestStagingTests {
         let data = Data("{\"works\":[5],\"bookmarks\":[],\"fonts\":[],\"version\":8,\"exportedAt\":\"2026-01-01T00:00:00Z\"".utf8)
         #expect(throws: ManifestStreamError.invalidDocument(.notJSON)) { try ManifestStager.stage(ManifestDataInput(data), options: scratch.options) }
         #expect(todaysOutcome(data).label == "notJSON")
+        #expect(scratch.leftovers.isEmpty)
+    }
+
+    @Test func anOversizedStrictRecordIsNeverAcceptedAndNeverStagedUnchecked() throws {
+        let scratch = Scratch()
+        var options = scratch.options
+        options.typedRecordBudget = 8192
+        let corpus = Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())
+        let base = try #require(corpus["gen:works"])
+        var obj = try #require(JSONSerialization.jsonObject(with: base) as? [String: Any])
+        // Typed-invalid (no required fields) and over the budget: today's decoder rejects it; the run must not accept it.
+        obj["bookmarks"] = [["junk": String(repeating: "x", count: 12000)]]
+        let invalid = try JSONSerialization.data(withJSONObject: obj)
+        #expect(todaysOutcome(invalid).label == "schema")
+        guard case .resourceExhausted = try Self.stagedFailure(invalid, options) else { Issue.record("invalid oversized strict record accepted"); return }
+        // A typed-valid oversized strict record is also not accepted by this reader (P4 streams it field by field); same outcome.
+        var works = try #require(obj["works"] as? [[String: Any]])
+        works[0]["summary"] = String(repeating: "y", count: 12000)
+        obj["works"] = works
+        obj["bookmarks"] = [Any]()
+        let valid = try JSONSerialization.data(withJSONObject: obj)
+        #expect(todaysOutcome(valid).label == "ok")
+        guard case .resourceExhausted = try Self.stagedFailure(valid, options) else { Issue.record("oversized strict record staged"); return }
+        // Oversized single strict value (settings) likewise.
+        obj["works"] = [Any](); obj["settings"] = ["pad": String(repeating: "z", count: 12000)]
+        guard case .resourceExhausted = try Self.stagedFailure(try JSONSerialization.data(withJSONObject: obj), options) else { Issue.record("settings"); return }
+        #expect(scratch.leftovers.isEmpty)
+    }
+
+    static func stagedFailure(_ data: Data, _ options: ManifestStagingOptions) throws -> ManifestStreamError? {
+        do { try ManifestStager.stage(ManifestDataInput(data), options: options).discard(); return nil } catch { return error as? ManifestStreamError }
+    }
+
+    @Test func keyCountLimitAppliesToEveryObject() throws {
+        let scratch = Scratch()
+        let keys = ManifestLimits.maxRootKeys
+        func object(_ n: Int) -> String { "{" + (0 ..< n).map { "\"k\($0)\":1" }.joined(separator: ",") + "}" }
+        // Nested inside an unknown key (and inside an array), at the limit: accepted as JSON (then not a manifest: schema).
+        for wrap in ["{\"x\":%@}", "{\"x\":[%@]}", "{\"x\":{\"y\":%@}}"] {
+            let ok = String(format: wrap, object(keys))
+            #expect(try Self.stagedFailure(Data(ok.utf8), scratch.options) == .invalidDocument(.schema), "at limit \(wrap)")
+            guard case .resourceExhausted = try Self.stagedFailure(Data(String(format: wrap, object(keys + 1)).utf8), scratch.options) else {
+                Issue.record("one over, nested \(wrap)"); return
+            }
+        }
         #expect(scratch.leftovers.isEmpty)
     }
 

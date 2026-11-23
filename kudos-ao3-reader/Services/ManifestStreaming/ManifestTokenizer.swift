@@ -17,8 +17,8 @@ nonisolated enum ManifestLimits {
     static let maxKeyChars = 64 * 1024
     /// Characters in one number token.
     static let maxNumberChars = 64 * 1024
-    /// Distinct keys in the top-level object (the duplicate-key set is in memory).
-    static let maxRootKeys = 262_144
+    /// Keys in any one object (the top-level one counts distinct keys; the duplicate-key set is in memory).
+    static let maxRootKeys = 262_144 // per object, at any depth
     /// Characters in a known single root value (`version`, `exportedAt`, `settings`, `pronunciations`): it is decoded in memory.
     static let maxRootValueChars = 16 * 1024 * 1024
 }
@@ -74,10 +74,14 @@ nonisolated struct ManifestTokenizer {
             pos += 1
             skipWhitespace()
             if peek() == UInt8(ascii: "}") { pos += 1; return (.object, start ..< pos) }
+            var keys = 0 // per object, on the call stack: every object obeys the key-count limit (shared with Android)
             while true {
                 skipWhitespace()
                 guard peek() == UInt8(ascii: "\"") else { throw fail("object key") }
-                _ = try skipString()
+                keys += 1
+                if keys > ManifestLimits.maxRootKeys { throw ManifestScanError.limit("more than \(ManifestLimits.maxRootKeys) keys in one object") }
+                let keyRange = try skipString()
+                if keyRange.count > 6 * ManifestLimits.maxKeyChars + 2 { throw ManifestScanError.limit("object key too long") }
                 skipWhitespace()
                 guard peek() == UInt8(ascii: ":") else { throw fail("colon") }
                 pos += 1

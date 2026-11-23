@@ -58,7 +58,7 @@ final class ManifestStagingMeasurementTests: XCTestCase {
                     T567Recorder.append("ios-staging.jsonl", meta.merging([
                         "phase": "finished", "run": run == 0 ? "warmup" : "measured", "outcome": outcome, "records": records, "deferred": deferred,
                         "wallSeconds": wall, "beforeBytes": before, "peakBytes": r.peakBytes, "peakAboveBeforeMiB": above,
-                        "stagingDiskBytes": dbBytes, "stagingDiskHighWaterBytes": r.diskHighWater, "leftoverDirs": leftovers
+                        "peakAtSeconds": r.timeline.max(by: { $0.bytes < $1.bytes })?.t ?? 0, "stagingDiskBytes": dbBytes, "stagingDiskHighWaterBytes": r.diskHighWater, "leftoverDirs": leftovers
                     ]) { $1 })
                     XCTAssertEqual(outcome, "ok")
                     XCTAssertEqual(leftovers, 0)

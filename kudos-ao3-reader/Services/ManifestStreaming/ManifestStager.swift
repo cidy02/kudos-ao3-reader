@@ -93,6 +93,7 @@ nonisolated final class ManifestStagingPass {
     private var schemaFailed = false
     private var version: Int?
     private var pendingRows = 0
+    private var pendingBytes = 0
 
     init(input: ManifestInput, db: ManifestStagingDB, options: ManifestStagingOptions) {
         self.input = input
@@ -186,7 +187,7 @@ nonisolated final class ManifestStagingPass {
         if range.count > ManifestLimits.maxRootValueChars { throw ManifestScanError.limit("\(spec.name) longer than \(ManifestLimits.maxRootValueChars)") }
         if !schemaFailed {
             if range.count > options.typedRecordBudget {
-                try storeChunks(owner: spec.name, seq: 0, from: range)
+                throw ManifestStreamError.resourceExhausted("\(spec.name) of \(range.count) bytes exceeds the typed-decode budget")
             } else {
                 let data = input.read(range)
                 if let failure = input.failure { throw ManifestStreamError.io(failure) }
@@ -236,6 +237,9 @@ nonisolated final class ManifestStagingPass {
     private func stageElement(_ spec: ManifestSectionSpec, seq: Int, range: Range<Int>) throws {
         guard !schemaFailed else { return } // the document is already known to be a schema failure; keep validating syntax
         if range.count > options.typedRecordBudget {
+            // A strict record must decode with the production type, and an oversized one cannot be decoded within budget
+            // (P4 may stream it field by field). Never accept what today's decoder would reject: fail the run instead.
+            if spec.policy != .lossy { throw ManifestStreamError.resourceExhausted("\(spec.name) record of \(range.count) bytes exceeds the typed-decode budget") }
             try insertRecord(spec, seq, .deferred, range.count, .init())
             try storeChunks(owner: spec.name, seq: seq, from: range)
             return
@@ -296,7 +300,7 @@ nonisolated final class ManifestStagingPass {
             try db.run("INSERT INTO payload (owner, seq, chunk, bytes) VALUES (?, ?, ?, ?)",
                        [.text(owner), .int(Int64(seq)), .int(Int64(chunk)), .blob($0)])
         }
-        try rowWritten()
+        try rowWritten(bytes: data.count)
     }
 
     private func storeChunks(owner: String, seq: Int, data: Data) throws {
@@ -321,10 +325,12 @@ nonisolated final class ManifestStagingPass {
     }
 
     /// Commits in batches so the open transaction (and SQLite's cache) stays small however large the document is.
-    private func rowWritten() throws {
+    private func rowWritten(bytes: Int = 0) throws {
         pendingRows += 1
-        guard pendingRows >= 2000 else { return }
+        pendingBytes += bytes
+        guard pendingRows >= 2000 || pendingBytes >= 16 << 20 else { return }
         pendingRows = 0
+        pendingBytes = 0
         try db.exec("COMMIT; BEGIN")
     }
 }
