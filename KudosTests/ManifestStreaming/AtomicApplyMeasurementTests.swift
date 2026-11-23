@@ -92,7 +92,7 @@ final class AtomicApplyMeasurementTests: XCTestCase {
             "heldEndAboveStartBytes": held - start, "settledEndAboveStartBytes": settled - start,
             "mallocInUseStartBytes": mallocStart, "mallocInUseEndBytes": mallocEnd,
             "allRows": all, "liveRows": live, "expectedAll": existing + incoming - updates,
-            "expectedLive": incoming + (existing > 0 ? updates : 0),
+            "expectedLive": incoming, // updated + new; untouched existing rows are swept (soft-deleted)
             "storeBytes": StoreSQLite.size(dir.appendingPathComponent("store.sqlite")),
             "diskHighWaterBytes": result.diskHighWater, "footprintAboveStartMiBAtEach10pct": series(points, start: start)
         ]) { $1 })
@@ -167,7 +167,7 @@ final class AtomicApplyMeasurementTests: XCTestCase {
             }
             let result = sampler.stop()
             T567Recorder.append("ios-p1b.jsonl", meta.merging([
-                "phase": "finished", "quickCheck": check, "liveRowsAfterSwap": liveRows, "expectedRows": 2 * n,
+                "phase": "finished", "quickCheck": check, "liveRowsAfterSwap": liveRows, "expectedRows": 2 * n - (0 ..< n).filter { $0 % 4 == 0 && $0 / 4 < n }.count,
                 "times": times, "sizes": sizes, "ticksPerPublish": swap.ticks,
                 "peakFootprintAboveBaseBytes": result.peakBytes - baseMemory,
                 "diskHighWaterAboveLiveBytes": result.diskHighWater,

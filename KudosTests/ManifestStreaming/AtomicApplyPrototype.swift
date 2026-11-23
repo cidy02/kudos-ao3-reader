@@ -15,12 +15,15 @@ enum BatchApply {
         case freshContextRollback = "fresh_context_rollback"
         /// A new `ModelContainer` and context per batch; everything dropped between batches.
         case freshContainer = "fresh_container"
+        /// Diagnostic: as `freshContext` but with no `autoreleasepool` around the batch (what P1's control effectively did).
+        case freshContextNoPool = "fresh_context_nopool"
         /// A new container every 16 batches (a cheaper compromise).
         case containerEvery16 = "container_every_16"
     }
 
     static func uuidNew(_ i: Int) -> UUID { ManifestFixtureGenerator.uuid(8, i, seed: 1) }
-    static func uuidExisting(_ i: Int) -> UUID { ManifestFixtureGenerator.uuid(9, i, seed: 1) }
+    // Different seed, not kind: the generator's state is seed*1000003+kind*7919+index, so kinds 8/9 collide 7919 apart.
+    static func uuidExisting(_ i: Int) -> UUID { ManifestFixtureGenerator.uuid(9, i, seed: 2) }
 
     /// Incoming row `i`: every 4th one updates an existing row (when `existing` has one at i/4), the rest are new.
     static func incomingID(_ i: Int, existing: Int) -> UUID {
@@ -49,8 +52,12 @@ enum BatchApply {
         var lo = 0
         while lo < incoming {
             let hi = min(incoming, lo + batch)
-            try autoreleasepool {
-                try applyOne(container!, range: lo ..< hi, existing: existing, author: author, reset: recycle == .freshContextRollback)
+            if recycle == .freshContextNoPool {
+                try applyOne(container!, range: lo ..< hi, existing: existing, author: author, reset: false)
+            } else {
+                try autoreleasepool {
+                    try applyOne(container!, range: lo ..< hi, existing: existing, author: author, reset: recycle == .freshContextRollback)
+                }
             }
             batches += 1
             lo = hi
