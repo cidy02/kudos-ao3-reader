@@ -361,3 +361,51 @@ Entry: `importPackage` `:174`, `importV2ZipBytesInternal` `:155`, `applyMergeRes
 | A-H04 | `app/DemoLibrary.kt` (16 DAO sites, debug-only via `MainScaffold.kt:151`) | works, queues, collections, sessions | Seed a demo library | DAO1 | `NONE`; gate capture off in demo mode |
 | A-H05 | `backup/PairingSheet.kt:171,469` (`trustStore.rename`) | trust store label (not a Room table) | Rename a trusted device | store | `NONE` (device wiring) |
 
+## 3. Android sources outside the Room tables, and the reconciliation each source needs
+
+(The iOS equivalents are § 1.I.) Room commits do not cover any of these, so a same-transaction outbox cannot either; each needs its own durable capture and a contract for "the process died between the table write and this write".
+
+| # | file:line | Source . granularity | Writer(s) | Capture today | Capture recommended . reconciliation need |
+|---|---|---|---|---|---|
+| A-I01 | `data/preferences/SettingsRepository.kt:75-640` (68 `dataStore.edit` sites; `replaceAll` `:592-640`); `data/preferences/KudosSettingsDataStore.kt:6-8`; typed payload `backup/BackupManifest.kt:278-301` (23 fields: reader typography, privacy gates, themes, accent, work-symbol placement, small-series auto-preserve, library page arrangement) | Jetpack DataStore `kudos_settings` (`SettingsRepository.DataStoreName`); one Preferences file | Settings screens (`update*` functions), `ReaderViewModel`, onboarding, `CustomFontRepository.kt:~114` (`updateReaderFontId`), restore (`BackupRepository.kt:684-686`) | None: Android does not stamp local setting changes (D4 X-9); typed fields are assigned wholesale on a non-Replace import; the raw `modifiedAt` / `extras` of the last manifest are carried through the overlay (`SMP:550-660`) | Per-key stamp at the `SettingsRepository` boundary (a wrapper around `dataStore.edit`, one op per changed synced key), plus a snapshot diff against a stored baseline as the safety net (the iOS `SyncedSettingsClock` pattern, § 1.I). DataStore has its own file, so the stamp and baseline must be written in the SAME `dataStore.edit` as the value. Most of the 68 sites are device-local (UI state, onboarding, changelog) and must be classed once, by key |
+| A-I02 | `reader/speech/KokoroPronunciationStore.kt:51-71` (`save`: temp file + atomic move; `apply` `:63`; `setOverride` `:71`) | `kokoro-pronunciations.json` in app `filesDir`; global / per-fandom / per-work maps, NO per-entry stamps (iOS has them, I-I02) | `settings/PronunciationSettings.kt:62` (editor), `reader/ReaderScreen.kt:281,359` (reader sheet), `BackupRepository.kt:276-281,566-575`, `backup/SyncRepository.kt:560-562` (digest in `SharedPreferences`) | Whole-file atomic write; no change record | Entry-level op needs entry-level times Android does not keep: either add stamps to the file (migration) or capture by snapshot diff and mint the op at write time. Reconciliation: load -> diff against last-synced digest (`nativeManifestDigest`, `SyncRepository.kt:560`) |
+| A-I03 | `backup/SyncManifestPassthrough.kt:723-760` (`SyncLastManifestStore`: `sync-last-manifest.json`, with folder tag), `backup/BackupRepository.kt:50-66,199-258` (`lastImportedManifestStore`, `pendingImportManifestStore`, `withOverlaysAside`, `recordAfterCommit`), `backup/SyncRepository.kt:545-557` (`lastManifestStore.save`) | Android opaque overlay: the raw JSON of the last manifest, which carries every field Android does not model (iOS reading-status, cover-pin, provenance, followed tags, aliases, comment drafts, pronunciation stamps, `extras` settings) and is merged as whole records by newer stamp (D4 § 1) | Written only by import / sync, never by a UI command | Atomic file move; asides during Replace; an `opaqueDataNotSaved` flag when the post-commit write fails (`BackupRepository.kt:221-231`) | Not a capture source: Android never edits these fields. It is a PASSTHROUGH CONTRACT the outbox must preserve: unmodelled ops received from a peer must be retained and re-published, and the overlay file must be committed with the checkpoint cursor. Reconciliation gap today: the overlay is written AFTER the Room commit (`recordAfterCommit`), so a crash between the two loses opaque data silently ("opaque fields lost", `BackupRepository.kt:190-197`) |
+| A-I04 | `works/WorkFileStore` (`files/WorkFileStore.kt:14`), `files/FontFileStore.kt:15`, `BackupRepository.kt:299-413` (originals) | EPUB bytes, font files, imported originals | Import, download, restore, sync | Row flags updated after the file write (A-G10) | Same as iOS I-I05..I-I07: assets are not ops; the outbox needs a presence / digest record. `H-order`: files are written before or after the row, per path, and a crash between them is repaired by `repairMissingEpubFlags` (A-B06) or by the next sync |
+| A-I05 | `network/ao3/writing/recovery/WritingTextRecovery.kt:24-64`, `WritingRecoveryWriter.kt:17` | Writing recovery files, one per field per session | Writing editor, per checkpoint on `writingRecoveryIO` | None; NOT in the typed manifest (`KudosBackupManifest` has no `writingRecovery` key): carried only if the overlay keeps the unknown top-level key | iOS carries these as `writingRecovery` (§ 1.I I-I03). Android capture is a decision (D4 scope), not a gap in this inventory |
+| A-I06 | `network/ao3/comments/CommentDraftStore.kt:28` (DataStore), `auth/AO3PostingPseudStore.kt:20`, `account/SubscriptionWatermarks.kt:25-61` (`SharedPreferences`), `search/SearchRanking.kt:28` (`SharedPreferences`), `library/AuthorNewestWorkStore.kt:22` | iOS syncs comment drafts, posting-as, subscription watermarks and last-seen-kudos as `extras` settings (§ 1.I I-I01, I-I08); Android keeps its own copies in four separate stores | Comment composer, AO3 browse | None | Whether Android participates is a D4 scope question; if it does, each store needs its own per-entry stamp + diff, four mechanisms for what iOS does with one |
+| A-I07 | `backup/TombstoneTrustStore.kt:29`, `auth/AO3SessionStore.kt:45,171`, `auth/AO3CookieStore.kt:19`, `update/AppUpdatePreferences.kt:15`, `onboarding/FirstRunState.kt` | Trust keys, sign-in, update prefs, first-run state | Settings, pairing | n/a | `NONE` (device wiring and sign-in, "not carried, by rule") |
+
+## 4. Totals
+
+**iOS (rows by first-named capture strategy)**
+
+| Section | Rows | command + outbox | snapshot reconcile | must not capture | source contract (prose) |
+|---|---|---|---|---|---|
+| 1.A Reader checkpoints and Insights recorders | 18 | 18 | 0 | 0 | 0 |
+| 1.B Work-level user commands | 26 | 23 | 3 | 0 | 0 |
+| 1.C Collections | 7 | 7 | 0 | 0 | 0 |
+| 1.D Reading queues and memberships | 14 | 12 | 2 | 0 | 0 |
+| 1.E Saved searches, bookmarks, fonts, followed tags, aliases, series | 12 | 9 | 2 | 1 | 0 |
+| 1.F Imports, downloads, AO3 refresh | 13 | 11 | 1 | 1 | 0 |
+| 1.G Backup restore and folder-sync apply | 22 | 15 | 0 | 3 | 4 |
+| 1.H Sweeps, migrations, backfills, launch | 12 | 1 | 6 | 5 | 0 |
+| 1.I Sources outside the model tables | 9 | 0 | 1 | 1 | 7 |
+| **Total** | **133** | **96** | **15** | **11** | **11** |
+
+**Android (rows by first-named capture strategy; `TRG` and `DAO` are counted together)**
+
+| Section | Rows | trigger / DAO op | must not capture | source contract (prose) |
+|---|---|---|---|---|
+| 2.A Reader checkpoints, reading log, annotations | 10 | 10 | 0 | 0 |
+| 2.B Work-level commands | 15 | 10 | 5 | 0 |
+| 2.C Collections | 4 | 4 | 0 | 0 |
+| 2.D Reading queues, memberships, queue tags | 13 | 12 | 1 | 0 |
+| 2.E Saved searches, bookmarks, fonts | 4 | 4 | 0 | 0 |
+| 2.F Imports, downloads, AO3 refresh | 6 | 6 | 0 | 0 |
+| 2.G Restore and folder-sync apply | 14 | 9 | 2 | 3 |
+| 2.H Launch tasks, migrations, other | 5 | 0 | 3 | 2 |
+| 3 Sources outside the Room tables | 7 | 0 | 1 | 6 |
+| **Total** | **78** | **55** | **12** | **11** |
+
+Reading the table. A row is one write site or one tightly coupled group of sites (same function, same commit). The strategy column counts the FIRST strategy each row names; many rows name a second one (`TRG+DAO`, `CMD` plus `SNAP` for a device-local group inside it), so the counts are a shape, not a plan. iOS: 133 rows, of which `CMD` is the default and `SNAP`/`NONE` are derived or device-local. Android: 78 rows. Counts of raw call sites behind them: iOS 291 `save`/`saveBestEffort`/`commitNow`/`insert`/`delete` sites in 56 files (+ autosave-only assignments), Android 286 DAO/transaction call sites in 24 non-DAO files, 58 of them in `KudosDatabaseMigrations.kt`. Not counted as rows: the several hundred `@AppStorage` / `DataStore.edit` setting writes (one row per mechanism, I-I01 and A-I01), and debug-only seeding (one row each).
+
