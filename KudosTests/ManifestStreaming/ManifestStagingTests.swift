@@ -189,6 +189,34 @@ struct ManifestStagingTests {
         #expect(scratch.leftovers.isEmpty)
     }
 
+    // MARK: Resource limits (shared with Android)
+
+    @Test func resourceLimitsAreResourceExhaustionAndAtTheLimitIsAccepted() throws {
+        let scratch = Scratch()
+        func stage(_ text: String) throws -> ManifestStreamError? {
+            do { try ManifestStager.stage(ManifestDataInput(Data(text.utf8)), options: scratch.options).discard(); return nil } catch { return error as? ManifestStreamError }
+        }
+        let key = ManifestLimits.maxKeyChars, number = ManifestLimits.maxNumberChars
+        // At the limit: a schema failure (not a manifest), never a resource one. One over: resource exhaustion.
+        #expect(try stage("{\"\(String(repeating: "k", count: key))\":1}") == .invalidDocument(.schema))
+        guard case .resourceExhausted = try stage("{\"\(String(repeating: "k", count: key + 1))\":1}") else { Issue.record("key"); return }
+        #expect(try stage("{\"x\":\(String(repeating: "1", count: number))}") == .invalidDocument(.schema))
+        guard case .resourceExhausted = try stage("{\"x\":\(String(repeating: "1", count: number + 1))}") else { Issue.record("number"); return }
+        let keys = ManifestLimits.maxRootKeys
+        func object(_ n: Int) -> String { "{" + (0 ..< n).map { "\"k\($0)\":1" }.joined(separator: ",") + "}" }
+        #expect(try stage(object(keys)) == .invalidDocument(.schema))
+        guard case .resourceExhausted = try stage(object(keys + 1)) else { Issue.record("keys"); return }
+        let big = ManifestLimits.maxRootValueChars
+        #expect(try stage("{\"settings\":\"\(String(repeating: "a", count: big - 2))\"}") == .invalidDocument(.schema))
+        guard case .resourceExhausted = try stage("{\"settings\":\"\(String(repeating: "a", count: big))\"}") else { Issue.record("root value"); return }
+        // Leading zero and a missing comma are syntax errors, as today's route (shared with Android).
+        for text in ["{\"version\":08}", "{\"version\":8 \"x\":1}"] {
+            #expect(try stage(text) == .invalidDocument(.notJSON), "\(text)")
+            #expect(todaysOutcome(Data(text.utf8)).label == "notJSON")
+        }
+        #expect(scratch.leftovers.isEmpty)
+    }
+
     // MARK: Distinct outcomes: cancellation, I/O, resources
 
     /// Delegates to a real input and lets a test act on the Nth read or window.

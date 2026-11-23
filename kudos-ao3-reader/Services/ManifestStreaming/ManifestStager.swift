@@ -59,7 +59,13 @@ nonisolated enum ManifestStager {
         if let e = error as? ManifestStreamError { return e }
         if Task.isCancelled { return .cancelled }
         if let failure = input.failure { return .io(failure) }
-        if let scan = error as? ManifestScanError { return scan == .cancelled ? .cancelled : .invalidDocument(.notJSON) }
+        if let scan = error as? ManifestScanError {
+            switch scan {
+            case .cancelled: return .cancelled
+            case let .limit(message): return .resourceExhausted(message)
+            default: return .invalidDocument(.notJSON)
+            }
+        }
         return .io(String(describing: error))
     }
 
@@ -136,7 +142,8 @@ nonisolated final class ManifestStagingPass {
             tokenizer.skipWhitespace()
             guard tokenizer.peek() == UInt8(ascii: ":") else { throw tokenizer.fail("colon") }
             tokenizer.pos += 1
-            let key = decodeKey(keyRange)
+            let key = try decodeKey(keyRange)
+            if seen.count >= ManifestLimits.maxRootKeys, !seen.contains(key) { throw ManifestScanError.limit("more than \(ManifestLimits.maxRootKeys) keys") }
             if !seen.insert(key).inserted {
                 _ = try tokenizer.skipValue(depth: 1) // a duplicate key: the first value wins (validated, not staged)
             } else if let section = ManifestSectionSpec.byName[key] {
@@ -158,11 +165,15 @@ nonisolated final class ManifestStagingPass {
         }
     }
 
-    private func decodeKey(_ range: Range<Int>) -> String {
-        guard range.count <= 4096 else { return "\u{0}long" } // no key of ours is this long
+    private func decodeKey(_ range: Range<Int>) throws -> String {
+        // A key is at most 4 UTF-8 bytes per character (+ escapes, which only lengthen it); measure characters after decoding.
+        guard range.count <= 6 * ManifestLimits.maxKeyChars + 2 else { throw ManifestScanError.limit("object key too long") }
         let bytes = input.read(range)
-        if !bytes.contains(UInt8(ascii: "\\")) { return String(decoding: bytes.dropFirst().dropLast(), as: UTF8.self) }
-        return (try? JSONSerialization.jsonObject(with: bytes, options: .fragmentsAllowed) as? String) ?? "\u{0}invalid"
+        let key = bytes.contains(UInt8(ascii: "\\"))
+            ? ((try? JSONSerialization.jsonObject(with: bytes, options: .fragmentsAllowed) as? String) ?? "\u{0}invalid")
+            : String(decoding: bytes.dropFirst().dropLast(), as: UTF8.self)
+        if key.count > ManifestLimits.maxKeyChars { throw ManifestScanError.limit("object key longer than \(ManifestLimits.maxKeyChars)") }
+        return key
     }
 
     private func stageValue(_ spec: ManifestValueSpec) throws {
@@ -172,6 +183,7 @@ nonisolated final class ManifestStagingPass {
             try recordMember(spec.name, .null, kind, 0, range.count)
             return
         }
+        if range.count > ManifestLimits.maxRootValueChars { throw ManifestScanError.limit("\(spec.name) longer than \(ManifestLimits.maxRootValueChars)") }
         if !schemaFailed {
             if range.count > options.typedRecordBudget {
                 try storeChunks(owner: spec.name, seq: 0, from: range)

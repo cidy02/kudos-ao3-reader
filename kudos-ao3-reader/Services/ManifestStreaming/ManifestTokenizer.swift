@@ -6,6 +6,21 @@ nonisolated enum ManifestScanError: Error, Equatable {
     case tooDeep
     case unexpectedEnd
     case cancelled
+    /// A resource limit (`ManifestLimits`); reported as `resourceExhausted`, not as an invalid document.
+    case limit(String)
+}
+
+/// Resource limits shared with Android (A-567 P2). New limits, pending owner approval: one constant each so they are easy to change.
+/// Real manifests are nowhere near any of them. Record arrays, records and unknown values have no size limit.
+nonisolated enum ManifestLimits {
+    /// Characters in one object key.
+    static let maxKeyChars = 64 * 1024
+    /// Characters in one number token.
+    static let maxNumberChars = 64 * 1024
+    /// Distinct keys in the top-level object (the duplicate-key set is in memory).
+    static let maxRootKeys = 262_144
+    /// Characters in a known single root value (`version`, `exportedAt`, `settings`, `pronunciations`): it is decoded in memory.
+    static let maxRootValueChars = 16 * 1024 * 1024
 }
 
 nonisolated enum ManifestValueKind: Equatable { case object, array, string, number, bool, null }
@@ -115,6 +130,7 @@ nonisolated struct ManifestTokenizer {
     }
 
     private mutating func number() throws {
+        let numberStart = pos
         if peek() == UInt8(ascii: "-") { pos += 1 }
         guard let first = peek() else { throw ManifestScanError.unexpectedEnd }
         if first == 0x30 { pos += 1 } else if first >= 0x31, first <= 0x39 { try digits(min: 1) } else { throw fail("number") }
@@ -124,6 +140,7 @@ nonisolated struct ManifestTokenizer {
             if let s = peek(), s == UInt8(ascii: "+") || s == UInt8(ascii: "-") { pos += 1 }
             try digits(min: 1)
         }
+        if pos - numberStart > ManifestLimits.maxNumberChars { throw ManifestScanError.limit("number token longer than \(ManifestLimits.maxNumberChars)") }
     }
 
     /// Scans a string with a UTF-8 DFA whose state survives window refills. The hot loop runs over the current window.
