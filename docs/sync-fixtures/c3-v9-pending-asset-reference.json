@@ -92,14 +92,14 @@
    "events": [
     {
      "id": "blob",
-     "kind": "blobVisible",
+     "type": "blobVisible",
      "digest": "d2",
      "verified": true,
      "installed": true
     },
     {
      "id": "badblob",
-     "kind": "blobVisible",
+     "type": "blobVisible",
      "digest": "d2",
      "verified": false
     }
@@ -107,22 +107,42 @@
    "schedules": {
     "orders": [
      [
-      "r1",
-      "blob"
+      {
+       "op": "r1"
+      },
+      {
+       "event": "blob"
+      }
      ],
      [
-      "blob",
-      "r1"
+      {
+       "event": "blob"
+      },
+      {
+       "op": "r1"
+      }
      ],
      [
-      "r1",
-      "badblob",
-      "blob"
+      {
+       "op": "r1"
+      },
+      {
+       "event": "badblob"
+      },
+      {
+       "event": "blob"
+      }
      ],
      [
-      "badblob",
-      "r1",
-      "blob"
+      {
+       "event": "badblob"
+      },
+      {
+       "op": "r1"
+      },
+      {
+       "event": "blob"
+      }
      ]
     ],
     "orderCount": 4,
@@ -130,10 +150,18 @@
      {
       "name": "r1 and blob each twice",
       "order": [
-       "r1",
-       "r1",
-       "blob",
-       "blob"
+       {
+        "op": "r1"
+       },
+       {
+        "op": "r1"
+       },
+       {
+        "event": "blob"
+       },
+       {
+        "event": "blob"
+       }
       ]
      }
     ],
@@ -141,8 +169,12 @@
      {
       "name": "kill after r1, again after blob",
       "order": [
-       "r1",
-       "blob"
+       {
+        "op": "r1"
+       },
+       {
+        "event": "blob"
+       }
       ],
       "restartAfter": "every"
      }
@@ -150,8 +182,12 @@
     "missingPrerequisite": [],
     "checkpoints": [],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 1,
+     "cutsChecked": 2,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {
@@ -189,27 +225,39 @@
     "afterEachPrefix": [
      {
       "prefix": [
-       "r1"
+       {
+        "op": "r1"
+       }
       ],
       "epub": "pending"
      },
      {
       "prefix": [
-       "blob"
+       {
+        "event": "blob"
+       }
       ],
       "epub": "blobKnownNoReference"
      },
      {
       "prefix": [
-       "r1",
-       "badblob"
+       {
+        "op": "r1"
+       },
+       {
+        "event": "badblob"
+       }
       ],
       "epub": "pending (verification failed, retry)"
      },
      {
       "prefix": [
-       "r1",
-       "blob"
+       {
+        "op": "r1"
+       },
+       {
+        "event": "blob"
+       }
       ],
       "epub": "available"
      }

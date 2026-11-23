@@ -79,7 +79,21 @@
   "tombstoneId": "UUIDv5(namespace, fixtureId + \"/tombstone/\" + index)",
   "timestamps": "every date in a fixture is an explicit ISO-8601 UTC instant with whole seconds unless stated"
  },
- "assetBytesRule": "EPUB for label L: a minimal valid package, zip entries stored (method 0) with timestamps 1980-01-01T00:00:00, order mimetype, META-INF/container.xml, OEBPS/content.opf, OEBPS/ch1.xhtml; ch1.xhtml body is the ASCII bytes of SHA-256(\"kudos-fixture-epub/\"+L) in hex repeated and truncated so the whole file has exactly the stated size. The digest label L is the name; the real SHA-256 of those bytes is computed by the harness and stored as epubDigest.",
+ "assetBytesRule": {
+  "summary": "Entire file bytes are fixed by this rule; the digest label L only names the file.",
+  "entries": [
+   "mimetype",
+   "META-INF/container.xml",
+   "OEBPS/content.opf",
+   "OEBPS/ch1.xhtml"
+  ],
+  "mimetype": "ASCII `application/epub+zip`, no newline",
+  "container.xml": "<?xml version=\"1.0\"?>\\n<container version=\"1.0\" xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OEBPS/content.opf\" media-type=\"application/oebps-package+xml\"/></rootfiles></container>\\n",
+  "content.opf": "<?xml version=\"1.0\"?>\\n<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"id\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:identifier id=\"id\">urn:kudos-fixture:<L></dc:identifier><dc:title><L></dc:title><dc:language>en</dc:language></metadata><manifest><item id=\"c1\" href=\"ch1.xhtml\" media-type=\"application/xhtml+xml\"/></manifest><spine><itemref idref=\"c1\"/></spine></package>\\n",
+  "ch1.xhtml": "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body><p><L></p><!--<FILL>--></body></html>\\n where <FILL> is the lowercase hex of SHA-256(\"kudos-fixture-epub/\"+L) repeated and truncated so that the whole ZIP file has exactly the stated size",
+  "zip": "entries in the order above; method 0 (stored); general-purpose flags 0; version needed 20; DOS time 0x0000 and date 0x0021 (1980-01-01); no extra fields, no comments, no data descriptors; classic (non-ZIP64) records; CRC-32 and sizes in the local headers; central directory in the same order",
+  "digest": "SHA-256 of the file bytes; recorded as epubDigest when the case says so"
+ },
  "canonicalKeyInterpretation": {
   "locator": "locatorString on the wire",
   "kind": "kindRaw",
@@ -89,5 +103,6 @@
   "omitKeys": "top-level manifest keys not written at all",
   "<absent>": "same as omitKeys for that key"
  },
- "sessions": "a readingSession record names {id, work}; defaults per `defaults.readingSession`; workID is ids[work]; its id is UUIDv5(namespace, fixtureId + \"/\" + name)"
+ "sessions": "a readingSession record names {id, work}; defaults per `defaults.readingSession`; workID is ids[work]; its id is UUIDv5(namespace, fixtureId + \"/\" + name)",
+ "clockHooks": "harness must supply: iOS archivedDeletionState(now:), clampedArchiveDate(now:) and the resurrection test now (KB:5884-5887); Android a patched restoredDeletionState(now) (none today, BMap:98-107) and merge(now:) (BMS:46). A harness without the Android seam cannot run the Android column of a1/a2/c1."
 }

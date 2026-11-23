@@ -158,12 +158,20 @@
       ],
       "checkpointCut": [
        "b1"
-      ]
+      ],
+      "expectedAtCut": {
+       "works": {},
+       "diagnostics": []
+      }
      }
     ],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {

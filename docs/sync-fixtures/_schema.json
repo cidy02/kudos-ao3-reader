@@ -86,25 +86,67 @@
     "v8fixture": {
       "type": "object",
       "required": [
-        "harness"
+        "harness",
+        "v9Outcome"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "cases"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "local"
+                ]
+              },
+              {
+                "required": [
+                  "incoming"
+                ]
+              },
+              {
+                "required": [
+                  "expected"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "local",
+            "incoming",
+            "expected",
+            "agree"
+          ],
+          "not": {
+            "required": [
+              "cases"
+            ]
+          }
+        }
       ],
       "anyOf": [
         {
           "required": [
-            "harness",
-            "cases",
-            "v9Outcome"
+            "route"
           ]
         },
         {
           "required": [
-            "harness",
-            "local",
-            "incoming",
-            "expected",
-            "agree",
-            "v9Outcome"
-          ]
+            "cases"
+          ],
+          "properties": {
+            "cases": {
+              "items": {
+                "required": [
+                  "route"
+                ]
+              }
+            }
+          }
         }
       ],
       "properties": {
@@ -144,6 +186,9 @@
             },
             "assetBytes": {
               "type": "object"
+            },
+            "clockSubstitution": {
+              "$ref": "#/definitions/clockSubstitution"
             }
           }
         },
@@ -297,7 +342,7 @@
       "type": "array",
       "minItems": 1,
       "items": {
-        "type": "string"
+        "$ref": "#/definitions/orderEntry"
       }
     },
     "v9fixture": {
@@ -370,7 +415,10 @@
           }
         },
         "events": {
-          "type": "array"
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/event"
+          }
         },
         "deviceLocal": {
           "type": "object"
@@ -433,7 +481,25 @@
                   "name",
                   "order",
                   "restartAfter"
-                ]
+                ],
+                "properties": {
+                  "order": {
+                    "$ref": "#/definitions/orderList"
+                  },
+                  "restartAfter": {
+                    "oneOf": [
+                      {
+                        "const": "every"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        }
+                      }
+                    ]
+                  }
+                }
               }
             },
             "missingPrerequisite": {
@@ -447,7 +513,35 @@
                   "expectedPendingAtEnd",
                   "thenDeliver",
                   "finalPending"
-                ]
+                ],
+                "properties": {
+                  "withheld": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "order": {
+                    "$ref": "#/definitions/orderList"
+                  },
+                  "expectedPendingAtEnd": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "thenDeliver": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "finalPending": {
+                    "type": "array",
+                    "maxItems": 0
+                  }
+                }
               }
             },
             "checkpoints": {
@@ -457,7 +551,9 @@
                 "required": [
                   "name",
                   "cutAfter",
-                  "thenOrder"
+                  "thenOrder",
+                  "checkpointCut",
+                  "expectedAtCut"
                 ],
                 "properties": {
                   "cutAfter": {
@@ -471,6 +567,19 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "checkpointCut": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "expectedAtCut": {
+                    "type": "object",
+                    "required": [
+                      "works",
+                      "diagnostics"
+                    ]
                   }
                 }
               }
@@ -478,9 +587,31 @@
             "retentionEquivalence": {
               "type": "object",
               "required": [
-                "checked",
+                "mode",
+                "orders",
+                "cutsChecked",
                 "rule"
-              ]
+              ],
+              "properties": {
+                "mode": {
+                  "enum": [
+                    "exhaustive",
+                    "sampled"
+                  ]
+                },
+                "orders": {
+                  "type": "integer"
+                },
+                "cutsChecked": {
+                  "type": "integer"
+                },
+                "seed": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              }
             },
             "incomparableCuts": {
               "type": "array",
@@ -523,16 +654,117 @@
               "minProperties": 1
             },
             "pending": {
-              "type": "array"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             },
             "diagnostics": {
               "type": "array",
               "items": {
-                "type": "string",
-                "pattern": "^[A-Za-z.]+\\(.*\\)$"
+                "$ref": "#/definitions/diagnostic"
               }
             }
           }
+        }
+      }
+    },
+    "clockSubstitution": {
+      "type": "object",
+      "required": [
+        "ios",
+        "android"
+      ],
+      "properties": {
+        "ios": {
+          "type": "object",
+          "required": [
+            "function"
+          ]
+        },
+        "android": {
+          "type": "object",
+          "required": [
+            "function",
+            "available"
+          ]
+        }
+      }
+    },
+    "orderEntry": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "event"
+          ],
+          "properties": {
+            "event": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "diagnostic": {
+      "type": "object",
+      "required": [
+        "kind",
+        "key"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "witness": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "id",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "blobVisible"
+          ]
+        },
+        "digest": {
+          "type": "string"
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "installed": {
+          "type": "boolean"
         }
       }
     }

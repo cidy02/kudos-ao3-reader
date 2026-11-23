@@ -28,11 +28,13 @@
     "also": [
      "clampedArchiveDate(now:)",
      "TombstoneIndex.suppressesResurrection scheduled > now (KB:5884-5887)"
-    ]
+    ],
+    "available": true
    },
    "android": {
     "function": "BackupMappers.restoredDeletionState",
-    "change": "add a parameter now: Instant = Instant.now() and pass the harness opClock (BMap:98-107); merge(now:) already takes it (BMS:46)"
+    "available": false,
+    "harnessMustSupply": "a patched build or test seam adding a `now: Instant = Instant.now()` parameter (BMap:98-107 has none today); BackupMergeService.merge(now:) is already injectable (BMS:46)"
    }
   }
  },

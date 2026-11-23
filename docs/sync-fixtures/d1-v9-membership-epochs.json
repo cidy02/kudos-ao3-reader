@@ -232,12 +232,30 @@
       ],
       "checkpointCut": [
        "m1"
-      ]
+      ],
+      "expectedAtCut": {
+       "works": {
+        "X": {
+         "lifecycle": "live"
+        },
+        "Y": {
+         "lifecycle": "live"
+        },
+        "q1": {
+         "lifecycle": "live"
+        }
+       },
+       "diagnostics": []
+      }
      }
     ],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 6,
+     "cutsChecked": 24,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {
@@ -462,8 +480,12 @@
     "missingPrerequisite": [],
     "checkpoints": [],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 1,
+     "cutsChecked": 2,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {
@@ -761,8 +783,12 @@
     ],
     "checkpoints": [],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 120,
+     "cutsChecked": 720,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {
@@ -1064,12 +1090,27 @@
        "b1",
        "m1",
        "m2"
-      ]
+      ],
+      "expectedAtCut": {
+       "works": {
+        "Y": {
+         "lifecycle": "live"
+        },
+        "q1": {
+         "lifecycle": "live"
+        }
+       },
+       "diagnostics": []
+      }
      }
     ],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 120,
+     "cutsChecked": 720,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {
@@ -1221,8 +1262,12 @@
     "missingPrerequisite": [],
     "checkpoints": [],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 2,
+     "cutsChecked": 6,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {
@@ -1452,12 +1497,30 @@
       ],
       "checkpointCut": [
        "m1"
-      ]
+      ],
+      "expectedAtCut": {
+       "works": {
+        "X": {
+         "lifecycle": "live"
+        },
+        "Y": {
+         "lifecycle": "live"
+        },
+        "q1": {
+         "lifecycle": "live"
+        }
+       },
+       "diagnostics": []
+      }
      }
     ],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 2,
+     "cutsChecked": 6,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {
@@ -1678,12 +1741,24 @@
        "a1",
        "a2",
        "q0"
-      ]
+      ],
+      "expectedAtCut": {
+       "works": {
+        "q1": {
+         "lifecycle": "live"
+        }
+       },
+       "diagnostics": []
+      }
      }
     ],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {

@@ -340,12 +340,27 @@
        "a2",
        "b1",
        "b2"
-      ]
+      ],
+      "expectedAtCut": {
+       "works": {
+        "W-A": {
+         "lifecycle": "live"
+        },
+        "q1": {
+         "lifecycle": "live"
+        }
+       },
+       "diagnostics": []
+      }
      }
     ],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "sampled",
+     "orders": 40,
+     "cutsChecked": 360,
+     "seed": 7,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {
@@ -747,12 +762,27 @@
        "b2",
        "b3",
        "b4"
-      ]
+      ],
+      "expectedAtCut": {
+       "works": {
+        "W-A": {
+         "lifecycle": "live"
+        },
+        "q1": {
+         "lifecycle": "live"
+        }
+       },
+       "diagnostics": []
+      }
      }
     ],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "sampled",
+     "orders": 40,
+     "cutsChecked": 400,
+     "seed": 7,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {
@@ -950,8 +980,12 @@
     "missingPrerequisite": [],
     "checkpoints": [],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {
@@ -1150,8 +1184,12 @@
     ],
     "checkpoints": [],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {
@@ -1367,8 +1405,12 @@
     ],
     "checkpoints": [],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {
@@ -1490,10 +1532,17 @@
       "gen": "g0",
       "basis": [
        "d1"
-      ]
+      ],
+      "authority": "root:inc-c"
      },
      "payload": {
       "reason": "explicit",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      },
       "scope": [
        "W-B"
       ]
@@ -1569,8 +1618,12 @@
     ],
     "checkpoints": [],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {
@@ -1674,23 +1727,22 @@
      "kind": "work.delete",
      "target": "W-A",
      "observed": {
-      "gen": "g0",
-      "creates": [
-       "a1",
-       "b1"
-      ]
+      "gen": "g0"
      },
      "payload": {
       "deletedAt": "2026-10-02T09:00:00Z",
       "scope": [
        "W-A",
        "W-B"
-      ]
-     },
-     "requires": [
-      "a1",
-      "b1"
-     ]
+      ],
+      "capture": {
+       "observedLineages": [
+        "W-A",
+        "W-B"
+       ],
+       "note": "capture-only metadata; not a prerequisite (delete is fact-first)"
+      }
+     }
     },
     {
      "id": "p2",
@@ -1707,10 +1759,17 @@
       "gen": "g0",
       "basis": [
        "del"
-      ]
+      ],
+      "authority": "root:inc-c"
      },
      "payload": {
       "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      },
       "scope": [
        "W-A",
        "W-B"
@@ -1796,48 +1855,6 @@
     ],
     "missingPrerequisite": [
      {
-      "name": "withhold a1",
-      "withheld": [
-       "a1"
-      ],
-      "order": [
-       "b1",
-       "del",
-       "p2",
-       "r1"
-      ],
-      "expectedPendingAtEnd": [
-       "del",
-       "p2",
-       "r1"
-      ],
-      "thenDeliver": [
-       "a1"
-      ],
-      "finalPending": []
-     },
-     {
-      "name": "withhold b1",
-      "withheld": [
-       "b1"
-      ],
-      "order": [
-       "a1",
-       "del",
-       "p2",
-       "r1"
-      ],
-      "expectedPendingAtEnd": [
-       "del",
-       "p2",
-       "r1"
-      ],
-      "thenDeliver": [
-       "b1"
-      ],
-      "finalPending": []
-     },
-     {
       "name": "withhold del",
       "withheld": [
        "del"
@@ -1875,12 +1892,26 @@
        "b1",
        "del",
        "p2"
-      ]
+      ],
+      "expectedAtCut": {
+       "works": {
+        "W-A": {
+         "lifecycle": "purged",
+         "reason": "expired",
+         "witness": "p2"
+        }
+       },
+       "diagnostics": []
+      }
      }
     ],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 120,
+     "cutsChecked": 720,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {
@@ -1910,10 +1941,30 @@
     },
     "pending": [],
     "diagnostics": [
-     "expiryInvalidated(W-A,p2,restored)",
-     "expiryInvalidated(W-B,p2,restored)",
-     "offlineRestoreDefeatedExpiry(W-A,r1)",
-     "offlineRestoreDefeatedExpiry(W-B,r1)"
+     {
+      "kind": "expiryInvalidated",
+      "key": "W-A",
+      "witness": "p2",
+      "detail": "restored"
+     },
+     {
+      "kind": "expiryInvalidated",
+      "key": "W-B",
+      "witness": "p2",
+      "detail": "restored"
+     },
+     {
+      "kind": "offlineRestoreDefeatedExpiry",
+      "key": "W-A",
+      "witness": "r1",
+      "detail": "p2"
+     },
+     {
+      "kind": "offlineRestoreDefeatedExpiry",
+      "key": "W-B",
+      "witness": "r1",
+      "detail": "p2"
+     }
     ]
    }
   },
@@ -2036,8 +2087,12 @@
     "missingPrerequisite": [],
     "checkpoints": [],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 6,
+     "cutsChecked": 24,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {
@@ -2083,8 +2138,15 @@
     },
     "pending": [],
     "diagnostics": [
-     "identity.ambiguousUrl(W-B)",
-     "identity.urlMismatch(W-A+W-C)"
+     {
+      "kind": "identity.ambiguousUrl",
+      "key": "W-B",
+      "detail": "W-A+W-C"
+     },
+     {
+      "kind": "identity.urlMismatch",
+      "key": "W-A+W-C"
+     }
     ]
    }
   },
@@ -2180,8 +2242,12 @@
     "missingPrerequisite": [],
     "checkpoints": [],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 2,
+     "cutsChecked": 6,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     }
    },
    "expected": {

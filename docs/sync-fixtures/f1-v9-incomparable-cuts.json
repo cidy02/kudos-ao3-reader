@@ -224,12 +224,54 @@
     ],
     "checkpoints": [],
     "retentionEquivalence": {
-     "checked": "every cut of 40 orders",
-     "rule": "project(retain(prefix)+suffix) == project(all)"
+     "mode": "exhaustive",
+     "orders": 120,
+     "cutsChecked": 720,
+     "seed": null,
+     "compared": "normalized projection and diagnostics",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
     },
     "incomparableCuts": [
      {
-      "name": "local {inc-a:2,inc-b:1} vs checkpoint {inc-a:1,inc-b:3}",
+      "name": "u1 is an intent, not yet reserved",
+      "localCut": {
+       "inc-a": 2,
+       "inc-b": 1
+      },
+      "localApplied": [
+       "a2",
+       "b1"
+      ],
+      "localIntent": [
+       {
+        "id": "u1",
+        "kind": "work.edit",
+        "groups": [
+         "progress"
+        ],
+        "state": "unreserved"
+       }
+      ],
+      "localUnpublished": [],
+      "incomingCheckpointCut": {
+       "inc-a": 1,
+       "inc-b": 3
+      },
+      "procedure": [
+       "install the checkpoint",
+       "replay local-applied ops it does not cover (a2)",
+       "re-evaluate the unreserved intent against the merged state",
+       "reserve u1 with a stamp above everything applied (counter 5)",
+       "publish a2 and u1"
+      ],
+      "finalCut": {
+       "inc-a": 2,
+       "inc-b": 3,
+       "inc-l": 1
+      }
+     },
+     {
+      "name": "u1 already reserved: replays byte for byte",
       "localCut": {
        "inc-a": 2,
        "inc-b": 1
@@ -247,14 +289,13 @@
       },
       "procedure": [
        "install the checkpoint",
-       "replay local-applied ops it does not cover (a2)",
-       "re-evaluate local intent against the merged state",
-       "reserve u1 with a stamp above everything applied (5)",
-       "publish a2 and u1"
+       "replay a2",
+       "keep the reserved bytes of u1 unchanged (id, stamp, payload)",
+       "publish a2 and u1 with the same bytes"
       ],
       "finalCut": {
        "inc-a": 2,
-       "inc-b": 4,
+       "inc-b": 3,
        "inc-l": 1
       }
      }
