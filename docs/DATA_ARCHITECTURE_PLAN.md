@@ -1,4 +1,4 @@
-# Data storage and sync architecture — plan v3.1
+# Data storage and sync architecture — plan v3.2
 
 Owner, 2026-11-22: "build the most architecturally sound data storage and sync possible … design incremental sync … implement
 it, all of it" — not to store all of AO3, but so no part of storage, sync or backup has a ceiling a real reader can hit.
@@ -113,18 +113,18 @@ adapter. G-journal tests clock skew in both directions and requires identical re
 seq range, logical-stamp range, dependency summary), records, trailer checksum. A segment without a valid trailer, a seq gap, or a missing
 dependency is **pending**, never skipped.
 
-**Assets.** Immutable blobs stored **by digest** (`blobs/<sha256>`); the logical asset reference ((owner generation, asset kind) → digest) is a
+**Assets.** Immutable blobs stored **by digest** (`blobs/<sha256>`); the logical asset reference ((owner lineage, asset kind) → digest; generation is provenance only) is a
 versioned field in the operation matrix. Metadata may commit with pending asset references. Only D5-defined atomic groups wait for
 required bytes. Verify size and digest and complete recoverable local installation before marking an asset available. Durable staging covers file install + database commit, including a cancellation reported after
 commit. **Blob reclaim is disabled** until reachability is provable from retained checkpoints, segments and supported restore points.
 
-D4 specifies asset references by owner generation and asset kind, including EPUBs, originals and their sidecars, and fonts.
-Ordinary download eviction is device-local. A shared reference removal is an explicit operation subject to generation rules.
+D4 specifies asset references by owner lineage and asset kind, including EPUBs, originals and their sidecars, and fonts.
+Ordinary download eviction is device-local. A shared reference removal is an explicit operation subject to the lifecycle rules of `docs/SYNC_OPERATION_MATRIX.md`.
 Metadata may commit with an explicit pending asset reference. Mark bytes available only after verification and recoverable local
 installation. D5 defines the atomic groups that must wait for bytes and records metadata apply separately from asset materialization.
 
 **Checkpoints.** Immutable, hash-addressed v9 checkpoints built from a consistent store view, containing a **per-writer sequence
-vector** (the exact cut), merge metadata (field stamps, generations, aliases, retained deletions and witnesses), membership and
+vector** (the exact cut), merge metadata (field stamps, lineages and provenance generations, identity evidence, retained deletions, restores and witnesses — per the per-key retention rule in `docs/SYNC_OPERATION_MATRIX.md` § 2.1, so a checkpoint carries semantic evidence, not only coverage), membership and
 deletion state, and the asset closure. Readers choose among checkpoints by cut; incomparable cuts are resolved by the rule in the
 spec. Checkpoints are for bootstrap and catch-up first.
 
@@ -145,13 +145,14 @@ bootstrap; compare normalized logical state, merge metadata, applied cuts and pe
 - **Field groups and policies** per entity: LWW by logical stamp, fill-only, monotonic (`hasGivenKudos`), positive counters, atomic value
   groups (reading progress; deletion state + deadline; voice id + name; hue + exact colour), absent vs `null` vs reset; settings and
   pronunciation maps with entry-level presence and reset operations, explicit vs inferred stamps, malformed values, unknown passthrough.
-- **Lifecycle generations**: a delete targets an entity generation and wins over ordinary concurrent edits to it; an explicit restore
-  references the deletion and starts a new generation; concurrent delete/restore, permanent purge and deliberate re-acquisition
+- **Lifecycle (retained facts, projected)**: a delete targets the lineages of the component the user saw (a fixed scope) and holds
+  over ordinary concurrent edits, which are kept; an explicit restore references the deletions it observed; the lineage is the merge
+  target and generation is provenance only; concurrent delete/restore, permanent purge and deliberate re-acquisition
   outcomes; signed witnesses (signature scope, trusted-signer enrolment, unknown witnesses, restore authority) preserved through
   checkpoints; the 90-day Recently Deleted deadline and the device-local 60-day held-copy policy; memberships stay attached during
   soft deletion; session history independent; immediate-delete types; Replace-only omission rules.
-- **Identity**: AO3 ID → canonical URL → UUID matching and ambiguity rules preserved; deterministic survivor selection; durable
-  aliases; re-keying of memberships, annotations, sessions, favorites, settings references and assets with stamp merge.
+- **Identity**: AO3 ID → canonical URL → UUID matching and ambiguity rules preserved; survivor = lowest canonical UUID within an AO3-id-first component
+  (URL-only evidence attaches only to a single id group); identity as a deterministic projection over write-once evidence; re-keying of memberships, annotations, sessions, favorites, settings references and assets with stamp merge.
 - **Memberships and order**: keyed by canonical endpoints; presence separate from rank, section and notes; concurrent remove/re-add
   and move/move outcomes; deterministic rank ties; rebalance vs pending move; special queue identities; smart (derived) memberships
   never synced.
@@ -239,3 +240,6 @@ cutover to a distinct sync root with a bootstrap descriptor (3); SwiftData comma
 verifiable publication independent of rename, asset kinds, pending asset references (5); restore-point activation and pool ownership
 (6); bounded discovery, coalescing before IDs, D7 limits and archive-route measurement (7); finite permutation scope (8); D4 row
 contract and D1 coordination.
+
+v3.1 → v3.2: wording aligned with D4 round 3 (`docs/SYNC_OPERATION_MATRIX.md` § 8): lineage as merge target, restores reference observed
+deletions, component-scoped deletes, per-key checkpoint retention, AO3-id-first component survivor.
