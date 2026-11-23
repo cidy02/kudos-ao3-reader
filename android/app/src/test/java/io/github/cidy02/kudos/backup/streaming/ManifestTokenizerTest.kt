@@ -108,6 +108,8 @@ class ManifestTokenizerTest {
         invalid("{\"a\":" + "[".repeat(100_000)) // unterminated deep value
         invalid("{\"a\":" + "[".repeat(600) + "]".repeat(599) + "}")  // one close short
         invalid("{\"a\":" + "[".repeat(600) + "}".repeat(600) + "}") // mismatched brackets
+        invalid("{\"a\":" + "[".repeat(600) + "]".repeat(87) + "}" + "]".repeat(512) + "}") // a mismatch inside the skipped part
+        invalid("{\"a\":" + "[".repeat(520) + "]".repeat(7) + "}" + "]".repeat(512) + "}")
         invalid("{\"a\":" + "{\"k\":".repeat(600) + "1" + "}".repeat(600) + ",}x")
         try { parse("$deep}"); fail("accepted") } catch (e: ManifestStageException.ResourceExhausted) { /* a complete deep file is resource, not syntax */ }
         val t = Trace()
