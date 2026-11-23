@@ -281,98 +281,134 @@ Smart (derived) memberships are never ops (`INVARIANTS` Queues); the adapter ski
 
 ## 4. Legacy route table and adapters
 
-A **legacy adapter** reads a v8 manifest (and its assets) through today's rule set and produces v9 operations. Routes: **Merge** (file import, add-only), **Reconcile** (folder sync-down, conflict-version folds, the pre-2026 package fold; default mode), **Replace** (file import, snapshot), **v8 folder import** (the seed of the v9 library and the explicit reviewed import of post-handoff v8 edits, plan § C Namespace and cutover). Both platforms expose the same three modes (`KB:3086`, `BM`-side `KudosBackup.kt:59-75`); folder sync-down is Reconcile on both (`FS:371`, `SR:784`).
+A **legacy adapter** turns a v8 manifest (and its assets) into v9 operations. It runs in three separate steps so that "what today's app would do" is never confused with "what v9 additionally changes":
 
-### 4.1 Adapter contract
+1. **Accept via the named shipped route.** Run the route exactly as the shipped build on the importing device does (iOS `KudosBackupService.restore`, Android `BackupMergeService.merge`), including its date, fill, dedupe, tombstone and membership behaviour. The only injection is the clock value the shipped code already takes (`now`) and the trust set; the adapter records both. Result = the **accepted result** (post-merge normalized state).
+2. **Apply explicitly approved migration changes.** A fixed list of named changes `MC-n` (§4.3), each independently approved by the owner or engineering default; a change not approved is not applied. Default list = empty, so step 2 is the identity.
+3. **Translate to defined v9 ops** (§4.4): ordinary operation kinds of §3, diffed against the **accepted baseline cut**, in a defined order, with reserved ids and bytes. Never per-field history reconstructed from a record's `lastModifiedAt`.
 
-1. **Run record** (durable, one per adapter run): `{route, platform rule set, sourceManifestDigest, opClock, status ∈ planned|accepted|published}`. `opClock` is fixed at creation (DEC-17). Retry after interruption reuses the record and the same accepted result; it never re-runs the rules against a moved local state.
-2. **Accepted result** = the post-merge normalized state the v8 rules would produce, computed by the rules of §4.2 against the local v9 state at run start, with `opClock` substituted for every wall read. It is stored with the run record before any op is minted (so retries mint the same ops).
-3. **Translation** (never fabricated history): for each entity and each value group where accepted ≠ local, emit one op `*.legacyAdopt` carrying the group's accepted value, `origin = {route, sourceManifestDigest}` and, as payload only, the normalized legacy record date. Its stamp is an ordinary new stamp minted by the importing writer after the adapter commits; per-field stamps are **not** reconstructed from the record's `lastModifiedAt`. Groups where accepted = local emit nothing (a stale archive overrides nothing).
-4. **Lifecycle:** accepted deletion state → `softDelete` with `deletedAt` from the archive record (payload), never a schedule copied from the file; accepted restore (Merge undo of Replace parking, retraction) → `restore` referencing the deletion op if known, else a `restore` against the adapter-created deletion. Accepted tombstone adoption → `purge` only for a permanent-reason tombstone from a trusted signer whose lineage the local state holds; every adopted tombstone also stores its witness.
-5. **Replace omissions** become explicit ops (§4.4); **absent is not empty**: a key the archive does not carry yields no op for that collection on either platform's v9 adapter, closing X-5.
-6. **Seed run** (v8 → v9 library creation) is the same adapter with local state empty: creates, group values, aliases (by tiers), tombstone witnesses, opaque unknown keys preserved verbatim (Android overlay rule becomes universal).
+Routes: **Merge** (file import, add-only), **Reconcile** (folder sync-down, conflict-version folds, the pre-2026 package fold; default mode), **Replace** (file import, snapshot), **v8 folder import** (seed of the v9 library, and the explicit reviewed import of post-handoff v8 edits; plan § C Namespace and cutover). Both platforms expose the same three modes (`KB:3086`, `KudosBackup.kt:59-75`); sync-down is Reconcile on both (`FS:371`, `SR:784`).
 
-### 4.2 Tie and normalization rules per route (what the adapter must reproduce)
+### 4.1 Shipped rules per route (what step 1 reproduces)
 
-| Rule | iOS (cite) | Android (cite) | Adapter rule |
+| Rule | iOS (cite) | Android (cite) |
+|---|---|---|
+| Record wins | `incoming >= local` (`PS:668-672`); ties go to incoming | `!incoming.isBefore(local)` (`BMS:2538-2542`) |
+| Missing record clock | `lastModifiedAt ?? dateAdded` (`KB:6196`) | blank → `dateAdded`; a future date → null, which loses (`BMS:2375-2385`) |
+| Future date | clamp to `now+24h` at decode (`KB:554-577`) | validator rejects (`BV:181-201`), merge parse drops (`BMS:2348-2367`) |
+| New record | adopts archive values and clock (`KB:3555-3560`, `6425-6431`) | same (`BMS:206-210`) |
+| Text, counters | fill-only on blank/≤0 (`KB:6417-6426`) | whole-copy take for a subset (X-2) |
+| Monotonic | `hasGivenKudos`, `ao3Unavailable`, `workTagsFetched`, preservation never demoted (`KB:6248`, `6340`, `6350`) | all but `workTagsFetched` on an archive win |
+| Tombstone adopt | trusted verified signer; `lastModifiedAt = min(createdAt, exportedAt)`; newest per record wins, tie → permanent (`KB:3365-3437`, `PS:430`) | trusted verified; held row replaced only for same identity and strictly later; suppression index keeps first on a tie (`BMS:83-127`, `2755`) |
+| Newer-snapshot escape hatch | `tombstoneResolution`: incoming `>` tombstone revives; `==`/older suppresses; no incoming clock = ambiguous, keep (`PS:697-704`); works `suppressesResurrection` `>=` (`KB:5861-5890`) | same shape (`BMS:2553-2565`, `2644-2662`) |
+| Recently Deleted copy | restored pending while window open, tombstone ≤ `max(modified, deletedAt)+120 s`, not permanent (`KB:5861-5890`; collections/queues `5928-5937`) | suppressed when tombstone ≥ record (X-6) |
+| Retraction on restore | `retractTombstone` deletes the row (`PWS:216-241`); File Merge only for a live archive copy (`KB:3470-3490`) | `retractWorkTombstone` in the Merge path (`BMS:213-229`) |
+| Deletion schedule | never from the archive (`KB:6147-6164`) | `keptDeletionSchedule` (`BMap:115`) |
+| Progress | `applyProgress` (`PS:716-760`); Replace forces (`KB:6375-6385`) | `applyProgressLww` (`BMS:938`) |
+| Membership match / winner | `(queue, work)`; Replace always, Reconcile by clock, Merge never (`KB:4182-4222`) | by id (X-4); same winner rule (`BMS:1815-1875`) |
+| Annotations | Merge add-only; Reconcile/Replace LWW; displaced note parked (`KB:5470-5520`) | same (`BMS:2230-2250`) |
+| Settings | per-key stamps, inferred stamps never beat real (`SSC:139`); Replace leaves settings (`KB:4724-4737`) | wholesale typed + raw stamp fold (X-9); Replace leaves settings (`BMS:449`) |
+
+### 4.2 Route summary
+
+| Route | iOS | Android |
+|---|---|---|
+| Merge | existing overlap untouched except revive of Replace-parked live copy and missing EPUB bytes (`KB:3470-3527`); new records adopt; collections/queues/annotations add-only | same plus `downloadedAt` fill (X-3) (`BMS:231-232`) |
+| Reconcile | LWW per group; unions for tags and memberships | same with X-2/X-4 differences |
+| Replace | snapshot: forces progress and cover pin; omission §4.5; settings untouched; pronunciations, recovery docs and documents still applied (`KB:4737-4751`) | snapshot; settings untouched (`BMS:449`) |
+| v8 folder import | = Reconcile per manifest version including folded conflicts and the pre-2026 package (`FS:519-615`, `SR:340-400`); assets read when size or digest differ (`FS:837-854`, `SR:867`) | same |
+
+### 4.3 Migration changes (step 2), all proposed and **off by default**
+
+| ID | Change | Resolves | Needs |
 |---|---|---|---|
-| Record wins | `incoming >= local` (`PS:668-672`): ties go to incoming | `!incoming.isBefore(local)` (`BMS:2538-2542`) same | `>=` as both; missing incoming clock = lose |
-| Missing record clock | `lastModifiedAt ?? dateAdded` (`KB:6196`) | `lastModifiedAt` blank → `dateAdded`; present-but-future → null (loses) (`BMS:2375-2385`) | fall back to `dateAdded`; future date clamps (DEC-17), never null |
-| Future date | clamp to `now+24h` (`KB:554-577`) | reject > now+24h; cap at `exportedAt` (`BV:181-201`) | `min(d, min(exportedAt, opClock+24h))` (X-1) |
-| New record | adopts archive values and clock (`KB:3555-3560`, `6425-6431`) | same (`BMS:206-210`) | same |
-| Fill-only | text/counters: blank/≤0 incoming never overwrites (`KB:6417-6426`); `ao3WorkID`, `authorIdentitiesJSON`, colour hue (never clears), `smartRulesJSON`, `downloadedAt` | `?:`/`ifBlank` guards on a subset; `kudos`, `wordCount`, `title`, etc. take blanks (X-2) | iOS rule everywhere (X-2 resolved toward iOS: never replace known data with empty) |
-| Positive counters | `mergedPositive` (`KB:6423`) | partial | iOS rule |
-| Monotonic | `hasGivenKudos`, `ao3Unavailable`, `workTagsFetched`, preservation never demoted (`KB:6248`, `6340`, `6350`) | all but `workTagsFetched` on archive-wins | monotonic for all four |
-| Tombstone adopt | trusted signer, verified; `lastModifiedAt = min(createdAt, exportedAt)`; newest per record wins, tie → permanent (`KB:3380-3436`, `PS:430`) | trusted + verified; held row replaced only by same identity strictly later; tie keeps first (`BMS:83-127`, `2755`) | iOS rule (newest wins; tie → permanent) |
-| Newer-snapshot escape hatch | `tombstoneResolution`: incoming `>` tombstone revives; `==`/older suppresses; no incoming clock = ambiguous, keep (`PS:697-704`); works `suppressesResurrection` uses `>=` suppress (`KB:5861-5890`) | same shape (`BMS:2553-2565`, `2644-2662`) | same; revive = `acquire` op carrying the archive record |
-| Recently Deleted copy | restored pending while window open and tombstone ≤ deletion+120 s and not permanent (`KB:5876-5889`, collections/queues `5928-5937`) | suppressed (X-6) | iOS rule |
-| Retraction on restore | `retractTombstone` deletes the row (`PWS:216-241`); File Merge only for a live archive copy (`KB:3470-3490`) | `retractWorkTombstone` in Merge path (`BMS:213-229`) | `restore` op referencing the deletion; no tombstone deletion in v9 |
-| Deletion schedule | never from the archive (`KB:6147-6164`) | `keptDeletionSchedule` (`BMap:115`) | derived from `deletedAt` payload (DEC-5) |
-| Progress | `applyProgress` (`PS:716-760`); Replace forces (`KB:6375-6385`) | `applyProgressLww` (`BMS:938`) | iOS rule |
-| Membership match | `(queue, work)` (`KB:4182`) | by id (X-4) | `(queue, work)` |
-| Membership winner | Replace always, Reconcile by clock, Merge never (`KB:4194-4212`) | Replace/clock; Merge never (`BMS:1860-1875`) | same |
-| Annotations | Merge add-only; Reconcile/Replace LWW; displaced note parked (`KB:5470-5520`) | same (`BMS:2230-2250`) | same, with deterministic sibling id (DEC-11) |
-| Settings | per-key stamps, `fromSync` inferred (`SSC:139`) | wholesale typed + raw stamp fold (X-9) | adapter reads the sender's real stamps; absent-without-stamp = unchanged; inferred stamp never beats a real stamp; explicit restore (Merge/Replace file) takes file values but Replace never touches settings (`KB:4724-4737`, `BMS:449`) |
-| Dedupe now | wall `Date()` | `now` param | `opClock` |
+| MC-1 | Date normalization `min(d, min(exportedAt, opClock+24h))`, never reject | X-1, X-21 | owner (Android whole-import rejection becomes a clamp, Q-5) |
+| MC-2 | Never replace known text/counters with blank/zero | X-2 | owner (Android manual import acceptance, Q-6) |
+| MC-3 | Match memberships by `(queue, work)` | X-4 | engineering |
+| MC-4 | Record omitted keys before defaulting; omitted ⇒ no delete (T-563) | X-5 | owner for a shipped Android Replace change (Q-7); required for the v9 adapter |
+| MC-5 | Import an archive's Recently Deleted copy per the iOS rule | X-6 | engineering |
+| MC-6 | Tombstone tie: newest, permanent wins | X-7 | engineering |
+| MC-7 | Mint a native purge from *verified permanent* legacy evidence when the adopter is authorized (DEC-10) | N-1 | owner (Q-8 wording) |
+| MC-8 | Blank/whitespace anchors never dedupe | X-10 | engineering |
+| MC-9 | Never rename on collision | X-12 | engineering |
+| MC-10 | Compare originals by bytes on publish | X-16 | engineering |
 
-### 4.3 Route summary
+### 4.4 Translation (step 3)
 
-| Route | iOS | Android | Adapter output |
+Inputs: accepted result (after step 2) and the local v9 projection at the **accepted baseline cut**. Output ordered list of ops; for each entity (sorted by canonical key) and each group (fixed order of §3.1b, then memberships, annotations, sessions/favorites/watermarks, settings, assets) emit an op only where accepted ≠ baseline. Replace is "forced" in acceptance, so differences are more frequent, but equal values emit nothing.
+
+| Accepted transition | Op |
+|---|---|
+| new entity | W1 create (+ evidence); archive record dates are payload only |
+| group value differs | W7 edit of that group, or the kind's own op (P1, F1, L1…); no per-field history |
+| live → deleted | W2 delete with `deletedAt` from the archive record |
+| deleted → live (newer snapshot, Merge undo of parking) | W3 restore naming **every uncleared deletion fact in the baseline**; a deletion that is not a fact cannot exist in a v9 library (the seed run created deletion facts from the archive's own `isDeleted`/`deletedAt`), so no deletion evidence is ever fabricated |
+| revival of an entity projected `purged(expired)` | W3 restore |
+| revival of an entity projected `purged(explicit)` | W5 acquire (new entity, `supersedes`) |
+| verified permanent legacy tombstone, adopter authorized, MC-7 on | W4 purge(explicit) citing the legacy evidence digest; otherwise the evidence is stored and nothing else happens (v8 behaviour, N-1) |
+| membership present/ranked/removed | M1 add, M2 move, M1r remove naming baseline epochs |
+| annotation new/changed/hidden | A1, A2 (source-addressed), A3 naming the observed source group; the accepted same-passage dedupe is **not** translated (projection) |
+| EPUB bytes installed (digest differs) | W8 with `observedBase` = current winner version; bytes staged to the blob pool |
+| original + sidecar installed | O1 bundle |
+| Replace omission | explicit delete ops per §4.5 only for keys the archive carries |
+
+### 4.5 Durability, ordering, local edits
+
+A **run record** is stored durably before anything is published: route, shipped build id, trust set, `opClock`, `sourceManifestDigest`, **baseline cut** (applied cut + checkpoint id), `acceptedResultDigest`, approved MC ids, the **ordered translation list** and, per op, the **reserved op id `(writer, seq)` with its content hash**, plus **asset inputs** `{workKey, digest, size, stagedBlobPath}`. Publishing retries the same bytes (plan § C Operations). A crash after acceptance resumes from the record and never re-runs step 1 against moved local state.
+
+**Stamps are assigned at reservation** (counter above everything applied and everything already reserved). A **local edit that commits after reservation** therefore carries a greater stamp and wins every LWW/epoch register against the migration op; a **local edit that committed between acceptance and reservation** is detected at reservation by comparing each `(entity, group)` register with the baseline cut: if local facts exist beyond the baseline, that group's translation is dropped and recorded `localEditWins`; a local delete in that window stays uncleared because W3 names only deletions known at the baseline cut. The seed run is the same pipeline with an empty baseline. Unknown manifest keys are preserved verbatim as opaque facts (Android overlay rule becomes universal).
+
+### 4.6 Replace-only omission rules
+
+| Collection | iOS today | Android today | Translated op (with MC-4) |
 |---|---|---|---|
-| Merge | existing overlap untouched (revive-only for Replace-parked live copies; fill missing EPUB bytes) (`KB:3470-3527`); new records adopt; collections/queues add-only; annotations add-only; sessions/favorites/watermarks by id add-only | same, plus `downloadedAt` fill (X-3) (`BMS:231-232`) | creates, fills, memberships only; never an overwrite op |
-| Reconcile | LWW per group with all rules of 4.2; unions for tags/memberships | same (with X-2/X-4 differences) | `legacyAdopt` ops per changed group; tombstone witnesses stored |
-| Replace | snapshot: forces progress, cover, ties; omission rules 4.4; settings untouched; pronunciations/recovery/documents still applied (`KB:4737-4751`) | snapshot; settings untouched (`BMS:449`) | explicit deletes per 4.4; `legacyAdopt` for every group (forced) |
-| v8 folder import | = Reconcile for each manifest version incl. folded conflicts and the pre-2026 package (`FS:519-615`, `SR:340-400`); assets read when size or digest differ (`FS:837-854`, `SR:867`) | same | seed (§4.1.6) or reviewed import; asset refs recorded by digest, bytes copied to blobs |
-
-### 4.4 Replace-only omission rules
-
-| Collection | iOS today | Android today | v9 adapter (both platforms) |
-|---|---|---|---|
-| works | soft-delete (Recently Deleted), no tombstone (`KB:4664-4669`) | same (`BMS:258-275`) | `softDelete` op with `reason=replaceOmitted`, deadline from `opClock` |
-| collections, queues (not Saved for Later) | soft-delete unless key omitted (`KB:4681-4695`) | hard remove (X-5) | `softDelete` only when key present |
-| annotations | hidden (`isPendingDeletion`), no tombstone, key omitted → skipped (`KB:4707-4715`, `5542-5553`) | hard remove (X-5) | `annotation.delete` (lifecycle) only when key present |
-| saved searches, bookmarks | tombstone + hard delete when present (`KB:4358-4366`, `4417-4426`) | tombstone + remove, even when key absent | delete ops only when key present |
-| sessions, favorites, watermarks, followed tags, tag aliases | tombstone + delete only if key non-nil (T-563) (`KB:4856-4864`, `5063`, `5150`, `5236`, `5395`) | tombstone for first three even when absent (X-5); other two opaque | delete ops only when key present, even `[]` replaces |
-| memberships | not swept (`KB:4140`; Replace takes archive order/note for matched ones) | Replace removes non-incoming memberships except system queue (`BMS:1840-1865`) | membership remove ops only for memberships of queues the archive lists with key present |
-| tags | union, queue tags exact (`KB:3882-3905`) | work tags exact (`BMS:271-282`) | per-tag detach ops only under Replace with key present |
+| works | soft-delete, no tombstone (`KB:4664-4669`) | same (`BMS:258-275`) | W2 delete (`reason=replaceOmitted`) |
+| collections, queues (not Saved for Later) | soft-delete unless key omitted (`KB:4681-4695`) | hard remove, key absent or not (X-5) | W2 delete, only when the key is present |
+| annotations | hidden (`isPendingDeletion`), no tombstone; key omitted → skipped (`KB:4707-4715`, `5542-5553`) | hard remove | A3 delete naming local sources, key present only |
+| saved searches, bookmarks | tombstone + hard delete when present (`KB:4358-4366`, `4417-4426`) | tombstone + remove even when absent | L1a/L1b delete, key present only |
+| sessions, favorites, watermarks, followed tags, tag aliases | tombstone + delete only if key non-nil (T-563) (`KB:4873-4884`, `5063`, `5150`, `5236`, `5395`) | tombstone for first three even when absent; last two opaque | S2/F1/F2/L1c/L1d delete, key present only, `[]` replaces |
+| memberships | not swept (`KB:4140`) | removes non-incoming except system queue (`BMS:1840-1865`) | M1r only for queues the archive lists with the key present |
+| tags | union; queue tags exact (`KB:3882-3905`) | work tags exact (`BMS:258-268`) | T1 detach under Replace with key present |
 | settings | untouched | untouched | none |
-
-Android needs `omittedKeys` (record which top-level keys were missing before defaulting) to meet T-563. The D4 adapter assumes that is added in A-569; the matrix does not depend on Android's legacy behaviour.
 
 ## 5. Fixtures
 
-Files under `docs/sync-fixtures/` are JSON. Two kinds, deliberately separate (plan D4):
+### 5.1 Contract
 
-- `kind: "v8-compat"`: `route`, `opClock`, `local`, `incoming` (a minimal normalized manifest fragment), `expected.ios`, `expected.android`, `agree` (bool), `disagreement` (X-n) and `v9Outcome`. Expected values were derived by reading the cited paths, **not by running them**; each must be re-verified against the real code by a test in D5/A-569 before the fixture is frozen.
-- `kind: "v9-concurrency"`: `entities` (initial normalized state), `ops` (id, writer, stamp, kind, target, payload, prerequisites), `events` (e.g. `blobVisible`), `orders` (`"allInterleavings"` over per-writer prefix order, or an explicit list), `duplicates` (re-deliver every op once), `expected` (normalized logical state, alias table, pending set, applied cut). Every order and every duplicate pattern must give identical `expected`.
+All fixtures are JSON with `"schema": "kudos.sync-fixture/2"`, validated by `docs/sync-fixtures/_schema.json`. Two kinds, deliberately separate:
 
-| File | Slice | Kind |
-|---|---|---|
-| `a1-v8-softdelete-propagation.json` | a | v8-compat |
-| `a2-v8-recently-deleted-copy-new-device.json` | a | v8-compat (disagree X-6) |
-| `a3-v8-permanent-delete-holder.json` | a | v8-compat (N-1) |
-| `a4-v9-delete-restore-purge.json` | a | v9 |
-| `a5-v9-reacquire-after-purge.json` | a | v9 |
-| `b1-v8-duplicate-identity.json` | b | v8-compat (disagree X-4, X-10) |
-| `b2-v9-duplicate-identity-annotations-queue.json` | b | v9 (required cross-device test) |
-| `c1-v8-asset-replace-vs-delete.json` | c | v8-compat (N-5) |
-| `c2-v9-asset-replace-vs-delete.json` | c | v9 |
-| `c3-v9-pending-asset-reference.json` | c | v9 |
-| `d1-v9-membership-remove-readd-move.json` | ext. | v9 |
-| `d2-v9-setting-entry-reset.json` | ext. | v9 |
-| `e1-v8-replace-omission-absent-key.json` | ext. | v8-compat (disagree X-5) |
+- **`v8-compat`** (today's results, verified by reading code). Fields: `route`, `harness` (`opClock`, `trust` signer list, `signatureValid`, `preserved` per work, asset bytes by digest), `ids` (symbolic name → fixed UUID), `local` and `incoming` as **manifest-fragment specs** (`_v8-builder.json`: records name only what they vary; required v8 fields get deterministic defaults), `expected.ios` / `expected.android` (normalized post-merge state), `agree`, `disagreement`, `v9Outcome`. Both platform results are stated for every case, including where they agree. They are not yet executed; D5/A-569 must run each against the real route with the clock substituted inside Android's mapper (`BMap:98-117`) and iOS' `archivedDeletionState` before the fixture is frozen.
+- **`v9-concurrency`**. Fields: `ids`, `universes[]`. A **universe** is one valid operation set: `initial` (full `createHistory` of ops, or a `checkpoint` with cut and retained facts), `authorization` (enroll facts), `ops[]` with `id`, `writer`, `seq` (contiguous per writer, never reused within a universe), `stamp` (`counter` strictly above the counter of every op it names or follows), `kind`, `target`, `observed` (named gen/deletions/epochs/base/sources), `payload`, `requires` (semantic prerequisites only; same-writer order is implicit and is **not** repeated), `events[]` (blob visibility), `schedules`: `orders` (explicit lists or `"allInterleavings"`, same-writer order fixed), `duplicates` (each op delivered twice, positions given), `restarts` (kill and reload after listed steps), `missingPrerequisite` (withheld ops and the pending set expected at each prefix), `checkpoints` (`cutAfter`, then `thenOrder`), and one `expected` with `state` (normalized projection: `works`, `components` (derived), `memberships`, `annotations`, `assets`, `settings`, `pronunciations`, `witnesses`), `appliedCut`, `pending`, `diagnostics` (derived from final facts, sorted). Every schedule of a universe must produce the same `expected` for its final cut; `missingPrerequisite` schedules assert only the stated intermediate `pending`.
+- **Normalized projections**: identities as survivor keys, lifecycle label, group values, version heads/alternates, epoch-level facts for memberships, no storage ids, no wall clocks, derived ids as symbolic expressions (`uuidv5(ns, sourceId|noteVersionId)`).
 
-## 6. Open questions (for the orchestrator and owner)
+### 5.2 Files
 
-- **Q-1** DEC-2: should an edit concurrent with a delete be retained and returned on restore (chosen) or discarded? Retention is data-preserving; discarding is simpler.
-- **Q-2** DEC-4: an `expired` purge loses to a concurrent restore, so devices must keep journal + blobs for a purged-by-expiry lineage until D8 retention is defined. How long must "restore after expiry elsewhere" stay possible? Interacts with D8's retirement bound (must be ≥ 90 days plus a margin).
-- **Q-3** DEC-8: when tier 1 and tier 2 name different live entities, v8 silently takes tier 1. v9-native emits no alias and a diagnostic. Is a user-visible "possible duplicate" review wanted? The adapter keeps v8 behaviour for parity.
-- **Q-4** DEC-9: survivor = lowest UUID is arbitrary but identical on both platforms. Alternative: earliest create stamp. Does the owner prefer the older record's UUID (it may match an existing `Works/<UUID>.epub` name in the legacy folder)?
-- **Q-5** DEC-17: X-1 resolved by clamping both ways; Android's current rejection (a whole import fails on `InvalidDate`) would change in A-569. Acceptable?
-- **Q-6** X-2: resolving the work-field difference toward iOS (never overwrite known data with empty) changes Android merge results for blank archive fields. Needs Android parity tests before the adapter ships.
-- **Q-7** X-5: Android must track omitted keys (T-563) before its Replace adapter can be trusted; owner decision on whether Android Replace keeps hard-removing collections/queues until then.
-- **Q-8** N-1: v9 makes a permanent purge reach every device. Owner confirmation that an explicit purge on one device deleting the Recently Deleted copy on others (a behaviour change) is intended.
-- **Q-9** DEC-5: deadline uses the *latest* effective deletion's `deletedAt` (more recovery time). Alternative: earliest.
-- **Q-10** Unsigned/untrusted-signer purges: the witness is kept but the purge is not applied (matches v8). Without a trusted signer a v9 library has no purge propagation; where does trusted-signer enrolment live for a v9-only device (`TombstoneTrustStore`, `TS:360-470`; Android `TombstoneTrustStore.kt`)? D5 must decide whether the journal's own authenticated writer identity replaces it.
-- **Q-11** Same-key stamp tie across a restored device: a new incarnation gets a new `writerIncarnation`, so ordering never ties, but "greater incarnation wins at equal counter" is arbitrary; confirm that is acceptable for user-visible rank ties.
-- **Q-12** N-3/DEC-9: re-keying a work's UUID changes `Works/<UUID>.epub` in the legacy folder. v9 assets are by digest, so this only matters for the seed run and for any v8 reader still attached.
+| File | Slice | Kind | Round-2 variants |
+|---|---|---|---|
+| `a1-v8-softdelete-propagation.json` | a | v8 | harness clock substitution stated |
+| `a2-v8-recently-deleted-copy-new-device.json` | a | v8 (X-6) | trust/signature as harness inputs; control with no tombstone |
+| `a3-v8-permanent-delete-holder.json` | a | v8 (N-1) | v9 outcome with named deletion and authorized witness |
+| `a4-v9-lifecycle.json` | a | v9 | edit orders across restore; distinct-subset competing restores; equal-max deletion lists; expiry vs restore; expiry basis extension; checkpoint before restore |
+| `a5-v9-reacquire-after-purge.json` | a | v9 | purge with named deletion, authorized witness, derived diagnostics |
+| `b1-v8-duplicate-identity.json` | b | v8 (X-4) | nonblank locator only |
+| `b1r-v8-duplicate-identity-reverse.json` | b | v8 (N-3) | opposite direction |
+| `b2-v9-duplicate-identity.json` | b | v9 | no alias op; late loser-addressed ops across a checkpoint; annotation salvage orders; purge-after-alias vs before |
+| `b3-v8-annotation-anchors.json` | b | v8 (X-10) | blank, whitespace-only, present-empty; Replace omission |
+| `c1-v8-asset-replace-vs-delete.json` | c | v8 (N-5) | corrected receiver; preserved and ordinary controls |
+| `c2-v9-asset-versions.json` | c | v9 | separate universes for purge and restore; two concurrent replacements; repeated digest with higher stamp; bundle |
+| `c3-v9-pending-asset-reference.json` | c | v9 | bad blob prefix; materialization separate from journal pending |
+| `d1-v9-membership-epochs.json` | ext. | v9 | old-epoch high-stamp move; concurrent initial adds; checkpoint of removed state |
+| `d2-v9-setting-entry-reset.json` | ext. | v9 | final cut and pending asserted |
+| `e1-v8-replace-omission-absent-key.json` | ext. | v8 (X-5) | key physically omitted, and separate `[]` case |
+
+## 6. Open questions
+
+Dispositions follow the Codex review (round 2). **Resolved by engineering decision (no owner input needed):** Q-2 (reclamation stays disabled; offline restores of non-retired devices stay eligible; D8 sets the bound, the earlier "90 days plus margin" claim is withdrawn), Q-4 (lowest canonical UUID, DEC-11), Q-5 (shipped validator behaviour is the v8 baseline; v9 import date handling is MC-1, separate), Q-6 (platform blank/zero acceptance stays in v8 results; MC-2 is the opt-in change), Q-7 (v9 adapter captures omitted keys, MC-4; shipped Android Replace stays in compatibility fixtures), Q-11 (a new incarnation sorts by its own id; arbitrary but identical everywhere, DEC-9 stamps), Q-12 (v9 assets are digest-addressed; legacy file names matter only for the seed run).
+
+**Owner questions**, each with the recommendation:
+
+- **Q-1 (policy)** Should an edit made while a work sits in Recently Deleted come back when it is restored? *Recommend yes (DEC-5): content edits are retained and shown after restore; only an explicit permanent delete discards them.*
+- **Q-3 (UI)** Tier-1 and tier-2 identity disagree (different AO3 ids, same URL): *recommend a diagnostic now, no review UI; the legacy route keeps the shipped tier-1 outcome (DEC-11).* Does the owner want a "possible duplicate" review flow later?
+- **Q-8 (wording)** An explicit Delete Permanently on one device now removes the item from every device's Recently Deleted (v8 never did, N-1). *Recommend adopting it with confirmation copy that names every device ("also on your other devices"), and an undo window equal to none (it is terminal) — owner to approve the wording and whether the 90-day Recently Deleted entry should show "deleted permanently on <device>" instead of vanishing.*
+- **Q-9 (policy)** Recovery deadline: *recommend the latest effective deletion date plus 90 days (DEC-3), so a second device's later delete extends, never shortens, recovery time.* The expiry basis rule (DEC-1.2) is the matching mechanism.
+- **Q-10 (enrollment UX)** How does a v9 device become an authorized writer and how is revocation shown? *Recommend reusing the pairing flow (QR/trust list, `TombstoneTrustStore`, Android `TombstoneTrustStore.kt`): scanning a founder or already-enrolled device's code emits `writer.enroll`; revocation emits `writer.revoke` with the stolen/retired distinction already in the UI. Semantics (shared authorization facts, DEC-9) are engineering; only the pairing wording is owner's.*
