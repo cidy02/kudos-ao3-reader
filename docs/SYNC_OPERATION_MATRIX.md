@@ -389,40 +389,70 @@ The seed run is the same pipeline with an empty baseline. Unknown manifest keys 
 
 ### 5.1 Contract
 
-All fixtures are JSON with `"schema": "kudos.sync-fixture/2"`, validated by `docs/sync-fixtures/_schema.json`. Two kinds, deliberately separate:
+All fixtures are JSON with `"schema": "kudos.sync-fixture/2"`, validated structurally by `docs/sync-fixtures/_schema.json` (draft-07; a fixture missing a required part fails: v8 needs `harness` and cases with `local`, `incoming` and `expected.ios`/`expected.android`; v9 needs universes with full `initial`, `authorization`, `ops`, every schedule family, `expected.state/appliedCut/pending/diagnostics`) and semantically by §5.3. Two kinds:
 
-- **`v8-compat`** (today's results, verified by reading code). Fields: `route`, `harness` (`opClock`, `trust` signer list, `signatureValid`, `preserved` per work, asset bytes by digest), `ids` (symbolic name → fixed UUID), `local` and `incoming` as **manifest-fragment specs** (`_v8-builder.json`: records name only what they vary; required v8 fields get deterministic defaults), `expected.ios` / `expected.android` (normalized post-merge state), `agree`, `disagreement`, `v9Outcome`. Both platform results are stated for every case, including where they agree. They are not yet executed; D5/A-569 must run each against the real route with the clock substituted inside Android's mapper (`BMap:98-117`) and iOS' `archivedDeletionState` before the fixture is frozen.
-- **`v9-concurrency`**. Fields: `ids`, `universes[]`. A **universe** is one valid operation set: `initial` (full `createHistory` of ops, or a `checkpoint` with cut and retained facts), `authorization` (enroll facts), `ops[]` with `id`, `writer`, `seq` (contiguous per writer, never reused within a universe), `stamp` (`counter` strictly above the counter of every op it names or follows), `kind`, `target`, `observed` (named gen/deletions/epochs/base/sources), `payload`, `requires` (semantic prerequisites only; same-writer order is implicit and is **not** repeated), `events[]` (blob visibility), `schedules`: `orders` (explicit lists or `"allInterleavings"`, same-writer order fixed), `duplicates` (each op delivered twice, positions given), `restarts` (kill and reload after listed steps), `missingPrerequisite` (withheld ops and the pending set expected at each prefix), `checkpoints` (`cutAfter`, then `thenOrder`), and one `expected` with `state` (normalized projection: `works`, `components` (derived), `memberships`, `annotations`, `assets`, `settings`, `pronunciations`, `witnesses`), `appliedCut`, `pending`, `diagnostics` (derived from final facts, sorted). Every schedule of a universe must produce the same `expected` for its final cut; `missingPrerequisite` schedules assert only the stated intermediate `pending`.
-- **Normalized projections**: identities as survivor keys, lifecycle label, group values, version heads/alternates, epoch-level facts for memberships, no storage ids, no wall clocks, derived ids as symbolic expressions (`uuidv5(ns, sourceId|noteVersionId)`).
+- **`v8-compat`**: today's results, derived by reading the code, **not executed**. `harness` supplies `opClock`, `trust`, `signatureValid`, `preserved`, `assetBytes` and an executable `clockSubstitution` (iOS `archivedDeletionState(now:)`, `clampedArchiveDate(now:)` and the resurrection test at `KB:5884-5887`; Android `restoredDeletionState` gains a `now` parameter, `BMap:98-107`, and `merge(now:)` is already injectable, `BMS:46`). `local`/`incoming` are manifest fragment specs built by `_v8-builder.json` (record defaults, deterministic ids, signing seeds and tombstone identity, deterministic EPUB bytes, wire-key map such as `locator` → `locatorString`). The string `"<absent>"` or `omitKeys` physically omits a key. Both platforms' results are stated for every case.
+- **`v9-concurrency`**: `universes[]`; a universe is one valid operation set (a fixture never reuses a writer slot for different bytes; alternatives are separate universes).
 
 ### 5.2 Files
 
-| File | Slice | Kind | Round-2 variants |
+| File | Slice | Kind | Round-3 variants |
 |---|---|---|---|
-| `a1-v8-softdelete-propagation.json` | a | v8 | harness clock substitution stated |
-| `a2-v8-recently-deleted-copy-new-device.json` | a | v8 (X-6) | trust/signature as harness inputs; control with no tombstone |
-| `a3-v8-permanent-delete-holder.json` | a | v8 (N-1) | v9 outcome with named deletion and authorized witness |
-| `a4-v9-lifecycle.json` | a | v9 | edit orders across restore; distinct-subset competing restores; equal-max deletion lists; expiry vs restore; expiry basis extension; checkpoint before restore |
-| `a5-v9-reacquire-after-purge.json` | a | v9 | purge with named deletion, authorized witness, derived diagnostics |
-| `b1-v8-duplicate-identity.json` | b | v8 (X-4) | nonblank locator only |
-| `b1r-v8-duplicate-identity-reverse.json` | b | v8 (N-3) | opposite direction |
-| `b2-v9-duplicate-identity.json` | b | v9 | no alias op; late loser-addressed ops across a checkpoint; annotation salvage orders; purge-after-alias vs before |
-| `b3-v8-annotation-anchors.json` | b | v8 (X-10) | blank, whitespace-only, present-empty; Replace omission |
-| `c1-v8-asset-replace-vs-delete.json` | c | v8 (N-5) | corrected receiver; preserved and ordinary controls |
-| `c2-v9-asset-versions.json` | c | v9 | separate universes for purge and restore; two concurrent replacements; repeated digest with higher stamp; bundle |
-| `c3-v9-pending-asset-reference.json` | c | v9 | bad blob prefix; materialization separate from journal pending |
-| `d1-v9-membership-epochs.json` | ext. | v9 | old-epoch high-stamp move; concurrent initial adds; checkpoint of removed state |
-| `d2-v9-setting-entry-reset.json` | ext. | v9 | final cut and pending asserted |
-| `e1-v8-replace-omission-absent-key.json` | ext. | v8 (X-5) | key physically omitted, and separate `[]` case |
+| `a1-v8-softdelete-propagation.json` | a | v8 | executable clock hooks; older-deleted-record control |
+| `a2-v8-recently-deleted-copy-new-device.json` | a | v8 (X-6) | signer seed and tombstone identity in the builder |
+| `a3-v8-permanent-delete-holder.json` | a | v8 (N-1) | v9 outcome = MC-7 legacy-evidence-only purge, no deletion fact |
+| `a4-v9-lifecycle.json` | a | v9 | 19 universes: edits across restore; competing restores; equal-max lists; explicit purge with the greatest edit diagnosed; offline vs after-observing restore; expiry alone/witness/deadline; unseen deletion; reissued expiry; **old-basis reactivation**; scope (unseen duplicate survives, all members, per-member deadline, restore scope, purge scope, lineage-scoped admin purge); late revocation; checkpoints before restores |
+| `a5-v9-reacquire-after-purge.json` | a | v9 | `work.create` with `supersedes`; supersedes against the named (non-winning) purge across a checkpoint; unauthorized purge ⇒ ineligible |
+| `b1-v8-duplicate-identity.json`, `b1r-…-reverse.json` | b | v8 (X-4, N-3) | both directions with rank and provenance |
+| `b2-v9-duplicate-identity.json` | b | v9 | no alias op; late loser edit across a checkpoint; salvage orders; delete scope both ways; lineage-only purge; component expiry/restore across a checkpoint; URL bridge with conflicting ids; URL-only attach |
+| `b3-v8-annotation-anchors.json` | b | v8 (X-10, X-5) | blank, whitespace-only, Replace `[]` and absent |
+| `c1-v8-asset-replace-vs-delete.json` | c | v8 (N-4, N-5) | correct receiver; installed digest vs record digest; preserved control |
+| `c2-v9-asset-versions.json` | c | v9 | replace/delete/restore/purge; branches (assetConflict); same-digest successor; shared remove; write on removed base; foreign-owner base; chapter data per digest; bundle; fonts |
+| `c3-v9-pending-asset-reference.json` | c | v9 | four explicit orders, bad blob, restart/duplicate with the blob |
+| `d1-v9-membership-epochs.json` | ext. | v9 | creates for queue and works; old-epoch high-stamp move; per-epoch maxima; Saved for Later key; endpoint created last |
+| `d2-v9-setting-entry-reset.json` | ext. | v9 | checkpoint after the winning reset; tie-break by incarnation |
+| `e1-v8-replace-omission-absent-key.json` | ext. | v8 (X-5) | sessions linked to works, absent vs `[]` |
+| `f1-v9-incomparable-cuts.json` | ext. | v9 | incomparable cuts with an unpublished local edit |
+| `f2-v9-retention-equivalence.json` | ext. | v9 | one universe per retention rule |
+
+### 5.3 Semantic validation contract (what a harness checks before running)
+
+1. Writer slots: per writer, `seq` is contiguous across `initial` then `ops`, `stamp = [counter, writer, seq]`, counters strictly increase per writer.
+2. Prerequisites: `requires` lists only cross-writer named ops; every named op id in `observed` exists in the universe; the named op's counter is below the naming op's. `observed.gen` is provenance and is never validated.
+3. Schedules: `allInterleavings` keeps same-writer order and is exhaustive; explicit `orders` list their count; every `checkpoints.cutAfter` and `thenOrder` name universe ops and are disjoint; `missingPrerequisite.expectedPendingAtEnd` is nonempty.
+4. Retention: for every complete order and every cut, `project(retain(prefix) ⊕ suffix) = project(all)`; the generator that produced the v9 files checked 40 orders at every cut per universe.
+5. Normalization: expected states use symbolic keys from `ids`, derived ids as computed (`UUIDv5(NS, …)`), diagnostics as `kind(K,latestOpId)`; `appliedCut` is the per-writer max seq (initial included); `pending` is empty for complete schedules.
 
 ## 6. Open questions
 
-Dispositions follow the Codex review (round 2). **Resolved by engineering decision (no owner input needed):** Q-2 (reclamation stays disabled; offline restores of non-retired devices stay eligible; D8 sets the bound, the earlier "90 days plus margin" claim is withdrawn), Q-4 (lowest canonical UUID, DEC-11), Q-5 (shipped validator behaviour is the v8 baseline; v9 import date handling is MC-1, separate), Q-6 (platform blank/zero acceptance stays in v8 results; MC-2 is the opt-in change), Q-7 (v9 adapter captures omitted keys, MC-4; shipped Android Replace stays in compatibility fixtures), Q-11 (a new incarnation sorts by its own id; arbitrary but identical everywhere, DEC-9 stamps), Q-12 (v9 assets are digest-addressed; legacy file names matter only for the seed run).
+**Decided by the owner (2026-11-23, `docs/REDESIGN_DECISIONS.md`):** restore keeps concurrent edits (DEC-6); explicit permanent delete removes the item on every device, automatic 90-day cleanup loses to a restore (DEC-2, DEC-4, DEC-8); the latest deletion starts the 90-day window (DEC-5); AO3 id vs URL disagreements resolve automatically by the AO3-id-first rule with a diagnostic (DEC-14).
 
-**Owner questions**, each with the recommendation:
+**Resolved by engineering decision:** lowest canonical UUID survivor (DEC-14); reclamation stays disabled and D8 sets any offline-writer bound; the shipped validator stays the v8 baseline and MC-1 is the opt-in v9 date rule; blank/zero handling stays a platform result in v8 and MC-2 is opt-in; omitted-key capture is mandatory for v9 (MC-4); a new incarnation sorts by its own id.
 
-- **Q-1 (policy)** Should an edit made while a work sits in Recently Deleted come back when it is restored? *Recommend yes (DEC-5): content edits are retained and shown after restore; only an explicit permanent delete discards them.*
-- **Q-3 (UI)** Tier-1 and tier-2 identity disagree (different AO3 ids, same URL): *recommend a diagnostic now, no review UI; the legacy route keeps the shipped tier-1 outcome (DEC-11).* Does the owner want a "possible duplicate" review flow later?
-- **Q-8 (wording)** An explicit Delete Permanently on one device now removes the item from every device's Recently Deleted (v8 never did, N-1). *Recommend adopting it with confirmation copy that names every device ("also on your other devices"), and an undo window equal to none (it is terminal) — owner to approve the wording and whether the 90-day Recently Deleted entry should show "deleted permanently on <device>" instead of vanishing.*
-- **Q-9 (policy)** Recovery deadline: *recommend the latest effective deletion date plus 90 days (DEC-3), so a second device's later delete extends, never shortens, recovery time.* The expiry basis rule (DEC-1.2) is the matching mechanism.
-- **Q-10 (enrollment UX)** How does a v9 device become an authorized writer and how is revocation shown? *Recommend reusing the pairing flow (QR/trust list, `TombstoneTrustStore`, Android `TombstoneTrustStore.kt`): scanning a founder or already-enrolled device's code emits `writer.enroll`; revocation emits `writer.revoke` with the stolen/retired distinction already in the UI. Semantics (shared authorization facts, DEC-9) are engineering; only the pairing wording is owner's.*
+**Still open for the owner**
+- **Q-8 (UI wording)** Confirmation text for Delete Now / empty Recently Deleted. *Recommend: "This also removes it from your other devices. This can't be undone." and, when another device holds a copy that an offline restore later names, a quiet note "deleted permanently on <device>".*
+- **Q-10 (enrollment UX)** How a device becomes an authorized writer. *Recommend reusing the pairing flow: scanning an enrolled device's code emits `writer.enroll`; removing a device emits `writer.revoke` with the stolen/retired distinction already shown; semantics are DEC-9 to DEC-12.*
+- **Q-13 (D8)** The numbers the retention contract (§7) leaves to D8: the offline-writer bound, restore-point retention, diagnostic history depth. *Recommend: offline bound ≥ the longest restore-point age so no retained restore point is orphaned; decide with D8's authority protocol.*
+
+## 7. Retained state: growth and the retention contract (input to D8)
+
+**Growth estimate (illustrative, not a measurement).** Model from the Codex review of this document: 50,000 works, 20–35 current register facts per work, one identity row per work, 370k session/bookmark/annotation-source rows, 200k tag identities ⇒ **1.6–2.4 M rows** current state. Churn over a 30-year library life (treating the review's counts as 30-year totals): two delete/restore cycles per work (+200k lifecycle facts), ten EPUB versions per work (+500k version facts), twenty note edits per annotation (+400k), 100k membership edges with three add/remove cycles each (+600k) ⇒ **+1.7 M rows**, total **3.3–4.1 M rows**, about **0.4–1.0 GB** at 120–250 bytes per row before indexes, text, segments and blobs (per-year growth ≈ 57k facts ≈ 7–14 MB). EPUB bytes: 50k works × 10 versions × 1 MiB ≈ **0.5 TiB** if no version is ever reclaimed.
+
+**Effect of the retention contract.** Replacing history with stable-cut summaries (below) leaves roughly: cleared deletions → ≤ 1 watermark row per touched lineage (≤ 50k instead of 200k); version ancestry → one `(owner, kind)` supersession watermark plus heads and alternates (≈ 50–100k instead of 500k) with non-head **blobs** reclaimable under D8 (≈ 50 GiB for one retained version per work instead of 0.5 TiB, plus whatever restore points pin); note versions → 2 per annotation source instead of 20 (≈ 40k–80k for ~20–40k annotations); epochs → live edges plus one removal watermark per endpoint (≈ 100–200k instead of 700k). Total ≈ **2.0–2.8 M rows, ≈ 0.25–0.7 GB**, and growth per year falls to the rate of live-state change.
+
+**Retention contract (what D8 may and may not discard).**
+1. **Stable cut.** A cut acknowledged as applied by every non-retired device. Below it, facts may be replaced by summaries; at or above it, nothing is discarded.
+2. **Summaries allowed below the stable cut:** cleared deletions → per-lineage `{clearedBelow watermark per writer, ids still referenced by retained restore points}`; removed epochs → per-endpoint removal watermark; note versions → latest + greatest nonempty (already the retention rule); asset versions → `(owner, kind)` supersession watermark plus heads and alternates, **independent of blob presence**; resets (settings/entries) → winning fact; authorization and purge facts are **never** summarized (late revocation needs them, DEC-12).
+3. **Never summarized:** explicit/expired purge facts and their witnesses, `writer.enroll/revoke`, identity evidence of any lineage a purge witness or `supersedes` references.
+4. **Offline writers.** A device whose base cut is below the stable cut is *retired*; its unpublished and reserved ops are rebased against the summary state (a named deletion or epoch below the cut resolves through the watermark; an op naming a pruned id is rebased by dropping that name and recording `rebasedReference`). The retirement bound is a D8 number (Q-13) and must be at least the age of the oldest retained restore point.
+5. **Diagnostics.** Diagnostics report `(kind, K, latestOpId)`; they never require discarded op ids, so they survive summarization unchanged.
+6. **Restore points** pin their own cut and its asset closure; a pinned cut is a lower bound for the stable cut of the facts it depends on.
+7. **Bounded work.** Checkpoint construction streams per original key in bounded batches from an indexed store; apply and component splits run in bounded batches; no step needs the whole retained set in memory.
+
+## 8. Plan text that must change (note to the coordinator)
+
+- `docs/DATA_ARCHITECTURE_PLAN.md` § C Assets: "the logical asset reference ((owner generation, asset kind) → digest)" → "((owner lineage, asset kind) → digest), with the generation carried as provenance only" (DEC-0).
+- § C Causality / Operations: "a restore … references the deletion and starts a new generation" → "references the deletions it observed (nonempty); the lineage is the merge target and generation is observational".
+- § D lifecycle bullet: "a delete targets an entity generation" → "a delete targets the lineages of the observed component (a fixed scope)".
+- § C Checkpoints: add the per-original-key retention rule of §2.1 and that a checkpoint carries semantic evidence (deletion, epoch, version, purge facts), not only the coverage vector.
+- § D Identity: "deterministic survivor selection" → lowest canonical UUID per AO3-id-first component (DEC-14).
