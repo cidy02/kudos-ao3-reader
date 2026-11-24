@@ -88,6 +88,9 @@ internal class StagingWriter(
         }
     }
 
+    /** Reads one staged value as bounded UTF-8 chunks while the staging transaction is still open. */
+    fun openTextStream(table: String, ord: Long) = StagedChunkInputStream(db, table, ord)
+
     fun root(ord: Long, key: String, kind: String, known: Boolean, oversize: Boolean, chars: Long, records: Long) {
         stmt("INSERT INTO root(ord, key, kind, known, oversize, chars, records) VALUES(?,?,?,?,?,?,?)").run {
             bindLong(1, ord); bindString(2, key); bindString(3, kind); bindLong(4, if (known) 1 else 0)

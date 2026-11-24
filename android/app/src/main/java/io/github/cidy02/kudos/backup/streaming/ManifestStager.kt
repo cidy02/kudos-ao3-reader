@@ -26,7 +26,9 @@ class ManifestStageOptions(
     /** Test hook for the component-budget boundary; production uses 2.5. */
     val componentBudgetFactor: Double = 2.5,
     /** Called after each commit with the number of rows staged so far. */
-    val checkpoint: (Long) -> Unit = {}
+    val checkpoint: (Long) -> Unit = {},
+    /** Called after a typed record is staged; used by opt-in live-heap measurement. */
+    val recordCheckpoint: (Long) -> Unit = {}
 )
 
 /** What the sync recovery predicate may conclude about a live document (a complete file is never replaced from `.bak` unless MALFORMED). */
@@ -68,7 +70,7 @@ object ManifestStager {
             val w = StagingWriter(dir, { options.freeSpace(dir) }, budget, options.checkpoint).also { writer = it }
             val holder = SourceHolder()
             val cancelled = { if (options.isCancelled()) throw ManifestStageException.Cancelled() }
-            val sink = StagingSink(w, holder) { w.maybeCommit() }
+            val sink = StagingSink(w, holder, options.recordCheckpoint) { w.maybeCommit() }
             val tokenizer = ManifestTokenizer(input, sink, options.isCancelled)
             holder.source = tokenizer
             w.sourceBytes = { tokenizer.sourceBytes().also { bytesRead = it } }

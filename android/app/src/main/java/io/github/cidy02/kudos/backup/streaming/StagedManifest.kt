@@ -13,11 +13,14 @@ import io.github.cidy02.kudos.backup.KudosBackupManifest
 import java.io.File
 import java.io.IOException
 import java.time.Instant
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromStream
 
 /** One top-level key of the staged document. [kind] is `records` for a known array of records, else the JSON kind of its value. */
 data class StagedRootEntry(val ord: Long, val key: String, val kind: String, val known: Boolean, val oversize: Boolean, val chars: Long, val records: Long)
@@ -141,23 +144,7 @@ class StagedManifest internal constructor(
                         batchCount = 0
                         batchBytes = 0
                     }
-                    val text = recordTextInMemory(name, record.ord)
-                    val partial = when (name) {
-                        "works" -> head.copy(works = listOf(BackupJson.decodeFromString(BackupWork.serializer(), text)))
-                        "bookmarks" -> head.copy(bookmarks = listOf(BackupJson.decodeFromString(BackupBookmark.serializer(), text)))
-                        "fonts" -> head.copy(fonts = listOf(BackupJson.decodeFromString(BackupFont.serializer(), text)))
-                        "collections" -> head.copy(collections = listOf(BackupJson.decodeFromString(BackupCollection.serializer(), text)))
-                        "savedSearches" -> head.copy(savedSearches = listOf(BackupJson.decodeFromString(BackupSavedSearch.serializer(), text)))
-                        else -> error("unsupported validation section $name")
-                    }
-                    val canonical = BackupValidator.validateManifest(partial, now)
-                    onValidatedRecord(name, record.ord, when (name) {
-                        "works" -> canonical.works.single()
-                        "bookmarks" -> canonical.bookmarks.single()
-                        "fonts" -> canonical.fonts.single()
-                        "collections" -> canonical.collections.single()
-                        else -> canonical.savedSearches.single()
-                    })
+                    validateOneRecord(name, record.ord, head, now, onValidatedRecord)
                     batchCount++
                     batchBytes += record.sourceBytes
                 }
@@ -171,6 +158,33 @@ class StagedManifest internal constructor(
             if (dup != null && name != "bookmarks") throw BackupError.InvalidPackage("Duplicate ${if (name == "works") "work" else name} id: $dup")
         }
     }
+
+    /** One call frame per record, so its decoded value is unreachable before the next record is read. */
+    private fun validateOneRecord(
+        name: String, ord: Long, head: KudosBackupManifest, now: Instant,
+        onValidatedRecord: (String, Long, Any) -> Unit
+    ) {
+        val partial = when (name) {
+            "works" -> head.copy(works = listOf(decodeRecord(name, ord, BackupWork.serializer())))
+            "bookmarks" -> head.copy(bookmarks = listOf(decodeRecord(name, ord, BackupBookmark.serializer())))
+            "fonts" -> head.copy(fonts = listOf(decodeRecord(name, ord, BackupFont.serializer())))
+            "collections" -> head.copy(collections = listOf(decodeRecord(name, ord, BackupCollection.serializer())))
+            "savedSearches" -> head.copy(savedSearches = listOf(decodeRecord(name, ord, BackupSavedSearch.serializer())))
+            else -> error("unsupported validation section $name")
+        }
+        val canonical = BackupValidator.validateManifest(partial, now)
+        onValidatedRecord(name, ord, when (name) {
+            "works" -> canonical.works.single()
+            "bookmarks" -> canonical.bookmarks.single()
+            "fonts" -> canonical.fonts.single()
+            "collections" -> canonical.collections.single()
+            else -> canonical.savedSearches.single()
+        })
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    private fun <T> decodeRecord(section: String, ord: Long, serializer: KSerializer<T>): T =
+        StagedChunkInputStream(db, spec(section).chunkTable, ord).use { BackupJson.decodeFromStream(serializer, it) }
 
     private fun exportedAt(): String = db.rawQuery("SELECT v FROM meta WHERE k = 'exportedAt'", null).use { it.moveToFirst(); it.getString(0) }
 

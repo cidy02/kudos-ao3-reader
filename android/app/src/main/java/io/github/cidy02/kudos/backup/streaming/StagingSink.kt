@@ -1,8 +1,11 @@
 package io.github.cidy02.kudos.backup.streaming
 
 import io.github.cidy02.kudos.backup.BackupJson
+import java.io.InputStream
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.decodeFromStream
 
 /** A compact-JSON text being built: held in memory while small, written to chunk rows (addressed by char offset) once it grows. */
 internal class StagedText(private val w: StagingWriter, private val chunkTable: String, private val ord: Long, private val overBudget: () -> Boolean = { false }) {
@@ -90,6 +93,7 @@ internal class StagedText(private val w: StagingWriter, private val chunkTable: 
 internal class StagingSink(
     private val w: StagingWriter,
     private val src: SourcePosition,
+    private val onRecordStaged: (Long) -> Unit,
     private val tick: () -> Unit
 ) : ManifestEvents {
     private class Frame(val isObject: Boolean, val kind: Int) {
@@ -209,8 +213,12 @@ internal class StagingSink(
         when {
             sourceBytes > TYPED_BUDGET_BYTES -> resource("a ${spec.name} record is larger than the typed budget of $TYPED_BUDGET_BYTES bytes")
             else -> {
-                val text = if (oversize) { o.close(); w.readText(spec.chunkTable, ord) } else o.sb.toString()
-                typedOk = if (decodes(spec.serializer, text)) 1 else 0
+                typedOk = if (oversize) {
+                    o.close()
+                    w.openTextStream(spec.chunkTable, ord).use { if (decodes(spec.serializer, it)) 1 else 0 }
+                } else {
+                    if (decodes(spec.serializer, o.sb.toString())) 1 else 0
+                }
                 if (typedOk == 0 && pendingFailure == null) pendingFailure = "${spec.name}[$ord] is not a valid ${spec.name} record"
             }
         }
@@ -222,6 +230,7 @@ internal class StagingSink(
         records++
         out = null
         tick()
+        onRecordStaged(records)
     }
 
     private fun finishRoot() {
@@ -249,6 +258,17 @@ internal class StagingSink(
     @Suppress("UNCHECKED_CAST")
     private fun decodes(serializer: KSerializer<*>, text: String): Boolean = try {
         BackupJson.decodeFromString(serializer as KSerializer<Any>, text)
+        true
+    } catch (_: SerializationException) {
+        false
+    } catch (_: IllegalArgumentException) {
+        false
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    @Suppress("UNCHECKED_CAST")
+    private fun decodes(serializer: KSerializer<*>, stream: InputStream): Boolean = try {
+        BackupJson.decodeFromStream(serializer as KSerializer<Any>, stream)
         true
     } catch (_: SerializationException) {
         false

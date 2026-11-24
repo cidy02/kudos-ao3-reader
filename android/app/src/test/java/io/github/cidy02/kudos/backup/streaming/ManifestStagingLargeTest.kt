@@ -70,7 +70,7 @@ class ManifestStagingLargeTest {
         val root = File(dir, "staging")
         val target = StagingSink.TYPED_BUDGET_BYTES.toInt() - 4096
         val now = Instant.parse("2026-06-15T00:00:00Z")
-        val report = StringBuilder("\nThree near-8 MiB strict records (Robolectric JVM, sampled heap; native SQLite excluded):\n")
+        val report = StringBuilder("\nThree near-8 MiB strict records (Robolectric JVM; sampled heap includes garbage, live heap is forced-GC at each record/commit/validation sample; native SQLite excluded):\n")
         try {
             for (structured in listOf(false, true)) {
                 val label = if (structured) "160000 tags" else "flat summary"
@@ -94,26 +94,45 @@ class ManifestStagingLargeTest {
                 }
                 val results = (0..3).map { run ->
                     val batches = mutableListOf<Pair<Int, Long>>()
+                    val baseline = A567Run.settledHeap()
+                    var livePeakBytes = 0L
+                    var liveSamples = 0
+                    fun sampleLive() {
+                        livePeakBytes = maxOf(livePeakBytes, A567Run.settledHeap() - baseline)
+                        liveSamples++
+                    }
                     val result = A567Run(listOf(root)).measure {
                         file.inputStream().buffered(1 shl 16).use { input ->
-                            ManifestStager.stage(input, root, ManifestStageOptions(expectedBytes = file.length())).use { staged ->
+                            val options = ManifestStageOptions(
+                                expectedBytes = file.length(),
+                                checkpoint = { sampleLive() },
+                                recordCheckpoint = { sampleLive() }
+                            )
+                            ManifestStager.stage(input, root, options).use { staged ->
+                                sampleLive()
                                 assertEquals(3L, staged.count("works"))
                                 assertTrue(staged.records("works").all { it.sourceBytes in 7_900_000L..StagingSink.TYPED_BUDGET_BYTES })
-                                staged.validate(now) { count, bytes -> batches += count to bytes }
+                                staged.validate(now, onValidatedRecord = { _, _, _ -> sampleLive() }) { count, bytes ->
+                                    batches += count to bytes
+                                    sampleLive()
+                                }
+                                sampleLive()
                             }
                         }
                         "ok"
                     }
                     assertEquals("$label run $run", "ok", result.outcome)
                     assertEquals(listOf(2, 1), batches.map { it.first })
+                    assertTrue("$label run $run missed live samples", liveSamples >= 8)
                     assertTrue("$label run $run left staging files", root.list()?.isEmpty() != false)
-                    result
+                    result to A567Run.mib(livePeakBytes)
                 }.drop(1) // first is warm-up
-                val peak = A567Run.median(results.map { it.peakHeapMiB })
-                val retained = A567Run.median(results.map { it.retainedMiB })
-                report.append("$label: median sampled peak ${"%.1f".format(peak)} MiB; retained ${"%.1f".format(retained)} MiB; input ${file.length()} bytes\n")
-                println("A567P2 three-record $label peak ${"%.1f".format(peak)} MiB")
-                assertTrue("$label peak $peak MiB exceeds 64 MiB", peak <= 64.0)
+                val sampledPeak = A567Run.median(results.map { it.first.peakHeapMiB })
+                val livePeak = A567Run.median(results.map { it.second })
+                val retained = A567Run.median(results.map { it.first.retainedMiB })
+                report.append("$label: median sampled heap peak ${"%.1f".format(sampledPeak)} MiB; median forced-GC live heap peak ${"%.1f".format(livePeak)} MiB; retained ${"%.1f".format(retained)} MiB; input ${file.length()} bytes\n")
+                println("A567P2 three-record $label sampled ${"%.1f".format(sampledPeak)} MiB, live ${"%.1f".format(livePeak)} MiB")
+                assertTrue("$label live heap peak $livePeak MiB exceeds 64 MiB", livePeak <= 64.0)
             }
             File(out!!).appendText(report.toString())
         } finally {
