@@ -68,6 +68,9 @@ struct WritingView: View {
                 }
             }
             .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
+            // Your Works' rows for works saved here push these (BUG-15).
+            .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
+            .navigationDestination(for: LocalWorkDestination.self) { LocalWorkDestinationView(destination: $0) }
             .navigationDestination(for: AccountInboxThreadDestination.self) { destination in
                 CommentsView(
                     workID: destination.workID,

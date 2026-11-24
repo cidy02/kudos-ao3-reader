@@ -61,6 +61,9 @@ struct LinkedWorkLandingView: View {
             }
             .originAwareWorkDestinations()
             .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
+            // An author profile's rows for works saved here push these (BUG-15).
+            .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
+            .navigationDestination(for: LocalWorkDestination.self) { LocalWorkDestinationView(destination: $0) }
             .navigationDestination(for: AO3SeriesSummary.self) { AO3SeriesDetailView(series: $0) }
             .navigationDestination(for: RemoteWorkReaderRoute.self) {
                 RemoteWorkReaderDestination(summary: $0.work)
