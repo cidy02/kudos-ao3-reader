@@ -219,6 +219,27 @@ struct TabBarContentInset: UIViewRepresentable {
     final class Probe: UIView {
         var inset: CGFloat = 0
         private weak var controller: UITabBarController?
+        /// The keyboard covers the bar (as it does the system bar), so no inset while it is up.
+        private var keyboardUp = false
+        private var observers: [NSObjectProtocol] = []
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            let center = NotificationCenter.default
+            observers = [
+                (UIResponder.keyboardWillShowNotification, true),
+                (UIResponder.keyboardWillHideNotification, false),
+            ].map { name, up in
+                center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                    self?.keyboardUp = up
+                    self?.apply()
+                }
+            }
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+        deinit { observers.forEach(NotificationCenter.default.removeObserver) }
 
         // The controller can attach after this view does, or be rebuilt (`.id` on the
         // TabView): re-apply on every layout and window change instead of once.
@@ -236,8 +257,9 @@ struct TabBarContentInset: UIViewRepresentable {
             let found = Self.tabBarController(from: window?.rootViewController)
             if let old = controller, old !== found { old.additionalSafeAreaInsets.bottom = 0 }
             controller = found
-            guard let found, found.additionalSafeAreaInsets.bottom != inset else { return }
-            found.additionalSafeAreaInsets.bottom = inset
+            let wanted = keyboardUp ? 0 : inset
+            guard let found, found.additionalSafeAreaInsets.bottom != wanted else { return }
+            found.additionalSafeAreaInsets.bottom = wanted
         }
 
         func reset() {
