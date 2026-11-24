@@ -206,7 +206,7 @@ internal class StagingSink(
         }
         o.close()
         val keys = spec.keys.map { k -> k.make(captured[k.field]) }
-        w.record(spec, ord, elementKind, o.length, oversize, typedOk, keys)
+        w.record(spec, ord, elementKind, o.length, sourceBytes, oversize, typedOk, keys)
         for ((name, start, stop) in unknowns) w.unknown(spec.name, ord, name, start, stop)
         sectionOrd++
         records++
@@ -246,6 +246,7 @@ internal class StagingSink(
     }
 
     override fun beginObject() {
+        if (resourceFailure != null) return
         if (stack.isEmpty()) { stack += Frame(true, ROOT); return }
         if (skipping()) { stack += Frame(true, PLAIN); return }
         val parent = stack.last().kind
@@ -261,6 +262,7 @@ internal class StagingSink(
     }
 
     override fun endObject() {
+        if (resourceFailure != null) return
         if (skipping()) { pop(); if (stack.size == skipBase) skipBase = -1; return }
         val frame = pop()
         if (frame.kind == ROOT) return
@@ -269,6 +271,7 @@ internal class StagingSink(
     }
 
     override fun beginArray() {
+        if (resourceFailure != null) return
         if (skipping()) { stack += Frame(false, PLAIN); return }
         val parent = stack.last().kind
         startValue("array")
@@ -281,6 +284,7 @@ internal class StagingSink(
     }
 
     override fun endArray() {
+        if (resourceFailure != null) return
         if (skipping()) { pop(); if (stack.size == skipBase) skipBase = -1; return }
         val frame = pop()
         if (frame.kind != SECTION) out!!.append(']')
@@ -288,6 +292,7 @@ internal class StagingSink(
     }
 
     override fun name(name: String) {
+        if (resourceFailure != null) return
         if (skipping()) return
         val top = stack.last()
         val keys = top.keys ?: HashSet<String>().also { top.keys = it }
@@ -312,6 +317,7 @@ internal class StagingSink(
     }
 
     override fun stringChunk(buffer: CharArray, offset: Int, length: Int, last: Boolean) {
+        if (resourceFailure != null) return
         if (skipping()) {
             if (last && stack.size == skipBase) skipBase = -1
             return
@@ -333,6 +339,7 @@ internal class StagingSink(
     }
 
     override fun literal(text: String) {
+        if (resourceFailure != null) return
         if (skipping()) {
             if (stack.size == skipBase) skipBase = -1
             return
@@ -350,8 +357,8 @@ internal class StagingSink(
         /** Source bytes of one known non-array root value (including whitespace inside it). */
         const val MAX_ROOT_VALUE_BYTES = 16L * 1024 * 1024
 
-        /** UTF-16 units of keys held by all open objects at once. */
-        const val MAX_LIVE_KEY_CHARS = 16L * 1024 * 1024
+        /** UTF-16 units of distinct keys held by all open objects at once. The 182,361 x 60 fixture crosses this limit. */
+        const val MAX_LIVE_KEY_CHARS = 10L * 1024 * 1024
         private const val ROOT = 0
         private const val PLAIN = 1
         private const val SECTION = 2

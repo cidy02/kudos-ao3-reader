@@ -22,7 +22,7 @@ data class StagedRootEntry(val ord: Long, val key: String, val kind: String, val
 data class StagedUnknownRange(val name: String, val start: Long, val stop: Long)
 
 /** Row metadata of one staged element; the payload is read only through [StagedManifest.readRecord]. */
-data class StagedRecordMeta(val ord: Long, val kind: String, val chars: Long, val oversize: Boolean, val keys: Map<String, String?>)
+data class StagedRecordMeta(val ord: Long, val kind: String, val chars: Long, val sourceBytes: Long, val oversize: Boolean, val keys: Map<String, String?>)
 
 /** How a section appeared in the document: the apply view Replace needs (missing and null are not the same as `[]`). */
 enum class SectionPresence { MISSING, NULL, EMPTY, POPULATED }
@@ -41,8 +41,10 @@ class StagedManifest internal constructor(
     internal val db: SQLiteDatabase,
     val version: Int
 ) : AutoCloseable {
-    fun rootEntries(): List<StagedRootEntry> = db.rawQuery(
-        "SELECT ord, key, kind, known, oversize, chars, records FROM root ORDER BY ord", null
+    /** Root metadata keyset page, with a fixed maximum; payloads remain in chunk rows. */
+    fun rootEntries(afterOrd: Long = -1, limit: Int = 500): List<StagedRootEntry> = db.rawQuery(
+        "SELECT ord, key, kind, known, oversize, chars, records FROM root WHERE ord > ? ORDER BY ord LIMIT ${limit.coerceIn(1, MAX_METADATA_PAGE)}",
+        arrayOf(afterOrd.toString())
     ).use { c ->
         buildList {
             while (c.moveToNext()) add(StagedRootEntry(c.getLong(0), c.getString(1), c.getString(2), c.getInt(3) == 1, c.getInt(4) == 1, c.getLong(5), c.getLong(6)))
@@ -68,10 +70,10 @@ class StagedManifest internal constructor(
     fun records(section: String, afterOrd: Long = -1, limit: Int = 500): List<StagedRecordMeta> {
         val s = spec(section)
         val cols = s.keys.joinToString("") { ", ${it.column}" }
-        return db.rawQuery("SELECT ord, kind, chars, oversize$cols FROM ${s.table} WHERE ord > ? ORDER BY ord LIMIT $limit", arrayOf(afterOrd.toString())).use { c ->
+        return db.rawQuery("SELECT ord, kind, chars, source_bytes, oversize$cols FROM ${s.table} WHERE ord > ? ORDER BY ord LIMIT ${limit.coerceIn(1, MAX_METADATA_PAGE)}", arrayOf(afterOrd.toString())).use { c ->
             buildList {
                 while (c.moveToNext()) {
-                    add(StagedRecordMeta(c.getLong(0), c.getString(1), c.getLong(2), c.getInt(3) == 1, s.keys.withIndex().associate { (i, k) -> k.column to if (c.isNull(4 + i)) null else c.getString(4 + i) }))
+                    add(StagedRecordMeta(c.getLong(0), c.getString(1), c.getLong(2), c.getLong(3), c.getInt(4) == 1, s.keys.withIndex().associate { (i, k) -> k.column to if (c.isNull(5 + i)) null else c.getString(5 + i) }))
                 }
             }
         }
@@ -87,8 +89,10 @@ class StagedManifest internal constructor(
         range("root_chunk", ord, from, to, sink)
     }
 
-    fun unknownRanges(section: String, ord: Long): List<StagedUnknownRange> = db.rawQuery(
-        "SELECT name, start, stop FROM unknown_range WHERE section = ? AND ord = ? ORDER BY start", arrayOf(section, ord.toString())
+    /** Unknown direct members, paged by their unique start offset. */
+    fun unknownRanges(section: String, ord: Long, afterStart: Long = -1, limit: Int = 500): List<StagedUnknownRange> = db.rawQuery(
+        "SELECT name, start, stop FROM unknown_range WHERE section = ? AND ord = ? AND start > ? ORDER BY start LIMIT ${limit.coerceIn(1, MAX_METADATA_PAGE)}",
+        arrayOf(section, ord.toString(), afterStart.toString())
     ).use { c -> buildList { while (c.moveToNext()) add(StagedUnknownRange(c.getString(0), c.getLong(1), c.getLong(2))) } }
 
     /** Whole record text: tests and small records only. */
@@ -110,24 +114,35 @@ class StagedManifest internal constructor(
 
     /**
      * Semantic validation over the final staged metadata (today's `BackupValidator.validateManifest` rules, with the clock
-     * fixed by [now]): per-record checks in bounded batches, and duplicate ids over the whole section through the indexed key
-     * columns, so two works with one id in different batches are still caught. Call before any mutation.
+     * fixed by [now]): one record is decoded at a time and batch accounting flushes at 200 records or 16 MiB of
+     * source bytes. Duplicate ids across batches use indexed key columns. Call before any mutation.
      */
-    fun validate(now: Instant = Instant.now()) {
+    fun validate(now: Instant = Instant.now(), onBatch: (Int, Long) -> Unit = { _, _ -> }) {
         val head = BackupValidator.validateManifest(KudosBackupManifest(version = version, exportedAt = exportedAt()), now)
         for (name in listOf("works", "bookmarks", "fonts", "collections", "savedSearches")) {
             var last = -1L
+            var batchCount = 0
+            var batchBytes = 0L
             while (true) {
                 val batch = records(name, last, 200)
                 if (batch.isEmpty()) break
-                val texts = batch.map { recordTextInMemory(name, it.ord) }
-                val array = JsonArray(texts.map { Json.parseToJsonElement(it) })
-                val partial = BackupJson.decodeFromJsonElement(KudosBackupManifest.serializer(), JsonObject(mapOf(
-                    "version" to JsonPrimitive(head.version), "exportedAt" to JsonPrimitive(head.exportedAt), name to array
-                )))
-                BackupValidator.validateManifest(partial, now)
+                for (record in batch) {
+                    if (batchCount > 0 && (batchCount == 200 || batchBytes + record.sourceBytes > VALIDATION_BATCH_BYTES)) {
+                        onBatch(batchCount, batchBytes)
+                        batchCount = 0
+                        batchBytes = 0
+                    }
+                    val element = Json.parseToJsonElement(recordTextInMemory(name, record.ord))
+                    val partial = BackupJson.decodeFromJsonElement(KudosBackupManifest.serializer(), JsonObject(mapOf(
+                        "version" to JsonPrimitive(head.version), "exportedAt" to JsonPrimitive(head.exportedAt), name to JsonArray(listOf(element))
+                    )))
+                    BackupValidator.validateManifest(partial, now)
+                    batchCount++
+                    batchBytes += record.sourceBytes
+                }
                 last = batch.last().ord
             }
+            if (batchCount > 0) onBatch(batchCount, batchBytes)
             val idColumn = spec(name).keys.firstOrNull { it.column == "k_id" }?.column ?: spec(name).keys.first().column
             val dup = db.rawQuery("SELECT $idColumn FROM s_$name WHERE $idColumn IS NOT NULL GROUP BY $idColumn HAVING COUNT(*) > 1 LIMIT 1", null).use { c ->
                 if (c.moveToFirst()) c.getString(0) else null
@@ -144,14 +159,20 @@ class StagedManifest internal constructor(
      */
     fun reconstructRaw(): JsonObject {
         val map = LinkedHashMap<String, JsonElement>()
-        for (entry in rootEntries()) {
-            map[entry.key] = if (entry.kind == "records") {
-                val items = ArrayList<JsonElement>()
-                forEachRecordTextInMemory(entry.key) { _, text -> items += Json.parseToJsonElement(text) }
-                JsonArray(items)
-            } else {
-                Json.parseToJsonElement(rootTextInMemory(entry.key))
+        var after = -1L
+        while (true) {
+            val page = rootEntries(after)
+            if (page.isEmpty()) break
+            for (entry in page) {
+                map[entry.key] = if (entry.kind == "records") {
+                    val items = ArrayList<JsonElement>()
+                    forEachRecordTextInMemory(entry.key) { _, text -> items += Json.parseToJsonElement(text) }
+                    JsonArray(items)
+                } else {
+                    Json.parseToJsonElement(rootTextInMemory(entry.key))
+                }
             }
+            after = page.last().ord
         }
         return JsonObject(map)
     }
@@ -178,6 +199,11 @@ class StagedManifest internal constructor(
     }
 
     private fun spec(section: String) = ManifestSections.byName[section] ?: throw IllegalArgumentException("unknown section $section")
+
+    companion object {
+        const val MAX_METADATA_PAGE = 500
+        const val VALIDATION_BATCH_BYTES = 16L * 1024 * 1024
+    }
 
     /** Streams `[from, to)` of one staged text: finds the first overlapping chunk by its indexed start, then walks forward one row at a time. */
     private fun range(table: String, ord: Long, from: Long, to: Long, sink: (CharSequence) -> Unit) {

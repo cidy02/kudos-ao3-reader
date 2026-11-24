@@ -44,7 +44,7 @@ class ManifestFixtureCasesTest {
         sb.append(g.getValue("prefix").jsonPrimitive.content)
         for (i in 0 until count) sb.append(unit)
         sb.append(g.getValue("suffix").jsonPrimitive.content)
-        if (wrap) sb.append("}")
+        if (wrap) sb.append(index.getValue("wrapper").jsonPrimitive.content.substringAfter("BODY"))
         return sb.toString().toByteArray(Charsets.UTF_8)
     }
 
@@ -72,14 +72,25 @@ class ManifestFixtureCasesTest {
         assertTrue(wrong.joinToString("\n"), wrong.isEmpty())
     }
 
+    @Test fun everySharedSuccessHasTheRequiredCrossPlatformRootFields() {
+        for (case in index.getValue("cases").jsonArray.map { it.jsonObject }) {
+            if (case.getValue("expect").jsonPrimitive.content != "ok") continue
+            val id = case.getValue("id").jsonPrimitive.content
+            val text = bytes(case).toString(Charsets.UTF_8)
+            for (field in listOf("\"bookmarks\":[]", "\"fonts\":[]", "\"settings\":")) {
+                assertTrue("$id lacks $field", text.contains(field))
+            }
+        }
+    }
+
     @Test fun distinctUnnormalisedKeysAreBothKeptAndEscapedDuplicatesAreFirstWins() {
         fun case(id: String) = index.getValue("cases").jsonArray.map { it.jsonObject }.first { it.getValue("id").jsonPrimitive.content == id }
         outcome(bytes(case("key-nfc-nfd-distinct"))) { s ->
-            assertEquals(listOf("version", "exportedAt", "works", "é", "é"), s.rootEntries().map { it.key })
+            assertEquals(listOf("version", "exportedAt", "works", "bookmarks", "fonts", "settings", "é", "é"), s.rootEntries().map { it.key })
         }.also { assertEquals("ok", it) }
         outcome(bytes(case("key-escaped-duplicate-first-wins"))) { s ->
             assertEquals("1", s.rootTextInMemory("x"))
-            assertEquals(4, s.rootEntries().size)
+            assertEquals(7, s.rootEntries().size)
         }.also { assertEquals("ok", it) }
     }
 

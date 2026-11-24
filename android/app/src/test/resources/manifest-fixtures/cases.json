@@ -1,5 +1,5 @@
 {
- "wrapper": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[],BODY}",
+ "wrapper": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[],\"bookmarks\":[],\"fonts\":[],BODY,\"settings\":{}}",
  "cases": [
   {
    "id": "depth-512-total-ok",
@@ -132,7 +132,7 @@
    "gen": {
     "wrap": true,
     "prefix": "\"",
-    "unit": "\ud83d\ude00",
+    "unit": "😀",
     "count": 32768,
     "suffix": "\":1"
    },
@@ -144,7 +144,7 @@
    "gen": {
     "wrap": true,
     "prefix": "\"",
-    "unit": "\ud83d\ude00",
+    "unit": "😀",
     "count": 32768,
     "suffix": "a\":1"
    },
@@ -252,7 +252,7 @@
    "gen": {
     "wrap": true,
     "prefix": "\"settings\":{\"readerFontID\":\"  ",
-    "unit": "\ud83d\ude00",
+    "unit": "😀",
     "count": 4194299,
     "suffix": "\"}"
    },
@@ -347,9 +347,9 @@
    "id": "record-8MiB-exact-valid-ok",
    "gen": {
     "wrap": false,
-    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"id\":\"00000001-0000-4000-8000-000000000001\",\"summary\":\"",
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"bookmarks\":[],\"fonts\":[],\"settings\":{},\"works\":[{\"id\":\"00000001-0000-4000-8000-000000000001\",\"dateAdded\":\"2026-01-01T00:00:00Z\",\"summary\":\"",
     "unit": "a",
-    "count": 8388550,
+    "count": 8388515,
     "suffix": "\"}]}"
    },
    "expect": "ok",
@@ -396,6 +396,24 @@
    "file": "array-root-then-garbage.json",
    "expect": "syntax",
    "note": "trailing content after an array root is a syntax error"
+  },
+  {
+   "id": "live-keys-182361x60-resource",
+   "expect": "resource",
+   "note": "182,361 distinct 60-unit keys exceed the shared 16 Mi UTF-16-unit live-key budget",
+   "file": "live-keys-182361x60-resource.json"
+  },
+  {
+   "id": "array-root-513-schema",
+   "gen": {
+    "wrap": false,
+    "prefix": "[",
+    "unit": "[",
+    "count": 512,
+    "suffix": "]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"
+   },
+   "expect": "schema",
+   "note": "root schema is decided before depth"
   }
  ]
 }

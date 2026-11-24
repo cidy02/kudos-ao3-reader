@@ -241,7 +241,7 @@ class ManifestRound2Test {
         File(dir, StagingWriter.MARKER).mkdirs() // the marker cannot be written
         var opened: android.database.sqlite.SQLiteDatabase? = null
         try {
-            StagingWriter(dir, { 1L shl 40 }, null, {}, onOpened = { opened = it })
+            StagingWriter(dir, { 1L shl 40 }, { Long.MAX_VALUE }, {}, onOpened = { opened = it })
             fail("initialised")
         } catch (e: IOException) {
             // expected

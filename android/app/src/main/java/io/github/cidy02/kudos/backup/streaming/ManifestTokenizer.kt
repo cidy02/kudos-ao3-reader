@@ -203,7 +203,10 @@ internal class ManifestTokenizer(
                     while (true) {
                         ws()
                         if (peek() != '"'.code) fail("expected a quoted key")
-                        if (++members == MAX_MEMBERS + 1) defer("an object has more than $MAX_MEMBERS members")
+                        if (++members == MAX_MEMBERS + 1) {
+                            defer("an object has more than $MAX_MEMBERS members")
+                            muted = true // the resource outcome is decided; validate the tail without staging more keys
+                        }
                         key().let { if (!muted) events.name(it) }
                         ws()
                         if (next() != ':'.code) fail("expected ':'")

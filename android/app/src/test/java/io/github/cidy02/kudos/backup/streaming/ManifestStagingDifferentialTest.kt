@@ -137,6 +137,12 @@ class ManifestStagingDifferentialTest {
         pin("duplicate key: works twice"); pin("duplicate key inside a record")
         val (name, bytes) = cases.first { it.first == "duplicate key: works twice" }
         assertNotEquals(name, today(bytes).raw, mine(bytes).raw)
+        val nested = cases.first { it.first == "duplicate key inside a record" }.second
+        val staged = mine(nested)
+        assertEquals("a", (staged.typed as io.github.cidy02.kudos.backup.KudosBackupManifest).works.single().title)
+        assertEquals("a", staged.raw!!.getValue("works").let { it as kotlinx.serialization.json.JsonArray }.single().let {
+            (it as JsonObject).getValue("title").let { value -> (value as kotlinx.serialization.json.JsonPrimitive).content }
+        })
     }
     @Test fun depthBeyondFiveHundredTwelveIsRejectedNow() = pin("nesting depth 600 (unknown key)")
     @Test fun unquotedAndMissingCommaLenienceIsDroppedNow() { pin("lenient: unquoted keys"); pin("missing comma between members") }

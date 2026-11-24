@@ -21,7 +21,7 @@ import java.io.File
 internal class StagingWriter(
     private val directory: File,
     private val freeSpace: () -> Long,
-    private val budgetBytes: Long?,
+    private val budgetBytes: () -> Long,
     private val checkpoint: (Long) -> Unit,
     onOpened: (SQLiteDatabase) -> Unit = {}
 ) {
@@ -30,6 +30,7 @@ internal class StagingWriter(
     private val statements = HashMap<String, SQLiteStatement>()
     private var pendingChars = 0L
     private var pendingRows = 0
+    var sourceBytes: () -> Long = { 0L }
     var committedRows = 0L
         private set
 
@@ -48,7 +49,7 @@ internal class StagingWriter(
             for (s in ManifestSections.all) {
                 val keys = s.keys.joinToString("") { ", ${it.column} TEXT" }
                 db.execSQL(
-                    "CREATE TABLE ${s.table}(ord INTEGER PRIMARY KEY, kind TEXT NOT NULL, chars INTEGER NOT NULL, " +
+                    "CREATE TABLE ${s.table}(ord INTEGER PRIMARY KEY, kind TEXT NOT NULL, chars INTEGER NOT NULL, source_bytes INTEGER NOT NULL, " +
                         "oversize INTEGER NOT NULL, typed_ok INTEGER NOT NULL$keys)"
                 )
                 db.execSQL(chunkTableSql(s.chunkTable))
@@ -96,12 +97,13 @@ internal class StagingWriter(
         row()
     }
 
-    fun record(spec: SectionSpec, ord: Long, kind: String, chars: Long, oversize: Boolean, typedOk: Int, keys: List<String?>) {
+    fun record(spec: SectionSpec, ord: Long, kind: String, chars: Long, sourceBytes: Long, oversize: Boolean, typedOk: Int, keys: List<String?>) {
         val cols = spec.keys.joinToString("") { ", ${it.column}" }
         val marks = ",?".repeat(spec.keys.size)
-        stmt("INSERT INTO ${spec.table}(ord, kind, chars, oversize, typed_ok$cols) VALUES(?,?,?,?,?$marks)").run {
-            bindLong(1, ord); bindString(2, kind); bindLong(3, chars); bindLong(4, if (oversize) 1 else 0); bindLong(5, typedOk.toLong())
-            keys.forEachIndexed { i, v -> if (v == null) bindNull(6 + i) else bindString(6 + i, v) }
+        stmt("INSERT INTO ${spec.table}(ord, kind, chars, source_bytes, oversize, typed_ok$cols) VALUES(?,?,?,?,?,?$marks)").run {
+            bindLong(1, ord); bindString(2, kind); bindLong(3, chars); bindLong(4, sourceBytes)
+            bindLong(5, if (oversize) 1 else 0); bindLong(6, typedOk.toLong())
+            keys.forEachIndexed { i, v -> if (v == null) bindNull(7 + i) else bindString(7 + i, v) }
             executeInsert()
         }
         row()
@@ -136,8 +138,9 @@ internal class StagingWriter(
     /** Free space and the staging component budget; called at batch boundaries and around every finalization step. */
     fun checkDisk() {
         File(directory, MARKER).setLastModified(System.currentTimeMillis())
+        sourceBytes()
         if (freeSpace() < MIN_FREE_BYTES) throw ManifestStageException.ResourceExhausted("not enough free disk space to keep staging the manifest")
-        if (budgetBytes != null && directory.walkTopDown().filter { it.isFile }.sumOf { it.length() } > budgetBytes) {
+        if (directory.walkTopDown().filter { it.isFile }.sumOf { it.length() } > budgetBytes()) {
             throw ManifestStageException.ResourceExhausted("staging exceeded its disk budget")
         }
     }

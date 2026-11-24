@@ -23,6 +23,8 @@ class ManifestStageOptions(
     val isCancelled: () -> Boolean = { false },
     /** Free bytes where the staging directory lives (overridable so a full disk can be tested). */
     val freeSpace: (File) -> Long = { it.usableSpace },
+    /** Test hook for the component-budget boundary; production uses 1.6. */
+    val componentBudgetFactor: Double = 1.6,
     /** Called after each commit with the number of rows staged so far. */
     val checkpoint: (Long) -> Unit = {}
 )
@@ -36,16 +38,16 @@ enum class RecoveryVerdict { WELL_FORMED, MALFORMED, PROTECT }
  * before the exception leaves (a directory that cannot be deleted is attached as a suppressed `IOException`);
  * on success the caller owns the returned [StagedManifest] and must close it.
  *
- * Precedence, decided once the whole document has been read: I/O > cancellation > syntax > resource > schema
+ * Precedence among failures observed before reading stops: I/O > cancellation > syntax > resource > schema
  * (typed decode of every record and of the root fields) > unsupported version. Depth beyond 512 is the one resource
- * outcome raised as soon as it is seen. `BackupValidator.validateManifest` is a separate step ([StagedManifest.validate]).
+ * outcome recorded during scanning. A later I/O error cannot be discovered after an earlier decided syntax error.
+ * `BackupValidator.validateManifest` is a separate step ([StagedManifest.validate]).
  *
  * shortcut: the root fields (version, exportedAt, settings, exportedBy, pronunciations) are decoded in memory, so each is
  * limited to [StagingSink.MAX_ROOT_VALUE_BYTES] source bytes; record arrays and unknown top-level values have no such limit.
  */
 object ManifestStager {
-    /** Measured staging high-water is about 1.5x the input; the reservation and the budget are 1.7x + 16 MiB. */
-    private const val DISK_FACTOR = 1.7
+    /** Measured staging high-water is about 1.5x the input; the component budget is 1.6x + 16 MiB. */
     private const val DISK_EXTRA = 16L * 1024 * 1024
 
     fun stage(input: InputStream, stagingRoot: File, options: ManifestStageOptions = ManifestStageOptions()): StagedManifest {
@@ -53,8 +55,11 @@ object ManifestStager {
         var writer: StagingWriter? = null
         try {
             stagingRoot.mkdirs()
-            val budget = options.expectedBytes?.let { (it * DISK_FACTOR).toLong() + DISK_EXTRA }
-            val needed = budget ?: StagingWriter.MIN_FREE_BYTES
+            var bytesRead = 0L
+            val factor = options.componentBudgetFactor
+            require(factor > 0 && factor.isFinite())
+            val budget = { ((options.expectedBytes ?: bytesRead) * factor).toLong() + DISK_EXTRA }
+            val needed = options.expectedBytes?.let { budget() } ?: StagingWriter.MIN_FREE_BYTES
             if (options.freeSpace(stagingRoot) < needed) {
                 throw ManifestStageException.ResourceExhausted("not enough free disk space to stage the manifest")
             }
@@ -65,6 +70,7 @@ object ManifestStager {
             val sink = StagingSink(w, holder) { w.maybeCommit() }
             val tokenizer = ManifestTokenizer(input, sink, options.isCancelled)
             holder.source = tokenizer
+            w.sourceBytes = { tokenizer.sourceBytes().also { bytesRead = it } }
             try {
                 tokenizer.parseDocument()
             } catch (e: ManifestStageException.Invalid) {
