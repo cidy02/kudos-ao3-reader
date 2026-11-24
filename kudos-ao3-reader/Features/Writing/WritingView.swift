@@ -49,7 +49,6 @@ struct WritingView: View {
             .cardList()
             .environment(\.defaultMinListRowHeight, 0)
             .navigationTitle("Writing")
-            .shrinksTabBarOnScroll()
             .tabReselect(.writing, path: $path)
             #if os(iOS)
             .toolbarTitleDisplayMode(.inlineLarge)

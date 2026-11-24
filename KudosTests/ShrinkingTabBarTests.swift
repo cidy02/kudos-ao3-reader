@@ -17,16 +17,26 @@ struct ShrinkingTabBarTests {
         #expect(ShrinkingTabBarPolicy.contentInset(barHidden: false, hasAccessory: true) == 132)
     }
 
-    @Test func barStaysHiddenWhileAnyCallerHidesIt() {
+    @Test func barStaysHiddenWhileAnyCallerInTheSelectedTabHidesIt() {
         var hiders = TabBarHiders()
         let selection = UUID(), reader = UUID()
-        #expect(!hiders.isHidden)
-        hiders.set(true, by: selection)
-        hiders.set(true, by: reader)
-        hiders.set(false, by: selection)
-        #expect(hiders.isHidden)
-        hiders.set(false, by: reader)
-        #expect(!hiders.isHidden)
+        #expect(!hiders.isHidden(in: .home))
+        hiders.set(true, by: selection, in: .home)
+        hiders.set(true, by: reader, in: .home)
+        hiders.set(false, by: selection, in: .home)
+        #expect(hiders.isHidden(in: .home))
+        hiders.set(false, by: reader, in: .home)
+        #expect(!hiders.isHidden(in: .home))
+    }
+
+    /// The review's inbox scenario: a Select left on in Writing's stack must not hide Home's bar.
+    @MainActor @Test func aScreenInAnotherTabNeverHidesTheSelectedTabsBar() {
+        let chrome = TabChromeState()
+        chrome.selectedTab = .home
+        chrome.setHidden(true, by: UUID(), in: .writing)
+        #expect(!chrome.isBarHidden)
+        chrome.selectedTab = .writing
+        #expect(chrome.isBarHidden)
     }
 
     @Test func shrinkRuleIsTheTopChromeRule() {

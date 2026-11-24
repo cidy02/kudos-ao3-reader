@@ -39,11 +39,20 @@ struct ScrollAwayTopChrome: ViewModifier {
                     fromTop: geometry.contentOffset.y + geometry.contentInsets.top
                 )
             } action: { old, new in
+                // The tab bar has its own state: tab switches and pushes reset it, and the
+                // navigation bar's `own` must not gate it.
+                if let chrome {
+                    let shrunk = Self.hides(chrome.isShrunk, from: old.offset, to: new.offset, fromTop: new.fromTop)
+                    if shrunk != chrome.isShrunk {
+                        withAnimationUnlessReduced(.easeInOut(duration: 0.22), reduceMotion: reduceMotion) {
+                            chrome.isShrunk = shrunk
+                        }
+                    }
+                }
                 let next = Self.hides(isHidden, from: old.offset, to: new.offset, fromTop: new.fromTop)
                 guard next != isHidden else { return }
                 withAnimationUnlessReduced(.easeInOut(duration: 0.22), reduceMotion: reduceMotion) {
                     if let external { external.wrappedValue = next } else { own = next }
-                    chrome?.isShrunk = next
                 }
             }
             // Pushing a screen leaves this root; the bar comes back with the new page.

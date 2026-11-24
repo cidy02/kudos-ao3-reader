@@ -31,13 +31,15 @@ enum ShrinkingTabBarPolicy {
 }
 
 /// Every screen that wants the bar gone registers here; the bar is hidden while any does.
+/// Each caller is keyed by the tab it lives in, so a screen in another tab's stack can
+/// never hide the bar of the tab on screen.
 struct TabBarHiders: Equatable {
-    private(set) var ids: Set<UUID> = []
+    private(set) var tabs: [UUID: AppTab] = [:]
 
-    var isHidden: Bool { !ids.isEmpty }
+    func isHidden(in tab: AppTab) -> Bool { tabs.values.contains(tab) }
 
-    mutating func set(_ hidden: Bool, by id: UUID) {
-        if hidden { ids.insert(id) } else { ids.remove(id) }
+    mutating func set(_ hidden: Bool, by id: UUID, in tab: AppTab) {
+        if hidden { tabs[id] = tab } else { tabs[id] = nil }
     }
 }
 
@@ -54,14 +56,16 @@ final class TabChromeState {
     var isShrunk = false
     /// True while Kudos's own bar replaces the system one.
     var usesCustomBar = false
+    var selectedTab: AppTab = .home
     private(set) var hiders = TabBarHiders()
     private(set) var reselect: TabReselect?
 
-    var isBarHidden: Bool { hiders.isHidden }
+    var isBarHidden: Bool { hiders.isHidden(in: selectedTab) }
 
-    func setHidden(_ hidden: Bool, by id: UUID) {
-        guard hiders.ids.contains(id) != hidden else { return }
-        hiders.set(hidden, by: id)
+    func setHidden(_ hidden: Bool, by id: UUID, in tab: AppTab) {
+        var next = hiders
+        next.set(hidden, by: id, in: tab)
+        if next != hiders { hiders = next }
     }
 
     func reselected(_ tab: AppTab) {
@@ -69,10 +73,30 @@ final class TabChromeState {
     }
 }
 
+private struct ChromeTabKey: EnvironmentKey {
+    static let defaultValue: AppTab? = nil
+}
+
+extension EnvironmentValues {
+    /// The tab whose content this view is in (set by the iPhone shell).
+    var chromeTab: AppTab? {
+        get { self[ChromeTabKey.self] }
+        set { self[ChromeTabKey.self] = newValue }
+    }
+}
+
 private struct TabBarHiddenModifier: ViewModifier {
     let hidden: Bool
     @Environment(TabChromeState.self) private var chrome: TabChromeState?
+    @Environment(\.chromeTab) private var tab
     @State private var id = UUID()
+    /// Only a screen that is on screen may hide the bar: a copy still mounted in another
+    /// tab's stack (or behind a sheet) sees `hidden` change too, and must not leak it.
+    @State private var isVisible = false
+
+    private func register(_ now: Bool) {
+        if let tab { chrome?.setHidden(now, by: id, in: tab) }
+    }
 
     func body(content: Content) -> some View {
         #if os(iOS)
@@ -82,9 +106,9 @@ private struct TabBarHiddenModifier: ViewModifier {
         let base = content
         #endif
         base
-            .onAppear { chrome?.setHidden(hidden, by: id) }
-            .onChange(of: hidden) { _, now in chrome?.setHidden(now, by: id) }
-            .onDisappear { chrome?.setHidden(false, by: id) }
+            .onAppear { isVisible = true; register(hidden) }
+            .onChange(of: hidden) { _, now in if isVisible { register(now) } }
+            .onDisappear { isVisible = false; register(false) }
     }
 }
 
@@ -124,8 +148,9 @@ private struct TabReselectModifier: ViewModifier {
 #if os(iOS)
 /// Scrolls the page's main scroll view to the top when `token` changes.
 /// shortcut: finds the scroll view by walking UIKit (SwiftUI has no handle to a List/ScrollView
-/// it did not build with a proxy), taking the largest tall one near this view; upgrade to
-/// `scrollPosition` per root if a screen ever has two competing tall scroll views.
+/// it did not build with a proxy): up from this view to the enclosing navigation controller,
+/// taking the largest tall VERTICAL one; upgrade to `scrollPosition` per root if a screen ever
+/// has two competing tall scroll views.
 private struct ScrollToTopProbe: UIViewRepresentable {
     let token: Int
 
@@ -142,12 +167,29 @@ private struct ScrollToTopProbe: UIViewRepresentable {
         guard context.coordinator.last != token else { return }
         context.coordinator.last = token
         var ancestor = view.superview
-        while let current = ancestor {
+        var hops = 0
+        while let current = ancestor, hops < 40 {
             if let scroll = Self.mainScrollView(in: current) {
-                scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: -scroll.adjustedContentInset.top), animated: true)
+                Self.scrollToTop(scroll)
                 return
             }
+            if current.next is UINavigationController { return }
             ancestor = current.superview
+            hops += 1
+        }
+    }
+
+    private static func scrollToTop(_ scroll: UIScrollView) {
+        let animated = !UIAccessibility.isReduceMotionEnabled
+        func go(_ animated: Bool) {
+            scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: -scroll.adjustedContentInset.top), animated: animated)
+        }
+        go(animated)
+        // Scrolling up brings the hidden navigation bar back, which raises the top inset:
+        // settle once against the final inset so the title is not left under the bar.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak scroll] in
+            guard let scroll, scroll.contentOffset.y > -scroll.adjustedContentInset.top + 1 else { return }
+            go(false)
         }
     }
 
@@ -158,6 +200,7 @@ private struct ScrollToTopProbe: UIViewRepresentable {
             let next = queue.removeFirst()
             if let scroll = next as? UIScrollView, !scroll.isHidden, scroll.window != nil,
                scroll.bounds.height > 200, scroll.bounds.width >= scroll.bounds.height * 0.4,
+               scroll.alwaysBounceVertical || scroll.contentSize.height > scroll.bounds.height,
                scroll.bounds.height * scroll.bounds.width > (best.map { $0.bounds.height * $0.bounds.width } ?? 0) {
                 best = scroll
             }
@@ -174,10 +217,41 @@ struct TabBarContentInset: UIViewRepresentable {
     let inset: CGFloat
 
     final class Probe: UIView {
-        var apply: (() -> Void)?
+        var inset: CGFloat = 0
+        private weak var controller: UITabBarController?
+
+        // The controller can attach after this view does, or be rebuilt (`.id` on the
+        // TabView): re-apply on every layout and window change instead of once.
         override func didMoveToWindow() {
             super.didMoveToWindow()
-            apply?()
+            apply()
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            apply()
+        }
+
+        func apply() {
+            let found = Self.tabBarController(from: window?.rootViewController)
+            if let old = controller, old !== found { old.additionalSafeAreaInsets.bottom = 0 }
+            controller = found
+            guard let found, found.additionalSafeAreaInsets.bottom != inset else { return }
+            found.additionalSafeAreaInsets.bottom = inset
+        }
+
+        func reset() {
+            controller?.additionalSafeAreaInsets.bottom = 0
+            controller = nil
+        }
+
+        private static func tabBarController(from root: UIViewController?) -> UITabBarController? {
+            guard let root else { return nil }
+            if let tabs = root as? UITabBarController { return tabs }
+            for child in root.children {
+                if let found = tabBarController(from: child) { return found }
+            }
+            return nil
         }
     }
 
@@ -188,22 +262,12 @@ struct TabBarContentInset: UIViewRepresentable {
     }
 
     func updateUIView(_ probe: Probe, context: Context) {
-        let inset = inset
-        probe.apply = { [weak probe] in
-            guard let controller = Self.tabBarController(from: probe?.window?.rootViewController) else { return }
-            guard controller.additionalSafeAreaInsets.bottom != inset else { return }
-            controller.additionalSafeAreaInsets.bottom = inset
-        }
-        probe.apply?()
+        probe.inset = inset
+        probe.apply()
     }
 
-    private static func tabBarController(from root: UIViewController?) -> UITabBarController? {
-        guard let root else { return nil }
-        if let tabs = root as? UITabBarController { return tabs }
-        for child in root.children {
-            if let found = tabBarController(from: child) { return found }
-        }
-        return nil
+    static func dismantleUIView(_ probe: Probe, coordinator: ()) {
+        probe.reset()
     }
 }
 #endif
@@ -218,7 +282,6 @@ struct ShrinkingTabBar: View {
 
     @Environment(\.accentFill) private var accentFill
     @Environment(\.accentInk) private var accentInk
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var availableWidth: CGFloat = 0
 
     private var height: CGFloat {
@@ -238,13 +301,15 @@ struct ShrinkingTabBar: View {
                 HStack(spacing: 0) {
                     ForEach(tabs) { tab in tabButton(tab) }
                 }
-                .padding(4)
+                .padding(.horizontal, 4)
                 .frame(height: height)
                 .glassEffect(.regular.interactive(), in: .capsule)
 
                 searchButton
             }
             .frame(width: barWidth)
+            .accessibilityElement(children: .contain)
+            .accessibilityAddTraits(.isTabBar)
         }
         .frame(maxWidth: .infinity)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
@@ -271,9 +336,12 @@ struct ShrinkingTabBar: View {
             }
             .foregroundStyle(selected ? accentInk : Color.primary)
             .frame(maxWidth: .infinity)
-            .frame(height: height - 8)
-            .background(selected ? accentFill.opacity(0.10) : .clear, in: .capsule)
-            .contentShape(.capsule)
+            // The tap target is the full bar height (44 pt shrunk); only the tint is inset.
+            .frame(height: height)
+            .background {
+                Capsule().fill(selected ? accentFill.opacity(0.10) : .clear).padding(.vertical, 4)
+            }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(tab.title)

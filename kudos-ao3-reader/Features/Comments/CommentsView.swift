@@ -1255,11 +1255,11 @@ struct CommentsView: View {
             .accessibilityLabel(title)
     }
 
-    private var usesTabViewBottomAccessory: Bool {
+    /// The composer takes the accessory slot (the speech mini-player yields to it).
+    private var composerOwnsAccessory: Bool {
         #if os(iOS)
         CommentsWriteBarPlacementPolicy.usesBottomAccessory(
-            // T-572: the system accessory rides the system bar; Kudos's own bar has none.
-            isModal: isModal || tabChrome?.usesCustomBar == true,
+            isModal: isModal,
             isAccessibilitySize: dynamicTypeSize.isAccessibilitySize
         )
         #else
@@ -1267,8 +1267,14 @@ struct CommentsView: View {
         #endif
     }
 
+    /// The system accessory rides the system bar; Kudos's own iPhone bar (T-572) has none,
+    /// so there the composer sits in-view just above it, in the same slot.
+    private var usesTabViewBottomAccessory: Bool {
+        composerOwnsAccessory && tabChrome?.usesCustomBar != true
+    }
+
     private var commentAccessoryActive: Bool {
-        guard usesTabViewBottomAccessory else { return false }
+        guard composerOwnsAccessory else { return false }
         if case .loaded = model.phase { return true }
         return false
     }

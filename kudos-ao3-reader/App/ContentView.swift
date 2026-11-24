@@ -584,6 +584,9 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(speechAccessoryAccessibilityLabel)
+            .accessibilityShowsLargeContentViewer {
+                Label(speechAccessoryTitle, systemImage: "waveform")
+            }
 
             Button { speech.toggle(from: nil) } label: {
                 Image(systemName: speech.isPlaying ? "pause.fill" : "play.fill")
@@ -855,6 +858,7 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
                     // A TabView-level toolbar() does not reach tabs whose roots never say
                     // anything about the bar (Browse, Writing), so say it on every tab.
                     destination(tab).toolbar(usesCustomBar ? .hidden : .automatic, for: .tabBar)
+                        .environment(\.chromeTab, tab)
                 } label: {
                     if duoLayout.hasVerticalBar {
                         Label {
@@ -883,11 +887,13 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
                 Tab(AppTab.search.title, systemImage: AppTab.search.symbol,
                     value: AppTab.search, role: .prominent) {
                     destination(.search).toolbar(usesCustomBar ? .hidden : .automatic, for: .tabBar)
+                        .environment(\.chromeTab, .search)
                 }
             } else {
                 Tab(AppTab.search.title, systemImage: AppTab.search.symbol,
                     value: AppTab.search, role: .search) {
                     destination(.search).toolbar(usesCustomBar ? .hidden : .automatic, for: .tabBar)
+                        .environment(\.chromeTab, .search)
                 }
             }
         }
@@ -908,6 +914,9 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
                 VStack(spacing: ShrinkingTabBarPolicy.gap) {
                     if showsMiniPlayer {
                         speechAccessory()
+                            // Fixed-height capsule: cap the text scale (the title also has a
+                            // Large Content Viewer) so AX5 never clips it.
+                            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                             .frame(height: chrome.isShrunk ? 46 : ShrinkingTabBarPolicy.accessoryHeight)
                             .glassEffect(.regular, in: .capsule)
                             .padding(.horizontal, 17)
@@ -927,9 +936,15 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        // The keyboard covers the bar like the system bar; it must not ride up over it.
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .animation(unlessReduced: .easeInOut(duration: 0.22), value: chrome.isBarHidden)
+        .animation(unlessReduced: .easeInOut(duration: 0.22), value: chrome.isShrunk)
         .onChange(of: usesCustomBar, initial: true) { _, custom in chrome.usesCustomBar = custom }
-        .onChange(of: router.selection) { chrome.isShrunk = false }
+        .onChange(of: router.selection, initial: true) { _, tab in
+            chrome.selectedTab = tab
+            chrome.isShrunk = false
+        }
         .onChange(of: duoLayout.separatesSearchTab, initial: true) { _, separates in
             if separates { latchedSeparatesSearchTab = true }
         }
@@ -942,6 +957,8 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
         }) {
             AccountView()
                 .duoAccountSheetSizing(isFormSheet: accountPresentation == .formSheet)
+                // A sheet's screens must not hide or re-inset the bar behind it.
+                .environment(nil as TabChromeState?)
         }
         .onChange(of: router.selection) { _, selection in
             // Switching tabs from the live rail while Account's inspector is open
