@@ -143,6 +143,8 @@ struct ReadiumReaderView: View {
     /// The reader-scoped rotation lock. Shared (not per-view) because iOS asks
     /// the app delegate, not this view, which orientations are supported.
     private var orientationLock: ReaderOrientationLock { .shared }
+    /// This reader's claim on the lock, so a reader closing late frees nothing it no longer owns.
+    @State private var orientationLockOwner = UUID()
 
     @State private var book = ReadiumBook()
     @State private var chapterLengths: ChapterLengths?
@@ -532,7 +534,7 @@ struct ReadiumReaderView: View {
                 WorkLifecycle.keepIfKeepingWorksYouRead(work, in: modelContext)
                 WorkLifecycle.releaseHeldCopy(work)
                 // Rotation Lock is a saved reader setting: pin again on the way in.
-                orientationLock.readerDidOpen()
+                orientationLock.readerDidOpen(owner: orientationLockOwner)
             }
             .onChange(of: scenePhase) { _, phase in
                 // Force-quit safety: flush when leaving the foreground so a
@@ -590,7 +592,7 @@ struct ReadiumReaderView: View {
                 // The lock is the reader's, not the app's — never leave the rest
                 // of the app pinned to whatever orientation reading ended in. The
                 // setting itself stays on for the next book (BUG-13).
-                orientationLock.release()
+                orientationLock.release(owner: orientationLockOwner)
                 if AppRouter.readerClearsSharedPanel(
                     router.panel,
                     ownsPanel: AppRouter.readerOwnsSharedPanel(

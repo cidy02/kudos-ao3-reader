@@ -32,6 +32,8 @@ final class ReaderOrientationLock {
     private(set) var mask: UIInterfaceOrientationMask = .all
 
     private let defaults: UserDefaults
+    /// The reader that last opened; only it may free the mask.
+    private var owner: UUID?
     private let applyMask: @MainActor (UIWindowScene?, UIInterfaceOrientationMask) -> Void
 
     /// `applyMask` is injectable so tests never rotate the test host.
@@ -66,11 +68,13 @@ final class ReaderOrientationLock {
     func unlock(in scene: UIWindowScene? = nil) {
         defaults.set(false, forKey: Self.lockedKey)
         isLocked = false
-        release(in: scene)
+        freeMask(in: scene)
     }
 
-    /// A reader opened: pin it again to the saved orientation if the lock is on.
-    func readerDidOpen(in scene: UIWindowScene? = nil) {
+    /// A reader opened: it owns the lock now, and is pinned again to the saved
+    /// orientation if the setting is on.
+    func readerDidOpen(owner: UUID, in scene: UIWindowScene? = nil) {
+        self.owner = owner
         guard isLocked,
               let orientation = UIInterfaceOrientation(rawValue: defaults.integer(forKey: Self.orientationKey)),
               orientation != .unknown else { return }
@@ -78,9 +82,16 @@ final class ReaderOrientationLock {
         applyMask(scene, mask)
     }
 
-    /// Returns the app to free rotation when the reader closes; the setting stays.
-    /// Safe to call when nothing is pinned.
-    func release(in scene: UIWindowScene? = nil) {
+    /// The reader `owner` closed: free the rest of the app; the setting stays. A
+    /// reader that no longer owns the lock changes nothing — Start Next Work can
+    /// open the next reader before the old one disappears.
+    func release(owner: UUID, in scene: UIWindowScene? = nil) {
+        guard owner == self.owner else { return }
+        self.owner = nil
+        freeMask(in: scene)
+    }
+
+    private func freeMask(in scene: UIWindowScene?) {
         guard mask != .all else { return }
         mask = .all
         applyMask(scene, mask)

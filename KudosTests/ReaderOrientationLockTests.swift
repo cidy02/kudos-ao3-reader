@@ -18,15 +18,17 @@ struct ReaderOrientationLockTests {
         var applied: [UIInterfaceOrientationMask] = []
         let lock = ReaderOrientationLock(defaults: defaults) { _, mask in applied.append(mask) }
 
+        let reader = UUID()
+        lock.readerDidOpen(owner: reader)
         lock.lock(to: .landscapeLeft)
         #expect(lock.isLocked)
         #expect(lock.mask == .landscapeLeft)
 
-        lock.release()
+        lock.release(owner: reader)
         #expect(lock.isLocked, "leaving the reader must not turn Rotation Lock off")
         #expect(lock.mask == .all, "the rest of the app rotates freely")
 
-        lock.readerDidOpen()
+        lock.readerDidOpen(owner: UUID())
         #expect(lock.mask == .landscapeLeft, "the next reader is pinned again")
         #expect(applied == [.landscapeLeft, .all, .landscapeLeft])
     }
@@ -38,8 +40,21 @@ struct ReaderOrientationLockTests {
         let relaunched = ReaderOrientationLock(defaults: defaults) { _, _ in }
         #expect(relaunched.isLocked)
         #expect(relaunched.mask == .all, "nothing is pinned until a reader opens")
-        relaunched.readerDidOpen()
+        relaunched.readerDidOpen(owner: UUID())
         #expect(relaunched.mask == .portrait)
+    }
+
+    /// Start Next Work can show the next reader before the old one disappears.
+    @Test func aReaderClosingLateDoesNotFreeTheNextOne() {
+        let lock = ReaderOrientationLock(defaults: makeDefaults()) { _, _ in }
+        lock.lock(to: .landscapeLeft)
+        let old = UUID(), next = UUID()
+        lock.readerDidOpen(owner: old)
+        lock.readerDidOpen(owner: next)
+        lock.release(owner: old)
+        #expect(lock.mask == .landscapeLeft, "the new reader stays pinned")
+        lock.release(owner: next)
+        #expect(lock.mask == .all)
     }
 
     @Test func turningItOffIsRemembered() {
@@ -51,7 +66,7 @@ struct ReaderOrientationLockTests {
         #expect(lock.mask == .all)
 
         let relaunched = ReaderOrientationLock(defaults: defaults) { _, _ in }
-        relaunched.readerDidOpen()
+        relaunched.readerDidOpen(owner: UUID())
         #expect(!relaunched.isLocked)
         #expect(relaunched.mask == .all)
     }
