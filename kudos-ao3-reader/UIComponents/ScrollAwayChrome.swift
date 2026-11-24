@@ -90,30 +90,15 @@ extension View {
 }
 
 #if os(iOS)
-private struct ShrinkAttachedKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
-extension EnvironmentValues {
-    /// Set once an outer surface already shrinks the bar, so a nested one need not observe again.
-    fileprivate var shrinkAttached: Bool {
-        get { self[ShrinkAttachedKey.self] }
-        set { self[ShrinkAttachedKey.self] = newValue }
-    }
-}
-
 private struct TabBarShrinksOnScroll: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(TabChromeState.self) private var chrome: TabChromeState?
-    @Environment(\.shrinkAttached) private var attached
 
-    @ViewBuilder
+    // shortcut: screens combining cardList + subjectScreenWash observe twice (same rule, same
+    // state, so harmless). An environment flag to dedupe leaked into pushed destinations
+    // declared inside a root and silenced them; upgrade only with a non-inheriting marker.
     func body(content: Content) -> some View {
-        if attached {
-            content
-        } else {
-            observed(content).environment(\.shrinkAttached, true)
-        }
+        observed(content)
     }
 
     private func observed(_ content: Content) -> some View {
