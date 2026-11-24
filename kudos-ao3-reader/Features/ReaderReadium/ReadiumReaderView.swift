@@ -531,6 +531,8 @@ struct ReadiumReaderView: View {
                 )
                 WorkLifecycle.keepIfKeepingWorksYouRead(work, in: modelContext)
                 WorkLifecycle.releaseHeldCopy(work)
+                // Rotation Lock is a saved reader setting: pin again on the way in.
+                orientationLock.readerDidOpen()
             }
             .onChange(of: scenePhase) { _, phase in
                 // Force-quit safety: flush when leaving the foreground so a
@@ -586,7 +588,8 @@ struct ReadiumReaderView: View {
                 try? modelContext.save()
                 scheduleFolderSyncOnReaderClose()
                 // The lock is the reader's, not the app's — never leave the rest
-                // of the app pinned to whatever orientation reading ended in.
+                // of the app pinned to whatever orientation reading ended in. The
+                // setting itself stays on for the next book (BUG-13).
                 orientationLock.release()
                 if AppRouter.readerClearsSharedPanel(
                     router.panel,

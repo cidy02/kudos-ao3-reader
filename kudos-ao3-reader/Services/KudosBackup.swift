@@ -2180,8 +2180,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     /// Deliberately not here, and why (see docs/DATA_AND_PERSISTENCE_INVARIANTS.md): sign-in
     /// state; this device's own wiring (the sync folder connection, device and signing ids,
     /// migration flags, crash counters, which voice pack this device downloaded, the open
-    /// tab, onboarding); AO3 politeness timers, which belong to this device's traffic; and the
-    /// developer-only demo and debug switches.
+    /// tab, onboarding, the reader's Rotation Lock and its pinned orientation, since an iPad
+    /// held in landscape must not pin an iPhone); AO3 politeness timers, which belong to
+    /// this device's traffic; and the developer-only demo and debug switches.
 
     static let extraKeys: [String: KudosBackupSettingValue.Kind] = [
         "keepScreenAwake": .bool,
