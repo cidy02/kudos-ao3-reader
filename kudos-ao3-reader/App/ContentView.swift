@@ -908,6 +908,7 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
             speechAccessory()
         }
         .environment(chrome)
+        .environment(\.usesCustomTabBar, usesCustomBar)
         .background { TabBarContentInset(inset: customBarInset) }
         .overlay {
             // A full-size, bottom-aligned layer that ignores the keyboard region, so the keyboard

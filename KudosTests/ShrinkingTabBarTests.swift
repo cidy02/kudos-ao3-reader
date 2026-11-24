@@ -19,8 +19,6 @@ struct ShrinkingTabBarTests {
     }
 
 
-    /// The review's inbox scenario: a Select left on in Writing's stack must not hide Home's bar.
-
     @Test func shrinkRuleIsTheTopChromeRule() {
         // Near the top: never shrunk. Scrolling down past it: shrunk. Deliberate upward scroll: expanded.
         #expect(!ScrollAwayTopChrome.hides(true, from: 0, to: 20, fromTop: 20))
@@ -61,16 +59,15 @@ struct ShrinkingTabBarRegressionTests {
         #expect(!ReaderSpeechSessionPolicy.showsMiniPlayer(
             sessionActive: true, readerOpen: false, commentAccessoryTab: .library, selectedTab: .library))
         #expect(ShrinkingTabBarPolicy.pillDrop(isShrunk: true) == 18)
-        #expect(ShrinkingTabBarPolicy.pillDrop(isShrunk: false) == 0)
     }
 
     @Test func scrollToTopPicksTallVerticalScrollersAndNeverFightTheUser() {
         #expect(ScrollToTopPolicy.qualifies(size: CGSize(width: 390, height: 700), contentHeight: 2000, alwaysBounceVertical: false))
         #expect(!ScrollToTopPolicy.qualifies(size: CGSize(width: 390, height: 240), contentHeight: 240, alwaysBounceVertical: false)) // carousel
         #expect(!ScrollToTopPolicy.qualifies(size: CGSize(width: 390, height: 700), contentHeight: 300, alwaysBounceVertical: false))
-        #expect(ScrollToTopPolicy.shouldSettle(offset: -60, top: -100, userIsScrolling: false))
-        #expect(!ScrollToTopPolicy.shouldSettle(offset: -60, top: -100, userIsScrolling: true))
-        #expect(!ScrollToTopPolicy.shouldSettle(offset: 900, top: -100, userIsScrolling: false))
+        #expect(ScrollToTopPolicy.shouldSettle(offset: -60, top: -100, initialTop: -60, userIsScrolling: false))
+        #expect(!ScrollToTopPolicy.shouldSettle(offset: -60, top: -100, initialTop: -60, userIsScrolling: true))
+        #expect(!ScrollToTopPolicy.shouldSettle(offset: 900, top: -100, initialTop: -60, userIsScrolling: false))
     }
 
     /// A popped or sheet-contained screen stops contributing because the combined value is
@@ -95,8 +92,56 @@ struct ShrinkingTabBarRegressionTests {
         #expect(!chrome.isBarHidden)
     }
 
-    @Test func pillOnlyDropsOnTheShrunkCustomBar() {
-        #expect(ShrinkingTabBarPolicy.pillDrop(isShrunk: false) == 0)
-        #expect(ShrinkingTabBarPolicy.pillDrop(isShrunk: true) == 18)
+    @Test func pillOnlyDropsOnTheShrunkPushedCustomBar() {
+        // CommentsView's own predicate: the system bar and modal sheets never shift.
+        #expect(CommentsWriteBarPlacementPolicy.customBarDrop(customBar: true, isModal: false, isShrunk: true) == 18)
+        #expect(CommentsWriteBarPlacementPolicy.customBarDrop(customBar: true, isModal: false, isShrunk: false) == 0)
+        #expect(CommentsWriteBarPlacementPolicy.customBarDrop(customBar: false, isModal: false, isShrunk: true) == 0)
+        #expect(CommentsWriteBarPlacementPolicy.customBarDrop(customBar: true, isModal: true, isShrunk: true) == 0)
+    }
+
+    @Test func onlyTheScreenOnTopHidesTheBar() {
+        #expect(TabBarHiddenPolicy.emitted(hidden: true, onScreen: true))
+        #expect(!TabBarHiddenPolicy.emitted(hidden: true, onScreen: false)) // covered by a push
+        #expect(!TabBarHiddenPolicy.emitted(hidden: false, onScreen: true))
+    }
+
+    @Test func theTabBarShrinksWhateverTheNavBarFlagSays() {
+        // Nav bar still hidden from before a tab switch; the bar was reset to expanded.
+        let step = ScrollAwayTopChrome.step(navHidden: true, barShrunk: false, from: 500, to: 900, fromTop: 900)
+        #expect(step.nav)
+        #expect(step.bar)
+        let up = ScrollAwayTopChrome.step(navHidden: false, barShrunk: true, from: 900, to: 700, fromTop: 700)
+        #expect(!up.nav && !up.bar)
+    }
+
+    @MainActor @Test func aSheetIsNotTheRootAndUnknownIsNotRootEither() {
+        let chrome = TabChromeState()
+        #expect(TabChromeState.scoped(chrome, inRoot: true) === chrome)
+        #expect(TabChromeState.scoped(chrome, inRoot: false) == nil)
+        #expect(TabChromeState.scoped(chrome, inRoot: nil) == nil)
+
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let root = UIViewController()
+        window.rootViewController = root
+        window.makeKeyAndVisible()
+        let rootChild = UIView()
+        root.view.addSubview(rootChild)
+        #expect(!TabChromeCover.isModal(rootChild))
+
+        let sheet = UIViewController()
+        let sheetChild = UIView()
+        sheet.view.addSubview(sheetChild)
+        let nav = UINavigationController(rootViewController: sheet)
+        root.present(nav, animated: false)
+        #expect(TabChromeCover.isModal(sheetChild))
+        #expect(!TabChromeCover.isModal(rootChild))
+    }
+
+    @Test func scrollToTopSettlesOnlyWhenTheTopInsetGrew() {
+        #expect(ScrollToTopPolicy.shouldSettle(offset: -60, top: -100, initialTop: -60, userIsScrolling: false))
+        #expect(!ScrollToTopPolicy.shouldSettle(offset: -60, top: -100, initialTop: -100, userIsScrolling: false))
+        #expect(!ScrollToTopPolicy.qualifies(size: CGSize(width: 390, height: 700), contentHeight: 300,
+                                             alwaysBounceVertical: false, alwaysBounceHorizontal: true))
     }
 }

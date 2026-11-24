@@ -41,18 +41,18 @@ struct ScrollAwayTopChrome: ViewModifier {
             } action: { old, new in
                 // The tab bar has its own state: tab switches and pushes reset it, and the
                 // navigation bar's `own` must not gate it.
-                if let chrome {
-                    let shrunk = Self.barShrinks(chrome.isShrunk, from: old.offset, to: new.offset, fromTop: new.fromTop)
-                    if shrunk != chrome.isShrunk {
-                        withAnimationUnlessReduced(.easeInOut(duration: 0.22), reduceMotion: reduceMotion) {
-                            chrome.isShrunk = shrunk
-                        }
+                let step = Self.step(
+                    navHidden: isHidden, barShrunk: chrome?.isShrunk ?? false,
+                    from: old.offset, to: new.offset, fromTop: new.fromTop
+                )
+                if let chrome, step.bar != chrome.isShrunk {
+                    withAnimationUnlessReduced(.easeInOut(duration: 0.22), reduceMotion: reduceMotion) {
+                        chrome.isShrunk = step.bar
                     }
                 }
-                let next = Self.hides(isHidden, from: old.offset, to: new.offset, fromTop: new.fromTop)
-                guard next != isHidden else { return }
+                guard step.nav != isHidden else { return }
                 withAnimationUnlessReduced(.easeInOut(duration: 0.22), reduceMotion: reduceMotion) {
-                    if let external { external.wrappedValue = next } else { own = next }
+                    if let external { external.wrappedValue = step.nav } else { own = step.nav }
                 }
             }
             // Pushing a screen leaves this root; the bar comes back with the new page.
@@ -67,6 +67,15 @@ struct ScrollAwayTopChrome: ViewModifier {
 
     /// The tab bar's half of the rule. It keeps its own state, apart from the navigation bar's
     /// `hidden`: a tab switch or push resets the bar but leaves the nav bar's flag alone.
+    /// Both bars' next state from one scroll step. They are independent: the nav bar's flag can be
+    /// stale after a tab switch while the tab bar was reset, and must not gate it.
+    nonisolated static func step(
+        navHidden: Bool, barShrunk: Bool, from old: CGFloat, to new: CGFloat, fromTop: CGFloat
+    ) -> (nav: Bool, bar: Bool) {
+        (hides(navHidden, from: old, to: new, fromTop: fromTop),
+         barShrinks(barShrunk, from: old, to: new, fromTop: fromTop))
+    }
+
     nonisolated static func barShrinks(_ shrunk: Bool, from old: CGFloat, to new: CGFloat, fromTop: CGFloat) -> Bool {
         hides(shrunk, from: old, to: new, fromTop: fromTop)
     }

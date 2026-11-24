@@ -101,6 +101,7 @@ struct CommentsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(TabChromeState.self) private var tabChrome: TabChromeState?
+    @Environment(\.usesCustomTabBar) private var usesCustomTabBar
     @ScaledMetric(relativeTo: .caption) private var noteSize: CGFloat = 11.5
     @ScaledMetric(relativeTo: .footnote) private var writeCommentButtonSize: CGFloat = 14
 
@@ -268,8 +269,8 @@ struct CommentsView: View {
                 CommentWriteBarPlacement(
                     isAccessoryActive: usesTabViewBottomAccessory,
                     accessibilitySize: dynamicTypeSize.isAccessibilitySize,
-                    customBarDrop: ShrinkingTabBarPolicy.pillDrop(
-                        isShrunk: tabChrome?.isShrunk == true && tabChrome?.usesCustomBar == true && !isModal
+                    customBarDrop: CommentsWriteBarPlacementPolicy.customBarDrop(
+                        customBar: usesCustomTabBar, isModal: isModal, isShrunk: tabChrome?.isShrunk == true
                     )
                 ) {
                     writeCommentBar
@@ -1282,7 +1283,7 @@ struct CommentsView: View {
     private var usesTabViewBottomAccessory: Bool {
         CommentsWriteBarPlacementPolicy.usesSystemAccessory(
             composerOwnsAccessory: composerOwnsAccessory,
-            customBar: tabChrome?.usesCustomBar == true
+            customBar: usesCustomTabBar
         )
     }
 

@@ -35,7 +35,6 @@ enum ShrinkingTabBarPolicy {
     }
 }
 
-/// Every screen that wants the bar gone registers here; the bar is hidden while any does.
 /// A tap on the already-selected tab; `count` makes repeated taps distinct.
 struct TabReselect: Equatable {
     let tab: AppTab
@@ -74,21 +73,45 @@ struct TabBarHiddenKey: PreferenceKey {
 
 extension TabChromeState {
     /// Only the root tab stacks drive the chrome: anything inside a sheet or cover gets none.
-    static func scoped(_ chrome: TabChromeState?, inRoot: Bool) -> TabChromeState? {
-        inRoot ? chrome : nil
+    /// `inRoot` is nil until the probe has looked: a sheet must never touch the root bar first.
+    static func scoped(_ chrome: TabChromeState?, inRoot: Bool?) -> TabChromeState? {
+        inRoot == true ? chrome : nil
+    }
+}
+
+/// Only the screen on top of its stack may hide the bar (the system's rule): a screen
+/// covered by a push stops contributing and contributes again when it is back on top.
+/// A sheet or cover over a screen does not disappear it, so the reader stays hidden behind Comments.
+enum TabBarHiddenPolicy {
+    static func emitted(hidden: Bool, onScreen: Bool) -> Bool { hidden && onScreen }
+}
+
+private struct UsesCustomTabBarKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// Plain (unscoped) flag: true while Kudos's own bar replaces the system one on this device.
+    var usesCustomTabBar: Bool {
+        get { self[UsesCustomTabBarKey.self] }
+        set { self[UsesCustomTabBarKey.self] = newValue }
     }
 }
 
 private struct TabBarHiddenModifier: ViewModifier {
     let hidden: Bool
-    @Environment(TabChromeState.self) private var chrome: TabChromeState?
+    @Environment(\.usesCustomTabBar) private var usesCustomBar
+    /// Starts true so a screen that mounts already on top hides the bar from its first frame.
+    @State private var onScreen = true
 
     func body(content: Content) -> some View {
         #if os(iOS)
         // The system bar still serves iPad / Duo; on iPhone it is always off.
         content
-            .toolbar(hidden || chrome?.usesCustomBar == true ? .hidden : .automatic, for: .tabBar)
-            .preference(key: TabBarHiddenKey.self, value: hidden)
+            .toolbar(hidden || usesCustomBar ? .hidden : .automatic, for: .tabBar)
+            .preference(key: TabBarHiddenKey.self, value: TabBarHiddenPolicy.emitted(hidden: hidden, onScreen: onScreen))
+            .onAppear { onScreen = true }
+            .onDisappear { onScreen = false }
         #else
         content
         #endif
@@ -108,7 +131,7 @@ enum TabChromeCover {
 }
 
 private struct ModalProbe: UIViewRepresentable {
-    @Binding var inRoot: Bool
+    @Binding var inRoot: Bool?
 
     final class Probe: UIView {
         var onChange: ((Bool) -> Void)?
@@ -130,7 +153,7 @@ private struct ModalProbe: UIViewRepresentable {
     }
 
     func updateUIView(_ probe: Probe, context: Context) {
-        probe.onChange = { now in if now != inRoot { inRoot = now } }
+        probe.onChange = { now in if inRoot != now { inRoot = now } }
     }
 }
 #endif
@@ -138,7 +161,7 @@ private struct ModalProbe: UIViewRepresentable {
 /// Hides the chrome environment from everything inside a sheet or cover.
 private struct RootChromeScope: ViewModifier {
     @Environment(TabChromeState.self) private var chrome: TabChromeState?
-    @State private var inRoot = true
+    @State private var inRoot: Bool?
 
     func body(content: Content) -> some View {
         #if os(iOS)
@@ -192,15 +215,19 @@ private struct TabReselectModifier: ViewModifier {
 /// Pure choices behind scroll-to-top.
 enum ScrollToTopPolicy {
     /// A tall vertical scroll view, not a carousel.
-    static func qualifies(size: CGSize, contentHeight: CGFloat, alwaysBounceVertical: Bool) -> Bool {
+    static func qualifies(
+        size: CGSize, contentHeight: CGFloat, alwaysBounceVertical: Bool, alwaysBounceHorizontal: Bool = false
+    ) -> Bool {
         size.height > 200 && size.width >= size.height * 0.4
+            && !(alwaysBounceHorizontal && !alwaysBounceVertical)
             && (alwaysBounceVertical || contentHeight > size.height)
     }
 
     /// The post-scroll correction only fixes a small miss from the nav bar's return; it never
     /// fights a user who has started scrolling, or has already moved well away from the top.
-    static func shouldSettle(offset: CGFloat, top: CGFloat, userIsScrolling: Bool) -> Bool {
-        !userIsScrolling && offset > top + 1 && offset < top + 160
+    /// It runs only if the top inset grew (the nav bar came back): otherwise there is nothing to fix.
+    static func shouldSettle(offset: CGFloat, top: CGFloat, initialTop: CGFloat, userIsScrolling: Bool) -> Bool {
+        !userIsScrolling && top < initialTop - 1 && offset > top + 1 && offset < top + 160
     }
 }
 
@@ -243,6 +270,7 @@ private struct ScrollToTopProbe: UIViewRepresentable {
         func go(_ animated: Bool) {
             scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: -scroll.adjustedContentInset.top), animated: animated)
         }
+        let initialTop = -scroll.adjustedContentInset.top
         go(!reduce)
         // Scrolling up brings the hidden navigation bar back, which raises the top inset:
         // settle once against the final inset, unless the user has taken over by then.
@@ -252,6 +280,7 @@ private struct ScrollToTopProbe: UIViewRepresentable {
             guard ScrollToTopPolicy.shouldSettle(
                 offset: scroll.contentOffset.y,
                 top: top,
+                initialTop: initialTop,
                 userIsScrolling: scroll.isTracking || scroll.isDragging || scroll.isDecelerating
             ) else { return }
             go(false)
@@ -267,7 +296,8 @@ private struct ScrollToTopProbe: UIViewRepresentable {
                ScrollToTopPolicy.qualifies(
                    size: scroll.bounds.size,
                    contentHeight: scroll.contentSize.height,
-                   alwaysBounceVertical: scroll.alwaysBounceVertical
+                   alwaysBounceVertical: scroll.alwaysBounceVertical,
+                   alwaysBounceHorizontal: scroll.alwaysBounceHorizontal
                ),
                scroll.bounds.height * scroll.bounds.width > (best.map { $0.bounds.height * $0.bounds.width } ?? 0) {
                 best = scroll
