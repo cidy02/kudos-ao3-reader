@@ -62,8 +62,29 @@ nonisolated struct ManifestSectionSpec {
         _ keys: @escaping (T) -> ManifestRecordKeys
     ) -> ManifestSectionSpec {
         ManifestSectionSpec(name: name, policy: policy, indexed: indexed) { decoder, encoder, data in
+            let defaults = decoder.userInfo[KudosBackupContents.stagingDefaultsKey] as? ManifestDefaultMarker
+            defaults?.used = false
+            defaults?.fields.removeAll(keepingCapacity: true)
             guard let value = try? decoder.decode(T.self, from: data) else { return nil }
-            return (keys(value), generatesDefaults ? try? encoder.encode(value) : nil)
+            guard generatesDefaults, defaults?.used == true else { return (keys(value), nil) }
+            // Insert only generated fields into compact source JSON. A present/null or escaped spelling falls back to
+            // canonical encoding, preserving first-wins and avoiding a second fresh default on reconstruction.
+            if let fields = defaults?.fields, !fields.isEmpty, data.first == UInt8(ascii: "{"), data.last == UInt8(ascii: "}"),
+               !data.contains(UInt8(ascii: "\\")), data.count >= 2,
+               (data.count == 2 || data[1] == UInt8(ascii: "\"")),
+               data[data.count - 2] != UInt8(ascii: ","),
+               fields.allSatisfy({ data.range(of: Data("\"\($0.0)\"".utf8)) == nil }) {
+                var compact = data
+                compact.removeLast()
+                for (index, field) in fields.enumerated() {
+                    if data.count > 2 || index > 0 { compact.append(UInt8(ascii: ",")) }
+                    compact.append(contentsOf: Data("\"\(field.0)\":".utf8))
+                    compact.append(field.1)
+                }
+                compact.append(UInt8(ascii: "}"))
+                return (keys(value), compact)
+            }
+            return (keys(value), try? encoder.encode(value))
         }
     }
 

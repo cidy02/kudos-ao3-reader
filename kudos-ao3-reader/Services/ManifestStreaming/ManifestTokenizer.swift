@@ -98,7 +98,8 @@ nonisolated struct ManifestTokenizer {
     }
 
     /// Skips one JSON value (validating it) and returns its byte range and kind.
-    mutating func skipValue(depth: Int = 0) throws -> (ManifestValueKind, Range<Int>) {
+    mutating func skipValue(depth: Int = 0, trackDuplicates: Bool = true,
+                            recordRemovals: Bool = true) throws -> (ManifestValueKind, Range<Int>) {
         if Task.isCancelled { throw ManifestScanError.cancelled }
         skipWhitespace()
         guard let b = peek() else { throw ManifestScanError.unexpectedEnd }
@@ -115,13 +116,17 @@ nonisolated struct ManifestTokenizer {
                 skipWhitespace()
                 guard peek() == UInt8(ascii: "\"") else { throw fail("object key") }
                 let keyRange = try skipString()
-                let duplicate = try noteKey(keyRange, in: &scan).duplicate
+                let duplicate = try noteKey(keyRange, in: &scan, retain: trackDuplicates).duplicate
                 skipWhitespace()
                 guard peek() == UInt8(ascii: ":") else { throw fail("colon") }
                 pos += 1
-                let (_, value) = try skipValue(depth: depth + 1)
-                if duplicate, scan.separator >= 0 {
-                    if removals.count >= 1 << 20 { noteLimit("too many duplicate members") } else { removals.append(scan.separator ..< value.upperBound) }
+                let (_, value) = try skipValue(depth: depth + 1, trackDuplicates: trackDuplicates && !duplicate,
+                                               recordRemovals: recordRemovals && !duplicate)
+                if recordRemovals, duplicate, scan.separator >= 0 {
+                    let cut = scan.separator ..< value.upperBound
+                    if let last = removals.last, last.upperBound == cut.lowerBound {
+                        removals[removals.count - 1] = last.lowerBound ..< cut.upperBound
+                    } else { removals.append(cut) }
                 }
                 skipWhitespace()
                 guard let c = peek() else { throw ManifestScanError.unexpectedEnd }
@@ -138,7 +143,8 @@ nonisolated struct ManifestTokenizer {
             skipWhitespace()
             if peek() == UInt8(ascii: "]") { pos += 1; return (.array, start ..< pos) }
             while true {
-                _ = try skipValue(depth: depth + 1)
+                _ = try skipValue(depth: depth + 1, trackDuplicates: trackDuplicates,
+                                  recordRemovals: recordRemovals)
                 skipWhitespace()
                 guard let c = peek() else { throw ManifestScanError.unexpectedEnd }
                 pos += 1
@@ -246,11 +252,13 @@ nonisolated struct ManifestTokenizer {
     /// Registers one object key (already scanned at `range`): counts the member, enforces the limits and returns whether an
     /// equal key came earlier in this object (the later value then loses). Equality is the exact UTF-16 sequence after
     /// unescaping, with no Unicode normalisation.
-    mutating func noteKey(_ range: Range<Int>, in scan: inout ManifestObjectScan) throws -> (units: [UInt16]?, duplicate: Bool) {
+    mutating func noteKey(_ range: Range<Int>, in scan: inout ManifestObjectScan,
+                          retain: Bool = true) throws -> (units: [UInt16]?, duplicate: Bool) {
         scan.members += 1
         if scan.members > ManifestLimits.maxKeysPerObject { noteLimit("more than \(ManifestLimits.maxKeysPerObject) members in one object") }
         guard limitHit == nil else { return (nil, false) }
         guard let units = try keyUnits(range) else { return (nil, false) }
+        guard retain else { return (nil, false) }
         // A duplicate costs nothing, so it is found before the budget is checked (shared decision 19a).
         if scan.seen.contains(units) { return (units, true) }
         let cost = units.count
@@ -301,6 +309,8 @@ nonisolated struct ManifestTokenizer {
             decode(UnsafeRawBufferPointer(start: base + (range.lowerBound - windowStart), count: range.count))
         } else {
             let data = input.read(range)
+            if let failure = input.failure { throw ManifestStreamError.io(failure) }
+            guard data.count == range.count, data.count >= 2 else { throw ManifestStreamError.io("short key read") }
             data.withUnsafeBytes { decode($0) }
         }
         if units.count > ManifestLimits.maxKeyUnits { noteLimit("object key longer than \(ManifestLimits.maxKeyUnits) UTF-16 units"); return nil }

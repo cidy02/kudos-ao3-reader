@@ -281,8 +281,9 @@ struct ManifestStagingTests {
         defer { accented.discard() }
         var names: [String] = []
         try accented.forEachMember(pageSize: 2) { names.append($0.name) }
-        #expect(names.contains("\u{00E9}") && names.contains("e\u{0301}") && names.contains("a") && names.contains("a\u{0}"))
-        #expect(names.filter { $0 == "\u{00E9}" || $0 == "e\u{0301}" }.count == 2)
+        let units = names.map { Array($0.utf16) }
+        #expect(units.contains([0x00E9]) && units.contains([0x0065, 0x0301]))
+        #expect(units.contains(Array("a".utf16)) && units.contains(Array("a\u{0}".utf16)))
         run.discard(); accented.discard()
         #expect(scratch.leftovers.isEmpty)
     }
@@ -493,7 +494,7 @@ struct ManifestStagingTests {
         let index = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("cases.json"))) as? [String: Any])
         let wrapper = try #require(index["wrapper"] as? String)
         let cases = try #require(index["cases"] as? [[String: Any]])
-        #expect(cases.count >= 37)
+        #expect(cases.count >= 51)
         var disagreements: [String] = []
         for c in cases {
             let id = try #require(c["id"] as? String)
@@ -573,6 +574,10 @@ struct ManifestStagingTests {
         let scratch = Scratch()
         let deepArray = Data((String(repeating: "[", count: 513) + String(repeating: "]", count: 513)).utf8)
         #expect(try Self.stagedFailure(deepArray, scratch.options) == .invalidDocument(.schema))
+        var noDisk = scratch.options
+        noDisk.availableCapacity = { _ in 0 }
+        #expect(try Self.stagedFailure(deepArray, noDisk) == .invalidDocument(.schema))
+        #expect(try Self.stagedFailure(Data("[1".utf8), noDisk) == .invalidDocument(.notJSON))
         #expect(scratch.leftovers.isEmpty)
     }
 
@@ -593,13 +598,6 @@ struct ManifestStagingTests {
         var countBatches: [[ManifestRecordMeta]] = []
         try run.forEachValidationBatch(of: "works", maxRecords: 1) { countBatches.append($0) }
         #expect(countBatches.allSatisfy { $0.count == 1 })
-        // Three near-8-MiB metadata rows must form two batches, even though the count cap is 200.
-        try run.db.run("DELETE FROM rec_works WHERE seq >= 3")
-        for seq in 0 ..< 3 { try run.db.run("UPDATE rec_works SET length = ? WHERE seq = ?", [.int((8 << 20) - 1), .int(Int64(seq))]) }
-        var largeBatches: [Int] = []
-        try run.forEachValidationBatch(of: "works") { largeBatches.append($0.count) }
-        #expect(largeBatches.first == 2)
-        #expect(largeBatches.dropFirst().first == 1)
     }
 
     @Test func liveKeyLimitCountsDecodedUTF16Units() throws {
@@ -619,6 +617,136 @@ struct ManifestStagingTests {
             Issue.record("distinct key units exceeded the budget")
         } catch ManifestStreamError.resourceExhausted { }
         #expect(scratch.leftovers.isEmpty)
+    }
+
+    @Test func skippedDuplicateObjectDoesNotRetainItsKeys() throws {
+        let scratch = Scratch()
+        let file = scratch.url.appendingPathComponent("skipped-keys.json")
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        let writer = try FileHandle(forWritingTo: file)
+        try writer.write(contentsOf: Data("{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00Z\",\"works\":[],\"bookmarks\":[],\"fonts\":[],\"settings\":{},\"x\":0,\"x\":{".utf8))
+        for start in stride(from: 0, to: 175_000, by: 1000) {
+            let text = (start ..< start + 1000).map { "\($0 == 0 ? "" : ",")\"\(String(format: "%06d", $0))\(String(repeating: "k", count: 54))\":0" }.joined()
+            try writer.write(contentsOf: Data(text.utf8))
+        }
+        try writer.write(contentsOf: Data("}}".utf8)); try writer.close()
+        let run = try ManifestStager.stage(ManifestFileInput(url: file), options: scratch.options)
+        #expect(try run.presence(of: "x") == .present)
+        run.discard()
+        #expect(scratch.leftovers.isEmpty)
+    }
+
+    @Test func unknownValueDuplicatesDoNotAccumulateRemovals() throws {
+        let scratch = Scratch()
+        let file = scratch.url.appendingPathComponent("million-duplicates.json")
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        let writer = try FileHandle(forWritingTo: file)
+        try writer.write(contentsOf: Data("{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00Z\",\"works\":[],\"bookmarks\":[],\"fonts\":[],\"settings\":{},\"x\":[".utf8))
+        let chunk = Data((Array(repeating: "\"a\":0", count: 1000).joined(separator: ",")).utf8)
+        for object in 0 ..< 5 {
+            try writer.write(contentsOf: Data((object == 0 ? "{" : ",{").utf8))
+            for part in 0 ..< 210 {
+                if part > 0 { try writer.write(contentsOf: Data(",".utf8)) }
+                try writer.write(contentsOf: chunk)
+            }
+            try writer.write(contentsOf: Data("}".utf8))
+        }
+        try writer.write(contentsOf: Data("]}".utf8)); try writer.close()
+        try ManifestStager.stage(ManifestFileInput(url: file), options: scratch.options).discard()
+        #expect(scratch.leftovers.isEmpty)
+    }
+
+    @Test func compactWorkIsNotReencodedUnlessItGeneratesADefault() throws {
+        let scratch = Scratch()
+        let work = "{\"id\":\"00000001-0000-4000-8000-000000000001\",\"dateAdded\":\"2026-01-01T00:00:00Z\"}"
+        let prefix = "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00Z\",\"bookmarks\":[],\"fonts\":[],\"settings\":{},\"works\":["
+        let run = try ManifestStager.stage(ManifestDataInput(Data((prefix + work + "]}").utf8)), options: scratch.options)
+        var stored = Data()
+        try run.readPayload(of: "works", seq: 0) { stored.append($0) }
+        #expect(stored == Data(work.utf8))
+        run.discard()
+        let missingDate = "{\"id\":\"00000001-0000-4000-8000-000000000001\"}"
+        let defaulted = try ManifestStager.stage(ManifestDataInput(Data((prefix + missingDate + "]}").utf8)), options: scratch.options)
+        var canonical = Data()
+        try defaulted.readPayload(of: "works", seq: 0) { canonical.append($0) }
+        #expect(canonical.range(of: Data("\"dateAdded\"".utf8)) != nil)
+        #expect(canonical.range(of: Data("\"workWarnings\"".utf8)) == nil)
+        #expect(canonical.count < 150)
+        defaulted.discard()
+    }
+
+    @Test func deferredLossyRecordIsAChunkedSingletonBatchAndKeepsFirstValue() throws {
+        let scratch = Scratch()
+        var options = scratch.options
+        options.typedRecordBudget = 64
+        let entry = "{\"name\":\"first\",\"name\":\"second\",\"modifiedAt\":\"2026-01-01T00:00:00Z\",\"data\":\"\(String(repeating: "QUFB", count: 500))\"}"
+        let text = "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00Z\",\"works\":[],\"bookmarks\":[],\"fonts\":[],\"settings\":{},\"documents\":[\(entry)]}"
+        let run = try ManifestStager.stage(ManifestDataInput(Data(text.utf8)), options: options)
+        defer { run.discard() }
+        var batches: [[ManifestRecordMeta]] = []
+        try run.forEachValidationBatch(of: "documents", maxBytes: 100) { batches.append($0) }
+        #expect(batches.count == 1 && batches[0].count == 1 && batches[0][0].status == .deferred)
+        var payload = Data()
+        try run.readPayload(of: "documents", seq: 0) { payload.append($0) }
+        #expect(payload.range(of: Data("\"name\":\"first\"".utf8)) != nil)
+        #expect(payload.range(of: Data("second".utf8)) == nil)
+    }
+
+    @Test func wrongKindLossyValueObeysKnownRootByteLimit() throws {
+        let scratch = Scratch()
+        let file = scratch.url.appendingPathComponent("wrong-kind-lossy.json")
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        let writer = try FileHandle(forWritingTo: file)
+        try writer.write(contentsOf: Data("{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00Z\",\"works\":[],\"bookmarks\":[],\"fonts\":[],\"settings\":{},\"documents\":\"".utf8))
+        let chunk = Data(repeating: 97, count: 1 << 20)
+        for _ in 0 ..< 16 { try writer.write(contentsOf: chunk) }
+        try writer.write(contentsOf: Data("\"}".utf8)); try writer.close()
+        do {
+            try ManifestStager.stage(ManifestFileInput(url: file), options: scratch.options).discard()
+            Issue.record("known root value exceeded its source-byte limit")
+        } catch ManifestStreamError.resourceExhausted { }
+    }
+
+    @Test func payloadRangeSeeksItsIndexedStartingChunk() throws {
+        let scratch = Scratch()
+        var options = scratch.options
+        options.chunkSize = 16
+        let text = "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00Z\",\"works\":[],\"bookmarks\":[],\"fonts\":[],\"settings\":{},\"documents\":[{\"name\":\"x\",\"modifiedAt\":\"2026-01-01T00:00:00Z\",\"data\":\"\(String(repeating: "QUFB", count: 100))\"}]}"
+        options.typedRecordBudget = 64
+        let run = try ManifestStager.stage(ManifestDataInput(Data(text.utf8)), options: options)
+        defer { run.discard() }
+        #expect(try run.payloadStartOffset(of: "documents", seq: 0, at: 210) == 208)
+        var slice = Data()
+        try run.readPayload(of: "documents", seq: 0, range: 210 ..< 230) { slice.append($0) }
+        #expect(slice.count == 20)
+        var empty = 0
+        try run.readPayload(of: "documents", seq: 0, range: 210 ..< 210) { _ in empty += 1 }
+        #expect(empty == 0)
+    }
+
+    @Test func recordPageClampsUntrustedPageLimit() throws {
+        let scratch = Scratch()
+        let works = (0 ..< 1001).map { "{\"id\":\"\(String(format: "%08d", $0 + 1))-0000-4000-8000-000000000001\",\"dateAdded\":\"2026-01-01T00:00:00Z\"}" }.joined(separator: ",")
+        let text = "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00Z\",\"bookmarks\":[],\"fonts\":[],\"settings\":{},\"works\":[\(works)]}"
+        let run = try ManifestStager.stage(ManifestDataInput(Data(text.utf8)), options: scratch.options)
+        defer { run.discard() }
+        #expect(try run.recordPage(of: "works", limit: 5000).count == 1000)
+        #expect(try run.recordPage(of: "works", after: 999, limit: 5000).count == 1)
+    }
+
+    @Test func fixtureVersionClassUsesSharedLabel() throws {
+        let scratch = Scratch()
+        let text = "{\"version\":9,\"exportedAt\":\"2026-06-01T00:00:00Z\",\"bookmarks\":[],\"fonts\":[],\"settings\":{},\"works\":[]}"
+        #expect(Self.outcomeName(Data(text.utf8), scratch.options) == "unsupportedVersion")
+    }
+
+    @Test func contractDocStatesObservedPrecedenceAndNewDiskBudget() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let text = try String(contentsOf: root.appendingPathComponent("docs/MANIFEST_CONTRACT.md"), encoding: .utf8)
+        #expect(text.contains("truncated or garbage-tailed arrays are `notJSON`"))
+        #expect(text.contains("syntax > root-type schema > resource exhaustion"))
+        #expect(text.contains("2.5 × input bytes + 32 MiB"))
+        #expect(!text.contains("Pending Android-owned fixture update"))
     }
 
     @Test func allRecordDefaultsUseOneCapturedClock() throws {
@@ -663,8 +791,29 @@ struct ManifestStagingTests {
         #expect(scratch.leftovers.isEmpty)
     }
 
+    @Test func failedKeyRereadAcrossInputWindowIsIO() throws {
+        let scratch = Scratch()
+        let file = scratch.url.appendingPathComponent("cross-window.json")
+        let prefix = "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00Z\",\"works\":[],\"bookmarks\":[],\"fonts\":[],\"settings\":{},\"pad\":\""
+        let count = manifestWindowSize - 4 - prefix.utf8.count - 2
+        let bytes = Data((prefix + String(repeating: "a", count: count) + "\",\"crossKey\":1}").utf8)
+        try bytes.write(to: file)
+        let input = HookedInput(try ManifestFileInput(url: file))
+        input.onRange = { range in
+            if range.lowerBound < manifestWindowSize && range.upperBound > manifestWindowSize {
+                try? bytes.write(to: file, options: .atomic)
+            }
+        }
+        do {
+            try ManifestStager.stage(input, options: scratch.options).discard()
+            Issue.record("changed source was accepted")
+        } catch ManifestStreamError.io { }
+        #expect(scratch.leftovers.isEmpty)
+    }
+
     @Test func stagingComponentBudgetIsEnforcedDespitePlentyOfFreeSpace() throws {
         let scratch = Scratch()
+        #expect(scratch.options.diskFactor == 2.5 && scratch.options.diskFloor == 32 << 20)
         var options = scratch.options
         options.availableCapacity = { _ in 1 << 40 }
         options.diskFactor = 0
@@ -681,6 +830,7 @@ struct ManifestStagingTests {
         let inner: ManifestInput
         let onWindow: (Int) -> Void
         let onRead: (Int) -> Void
+        var onRange: ((Range<Int>) -> Void)?
         var windows = 0, reads = 0
         var failureMessage: String?
         var length: Int { inner.length }
@@ -692,7 +842,7 @@ struct ManifestStagingTests {
             windows += 1; onWindow(windows)
             return failureMessage == nil ? inner.window(at: offset) : UnsafeRawBufferPointer(start: nil, count: 0)
         }
-        func read(_ range: Range<Int>) -> Data { reads += 1; onRead(reads); return inner.read(range) }
+        func read(_ range: Range<Int>) -> Data { reads += 1; onRead(reads); onRange?(range); return inner.read(range) }
         func checkSource() -> Bool { failure == nil && inner.checkSource() }
     }
 

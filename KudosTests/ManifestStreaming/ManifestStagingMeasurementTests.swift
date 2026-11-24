@@ -142,4 +142,78 @@ final class ManifestStagingMeasurementTests: XCTestCase {
         XCTAssertLessThan(latency, 1.0)
         XCTAssertEqual(leftovers, 0)
     }
+
+    /// Three real strict records just under 8 MiB each, including a DOM-heavy tag variant. Measures staging and
+    /// one-record-at-a-time P4-style consumption separately; the batch is a transaction unit, not a retention unit.
+    func testThreeNearMaxStrictRecordsValidationPeak() throws {
+        for structured in [false, true] {
+            let file = fm.temporaryDirectory.appendingPathComponent("three-works-\(structured)-\(UUID().uuidString).json")
+            defer { try? fm.removeItem(at: file) }
+            fm.createFile(atPath: file.path, contents: nil)
+            let writer = try FileHandle(forWritingTo: file)
+            try writer.write(contentsOf: Data("{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00Z\",\"bookmarks\":[],\"fonts\":[],\"settings\":{},\"works\":[".utf8))
+            for work in 0 ..< 3 {
+                let id = String(format: "%08d-0000-4000-8000-000000000001", work + 1)
+                try writer.write(contentsOf: Data("\(work == 0 ? "" : ","){\"id\":\"\(id)\",\"dateAdded\":\"2026-01-01T00:00:00Z\",\"\(structured ? "workTags" : "summary")\":\(structured ? "[" : "\"")".utf8))
+                if structured {
+                    for start in stride(from: 0, to: 160_000, by: 1000) {
+                        let tags = (start ..< start + 1000).map { "\($0 == 0 ? "" : ",")\"tag\(String(format: "%06d", $0))\(String(repeating: "x", count: 40))\"" }.joined()
+                        try writer.write(contentsOf: Data(tags.utf8))
+                    }
+                } else {
+                    let chunk = Data(repeating: 97, count: 1 << 20)
+                    for _ in 0 ..< 7 { try writer.write(contentsOf: chunk) }
+                    try writer.write(contentsOf: Data(repeating: 97, count: 995_000))
+                }
+                try writer.write(contentsOf: Data((structured ? "]}" : "\"}").utf8))
+            }
+            try writer.write(contentsOf: Data("]}".utf8)); try writer.close()
+
+            for trial in 0 ..< 4 {
+                let directory = parent()
+                defer { try? fm.removeItem(at: directory) }
+                var options = ManifestStagingOptions()
+                options.parentDirectory = directory
+                let before = T567Memory.settledFootprint()
+                let stageSampler = T567Sampler(diskRoots: [directory])
+                stageSampler.start()
+                let run = try ManifestStager.stage(try ManifestFileInput(url: file), options: options)
+                let stageResult = stageSampler.stop()
+                let stagePeak = Double(stageResult.peakBytes - before) / miB
+                let sourceBytes = (try fm.attributesOfItem(atPath: file.path)[.size] as? NSNumber)?.intValue ?? 0
+                let diskBudget = Int(Double(sourceBytes) * options.diskFactor) + Int(options.diskFloor)
+                let metas = try run.recordPage(of: "works")
+                XCTAssertEqual(metas.count, 3)
+                XCTAssertTrue(metas.allSatisfy { $0.length > 7_800_000 && $0.length <= 8 << 20 })
+
+                let validationBefore = T567Memory.settledFootprint()
+                let validationSampler = T567Sampler(diskRoots: [directory])
+                validationSampler.start()
+                var batchCounts: [Int] = []
+                try run.forEachValidationBatch(of: "works") { batch in
+                    batchCounts.append(batch.count)
+                    for meta in batch {
+                        try autoreleasepool {
+                            var bytes = Data()
+                            try run.readPayload(of: "works", seq: meta.seq) { bytes.append($0) }
+                            let value = try KudosBackupContents.makeDecoder(now: run.clock).decode(KudosBackupWork.self, from: bytes)
+                            XCTAssertFalse(value.id.uuidString.isEmpty)
+                        }
+                    }
+                }
+                let validationPeak = Double(validationSampler.stop().peakBytes - validationBefore) / miB
+                run.discard()
+                let leftovers = (try? fm.contentsOfDirectory(atPath: directory.path))?.count ?? 0
+                T567Recorder.append("ios-staging.jsonl", ["kind": "three-near-8MiB-works", "shape": structured ? "tags" : "flat",
+                    "trial": trial == 0 ? "warmup" : "measured", "stagePeakMiB": stagePeak,
+                    "validationPeakMiB": validationPeak, "batchCounts": batchCounts, "leftoverDirs": leftovers,
+                    "sourceBytes": sourceBytes, "stagingDiskHighWaterBytes": stageResult.diskHighWater, "diskBudgetBytes": diskBudget])
+                XCTAssertEqual(batchCounts, [2, 1])
+                XCTAssertLessThan(stagePeak, 64)
+                XCTAssertLessThan(validationPeak, 64)
+                XCTAssertLessThanOrEqual(stageResult.diskHighWater, diskBudget)
+                XCTAssertEqual(leftovers, 0)
+            }
+        }
+    }
 }

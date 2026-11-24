@@ -7,7 +7,7 @@ import Foundation
 /// (see `docs/MANIFEST_CONTRACT.md`): only `invalidDocument(.notJSON)` makes a live manifest eligible for the `.bak` fallback.
 nonisolated enum ManifestStreamError: Error, Equatable {
     enum InvalidReason: Equatable {
-        /// Not a JSON document (syntax, bad UTF-8, trailing content, nesting over 512, top-level scalar, truncation).
+        /// Not a JSON document (syntax, bad UTF-8, trailing content, top-level scalar, truncation).
         case notJSON
         /// Whole JSON that is not a decodable manifest (missing required key, wrong kind, a record that does not decode).
         case schema

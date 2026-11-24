@@ -85,7 +85,7 @@ extension ManifestStagedRun {
 
     /// Keyset page of root metadata; callers can select unknown entries without collecting the whole root.
     func memberPage(after order: Int = -1, limit: Int = 1000, unknownOnly: Bool = false) throws -> [ManifestMemberMeta] {
-        precondition(limit > 0 && limit <= 1000)
+        let limit = min(max(limit, 1), 1000)
         var page: [ManifestMemberMeta] = []
         let sql = "SELECT name, ord, known, presence, length FROM member WHERE ord > ?"
             + (unknownOnly ? " AND known = 0" : "") + " ORDER BY ord LIMIT ?"
@@ -97,6 +97,7 @@ extension ManifestStagedRun {
     }
 
     func forEachMember(pageSize: Int = 1000, unknownOnly: Bool = false, _ body: (ManifestMemberMeta) throws -> Void) throws {
+        let pageSize = min(max(pageSize, 1), 1000)
         var last = -1
         while true {
             let page = try memberPage(after: last, limit: pageSize, unknownOnly: unknownOnly)
@@ -108,6 +109,7 @@ extension ManifestStagedRun {
 
     /// One page of row metadata in source order, after `seq` (keyset: no OFFSET, no whole-section array).
     func recordPage(of section: String, after seq: Int = -1, limit: Int = 1000) throws -> [ManifestRecordMeta] {
+        let limit = min(max(limit, 1), 1000)
         guard let spec = ManifestSectionSpec.byName[section] else { return [] }
         var out: [ManifestRecordMeta] = []
         let columns = ManifestRecordKeys.columns.joined(separator: ", ")
@@ -129,6 +131,7 @@ extension ManifestStagedRun {
 
     /// Every row of a section, a page at a time.
     func forEachRecordMeta(of section: String, pageSize: Int = 1000, _ body: (ManifestRecordMeta) throws -> Void) throws {
+        let pageSize = min(max(pageSize, 1), 1000)
         var last = -1
         while true {
             let page = try recordPage(of: section, after: last, limit: pageSize)
@@ -143,6 +146,7 @@ extension ManifestStagedRun {
     func forEachValidationBatch(of section: String, maxRecords: Int = 200, maxBytes: Int = 16 << 20,
                                 _ body: ([ManifestRecordMeta]) throws -> Void) throws {
         precondition(maxRecords > 0 && maxRecords <= 200 && maxBytes > 0 && maxBytes <= 16 << 20)
+        guard let spec = ManifestSectionSpec.byName[section] else { return }
         var batch: [ManifestRecordMeta] = []
         var bytes = 0
         try forEachRecordMeta(of: section, pageSize: maxRecords) { meta in
@@ -151,7 +155,13 @@ extension ManifestStagedRun {
                 batch.removeAll(keepingCapacity: true)
                 bytes = 0
             }
-            if meta.length > maxBytes { throw ManifestStreamError.resourceExhausted("validation record exceeds batch budget") }
+            if meta.length > maxBytes {
+                guard spec.policy == .lossy, meta.status == .deferred else {
+                    throw ManifestStreamError.resourceExhausted("validation record exceeds batch budget")
+                }
+                try body([meta]) // deferred lossy payload is consumed by chunks, never materialized in the batch
+                return
+            }
             batch.append(meta)
             bytes += meta.length
         }
@@ -160,14 +170,23 @@ extension ManifestStagedRun {
 
     /// Streams bytes `range` (all of it when nil) of one stored record to `sink`, in order, a stored chunk at a time (clipped to
     /// the range). Nothing larger than a chunk is ever held, so an oversized value is consumed without being assembled.
+    func payloadStartOffset(of owner: String, seq: Int, at lower: Int) throws -> Int? {
+        var start: Int?
+        try db.query("SELECT off FROM payload WHERE owner = ? AND seq = ? AND off <= ? ORDER BY off DESC LIMIT 1",
+                     [.text(owner), .int(Int64(seq)), .int(Int64(lower))]) { start = $0.int(0) }
+        return start
+    }
+
     func readPayload(of owner: String, seq: Int, range: Range<Int>? = nil, into sink: (Data) throws -> Void) throws {
         let lower = range?.lowerBound ?? 0, upper = range?.upperBound ?? Int.max
-        try db.query("SELECT off, bytes FROM payload WHERE owner = ? AND seq = ? AND off < ? AND off + length(bytes) > ? ORDER BY off",
-                     [.text(owner), .int(Int64(seq)), .int(Int64(min(upper, Int(Int64.max)))), .int(Int64(lower))]) { r in
+        guard lower < upper else { return }
+        guard let start = try payloadStartOffset(of: owner, seq: seq, at: lower) else { return }
+        try db.query("SELECT off, bytes FROM payload WHERE owner = ? AND seq = ? AND off >= ? AND off < ? ORDER BY off",
+                     [.text(owner), .int(Int64(seq)), .int(Int64(start)), .int(Int64(upper))]) { r in
             let off = r.int(0)
             let bytes = r.data(1)
             let from = max(lower - off, 0), to = min(upper - off, bytes.count)
-            try sink(from == 0 && to == bytes.count ? bytes : bytes.subdata(in: from ..< to))
+            if from < to { try sink(from == 0 && to == bytes.count ? bytes : bytes.subdata(in: from ..< to)) }
         }
     }
 
