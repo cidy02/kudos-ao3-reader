@@ -285,7 +285,7 @@ struct LibrarySectionListView: View {
             }
         #if os(iOS)
             // Select mode hides the floating tab/search glass, matching LibraryView's dashboard.
-            .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
+            .tabBarHidden(isSelecting)
         #endif
             #if DEBUG
             .task {

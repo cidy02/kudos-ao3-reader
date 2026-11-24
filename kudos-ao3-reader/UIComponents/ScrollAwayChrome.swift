@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Owner, 2026-10-01: scrolling down hides the top chrome and scrolling back up
 /// (or returning to the top) brings it back, as other apps do. The tab bar's
-/// half is `tabBarMinimizeBehavior(.onScrollDown)` on the root `TabView`.
+/// half (T-572) is the same rule below, written to `TabChromeState.isShrunk`, which
+/// `ShrinkingTabBar` reads.
 ///
 /// With `isHidden` bound, the caller hides its own chrome (Account floats a gear
 /// over a bar-less page) and the navigation bar is left alone.
@@ -10,6 +11,7 @@ struct ScrollAwayTopChrome: ViewModifier {
     var external: Binding<Bool>?
     @State private var own = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(TabChromeState.self) private var chrome: TabChromeState?
 
     private var isHidden: Bool { external?.wrappedValue ?? own }
 
@@ -41,8 +43,11 @@ struct ScrollAwayTopChrome: ViewModifier {
                 guard next != isHidden else { return }
                 withAnimationUnlessReduced(.easeInOut(duration: 0.22), reduceMotion: reduceMotion) {
                     if let external { external.wrappedValue = next } else { own = next }
+                    chrome?.isShrunk = next
                 }
             }
+            // Pushing a screen leaves this root; the bar comes back with the new page.
+            .onDisappear { chrome?.isShrunk = false }
     }
     #endif
 
@@ -66,5 +71,39 @@ extension View {
     /// For a tab's root scroll view (see `ScrollAwayTopChrome`).
     func scrollAwayTopChrome(isHidden: Binding<Bool>? = nil) -> some View {
         modifier(ScrollAwayTopChrome(external: isHidden))
+    }
+}
+
+#if os(iOS)
+private struct TabBarShrinksOnScroll: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(TabChromeState.self) private var chrome: TabChromeState?
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: ScrollAwayTopChrome.Position.self) { geometry in
+                .init(offset: geometry.contentOffset.y, fromTop: geometry.contentOffset.y + geometry.contentInsets.top)
+            } action: { old, new in
+                guard let chrome else { return }
+                let next = ScrollAwayTopChrome.hides(chrome.isShrunk, from: old.offset, to: new.offset, fromTop: new.fromTop)
+                guard next != chrome.isShrunk else { return }
+                withAnimationUnlessReduced(.easeInOut(duration: 0.22), reduceMotion: reduceMotion) {
+                    chrome.isShrunk = next
+                }
+            }
+            .onDisappear { chrome?.isShrunk = false }
+    }
+}
+#endif
+
+extension View {
+    /// A tab root that keeps its navigation bar but still shrinks the tab bar on scroll.
+    @ViewBuilder
+    func shrinksTabBarOnScroll() -> some View {
+        #if os(iOS)
+        modifier(TabBarShrinksOnScroll())
+        #else
+        self
+        #endif
     }
 }

@@ -21,7 +21,7 @@ extension View {
     @ViewBuilder
     func hidesFloatingTabBarInEditor() -> some View {
         #if os(iOS)
-        toolbar(FloatingTabBarPolicy.hidesTabBar(isEditor: true) ? .hidden : .automatic, for: .tabBar)
+        tabBarHidden(FloatingTabBarPolicy.hidesTabBar(isEditor: true))
         #else
         self
         #endif
