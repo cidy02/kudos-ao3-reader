@@ -462,9 +462,10 @@ struct AO3AuthorSeriesSection: View {
     @Environment(AO3AuthService.self) private var auth
     /// 1w's Edit and Reorder, pushed. A `NavigationLink` inside a swipe action
     /// does not reliably push, which is the same reason the series detail page
-    /// opens Edit from a button rather than a link in a menu.
-    @State private var editingSeries: AO3SeriesSummary?
-    @State private var reorderingSeries: AO3SeriesSummary?
+    /// opens Edit from a button rather than a link in a menu. Owned by
+    /// `AuthorProfileView`, which registers their destinations outside the `List`.
+    @Binding var editingSeries: AO3SeriesSummary?
+    @Binding var reorderingSeries: AO3SeriesSummary?
     #if DEBUG
     @State private var debugSeriesDetail: AO3SeriesSummary?
     #endif
@@ -546,16 +547,11 @@ struct AO3AuthorSeriesSection: View {
                 AO3AuthorPaginationRows(model: model, auth: auth)
             }
         } header: {
-            // The destinations hang off the header, not the Section: a modifier
-            // on a Section folds it into one plain row, which dropped every
-            // series card to a white full-width panel.
+            // Edit and Reorder register on AuthorProfileView, outside the List
+            // (BUG-15): a lazy header scrolled away drops its destinations. The
+            // debug route stays here: a modifier on a Section folds it into one
+            // plain row, which dropped every series card to a white panel.
             SectionRuleHeader(title: "Series", count: model.series.isEmpty ? nil : model.series.count)
-                .navigationDestination(item: $editingSeries) { series in
-                    SeriesEditDestination(series: series)
-                }
-                .navigationDestination(item: $reorderingSeries) { series in
-                    SeriesReorderDestination(seriesID: series.id, seriesTitle: series.title)
-                }
                 #if DEBUG
                 .navigationDestination(item: $debugSeriesDetail) { series in
                     AO3SeriesDetailView(series: series)

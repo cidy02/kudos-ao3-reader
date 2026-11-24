@@ -64,6 +64,9 @@ struct AuthorProfileView: View {
     /// The works sort-and-refine panel, opened from the toolbar Filter.
     @State private var showingWorksFilters = false
     @State private var isShowingDrafts = false
+    /// The Series tab's swipe Edit / Reorder (BUG-15: registered here, not in the List).
+    @State private var editingSeries: AO3SeriesSummary?
+    @State private var reorderingSeries: AO3SeriesSummary?
     /// Nav bar title. Account's **My Dashboard** reuses this surface for the
     /// signed-in user's home (`/users/:login`) under the title "Dashboard".
     private let navigationTitle: String
@@ -136,6 +139,10 @@ struct AuthorProfileView: View {
             }
             .navigationDestination(isPresented: $isShowingStats) { WritingStatsView() }
             .navigationDestination(isPresented: $isShowingDrafts) { WritingDraftsView() }
+            .navigationDestination(item: $editingSeries) { SeriesEditDestination(series: $0) }
+            .navigationDestination(item: $reorderingSeries) {
+                SeriesReorderDestination(seriesID: $0.id, seriesTitle: $0.title)
+            }
             .navigationDestination(item: ownWorkPushBinding) { action in
                 ownWorkDestination(action)
                     .environment(\.writingOtherWorks, WritingOtherWorkTags.sources(from: model.works))
@@ -661,7 +668,9 @@ private extension AuthorProfileView {
         case .series:
             AO3AuthorSeriesSection(
                 model: model,
-                showsNewSeriesOnAO3: isOwnProfile
+                showsNewSeriesOnAO3: isOwnProfile,
+                editingSeries: $editingSeries,
+                reorderingSeries: $reorderingSeries
             )
         case .bookmarks:
             AO3AuthorBookmarksSection(model: model, expandAll: expandAll)

@@ -7,7 +7,9 @@ struct LibraryShelfSeeAllTests {
     @Test func everyLibraryShelfHasDestination() {
         for shelf in LibraryShelfID.allCases {
             let destination = LibraryShelfDestination.destination(for: shelf)
-            #expect(destination != nil)
+            // BUG-15: a type-erased `AnyHashable` reaches NavigationPath as `AnyHashable`
+            // and matches no destination; the route must keep its own type.
+            #expect(type(of: destination) != AnyHashable.self)
 
             switch shelf {
             case .favourites:

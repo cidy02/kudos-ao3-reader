@@ -71,6 +71,9 @@ struct BrowseView: View {
                 .navigationDestination(for: AO3WorkSummary.self) { work in
                     WorkDetailView(remote: work)
                 }
+                // An author profile's rows for works saved here push these (BUG-15).
+                .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
+                .navigationDestination(for: LocalWorkDestination.self) { LocalWorkDestinationView(destination: $0) }
                 .ao3AuthorNavigation(path: $path, tab: .browse)
                 // A tapped AO3 tag link (e.g. in a work's preface) → native tag works.
                 .onChange(of: router.pendingTagWorks, initial: true) { _, request in

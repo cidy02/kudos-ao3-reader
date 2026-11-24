@@ -2,8 +2,12 @@ import Foundation
 
 /// Unified destination for opening a library shelf from its section header "See All"
 /// or from its tile in the Shelves button grid.
+///
+/// Returns `any Hashable`, never `AnyHashable` (BUG-15): `NavigationPath.append` opens an
+/// existential to the route's real type, but an `AnyHashable` is recorded as `AnyHashable`,
+/// which matches no `navigationDestination(for:)` and pushed SwiftUI's blank warning page.
 enum LibraryShelfDestination {
-    static func destination(for shelf: LibraryShelfID) -> AnyHashable {
+    static func destination(for shelf: LibraryShelfID) -> any Hashable {
         switch shelf {
         case .collections:
             return AllCollectionsDestination()
