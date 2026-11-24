@@ -42,7 +42,7 @@ struct ScrollAwayTopChrome: ViewModifier {
                 // The tab bar has its own state: tab switches and pushes reset it, and the
                 // navigation bar's `own` must not gate it.
                 if let chrome {
-                    let shrunk = Self.hides(chrome.isShrunk, from: old.offset, to: new.offset, fromTop: new.fromTop)
+                    let shrunk = Self.barShrinks(chrome.isShrunk, from: old.offset, to: new.offset, fromTop: new.fromTop)
                     if shrunk != chrome.isShrunk {
                         withAnimationUnlessReduced(.easeInOut(duration: 0.22), reduceMotion: reduceMotion) {
                             chrome.isShrunk = shrunk
@@ -65,6 +65,12 @@ struct ScrollAwayTopChrome: ViewModifier {
         let fromTop: CGFloat
     }
 
+    /// The tab bar's half of the rule. It keeps its own state, apart from the navigation bar's
+    /// `hidden`: a tab switch or push resets the bar but leaves the nav bar's flag alone.
+    nonisolated static func barShrinks(_ shrunk: Bool, from old: CGFloat, to new: CGFloat, fromTop: CGFloat) -> Bool {
+        hides(shrunk, from: old, to: new, fromTop: fromTop)
+    }
+
     /// Hides once you scroll down past the bar's own height; any deliberate
     /// upward scroll, or being back near the top, shows it again.
     nonisolated static func hides(_ hidden: Bool, from old: CGFloat, to new: CGFloat, fromTop: CGFloat) -> Bool {
@@ -84,17 +90,39 @@ extension View {
 }
 
 #if os(iOS)
+private struct ShrinkAttachedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// Set once an outer surface already shrinks the bar, so a nested one need not observe again.
+    fileprivate var shrinkAttached: Bool {
+        get { self[ShrinkAttachedKey.self] }
+        set { self[ShrinkAttachedKey.self] = newValue }
+    }
+}
+
 private struct TabBarShrinksOnScroll: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(TabChromeState.self) private var chrome: TabChromeState?
+    @Environment(\.shrinkAttached) private var attached
 
+    @ViewBuilder
     func body(content: Content) -> some View {
+        if attached {
+            content
+        } else {
+            observed(content).environment(\.shrinkAttached, true)
+        }
+    }
+
+    private func observed(_ content: Content) -> some View {
         content
             .onScrollGeometryChange(for: ScrollAwayTopChrome.Position.self) { geometry in
                 .init(offset: geometry.contentOffset.y, fromTop: geometry.contentOffset.y + geometry.contentInsets.top)
             } action: { old, new in
                 guard let chrome else { return }
-                let next = ScrollAwayTopChrome.hides(chrome.isShrunk, from: old.offset, to: new.offset, fromTop: new.fromTop)
+                let next = ScrollAwayTopChrome.barShrinks(chrome.isShrunk, from: old.offset, to: new.offset, fromTop: new.fromTop)
                 guard next != chrome.isShrunk else { return }
                 withAnimationUnlessReduced(.easeInOut(duration: 0.22), reduceMotion: reduceMotion) {
                     chrome.isShrunk = next
@@ -110,7 +138,7 @@ extension View {
     @ViewBuilder
     func shrinksTabBarOnScroll() -> some View {
         #if os(iOS)
-        modifier(TabBarShrinksOnScroll())
+        modifier(TabBarShrinksOnScroll()).rootChromeScope()
         #else
         self
         #endif

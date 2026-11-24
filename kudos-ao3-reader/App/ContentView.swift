@@ -934,10 +934,11 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
                     }
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
+                // The keyboard covers the bar like the system bar. Only this layer ignores it:
+                // the TabView's own content must keep its keyboard avoidance.
+                .ignoresSafeArea(.keyboard, edges: .bottom)
             }
         }
-        // The keyboard covers the bar like the system bar; it must not ride up over it.
-        .ignoresSafeArea(.keyboard, edges: .bottom)
         .animation(unlessReduced: .easeInOut(duration: 0.22), value: chrome.isBarHidden)
         .animation(unlessReduced: .easeInOut(duration: 0.22), value: chrome.isShrunk)
         .onChange(of: usesCustomBar, initial: true) { _, custom in chrome.usesCustomBar = custom }

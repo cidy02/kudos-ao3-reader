@@ -36,4 +36,10 @@ enum CommentsWriteBarPlacementPolicy {
     static func usesBottomAccessory(isModal: Bool, isAccessibilitySize: Bool) -> Bool {
         !isModal && !isAccessibilitySize
     }
+
+    /// The system accessory rides the system bar; Kudos's own iPhone bar (T-572) has none, so
+    /// there the composer sits in-view above it, in the same slot (and still wins over Read Aloud).
+    static func usesSystemAccessory(composerOwnsAccessory: Bool, customBar: Bool) -> Bool {
+        composerOwnsAccessory && !customBar
+    }
 }

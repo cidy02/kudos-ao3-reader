@@ -1,3 +1,4 @@
+import UIKit
 import Foundation
 import Testing
 @testable import Kudos
@@ -51,5 +52,74 @@ struct ShrinkingTabBarTests {
         chrome.reselected(.home)
         chrome.reselected(.home)
         #expect(chrome.reselect == TabReselect(tab: .home, count: 2))
+    }
+}
+
+/// Round 2/3 regressions: each fails if the matching fix is undone.
+struct ShrinkingTabBarRegressionTests {
+    @Test func hiderRegistersOnlyWhileVisible() {
+        var registration = HiderRegistration()
+        #expect(registration.changed(to: true) == nil) // off-screen copy: ignored
+        let shown = registration.appeared(hidden: true)
+        #expect(shown)
+        #expect(registration.changed(to: false) == false)
+        let left = registration.disappeared(coveredByPresentation: false)
+        #expect(left == false)
+        #expect(registration.changed(to: true) == nil)
+    }
+
+    @Test func aCoveredScreenKeepsItsHide() {
+        var registration = HiderRegistration()
+        _ = registration.appeared(hidden: true)
+        let left = registration.disappeared(coveredByPresentation: true)
+        #expect(left == nil)
+    }
+
+    @MainActor @Test func sheetsGetNoChrome() {
+        let chrome = TabChromeState()
+        #expect(TabChromeState.scoped(chrome, inRoot: true) === chrome)
+        #expect(TabChromeState.scoped(chrome, inRoot: false) == nil)
+    }
+
+    @Test func barShrinksEvenWhenTheNavBarFlagIsStale() {
+        // Nav bar still "hidden" from before a tab switch; the bar was reset to expanded.
+        #expect(ScrollAwayTopChrome.barShrinks(false, from: 500, to: 900, fromTop: 900))
+        #expect(!ScrollAwayTopChrome.barShrinks(true, from: 900, to: 800, fromTop: 800))
+    }
+
+    @MainActor @Test func dismantlingTheInsetProbeClearsTheTabControllerInset() {
+        let controller = UITabBarController()
+        let probe = TabBarContentInset.Probe()
+        probe.controllerProvider = { _ in controller }
+        probe.inset = 70
+        probe.apply()
+        #expect(controller.additionalSafeAreaInsets.bottom == 70)
+        TabBarContentInset.dismantleUIView(probe, coordinator: ())
+        #expect(controller.additionalSafeAreaInsets.bottom == 0)
+    }
+
+    @Test func onlyAKeyboardReachingTheBarTakesTheInset() {
+        #expect(TabBarKeyboardPolicy.inset(base: 70, keyboardOverlap: 0, safeBottom: 34) == 70)
+        #expect(TabBarKeyboardPolicy.inset(base: 70, keyboardOverlap: 55, safeBottom: 34) == 70) // shortcut strip
+        #expect(TabBarKeyboardPolicy.inset(base: 70, keyboardOverlap: 336, safeBottom: 34) == 0)
+    }
+
+    @Test func composerWinsAndTheCustomBarHasNoSystemAccessory() {
+        #expect(CommentsWriteBarPlacementPolicy.usesBottomAccessory(isModal: false, isAccessibilitySize: false))
+        #expect(!CommentsWriteBarPlacementPolicy.usesSystemAccessory(composerOwnsAccessory: true, customBar: true))
+        #expect(CommentsWriteBarPlacementPolicy.usesSystemAccessory(composerOwnsAccessory: true, customBar: false))
+        #expect(!ReaderSpeechSessionPolicy.showsMiniPlayer(
+            sessionActive: true, readerOpen: false, commentAccessoryTab: .library, selectedTab: .library))
+        #expect(ShrinkingTabBarPolicy.pillDrop(isShrunk: true) == 18)
+        #expect(ShrinkingTabBarPolicy.pillDrop(isShrunk: false) == 0)
+    }
+
+    @Test func scrollToTopPicksTallVerticalScrollersAndNeverFightTheUser() {
+        #expect(ScrollToTopPolicy.qualifies(size: CGSize(width: 390, height: 700), contentHeight: 2000, alwaysBounceVertical: false))
+        #expect(!ScrollToTopPolicy.qualifies(size: CGSize(width: 390, height: 240), contentHeight: 240, alwaysBounceVertical: false)) // carousel
+        #expect(!ScrollToTopPolicy.qualifies(size: CGSize(width: 390, height: 700), contentHeight: 300, alwaysBounceVertical: false))
+        #expect(ScrollToTopPolicy.shouldSettle(offset: -60, top: -100, userIsScrolling: false))
+        #expect(!ScrollToTopPolicy.shouldSettle(offset: -60, top: -100, userIsScrolling: true))
+        #expect(!ScrollToTopPolicy.shouldSettle(offset: 900, top: -100, userIsScrolling: false))
     }
 }

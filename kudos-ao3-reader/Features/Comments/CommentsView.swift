@@ -40,6 +40,7 @@ private struct CommentWriteBarPlacement<Bar: View>: ViewModifier {
     var isAccessoryActive: Bool
     var accessibilitySize: Bool
     @ViewBuilder var bar: () -> Bar
+    @Environment(TabChromeState.self) private var chrome: TabChromeState?
 
     func body(content: Content) -> some View {
         if accessibilitySize {
@@ -48,7 +49,12 @@ private struct CommentWriteBarPlacement<Bar: View>: ViewModifier {
                 bar()
             }
         } else if !isAccessoryActive {
-            content.safeAreaInset(edge: .bottom) { bar() }
+            // The safe-area inset is the bar's EXPANDED top; follow it down when the bar shrinks
+            // so the pill never hovers above a shorter bar.
+            content.safeAreaInset(edge: .bottom) {
+                bar().offset(y: ShrinkingTabBarPolicy.pillDrop(isShrunk: chrome?.isShrunk == true))
+                    .animation(unlessReduced: .easeInOut(duration: 0.22), value: chrome?.isShrunk)
+            }
         } else {
             content
         }
@@ -1270,7 +1276,10 @@ struct CommentsView: View {
     /// The system accessory rides the system bar; Kudos's own iPhone bar (T-572) has none,
     /// so there the composer sits in-view just above it, in the same slot.
     private var usesTabViewBottomAccessory: Bool {
-        composerOwnsAccessory && tabChrome?.usesCustomBar != true
+        CommentsWriteBarPlacementPolicy.usesSystemAccessory(
+            composerOwnsAccessory: composerOwnsAccessory,
+            customBar: tabChrome?.usesCustomBar == true
+        )
     }
 
     private var commentAccessoryActive: Bool {

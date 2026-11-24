@@ -20,6 +20,11 @@ enum ShrinkingTabBarPolicy {
     static let accessoryHeight: CGFloat = 54
     static let gap: CGFloat = 8
 
+    /// How far a pill laid out above the EXPANDED bar must drop to sit on the shrunk one.
+    static func pillDrop(isShrunk: Bool) -> CGFloat {
+        isShrunk ? barHeight - shrunkBarHeight : 0
+    }
+
     /// The bottom safe-area the bar and mini-player take from every tab's content.
     /// Always the EXPANDED footprint: following the shrunk height would move the
     /// scroll limit while you scroll and flip the bar back and forth at the bottom
@@ -27,6 +32,14 @@ enum ShrinkingTabBarPolicy {
     static func contentInset(barHidden: Bool, hasAccessory: Bool) -> CGFloat {
         if barHidden { return 0 }
         return barHeight + gap + (hasAccessory ? accessoryHeight + gap : 0)
+    }
+}
+
+/// The root inset while a keyboard is up: only a keyboard that actually reaches the bar
+/// (not a hardware keyboard's shortcut strip) takes it away.
+enum TabBarKeyboardPolicy {
+    static func inset(base: CGFloat, keyboardOverlap: CGFloat, safeBottom: CGFloat) -> CGFloat {
+        keyboardOverlap > safeBottom + ShrinkingTabBarPolicy.barHeight / 2 ? 0 : base
     }
 }
 
@@ -85,14 +98,39 @@ extension EnvironmentValues {
     }
 }
 
+/// When a hiding screen registers: only while it is on screen. A copy left mounted in another
+/// tab's stack sees `hidden` change too and must not leak it. A screen merely covered by a
+/// sheet or cover keeps its hide (the page behind it must not reflow).
+struct HiderRegistration: Equatable {
+    private(set) var isVisible = false
+
+    mutating func appeared(hidden: Bool) -> Bool {
+        isVisible = true
+        return hidden
+    }
+
+    func changed(to hidden: Bool) -> Bool? { isVisible ? hidden : nil }
+
+    /// The new registration, or nil to leave it as it is.
+    mutating func disappeared(coveredByPresentation: Bool) -> Bool? {
+        isVisible = false
+        return coveredByPresentation ? nil : false
+    }
+}
+
+extension TabChromeState {
+    /// Only the root tab stacks drive the chrome: anything inside a sheet or cover gets none.
+    static func scoped(_ chrome: TabChromeState?, inRoot: Bool) -> TabChromeState? {
+        inRoot ? chrome : nil
+    }
+}
+
 private struct TabBarHiddenModifier: ViewModifier {
     let hidden: Bool
     @Environment(TabChromeState.self) private var chrome: TabChromeState?
     @Environment(\.chromeTab) private var tab
     @State private var id = UUID()
-    /// Only a screen that is on screen may hide the bar: a copy still mounted in another
-    /// tab's stack (or behind a sheet) sees `hidden` change too, and must not leak it.
-    @State private var isVisible = false
+    @State private var registration = HiderRegistration()
 
     private func register(_ now: Bool) {
         if let tab { chrome?.setHidden(now, by: id, in: tab) }
@@ -102,20 +140,100 @@ private struct TabBarHiddenModifier: ViewModifier {
         #if os(iOS)
         // The system bar still serves iPad / Duo; on iPhone it is always off.
         let base = content.toolbar(hidden || chrome?.usesCustomBar == true ? .hidden : .automatic, for: .tabBar)
+        let covered = { TabChromeCover.isPresentingOverRoot() }
         #else
         let base = content
+        let covered = { false }
         #endif
         base
-            .onAppear { isVisible = true; register(hidden) }
-            .onChange(of: hidden) { _, now in if isVisible { register(now) } }
-            .onDisappear { isVisible = false; register(false) }
+            .onAppear { register(registration.appeared(hidden: hidden)) }
+            .onChange(of: hidden) { _, now in
+                if let next = registration.changed(to: now) { register(next) }
+            }
+            .onDisappear {
+                if let next = registration.disappeared(coveredByPresentation: covered()) { register(next) }
+            }
+    }
+}
+
+#if os(iOS)
+enum TabChromeCover {
+    /// True while any sheet or full-screen cover is up over the app's root.
+    static func isPresentingOverRoot() -> Bool {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let root = scenes.flatMap(\.windows).first(where: \.isKeyWindow)?.rootViewController
+        return hasPresentation(root)
+    }
+
+    private static func hasPresentation(_ controller: UIViewController?) -> Bool {
+        guard let controller else { return false }
+        if controller.presentedViewController != nil { return true }
+        return controller.children.contains { hasPresentation($0) }
+    }
+
+    /// True when `view` lives in a presented sheet / cover rather than the root hierarchy.
+    static func isModal(_ view: UIView) -> Bool {
+        var responder: UIResponder? = view
+        while let current = responder, !(current is UIViewController) { responder = current.next }
+        guard var controller = responder as? UIViewController else { return false }
+        while let parent = controller.parent { controller = parent }
+        return controller.presentingViewController != nil
+    }
+}
+
+private struct ModalProbe: UIViewRepresentable {
+    @Binding var inRoot: Bool
+
+    final class Probe: UIView {
+        var onChange: ((Bool) -> Void)?
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            guard window != nil else { return }
+            // The controller chain is only complete once the layout pass has run.
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                onChange?(!TabChromeCover.isModal(self))
+            }
+        }
+    }
+
+    func makeUIView(context: Context) -> Probe {
+        let probe = Probe()
+        probe.isUserInteractionEnabled = false
+        return probe
+    }
+
+    func updateUIView(_ probe: Probe, context: Context) {
+        probe.onChange = { now in if now != inRoot { inRoot = now } }
+    }
+}
+#endif
+
+/// Hides the chrome environment from everything inside a sheet or cover.
+private struct RootChromeScope: ViewModifier {
+    @Environment(TabChromeState.self) private var chrome: TabChromeState?
+    @State private var inRoot = true
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .environment(TabChromeState.scoped(chrome, inRoot: inRoot))
+            .background(ModalProbe(inRoot: $inRoot))
+        #else
+        content
+        #endif
     }
 }
 
 extension View {
     /// The one way a screen hides the tab bar (both the system bar and Kudos's own).
     func tabBarHidden(_ hidden: Bool = true) -> some View {
-        modifier(TabBarHiddenModifier(hidden: hidden))
+        modifier(TabBarHiddenModifier(hidden: hidden)).modifier(RootChromeScope())
+    }
+
+    /// Everything inside this view ignores the tab-bar chrome when it sits in a sheet or cover.
+    func rootChromeScope() -> some View {
+        modifier(RootChromeScope())
     }
 
     /// For a tab's root: tapping the selected tab again pops its stack to the root, and at
@@ -142,6 +260,21 @@ private struct TabReselectModifier: ViewModifier {
         #else
         content
         #endif
+    }
+}
+
+/// Pure choices behind scroll-to-top.
+enum ScrollToTopPolicy {
+    /// A tall vertical scroll view, not a carousel.
+    static func qualifies(size: CGSize, contentHeight: CGFloat, alwaysBounceVertical: Bool) -> Bool {
+        size.height > 200 && size.width >= size.height * 0.4
+            && (alwaysBounceVertical || contentHeight > size.height)
+    }
+
+    /// The post-scroll correction only fixes a small miss from the nav bar's return; it never
+    /// fights a user who has started scrolling, or has already moved well away from the top.
+    static func shouldSettle(offset: CGFloat, top: CGFloat, userIsScrolling: Bool) -> Bool {
+        !userIsScrolling && offset > top + 1 && offset < top + 160
     }
 }
 
@@ -180,15 +313,21 @@ private struct ScrollToTopProbe: UIViewRepresentable {
     }
 
     private static func scrollToTop(_ scroll: UIScrollView) {
-        let animated = !UIAccessibility.isReduceMotionEnabled
+        let reduce = UIAccessibility.isReduceMotionEnabled
         func go(_ animated: Bool) {
             scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: -scroll.adjustedContentInset.top), animated: animated)
         }
-        go(animated)
+        go(!reduce)
         // Scrolling up brings the hidden navigation bar back, which raises the top inset:
-        // settle once against the final inset so the title is not left under the bar.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak scroll] in
-            guard let scroll, scroll.contentOffset.y > -scroll.adjustedContentInset.top + 1 else { return }
+        // settle once against the final inset, unless the user has taken over by then.
+        DispatchQueue.main.asyncAfter(deadline: .now() + (reduce ? 0.1 : 0.5)) { [weak scroll] in
+            guard let scroll else { return }
+            let top = -scroll.adjustedContentInset.top
+            guard ScrollToTopPolicy.shouldSettle(
+                offset: scroll.contentOffset.y,
+                top: top,
+                userIsScrolling: scroll.isTracking || scroll.isDragging || scroll.isDecelerating
+            ) else { return }
             go(false)
         }
     }
@@ -199,8 +338,11 @@ private struct ScrollToTopProbe: UIViewRepresentable {
         while !queue.isEmpty {
             let next = queue.removeFirst()
             if let scroll = next as? UIScrollView, !scroll.isHidden, scroll.window != nil,
-               scroll.bounds.height > 200, scroll.bounds.width >= scroll.bounds.height * 0.4,
-               scroll.alwaysBounceVertical || scroll.contentSize.height > scroll.bounds.height,
+               ScrollToTopPolicy.qualifies(
+                   size: scroll.bounds.size,
+                   contentHeight: scroll.contentSize.height,
+                   alwaysBounceVertical: scroll.alwaysBounceVertical
+               ),
                scroll.bounds.height * scroll.bounds.width > (best.map { $0.bounds.height * $0.bounds.width } ?? 0) {
                 best = scroll
             }
@@ -219,30 +361,40 @@ struct TabBarContentInset: UIViewRepresentable {
     final class Probe: UIView {
         var inset: CGFloat = 0
         private weak var controller: UITabBarController?
-        /// The keyboard covers the bar (as it does the system bar), so no inset while it is up.
-        private var keyboardUp = false
+        /// How far the on-screen keyboard reaches up from the window's bottom edge.
+        private var keyboardOverlap: CGFloat = 0
         private var observers: [NSObjectProtocol] = []
+        /// Test seam: where the tab controller comes from.
+        var controllerProvider: ((UIWindow?) -> UITabBarController?)?
 
         override init(frame: CGRect) {
             super.init(frame: frame)
             let center = NotificationCenter.default
             observers = [
-                (UIResponder.keyboardWillShowNotification, true),
-                (UIResponder.keyboardWillHideNotification, false),
-            ].map { name, up in
-                center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                    self?.keyboardUp = up
+                center.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: nil) { [weak self] note in
+                    self?.keyboardMoved(note)
+                },
+                center.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: nil) { [weak self] _ in
+                    self?.keyboardOverlap = 0
                     self?.apply()
-                }
-            }
+                },
+            ]
         }
 
         required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
         deinit { observers.forEach(NotificationCenter.default.removeObserver) }
 
-        // The controller can attach after this view does, or be rebuilt (`.id` on the
-        // TabView): re-apply on every layout and window change instead of once.
+        private func keyboardMoved(_ note: Notification) {
+            // A sheet's own keyboard is not the root's business, and another app's never is.
+            guard let window, !TabChromeCover.isPresentingOverRoot(),
+                  (note.userInfo?[UIResponder.keyboardIsLocalUserInfoKey] as? Bool) ?? true,
+                  let end = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect) else { return }
+            let frame = window.screen.coordinateSpace.convert(end, to: window.coordinateSpace)
+            keyboardOverlap = max(0, window.bounds.maxY - frame.minY)
+            apply()
+        }
+
         override func didMoveToWindow() {
             super.didMoveToWindow()
             apply()
@@ -254,10 +406,14 @@ struct TabBarContentInset: UIViewRepresentable {
         }
 
         func apply() {
-            let found = Self.tabBarController(from: window?.rootViewController)
+            let found = controllerProvider?(window) ?? Self.tabBarController(from: window?.rootViewController)
             if let old = controller, old !== found { old.additionalSafeAreaInsets.bottom = 0 }
             controller = found
-            let wanted = keyboardUp ? 0 : inset
+            let wanted = TabBarKeyboardPolicy.inset(
+                base: inset,
+                keyboardOverlap: keyboardOverlap,
+                safeBottom: window?.safeAreaInsets.bottom ?? 0
+            )
             guard let found, found.additionalSafeAreaInsets.bottom != wanted else { return }
             found.additionalSafeAreaInsets.bottom = wanted
         }
