@@ -858,7 +858,7 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
                     // A TabView-level toolbar() does not reach tabs whose roots never say
                     // anything about the bar (Browse, Writing), so say it on every tab.
                     destination(tab).toolbar(usesCustomBar ? .hidden : .automatic, for: .tabBar)
-                        .environment(\.chromeTab, tab)
+                        .onPreferenceChange(TabBarHiddenKey.self) { chrome.setHidden($0, in: tab) }
                 } label: {
                     if duoLayout.hasVerticalBar {
                         Label {
@@ -887,13 +887,13 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
                 Tab(AppTab.search.title, systemImage: AppTab.search.symbol,
                     value: AppTab.search, role: .prominent) {
                     destination(.search).toolbar(usesCustomBar ? .hidden : .automatic, for: .tabBar)
-                        .environment(\.chromeTab, .search)
+                        .onPreferenceChange(TabBarHiddenKey.self) { chrome.setHidden($0, in: .search) }
                 }
             } else {
                 Tab(AppTab.search.title, systemImage: AppTab.search.symbol,
                     value: AppTab.search, role: .search) {
                     destination(.search).toolbar(usesCustomBar ? .hidden : .automatic, for: .tabBar)
-                        .environment(\.chromeTab, .search)
+                        .onPreferenceChange(TabBarHiddenKey.self) { chrome.setHidden($0, in: .search) }
                 }
             }
         }
@@ -909,7 +909,10 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
         }
         .environment(chrome)
         .background { TabBarContentInset(inset: customBarInset) }
-        .overlay(alignment: .bottom) {
+        .overlay {
+            // A full-size, bottom-aligned layer that ignores the keyboard region, so the keyboard
+            // simply covers the bar like the system bar (the TabView's content keeps avoiding it).
+            ZStack(alignment: .bottom) {
             if usesCustomBar, !chrome.isBarHidden {
                 VStack(spacing: ShrinkingTabBarPolicy.gap) {
                     if showsMiniPlayer {
@@ -934,10 +937,10 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
                     }
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
-                // The keyboard covers the bar like the system bar. Only this layer ignores it:
-                // the TabView's own content must keep its keyboard avoidance.
-                .ignoresSafeArea(.keyboard, edges: .bottom)
             }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .ignoresSafeArea(.keyboard, edges: .bottom)
         }
         .animation(unlessReduced: .easeInOut(duration: 0.22), value: chrome.isBarHidden)
         .animation(unlessReduced: .easeInOut(duration: 0.22), value: chrome.isShrunk)

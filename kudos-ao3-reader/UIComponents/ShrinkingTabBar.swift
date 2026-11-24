@@ -35,27 +35,7 @@ enum ShrinkingTabBarPolicy {
     }
 }
 
-/// The root inset while a keyboard is up: only a keyboard that actually reaches the bar
-/// (not a hardware keyboard's shortcut strip) takes it away.
-enum TabBarKeyboardPolicy {
-    static func inset(base: CGFloat, keyboardOverlap: CGFloat, safeBottom: CGFloat) -> CGFloat {
-        keyboardOverlap > safeBottom + ShrinkingTabBarPolicy.barHeight / 2 ? 0 : base
-    }
-}
-
 /// Every screen that wants the bar gone registers here; the bar is hidden while any does.
-/// Each caller is keyed by the tab it lives in, so a screen in another tab's stack can
-/// never hide the bar of the tab on screen.
-struct TabBarHiders: Equatable {
-    private(set) var tabs: [UUID: AppTab] = [:]
-
-    func isHidden(in tab: AppTab) -> Bool { tabs.values.contains(tab) }
-
-    mutating func set(_ hidden: Bool, by id: UUID, in tab: AppTab) {
-        if hidden { tabs[id] = tab } else { tabs[id] = nil }
-    }
-}
-
 /// A tap on the already-selected tab; `count` makes repeated taps distinct.
 struct TabReselect: Equatable {
     let tab: AppTab
@@ -70,15 +50,15 @@ final class TabChromeState {
     /// True while Kudos's own bar replaces the system one.
     var usesCustomBar = false
     var selectedTab: AppTab = .home
-    private(set) var hiders = TabBarHiders()
+    /// Each tab root's combined `tabBarHidden` preference, read from the live view tree
+    /// (so a popped or dismissed screen stops contributing by itself; sheets never reach it).
+    private(set) var hiddenByTab: [AppTab: Bool] = [:]
     private(set) var reselect: TabReselect?
 
-    var isBarHidden: Bool { hiders.isHidden(in: selectedTab) }
+    var isBarHidden: Bool { hiddenByTab[selectedTab] ?? false }
 
-    func setHidden(_ hidden: Bool, by id: UUID, in tab: AppTab) {
-        var next = hiders
-        next.set(hidden, by: id, in: tab)
-        if next != hiders { hiders = next }
+    func setHidden(_ hidden: Bool, in tab: AppTab) {
+        if (hiddenByTab[tab] ?? false) != hidden { hiddenByTab[tab] = hidden }
     }
 
     func reselected(_ tab: AppTab) {
@@ -86,36 +66,10 @@ final class TabChromeState {
     }
 }
 
-private struct ChromeTabKey: EnvironmentKey {
-    static let defaultValue: AppTab? = nil
-}
-
-extension EnvironmentValues {
-    /// The tab whose content this view is in (set by the iPhone shell).
-    var chromeTab: AppTab? {
-        get { self[ChromeTabKey.self] }
-        set { self[ChromeTabKey.self] = newValue }
-    }
-}
-
-/// When a hiding screen registers: only while it is on screen. A copy left mounted in another
-/// tab's stack sees `hidden` change too and must not leak it. A screen merely covered by a
-/// sheet or cover keeps its hide (the page behind it must not reflow).
-struct HiderRegistration: Equatable {
-    private(set) var isVisible = false
-
-    mutating func appeared(hidden: Bool) -> Bool {
-        isVisible = true
-        return hidden
-    }
-
-    func changed(to hidden: Bool) -> Bool? { isVisible ? hidden : nil }
-
-    /// The new registration, or nil to leave it as it is.
-    mutating func disappeared(coveredByPresentation: Bool) -> Bool? {
-        isVisible = false
-        return coveredByPresentation ? nil : false
-    }
+/// What every `tabBarHidden` caller contributes; the combined value is "any caller hides it".
+struct TabBarHiddenKey: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
 }
 
 extension TabChromeState {
@@ -128,49 +82,21 @@ extension TabChromeState {
 private struct TabBarHiddenModifier: ViewModifier {
     let hidden: Bool
     @Environment(TabChromeState.self) private var chrome: TabChromeState?
-    @Environment(\.chromeTab) private var tab
-    @State private var id = UUID()
-    @State private var registration = HiderRegistration()
-
-    private func register(_ now: Bool) {
-        if let tab { chrome?.setHidden(now, by: id, in: tab) }
-    }
 
     func body(content: Content) -> some View {
         #if os(iOS)
         // The system bar still serves iPad / Duo; on iPhone it is always off.
-        let base = content.toolbar(hidden || chrome?.usesCustomBar == true ? .hidden : .automatic, for: .tabBar)
-        let covered = { TabChromeCover.isPresentingOverRoot() }
+        content
+            .toolbar(hidden || chrome?.usesCustomBar == true ? .hidden : .automatic, for: .tabBar)
+            .preference(key: TabBarHiddenKey.self, value: hidden)
         #else
-        let base = content
-        let covered = { false }
+        content
         #endif
-        base
-            .onAppear { register(registration.appeared(hidden: hidden)) }
-            .onChange(of: hidden) { _, now in
-                if let next = registration.changed(to: now) { register(next) }
-            }
-            .onDisappear {
-                if let next = registration.disappeared(coveredByPresentation: covered()) { register(next) }
-            }
     }
 }
 
 #if os(iOS)
 enum TabChromeCover {
-    /// True while any sheet or full-screen cover is up over the app's root.
-    static func isPresentingOverRoot() -> Bool {
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let root = scenes.flatMap(\.windows).first(where: \.isKeyWindow)?.rootViewController
-        return hasPresentation(root)
-    }
-
-    private static func hasPresentation(_ controller: UIViewController?) -> Bool {
-        guard let controller else { return false }
-        if controller.presentedViewController != nil { return true }
-        return controller.children.contains { hasPresentation($0) }
-    }
-
     /// True when `view` lives in a presented sheet / cover rather than the root hierarchy.
     static func isModal(_ view: UIView) -> Bool {
         var responder: UIResponder? = view
@@ -228,7 +154,7 @@ private struct RootChromeScope: ViewModifier {
 extension View {
     /// The one way a screen hides the tab bar (both the system bar and Kudos's own).
     func tabBarHidden(_ hidden: Bool = true) -> some View {
-        modifier(TabBarHiddenModifier(hidden: hidden)).modifier(RootChromeScope())
+        modifier(TabBarHiddenModifier(hidden: hidden))
     }
 
     /// Everything inside this view ignores the tab-bar chrome when it sits in a sheet or cover.
@@ -361,39 +287,8 @@ struct TabBarContentInset: UIViewRepresentable {
     final class Probe: UIView {
         var inset: CGFloat = 0
         private weak var controller: UITabBarController?
-        /// How far the on-screen keyboard reaches up from the window's bottom edge.
-        private var keyboardOverlap: CGFloat = 0
-        private var observers: [NSObjectProtocol] = []
         /// Test seam: where the tab controller comes from.
         var controllerProvider: ((UIWindow?) -> UITabBarController?)?
-
-        override init(frame: CGRect) {
-            super.init(frame: frame)
-            let center = NotificationCenter.default
-            observers = [
-                center.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: nil) { [weak self] note in
-                    self?.keyboardMoved(note)
-                },
-                center.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: nil) { [weak self] _ in
-                    self?.keyboardOverlap = 0
-                    self?.apply()
-                },
-            ]
-        }
-
-        required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-        deinit { observers.forEach(NotificationCenter.default.removeObserver) }
-
-        private func keyboardMoved(_ note: Notification) {
-            // A sheet's own keyboard is not the root's business, and another app's never is.
-            guard let window, !TabChromeCover.isPresentingOverRoot(),
-                  (note.userInfo?[UIResponder.keyboardIsLocalUserInfoKey] as? Bool) ?? true,
-                  let end = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect) else { return }
-            let frame = window.screen.coordinateSpace.convert(end, to: window.coordinateSpace)
-            keyboardOverlap = max(0, window.bounds.maxY - frame.minY)
-            apply()
-        }
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
@@ -409,13 +304,8 @@ struct TabBarContentInset: UIViewRepresentable {
             let found = controllerProvider?(window) ?? Self.tabBarController(from: window?.rootViewController)
             if let old = controller, old !== found { old.additionalSafeAreaInsets.bottom = 0 }
             controller = found
-            let wanted = TabBarKeyboardPolicy.inset(
-                base: inset,
-                keyboardOverlap: keyboardOverlap,
-                safeBottom: window?.safeAreaInsets.bottom ?? 0
-            )
-            guard let found, found.additionalSafeAreaInsets.bottom != wanted else { return }
-            found.additionalSafeAreaInsets.bottom = wanted
+            guard let found, found.additionalSafeAreaInsets.bottom != inset else { return }
+            found.additionalSafeAreaInsets.bottom = inset
         }
 
         func reset() {

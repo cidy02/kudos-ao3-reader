@@ -39,8 +39,9 @@ private struct CommentReaderDestination: Identifiable, Hashable {
 private struct CommentWriteBarPlacement<Bar: View>: ViewModifier {
     var isAccessoryActive: Bool
     var accessibilitySize: Bool
+    /// Points to drop the pill when Kudos's own bar is shrunk (0 everywhere else).
+    var customBarDrop: CGFloat = 0
     @ViewBuilder var bar: () -> Bar
-    @Environment(TabChromeState.self) private var chrome: TabChromeState?
 
     func body(content: Content) -> some View {
         if accessibilitySize {
@@ -52,8 +53,8 @@ private struct CommentWriteBarPlacement<Bar: View>: ViewModifier {
             // The safe-area inset is the bar's EXPANDED top; follow it down when the bar shrinks
             // so the pill never hovers above a shorter bar.
             content.safeAreaInset(edge: .bottom) {
-                bar().offset(y: ShrinkingTabBarPolicy.pillDrop(isShrunk: chrome?.isShrunk == true))
-                    .animation(unlessReduced: .easeInOut(duration: 0.22), value: chrome?.isShrunk)
+                bar().offset(y: customBarDrop)
+                    .animation(unlessReduced: .easeInOut(duration: 0.22), value: customBarDrop)
             }
         } else {
             content
@@ -266,7 +267,10 @@ struct CommentsView: View {
             .modifier(
                 CommentWriteBarPlacement(
                     isAccessoryActive: usesTabViewBottomAccessory,
-                    accessibilitySize: dynamicTypeSize.isAccessibilitySize
+                    accessibilitySize: dynamicTypeSize.isAccessibilitySize,
+                    customBarDrop: ShrinkingTabBarPolicy.pillDrop(
+                        isShrunk: tabChrome?.isShrunk == true && tabChrome?.usesCustomBar == true && !isModal
+                    )
                 ) {
                     writeCommentBar
                 }
