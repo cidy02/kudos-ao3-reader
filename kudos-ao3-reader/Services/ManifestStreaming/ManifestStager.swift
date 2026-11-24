@@ -17,7 +17,9 @@ nonisolated struct ManifestStagingOptions {
         try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage
     }
     /// Staging disk use as a multiple of the manifest (measured high-water on the P1 fixtures: 1.7x; indexes included).
-    var diskFactor = 1.7
+    var diskFactor = 1.6
+    /// Fixed clock for every generated default and date clamp in one staging run.
+    var clock: () -> Date = { Date() }
     /// Free space that must remain at the end (the last commit and a safety margin).
     var diskFloor: Int64 = 16 << 20
 }
@@ -41,11 +43,13 @@ nonisolated final class ManifestStagedRun {
     let db: ManifestStagingDB
     let version: Int
     let sourceLength: Int
+    let clock: Date
 
-    init(db: ManifestStagingDB, version: Int, sourceLength: Int) {
+    init(db: ManifestStagingDB, version: Int, sourceLength: Int, clock: Date) {
         self.db = db
         self.version = version
         self.sourceLength = sourceLength
+        self.clock = clock
     }
 
     /// Removes the run. A deletion failure is returned (and remembered for the next sweep), never swallowed.
@@ -64,7 +68,7 @@ nonisolated enum ManifestStager {
     /// Reads the whole document (validating it to EOF), stages it, and only then returns. Every thrown error is a
     /// `ManifestStreamError`, and no staging directory is left behind by a throw. Synchronous: call it off the main
     /// actor, from a `Task` so cancellation reaches it (polled in every unbounded loop, at least once per 1 MiB of input).
-    /// Outcome precedence, decided at EOF: I/O > cancellation > syntax > resource > schema > unsupported version.
+    /// Among failures observed before scanning stops: I/O > cancellation > syntax > resource > schema > unsupported version.
     static func stage(_ input: ManifestInput, options: ManifestStagingOptions = .init()) throws -> ManifestStagedRun {
         let directory = options.parentDirectory.appendingPathComponent("run-\(UUID().uuidString)", isDirectory: true)
         do {
@@ -81,8 +85,9 @@ nonisolated enum ManifestStager {
         do {
             let opened = try ManifestStagingDB(directory: directory)
             db = opened
-            let version = try ManifestStagingPass(input: input, db: opened, options: options).run()
-            return ManifestStagedRun(db: opened, version: version, sourceLength: input.length)
+            let now = options.clock()
+            let version = try ManifestStagingPass(input: input, db: opened, options: options, now: now).run()
+            return ManifestStagedRun(db: opened, version: version, sourceLength: input.length, clock: now)
         } catch {
             ManifestActiveRuns.remove(directory.lastPathComponent)
             var failure: Error?
@@ -130,7 +135,7 @@ nonisolated final class ManifestStagingPass {
     private let input: ManifestInput
     private let db: ManifestStagingDB
     private let options: ManifestStagingOptions
-    private let decoder = KudosBackupContents.makeDecoder()
+    private let decoder: JSONDecoder
     private let encoder: JSONEncoder = {
         let e = KudosBackupContents.makeEncoder()
         e.outputFormatting = []
@@ -144,10 +149,11 @@ nonisolated final class ManifestStagingPass {
     private var pendingRows = 0
     private var pendingBytes = 0
 
-    init(input: ManifestInput, db: ManifestStagingDB, options: ManifestStagingOptions) {
+    init(input: ManifestInput, db: ManifestStagingDB, options: ManifestStagingOptions, now: Date) {
         self.input = input
         self.db = db
         self.options = options
+        decoder = KudosBackupContents.makeDecoder(now: now)
         tokenizer = ManifestTokenizer(input: input)
     }
 
@@ -169,13 +175,14 @@ nonisolated final class ManifestStagingPass {
             (rootKind, _) = try tokenizer.skipValue()
             try tokenizer.expectEnd()
         }
-        // EOF reached. Decide in precedence order: I/O > cancellation > syntax (thrown above) > resource > schema.
+        // EOF reached. Decide in precedence order (shared decision 18a): I/O > cancellation > syntax (thrown above)
+        // > root type > resource > other schema. A syntax error anywhere beats a non-object root, which beats any limit.
         if let failure = input.failure { throw ManifestStreamError.io(failure) }
         if Task.isCancelled { throw ManifestStreamError.cancelled }
-        if let message = tokenizer.limitHit { throw ManifestStreamError.resourceExhausted(message) }
-        if tokenizer.depthExceeded { throw ManifestStreamError.invalidDocument(.depth) }
         // `JSONSerialization` takes only an object or an array at the top level; an array is JSON but not a manifest.
         if rootKind != .object { throw ManifestStreamError.invalidDocument(rootKind == .array ? .schema : .notJSON) }
+        if let message = tokenizer.limitHit { throw ManifestStreamError.resourceExhausted(message) }
+        if tokenizer.depthExceeded { throw ManifestStreamError.invalidDocument(.depth) }
 
         for spec in ManifestSectionSpec.all where presence[spec.name] == nil { try recordMember(spec.name, .missing, nil, 0, 0) }
         for spec in ManifestValueSpec.all where presence[spec.name] == nil { try recordMember(spec.name, .missing, nil, 0, 0) }
@@ -186,6 +193,7 @@ nonisolated final class ManifestStagingPass {
         guard KudosBackupManifest.supportedVersions.contains(version) else { throw ManifestStreamError.unsupportedVersion(version) }
         try db.exec("COMMIT")
         try checkDisk(final: true)
+        guard input.checkSource() else { throw ManifestStreamError.io(input.failure ?? "source changed during staging") }
         if Task.isCancelled { throw ManifestStreamError.cancelled } // not even a finished run is handed over after cancellation
         return version
     }
@@ -263,8 +271,10 @@ nonisolated final class ManifestStagingPass {
         }
         if range.count > options.typedValueBudget { tokenizer.noteLimit("\(spec.name) of \(range.count) bytes exceeds the typed-decode budget") }
         if !abandoned {
-            let data = firstWins(input.read(range), base: range.lowerBound, cuts: cuts)
+            guard input.checkSource() else { throw ManifestStreamError.io(input.failure ?? "source changed during staging") }
+            let raw = input.read(range)
             if let failure = input.failure { throw ManifestStreamError.io(failure) }
+            let data = firstWins(raw, base: range.lowerBound, cuts: cuts)
             if spec.decodes(decoder, data) {
                 if spec.name == "version" { version = try? decoder.decode(Int.self, from: data) }
                 try storeChunks(owner: spec.name, seq: 0, data: data)
@@ -324,11 +334,13 @@ nonisolated final class ManifestStagingPass {
             try storeChunks(owner: spec.name, seq: seq, from: range)
             return
         }
-        let data = firstWins(input.read(range), base: range.lowerBound, cuts: cuts)
+        guard input.checkSource() else { throw ManifestStreamError.io(input.failure ?? "source changed during staging") }
+        let raw = input.read(range)
         if let failure = input.failure { throw ManifestStreamError.io(failure) }
+        let data = firstWins(raw, base: range.lowerBound, cuts: cuts)
         if let (keys, canonical) = spec.decode(decoder, encoder, data) {
             let stored = canonical ?? data
-            try insertRecord(spec, seq, .decoded, stored.count, keys)
+            try insertRecord(spec, seq, .decoded, range.count, keys)
             try storeChunks(owner: spec.name, seq: seq, data: stored)
         } else if spec.policy == .lossy {
             try insertRecord(spec, seq, .undecodable, range.count, .init())
@@ -342,6 +354,7 @@ nonisolated final class ManifestStagingPass {
     private func createSchema() throws {
         var sql = """
         CREATE TABLE member (name TEXT PRIMARY KEY, ord INTEGER, known INTEGER, presence INTEGER, kind TEXT, count INTEGER, length INTEGER);
+        CREATE INDEX member_order ON member(ord);
         CREATE TABLE payload (id INTEGER PRIMARY KEY, owner TEXT NOT NULL, seq INTEGER NOT NULL, off INTEGER NOT NULL, bytes BLOB NOT NULL);
         CREATE UNIQUE INDEX payload_key ON payload(owner, seq, off);
         """
@@ -414,6 +427,13 @@ nonisolated final class ManifestStagingPass {
 
     /// Free space must cover the rest of the document at the measured staging rate, and the safety floor at the end.
     private func checkDisk(final: Bool) throws {
+        // SQLite page and index overhead counts toward the component budget even when the volume has ample space.
+        let files = try FileManager.default.contentsOfDirectory(at: db.directory, includingPropertiesForKeys: [.fileSizeKey])
+        let staged = try files.reduce(Int64(0)) { sum, url in
+            sum + Int64(try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0)
+        }
+        let budget = Int64(Double(input.length) * options.diskFactor) + options.diskFloor
+        if staged > budget { throw ManifestStreamError.resourceExhausted("staging uses \(staged) bytes, budget \(budget)") }
         let remaining = final ? 0 : max(0, input.length - tokenizer.pos)
         let needed = Int64(Double(remaining) * options.diskFactor) + options.diskFloor
         if let free = options.availableCapacity(db.directory.deletingLastPathComponent()), free < needed {

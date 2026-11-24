@@ -38,6 +38,12 @@ nonisolated protocol ManifestInput: AnyObject {
     func read(_ range: Range<Int>) -> Data
     /// Set by a failed read; the stager reports it as `.io` whatever the tokenizer saw next.
     var failure: String? { get }
+    /// Verifies that a seekable source is still the same file generation before a range reread or publication.
+    func checkSource() -> Bool
+}
+
+extension ManifestInput {
+    func checkSource() -> Bool { failure == nil }
 }
 
 nonisolated let manifestWindowSize = 1 << 20
@@ -47,14 +53,18 @@ nonisolated final class ManifestFileInput: ManifestInput {
     let length: Int
     private(set) var failure: String?
     private let fd: Int32
+    private let path: String
+    private let identity: stat
     private let base: Int
     private let buffer = UnsafeMutableRawPointer.allocate(byteCount: manifestWindowSize, alignment: 16)
 
     init(url: URL, range: Range<Int>? = nil) throws {
+        path = url.path
         fd = open(url.path, O_RDONLY)
         guard fd >= 0 else { throw ManifestStreamError.io("open: errno \(errno)") }
         var st = stat()
         guard fstat(fd, &st) == 0 else { close(fd); throw ManifestStreamError.io("fstat: errno \(errno)") }
+        identity = st
         base = range?.lowerBound ?? 0
         length = range?.count ?? Int(st.st_size)
         if let range, range.upperBound > Int(st.st_size) {
@@ -65,8 +75,26 @@ nonisolated final class ManifestFileInput: ManifestInput {
 
     deinit { close(fd); buffer.deallocate() }
 
+    func checkSource() -> Bool {
+        guard failure == nil else { return false }
+        var opened = stat(), current = stat()
+        guard fstat(fd, &opened) == 0, stat(path, &current) == 0 else {
+            failure = "source identity unavailable"
+            return false
+        }
+        if opened.st_size < identity.st_size { failure = "file shorter than expected"; return false }
+        let same = opened.st_dev == identity.st_dev && opened.st_ino == identity.st_ino
+            && opened.st_size == identity.st_size && opened.st_mtimespec.tv_sec == identity.st_mtimespec.tv_sec
+            && opened.st_mtimespec.tv_nsec == identity.st_mtimespec.tv_nsec
+            && current.st_dev == identity.st_dev && current.st_ino == identity.st_ino
+            && current.st_size == identity.st_size && current.st_mtimespec.tv_sec == identity.st_mtimespec.tv_sec
+            && current.st_mtimespec.tv_nsec == identity.st_mtimespec.tv_nsec
+        if !same { failure = "source changed during staging" }
+        return same
+    }
+
     func window(at offset: Int) -> UnsafeRawBufferPointer {
-        guard offset < length, failure == nil else { return UnsafeRawBufferPointer(start: nil, count: 0) }
+        guard offset < length, checkSource() else { return UnsafeRawBufferPointer(start: nil, count: 0) }
         let n = pread(fd, buffer, min(manifestWindowSize, length - offset), off_t(base + offset))
         guard n > 0 else {
             failure = n < 0 ? "pread: errno \(errno)" : "file shorter than expected"
@@ -76,6 +104,7 @@ nonisolated final class ManifestFileInput: ManifestInput {
     }
 
     func read(_ range: Range<Int>) -> Data {
+        guard checkSource() else { return Data() }
         var data = Data(count: range.count)
         var done = 0
         while done < range.count, failure == nil {

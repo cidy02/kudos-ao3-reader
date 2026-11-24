@@ -20,8 +20,9 @@ nonisolated enum ManifestLimits {
     /// Source bytes of a known root value as written (whitespace included): `version`, `exportedAt`, `settings`,
     /// `pronunciations`, `exportedBy`, and a known section holding the wrong kind of value.
     static let maxRootValueBytes = 16 * 1024 * 1024
-    /// Total bytes of decoded keys held at once for first-wins dedupe across all open objects.
-    static let maxLiveKeyBytes = 32 * 1024 * 1024
+    /// UTF-16 units of distinct decoded keys held for dedupe across open objects. Ten Mi units is below the
+    /// 182,361 × 60-unit shared boundary while preserving the existing approximately 32 MiB allocation guard.
+    static let maxLiveKeyUnits = 10 * 1024 * 1024
     /// Nesting: containers on the path from the root, the root included.
     static let maxDepth = 512
 }
@@ -47,7 +48,7 @@ nonisolated struct ManifestTokenizer {
     /// The first resource limit met. Scanning goes on (a syntax error later still wins, `docs/MANIFEST_CONTRACT.md` § precedence)
     /// but nothing more is remembered or staged.
     private(set) var limitHit: String?
-    private var liveKeyBytes = 0
+    private var liveKeyUnits = 0
     /// Source ranges of later duplicate members (`,"k":v`), at any depth, so a record can be rewritten first-wins before typed decode.
     private(set) var removals: [Range<Int>] = []
     private var whitespaceRun = 0
@@ -109,7 +110,7 @@ nonisolated struct ManifestTokenizer {
             skipWhitespace()
             if peek() == UInt8(ascii: "}") { pos += 1; return (.object, start ..< pos) }
             var scan = ManifestObjectScan()
-            defer { liveKeyBytes -= scan.cost }
+            defer { liveKeyUnits -= scan.cost }
             while true {
                 skipWhitespace()
                 guard peek() == UInt8(ascii: "\"") else { throw fail("object key") }
@@ -250,19 +251,21 @@ nonisolated struct ManifestTokenizer {
         if scan.members > ManifestLimits.maxKeysPerObject { noteLimit("more than \(ManifestLimits.maxKeysPerObject) members in one object") }
         guard limitHit == nil else { return (nil, false) }
         guard let units = try keyUnits(range) else { return (nil, false) }
-        let cost = units.count * 2 + 64
-        guard liveKeyBytes + cost <= ManifestLimits.maxLiveKeyBytes else {
-            noteLimit("decoded keys held at once exceed \(ManifestLimits.maxLiveKeyBytes) bytes")
+        // A duplicate costs nothing, so it is found before the budget is checked (shared decision 19a).
+        if scan.seen.contains(units) { return (units, true) }
+        let cost = units.count
+        guard liveKeyUnits + cost <= ManifestLimits.maxLiveKeyUnits else {
+            noteLimit("decoded keys held at once exceed \(ManifestLimits.maxLiveKeyUnits) UTF-16 units")
             return (nil, false)
         }
-        guard scan.seen.insert(units).inserted else { return (units, true) }
-        liveKeyBytes += cost
+        scan.seen.insert(units)
+        liveKeyUnits += cost
         scan.cost += cost
         return (units, false)
     }
 
     /// Releases an object's key memory (the nested path does this itself; the stager's root loop calls it at the end).
-    mutating func release(_ scan: ManifestObjectScan) { liveKeyBytes -= scan.cost }
+    mutating func release(_ scan: ManifestObjectScan) { liveKeyUnits -= scan.cost }
 
     /// The decoded key as UTF-16 units; nil (and a limit noted) when it is over the unit limit.
     mutating func keyUnits(_ range: Range<Int>) throws -> [UInt16]? {

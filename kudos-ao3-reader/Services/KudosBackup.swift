@@ -560,16 +560,19 @@ nonisolated struct KudosBackupContents {
     }
 
     /// Internal: the streaming staging pass (T-567) decodes records with exactly this decoder.
-    nonisolated static func makeDecoder() -> JSONDecoder {
+    nonisolated static let stagingClockKey = CodingUserInfoKey(rawValue: "kudos.manifestStagingClock")!
+
+    nonisolated static func makeDecoder(now: Date? = nil) -> JSONDecoder {
         let decoder = JSONDecoder()
+        if let now { decoder.userInfo[stagingClockKey] = now }
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let string = try container.decode(String.self)
             if let date = fractionalSecondsISO8601Formatter.date(from: string) {
-                return clampedArchiveDate(date)
+                return clampedArchiveDate(date, now: now ?? Date())
             }
             if let date = wholeSecondISO8601Formatter.date(from: string) {
-                return clampedArchiveDate(date)
+                return clampedArchiveDate(date, now: now ?? Date())
             }
             throw DecodingError.dataCorruptedError(
                 in: container,
@@ -1291,7 +1294,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         author = try container.decodeIfPresent(String.self, forKey: .author) ?? ""
         summary = try container.decodeIfPresent(String.self, forKey: .summary) ?? ""
         sourceURL = try container.decodeIfPresent(String.self, forKey: .sourceURL) ?? ""
-        dateAdded = try container.decodeIfPresent(Date.self, forKey: .dateAdded) ?? Date()
+        dateAdded = try container.decodeIfPresent(Date.self, forKey: .dateAdded)
+            ?? (decoder.userInfo[KudosBackupContents.stagingClockKey] as? Date ?? Date())
         downloadedAt = try container.decodeIfPresent(Date.self, forKey: .downloadedAt)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
         lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt)
@@ -1608,7 +1612,8 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         ao3WorkID = try container.decodeIfPresent(Int.self, forKey: .ao3WorkID)
         sourceURL = try container.decodeIfPresent(String.self, forKey: .sourceURL) ?? ""
         workTitle = try container.decodeIfPresent(String.self, forKey: .workTitle) ?? ""
-        startedAt = try container.decodeIfPresent(Date.self, forKey: .startedAt) ?? Date()
+        startedAt = try container.decodeIfPresent(Date.self, forKey: .startedAt)
+            ?? (decoder.userInfo[KudosBackupContents.stagingClockKey] as? Date ?? Date())
         endedAt = try container.decodeIfPresent(Date.self, forKey: .endedAt) ?? startedAt
         durationSeconds = try container.decodeIfPresent(Double.self, forKey: .durationSeconds) ?? 0
         tzOffsetSeconds = try container.decodeIfPresent(Int.self, forKey: .tzOffsetSeconds)
@@ -1680,7 +1685,8 @@ nonisolated struct KudosBackupReadingFavorite: Codable, Equatable {
             ?? ReadingFavoriteKind.work.rawValue
         targetKey = try container.decodeIfPresent(String.self, forKey: .targetKey) ?? ""
         displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? ""
-        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+            ?? (decoder.userInfo[KudosBackupContents.stagingClockKey] as? Date ?? Date())
         lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt) ?? createdAt
     }
 }
@@ -1712,7 +1718,8 @@ nonisolated struct KudosBackupFandomReadWatermark: Codable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         fandomName = try container.decodeIfPresent(String.self, forKey: .fandomName) ?? ""
-        lastVisitedAt = try container.decodeIfPresent(Date.self, forKey: .lastVisitedAt) ?? Date()
+        lastVisitedAt = try container.decodeIfPresent(Date.self, forKey: .lastVisitedAt)
+            ?? (decoder.userInfo[KudosBackupContents.stagingClockKey] as? Date ?? Date())
         newestWorkIDSeen = try container.decodeIfPresent(Int.self, forKey: .newestWorkIDSeen)
         newestWorkTitleSeen = try container.decodeIfPresent(String.self, forKey: .newestWorkTitleSeen)
             ?? ""
@@ -1775,7 +1782,8 @@ nonisolated struct KudosBackupFollowedTag: Codable, Equatable {
         showOnHome = try container.decodeIfPresent(Bool.self, forKey: .showOnHome) ?? true
         completeOnly = try container.decodeIfPresent(Bool.self, forKey: .completeOnly) ?? false
         hideExplicit = try container.decodeIfPresent(Bool.self, forKey: .hideExplicit) ?? false
-        followedAt = try container.decodeIfPresent(Date.self, forKey: .followedAt) ?? Date()
+        followedAt = try container.decodeIfPresent(Date.self, forKey: .followedAt)
+            ?? (decoder.userInfo[KudosBackupContents.stagingClockKey] as? Date ?? Date())
         lastCheckedAt = try container.decodeIfPresent(Date.self, forKey: .lastCheckedAt)
         lastSeenWorkID = try container.decodeIfPresent(Int.self, forKey: .lastSeenWorkID)
         lastSeenPublishedAt = try container.decodeIfPresent(Date.self, forKey: .lastSeenPublishedAt)
@@ -1824,7 +1832,8 @@ nonisolated struct KudosBackupTagAlias: Codable, Equatable {
         let decodedParents = try container.decodeIfPresent([String].self, forKey: .parentFandoms)
             .map(LearnedTagAlias.normalizedParentFandoms)
         parentFandoms = decodedParents?.isEmpty == true ? nil : decodedParents
-        learnedAt = try container.decodeIfPresent(Date.self, forKey: .learnedAt) ?? Date()
+        learnedAt = try container.decodeIfPresent(Date.self, forKey: .learnedAt)
+            ?? (decoder.userInfo[KudosBackupContents.stagingClockKey] as? Date ?? Date())
         lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt)
             ?? learnedAt
     }

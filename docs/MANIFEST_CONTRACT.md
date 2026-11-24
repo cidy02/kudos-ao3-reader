@@ -22,14 +22,14 @@ One contract for both platforms (owner, 2026-11-22, `docs/REDESIGN_DECISIONS.md`
 | Escapes | `\" \\ \/ \b \f \n \r \t \uXXXX`. A lone high or low surrogate escape is rejected; a valid pair is accepted. Raw control characters (< 0x20) in a string are rejected; `0x7F` is allowed. |
 | Numbers | JSON grammar (no leading `+`, no leading zeros, no `NaN`/`Infinity`, digits required after `.` and `e`). Value range is decided by the typed decode (`99999999999999999999` as `version` is a schema failure, not a syntax one). |
 | Not accepted | Comments, single quotes, unquoted tokens, `;`/`=` separators (Android's lenient decoder accepted some; it stops). |
-| Top level | An object is a manifest candidate. An array is JSON but not a manifest (**schema** on both platforms, shared decision 16). A scalar is not JSON (`notJSON`). Empty input is `notJSON`. |
+| Top level | An object is a manifest candidate. An array is **schema at its first token**, before depth or budget checks (shared decision 18). A scalar is not JSON (`notJSON`). Empty input is `notJSON`. |
 | Trailing content | Anything but whitespace after the top-level value is `notJSON`. |
 | Depth | At most **512 containers on any path, the root included** (a 513th is rejected). This differs from today's `JSONSerialization` by one (it allows 513); the shared decision (`briefs/p2-round3-shared.md` 1) follows Android's convention. Scanning goes on past the limit (iteratively, retaining nothing), so a malformed tail still reports syntax first; a depth rejection of a complete file is its own outcome (`invalidDocument(.depth)`), **not** `notJSON`: it never makes a live manifest eligible for `.bak` replacement (§ 3). Real manifests nest about 5 deep. |
 | Key equality | Exact sequence of UTF-16 code units after unescaping, **no Unicode normalisation** (`"é"` and `"e"+U+0301` are different keys, as in `NSString`/`JSONSerialization`). **First value wins at every depth**, enforced by the scanner: a later equal key inside a record is cut out of the bytes the typed decoder (and the stored payload) sees, so nothing depends on how Foundation resolves a repeated key. |
 | Strings | Raw control characters U+0000–U+001F inside a string and malformed UTF-8 are syntax errors; escape hex digits are ASCII only (`\uFF10` style is rejected); `0x7F` is allowed. |
-| Resource limits | Same on both platforms (new, **pending owner approval**; each is one named constant in `ManifestLimits`): object key <= 64 Ki **UTF-16 code units of the decoded key**; number token <= 64 Ki source characters (incremental JSON number grammar: a bare word is a syntax error, not an over-long number); <= 262,144 **source members** per object at every depth, counted before first-wins dedupe and including inside skipped duplicate values; a known root value (`version`, `exportedAt`, `settings`, `pronunciations`, `exportedBy`, or a known section holding the wrong kind of value) <= 16 Mi **source bytes as written** (whitespace included); decoded keys held at once for dedupe across all open objects <= 32 MiB (total live key memory). Over a limit is **resource exhaustion**, decided at EOF. Record arrays, records and unknown values have no size limit. Tested at the limit and one over. |
+| Resource limits | Same on both platforms (new, **pending owner approval**; each is one named constant in `ManifestLimits`): object key <= 64 Ki **UTF-16 code units of the decoded key**; number token <= 64 Ki source characters (incremental JSON number grammar: a bare word is a syntax error, not an over-long number); <= 262,144 **source members** per object at every depth, counted before first-wins dedupe and including inside skipped duplicate values; a known root value (`version`, `exportedAt`, `settings`, `pronunciations`, `exportedBy`, or a known section holding the wrong kind of value) <= 16 Mi **source bytes as written** (whitespace included); distinct decoded keys held for dedupe across open objects <= 10 Mi **UTF-16 code units**. Over a limit is **resource exhaustion**, decided at EOF. Record arrays, records and unknown values have no size limit. Tested at the limit and one over. |
 | Leading zeros, missing comma | Rejected as syntax (`08`, `{"a":1 "b":2}`): already so on iOS, identical on Android. |
-| Evaluation order | Decided at EOF: **I/O failure > cancellation > syntax > resource exhaustion > schema > unsupported version.** A bad record early plus a truncated or unreadable tail reports the tail first; a resource limit met early (or an oversized strict record) never hides a later syntax error and does not depend on member order. |
+| Evaluation order | Among **observed** failures: **I/O failure > cancellation > syntax > resource exhaustion > schema > unsupported version.** A syntax failure stops reading; an I/O failure in its unread tail is not observed. Resource limits keep scanning to EOF, so malformed syntax still wins. |
 | Key order | Free. `version` and `exportedAt` may follow the arrays (the exporter writes them last, `sortedKeys`), so nothing is applied or swept before EOF. |
 
 ## 2. Per top-level key
@@ -80,18 +80,21 @@ are there, indexed, in source order (`seq`).
 `KudosBackupFandomReadWatermark`, `KudosBackupFollowedTag` and `KudosBackupTagAlias` mint a default when a field is missing (a
 fresh UUID, `Date()`), differently on every decode. The staging pass decodes such a record once and **stores the record
 re-encoded from that value**, so the index (`k_id`, `k_work`) and every later reader (reconstruction, apply) see the same
-identity. The clock is the time of staging (the types read `Date()` themselves; a single injected operation clock needs a
-change to those decoders and is a P4 item). SQLite text is bound and read with explicit byte lengths (a NUL inside a key is
+identity. One clock is captured at staging start and passed through date clamping and generated record defaults. SQLite text is bound and read with explicit byte lengths (a NUL inside a key is
 part of the key) and composite identities use separate columns (`k_text` + `k_text2` for a favorite's kind and target).
 
 ### Consuming a staged run
 
-Row metadata is read by keyset (`recordPage` / `forEachRecordMeta`, no OFFSET, no whole-section array). Payload bytes are read
+Root metadata is paged by `memberPage` / `forEachMember` (including unknown-only traversal). Row metadata is read by keyset (`recordPage` / `forEachRecordMeta`, no OFFSET, no whole-section array); P4 validation batches stop at 200 rows or 16 MiB of record source bytes. Payload bytes are read
 only through `readPayload(of:seq:range:into:)`, which streams any byte range of a record to a sink from indexed chunk offsets, so
 an oversized value is consumed without being assembled. `shape(of:)` gives the presence-aware view an apply decision needs
-(`missing` / `null` / `empty` / `nonEmpty` / `wrongKind`). Cross-record semantic validation and the operation clock belong to
+(`missing` / `null` / `empty` / `nonEmpty` / `wrongKind`). Cross-record semantic validation belongs to
 P3/P4 and run over the final metadata before any mutation or sweep. `manifest()` and `forEachPayload` assemble whole records
 and exist as the oracle for tests.
+
+File input records device, inode, size, and modification time at open, and verifies them before each range read and before
+publishing a staged run. A changed source is I/O failure. The SQLite component is checked against `1.6 × input bytes + 16 MiB`
+at each batch and at success, even when free volume space is ample.
 
 ### Record sizes
 
@@ -142,11 +145,10 @@ All in `KudosTests/ManifestStreaming/ManifestStagingTests.swift` (normal gate un
 - **Presence, order, status, keys, indexes**: `presenceOrderStatusAndNaturalKeysAreStaged`.
 - **Chunked oversized value**: `oversizedValuesAreStoredInBoundedChunks`.
 - **Shared byte fixtures**: `docs/manifest-fixtures/` is Android's set copied byte-identical (`cases.json` + byte files; `wrapper` with
-  `BODY` and `gen` recipes), run by `sharedFixtureCasesHoldExactly`. Every non-`ok` case matches (iOS reports the depth policy as
-  `depth`, compared as Android's `resource`). **Reported, not changed:** every `ok` case is a *schema* failure on iOS because the
-  shared wrapper has only `version`, `exportedAt` and `works` while iOS requires `bookmarks`, `fonts` and `settings`; with those
-  members spliced in, all but `record-8MiB-exact-valid-ok` are `ok` (that record is `{id, summary}`, not a valid iOS work). The test
-  pins both lists exactly.
+  `BODY` and `gen` recipes), run by `sharedFixtureCasesHoldExactly`. **Pending Android-owned fixture update:** every case is
+  asserted exactly on iOS. The current shared wrapper lacks required iOS `bookmarks`, `fonts` and `settings`; the two malformed
+  array-root cases still say `syntax` although decision 18 says immediate `schema`. The suite remains red until Android publishes
+  the same updated bytes and expectations to both trees.
 - **Depth** (512 containers, root included) and the `.bak` eligibility rule: `nestingLimitIsFiveHundredTwelveContainersIncludingTheRoot`.
   **First wins at every depth, no normalisation**: `firstValueWinsAtEveryDepthBeforeTypedDecode`. **Generated defaults materialised
   once, NUL-safe keys, pair identities**: `generatedDefaultsAreMaterialisedOnceAndKeysSurviveNulAndPairs`.

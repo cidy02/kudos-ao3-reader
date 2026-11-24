@@ -136,7 +136,9 @@ struct ManifestStagingTests {
         let unknownData = try #require(corpus["unknown-top-keys"])
         let unknown = try ManifestStager.stage(ManifestDataInput(unknownData), options: scratch.options)
         defer { unknown.discard() }
-        #expect(try unknown.memberNames().contains("zzUnknown"))
+        var unknownNames: [String] = []
+        try unknown.forEachMember(pageSize: 2, unknownOnly: true) { unknownNames.append($0.name) }
+        #expect(unknownNames.contains("zzUnknown"))
         #expect(try unknown.db.scalar("SELECT count(*) FROM payload WHERE owner = 'zzUnknown'") == 0)
     }
 
@@ -171,9 +173,9 @@ struct ManifestStagingTests {
         // Object root + n arrays = n + 1 containers. 512 is the last accepted (then it is just not a manifest: schema).
         #expect(try outcome("{\"version\":8,\"x\":\(nested(511))}") == .invalidDocument(.schema))
         #expect(try outcome("{\"version\":8,\"x\":\(nested(512))}") == .invalidDocument(.depth))
-        // Array root: n containers.
+        // Array root: n containers. Root type outranks the depth limit (shared decision 18a).
         #expect(try outcome(nested(512)) == .invalidDocument(.schema))
-        #expect(try outcome(nested(513)) == .invalidDocument(.depth))
+        #expect(try outcome(nested(513)) == .invalidDocument(.schema))
         // A deep value inside a record array element counts the root, the array and the record.
         #expect(try outcome("{\"works\":[{\"a\":\(nested(509))}]}") == .invalidDocument(.schema))
         #expect(try outcome("{\"works\":[{\"a\":\(nested(510))}]}") == .invalidDocument(.depth))
@@ -277,7 +279,8 @@ struct ManifestStagingTests {
         let accents = try Self.withMembers("\"\u{00E9}\":1,\"e\u{0301}\":2,\"a\":1,\"a\\u0000\":2")
         let accented = try ManifestStager.stage(ManifestDataInput(accents), options: scratch.options)
         defer { accented.discard() }
-        let names = try accented.memberNames()
+        var names: [String] = []
+        try accented.forEachMember(pageSize: 2) { names.append($0.name) }
         #expect(names.contains("\u{00E9}") && names.contains("e\u{0301}") && names.contains("a") && names.contains("a\u{0}"))
         #expect(names.filter { $0 == "\u{00E9}" || $0 == "e\u{0301}" }.count == 2)
         run.discard(); accented.discard()
@@ -471,17 +474,6 @@ struct ManifestStagingTests {
 
     // MARK: Shared byte fixtures (docs/manifest-fixtures: Android's set, byte-identical; its suite reads the same cases.json)
 
-    /// Shared cases whose expectation iOS cannot meet, reported to the orchestrator and not changed. The shared wrapper has
-    /// `version`, `exportedAt` and `works` only, so every case that expects `ok` is a **schema** failure on iOS (`bookmarks`,
-    /// `fonts` and `settings` are required here); `augmentedKnownDisagreements` are the ones still not `ok` once those members
-    /// are added, i.e. a real difference in what a valid record is (Android's model is looser).
-    static let knownFixtureDisagreements: Set<String> = [
-        "bom-ok", "depth-512-total-ok", "key-32768-emoji-root-ok", "key-65536-ascii-nested-ok", "key-escaped-duplicate-first-wins",
-        "key-nfc-nfd-distinct", "members-262144-nested-ok", "number-65536-digits-ok", "record-8MiB-exact-valid-ok",
-        "settings-16MiB-source-ok", "surrogate-pair-ok", "trailing-commas-ok",
-    ]
-    static let augmentedKnownDisagreements: Set<String> = ["record-8MiB-exact-valid-ok"]
-
     static func outcomeName(_ data: Data, _ options: ManifestStagingOptions) -> String {
         do {
             try ManifestStager.stage(ManifestDataInput(data), options: options).discard()
@@ -502,12 +494,10 @@ struct ManifestStagingTests {
         let wrapper = try #require(index["wrapper"] as? String)
         let cases = try #require(index["cases"] as? [[String: Any]])
         #expect(cases.count >= 37)
-        let required = "\"works\":[],\"bookmarks\":[],\"fonts\":[],"
-        var disagreements: Set<String> = [], stillDisagreeing: Set<String> = []
+        var disagreements: [String] = []
         for c in cases {
             let id = try #require(c["id"] as? String)
             let expected = try #require(c["expect"] as? String)
-            var text: String?
             var data: Data
             if let file = c["file"] as? String {
                 data = try Data(contentsOf: folder.appendingPathComponent(file))
@@ -516,24 +506,12 @@ struct ManifestStagingTests {
                 let body = (gen["prefix"] as? String ?? "") + String(repeating: gen["unit"] as? String ?? "", count: gen["count"] as? Int ?? 1)
                     + (gen["suffix"] as? String ?? "")
                 let wrap = gen["wrap"] as? Bool ?? false
-                text = wrap ? wrapper.replacingOccurrences(of: "BODY", with: body) : body
-                data = Data(text!.utf8)
+                data = Data((wrap ? wrapper.replacingOccurrences(of: "BODY", with: body) : body).utf8)
             }
             let actual = Self.outcomeName(data, scratch.options)
-            guard actual != expected else { continue }
-            disagreements.insert(id)
-            guard expected == "ok", actual == "schema" else { stillDisagreeing.insert(id); continue }
-            // Does it become `ok` once iOS's required members are present? (Textual splice after `"works":[],`; bytes otherwise as shared.)
-            var augmented = data
-            if let range = data.range(of: Data("\"works\":[],".utf8)) {
-                let hasSettings = data.range(of: Data("\"settings\":".utf8)) != nil
-                let extra = required.dropFirst("\"works\":[],".count) + (hasSettings ? "" : "\"settings\":{\"readerFontID\":\"system\"},")
-                augmented.replaceSubrange(range.upperBound ..< range.upperBound, with: Data(extra.utf8))
-            }
-            if Self.outcomeName(augmented, scratch.options) != "ok" { stillDisagreeing.insert(id) }
+            if actual != expected { disagreements.append("\(id): \(actual), expected \(expected)") }
         }
-        #expect(disagreements == Self.knownFixtureDisagreements, "\(disagreements.sorted())")
-        #expect(stillDisagreeing == Self.augmentedKnownDisagreements, "\(stillDisagreeing.sorted())")
+        #expect(disagreements.isEmpty, "\(disagreements.sorted())")
         #expect(scratch.leftovers.isEmpty)
     }
 
@@ -573,6 +551,131 @@ struct ManifestStagingTests {
 
     // MARK: Distinct outcomes: cancellation, I/O, resources
 
+    /// Shared decision 19a: at the live-key limit a duplicate key costs nothing; only a new distinct key fails.
+    @Test func aDuplicateKeyAtTheLiveKeyLimitIsNotResourceExhaustion() throws {
+        let scratch = Scratch()
+        let prefix = "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[],\"bookmarks\":[],\"fonts\":[],"
+            + "\"settings\":{\"readerFontID\":\"system\"},\"x\":{"
+        let rootKeyUnits = "version exportedAt works bookmarks fonts settings x".split(separator: " ").reduce(0) { $0 + $1.count }
+        let fitting = (ManifestLimits.maxLiveKeyUnits - rootKeyUnits) / 60
+        func key(_ i: Int) -> String { String(format: "%06d", i) + String(repeating: "k", count: 54) }
+        func document(extra: String) -> Data {
+            var members = (0..<fitting).map { "\"\(key($0))\":0" }
+            members.append(extra)
+            return Data((prefix + members.joined(separator: ",") + "}}").utf8)
+        }
+        #expect(Self.outcomeName(document(extra: "\"\(key(0))\":1"), scratch.options) == "ok")
+        #expect(Self.outcomeName(document(extra: "\"\(key(fitting))\":0"), scratch.options) == "resource")
+        #expect(scratch.leftovers.isEmpty)
+    }
+
+    @Test func arrayRootIsSchemaBeforeDepthOrBudget() throws {
+        let scratch = Scratch()
+        let deepArray = Data((String(repeating: "[", count: 513) + String(repeating: "]", count: 513)).utf8)
+        #expect(try Self.stagedFailure(deepArray, scratch.options) == .invalidDocument(.schema))
+        #expect(scratch.leftovers.isEmpty)
+    }
+
+    @Test func validationBatchesStopAtBothRecordAndByteLimits() throws {
+        let scratch = Scratch()
+        let corpus = Dictionary(uniqueKeysWithValues: try ManifestParserDifferentialTests.corpus())
+        let data = try #require(corpus["gen:works"])
+        let run = try ManifestStager.stage(ManifestDataInput(data), options: scratch.options)
+        defer { run.discard() }
+        let all = try run.records(of: "works")
+        let largest = try #require(all.map(\.length).max())
+        let byteLimit = largest * 2
+        var batches: [[ManifestRecordMeta]] = []
+        try run.forEachValidationBatch(of: "works", maxRecords: 200, maxBytes: byteLimit) { batches.append($0) }
+        #expect(batches.count > 1)
+        #expect(batches.allSatisfy { $0.count <= 200 && $0.reduce(0) { $0 + $1.length } <= byteLimit })
+        #expect(batches.flatMap { $0.map(\.seq) } == all.map(\.seq))
+        var countBatches: [[ManifestRecordMeta]] = []
+        try run.forEachValidationBatch(of: "works", maxRecords: 1) { countBatches.append($0) }
+        #expect(countBatches.allSatisfy { $0.count == 1 })
+        // Three near-8-MiB metadata rows must form two batches, even though the count cap is 200.
+        try run.db.run("DELETE FROM rec_works WHERE seq >= 3")
+        for seq in 0 ..< 3 { try run.db.run("UPDATE rec_works SET length = ? WHERE seq = ?", [.int((8 << 20) - 1), .int(Int64(seq))]) }
+        var largeBatches: [Int] = []
+        try run.forEachValidationBatch(of: "works") { largeBatches.append($0.count) }
+        #expect(largeBatches.first == 2)
+        #expect(largeBatches.dropFirst().first == 1)
+    }
+
+    @Test func liveKeyLimitCountsDecodedUTF16Units() throws {
+        let scratch = Scratch()
+        let file = scratch.url.appendingPathComponent("key-budget.json")
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        let writer = try FileHandle(forWritingTo: file)
+        try writer.write(contentsOf: Data("{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[],\"bookmarks\":[],\"fonts\":[],\"settings\":{\"readerFontID\":\"system\"},\"manyKeys\":{".utf8))
+        for start in stride(from: 0, to: 175_000, by: 1000) {
+            let chunk = (start ..< start + 1000).map { "\($0 == 0 ? "" : ",")\"\(String(format: "%06d", $0))\(String(repeating: "k", count: 54))\":0" }.joined()
+            try writer.write(contentsOf: Data(chunk.utf8))
+        }
+        try writer.write(contentsOf: Data("}}".utf8))
+        try writer.close()
+        do {
+            try ManifestStager.stage(ManifestFileInput(url: file), options: scratch.options).discard()
+            Issue.record("distinct key units exceeded the budget")
+        } catch ManifestStreamError.resourceExhausted { }
+        #expect(scratch.leftovers.isEmpty)
+    }
+
+    @Test func allRecordDefaultsUseOneCapturedClock() throws {
+        let scratch = Scratch()
+        let base = try Self.withMembers("\"round4Unknown\":0")
+        var object = try #require(JSONSerialization.jsonObject(with: base) as? [String: Any])
+        var works = try #require(object["works"] as? [[String: Any]])
+        works[0].removeValue(forKey: "dateAdded")
+        works = [works[0], works[0]]
+        object["works"] = works
+        let data = try JSONSerialization.data(withJSONObject: object)
+        let fixed = Date(timeIntervalSince1970: 1_700_000_000)
+        var calls = 0
+        var options = scratch.options
+        options.clock = { calls += 1; return fixed }
+        let run = try ManifestStager.stage(ManifestDataInput(data), options: options)
+        defer { run.discard() }
+        #expect(calls == 1)
+        #expect(try run.manifest().works.map(\.dateAdded) == [fixed, fixed])
+    }
+
+    @Test func fileGenerationChangeFailsBeforeRereadAndPublishesNothing() throws {
+        let scratch = Scratch()
+        let data = try Self.withMembers("\"sourceCheck\":0")
+        let file = scratch.url.appendingPathComponent("mutable.json")
+        try data.write(to: file)
+        let input = try ManifestFileInput(url: file)
+        var changed = data
+        let marker = try #require(changed.range(of: Data("sourceCheck".utf8)))
+        changed.replaceSubrange(marker, with: Data("changedName".utf8)) // same byte length
+        try changed.write(to: file, options: .atomic)
+        #expect(throws: ManifestStreamError.io("source changed during staging")) {
+            try ManifestStager.stage(input, options: scratch.options)
+        }
+        try data.write(to: file, options: .atomic)
+        let duringRead = HookedInput(try ManifestFileInput(url: file), onRead: { n in
+            if n == 3 { try? changed.write(to: file, options: .atomic) }
+        })
+        #expect(throws: ManifestStreamError.io("source changed during staging")) {
+            try ManifestStager.stage(duringRead, options: scratch.options)
+        }
+        #expect(scratch.leftovers.isEmpty)
+    }
+
+    @Test func stagingComponentBudgetIsEnforcedDespitePlentyOfFreeSpace() throws {
+        let scratch = Scratch()
+        var options = scratch.options
+        options.availableCapacity = { _ in 1 << 40 }
+        options.diskFactor = 0
+        options.diskFloor = 1
+        let data = try Self.withMembers("\"budget\":0")
+        guard case .resourceExhausted = try Self.stagedFailure(data, options) else {
+            Issue.record("staging exceeded its component budget"); return
+        }
+        #expect(scratch.leftovers.isEmpty)
+    }
+
     /// Delegates to a real input and lets a test act on the Nth read or window.
     nonisolated final class HookedInput: ManifestInput {
         let inner: ManifestInput
@@ -590,6 +693,7 @@ struct ManifestStagingTests {
             return failureMessage == nil ? inner.window(at: offset) : UnsafeRawBufferPointer(start: nil, count: 0)
         }
         func read(_ range: Range<Int>) -> Data { reads += 1; onRead(reads); return inner.read(range) }
+        func checkSource() -> Bool { failure == nil && inner.checkSource() }
     }
 
     @Test func cancellationStopsPromptlyAndLeavesNothing() async throws {

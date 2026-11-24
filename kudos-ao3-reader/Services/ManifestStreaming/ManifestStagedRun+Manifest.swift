@@ -45,9 +45,17 @@ nonisolated enum ManifestSectionShape: Equatable {
 nonisolated struct ManifestRecordMeta {
     let seq: Int
     let status: ManifestRecordStatus
-    /// Stored payload bytes.
+    /// Record source bytes (before canonical re-encoding), used for validation batch accounting.
     let length: Int
     let keys: ManifestRecordKeys
+}
+
+nonisolated struct ManifestMemberMeta {
+    let name: String
+    let order: Int
+    let known: Bool
+    let presence: ManifestPresence
+    let length: Int
 }
 
 /// Reading a staged run back. The consumption path is bounded: `forEachRecordMeta` pages row metadata by keyset and
@@ -75,11 +83,27 @@ extension ManifestStagedRun {
         return out
     }
 
-    /// Member names in source order (known and unknown), first occurrence of each. Unknown names are bounded by the key limits.
-    func memberNames() throws -> [String] {
-        var names: [String] = []
-        try db.query("SELECT name FROM member WHERE ord IS NOT NULL ORDER BY ord") { names.append($0.text(0)) }
-        return names
+    /// Keyset page of root metadata; callers can select unknown entries without collecting the whole root.
+    func memberPage(after order: Int = -1, limit: Int = 1000, unknownOnly: Bool = false) throws -> [ManifestMemberMeta] {
+        precondition(limit > 0 && limit <= 1000)
+        var page: [ManifestMemberMeta] = []
+        let sql = "SELECT name, ord, known, presence, length FROM member WHERE ord > ?"
+            + (unknownOnly ? " AND known = 0" : "") + " ORDER BY ord LIMIT ?"
+        try db.query(sql, [.int(Int64(order)), .int(Int64(limit))]) { row in
+            page.append(.init(name: row.text(0), order: row.int(1), known: row.int(2) != 0,
+                              presence: ManifestPresence(rawValue: row.int(3)) ?? .missing, length: row.int(4)))
+        }
+        return page
+    }
+
+    func forEachMember(pageSize: Int = 1000, unknownOnly: Bool = false, _ body: (ManifestMemberMeta) throws -> Void) throws {
+        var last = -1
+        while true {
+            let page = try memberPage(after: last, limit: pageSize, unknownOnly: unknownOnly)
+            for member in page { try body(member) }
+            guard let end = page.last, page.count == pageSize else { return }
+            last = end.order
+        }
     }
 
     /// One page of row metadata in source order, after `seq` (keyset: no OFFSET, no whole-section array).
@@ -114,6 +138,26 @@ extension ManifestStagedRun {
         }
     }
 
+    /// P4's validation boundary: no batch contains more than 200 rows or 16 MiB of record source bytes.
+    /// A single row at the 8 MiB strict limit always fits. Metadata is fetched by keyset, never by OFFSET.
+    func forEachValidationBatch(of section: String, maxRecords: Int = 200, maxBytes: Int = 16 << 20,
+                                _ body: ([ManifestRecordMeta]) throws -> Void) throws {
+        precondition(maxRecords > 0 && maxRecords <= 200 && maxBytes > 0 && maxBytes <= 16 << 20)
+        var batch: [ManifestRecordMeta] = []
+        var bytes = 0
+        try forEachRecordMeta(of: section, pageSize: maxRecords) { meta in
+            if !batch.isEmpty && (batch.count == maxRecords || bytes + meta.length > maxBytes) {
+                try body(batch)
+                batch.removeAll(keepingCapacity: true)
+                bytes = 0
+            }
+            if meta.length > maxBytes { throw ManifestStreamError.resourceExhausted("validation record exceeds batch budget") }
+            batch.append(meta)
+            bytes += meta.length
+        }
+        if !batch.isEmpty { try body(batch) }
+    }
+
     /// Streams bytes `range` (all of it when nil) of one stored record to `sink`, in order, a stored chunk at a time (clipped to
     /// the range). Nothing larger than a chunk is ever held, so an oversized value is consumed without being assembled.
     func readPayload(of owner: String, seq: Int, range: Range<Int>? = nil, into sink: (Data) throws -> Void) throws {
@@ -144,7 +188,7 @@ extension ManifestStagedRun {
 
     /// Rebuilds the `KudosBackupManifest` that `KudosBackupContents.decodeManifest` returns for the staged bytes.
     func manifest() throws -> KudosBackupManifest {
-        let decoder = KudosBackupContents.makeDecoder()
+        let decoder = KudosBackupContents.makeDecoder(now: clock)
         func value<T: Decodable>(_ name: String, _: T.Type) throws -> T? {
             var out: T?
             try forEachPayload(of: name) { _, bytes in out = try decoder.decode(T.self, from: bytes) }
