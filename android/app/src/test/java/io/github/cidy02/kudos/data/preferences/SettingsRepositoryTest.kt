@@ -17,6 +17,7 @@ import io.github.cidy02.kudos.library.FavoriteScope
 import io.github.cidy02.kudos.library.FavoritePreferences
 import io.github.cidy02.kudos.library.LibraryHistoryGrouping
 import io.github.cidy02.kudos.library.ReadingAffinities
+import io.github.cidy02.kudos.reader.ReaderLockedOrientation
 import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
 import java.io.File
 import java.nio.file.Files
@@ -456,5 +457,54 @@ class SettingsRepositoryTest {
 
         repository.resetSpeechPreferences()
         assertEquals(ReaderSpeechPreferences(), repository.speechPreferences.first())
+    }
+
+    @Test
+    fun readerOrientationLockRoundTripsStaysDeviceLocalAndSurvivesBackupRestore() = runBlocking {
+        assertNull(repository.readerOrientationLock.first())
+        val backupBefore = BackupJson.encodeToString(
+            BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload()
+        )
+        assertFalse(backupBefore.contains("orientation", ignoreCase = true))
+        assertFalse(backupBefore.contains("rotation", ignoreCase = true))
+
+        for (orientation in ReaderLockedOrientation.entries) {
+            repository.updateReaderOrientationLock(orientation)
+            assertEquals(orientation, SettingsRepository(dataStore).readerOrientationLock.first())
+            assertEquals(
+                orientation.storageValue,
+                dataStore.data.first()[stringPreferencesKey("readerOrientationLock")]
+            )
+            assertEquals(KudosSettings.Defaults, repository.snapshot())
+            assertEquals(
+                backupBefore,
+                BackupJson.encodeToString(
+                    BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload()
+                )
+            )
+        }
+
+        // Backup restore and folder sync must not overwrite or clear the device-local lock.
+        repository.updateReaderOrientationLock(ReaderLockedOrientation.Landscape)
+        repository.replaceAll(KudosSettings.Defaults)
+        assertEquals(ReaderLockedOrientation.Landscape, repository.readerOrientationLock.first())
+
+        // Corrupt / unknown values decode safely as unlocked (never SCREEN_ORIENTATION_LOCKED).
+        for (raw in listOf("", "locked", "14", "unknown")) {
+            dataStore.edit { it[stringPreferencesKey("readerOrientationLock")] = raw }
+            assertNull(repository.readerOrientationLock.first())
+        }
+
+        // Explicit unlock removes the key.
+        repository.updateReaderOrientationLock(ReaderLockedOrientation.ReverseLandscape)
+        assertEquals(ReaderLockedOrientation.ReverseLandscape, repository.readerOrientationLock.first())
+        repository.updateReaderOrientationLock(null)
+        assertNull(repository.readerOrientationLock.first())
+        assertNull(dataStore.data.first()[stringPreferencesKey("readerOrientationLock")])
+
+        // Reset settings to defaults clears it back to unlocked.
+        repository.updateReaderOrientationLock(ReaderLockedOrientation.Portrait)
+        repository.resetToDefaults()
+        assertNull(repository.readerOrientationLock.first())
     }
 }
