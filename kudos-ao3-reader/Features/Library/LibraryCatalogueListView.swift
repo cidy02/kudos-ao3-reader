@@ -105,7 +105,7 @@ struct LibraryCatalogueListView: View {
                 }
             }
         #if os(iOS)
-            .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
+            .tabBarHidden(isSelecting)
         #endif
             .libraryWorkRemovalConfirmations(
                 pendingDelete: $pendingDelete,

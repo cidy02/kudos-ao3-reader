@@ -274,6 +274,7 @@ private struct CardList: ViewModifier {
                 ? theme.appTheme.contentBackdrop
                 : theme.appTheme.cardBackdrop
         let list = content
+            .shrinksTabBarOnScroll()
             .environment(\.subjectWashScroll, nil)
             .listStyle(.plain)
             .scrollContentBackground(.hidden)

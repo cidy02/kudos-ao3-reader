@@ -55,6 +55,7 @@ struct BrowseView: View {
         NavigationStack(path: $path) {
             MediaBrowserView(onSelectFandom: openFandom)
                 .scrollAwayTopChrome()
+                .tabReselect(.browse, path: $path)
                 .navigationTitle("Browse")
             #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)

@@ -468,7 +468,7 @@ struct ReadiumReaderView: View {
                 Text(speech.speechErrorMessage ?? "")
             }
             // Immersive reading: hide the tab bar; the status bar follows the chrome.
-            .toolbar(.hidden, for: .tabBar)
+            .tabBarHidden()
             .statusBarHidden(hidesStatusBar)
             .persistentSystemOverlays(chromeVisible ? .automatic : .hidden)
             // The status bar fades with the bars (T-562b), including Duo's initial

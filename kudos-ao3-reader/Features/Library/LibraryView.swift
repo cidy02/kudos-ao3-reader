@@ -140,6 +140,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 }
             }
             .scrollAwayTopChrome()
+            .tabReselect(.library, path: $path)
             .background(themeManager.appTheme.contentBackdrop.ignoresSafeArea())
             .navigationTitle(isSelecting ? WorkSelectionTitle.text(selectedCount: selectedWorks.count) : "Library")
             #if os(iOS)
@@ -194,7 +195,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 // the tab pill — Liquid Glass samples ambient color from surrounding
                 // content, and solid accent-red on screen bled visible red rings onto
                 // the (unrelated) tab icons whenever a selection was active.
-                .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
+                .tabBarHidden(isSelecting)
             #endif
                 // 1bk draws a form — name, description, colour, and a Behaviour
                 // group — not the bare name alert this replaced. One sheet

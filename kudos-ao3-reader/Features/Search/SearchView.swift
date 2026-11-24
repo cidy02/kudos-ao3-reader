@@ -232,6 +232,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 .padding(.trailing, searchLeadingTrailingInset)
                 .background(searchBackdrop.ignoresSafeArea())
                 .scrollAwayTopChrome()
+                .tabReselect(.search, path: $path)
                 .task { await FandomCatalog.shared.warmCache() }
                 #if DEBUG
                 .task {
@@ -396,7 +397,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     }
                 }
             #if os(iOS)
-                .toolbar((isSelectingLocal || bulkSelection.isSelecting) ? .hidden : .automatic, for: .tabBar)
+                .tabBarHidden((isSelectingLocal || bulkSelection.isSelecting))
                 // Focused Search has a custom Back button (results → Browse → previous
                 // tab, not a navigation pop), so mirror it with a left-edge swipe.
                 // Only at the root — pushed detail pages use the normal swipe-to-pop.

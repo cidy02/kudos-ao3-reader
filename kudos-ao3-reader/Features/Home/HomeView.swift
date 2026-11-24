@@ -286,6 +286,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                             .task { await mailDriver.refreshIfNeeded() }
                             #endif
                             .scrollAwayTopChrome()
+                            .tabReselect(.home, path: $path)
                             #if DEBUG
                             .task {
                                 guard let anchor = DebugLaunchRoute.homeAnchor else { return }
@@ -430,7 +431,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             #if os(iOS)
                 // Select mode owns the bottom edge with its bulk-action bar; matches
                 // LibraryView's own rationale for hiding the floating tab bar meanwhile.
-                .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
+                .tabBarHidden(isSelecting)
             #endif
                 .toolbar {
                     if isSelecting {

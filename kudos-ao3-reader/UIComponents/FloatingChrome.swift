@@ -21,7 +21,7 @@ extension View {
     @ViewBuilder
     func hidesFloatingTabBarInEditor() -> some View {
         #if os(iOS)
-        toolbar(FloatingTabBarPolicy.hidesTabBar(isEditor: true) ? .hidden : .automatic, for: .tabBar)
+        tabBarHidden(FloatingTabBarPolicy.hidesTabBar(isEditor: true))
         #else
         self
         #endif
@@ -35,5 +35,17 @@ extension View {
 enum CommentsWriteBarPlacementPolicy {
     static func usesBottomAccessory(isModal: Bool, isAccessibilitySize: Bool) -> Bool {
         !isModal && !isAccessibilitySize
+    }
+
+    /// The system accessory rides the system bar; Kudos's own iPhone bar (T-572) has none, so
+    /// there the composer sits in-view above it, in the same slot (and still wins over Read Aloud).
+    /// Points the in-view composer pill drops so it sits on the SHRUNK custom bar (its inset is the
+    /// expanded top). Zero on the system bar and in modal sheets.
+    static func customBarDrop(customBar: Bool, isModal: Bool, isShrunk: Bool) -> CGFloat {
+        ShrinkingTabBarPolicy.pillDrop(isShrunk: customBar && !isModal && isShrunk)
+    }
+
+    static func usesSystemAccessory(composerOwnsAccessory: Bool, customBar: Bool) -> Bool {
+        composerOwnsAccessory && !customBar
     }
 }
