@@ -48,7 +48,7 @@ internal object ManifestSections {
     private fun idKey(column: String, field: String = "id") = key(column, field, ::id)
 
     val all: List<SectionSpec> = listOf(
-        SectionSpec("works", BackupWork.serializer(), listOf(idKey("k_id"), key("k_ao3", "ao3WorkID"), key("k_url", "sourceURL"))),
+        SectionSpec("works", BackupWork.serializer(), listOf(idKey("k_id"), key("k_ao3", "ao3WorkID") { it?.toIntOrNull()?.toString() }, key("k_url", "sourceURL"))),
         SectionSpec("bookmarks", BackupBookmark.serializer(), listOf(idKey("k_id"), key("k_url", "urlString"))),
         SectionSpec("fonts", BackupFont.serializer(), listOf(
             key("k_file", "fileName") { it?.let(BackupPaths::fontFileNameKey) }, key("k_name", "name") { it?.lowercase() }

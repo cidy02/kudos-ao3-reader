@@ -170,7 +170,7 @@ class ManifestStagingTest {
             val ranges = s.unknownRanges("works", 0)
             assertEquals(listOf("future", "zzz"), ranges.map { it.name })
             assertEquals("\"future\":{\"a\":[1,2,{\"b\":null}]}", s.recordTextInMemory("works", 0, ranges[0].start, ranges[0].stop))
-            assertEquals("\"zzz\":\"xé\\u000a\"", s.recordTextInMemory("works", 0, ranges[1].start, ranges[1].stop))
+            assertEquals("\"zzz\":\"xé\\n\"", s.recordTextInMemory("works", 0, ranges[1].start, ranges[1].stop))
             assertEquals(emptyList<StagedUnknownRange>(), stage(doc("\"works\":[${work(2)}]")).use { it.unknownRanges("works", 0) })
         }
     }

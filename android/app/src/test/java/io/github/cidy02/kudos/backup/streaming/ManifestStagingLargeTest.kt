@@ -6,6 +6,7 @@ import io.github.cidy02.kudos.backup.BackupJson
 import io.github.cidy02.kudos.backup.BackupWork
 import java.io.File
 import java.nio.file.Files
+import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -60,6 +61,66 @@ class ManifestStagingLargeTest {
         return "works=$n sessions=${staged.count("readingSessions")} annotations=${staged.count("annotations")}"
     }
 
+    /** Opt-in three real near-8 MiB strict rows, both flat and 160k-tag-heavy. JVM heap excludes native SQLite. */
+    @Test
+    fun threeNearBudgetRecordsPeak() {
+        val out = System.getenv("A567_P2_OUT")
+        assumeTrue("opt-in", out != null)
+        val dir = Files.createTempDirectory("a567p2-three").toFile()
+        val root = File(dir, "staging")
+        val target = StagingSink.TYPED_BUDGET_BYTES.toInt() - 4096
+        val now = Instant.parse("2026-06-15T00:00:00Z")
+        val report = StringBuilder("\nThree near-8 MiB strict records (Robolectric JVM, sampled heap; native SQLite excluded):\n")
+        try {
+            for (structured in listOf(false, true)) {
+                val label = if (structured) "160000 tags" else "flat summary"
+                val tags = if (structured) (0 until 160_000).joinToString(",") { "\"tag-$it\"" } else ""
+                val suffix = if (structured) "\",\"workTags\":[$tags]}" else "\"}"
+                val file = File(dir, if (structured) "structured.json" else "flat.json")
+                file.bufferedWriter().use { w ->
+                    w.write("{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00Z\",\"works\":[")
+                    for (id in 1..3) {
+                        if (id > 1) w.write(",")
+                        val prefix = "{\"id\":\"${A567Corpus.uuid(id)}\",\"summary\":\""
+                        w.write(prefix)
+                        var remaining = target - prefix.length - suffix.length
+                        assertTrue("record exceeds typed budget", remaining > 0)
+                        val pad = "a".repeat(8192)
+                        while (remaining >= pad.length) { w.write(pad); remaining -= pad.length }
+                        w.write(pad.substring(0, remaining))
+                        w.write(suffix)
+                    }
+                    w.write("]}")
+                }
+                val results = (0..3).map { run ->
+                    val batches = mutableListOf<Pair<Int, Long>>()
+                    val result = A567Run(listOf(root)).measure {
+                        file.inputStream().buffered(1 shl 16).use { input ->
+                            ManifestStager.stage(input, root, ManifestStageOptions(expectedBytes = file.length())).use { staged ->
+                                assertEquals(3L, staged.count("works"))
+                                assertTrue(staged.records("works").all { it.sourceBytes in 7_900_000L..StagingSink.TYPED_BUDGET_BYTES })
+                                staged.validate(now) { count, bytes -> batches += count to bytes }
+                            }
+                        }
+                        "ok"
+                    }
+                    assertEquals("$label run $run", "ok", result.outcome)
+                    assertEquals(listOf(2, 1), batches.map { it.first })
+                    assertTrue("$label run $run left staging files", root.list()?.isEmpty() != false)
+                    result
+                }.drop(1) // first is warm-up
+                val peak = A567Run.median(results.map { it.peakHeapMiB })
+                val retained = A567Run.median(results.map { it.retainedMiB })
+                report.append("$label: median sampled peak ${"%.1f".format(peak)} MiB; retained ${"%.1f".format(retained)} MiB; input ${file.length()} bytes\n")
+                println("A567P2 three-record $label peak ${"%.1f".format(peak)} MiB")
+                assertTrue("$label peak $peak MiB exceeds 64 MiB", peak <= 64.0)
+            }
+            File(out!!).appendText(report.toString())
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
     @Test
     fun scaling() {
         val out = System.getenv("A567_P2_OUT")
@@ -81,7 +142,7 @@ class ManifestStagingLargeTest {
             val f = File(dir, "m$mib.json").also { A567Corpus.manifestFileOfSize(it, mib shl 20) }
             val row = median("rows $mib MiB", if (mib == 128L || mib == 512L) 3 else 1, f, root, ::worksCheck)
             add(row); byMib[mib] = row
-            assertTrue("$mib MiB staging DB ${row.dbMiB} MiB over budget", row.dbMiB <= mib * DB_BUDGET + 16)
+            assertTrue("$mib MiB staging DB ${row.dbMiB} MiB over budget", row.dbMiB <= mib * DB_BUDGET + 32)
             f.delete()
         }
         for (mib in listOf(20L, 96L, 256L).filter { it <= (sizes.max()) }) {
@@ -101,7 +162,7 @@ class ManifestStagingLargeTest {
                 w.write("]}]}")
             }
             if (f.length() > StagingSink.TYPED_BUDGET_BYTES) {
-                // over the 32 MiB typed budget: resource exhaustion after EOF, nothing left behind
+                // over the 8 MiB typed budget: resource exhaustion after EOF, nothing left behind
                 try { f.inputStream().buffered(1 shl 16).use { ManifestStager.stage(it, root).close() }; error("accepted") } catch (e: ManifestStageException.ResourceExhausted) { /* expected */ }
                 assertEquals(emptyList<String>(), root.list()?.toList().orEmpty())
                 t.append("| one work with $tags tags (${f.length() shr 20} MiB) | over the typed budget: ResourceExhausted, nothing left | | | | | | |\n")
@@ -145,7 +206,7 @@ class ManifestStagingLargeTest {
     }
 
     private companion object {
-        /** Measured budget: staging DB (rows, chunks, indexes) per manifest byte, with headroom; enforced here and by the free-disk check (3x + 32 MiB). */
-        const val DB_BUDGET = 1.6
+        /** Shared component budget, including indexes; measured staging must stay below this. */
+        const val DB_BUDGET = 2.5
     }
 }

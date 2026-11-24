@@ -21,7 +21,7 @@ import org.robolectric.annotation.Config
 /**
  * The shared byte fixtures (`manifest-fixtures/cases.json`; files are literal bytes, `gen` entries are
  * `prefix + unit x count + suffix`, optionally inside the standard manifest wrapper) with their exact expected
- * stage outcome: ok, syntax, resource, schema or version. The stage outcome is asserted on its own; reconstruction
+ * stage outcome: ok, syntax, resource, schema or unsupportedVersion. The stage outcome is asserted on its own; reconstruction
  * is a separate step, run here only for the cases that stay small.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -56,12 +56,12 @@ class ManifestFixtureCasesTest {
     } catch (e: ManifestStageException.ResourceExhausted) {
         "resource"
     } catch (e: ManifestStageException.UnsupportedVersion) {
-        "version"
+        "unsupportedVersion"
     }
 
     @Test fun everySharedCaseHasItsExactStageOutcome() {
         val cases = index.getValue("cases").jsonArray.map { it.jsonObject }
-        assertTrue(cases.size >= 37)
+        assertTrue(cases.size >= 51)
         val wrong = mutableListOf<String>()
         for (case in cases) {
             val id = case.getValue("id").jsonPrimitive.content
@@ -80,6 +80,15 @@ class ManifestFixtureCasesTest {
             for (field in listOf("\"bookmarks\":[]", "\"fonts\":[]", "\"settings\":")) {
                 assertTrue("$id lacks $field", text.contains(field))
             }
+        }
+    }
+
+    @Test fun missingIdSchemaFixtureHasAllOtherRequiredFields() {
+        val case = index.getValue("cases").jsonArray.map { it.jsonObject }
+            .first { it.getValue("id").jsonPrimitive.content == "record-1MiB-plus-1-missing-id-schema" }
+        val source = bytes(case).toString(Charsets.UTF_8)
+        for (field in listOf("\"bookmarks\":[]", "\"fonts\":[]", "\"settings\":{}")) {
+            assertTrue("schema fixture lacks $field", source.contains(field))
         }
     }
 

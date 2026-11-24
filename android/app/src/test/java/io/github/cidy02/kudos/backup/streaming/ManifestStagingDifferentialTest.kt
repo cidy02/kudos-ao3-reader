@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.backup.streaming
 
+import io.github.cidy02.kudos.backup.A567Corpus
 import io.github.cidy02.kudos.backup.A567ParserParityTest
 import io.github.cidy02.kudos.backup.BackupError
 import io.github.cidy02.kudos.backup.BackupValidator
@@ -137,10 +138,25 @@ class ManifestStagingDifferentialTest {
         pin("duplicate key: works twice"); pin("duplicate key inside a record")
         val (name, bytes) = cases.first { it.first == "duplicate key: works twice" }
         assertNotEquals(name, today(bytes).raw, mine(bytes).raw)
+        val firstWork = mine(bytes)
+        assertEquals(A567Corpus.uuid(1), (firstWork.typed as io.github.cidy02.kudos.backup.KudosBackupManifest).works.single().id)
+        assertEquals(A567Corpus.uuid(1), (firstWork.raw!!.getValue("works") as kotlinx.serialization.json.JsonArray).single().let {
+            (it as JsonObject).getValue("id").let { value -> (value as kotlinx.serialization.json.JsonPrimitive).content }
+        })
         val nested = cases.first { it.first == "duplicate key inside a record" }.second
         val staged = mine(nested)
         assertEquals("a", (staged.typed as io.github.cidy02.kudos.backup.KudosBackupManifest).works.single().title)
         assertEquals("a", staged.raw!!.getValue("works").let { it as kotlinx.serialization.json.JsonArray }.single().let {
+            (it as JsonObject).getValue("title").let { value -> (value as kotlinx.serialization.json.JsonPrimitive).content }
+        })
+    }
+
+    @Test fun escapedDuplicateInsideARecordKeepsTheFirstField() {
+        val bytes = """{"version":8,"exportedAt":"2026-06-01T00:00:00Z","works":[{"id":"${A567Corpus.uuid(1)}","title":"first","\u0074itle":"second"}]}""".toByteArray()
+        val result = mine(bytes)
+        assertEquals("ok", result.cls)
+        assertEquals("first", (result.typed as io.github.cidy02.kudos.backup.KudosBackupManifest).works.single().title)
+        assertEquals("first", (result.raw!!.getValue("works") as kotlinx.serialization.json.JsonArray).single().let {
             (it as JsonObject).getValue("title").let { value -> (value as kotlinx.serialization.json.JsonPrimitive).content }
         })
     }

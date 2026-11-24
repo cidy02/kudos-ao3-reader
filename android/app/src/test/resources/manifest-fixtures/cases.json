@@ -287,7 +287,7 @@
    "id": "record-1MiB-plus-1-missing-id-schema",
    "gen": {
     "wrap": false,
-    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"works\":[{\"x\":\"",
+    "prefix": "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00.000Z\",\"bookmarks\":[],\"fonts\":[],\"settings\":{},\"works\":[{\"x\":\"",
     "unit": "a",
     "count": 1048569,
     "suffix": "\"}]}"
@@ -400,7 +400,7 @@
   {
    "id": "live-keys-182361x60-resource",
    "expect": "resource",
-   "note": "182,361 distinct 60-unit keys exceed the shared 16 Mi UTF-16-unit live-key budget",
+   "note": "182,361 distinct 60-unit keys exceed the shared 10 Mi UTF-16-unit live-key budget",
    "file": "live-keys-182361x60-resource.json"
   },
   {
@@ -414,6 +414,66 @@
    },
    "expect": "schema",
    "note": "root schema is decided before depth"
+  },
+  {
+   "id": "array-root-overlong-number-schema",
+   "gen": {
+    "wrap": false,
+    "prefix": "[",
+    "unit": "1",
+    "count": 65537,
+    "suffix": "]"
+   },
+   "expect": "schema",
+   "note": "root type outranks the number-token budget after complete syntax"
+  },
+  {
+   "id": "array-root-overlong-key-schema",
+   "gen": {
+    "wrap": false,
+    "prefix": "[{\"",
+    "unit": "a",
+    "count": 65537,
+    "suffix": "\":1}]"
+   },
+   "expect": "schema",
+   "note": "root type outranks the key-length budget after complete syntax"
+  },
+  {
+   "id": "skipped-duplicate-175000x60-ok",
+   "file": "skipped-duplicate-175000x60-ok.json",
+   "expect": "ok",
+   "note": "keys inside an ignored duplicate value are not retained or charged to live-key budget"
+  },
+  {
+   "id": "unknown-newline-6500000-ok",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"x\":\"",
+    "unit": "\\n",
+    "count": 6500000,
+    "suffix": "\""
+   },
+   "expect": "ok",
+   "note": "short JSON control escapes do not inflate staged payload bytes beyond the 2.5x + 32 MiB disk budget"
+  },
+  {
+   "id": "unsupported-version",
+   "file": "unsupported-version.json",
+   "expect": "unsupportedVersion",
+   "note": "one shared label for an otherwise valid manifest with an unsupported version"
+  },
+  {
+   "id": "documents-wrong-kind-16MiB-plus-resource",
+   "gen": {
+    "wrap": true,
+    "prefix": "\"documents\":\"",
+    "unit": "a",
+    "count": 16777216,
+    "suffix": "\""
+   },
+   "expect": "resource",
+   "note": "known-on-iOS lossy root holding a wrong-kind value obeys the 16 MiB source-value limit on both platforms"
   }
  ]
 }

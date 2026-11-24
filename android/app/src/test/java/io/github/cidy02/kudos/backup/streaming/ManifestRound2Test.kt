@@ -223,7 +223,7 @@ class ManifestRound2Test {
     }
 
     @Test fun theStagingComponentBudgetIsEnforcedWhateverTheFreeSpace() {
-        val bytes = A567Corpus.manifestBytesOfSize(20L shl 20)
+        val bytes = A567Corpus.manifestBytesOfSize(30L shl 20)
         val e = fails<ManifestStageException.ResourceExhausted> {
             ManifestStager.stage(ByteArrayInputStream(bytes), root, ManifestStageOptions(expectedBytes = 1, freeSpace = { 1L shl 40 }))
         }

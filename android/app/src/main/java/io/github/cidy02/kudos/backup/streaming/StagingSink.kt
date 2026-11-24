@@ -3,10 +3,9 @@ package io.github.cidy02.kudos.backup.streaming
 import io.github.cidy02.kudos.backup.BackupJson
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.Json
 
 /** A compact-JSON text being built: held in memory while small, written to chunk rows (addressed by char offset) once it grows. */
-internal class StagedText(private val w: StagingWriter, private val chunkTable: String, private val ord: Long) {
+internal class StagedText(private val w: StagingWriter, private val chunkTable: String, private val ord: Long, private val overBudget: () -> Boolean = { false }) {
     val sb = StringBuilder()
     private var written = 0L
     var spilled = false
@@ -44,12 +43,18 @@ internal class StagedText(private val w: StagingWriter, private val chunkTable: 
         when {
             c == '"' -> sb.append("\\\"")
             c == '\\' -> sb.append("\\\\")
+            c == '\b' -> sb.append("\\b")
+            c == '\u000c' -> sb.append("\\f")
+            c == '\n' -> sb.append("\\n")
+            c == '\r' -> sb.append("\\r")
+            c == '\t' -> sb.append("\\t")
             c < ' ' -> { sb.append("\\u00"); sb.append(HEX[c.code shr 4]); sb.append(HEX[c.code and 15]) }
             else -> sb.append(c)
         }
     }
 
     private fun grown() {
+        if (overBudget()) { sb.setLength(0); return }
         if (!spilled && sb.length <= SPILL_AT) return
         spilled = true
         while (sb.length >= StagingWriter.CHUNK_CHARS) writeChunk(StagingWriter.CHUNK_CHARS)
@@ -152,7 +157,12 @@ internal class StagingSink(
             }
             SECTION -> {
                 val s = rootSection!!
-                out = StagedText(w, s.chunkTable, sectionOrd)
+                out = StagedText(w, s.chunkTable, sectionOrd) {
+                    if (src.sourceBytes() - elementStart > TYPED_BUDGET_BYTES) {
+                        resource("a ${s.name} record is larger than the typed budget of $TYPED_BUDGET_BYTES bytes")
+                        true
+                    } else false
+                }
                 elementKind = kind
                 elementStart = src.valueStart
                 captured.clear()
@@ -164,7 +174,7 @@ internal class StagingSink(
                     if (top.count++ > 0) out!!.append(',')
                 } else if (top.kind == RECORD) {
                     val f = field!!
-                    capturing = (kind == "string" || kind == "number") && rootSection!!.keys.any { it.field == f }
+                    capturing = (kind == "string" || kind == "number" || kind == "bool") && rootSection!!.keys.any { it.field == f }
                     capBuf.setLength(0)
                     capOverflow = false
                 }
@@ -223,7 +233,8 @@ internal class StagingSink(
             val oversize = o.spilled
             o.close()
             val known = rootKey in ManifestSections.knownRootKeys
-            if (known && src.sourceBytes() - rootStart > MAX_ROOT_VALUE_BYTES) {
+            val boundedValue = known || (rootKey in IOS_LOSSY_ROOT_KEYS && rootKind != "array")
+            if (boundedValue && src.sourceBytes() - rootStart > MAX_ROOT_VALUE_BYTES) {
                 resource("the value of '$rootKey' is larger than $MAX_ROOT_VALUE_BYTES source bytes")
             }
             w.root(rootOrd, rootKey, rootKind, known, oversize, o.length, 0)
@@ -234,10 +245,10 @@ internal class StagingSink(
         tick()
     }
 
-    /** The same path as today's reader: a tree from the text, then `decodeFromJsonElement`. */
+    /** The compact staged JSON has already passed strict tokenization and first-wins filtering. */
     @Suppress("UNCHECKED_CAST")
     private fun decodes(serializer: KSerializer<*>, text: String): Boolean = try {
-        BackupJson.decodeFromJsonElement(serializer as KSerializer<Any>, Json.parseToJsonElement(text))
+        BackupJson.decodeFromString(serializer as KSerializer<Any>, text)
         true
     } catch (_: SerializationException) {
         false
@@ -267,6 +278,7 @@ internal class StagingSink(
         val frame = pop()
         if (frame.kind == ROOT) return
         out!!.append('}')
+        if (resourceFailure != null) return
         endValue()
     }
 
@@ -288,6 +300,7 @@ internal class StagingSink(
         if (skipping()) { pop(); if (stack.size == skipBase) skipBase = -1; return }
         val frame = pop()
         if (frame.kind != SECTION) out!!.append(']')
+        if (resourceFailure != null) return
         endValue()
     }
 
@@ -328,6 +341,7 @@ internal class StagingSink(
             inString = true
         }
         out!!.appendEscaped(buffer, offset, length)
+        if (resourceFailure != null) return
         if (capturing) {
             if (capBuf.length + length > ManifestSections.MAX_KEY_CHARS) capOverflow = true else capBuf.append(buffer, offset, length)
         }
@@ -346,7 +360,11 @@ internal class StagingSink(
         }
         startValue(kindOf(text))
         out!!.append(text)
-        if (capturing) capBuf.append(text)
+        if (capturing) {
+            if (capBuf.length + text.length > ManifestSections.MAX_KEY_CHARS) capOverflow = true
+            else capBuf.append(text)
+        }
+        if (resourceFailure != null) return
         endValue()
     }
 
@@ -359,6 +377,7 @@ internal class StagingSink(
 
         /** UTF-16 units of distinct keys held by all open objects at once. The 182,361 x 60 fixture crosses this limit. */
         const val MAX_LIVE_KEY_CHARS = 10L * 1024 * 1024
+        private val IOS_LOSSY_ROOT_KEYS = setOf("writingRecovery", "documents")
         private const val ROOT = 0
         private const val PLAIN = 1
         private const val SECTION = 2

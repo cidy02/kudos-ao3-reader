@@ -91,7 +91,7 @@ class ManifestRound4Test {
     }
 
     @Test fun unknownLengthStillEnforcesComponentBudget() {
-        val bytes = A567Corpus.manifestBytesOfSize(20L shl 20)
+        val bytes = A567Corpus.manifestBytesOfSize(40L shl 20)
         try {
             ManifestStager.stage(ByteArrayInputStream(bytes), root, ManifestStageOptions(freeSpace = { 1L shl 40 }, componentBudgetFactor = 0.1)).close()
             fail("accepted")

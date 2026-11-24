@@ -23,8 +23,8 @@ class ManifestStageOptions(
     val isCancelled: () -> Boolean = { false },
     /** Free bytes where the staging directory lives (overridable so a full disk can be tested). */
     val freeSpace: (File) -> Long = { it.usableSpace },
-    /** Test hook for the component-budget boundary; production uses 1.6. */
-    val componentBudgetFactor: Double = 1.6,
+    /** Test hook for the component-budget boundary; production uses 2.5. */
+    val componentBudgetFactor: Double = 2.5,
     /** Called after each commit with the number of rows staged so far. */
     val checkpoint: (Long) -> Unit = {}
 )
@@ -38,17 +38,18 @@ enum class RecoveryVerdict { WELL_FORMED, MALFORMED, PROTECT }
  * before the exception leaves (a directory that cannot be deleted is attached as a suppressed `IOException`);
  * on success the caller owns the returned [StagedManifest] and must close it.
  *
- * Precedence among failures observed before reading stops: I/O > cancellation > syntax > resource > schema
- * (typed decode of every record and of the root fields) > unsupported version. Depth beyond 512 is the one resource
- * outcome recorded during scanning. A later I/O error cannot be discovered after an earlier decided syntax error.
+ * Precedence among observed failures: I/O > cancellation > syntax > root-type schema > resource > other schema
+ * (typed decode of every record and of the root fields) > unsupported version. Depth beyond 512 is a resource
+ * outcome recorded during scanning; a complete array root is schema even if a limit was also hit.
+ * A later I/O error cannot be discovered after an earlier decided syntax error.
  * `BackupValidator.validateManifest` is a separate step ([StagedManifest.validate]).
  *
  * shortcut: the root fields (version, exportedAt, settings, exportedBy, pronunciations) are decoded in memory, so each is
  * limited to [StagingSink.MAX_ROOT_VALUE_BYTES] source bytes; record arrays and unknown top-level values have no such limit.
  */
 object ManifestStager {
-    /** Measured staging high-water is about 1.5x the input; the component budget is 1.6x + 16 MiB. */
-    private const val DISK_EXTRA = 16L * 1024 * 1024
+    /** Measured staging high-water is about 1.5x the input; the shared component budget is 2.5x + 32 MiB. */
+    private const val DISK_EXTRA = 32L * 1024 * 1024
 
     fun stage(input: InputStream, stagingRoot: File, options: ManifestStageOptions = ManifestStageOptions()): StagedManifest {
         var directory: File? = null

@@ -4,6 +4,11 @@ import android.database.sqlite.SQLiteDatabase
 import io.github.cidy02.kudos.backup.BackupError
 import io.github.cidy02.kudos.backup.BackupJson
 import io.github.cidy02.kudos.backup.BackupValidator
+import io.github.cidy02.kudos.backup.BackupWork
+import io.github.cidy02.kudos.backup.BackupBookmark
+import io.github.cidy02.kudos.backup.BackupFont
+import io.github.cidy02.kudos.backup.BackupCollection
+import io.github.cidy02.kudos.backup.BackupSavedSearch
 import io.github.cidy02.kudos.backup.KudosBackupManifest
 import java.io.File
 import java.io.IOException
@@ -13,7 +18,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 
 /** One top-level key of the staged document. [kind] is `records` for a known array of records, else the JSON kind of its value. */
 data class StagedRootEntry(val ord: Long, val key: String, val kind: String, val known: Boolean, val oversize: Boolean, val chars: Long, val records: Long)
@@ -117,7 +121,12 @@ class StagedManifest internal constructor(
      * fixed by [now]): one record is decoded at a time and batch accounting flushes at 200 records or 16 MiB of
      * source bytes. Duplicate ids across batches use indexed key columns. Call before any mutation.
      */
-    fun validate(now: Instant = Instant.now(), onBatch: (Int, Long) -> Unit = { _, _ -> }) {
+    fun validate(
+        now: Instant = Instant.now(),
+        /** Canonical typed projection. Consumers may spool it, but must not mutate the library until validation returns. */
+        onValidatedRecord: (String, Long, Any) -> Unit = { _, _, _ -> },
+        onBatch: (Int, Long) -> Unit = { _, _ -> }
+    ) {
         val head = BackupValidator.validateManifest(KudosBackupManifest(version = version, exportedAt = exportedAt()), now)
         for (name in listOf("works", "bookmarks", "fonts", "collections", "savedSearches")) {
             var last = -1L
@@ -132,11 +141,23 @@ class StagedManifest internal constructor(
                         batchCount = 0
                         batchBytes = 0
                     }
-                    val element = Json.parseToJsonElement(recordTextInMemory(name, record.ord))
-                    val partial = BackupJson.decodeFromJsonElement(KudosBackupManifest.serializer(), JsonObject(mapOf(
-                        "version" to JsonPrimitive(head.version), "exportedAt" to JsonPrimitive(head.exportedAt), name to JsonArray(listOf(element))
-                    )))
-                    BackupValidator.validateManifest(partial, now)
+                    val text = recordTextInMemory(name, record.ord)
+                    val partial = when (name) {
+                        "works" -> head.copy(works = listOf(BackupJson.decodeFromString(BackupWork.serializer(), text)))
+                        "bookmarks" -> head.copy(bookmarks = listOf(BackupJson.decodeFromString(BackupBookmark.serializer(), text)))
+                        "fonts" -> head.copy(fonts = listOf(BackupJson.decodeFromString(BackupFont.serializer(), text)))
+                        "collections" -> head.copy(collections = listOf(BackupJson.decodeFromString(BackupCollection.serializer(), text)))
+                        "savedSearches" -> head.copy(savedSearches = listOf(BackupJson.decodeFromString(BackupSavedSearch.serializer(), text)))
+                        else -> error("unsupported validation section $name")
+                    }
+                    val canonical = BackupValidator.validateManifest(partial, now)
+                    onValidatedRecord(name, record.ord, when (name) {
+                        "works" -> canonical.works.single()
+                        "bookmarks" -> canonical.bookmarks.single()
+                        "fonts" -> canonical.fonts.single()
+                        "collections" -> canonical.collections.single()
+                        else -> canonical.savedSearches.single()
+                    })
                     batchCount++
                     batchBytes += record.sourceBytes
                 }

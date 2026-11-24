@@ -131,8 +131,8 @@ internal class ManifestTokenizer(
         }
         ws()
         if (peek() != -1) fail("unexpected content after the document")
-        deferred?.let { throw ManifestStageException.ResourceExhausted(it) }
         if (arrayRoot) throw ManifestStageException.Invalid("the document is an array, not an object", syntactic = false)
+        deferred?.let { throw ManifestStageException.ResourceExhausted(it) }
     }
 
     /** Depth beyond the ceiling is a resource outcome, but the rest of the document is still scanned (no events, no retention) so a malformed tail reports syntax first. */
