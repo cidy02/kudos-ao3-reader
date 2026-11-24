@@ -254,7 +254,8 @@
         "inc-l",
         1
        ],
-       "bytes": "canonical bytes of ops[u1] exactly as listed (D5 supplies the encoding)"
+       "referenceEncoding": "utf8-sorted-keys-json-v1",
+       "bytesHex": "7b226964223a227531222c226b696e64223a22776f726b2e65646974222c226f62736572766564223a7b2267656e223a226730227d2c227061796c6f6164223a7b2267726f757073223a7b2270726f6772657373223a302e397d7d2c22736571223a312c227374616d70223a5b352c22696e632d6c222c315d2c22746172676574223a22572d41222c22777269746572223a22696e632d6c227d"
       },
       "incomingCheckpointCut": {
        "inc-a": 1,
@@ -424,7 +425,7 @@
    "events": [],
    "schedules": {
     "orders": "allInterleavings",
-    "orderCount": 20,
+    "orderCount": 4,
     "duplicates": [
      {
       "name": "each op delivered twice, back to back",
@@ -436,9 +437,7 @@
        "b2",
        "b2",
        "b3",
-       "b3",
-       "u1",
-       "u1"
+       "b3"
       ]
      },
      {
@@ -448,12 +447,10 @@
        "b1",
        "b2",
        "b3",
-       "u1",
        "a2",
        "b1",
        "b2",
-       "b3",
-       "u1"
+       "b3"
       ]
      }
     ],
@@ -464,8 +461,7 @@
        "a2",
        "b1",
        "b2",
-       "b3",
-       "u1"
+       "b3"
       ],
       "restartAfter": "every"
      }
@@ -479,8 +475,7 @@
       "order": [
        "a2",
        "b2",
-       "b3",
-       "u1"
+       "b3"
       ],
       "expectedPendingAtEnd": [
        "b2",
@@ -495,8 +490,8 @@
     "checkpoints": [],
     "retentionEquivalence": {
      "mode": "exhaustive",
-     "orders": 120,
-     "cutsChecked": 720,
+     "orders": 24,
+     "cutsChecked": 120,
      "seed": null,
      "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
      "rule": "project(retain(prefix) + suffix) == project(all)"

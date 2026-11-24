@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Standard-library reference for D4 reducer retention algebra.
 
-This checks the fixture envelope and reducer contract. It deliberately does not
-claim to implement D5 transport, the v8 shipped merge, or every UI projection.
+This checks the fixture envelope and reducer contract against an independent
+naive reducer. It does not implement D5 transport or the v8 shipped merge.
 """
 import itertools
 import json
@@ -29,6 +29,7 @@ DISPATCH = {
     "setting.entry.set": "RK-ENTRY", "setting.entry.reset": "RK-ENTRY",
     "pronunciation.set": "RK-ENTRY", "pronunciation.reset": "RK-ENTRY",
     "future.thing": "RK-OPAQUE",
+    "followedTag.put": "RK-RECORD", "followedTag.delete": "RK-RECORD",
 }
 GROUPS = {"seriesPosition": "RK-MAX", "preservationStatus": "RK-MAX",
           "preservedAt": "RK-MAX", "lastPreservationAttemptAt": "RK-MAX",
@@ -149,12 +150,13 @@ def expand(op):
 def expand_semantic(op):
     kind = op["kind"]
     payload = op.get("payload", {})
-    if kind in {"work.create", "work.edit", "queue.create"}:
+    if kind in {"work.create", "work.edit", "queue.create", "collection.create"}:
         out = []
-        if kind == "work.create":
+        if kind in {"work.create", "queue.create", "collection.create"}:
             out.append(atom(op, "RK-IDENTITY", value={
                 "ao3WorkID": payload.get("ao3WorkID"), "urls": payload.get("urls", []),
-                "supersedes": payload.get("supersedes")}))
+                "supersedes": payload.get("supersedes"), "entityClass": kind.split(".")[0],
+                "entityKind": payload.get("kind")}))
         malformed = payload.get("malformed", [])
         for group, value in payload.get("groups", {}).items():
             reducer = GROUPS.get(group, "RK-LWW")
@@ -214,13 +216,167 @@ def project(atoms):
     return tuple(sorted(canonical(a) for a in retain(atoms)))
 
 
+def oracle_project(atoms):
+    """Naive full-history reducer; never calls retain(), rank(), or project()."""
+    selected = {}
+    unabridged = {}
+    for a in atoms:
+        family = a["reducer"]
+        if family in {"RK-LWW", "RK-MAX", "RK-VALUE", "RK-ENTRY", "RK-GROW"}:
+            values = a["value"] if family == "RK-GROW" and isinstance(a["value"], list) else [a["value"]]
+            for value in values:
+                item = {**a, "value": value}
+                key = (family, a["key"], a["group"], canonical(value) if family == "RK-GROW" else "")
+                current = selected.get(key)
+                if family == "RK-MAX":
+                    domain = {"notPreserved": 0, "queued": 1,
+                              "preserving": 2, "preserved": 3}
+                    score = domain.get(value, -1) if a["group"] == "preservationStatus" else value
+                    prior_value = current["value"] if current else None
+                    prior = (domain.get(prior_value, -1) if a["group"] == "preservationStatus"
+                             else prior_value)
+                    wins = current is None or (score, a["stamp"], a["id"]) > (prior, current["stamp"], current["id"])
+                elif family == "RK-VALUE":
+                    pin = value.get("pinnedAt", "") if isinstance(value, dict) else ""
+                    old = current["value"] if current else None
+                    old_pin = old.get("pinnedAt", "") if isinstance(old, dict) else ""
+                    wins = current is None or (pin, canonical(value), a["stamp"], a["id"]) > (
+                        old_pin, canonical(old), current["stamp"], current["id"])
+                else:
+                    wins = current is None or (a["stamp"], a["id"]) > (current["stamp"], current["id"])
+                if wins:
+                    selected[key] = item
+        else:
+            unabridged[canonical(a)] = a
+    return tuple(sorted([canonical(a) for a in selected.values()] + list(unabridged)))
+
+
+def schedule_ids(universe, path):
+    ops = universe["initial"].get("createHistory", []) + universe["ops"]
+    known = {op["id"] for op in ops}
+    source_keys = {op.get("target") for op in ops if op["kind"] == "annotation.add"}
+    evidence_digests = {op.get("payload", {}).get("digest") for op in ops
+                        if op["kind"] == "legacy.evidence"}
+    event_ids = {event["id"] for event in universe.get("events", [])}
+    schedules = universe["schedules"]
+
+    for op in ops:
+        for name in op.get("requires", []):
+            assert name in known, (path, op["id"], "requires", name)
+        for field, value in op.get("observed", {}).items():
+            if field == "gen":
+                continue
+            for name in value if isinstance(value, list) else [value]:
+                if field == "authority" and isinstance(name, str) and name.startswith("root:"):
+                    continue
+                assert name in known or (field == "sources" and name in source_keys), (
+                    path, op["id"], "observed." + field, name)
+        for name in op.get("payload", {}).get("observedExpiry", []):
+            assert name in known, (path, op["id"], "payload.observedExpiry", name)
+        legacy = op.get("payload", {}).get("legacyEvidence")
+        if legacy:
+            assert legacy in evidence_digests, (path, op["id"], "legacyEvidence", legacy)
+
+    def check(entries, label):
+        for item in entries:
+            if isinstance(item, dict):
+                assert set(item) in ({"op"}, {"event"}), (path, label, item)
+                key = next(iter(item))
+                assert item[key] in (known if key == "op" else event_ids), (path, label, item)
+            else:
+                assert item in known, (path, label, item)
+
+    if isinstance(schedules["orders"], list):
+        for order in schedules["orders"]:
+            check(order, "orders")
+    for family in ("duplicates", "restarts", "missingPrerequisite"):
+        for case in schedules[family]:
+            for field in ("order", "withheld", "thenDeliver", "expectedPendingAtEnd", "finalPending"):
+                if field in case:
+                    check(case[field], family + "." + field)
+    for case in schedules["checkpoints"]:
+        for field in ("cutAfter", "thenOrder", "checkpointCut"):
+            check(case[field], "checkpoint." + field)
+    for case in schedules.get("incomparableCuts", []):
+        for field in ("localApplied", "localUnpublished"):
+            check(case[field], "incomparable." + field)
+        for name in case.get("assert", {}).get("byteIdentity", []):
+            assert name in known, (path, "byteIdentity", name)
+        record = case.get("reservedRecord")
+        if record:
+            assert record["id"] in known, (path, "reserved op missing", record["id"])
+            op = next(x for x in ops if x["id"] == record["id"])
+            assert record["referenceEncoding"] == "utf8-sorted-keys-json-v1"
+            assert bytes.fromhex(record["bytesHex"]) == canonical(op).encode(), (path, "reserved byte drift")
+    intent = universe.get("localIntent")
+    if intent:
+        assert intent["id"] not in known, (path, "unreserved intent delivered as op")
+        result = universe["expectedReservation"]
+        assert result["id"] == intent["id"]
+        assert all(result.get(field) == intent.get(field) for field in ("kind", "target", "payload", "observed"))
+    check(universe["expected"].get("pending", []), "expected.pending")
+
+
+def check_golden(universe):
+    golden = universe.get("goldenReducer")
+    if not golden:
+        return False
+    ops = universe["initial"].get("createHistory", []) + universe["ops"]
+    by_id = {op["id"]: op for op in ops}
+    if "groups" in golden:
+        candidates = {}
+        for op in ops:
+            for group, value in op.get("payload", {}).get("groups", {}).items():
+                candidates.setdefault(group, []).append((value, op["stamp"], op["id"]))
+        status_order = {"notPreserved": 0, "queued": 1, "preserving": 2, "preserved": 3}
+        actual = {}
+        for group in golden["groups"]:
+            choices = candidates[group]
+            if group == "preservationStatus":
+                actual[group] = max(choices, key=lambda x: (status_order[x[0]], x[1], x[2]))[0]
+            else:
+                actual[group] = max(choices, key=lambda x: (x[0], x[1], x[2]))[0]
+        assert actual == golden["groups"], (universe["name"], "independent group golden")
+        assert universe["expected"]["state"]["works"]["W-A"]["groups"].items() >= actual.items()
+    if "livePutIds" in golden:
+        puts = {op["id"] for op in ops if op["kind"].endswith(".put")}
+        removed = {name for op in ops if op["kind"].endswith(".delete")
+                   for name in op.get("observed", {}).get("puts", [])}
+        live = sorted(puts - removed)
+        seen = sorted({v for i in live for v in by_id[i]["payload"].get("seenIds", [])})
+        assert live == golden["livePutIds"] and seen == golden["recordSeenIds"]
+        assert universe["expected"]["state"]["records"]["tag:1"]["seenIds"] == seen
+    if "validRestoreIds" in golden:
+        restores = [op for op in ops if op["kind"] == "work.restore"]
+        valid_restores = []
+        for restore in restores:
+            named = restore.get("observed", {}).get("deletions", [])
+            expiry_ids = restore.get("observed", {}).get("observedExpiry", [])
+            if named and all(by_id[i]["kind"] == "work.delete" for i in named) and all(
+                    by_id[i]["kind"] == "work.purge" and
+                    by_id[i]["payload"]["reason"] == "expired" and
+                    by_id[i]["stamp"][0] < restore["stamp"][0] for i in expiry_ids):
+                valid_restores.append(restore["id"])
+        revokes = [op for op in ops if op["kind"] == "writer.revoke"]
+        authorized_expiry = sorted(op["id"] for op in ops if op["kind"] == "work.purge"
+                                   and op["payload"]["reason"] == "expired"
+                                   and not any(r["target"] == op["writer"] and
+                                               r["stamp"] < op["stamp"] for r in revokes))
+        assert sorted(valid_restores) == golden["validRestoreIds"]
+        assert authorized_expiry == golden["authorizedExpiryIds"]
+        assert universe["expected"]["state"]["works"]["W-A"]["lifecycle"] == "live"
+    return True
+
+
 def check_order(ops, order):
     full = [a for i in order for a in expand(ops[i])]
     expected = project(full)
+    assert expected == oracle_project(full), ("oracle final", order)
     for cut in range(len(order) + 1):
         prefix = [a for i in order[:cut] for a in expand(ops[i])]
         suffix = [a for i in order[cut:] for a in expand(ops[i])]
         assert project(retain(prefix) + suffix) == expected, ("cut", cut)
+        assert project(retain(prefix) + suffix) == oracle_project(prefix + suffix), ("oracle cut", cut)
     return expected
 
 
@@ -232,6 +388,7 @@ def main():
     fixture_cases = 0
     exhaustive = 0
     sampled = 0
+    goldens = 0
     seen = set()
     for path in files:
         doc = json.loads(path.read_text())
@@ -243,6 +400,8 @@ def main():
             assert len(ids) == len(set(ids)), (path.name, universe["name"], "duplicate op id")
             for op in ops:
                 assert op["stamp"] == [op["stamp"][0], op["writer"], op["seq"]], op
+            schedule_ids(universe, path.name + ":" + universe["name"])
+            goldens += check_golden(universe)
             for op in ops:
                 for a in expand(op):
                     seen.add(a["reducer"])
@@ -261,6 +420,7 @@ def main():
                     sampled += 1
     print(f"schema + matrix: {len(files)} fixtures validated; {len(KINDS)} closed reducer kinds named")
     print(f"fixture reducers: {fixture_cases} universes, {exhaustive} exhaustive orders (<=5), {sampled} larger orders; cuts and arrival order equal")
+    print(f"goldens + references: {goldens} independent semantic goldens checked; every scheduled op/event/intent resolved")
     rng = random.Random(56905)
     reducers = sorted(KINDS)
     for case in range(2400):
@@ -277,7 +437,7 @@ def main():
                           "key": "K", "group": "seriesPosition" if kind == "RK-MAX" else "g",
                           "value": val, **({"source": {"kind": kind, "id": i}}
                                        if kind not in {"RK-LWW", "RK-MAX", "RK-VALUE", "RK-ENTRY", "RK-GROW"} else {})})
-        expected = project(atoms)
+        expected = oracle_project(atoms)
         for order in (atoms, list(reversed(atoms)), rng.sample(atoms, len(atoms))):
             assert project(order) == expected, (case, "arrival")
             for cut in range(len(order) + 1):

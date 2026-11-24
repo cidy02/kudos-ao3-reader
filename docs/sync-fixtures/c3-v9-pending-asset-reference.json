@@ -105,7 +105,7 @@
     }
    ],
    "schedules": {
-    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
+    "missingPrerequisiteEmptyBecause": "the scenario models a missing blob-visibility event, not a missing operation id; all named operations are delivered in the orders and event schedules",
     "orders": [
      [
       {

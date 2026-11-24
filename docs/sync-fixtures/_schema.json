@@ -577,9 +577,17 @@
                   "expectedAtCut": {
                     "type": "object",
                     "required": [
+                      "appliedVector",
+                      "pending",
                       "works",
                       "diagnostics"
-                    ]
+                    ],
+                    "properties": {
+                      "appliedVector": { "type": "object" },
+                      "pending": { "type": "array", "items": { "type": "string" } },
+                      "works": { "type": "object" },
+                      "diagnostics": { "type": "array", "items": { "$ref": "#/definitions/diagnostic" } }
+                    }
                   }
                 }
               }
