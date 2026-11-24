@@ -93,6 +93,7 @@ struct CommentsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(TabChromeState.self) private var tabChrome: TabChromeState?
     @ScaledMetric(relativeTo: .caption) private var noteSize: CGFloat = 11.5
     @ScaledMetric(relativeTo: .footnote) private var writeCommentButtonSize: CGFloat = 14
 
@@ -1257,7 +1258,8 @@ struct CommentsView: View {
     private var usesTabViewBottomAccessory: Bool {
         #if os(iOS)
         CommentsWriteBarPlacementPolicy.usesBottomAccessory(
-            isModal: isModal,
+            // T-572: the system accessory rides the system bar; Kudos's own bar has none.
+            isModal: isModal || tabChrome?.usesCustomBar == true,
             isAccessibilitySize: dynamicTypeSize.isAccessibilitySize
         )
         #else

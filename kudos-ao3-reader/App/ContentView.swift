@@ -852,7 +852,9 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
         TabView(selection: tabSelection) {
             ForEach(router.mainTabs) { tab in
                 Tab(value: tab) {
-                    destination(tab)
+                    // A TabView-level toolbar() does not reach tabs whose roots never say
+                    // anything about the bar (Browse, Writing), so say it on every tab.
+                    destination(tab).toolbar(usesCustomBar ? .hidden : .automatic, for: .tabBar)
                 } label: {
                     if duoLayout.hasVerticalBar {
                         Label {
@@ -880,12 +882,12 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
                 // `UISearchTab` into a prominent `UITab` in place.
                 Tab(AppTab.search.title, systemImage: AppTab.search.symbol,
                     value: AppTab.search, role: .prominent) {
-                    destination(.search)
+                    destination(.search).toolbar(usesCustomBar ? .hidden : .automatic, for: .tabBar)
                 }
             } else {
                 Tab(AppTab.search.title, systemImage: AppTab.search.symbol,
                     value: AppTab.search, role: .search) {
-                    destination(.search)
+                    destination(.search).toolbar(usesCustomBar ? .hidden : .automatic, for: .tabBar)
                 }
             }
         }

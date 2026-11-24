@@ -75,9 +75,13 @@ private struct TabBarHiddenModifier: ViewModifier {
     @State private var id = UUID()
 
     func body(content: Content) -> some View {
-        content
-            // The system bar still serves iPad / Duo / macOS; on iPhone it is always off.
-            .toolbar(hidden || chrome?.usesCustomBar == true ? .hidden : .automatic, for: .tabBar)
+        #if os(iOS)
+        // The system bar still serves iPad / Duo; on iPhone it is always off.
+        let base = content.toolbar(hidden || chrome?.usesCustomBar == true ? .hidden : .automatic, for: .tabBar)
+        #else
+        let base = content
+        #endif
+        base
             .onAppear { chrome?.setHidden(hidden, by: id) }
             .onChange(of: hidden) { _, now in chrome?.setHidden(now, by: id) }
             .onDisappear { chrome?.setHidden(false, by: id) }
