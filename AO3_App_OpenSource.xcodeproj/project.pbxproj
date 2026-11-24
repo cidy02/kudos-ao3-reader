@@ -787,7 +787,7 @@
 			repositoryURL = "https://github.com/cidy02/swift-toolkit.git";
 			requirement = {
 				kind = revision;
-				revision = f9abc266d805f8b22c6fbfcec3dd0dbd93a68761;
+				revision = f28f18eadeb0a5518bcd026aad7bbbf058d5a142;
 			};
 		};
 		000000000000000700000000 /* XCRemoteSwiftPackageReference "sherpa-onnx" */ = {
