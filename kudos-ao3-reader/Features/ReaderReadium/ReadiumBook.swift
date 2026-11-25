@@ -611,6 +611,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
                 config: config
             )
             navigator.delegate = self
+            // The spoken-word mark is on the page being read for a moment: it must not
+            // empty the page-turn cache on every utterance (BUG-14).
+            navigator.transientDecorationGroups = [Self.speechDecorationGroup]
             // Belt-and-braces. Spreads are wrapped when they assign
             // `navigationDelegate` (ReaderWebIsolation setter hook);
             // this only refreshes the Browse callback on views already
