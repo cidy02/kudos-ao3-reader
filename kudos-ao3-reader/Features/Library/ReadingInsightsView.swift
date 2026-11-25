@@ -455,6 +455,8 @@ struct ReadingInsightsView: View {
 
         ReadingAndListeningCard(
             readingSeconds: insights.readingSeconds,
+            silentReadingSeconds: insights.silentReadingSeconds,
+            listeningSeconds: insights.listeningSeconds,
             hideReadingTime: hideReadingTime
         )
 
@@ -635,6 +637,8 @@ struct ReadingInsightsView: View {
                 hideReadingTime: hideReadingTime
             )
 
+            InsightsUnavailableCard(title: "New Chapters", explanation: "Chapter posting and first-read dates are not available yet.")
+
             if habits.savedToOpenedMedianDays != nil || habits.openedToFinishedMedianDays != nil {
                 HabitsSavedToFinishedCard(
                     savedToOpenedDays: habits.savedToOpenedMedianDays,
@@ -697,8 +701,27 @@ struct ReadingInsightsView: View {
                 )
             }
 
-            if let kudos = lib.kudosLeftPercent, let bookmarked = lib.bookmarkedPercent {
-                LibraryFeedbackCard(kudosLeftPercent: kudos, bookmarkedPercent: bookmarked)
+            if let kudos = lib.kudosLeftPercent {
+                LibraryFeedbackCard(kudosLeftPercent: kudos)
+            }
+
+            InsightsUnavailableCard(title: "Bookmarked · Commented", explanation: "Your AO3 bookmark and comment actions are not recorded yet.")
+
+            if lib.arrivalRows.isEmpty {
+                InsightsUnavailableCard(title: "How Finished Works Arrived", explanation: "Import source recording has not begun for these works.")
+            } else {
+                LibraryArrivalCard(rows: lib.arrivalRows)
+            }
+
+            if lib.foundEarlyCount == 0 {
+                InsightsUnavailableCard(title: "Found Early", explanation: "No finished work has a recorded kudos count under 500 at save yet.")
+            } else {
+                LibraryFoundEarlyCard(
+                    count: lib.foundEarlyCount,
+                    grownCount: lib.foundEarlyGrownCount,
+                    example: lib.foundEarlyExample,
+                    discreetMode: discreetMode
+                )
             }
 
             LibraryPreservedStatsCard(stats: stats, discreetMode: discreetMode, discreetMasker: discreetMasker)

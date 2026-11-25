@@ -289,19 +289,18 @@ struct WhereTheWordsWentCard: View {
 
 struct ReadingAndListeningCard: View {
     let readingSeconds: Double
+    let silentReadingSeconds: Double
+    let listeningSeconds: Double
     let hideReadingTime: Bool
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
-        // The log records time in the reader, not Read Aloud, so this is reading time only.
-        HStack(alignment: .firstTextBaseline) {
-            Text("Time Reading")
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Reading and Listening")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-            Spacer()
-            Text(hideReadingTime ? "—" : ReadingInsights.durationLabel(readingSeconds))
-                .font(.subheadline.weight(.semibold))
-                .monospacedDigit()
+            timeRow("Time reading", seconds: readingSeconds)
+            timeRow("Reading", seconds: silentReadingSeconds)
+            timeRow("Read Aloud", seconds: listeningSeconds)
         }
         .padding(16)
         .background(theme.appTheme.cardSurface)
@@ -310,6 +309,80 @@ struct ReadingAndListeningCard: View {
             RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
         )
+    }
+
+    private func timeRow(_ title: String, seconds: Double) -> some View {
+        HStack {
+            Text(title).font(.footnote).foregroundStyle(.secondaryInk)
+            Spacer()
+            Text(hideReadingTime ? "—" : ReadingInsights.durationLabel(seconds))
+                .font(.footnote.weight(.semibold)).monospacedDigit()
+        }
+    }
+}
+
+struct InsightsUnavailableCard: View {
+    let title: String
+    let explanation: String
+    @Environment(ThemeManager.self) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title).font(.subheadline.weight(.semibold))
+            Text(explanation).font(.footnote).foregroundStyle(.secondaryInk)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(theme.appTheme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+            .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5))
+    }
+}
+
+struct LibraryArrivalCard: View {
+    let rows: [ReadingLibraryInsights.ArrivalRow]
+    @Environment(ThemeManager.self) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("How Finished Works Arrived").font(.subheadline.weight(.semibold))
+            ForEach(rows) { row in
+                HStack {
+                    Text(row.label).frame(maxWidth: .infinity, alignment: .leading)
+                    Text("\(row.finished) finished · \(row.saved) saved · \(row.saved == 0 ? 0 : Int((Double(row.finished) / Double(row.saved) * 100).rounded()))%")
+                        .monospacedDigit().foregroundStyle(.secondaryInk)
+                }
+                .font(.footnote)
+            }
+        }
+        .padding(16)
+        .background(theme.appTheme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+    }
+}
+
+struct LibraryFoundEarlyCard: View {
+    let count: Int
+    let grownCount: Int
+    let example: String?
+    let discreetMode: Bool
+    @Environment(ThemeManager.self) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Found Early").font(.subheadline.weight(.semibold))
+            Text("\(count) finished works had fewer than 500 kudos when saved")
+            Text("\(grownCount) have at least tripled since")
+            if let example, !discreetMode {
+                Text(example).foregroundStyle(.secondaryInk)
+            }
+        }
+        .font(.footnote)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(theme.appTheme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
     }
 }
 
@@ -2068,7 +2141,6 @@ struct LibraryNoLongerOnAO3Card: View {
 
 struct LibraryFeedbackCard: View {
     let kudosLeftPercent: Int
-    let bookmarkedPercent: Int
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -2077,10 +2149,7 @@ struct LibraryFeedbackCard: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
 
-            VStack(spacing: 8) {
-                feedbackRow(label: "Kudos left", percent: kudosLeftPercent)
-                feedbackRow(label: "Bookmarked", percent: bookmarkedPercent)
-            }
+            feedbackRow(label: "Kudos left", percent: kudosLeftPercent)
         }
         .padding(16)
         .background(theme.appTheme.cardSurface)

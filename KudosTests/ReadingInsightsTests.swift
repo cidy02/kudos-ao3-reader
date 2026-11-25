@@ -568,6 +568,70 @@ struct ReadingInsightsTests {
         #expect(ReadingInsights.wipFreshness(works: works).total == works.filter { !$0.isComplete }.count)
     }
 
+    @Test func hourBarsSpreadAcrossClockHoursAndAgreeWithTotalTime() {
+        var crossing = fact(on: 1, hour: 23, minutes: 90, words: 1_000)
+        crossing.tzOffsetSeconds = 0
+        var listening = fact(on: 2, hour: 12, minutes: 30)
+        listening.mode = .listen
+        let figures = ReadingInsights.make(facts: [crossing, listening], calendar: calendar)
+        #expect(figures.hourlyDuration[23].seconds == 3_600)
+        #expect(figures.hourlyDuration[0].seconds == 1_800)
+        #expect(figures.hourlyDuration.reduce(0) { $0 + $1.seconds } == figures.readingSeconds)
+        #expect(figures.silentReadingSeconds + figures.listeningSeconds == figures.readingSeconds)
+        #expect(figures.silentReadingSeconds == 5_400)
+        #expect(figures.listeningSeconds == 1_800)
+    }
+
+    @Test func explicitStatusesWinAndUntouchedIsNotStopped() {
+        let stopped = SavedWork(title: "Stopped", author: "A")
+        stopped.readingStatusRaw = "stopped"
+        stopped.isFinished = true
+        let stacking = SavedWork(title: "Stacking", author: "A")
+        stacking.readingStatusRaw = "stacking"
+        let later = SavedWork(title: "Later", author: "A")
+        let partition = ReadingInsights.partitionStatuses(works: [stopped, stacking, later])
+        #expect(partition.stoppedCount == 1)
+        #expect(partition.stackingCount == 1)
+        #expect(partition.savedForLaterCount == 1)
+        #expect(partition.finishedCount == 0)
+        #expect(partition.total == 3)
+
+        let library = ReadingLibraryInsights.make(
+            works: [stopped, stacking, later], facts: [],
+            periodInterval: DateInterval(start: day(1), end: day(2)), calendar: calendar
+        )
+        #expect(library.unreadWorksCount == 1)
+    }
+
+    @Test func arrivalAndFoundEarlyUseOnlyRecordedSaveFacts() {
+        let early = SavedWork(title: "Early", author: "A")
+        early.isFinished = true
+        early.importSourceRaw = WorkImportSource.search.rawValue
+        early.statsSavedAt = day(1)
+        early.kudosAtSave = 100
+        early.kudos = 350
+        let old = SavedWork(title: "Old", author: "A")
+        old.isFinished = true
+        old.kudos = 2_000
+        let figures = ReadingLibraryInsights.make(
+            works: [early, old], facts: [],
+            periodInterval: DateInterval(start: day(1), end: day(2)), calendar: calendar
+        )
+        #expect(figures.arrivalRows.first?.finished == 1)
+        #expect(figures.arrivalRows.first?.saved == 1)
+        #expect(figures.arrivalRows.first?.label == "Other")
+        #expect(figures.foundEarlyCount == 1)
+        #expect(figures.foundEarlyGrownCount == 1)
+        #expect(figures.foundEarlyExample?.contains("100 then, 350 now") == true)
+
+        let beforeRecording = ReadingLibraryInsights.make(
+            works: [old], facts: [],
+            periodInterval: DateInterval(start: day(1), end: day(2)), calendar: calendar
+        )
+        #expect(beforeRecording.arrivalRows.isEmpty)
+        #expect(beforeRecording.foundEarlyCount == 0)
+    }
+
     @Test func checkShownFiguresReproduce() {
         let (facts, _, _) = checkFixture()
         let insights = ReadingInsights.make(facts: facts, calendar: calendar)

@@ -632,9 +632,25 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
     ) -> [HourlyBucket] {
         var hours: [Double] = Array(repeating: 0, count: 24)
         for fact in facts {
-            let hour = sittingTime(for: fact, calendar: calendar).hour
-            if hour >= 0 && hour < 24 {
-                hours[hour] += fact.durationSeconds
+            // Duration is active time, which can be less than wall time. Spread it
+            // proportionally over the clock interval rather than assigning the
+            // entire sitting to its starting hour. This preserves the total.
+            var local = calendar
+            if let offset = fact.tzOffsetSeconds, let zone = TimeZone(secondsFromGMT: offset) {
+                local.timeZone = zone
+            }
+            let start = fact.startedAt
+            let duration = max(0, fact.durationSeconds)
+            var cursor = start
+            let end = start.addingTimeInterval(duration)
+            while cursor < end {
+                let hour = local.component(.hour, from: cursor)
+                let next = local.nextDate(after: cursor, matching: DateComponents(minute: 0, second: 0),
+                    matchingPolicy: .nextTime) ?? end
+                let boundary = min(end, next)
+                guard boundary > cursor else { break }
+                hours[hour] += boundary.timeIntervalSince(cursor)
+                cursor = boundary
             }
         }
         return (0..<24).map { HourlyBucket(hour: $0, seconds: hours[$0]) }
@@ -756,7 +772,7 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         }
 
         var result: [ShipConcentration] = []
-        for (fandom, ships) in byFandom where ships.reduce(0, { $0 + $1.worksCount }) >= 2 {
+        for (fandom, ships) in byFandom where ships.reduce(0, { $0 + $1.worksCount }) >= 4 {
             let sorted = ships.sorted(by: { $0.words > $1.words })
             guard let top = sorted.first else { continue }
             let totalWords = max(1, ships.reduce(0) { $0 + $1.words })
@@ -825,23 +841,14 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
     static func partitionStatuses(works: [SavedWork], now: Date = Date()) -> ReadingStatusPartition {
         var p = ReadingStatusPartition()
         for work in works {
-            if work.isFinished {
-                p.finishedCount += 1
-            } else if work.isQueuedForLater && !work.hasStartedReading {
-                p.savedForLaterCount += 1
-            } else if ReadingLogService.isAbandoned(work: work, now: now) {
-                p.stoppedCount += 1
-            } else if work.keepInProgressOverride {
-                p.onHoldCount += 1
-            } else if work.hasStartedReading {
-                let progress = work.readingProgress ?? 0
-                if !work.isComplete && progress >= 0.98 {
-                    p.caughtUpCount += 1
-                } else {
-                    p.readingCount += 1
-                }
-            } else {
-                p.savedForLaterCount += 1
+            switch work.insightsReadingStatus {
+            case .stopped: p.stoppedCount += 1
+            case .onHold: p.onHoldCount += 1
+            case .stacking: p.stackingCount += 1
+            case .finished: p.finishedCount += 1
+            case .caughtUp: p.caughtUpCount += 1
+            case .reading: p.readingCount += 1
+            case .savedForLater: p.savedForLaterCount += 1
             }
         }
         return p
@@ -1231,9 +1238,10 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
         let sittings = ReadingInsights.sittingBuckets(from: facts)
         let typicalSec = ReadingInsights.medianSeconds(of: facts)
 
+        let worksByID = Dictionary(works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var finishCountsByWork: [UUID: (title: String, fandom: String, words: Int, count: Int)] = [:]
         for fact in allFacts where fact.didFinish {
-            guard let work = works.first(where: { $0.id == fact.workID }) else { continue }
+            guard let work = worksByID[fact.workID] else { continue }
             let cur = finishCountsByWork[fact.workID] ?? (
                 title: work.title,
                 fandom: aliases.resolve(work.workFandoms.first ?? "", kind: .fandom),
@@ -1306,16 +1314,23 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
             .map { $0 }
 
         // First sitting per work from the whole log, then the gaps the dates can prove.
-        let firstSitting = Dictionary(grouping: allFacts, by: \.workID).mapValues { $0.map(\.startedAt).min() }
+        var firstSitting: [UUID: Date] = [:]
+        for fact in allFacts {
+            firstSitting[fact.workID] = min(firstSitting[fact.workID] ?? fact.startedAt, fact.startedAt)
+        }
+        let openedInPeriod = Set(facts.map(\.workID))
+        var firstFinishInPeriod: [UUID: Date] = [:]
+        for fact in facts where fact.didFinish {
+            firstFinishInPeriod[fact.workID] = min(firstFinishInPeriod[fact.workID] ?? fact.startedAt, fact.startedAt)
+        }
         let secondsPerDay = 86_400.0
         let savedToOpened = works.compactMap { work -> Double? in
-            guard facts.contains(where: { $0.workID == work.id }),
-                  let first = firstSitting[work.id] ?? nil else { return nil }
+            guard openedInPeriod.contains(work.id), let first = firstSitting[work.id] else { return nil }
             return max(0, first.timeIntervalSince(work.dateAdded)) / secondsPerDay
         }
         let openedToFinished = works.compactMap { work -> Double? in
-            guard let first = firstSitting[work.id] ?? nil,
-                  let done = facts.filter({ $0.workID == work.id && $0.didFinish }).map(\.startedAt).min()
+            guard let first = firstSitting[work.id],
+                  let done = firstFinishInPeriod[work.id]
             else { return nil }
             return max(0, done.timeIntervalSince(first)) / secondsPerDay
         }
@@ -1342,6 +1357,12 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
 // MARK: - Library Insights
 
 nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
+    nonisolated struct ArrivalRow: Equatable, Sendable, Identifiable {
+        var id: String { label }
+        var label: String
+        var finished: Int
+        var saved: Int
+    }
     var unreadWords: Int = 0
     var unreadWorksCount: Int = 0
     var monthsToClear: Int? = nil
@@ -1353,9 +1374,13 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
     var noLongerOnAO3Count: Int = 0
     var noLongerOnAO3Words: Int = 0
     var noLongerOnAO3LastCopies: Int = 0
-    /// Share of finished works you left kudos on / favourited; nil with nothing finished.
+    /// Share of finished works still on AO3 with known kudos; nil with no eligible works.
     var kudosLeftPercent: Int?
     var bookmarkedPercent: Int?
+    var arrivalRows: [ArrivalRow] = []
+    var foundEarlyCount: Int = 0
+    var foundEarlyGrownCount: Int = 0
+    var foundEarlyExample: String?
 
     static func == (lhs: ReadingLibraryInsights, rhs: ReadingLibraryInsights) -> Bool {
         lhs.unreadWords == rhs.unreadWords
@@ -1371,6 +1396,10 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
             && lhs.noLongerOnAO3LastCopies == rhs.noLongerOnAO3LastCopies
             && lhs.kudosLeftPercent == rhs.kudosLeftPercent
             && lhs.bookmarkedPercent == rhs.bookmarkedPercent
+            && lhs.arrivalRows == rhs.arrivalRows
+            && lhs.foundEarlyCount == rhs.foundEarlyCount
+            && lhs.foundEarlyGrownCount == rhs.foundEarlyGrownCount
+            && lhs.foundEarlyExample == rhs.foundEarlyExample
     }
 
     nonisolated struct StillReadingCandidate: Equatable, Sendable, Identifiable {
@@ -1402,7 +1431,7 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         untouchedDays: Int = InsightsOptions.defaultUntouchedDays,
         now: Date = Date()
     ) -> ReadingLibraryInsights {
-        let unread = works.filter { !$0.hasStartedReading && !$0.isFinished }
+        let unread = works.filter { $0.insightsReadingStatus == .savedForLater }
         let unreadWords = unread.filter { $0.wordUnit == .words }.reduce(0) { $0 + max(0, $1.wordCount) }
         let readWordsInPeriod = facts.filter { $0.wordUnit == .words }.reduce(0) { $0 + $1.wordsRead }
 
@@ -1450,10 +1479,39 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         let lastCopies = works.filter { $0.preservationState == .preservedLastCopy }.count
 
         let finished = works.filter(\.isFinished)
-        let kudosPct: Int? = finished.isEmpty ? nil
-            : Int(Double(finished.filter(\.hasGivenKudos).count) / Double(finished.count) * 100)
+        let onAO3 = finished.filter {
+            $0.preservationState != .goneWithNoCopy && $0.preservationState != .preservedLastCopy
+        }
+        let kudosPct: Int? = onAO3.isEmpty ? nil
+            : Int(Double(onAO3.filter(\.hasGivenKudos).count) / Double(onAO3.count) * 100)
         let bookmarkPct: Int? = finished.isEmpty ? nil
             : Int(Double(finished.filter(\.isFavorite).count) / Double(finished.count) * 100)
+
+        var arrivals: [WorkImportSource: (saved: Int, finished: Int)] = [:]
+        for work in works {
+            guard let source = work.importSource else { continue }
+            var counts = arrivals[source] ?? (saved: 0, finished: 0)
+            counts.saved += 1
+            if work.isFinished { counts.finished += 1 }
+            arrivals[source] = counts
+        }
+        var grouped: [String: (saved: Int, finished: Int)] = [:]
+        for (source, counts) in arrivals {
+            let label = counts.saved < 5 ? "Other" : source.label
+            var total = grouped[label] ?? (saved: 0, finished: 0)
+            total.saved += counts.saved
+            total.finished += counts.finished
+            grouped[label] = total
+        }
+        let arrivalRows = grouped.map { label, counts in
+            ArrivalRow(label: label, finished: counts.finished, saved: counts.saved)
+        }.sorted { $0.finished == $1.finished ? $0.label < $1.label : $0.finished > $1.finished }
+
+        let foundEarly = finished.filter { $0.statsSavedAt != nil && ($0.kudosAtSave ?? Int.max) < 500 }
+        let grown = foundEarly.filter { $0.kudos >= 3 * max(1, $0.kudosAtSave ?? 0) }
+        let example = foundEarly.max { $0.kudos < $1.kudos }.map {
+            "\($0.title) · \($0.kudosAtSave ?? 0) then, \($0.kudos) now"
+        }
 
         return ReadingLibraryInsights(
             unreadWords: unreadWords,
@@ -1468,7 +1526,11 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
             noLongerOnAO3Words: goneWords,
             noLongerOnAO3LastCopies: lastCopies,
             kudosLeftPercent: kudosPct,
-            bookmarkedPercent: bookmarkPct
+            bookmarkedPercent: bookmarkPct,
+            arrivalRows: arrivalRows,
+            foundEarlyCount: foundEarly.count,
+            foundEarlyGrownCount: grown.count,
+            foundEarlyExample: example
         )
     }
 }
