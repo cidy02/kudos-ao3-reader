@@ -638,18 +638,14 @@ struct ManifestStagingTests {
 
     @Test func unknownValueDuplicatesDoNotAccumulateRemovals() throws {
         let scratch = Scratch()
-        let file = scratch.url.appendingPathComponent("million-duplicates.json")
+        let file = scratch.url.appendingPathComponent("nonadjacent-duplicates.json")
         FileManager.default.createFile(atPath: file.path, contents: nil)
         let writer = try FileHandle(forWritingTo: file)
         try writer.write(contentsOf: Data("{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00Z\",\"works\":[],\"bookmarks\":[],\"fonts\":[],\"settings\":{},\"x\":[".utf8))
-        let chunk = Data((Array(repeating: "\"a\":0", count: 1000).joined(separator: ",")).utf8)
-        for object in 0 ..< 5 {
-            try writer.write(contentsOf: Data((object == 0 ? "{" : ",{").utf8))
-            for part in 0 ..< 210 {
-                if part > 0 { try writer.write(contentsOf: Data(",".utf8)) }
-                try writer.write(contentsOf: chunk)
-            }
-            try writer.write(contentsOf: Data("}".utf8))
+        let chunk = Data(Array(repeating: "{\"a\":0,\"a\":1}", count: 1000).joined(separator: ",").utf8)
+        for part in 0 ..< 100 {
+            if part > 0 { try writer.write(contentsOf: Data(",".utf8)) }
+            try writer.write(contentsOf: chunk)
         }
         try writer.write(contentsOf: Data("]}".utf8)); try writer.close()
         try ManifestStager.stage(ManifestFileInput(url: file), options: scratch.options).discard()
@@ -673,6 +669,94 @@ struct ManifestStagingTests {
         #expect(canonical.range(of: Data("\"workWarnings\"".utf8)) == nil)
         #expect(canonical.count < 150)
         defaulted.discard()
+    }
+
+    @Test func generatedDefaultSpliceKeepsAcceptedJSONReadableAndCompact() throws {
+        let scratch = Scratch()
+        let id = "00000001-0000-4000-8000-000000000001"
+        let records = [
+            "{\"id\":\"\(id)\", }",
+            "{\"id\":\"\(id)\",\n}",
+            "{\n  \"id\": \"\(id)\"\n}",
+            "{\"id\":\"\(id)\",\"title\":\"a\\nb\"}",
+            "{\"id\":\"\(id)\",\"title\":\"x, }\",\"ignored\":[1, ]}",
+            "{\"id\":\"\(id)\",\"dateAdded\":null, }",
+            "{\"id\":\"\(id)\",\"date\\u0041dded\":null,\"ignored\":{\"x\":1, }}",
+        ]
+        let prefix = "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00Z\",\"bookmarks\":[],\"fonts\":[],\"settings\":{},\"works\":["
+        for record in records {
+            let run = try ManifestStager.stage(ManifestDataInput(Data((prefix + record + "]}").utf8)), options: scratch.options)
+            var stored = Data()
+            try run.readPayload(of: "works", seq: 0) { stored.append($0) }
+            let text = String(decoding: stored, as: UTF8.self)
+            #expect(try run.manifest().works.count == 1, "\(record)")
+            #expect((try JSONSerialization.jsonObject(with: stored) as? [String: Any]) != nil, "\(text)")
+            if record.contains("x, }") {
+                #expect(try run.manifest().works[0].title == "x, }")
+                #expect(!text.contains("[1, ]"), "\(text)")
+            } else {
+                #expect(!text.contains(", }") && !text.contains(",\n}"), "\(text)")
+            }
+            #expect(!text.contains("\"dateAdded\":null") && !text.contains("\"date\\u0041dded\":null"), "\(text)")
+            #expect(stored.count < 180, "compact payload grew to \(stored.count) bytes: \(text)")
+            run.discard()
+        }
+        let session = "{\"id\":\"\(id)\", }"
+        let sessionText = prefix + "] ,\"readingSessions\":[" + session + "]}"
+        let run = try ManifestStager.stage(ManifestDataInput(Data(sessionText.utf8)), options: scratch.options)
+        defer { run.discard() }
+        var stored = Data()
+        try run.readPayload(of: "readingSessions", seq: 0) { stored.append($0) }
+        #expect(try run.manifest().readingSessions?.count == 1)
+        #expect(stored.range(of: Data("\"workID\"".utf8)) != nil)
+        #expect(stored.range(of: Data("\"startedAt\"".utf8)) != nil)
+        #expect((try JSONSerialization.jsonObject(with: stored) as? [String: Any]) != nil)
+        #expect(stored.count < 180)
+    }
+
+    @Test func nonAdjacentDuplicateRemovalsAreSpilledInOrder() throws {
+        let scratch = Scratch()
+        let value = "[" + Array(repeating: "{\"a\":1,\"a\":2}", count: 1000).joined(separator: ",") + "]"
+        var tokenizer = ManifestTokenizer(input: ManifestDataInput(Data(value.utf8)))
+        tokenizer.removalBatchSize = 32
+        let spool = ManifestRemovalSpool(directory: scratch.url, batchSize: 32)
+        var largestBatch = 0
+        tokenizer.onRemovalBatch = { batch in
+            largestBatch = max(largestBatch, batch.count)
+            try spool.append(batch)
+        }
+        _ = try tokenizer.skipValue()
+        try spool.append(tokenizer.takeRemovals())
+        var previous = -1
+        var count = 0
+        try spool.forEachRange { cut in
+            #expect(cut.lowerBound > previous)
+            previous = cut.lowerBound
+            count += 1
+        }
+        #expect(count == 1000)
+        #expect(largestBatch == 32)
+        #expect(spool.peakBufferedCount <= 32)
+        try spool.discard()
+    }
+
+    @Test func deferredLossyRecordStreamsNonAdjacentFirstWinsCuts() throws {
+        let scratch = Scratch()
+        var options = scratch.options
+        options.typedRecordBudget = 64
+        let ignored = Array(repeating: "{\"a\":1,\"a\":2}", count: 5000).joined(separator: ",")
+        let entry = "{\"name\":\"first\",\"name\":\"second\",\"modifiedAt\":\"2026-01-01T00:00:00Z\",\"data\":\"QUFB\",\"ignored\":[\(ignored)]}"
+        let text = "{\"version\":8,\"exportedAt\":\"2026-06-01T00:00:00Z\",\"works\":[],\"bookmarks\":[],\"fonts\":[],\"settings\":{},\"documents\":[\(entry)]}"
+        let run = try ManifestStager.stage(ManifestDataInput(Data(text.utf8)), options: options)
+        defer { run.discard() }
+        #expect(try run.records(of: "documents").map(\.status) == [.deferred])
+        var stored = Data()
+        try run.readPayload(of: "documents", seq: 0) { stored.append($0) }
+        #expect(stored.range(of: Data("\"name\":\"second\"".utf8)) == nil)
+        #expect(stored.range(of: Data("\"a\":2".utf8)) == nil)
+        #expect(try run.manifest().documents?.first?.name == "first")
+        let files = try FileManager.default.contentsOfDirectory(atPath: run.db.directory.path)
+        #expect(!files.contains(where: { $0.hasPrefix("cuts-") }))
     }
 
     @Test func deferredLossyRecordIsAChunkedSingletonBatchAndKeepsFirstValue() throws {

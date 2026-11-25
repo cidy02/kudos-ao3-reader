@@ -67,25 +67,95 @@ nonisolated struct ManifestSectionSpec {
             defaults?.fields.removeAll(keepingCapacity: true)
             guard let value = try? decoder.decode(T.self, from: data) else { return nil }
             guard generatesDefaults, defaults?.used == true else { return (keys(value), nil) }
-            // Insert only generated fields into compact source JSON. A present/null or escaped spelling falls back to
-            // canonical encoding, preserving first-wins and avoiding a second fresh default on reconstruction.
-            if let fields = defaults?.fields, !fields.isEmpty, data.first == UInt8(ascii: "{"), data.last == UInt8(ascii: "}"),
-               !data.contains(UInt8(ascii: "\\")), data.count >= 2,
-               (data.count == 2 || data[1] == UInt8(ascii: "\"")),
-               data[data.count - 2] != UInt8(ascii: ","),
-               fields.allSatisfy({ data.range(of: Data("\"\($0.0)\"".utf8)) == nil }) {
-                var compact = data
-                compact.removeLast()
-                for (index, field) in fields.enumerated() {
-                    if data.count > 2 || index > 0 { compact.append(UInt8(ascii: ",")) }
-                    compact.append(contentsOf: Data("\"\(field.0)\":".utf8))
-                    compact.append(field.1)
-                }
-                compact.append(UInt8(ascii: "}"))
+            // Keep the source's compact shape while materialising defaults. The input has passed the tokenizer and
+            // typed decoder; the splice also removes accepted trailing commas, including inside ignored values.
+            if let fields = defaults?.fields, let compact = Self.spliceDefaults(fields, into: data) {
                 return (keys(value), compact)
             }
             return (keys(value), try? encoder.encode(value))
         }
+    }
+
+    /// Replaces present `null` defaults and appends absent ones without expanding a minimal record to every Codable field.
+    /// Key strings are decoded only at the object's first level, so escapes in values and nested keys cannot hide a field.
+    private static func spliceDefaults(_ fields: [(String, Data)], into data: Data) -> Data? {
+        guard !fields.isEmpty, data.first == UInt8(ascii: "{"), data.last == UInt8(ascii: "}") else { return nil }
+        let generated = Dictionary(fields, uniquingKeysWith: { first, _ in first })
+        var missing = Set(generated.keys)
+        var out = Data(capacity: data.count + fields.reduce(0) { $0 + $1.0.utf8.count + $1.1.count + 4 })
+        var start = 0
+        var depth = 0
+        var members = 0
+        var expectsKey = false
+        var rootKey: String?
+        var i = 0
+        while i < data.count {
+            let byte = data[i]
+            if byte == UInt8(ascii: "\"") {
+                let opening = i
+                i += 1
+                while i < data.count {
+                    if data[i] == UInt8(ascii: "\\") { i += 2; continue }
+                    if data[i] == UInt8(ascii: "\"") { break }
+                    i += 1
+                }
+                guard i < data.count else { return nil }
+                if depth == 1 && expectsKey {
+                    let inner = data[(opening + 1) ..< i]
+                    if inner.contains(UInt8(ascii: "\\")) {
+                        rootKey = try? JSONDecoder().decode(String.self, from: Data(data[opening ... i]))
+                    } else {
+                        rootKey = String(decoding: inner, as: UTF8.self)
+                    }
+                    expectsKey = false
+                }
+            } else if byte == UInt8(ascii: "{") || byte == UInt8(ascii: "[") {
+                depth += 1
+                if depth == 1 { expectsKey = true }
+            } else if byte == UInt8(ascii: "}") || byte == UInt8(ascii: "]") {
+                depth -= 1
+            } else if byte == UInt8(ascii: ":") && depth == 1 {
+                members += 1
+                if let rootKey, let replacement = generated[rootKey] {
+                    var valueStart = i + 1
+                    while valueStart < data.count && isJSONWhitespace(data[valueStart]) { valueStart += 1 }
+                    guard valueStart + 4 <= data.count, data[valueStart ..< valueStart + 4].elementsEqual("null".utf8) else {
+                        return nil // a generated field can be present only as null
+                    }
+                    out.append(data[start ..< valueStart])
+                    out.append(replacement)
+                    start = valueStart + 4
+                    i = start - 1
+                    missing.remove(rootKey)
+                }
+            } else if byte == UInt8(ascii: ",") {
+                var next = i + 1
+                while next < data.count && isJSONWhitespace(data[next]) { next += 1 }
+                let closesContainer = next < data.count
+                    && (data[next] == UInt8(ascii: "}") || data[next] == UInt8(ascii: "]"))
+                if closesContainer {
+                    out.append(data[start ..< i])
+                    start = i + 1
+                } else if depth == 1 {
+                    expectsKey = true
+                    rootKey = nil
+                }
+            }
+            i += 1
+        }
+        out.append(data[start ..< data.count - 1]) // the final brace is inserted after missing fields
+        for field in fields where missing.contains(field.0) {
+            if members > 0 { out.append(UInt8(ascii: ",")) }
+            out.append(contentsOf: Data("\"\(field.0)\":".utf8))
+            out.append(field.1)
+            members += 1
+        }
+        out.append(UInt8(ascii: "}"))
+        return out
+    }
+
+    private static func isJSONWhitespace(_ byte: UInt8) -> Bool {
+        byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D
     }
 
     // Order is the order of `KudosBackupManifest.init(from:)`.

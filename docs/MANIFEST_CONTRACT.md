@@ -79,7 +79,7 @@ are there, indexed, in source order (`seq`).
 `KudosBackupBookmark`, `KudosBackupWork`, `KudosBackupReadingSession`, `KudosBackupReadingFavorite`,
 `KudosBackupFandomReadWatermark`, `KudosBackupFollowedTag` and `KudosBackupTagAlias` mint a default when a field is missing (a
 fresh UUID, `Date()`), differently on every decode. The staging pass decodes such a record once and **stores the generated
-fields with the record** (in compact source JSON where safe, otherwise via canonical re-encoding), so the index (`k_id`, `k_work`) and every later reader (reconstruction, apply) see the same
+fields with the record** (a compact splice replaces present `null` defaults, appends absent fields, and removes accepted trailing commas, including after whitespace and in nested values), so the index (`k_id`, `k_work`) and every later reader (reconstruction, apply) see the same
 identity. One clock is captured at staging start and passed through date clamping and generated record defaults. SQLite text is bound and read with explicit byte lengths (a NUL inside a key is
 part of the key) and composite identities use separate columns (`k_text` + `k_text2` for a favorite's kind and target).
 

@@ -51,6 +51,9 @@ nonisolated struct ManifestTokenizer {
     private var liveKeyUnits = 0
     /// Source ranges of later duplicate members (`,"k":v`), at any depth, so a record can be rewritten first-wins before typed decode.
     private(set) var removals: [Range<Int>] = []
+    /// A retained value can have arbitrarily many non-adjacent cuts. Flush them before this array grows with input size.
+    var onRemovalBatch: (([Range<Int>]) throws -> Void)?
+    var removalBatchSize = 4096
     private var whitespaceRun = 0
     /// A container beyond `ManifestLimits.maxDepth` was met. Scanning goes on (iteratively, remembering nothing) so a malformed
     /// tail still reports syntax first; the stager reports the depth outcome at EOF and stages nothing from then on.
@@ -127,6 +130,10 @@ nonisolated struct ManifestTokenizer {
                     if let last = removals.last, last.upperBound == cut.lowerBound {
                         removals[removals.count - 1] = last.lowerBound ..< cut.upperBound
                     } else { removals.append(cut) }
+                    if let onRemovalBatch, removals.count >= removalBatchSize {
+                        try onRemovalBatch(removals)
+                        removals.removeAll(keepingCapacity: true)
+                    }
                 }
                 skipWhitespace()
                 guard let c = peek() else { throw ManifestScanError.unexpectedEnd }

@@ -68,7 +68,7 @@ nonisolated enum ManifestStager {
     /// Reads the whole document (validating it to EOF), stages it, and only then returns. Every thrown error is a
     /// `ManifestStreamError`, and no staging directory is left behind by a throw. Synchronous: call it off the main
     /// actor, from a `Task` so cancellation reaches it (polled in every unbounded loop, at least once per 1 MiB of input).
-    /// Among failures observed before scanning stops: I/O > cancellation > syntax > resource > schema > unsupported version.
+    /// Among observed failures: I/O > cancellation > syntax > root-type schema > resource > other schema > unsupported version.
     static func stage(_ input: ManifestInput, options: ManifestStagingOptions = .init()) throws -> ManifestStagedRun {
         let directory = options.parentDirectory.appendingPathComponent("run-\(UUID().uuidString)", isDirectory: true)
         do {
@@ -240,7 +240,7 @@ nonisolated final class ManifestStagingPass {
                 } else if let value = ManifestValueSpec.byName[key] {
                     try stageValue(value)
                 } else {
-                    let (kind, range) = try tokenizer.skipValue(depth: 1)
+                    let (kind, range) = try tokenizer.skipValue(depth: 1, recordRemovals: false)
                     _ = tokenizer.takeRemovals()
                     if key == "exportedBy", range.count > ManifestLimits.maxRootValueBytes { noteRootValueTooLarge(key, range.count) }
                     if !abandoned { try recordMember(key, kind == .null ? .null : .present, kind, 0, range.count, known: false) }
@@ -263,22 +263,27 @@ nonisolated final class ManifestStagingPass {
 
     /// A record's bytes with every later duplicate member cut out, so the typed decoder sees first-wins at every depth
     /// whatever Foundation would do with a repeated key.
-    private func firstWins(_ data: Data, base: Int, cuts: [Range<Int>]) -> Data {
-        guard !cuts.isEmpty else { return data }
-        let sorted = cuts.sorted { $0.lowerBound != $1.lowerBound ? $0.lowerBound < $1.lowerBound : $0.upperBound > $1.upperBound }
+    private func firstWins(_ data: Data, base: Int, cuts: ManifestRemovalSpool) throws -> Data {
+        guard cuts.hasRanges else { return data }
         var out = Data(capacity: data.count)
         var cursor = base
-        for cut in sorted where cut.lowerBound >= cursor { // a cut inside an earlier cut is already gone
-            out.append(data[(cursor - base) ..< (cut.lowerBound - base)])
-            cursor = cut.upperBound
+        try cuts.forEachRange { cut in
+            if cut.lowerBound >= cursor { // a cut inside an earlier cut is already gone
+                out.append(data[(cursor - base) ..< (cut.lowerBound - base)])
+                cursor = cut.upperBound
+            }
         }
         out.append(data[(cursor - base)...])
         return out
     }
 
     private func stageValue(_ spec: ManifestValueSpec) throws {
-        let (kind, range) = try tokenizer.skipValue(depth: 1)
-        let cuts = tokenizer.takeRemovals()
+        let cuts = ManifestRemovalSpool(directory: db.directory)
+        defer { try? cuts.discard() }
+        tokenizer.onRemovalBatch = { try cuts.append($0) }
+        defer { tokenizer.onRemovalBatch = nil }
+        let (kind, range) = try tokenizer.skipValue(depth: 1, recordRemovals: !abandoned)
+        try cuts.append(tokenizer.takeRemovals())
         if range.count > ManifestLimits.maxRootValueBytes { noteRootValueTooLarge(spec.name, range.count) }
         if kind == .null {
             if spec.isRequired { schemaFailed = true }
@@ -290,7 +295,7 @@ nonisolated final class ManifestStagingPass {
             guard input.checkSource() else { throw ManifestStreamError.io(input.failure ?? "source changed during staging") }
             let raw = input.read(range)
             if let failure = input.failure { throw ManifestStreamError.io(failure) }
-            let data = firstWins(raw, base: range.lowerBound, cuts: cuts)
+            let data = try firstWins(raw, base: range.lowerBound, cuts: cuts)
             if spec.decodes(decoder, data) {
                 if spec.name == "version" { version = try? decoder.decode(Int.self, from: data) }
                 try storeChunks(owner: spec.name, seq: 0, data: data)
@@ -304,7 +309,7 @@ nonisolated final class ManifestStagingPass {
     private func stageArray(_ spec: ManifestSectionSpec) throws {
         tokenizer.skipWhitespace()
         guard tokenizer.peek() == UInt8(ascii: "[") else {
-            let (kind, range) = try tokenizer.skipValue(depth: 1)
+            let (kind, range) = try tokenizer.skipValue(depth: 1, recordRemovals: false)
             _ = tokenizer.takeRemovals()
             if range.count > ManifestLimits.maxRootValueBytes { noteRootValueTooLarge(spec.name, range.count) }
             let shape: ManifestPresence = kind == .null ? .null : .wrongKind
@@ -320,8 +325,14 @@ nonisolated final class ManifestStagingPass {
             tokenizer.pos += 1
         } else {
             elements: while true {
-                let (_, range) = try tokenizer.skipValue(depth: 2)
-                try stageElement(spec, seq: count, range: range, cuts: tokenizer.takeRemovals())
+                let cuts = ManifestRemovalSpool(directory: db.directory)
+                defer { try? cuts.discard() }
+                tokenizer.onRemovalBatch = { try cuts.append($0) }
+                let (_, range) = try tokenizer.skipValue(depth: 2, recordRemovals: !abandoned)
+                try cuts.append(tokenizer.takeRemovals())
+                tokenizer.onRemovalBatch = nil
+                try stageElement(spec, seq: count, range: range, cuts: cuts)
+                try cuts.discard()
                 count += 1
                 tokenizer.skipWhitespace()
                 guard let c = tokenizer.peek() else { throw ManifestScanError.unexpectedEnd }
@@ -335,11 +346,11 @@ nonisolated final class ManifestStagingPass {
         try recordMember(spec.name, .present, .array, count, tokenizer.pos - start)
     }
 
-    private func stageElement(_ spec: ManifestSectionSpec, seq: Int, range: Range<Int>, cuts: [Range<Int>]) throws {
+    private func stageElement(_ spec: ManifestSectionSpec, seq: Int, range: Range<Int>, cuts: ManifestRemovalSpool) throws {
         try autoreleasepool { try stageElementInPool(spec, seq: seq, range: range, cuts: cuts) }
     }
 
-    private func stageElementInPool(_ spec: ManifestSectionSpec, seq: Int, range: Range<Int>, cuts: [Range<Int>]) throws {
+    private func stageElementInPool(_ spec: ManifestSectionSpec, seq: Int, range: Range<Int>, cuts: ManifestRemovalSpool) throws {
         // The budget is checked before anything else, so the outcome does not depend on member order or an earlier schema error.
         if range.count > options.typedRecordBudget, spec.policy != .lossy {
             // A strict record must decode with the production type, and an oversized one cannot be decoded within budget
@@ -357,7 +368,7 @@ nonisolated final class ManifestStagingPass {
         guard input.checkSource() else { throw ManifestStreamError.io(input.failure ?? "source changed during staging") }
         let raw = input.read(range)
         if let failure = input.failure { throw ManifestStreamError.io(failure) }
-        let data = firstWins(raw, base: range.lowerBound, cuts: cuts)
+        let data = try firstWins(raw, base: range.lowerBound, cuts: cuts)
         if let (keys, canonical) = spec.decode(decoder, encoder, data) {
             let stored = canonical ?? data
             try insertRecord(spec, seq, .decoded, range.count, keys)
@@ -424,7 +435,7 @@ nonisolated final class ManifestStagingPass {
     }
 
     /// An oversized value: copied piece by piece, never held whole.
-    private func storeChunks(owner: String, seq: Int, from range: Range<Int>, omitting cuts: [Range<Int>] = []) throws {
+    private func storeChunks(owner: String, seq: Int, from range: Range<Int>, omitting cuts: ManifestRemovalSpool) throws {
         var offset = 0
         func copy(_ part: Range<Int>) throws {
             try input.forEachChunk(of: part, size: options.chunkSize) { piece in
@@ -433,9 +444,11 @@ nonisolated final class ManifestStagingPass {
             }
         }
         var cursor = range.lowerBound
-        for cut in cuts.sorted(by: { $0.lowerBound < $1.lowerBound }) where cut.lowerBound >= cursor {
-            if cursor < cut.lowerBound { try copy(cursor ..< cut.lowerBound) }
-            cursor = cut.upperBound
+        try cuts.forEachRange { cut in
+            if cut.lowerBound >= cursor {
+                if cursor < cut.lowerBound { try copy(cursor ..< cut.lowerBound) }
+                cursor = cut.upperBound
+            }
         }
         if cursor < range.upperBound { try copy(cursor ..< range.upperBound) }
         if let failure = input.failure { throw ManifestStreamError.io(failure) }
