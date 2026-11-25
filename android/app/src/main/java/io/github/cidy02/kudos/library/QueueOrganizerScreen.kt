@@ -436,11 +436,12 @@ private fun OrganizerRow(
                 io.github.cidy02.kudos.ui.components.CoverStack(
                     kind = io.github.cidy02.kudos.ui.components.CoverStackKind.Queue,
                     name = row.queue.displayName,
-                    hue = queueHue,
+                    hue = row.queue.hue,
                     pickedHex = row.queue.colorHex,
                     backs = visibleWorks.take(io.github.cidy02.kudos.ui.components.CoverStackLayout.maxBacks),
                     width = 48.dp,
-                    height = 48.dp
+                    height = 48.dp,
+                    identity = row.queue.id
                 )
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {

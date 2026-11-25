@@ -1,13 +1,6 @@
 package io.github.cidy02.kudos.library
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
-import io.github.cidy02.kudos.home.HomeFacts
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -15,47 +8,40 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.ui.components.CoverStack
 import io.github.cidy02.kudos.ui.components.CoverStackKind
 import io.github.cidy02.kudos.ui.components.CoverStackLayout
-import io.github.cidy02.kudos.ui.components.coverHue
+import io.github.cidy02.kudos.ui.components.GeneratedCoverView
+import io.github.cidy02.kudos.ui.components.rememberCoverEpub
+import io.github.cidy02.kudos.ui.components.generatedCoverRecipe
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
-import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCardMetrics
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
-import io.github.cidy02.kudos.works.rememberWorkEmbeddedCoverArt
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -71,9 +57,6 @@ fun CollectionCard(
     val cardWidth = if (accessibility) (LocalConfiguration.current.screenWidthDp.dp - 32.dp).coerceAtLeast(1.dp)
         else SubjectWorkCardMetrics.width
     val tileHeight = cardWidth * (140f / 150f)
-    val palette = remember(collection.hue, collection.colorHex, collection.name, tokens.theme) {
-        collectionDraftPalette(collection.name, collection.hue, collection.colorHex, tokens.theme)
-    }
     Column(
         modifier
             .width(cardWidth)
@@ -85,36 +68,16 @@ fun CollectionCard(
             },
         verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        val shape = RoundedCornerShape(18.dp)
-        if (collection.workIds.isEmpty()) {
-            // iOS CollectionCard.singleTile: the collection's own hue, stack glyph at white 0.6.
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(tileHeight)
-                    .clip(shape)
-                    .background(palette.cardWash),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Outlined.CollectionsBookmark,
-                    contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.6f),
-                    modifier = Modifier.size(38.dp)
-                )
-            }
-        } else {
-            val displayHue = collection.hue ?: HomeFacts.coverHue(collection.name.trim().ifEmpty { "Collection" })
-            CoverStack(
-                kind = CoverStackKind.Collection,
-                name = collection.name,
-                hue = displayHue,
-                pickedHex = collection.colorHex,
-                backs = previewWorks.take(CoverStackLayout.maxBacks),
-                width = cardWidth,
-                height = tileHeight
-            )
-        }
+        CoverStack(
+            kind = CoverStackKind.Collection,
+            name = collection.name,
+            hue = collection.hue,
+            pickedHex = collection.colorHex,
+            backs = previewWorks.take(CoverStackLayout.maxBacks),
+            width = cardWidth,
+            height = tileHeight,
+            identity = collection.id
+        )
         Text(
             collection.name,
             color = tokens.primaryInk,
@@ -195,59 +158,16 @@ private fun MiniatureWorkCover(
     modifier: Modifier = Modifier,
     height: Dp = 54.dp
 ) {
-    val tokens = LocalKudosTokens.current
-    val coverArt = rememberWorkEmbeddedCoverArt(work)
-    val palette = remember(work.title, tokens.theme) {
-        SubjectPalette.fromHue(coverHue(work.workFandoms.firstOrNull() ?: work.title).toDouble() / 360.0, tokens.theme)
-    }
-    Box(
-        modifier
-            .height(height)
-            .clip(RoundedCornerShape(7.dp))
-            .background(palette.cardWash)
-    ) {
-        if (coverArt != null) {
-            Image(
-                bitmap = coverArt,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            0f to Color.Black.copy(alpha = 0.32f),
-                            1f to Color.Black.copy(alpha = 0.68f)
-                        )
-                    )
-            )
-        }
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(6.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
-        ) {
-            Box(
-                Modifier
-                    .size(width = 13.dp, height = 2.dp)
-                    .background(
-                        if (coverArt != null) Color.White.copy(alpha = 0.85f) else palette.accent,
-                        RoundedCornerShape(50)
-                    )
-            )
-            Text(
-                work.title,
-                color = if (coverArt != null) Color.White else tokens.primaryInk,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
+    val epub = rememberCoverEpub(work)
+    val recipe = remember(work) { work.generatedCoverRecipe() }
+    GeneratedCoverView(
+        recipe = recipe,
+        width = 61.dp,
+        height = height,
+        epub = epub,
+        showsWords = false,
+        modifier = modifier
+    )
 }
 
 @Composable

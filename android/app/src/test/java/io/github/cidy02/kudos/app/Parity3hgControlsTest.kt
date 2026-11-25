@@ -105,11 +105,15 @@ class Parity3hgControlsTest {
         }
         show { QueuePageScreen(queues, queue.id, { 0L }, workRepository = works,
             onOpenWork = {}, onOpenReader = {}, onManageQueue = {}) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Sodium").fetchSemanticsNodes().isNotEmpty() }
+        // Compact queue cards use SubjectWorkCoverCard -> GeneratedCoverView (iOS ReadingQueueBrowser / GeneratedCoverView
+        // accessibilityElement(children: .ignore)), exposing "$title, $author".
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithContentDescription("Sodium, A", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
         compose.waitForIdle()
         // The clickable parents include the whole covers, rather than just their title text.
         val cards = listOf("Sodium", "Winter", "Frozen").map { title ->
-            compose.onNode(hasClickAction() and hasAnyDescendant(hasText(title)), useUnmergedTree = true)
+            compose.onNode(hasClickAction() and hasAnyDescendant(hasContentDescription("$title, A")), useUnmergedTree = true)
                 .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         }
         val (first, second, last) = cards
@@ -120,10 +124,10 @@ class Parity3hgControlsTest {
         assertTrue(last.top > first.top)
         assertEquals(first.left, last.left, 1f)
         assertEquals(first.width, last.width, 1f)
-        compose.onNode(hasClickAction() and hasAnyDescendant(hasText("Sodium")), useUnmergedTree = true)
+        compose.onNode(hasClickAction() and hasAnyDescendant(hasContentDescription("Sodium, A")), useUnmergedTree = true)
             .performTouchInput { swipeLeft() }
         compose.onNodeWithText("Remove").assertIsDisplayed()
-        compose.onNodeWithText("Winter").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Winter, A", useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test fun tagManagerDialogsUseTheirQueuePaletteInEveryTheme() {

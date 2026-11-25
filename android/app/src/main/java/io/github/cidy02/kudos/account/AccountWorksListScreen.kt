@@ -3,6 +3,8 @@ package io.github.cidy02.kudos.account
 import io.github.cidy02.kudos.ui.subject.SubjectSkeletonList
 import androidx.compose.foundation.combinedClickable
 
+import io.github.cidy02.kudos.ui.components.GeneratedCoverRecipe
+import io.github.cidy02.kudos.ui.subject.SubjectRemoteCoverCard
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
 import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.ui.components.rememberStoredChoice
@@ -1654,8 +1656,19 @@ private fun CompactWorkCovers(
                     io.github.cidy02.kudos.ui.components.RemoteWorkActionFrame(work.remote, environment, onOpenWork) {
                         matched, hidden, click, longClick ->
                         Box(Modifier.combinedClickable(onClick = click, onLongClick = longClick)) {
-                            SubjectWorkCoverCard(work = matched ?: work.remote.coverFace(), obscured = hidden,
-                                downloadFraction = null, progress = matched?.readingProgressFraction())
+                            if (matched != null) {
+                                SubjectWorkCoverCard(
+                                    work = matched,
+                                    obscured = hidden,
+                                    downloadFraction = null,
+                                    progress = matched.readingProgressFraction()
+                                )
+                            } else {
+                                SubjectRemoteCoverCard(
+                                    summary = work.remote,
+                                    obscured = hidden
+                                )
+                            }
                         }
                     }
                 } else Box(
@@ -1664,12 +1677,19 @@ private fun CompactWorkCovers(
                     }
                 ) {
                     // The saved copy's own cover, with its place in it; else one drawn from AO3's blurb.
-                    SubjectWorkCoverCard(
-                        work = local ?: work.remote.coverFace(),
-                        obscured = obscured,
-                        downloadFraction = null,
-                        progress = local?.readingProgressFraction()
-                    )
+                    if (local != null) {
+                        SubjectWorkCoverCard(
+                            work = local,
+                            obscured = obscured,
+                            downloadFraction = null,
+                            progress = local.readingProgressFraction()
+                        )
+                    } else {
+                        SubjectRemoteCoverCard(
+                            summary = work.remote,
+                            obscured = obscured
+                        )
+                    }
                 }
                 footer?.invoke(work)
             }
@@ -1686,9 +1706,17 @@ internal fun AO3WorkSummary.coverFace() = SavedWork(
     hasEpub = false,
     rating = rating,
     isComplete = isComplete == true,
+    wordCount = wordCount ?: 0,
+    chapters = chapters,
+    seriesPosition = seriesPosition ?: 0,
+    seriesUrl = seriesUrl.orEmpty(),
+    ao3SeriesID = seriesUrl?.let(GeneratedCoverRecipe::parseAo3SeriesId)?.toInt(),
+    ao3WorkID = id.takeIf { it in Int.MIN_VALUE..Int.MAX_VALUE }?.toInt(),
     workFandoms = fandoms.filter { it.isNotBlank() },
     workCategories = categories,
-    workWarnings = warnings
+    workWarnings = warnings,
+    workFreeforms = freeforms,
+    workTagsFetched = true
 )
 
 /**

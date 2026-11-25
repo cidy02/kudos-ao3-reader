@@ -39,7 +39,10 @@ data class LibrarySection(
 data class LibraryQueuePreview(
     val id: String,
     val name: String,
-    val workCount: Int
+    val workCount: Int,
+    val hue: Double? = null,
+    val colorHex: String? = null,
+    val previewWorks: List<SavedWork> = emptyList()
 )
 
 data class LibraryUiState(
