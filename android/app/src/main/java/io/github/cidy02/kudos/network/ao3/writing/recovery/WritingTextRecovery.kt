@@ -188,6 +188,11 @@ class WritingTextRecovery(
         private fun registeredUsername(keyDigest: String): String? =
             usernameByKeyDigest[keyDigest]
 
+        internal fun clearKeyRegistryForTests() {
+            accountDigestByKeyDigest.clear()
+            usernameByKeyDigest.clear()
+        }
+
         fun digest(text: String): String = MessageDigest.getInstance("SHA-256")
             .digest(text.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it.toInt() and 0xff) }
 

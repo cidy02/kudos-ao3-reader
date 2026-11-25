@@ -99,17 +99,22 @@ object WritingTabEvents {
         data class AuthChanged(
             val isSignedIn: Boolean,
             val username: String?,
-            val authenticationScope: String?
+            val authenticationScope: String?,
+            val generation: Int? = null
         ) : Payload
 
         data class CountsChanged(val authenticationScope: String) : Payload
 
         data class DashboardLoaded(
             val header: AO3AuthorHeader,
-            val route: AO3AuthorRoute
+            val route: AO3AuthorRoute,
+            val generation: Int? = null
         ) : Payload
 
-        data class DraftSaved(val username: String?) : Payload
+        data class DraftSaved(
+            val username: String?,
+            val generation: Int? = null
+        ) : Payload
     }
 
     private val listeners = CopyOnWriteArrayList<(Payload) -> Unit>()
@@ -119,20 +124,29 @@ object WritingTabEvents {
         return { listeners -= listener }
     }
 
-    fun notifyAuthChanged(isSignedIn: Boolean, username: String?, authenticationScope: String?) {
-        dispatch(Payload.AuthChanged(isSignedIn, username, authenticationScope))
+    fun notifyAuthChanged(
+        isSignedIn: Boolean,
+        username: String?,
+        authenticationScope: String?,
+        generation: Int? = null
+    ) {
+        dispatch(Payload.AuthChanged(isSignedIn, username, authenticationScope, generation))
     }
 
     fun notifyCountsChanged(authenticationScope: String) {
         dispatch(Payload.CountsChanged(authenticationScope))
     }
 
-    fun notifyDashboardLoaded(header: AO3AuthorHeader, route: AO3AuthorRoute) {
-        dispatch(Payload.DashboardLoaded(header, route))
+    fun notifyDashboardLoaded(
+        header: AO3AuthorHeader,
+        route: AO3AuthorRoute,
+        generation: Int? = null
+    ) {
+        dispatch(Payload.DashboardLoaded(header, route, generation))
     }
 
-    fun notifyDraftSaved(username: String? = null) {
-        dispatch(Payload.DraftSaved(username))
+    fun notifyDraftSaved(username: String? = null, generation: Int? = null) {
+        dispatch(Payload.DraftSaved(username, generation))
     }
 
     private fun dispatch(payload: Payload) {
@@ -151,71 +165,41 @@ class WritingTabController(
     private val recoveryStore: WritingTextRecovery? = null,
     private val countsCache: AO3AccountListCountsCache? = null,
     private val cachedHeaderForUser: (String) -> AO3AuthorHeader? = { null },
-    initialSelection: String = Routes.Home,
     subscribeEvents: Boolean = true
 ) {
+    private data class EvaluationTarget(
+        val epoch: Long,
+        val username: String?,
+        val generation: Int?,
+        val activeScope: String?,
+        val queryScope: String?
+    )
+
+    private data class HeaderWritingCounts(
+        val workCount: Int?,
+        val seriesCount: Int?,
+        val draftCount: Int?
+    )
+
     private val lock = Any()
     private val mutableShowsWritingTab = MutableStateFlow(false)
     val showsWritingTabFlow: StateFlow<Boolean> = mutableShowsWritingTab.asStateFlow()
     val showsWritingTab: Boolean get() = mutableShowsWritingTab.value
 
-    private val mutableSelection = MutableStateFlow(initialSelection)
-    val selectionFlow: StateFlow<String> = mutableSelection.asStateFlow()
-    var selection: String
-        get() = mutableSelection.value
-        set(value) {
-            synchronized(lock) {
-                mutableSelection.value = value
-                if (value != Routes.Home && value != Routes.Writing) {
-                    restoredWritingSelection = false
-                }
-            }
-        }
-
-    private val mutableIsPresentingAccount = MutableStateFlow(false)
-    val isPresentingAccountFlow: StateFlow<Boolean> = mutableIsPresentingAccount.asStateFlow()
-    var isPresentingAccount: Boolean
-        get() = mutableIsPresentingAccount.value
-        set(value) {
-            synchronized(lock) {
-                mutableIsPresentingAccount.value = value
-            }
-        }
-
-    private val mutablePendingWritingRoute = MutableStateFlow<WritingRoute?>(null)
-    val pendingWritingRouteFlow: StateFlow<WritingRoute?> = mutablePendingWritingRoute.asStateFlow()
-    var pendingWritingRoute: WritingRoute?
-        get() = mutablePendingWritingRoute.value
-        set(value) {
-            synchronized(lock) {
-                mutablePendingWritingRoute.value = value
-            }
-        }
-
-    private val mutablePendingAccountRoute = MutableStateFlow<AccountSheetRoute?>(null)
-    var pendingAccountRoute: AccountSheetRoute?
-        get() = mutablePendingAccountRoute.value
-        set(value) {
-            synchronized(lock) {
-                mutablePendingAccountRoute.value = value
-            }
-        }
-
-    private val mutablePendingLibraryAO3Route = MutableStateFlow<LibraryAO3Route?>(null)
-    var pendingLibraryAO3Route: LibraryAO3Route?
-        get() = mutablePendingLibraryAO3Route.value
-        set(value) {
-            synchronized(lock) {
-                mutablePendingLibraryAO3Route.value = value
-            }
-        }
-
     private val mutableReturnToWritingRequest = MutableStateFlow(0)
     val returnToWritingRequestFlow: StateFlow<Int> = mutableReturnToWritingRequest.asStateFlow()
 
+    private var currentRoute: String = Routes.Home
+    private var isPresentingAccount = false
+    private var pendingWritingRouteValue: WritingRoute? = null
+    val pendingWritingRoute: WritingRoute?
+        get() = synchronized(lock) { pendingWritingRouteValue }
+
     private var activeUsername: String? = null
-    private var evaluatedAccount: String? = null
+    private var activeGeneration: Int? = null
     private var activeAuthenticationScope: String? = null
+    private var authEpoch: Long = 0L
+    private var evaluatedAccount: String? = null
     private var restoredWritingSelection = false
     private var lastObservedAuth: Pair<AO3AuthState, Int>? = null
     private var unregisterEvents: (() -> Unit)? = null
@@ -246,51 +230,44 @@ class WritingTabController(
 
     fun onShellStateChanged(currentRoute: String?, isPresentingAccount: Boolean) {
         synchronized(lock) {
-            mutableIsPresentingAccount.value = isPresentingAccount
-            if (Routes.isShellRoot(currentRoute, showsWriting = showsWritingTab)) {
-                mutableSelection.value = currentRoute ?: Routes.Home
+            this.isPresentingAccount = isPresentingAccount
+            if (currentRoute != null) {
+                this.currentRoute = currentRoute
                 if (currentRoute != Routes.Home && currentRoute != Routes.Writing) {
                     restoredWritingSelection = false
+                    pendingWritingRouteValue = null
+                    mutableReturnToWritingRequest.value = 0
                 }
             }
         }
     }
 
     fun onAuthStateChanged(authState: AO3AuthState, generation: Int) {
-        synchronized(lock) {
+        val target = synchronized(lock) {
             val key = authState to generation
             if (lastObservedAuth == key) return
             lastObservedAuth = key
-        }
-        when (authState) {
-            is AO3AuthState.SignedIn -> handlePayload(
-                WritingTabEvents.Payload.AuthChanged(
+            when (authState) {
+                is AO3AuthState.SignedIn -> beginAuthLocked(
                     isSignedIn = true,
                     username = authState.username,
-                    authenticationScope = AO3AccountListCountsCache.scope(authState.username, generation)
+                    authenticationScope = AO3AccountListCountsCache.scope(authState.username, generation),
+                    generation = generation
                 )
-            )
-            is AO3AuthState.SignedOut,
-            is AO3AuthState.Expired,
-            is AO3AuthState.Error -> handlePayload(
-                WritingTabEvents.Payload.AuthChanged(
+                is AO3AuthState.SignedOut,
+                is AO3AuthState.Expired,
+                is AO3AuthState.Error -> beginAuthLocked(
                     isSignedIn = false,
                     username = null,
-                    authenticationScope = null
+                    authenticationScope = null,
+                    generation = null
                 )
-            )
-            AO3AuthState.Restoring,
-            AO3AuthState.SigningIn -> Unit
+                AO3AuthState.Restoring,
+                AO3AuthState.SigningIn -> null
+            }
         }
-    }
-
-    fun restoreSelection(rawRoute: String?) {
-        synchronized(lock) {
-            val wantsWriting = rawRoute == Routes.Writing
-            val restored = Routes.restoredSelection(rawRoute, showsWriting = showsWritingTab)
-            mutableSelection.value = restored.tabRoute
-            mutableIsPresentingAccount.value = restored.presentsAccount
-            restoredWritingSelection = wantsWriting && !showsWritingTab
+        if (target != null) {
+            finishSignedInAuthEvaluation(target)
         }
     }
 
@@ -298,46 +275,25 @@ class WritingTabController(
         synchronized(lock) {
             if (!showsWritingTab) {
                 restoredWritingSelection = true
-                mutableSelection.value = Routes.Home
+                currentRoute = Routes.Home
             }
         }
     }
 
     fun openPendingWritingRoute(route: WritingRoute) {
         synchronized(lock) {
-            mutablePendingWritingRoute.value = route
+            pendingWritingRouteValue = route
+            currentRoute = Routes.Home
             if (showsWritingTab) {
-                mutableSelection.value = Routes.Writing
                 mutableReturnToWritingRequest.value += 1
-            } else {
-                mutableSelection.value = Routes.Home
-            }
-        }
-    }
-
-    fun openLegacyAccountRoute(route: LegacyAccountRoute) {
-        synchronized(lock) {
-            when (val dest = route.destination) {
-                is LegacyAccountDestination.Account -> {
-                    mutablePendingAccountRoute.value = dest.route
-                    mutableIsPresentingAccount.value = true
-                }
-                is LegacyAccountDestination.Writing -> {
-                    mutablePendingWritingRoute.value = dest.route
-                    mutableSelection.value = if (showsWritingTab) Routes.Writing else Routes.Home
-                }
-                is LegacyAccountDestination.Library -> {
-                    mutablePendingLibraryAO3Route.value = dest.route
-                    mutableSelection.value = Routes.Library
-                }
             }
         }
     }
 
     fun consumePendingWritingRoute(): WritingRoute? {
         synchronized(lock) {
-            val route = mutablePendingWritingRoute.value
-            mutablePendingWritingRoute.value = null
+            val route = pendingWritingRouteValue
+            pendingWritingRouteValue = null
             return route
         }
     }
@@ -356,40 +312,26 @@ class WritingTabController(
         draftCount: Int? = null,
         hasLocalDrafts: Boolean? = null
     ): Boolean {
+        val (effectiveUsername, capturedEpoch) = synchronized(lock) {
+            (username ?: activeUsername) to authEpoch
+        }
+        val resolvedHasLocalDrafts = if (isSignedIn) {
+            hasLocalDrafts ?: (recoveryStore?.hasLocalDrafts(effectiveUsername) == true)
+        } else {
+            false
+        }
         synchronized(lock) {
-            val effectiveUsername = username ?: activeUsername
-            val normalizedUser = normalizeWritingTabAccount(effectiveUsername)
-            val accountSwitched = isSignedIn &&
-                evaluatedAccount != null &&
-                normalizedUser != evaluatedAccount
-            evaluatedAccount = if (isSignedIn) normalizedUser else null
-            if (accountSwitched) {
-                restoredWritingSelection = false
-                mutablePendingWritingRoute.value = null
-                mutableReturnToWritingRequest.value = 0
+            if (hasLocalDrafts == null && isSignedIn && authEpoch != capturedEpoch) {
+                return showsWritingTab
             }
-            val resolvedHasLocalDrafts = if (isSignedIn) {
-                hasLocalDrafts ?: (recoveryStore?.hasLocalDrafts(effectiveUsername) == true)
-            } else {
-                false
-            }
-            if (isSignedIn) {
-                if (resolvedHasLocalDrafts || (workCount ?: 0) > 0 || (seriesCount ?: 0) > 0 || (draftCount ?: 0) > 0) {
-                    writingStateStore.setLastKnownWrites(true, effectiveUsername)
-                } else if (workCount == 0 && seriesCount == 0 && draftCount == 0) {
-                    writingStateStore.setLastKnownWrites(false, effectiveUsername)
-                }
-            }
-            val rule = WritingTabRule(
+            return evaluateWritingTabLocked(
                 isSignedIn = isSignedIn,
+                username = effectiveUsername,
                 workCount = workCount,
                 seriesCount = seriesCount,
                 draftCount = draftCount,
-                hasLocalDrafts = resolvedHasLocalDrafts,
-                lastKnownWrites = writingStateStore.lastKnownWrites(effectiveUsername),
-                alreadyShownThisRun = if (accountSwitched) false else showsWritingTab
+                hasLocalDrafts = resolvedHasLocalDrafts
             )
-            return applyWritingTabRuleLocked(rule)
         }
     }
 
@@ -409,35 +351,37 @@ class WritingTabController(
         if (isSignedIn && !route.username.equals(effectiveUsername, ignoreCase = true)) {
             return showsWritingTab
         }
-        // A header with no count but a recent work or series is still proof of writing;
-        // an empty list without a count proves nothing (unknown, never zero).
-        val rawWorkCount = AuthorOverview.listCount(header, route, AuthorSeeAll.Works)
-            ?: header.recentWorks?.takeIf { it.isNotEmpty() }?.size
-        val rawSeriesCount = AuthorOverview.listCount(header, route, AuthorSeeAll.Series)
-            ?: header.recentSeries?.takeIf { it.isNotEmpty() }?.size
-        // A pseud's zero counts never disprove writing across the whole account.
-        val workCount = if (route.pseud == null) rawWorkCount else rawWorkCount?.takeIf { it > 0 }
-        val seriesCount = if (route.pseud == null) rawSeriesCount else rawSeriesCount?.takeIf { it > 0 }
-        val draftCount = header.draftsListCount()
+        val counts = headerWritingCounts(header, route)
         return evaluateWritingTab(
             isSignedIn = isSignedIn,
             username = effectiveUsername,
-            workCount = workCount,
-            seriesCount = seriesCount,
-            draftCount = draftCount,
-            hasLocalDrafts = recoveryStore?.hasLocalDrafts(effectiveUsername)
+            workCount = counts.workCount,
+            seriesCount = counts.seriesCount,
+            draftCount = counts.draftCount,
+            hasLocalDrafts = null
         )
     }
 
-    fun noteDraftSaved(username: String? = null) {
-        val effectiveUsername = synchronized(lock) { username ?: activeUsername }
-        writingStateStore.setLastKnownWrites(true, effectiveUsername)
-        evaluateWritingTab(
-            isSignedIn = true,
-            username = effectiveUsername,
-            draftCount = 1,
-            hasLocalDrafts = true
-        )
+    fun noteDraftSaved(username: String? = null, generation: Int? = null) {
+        synchronized(lock) {
+            val currentActive = activeUsername ?: return
+            if (username != null &&
+                normalizeWritingTabAccount(username) != normalizeWritingTabAccount(currentActive)
+            ) {
+                return
+            }
+            if (generation != null && activeGeneration != null && generation != activeGeneration) {
+                return
+            }
+            evaluateWritingTabLocked(
+                isSignedIn = true,
+                username = currentActive,
+                workCount = null,
+                seriesCount = null,
+                draftCount = 1,
+                hasLocalDrafts = true
+            )
+        }
     }
 
     /**
@@ -450,26 +394,146 @@ class WritingTabController(
         }
     }
 
+    private fun beginAuthLocked(
+        isSignedIn: Boolean,
+        username: String?,
+        authenticationScope: String?,
+        generation: Int?
+    ): EvaluationTarget? {
+        authEpoch += 1
+        if (!isSignedIn) {
+            activeUsername = null
+            activeGeneration = null
+            activeAuthenticationScope = null
+            evaluateWritingTabLocked(
+                isSignedIn = false,
+                username = null,
+                workCount = null,
+                seriesCount = null,
+                draftCount = null,
+                hasLocalDrafts = false
+            )
+            return null
+        }
+        activeUsername = username
+        activeGeneration = generation
+        activeAuthenticationScope = authenticationScope
+        return EvaluationTarget(
+            epoch = authEpoch,
+            username = username,
+            generation = generation,
+            activeScope = authenticationScope,
+            queryScope = authenticationScope
+        )
+    }
+
+    private fun isCurrentLocked(target: EvaluationTarget): Boolean =
+        authEpoch == target.epoch &&
+            activeGeneration == target.generation &&
+            activeAuthenticationScope == target.activeScope &&
+            normalizeWritingTabAccount(activeUsername) == normalizeWritingTabAccount(target.username)
+
+    private fun finishSignedInAuthEvaluation(target: EvaluationTarget) {
+        val scope = target.queryScope
+        val username = target.username
+        val cachedWorkCount = scope?.let { countsCache?.get(AccountListType.MyWorks, it)?.knownCount }
+        val cachedSeriesCount = scope?.let { countsCache?.get(AO3AccountListCountsCache.SERIES, it)?.knownCount }
+        val cachedDraftCount = scope?.let { countsCache?.get(AO3AccountListCountsCache.DRAFTS, it)?.knownCount }
+        val cachedHeader = username?.let(cachedHeaderForUser)
+        val headerRoute = username?.let { AO3AuthorRoute(it) }
+        val headerCounts = if (cachedHeader != null && headerRoute != null) {
+            headerWritingCounts(cachedHeader, headerRoute)
+        } else {
+            null
+        }
+        val workCount = cachedWorkCount ?: headerCounts?.workCount
+        val seriesCount = cachedSeriesCount ?: headerCounts?.seriesCount
+        val draftCount = cachedDraftCount ?: headerCounts?.draftCount
+        val hasLocalDrafts = recoveryStore?.hasLocalDrafts(username) == true
+        synchronized(lock) {
+            if (!isCurrentLocked(target)) return
+            evaluateWritingTabLocked(
+                isSignedIn = true,
+                username = username,
+                workCount = workCount,
+                seriesCount = seriesCount,
+                draftCount = draftCount,
+                hasLocalDrafts = hasLocalDrafts
+            )
+        }
+    }
+
+    private fun headerWritingCounts(header: AO3AuthorHeader, route: AO3AuthorRoute): HeaderWritingCounts {
+        // A header with no count but a recent work or series is still proof of writing;
+        // an empty list without a count proves nothing (unknown, never zero).
+        val rawWorkCount = AuthorOverview.listCount(header, route, AuthorSeeAll.Works)
+            ?: header.recentWorks?.takeIf { it.isNotEmpty() }?.size
+        val rawSeriesCount = AuthorOverview.listCount(header, route, AuthorSeeAll.Series)
+            ?: header.recentSeries?.takeIf { it.isNotEmpty() }?.size
+        // A pseud's zero counts never disprove writing across the whole account.
+        val workCount = if (route.pseud == null) rawWorkCount else rawWorkCount?.takeIf { it > 0 }
+        val seriesCount = if (route.pseud == null) rawSeriesCount else rawSeriesCount?.takeIf { it > 0 }
+        val rawDraftCount = header.draftsListCount()
+        val draftCount = if (route.pseud == null) rawDraftCount else rawDraftCount?.takeIf { it > 0 }
+        return HeaderWritingCounts(workCount = workCount, seriesCount = seriesCount, draftCount = draftCount)
+    }
+
+    private fun evaluateWritingTabLocked(
+        isSignedIn: Boolean,
+        username: String?,
+        workCount: Int?,
+        seriesCount: Int?,
+        draftCount: Int?,
+        hasLocalDrafts: Boolean
+    ): Boolean {
+        val normalizedUser = normalizeWritingTabAccount(username)
+        val accountSwitched = isSignedIn &&
+            evaluatedAccount != null &&
+            normalizedUser != evaluatedAccount
+        evaluatedAccount = if (isSignedIn) normalizedUser else null
+        if (accountSwitched) {
+            restoredWritingSelection = false
+            pendingWritingRouteValue = null
+            mutableReturnToWritingRequest.value = 0
+        }
+        if (isSignedIn) {
+            if (hasLocalDrafts || (workCount ?: 0) > 0 || (seriesCount ?: 0) > 0 || (draftCount ?: 0) > 0) {
+                writingStateStore.setLastKnownWrites(true, username)
+            } else if (workCount == 0 && seriesCount == 0 && draftCount == 0) {
+                writingStateStore.setLastKnownWrites(false, username)
+            }
+        }
+        val rule = WritingTabRule(
+            isSignedIn = isSignedIn,
+            workCount = workCount,
+            seriesCount = seriesCount,
+            draftCount = draftCount,
+            hasLocalDrafts = hasLocalDrafts,
+            lastKnownWrites = writingStateStore.lastKnownWrites(username),
+            alreadyShownThisRun = if (accountSwitched) false else showsWritingTab
+        )
+        return applyWritingTabRuleLocked(rule)
+    }
+
     private fun applyWritingTabRuleLocked(rule: WritingTabRule): Boolean {
         val next = rule.showsWritingTab
         if (next) {
             mutableShowsWritingTab.value = true
-            if ((restoredWritingSelection || mutablePendingWritingRoute.value != null) &&
-                mutableSelection.value == Routes.Home &&
-                !mutableIsPresentingAccount.value
+            if ((restoredWritingSelection || pendingWritingRouteValue != null) &&
+                currentRoute == Routes.Home &&
+                !isPresentingAccount
             ) {
-                mutableSelection.value = Routes.Writing
                 mutableReturnToWritingRequest.value += 1
+            } else {
+                pendingWritingRouteValue = null
             }
             restoredWritingSelection = false
         } else {
-            // Move selection off Writing before hiding the tab so no frame holds a hidden tab.
-            if (mutableSelection.value == Routes.Writing) {
-                mutableSelection.value = Routes.Home
-            }
             mutableShowsWritingTab.value = false
             if (!rule.isSignedIn) {
                 restoredWritingSelection = false
+                pendingWritingRouteValue = null
+                mutableReturnToWritingRequest.value = 0
             }
         }
         return next
@@ -478,83 +542,82 @@ class WritingTabController(
     private fun handlePayload(payload: WritingTabEvents.Payload) {
         when (payload) {
             is WritingTabEvents.Payload.AuthChanged -> {
-                synchronized(lock) {
-                    activeUsername = if (payload.isSignedIn) payload.username else null
-                    activeAuthenticationScope = if (payload.isSignedIn) payload.authenticationScope else null
+                val target = synchronized(lock) {
+                    lastObservedAuth = null
+                    beginAuthLocked(
+                        isSignedIn = payload.isSignedIn,
+                        username = payload.username,
+                        authenticationScope = payload.authenticationScope,
+                        generation = payload.generation
+                    )
                 }
-                if (!payload.isSignedIn) {
-                    evaluateWritingTab(isSignedIn = false)
-                    return
+                if (target != null) {
+                    finishSignedInAuthEvaluation(target)
                 }
-                val scope = payload.authenticationScope
-                val username = payload.username
-                val cachedWorkCount = scope?.let { countsCache?.get(AccountListType.MyWorks, it)?.knownCount }
-                val cachedSeriesCount = scope?.let { countsCache?.get(AO3AccountListCountsCache.SERIES, it)?.knownCount }
-                val cachedDraftCount = scope?.let { countsCache?.get(AO3AccountListCountsCache.DRAFTS, it)?.knownCount }
-                val cachedHeader = username?.let(cachedHeaderForUser)
-                val headerRoute = username?.let { AO3AuthorRoute(it) }
-                val workCount = cachedWorkCount
-                    ?: cachedHeader?.let { header ->
-                        headerRoute?.let { route ->
-                            AuthorOverview.listCount(header, route, AuthorSeeAll.Works)
-                                ?: header.recentWorks?.takeIf { it.isNotEmpty() }?.size
-                        }
-                    }
-                val seriesCount = cachedSeriesCount
-                    ?: cachedHeader?.let { header ->
-                        headerRoute?.let { route ->
-                            AuthorOverview.listCount(header, route, AuthorSeeAll.Series)
-                                ?: header.recentSeries?.takeIf { it.isNotEmpty() }?.size
-                        }
-                    }
-                val draftCount = cachedDraftCount ?: cachedHeader?.draftsListCount()
-                evaluateWritingTab(
-                    isSignedIn = true,
-                    username = username,
-                    workCount = workCount,
-                    seriesCount = seriesCount,
-                    draftCount = draftCount,
-                    hasLocalDrafts = recoveryStore?.hasLocalDrafts(username)
-                )
             }
             is WritingTabEvents.Payload.CountsChanged -> {
-                val (username, scope) = synchronized(lock) {
+                val target = synchronized(lock) {
                     val user = activeUsername ?: return
-                    val activeScope = activeAuthenticationScope ?: payload.authenticationScope
-                    if (activeScope != payload.authenticationScope) return
-                    user to activeScope
+                    val queryScope = activeAuthenticationScope ?: payload.authenticationScope
+                    if (!queryScope.equals(payload.authenticationScope, ignoreCase = true)) return
+                    EvaluationTarget(
+                        epoch = authEpoch,
+                        username = user,
+                        generation = activeGeneration,
+                        activeScope = activeAuthenticationScope,
+                        queryScope = queryScope
+                    )
                 }
+                val scope = target.queryScope ?: return
                 val workCount = countsCache?.get(AccountListType.MyWorks, scope)?.knownCount
                 val seriesCount = countsCache?.get(AO3AccountListCountsCache.SERIES, scope)?.knownCount
                 val draftCount = countsCache?.get(AO3AccountListCountsCache.DRAFTS, scope)?.knownCount
-                evaluateWritingTab(
-                    isSignedIn = true,
-                    username = username,
-                    workCount = workCount,
-                    seriesCount = seriesCount,
-                    draftCount = draftCount,
-                    hasLocalDrafts = recoveryStore?.hasLocalDrafts(username)
-                )
+                val hasLocalDrafts = recoveryStore?.hasLocalDrafts(target.username) == true
+                synchronized(lock) {
+                    if (!isCurrentLocked(target)) return
+                    evaluateWritingTabLocked(
+                        isSignedIn = true,
+                        username = target.username,
+                        workCount = workCount,
+                        seriesCount = seriesCount,
+                        draftCount = draftCount,
+                        hasLocalDrafts = hasLocalDrafts
+                    )
+                }
             }
             is WritingTabEvents.Payload.DashboardLoaded -> {
-                val username = synchronized(lock) { activeUsername } ?: return
-                if (!payload.route.username.equals(username, ignoreCase = true)) return
-                evaluateWritingTab(
-                    header = payload.header,
-                    route = payload.route,
-                    username = username,
-                    isSignedIn = true
-                )
+                val target = synchronized(lock) {
+                    val user = activeUsername ?: return
+                    if (!payload.route.username.equals(user, ignoreCase = true)) return
+                    if (payload.generation != null && activeGeneration != null &&
+                        payload.generation != activeGeneration
+                    ) {
+                        return
+                    }
+                    EvaluationTarget(
+                        epoch = authEpoch,
+                        username = user,
+                        generation = activeGeneration,
+                        activeScope = activeAuthenticationScope,
+                        queryScope = activeAuthenticationScope
+                    )
+                }
+                val counts = headerWritingCounts(payload.header, payload.route)
+                val hasLocalDrafts = recoveryStore?.hasLocalDrafts(target.username) == true
+                synchronized(lock) {
+                    if (!isCurrentLocked(target)) return
+                    evaluateWritingTabLocked(
+                        isSignedIn = true,
+                        username = target.username,
+                        workCount = counts.workCount,
+                        seriesCount = counts.seriesCount,
+                        draftCount = counts.draftCount,
+                        hasLocalDrafts = hasLocalDrafts
+                    )
+                }
             }
             is WritingTabEvents.Payload.DraftSaved -> {
-                val currentActive = synchronized(lock) { activeUsername }
-                if (payload.username != null && currentActive != null &&
-                    normalizeWritingTabAccount(payload.username) != normalizeWritingTabAccount(currentActive)
-                ) {
-                    return
-                }
-                val targetUser = payload.username ?: currentActive ?: return
-                noteDraftSaved(targetUser)
+                noteDraftSaved(payload.username, payload.generation)
             }
         }
     }

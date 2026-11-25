@@ -174,11 +174,6 @@ fun MainScaffold(
     val currentRoute = backStackEntry?.destination?.route
     val showsWritingTab by container.writingTabController.showsWritingTabFlow.collectAsState()
     val authState by container.authRepository.state.collectAsState()
-    val authGeneration by container.authRepository.generation.collectAsState()
-    val returnToWritingRequest by container.writingTabController.returnToWritingRequestFlow.collectAsState()
-    LaunchedEffect(authState, authGeneration) {
-        container.writingTabController.onAuthStateChanged(authState, authGeneration)
-    }
     val shell = Routes.isShellRoot(currentRoute, showsWriting = showsWritingTab)
     val reader = currentRoute == Routes.Reader
     val shellTitle = Routes.shellTitle(currentRoute)
@@ -190,131 +185,30 @@ fun MainScaffold(
     val accountSheetState = androidx.compose.runtime.saveable.rememberSaveable(saver = AccountSheetState.Saver) {
         AccountSheetState()
     }
-    var handledStartRoute by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
-    // Not saveable: process death must plan again from the restored back stack.
-    // The sheet itself is what [AccountSheetState.Saver] keeps.
-    var handledRestoredRoute by androidx.compose.runtime.remember { mutableStateOf(false) }
-
-    fun concreteRoute(entry: androidx.navigation.NavBackStackEntry): String? {
-        val pattern = entry.destination.route ?: return null
-        return when (pattern) {
-            Routes.AccountList -> Routes.routeArg(entry, "listType")?.let(Routes::accountList) ?: pattern
-            Routes.AuthorSeries -> Routes.routeArg(entry, "authorUsername")?.let(Routes::authorSeries) ?: pattern
-            else -> pattern
-        }
-    }
-
-    fun applyRestored(plan: RestoredNavigation) {
-        when (plan) {
-            is RestoredNavigation.AccountSheet -> {
-                var left = plan.popCount
-                while (left > 0 && navController.popBackStack()) left -= 1
-                if (navController.currentDestination?.route != plan.tabRoute) {
-                    navController.navigateShellRoot(plan.tabRoute)
-                }
-                accountSheetState.showAccount(plan.route)
-            }
-            is RestoredNavigation.TabPush -> {
-                navController.navigateShellRoot(plan.tabRoute)
-                navController.navigate(plan.pushRoute)
-            }
-            is RestoredNavigation.Push -> navController.navigate(plan.route)
-            is RestoredNavigation.PendingWriting -> {
-                if (navController.currentDestination?.route != plan.tabRoute) {
-                    navController.navigateShellRoot(plan.tabRoute)
-                }
-                if (plan.writingRoute != null) {
-                    container.writingTabController.openPendingWritingRoute(plan.writingRoute)
-                } else {
-                    container.writingTabController.noteRestoredWritingSelection()
-                }
-            }
-        }
-    }
-
-    // Debug launch extra `kudosDebugRoute nav:<route>` opens through the same legacy migration as restore.
-    LaunchedEffect(startRoute) {
-        if (startRoute != null && handledStartRoute != startRoute) {
-            handledStartRoute = startRoute
-            if (io.github.cidy02.kudos.BuildConfig.DEBUG &&
-                io.github.cidy02.kudos.network.ao3.DemoNetwork.isActive &&
-                (startRoute == Routes.Writing ||
-                    Routes.resolveFormerAccountRoute(startRoute) is LegacyAccountDestination.Writing)
-            ) {
-                container.writingTabController.revealWritingTabForSession()
-            }
-            Routes.legacyLaunchNavigation(
-                startRoute,
-                showsWriting = container.writingTabController.showsWritingTab
-            )?.let(::applyRestored)
-        }
-    }
-    // Not keyed on the current route: each pop would cancel this effect before the
-    // rest of the account run left the main stack.
-    LaunchedEffect(debugShotName, startRoute) {
-        if (debugShotName != null || startRoute != null) return@LaunchedEffect
-        val entries = navController.currentBackStack.first { it.isNotEmpty() }
-        if (handledRestoredRoute) return@LaunchedEffect
-        handledRestoredRoute = true
-        val top = entries.last()
-        val concreteTop = concreteRoute(top)
-        val stack = entries.dropLast(1).map { it.destination.route } + concreteTop
-        Routes.restoredNavigation(
-            stack,
-            concreteTop,
-            showsWriting = container.writingTabController.showsWritingTab
-        )?.let(::applyRestored)
-    }
-    LaunchedEffect(currentRoute, showsWritingTab) {
-        if (currentRoute == Routes.Writing && !showsWritingTab) {
-            if (authState is io.github.cidy02.kudos.auth.AO3AuthState.Restoring) {
-                container.writingTabController.noteRestoredWritingSelection()
-            }
-            navController.navigateShellRoot(Routes.Home)
-        }
-    }
-    LaunchedEffect(returnToWritingRequest, showsWritingTab, currentRoute, accountSheetState.isPresentingAccount) {
-        if (returnToWritingRequest > 0 &&
-            showsWritingTab &&
-            currentRoute == Routes.Home &&
-            !accountSheetState.isPresentingAccount
-        ) {
-            container.writingTabController.consumeReturnToWritingRequest()
-            val pending = container.writingTabController.consumePendingWritingRoute()
-            navController.navigateShellRoot(Routes.Writing)
-            val target = when (pending) {
-                WritingRoute.Works -> Routes.accountList(
-                    NavArgCodecs.encodeAccountListType(io.github.cidy02.kudos.account.AccountListType.MyWorks)
-                )
-                WritingRoute.Drafts -> Routes.WritingDrafts
-                WritingRoute.Series -> container.authRepository.username()?.let { Routes.authorSeries(it) }
-                WritingRoute.CollectionsAndChallenges -> Routes.AO3Collections
-                null -> null
-            }
-            target?.let(navController::navigate)
-        }
-    }
+    var searchReturnTab by remember { mutableStateOf(Routes.Home) }
+    // The destination a pushed page was opened from stays marked in the navigation bar.
+    var lastRoot by remember { mutableStateOf(Routes.Home) }
+    MainScaffoldNavigationEffects(
+        navController = navController,
+        writingTabController = container.writingTabController,
+        accountSheetState = accountSheetState,
+        authState = authState,
+        username = container.authRepository::username,
+        currentRoute = currentRoute,
+        showsWritingTab = showsWritingTab,
+        startRoute = startRoute,
+        debugShotName = debugShotName,
+        isDemoActive = io.github.cidy02.kudos.BuildConfig.DEBUG &&
+            io.github.cidy02.kudos.network.ao3.DemoNetwork.isActive,
+        onUpdateSearchReturnTab = { searchReturnTab = it },
+        onUpdateLastRoot = { lastRoot = it }
+    )
     val onHome = currentRoute == Routes.Home
     val onLibrary = currentRoute == Routes.Library
     val onWriting = currentRoute == Routes.Writing
     val homeSelecting = onHome && homeChrome.hideTabBar
     val librarySelecting = onLibrary && libraryChrome.hideTabBar
     val overlay = remember { ShellOverlayState() }
-    var searchReturnTab by remember { mutableStateOf(Routes.Home) }
-    // The destination a pushed page was opened from stays marked in the navigation bar.
-    var lastRoot by remember { mutableStateOf(Routes.Home) }
-    SideEffect {
-        if (Routes.isTopLevel(currentRoute, showsWriting = showsWritingTab)) {
-            searchReturnTab = currentRoute ?: Routes.Home
-        }
-        if (Routes.isShellRoot(currentRoute, showsWriting = showsWritingTab)) {
-            lastRoot = currentRoute ?: Routes.Home
-        }
-        container.writingTabController.onShellStateChanged(
-            currentRoute = currentRoute,
-            isPresentingAccount = accountSheetState.isPresentingAccount
-        )
-    }
     val pushedSelecting = pushedChrome.mounted && pushedChrome.hideTabBar
     val selectionHidesBar = homeSelecting || librarySelecting || overlay.hidesTabBar || pushedSelecting
     val showTabBar = !Routes.hidesTabBar(currentRoute) && !selectionHidesBar
@@ -441,7 +335,9 @@ fun MainScaffold(
                 CompositionLocalProvider(
                     LocalShellOverlayState provides overlay,
                     LocalPushedShellChrome provides pushedChrome,
-                    LocalSearchExit provides { navController.navigateShellRoot(searchReturnTab) },
+                    LocalSearchExit provides {
+                        navController.navigateShellRoot(resolveSearchExitTab(searchReturnTab, showsWritingTab))
+                    },
                     io.github.cidy02.kudos.works.detail.LocalOpenAuthor provides { byline ->
                         navController.navigate(Routes.authorProfile(byline))
                     },
@@ -1003,12 +899,248 @@ private class ShellScrollBridge {
     var density: Float = 1f
 }
 
-internal fun NavHostController.navigateShellRoot(route: String) {
+@Composable
+internal fun MainScaffoldNavigationEffects(
+    navController: NavHostController,
+    writingTabController: WritingTabController,
+    accountSheetState: AccountSheetState,
+    authState: io.github.cidy02.kudos.auth.AO3AuthState,
+    username: () -> String?,
+    currentRoute: String?,
+    showsWritingTab: Boolean,
+    startRoute: String?,
+    debugShotName: String?,
+    isDemoActive: Boolean,
+    onUpdateSearchReturnTab: (String) -> Unit = {},
+    onUpdateLastRoot: (String) -> Unit = {}
+) {
+    var handledStartRoute by androidx.compose.runtime.saveable.rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
+    // Not saveable: process death must plan again from the restored back stack.
+    // The sheet itself is what [AccountSheetState.Saver] keeps.
+    var handledRestoredRoute by remember { mutableStateOf(false) }
+
+    // Debug launch extra `kudosDebugRoute nav:<route>` opens through the same legacy migration as restore.
+    LaunchedEffect(startRoute) {
+        if (startRoute != null && handledStartRoute != startRoute) {
+            handledStartRoute = startRoute
+            applyStartRouteNavigation(
+                navController = navController,
+                accountSheetState = accountSheetState,
+                writingTabController = writingTabController,
+                startRoute = startRoute,
+                isDemoActive = isDemoActive
+            )
+        }
+    }
+    // Not keyed on the current route: each pop would cancel this effect before the
+    // rest of the account run left the main stack.
+    LaunchedEffect(debugShotName, startRoute) {
+        if (debugShotName != null || startRoute != null) {
+            handledRestoredRoute = true
+            return@LaunchedEffect
+        }
+        val entries = navController.currentBackStack.first { it.isNotEmpty() }
+        if (handledRestoredRoute) return@LaunchedEffect
+        applyRestoredBackStack(
+            navController = navController,
+            entries = entries,
+            accountSheetState = accountSheetState,
+            writingTabController = writingTabController
+        )
+        handledRestoredRoute = true
+    }
+    LaunchedEffect(handledRestoredRoute, currentRoute, showsWritingTab) {
+        evictHiddenWritingIfNeeded(
+            navController = navController,
+            writingTabController = writingTabController,
+            handledRestoredRoute = handledRestoredRoute,
+            currentRoute = currentRoute,
+            showsWritingTab = showsWritingTab,
+            authState = authState
+        )
+    }
+    val returnToWritingRequest by writingTabController.returnToWritingRequestFlow.collectAsState()
+    LaunchedEffect(returnToWritingRequest, showsWritingTab, currentRoute, accountSheetState.isPresentingAccount) {
+        applyReturnToWritingIfPending(
+            navController = navController,
+            writingTabController = writingTabController,
+            returnToWritingRequest = returnToWritingRequest,
+            showsWritingTab = showsWritingTab,
+            currentRoute = currentRoute,
+            isPresentingAccount = accountSheetState.isPresentingAccount,
+            username = username
+        )
+    }
+    val liveRoute = navController.currentDestination?.route ?: currentRoute
+    SideEffect {
+        if (Routes.isTopLevel(liveRoute, showsWriting = showsWritingTab)) {
+            onUpdateSearchReturnTab(liveRoute ?: Routes.Home)
+        }
+        if (Routes.isShellRoot(liveRoute, showsWriting = showsWritingTab)) {
+            onUpdateLastRoot(liveRoute ?: Routes.Home)
+        }
+        writingTabController.onShellStateChanged(
+            currentRoute = liveRoute,
+            isPresentingAccount = accountSheetState.isPresentingAccount
+        )
+    }
+}
+
+internal fun concreteBackStackRoute(entry: androidx.navigation.NavBackStackEntry?): String? {
+    val pattern = entry?.destination?.route ?: return null
+    return when (pattern) {
+        Routes.AccountList -> Routes.routeArg(entry, "listType")?.let(Routes::accountList) ?: pattern
+        Routes.AuthorSeries -> Routes.routeArg(entry, "authorUsername")?.let(Routes::authorSeries) ?: pattern
+        else -> pattern
+    }
+}
+
+internal fun applyRestoredNavigation(
+    navController: NavHostController,
+    accountSheetState: AccountSheetState,
+    writingTabController: WritingTabController,
+    plan: RestoredNavigation
+) {
+    when (plan) {
+        is RestoredNavigation.AccountSheet -> {
+            var left = plan.popCount
+            while (left > 0 && navController.popBackStack()) left -= 1
+            if (navController.currentDestination?.route != plan.tabRoute) {
+                navController.navigateShellRoot(plan.tabRoute)
+            }
+            accountSheetState.showAccount(plan.route)
+        }
+        is RestoredNavigation.SwitchTab -> {
+            if (navController.currentDestination?.route != plan.tabRoute) {
+                navController.navigateShellRoot(plan.tabRoute)
+            }
+        }
+        is RestoredNavigation.TabPush -> {
+            navController.navigateShellRoot(plan.tabRoute, saveCurrentState = false, restoreTargetState = false)
+            if (concreteBackStackRoute(navController.currentBackStackEntry) != plan.pushRoute) {
+                navController.navigate(plan.pushRoute)
+            }
+        }
+        is RestoredNavigation.Push -> navController.navigate(plan.route)
+        is RestoredNavigation.PendingWriting -> {
+            if (navController.currentDestination?.route != plan.tabRoute) {
+                // Drop the hidden Writing stack rather than saving it so returning pushes once.
+                navController.navigateShellRoot(plan.tabRoute, saveCurrentState = false)
+            }
+            if (plan.writingRoute != null) {
+                writingTabController.openPendingWritingRoute(plan.writingRoute)
+            } else {
+                writingTabController.noteRestoredWritingSelection()
+            }
+        }
+    }
+}
+
+internal fun applyStartRouteNavigation(
+    navController: NavHostController,
+    accountSheetState: AccountSheetState,
+    writingTabController: WritingTabController,
+    startRoute: String,
+    isDemoActive: Boolean
+) {
+    if (isDemoActive &&
+        (startRoute == Routes.Writing ||
+            Routes.resolveFormerAccountRoute(startRoute) is LegacyAccountDestination.Writing)
+    ) {
+        writingTabController.revealWritingTabForSession()
+    }
+    Routes.legacyLaunchNavigation(
+        startRoute,
+        showsWriting = writingTabController.showsWritingTab
+    )?.let { plan ->
+        applyRestoredNavigation(navController, accountSheetState, writingTabController, plan)
+    }
+}
+
+internal fun applyRestoredBackStack(
+    navController: NavHostController,
+    entries: List<androidx.navigation.NavBackStackEntry>,
+    accountSheetState: AccountSheetState,
+    writingTabController: WritingTabController
+) {
+    if (entries.isEmpty()) return
+    val top = entries.last()
+    val concreteTop = concreteBackStackRoute(top)
+    val stack = entries.dropLast(1).map { it.destination.route } + concreteTop
+    Routes.restoredNavigation(
+        stack,
+        concreteTop,
+        showsWriting = writingTabController.showsWritingTab
+    )?.let { plan ->
+        applyRestoredNavigation(navController, accountSheetState, writingTabController, plan)
+    }
+}
+
+internal fun evictHiddenWritingIfNeeded(
+    navController: NavHostController,
+    writingTabController: WritingTabController,
+    handledRestoredRoute: Boolean,
+    currentRoute: String?,
+    showsWritingTab: Boolean,
+    authState: io.github.cidy02.kudos.auth.AO3AuthState
+) {
+    if (!handledRestoredRoute) return
+    val liveRoute = navController.currentDestination?.route ?: currentRoute
+    if (liveRoute == Routes.Writing && !showsWritingTab && !writingTabController.showsWritingTab) {
+        if (authState is io.github.cidy02.kudos.auth.AO3AuthState.Restoring) {
+            writingTabController.noteRestoredWritingSelection()
+        }
+        navController.navigateShellRoot(Routes.Home, saveCurrentState = false)
+    }
+}
+
+internal fun applyReturnToWritingIfPending(
+    navController: NavHostController,
+    writingTabController: WritingTabController,
+    returnToWritingRequest: Int,
+    showsWritingTab: Boolean,
+    currentRoute: String?,
+    isPresentingAccount: Boolean,
+    username: () -> String?
+) {
+    if (returnToWritingRequest > 0 &&
+        showsWritingTab &&
+        currentRoute == Routes.Home &&
+        !isPresentingAccount
+    ) {
+        writingTabController.consumeReturnToWritingRequest()
+        val pending = writingTabController.consumePendingWritingRoute()
+        navController.navigateShellRoot(Routes.Writing, restoreTargetState = pending == null)
+        val target = when (pending) {
+            WritingRoute.Works -> Routes.accountList(
+                NavArgCodecs.encodeAccountListType(io.github.cidy02.kudos.account.AccountListType.MyWorks)
+            )
+            WritingRoute.Drafts -> Routes.WritingDrafts
+            WritingRoute.Series -> username()?.let { Routes.authorSeries(it) }
+            WritingRoute.CollectionsAndChallenges -> Routes.AO3Collections
+            null -> null
+        }
+        if (target != null && concreteBackStackRoute(navController.currentBackStackEntry) != target) {
+            navController.navigate(target)
+        }
+    }
+}
+
+internal fun resolveSearchExitTab(searchReturnTab: String, showsWritingTab: Boolean): String =
+    if (searchReturnTab == Routes.Writing && !showsWritingTab) Routes.Home else searchReturnTab
+
+internal fun NavHostController.navigateShellRoot(
+    route: String,
+    saveCurrentState: Boolean = true,
+    restoreTargetState: Boolean = true
+) {
     navigate(route) {
         popUpTo(graph.findStartDestination().id) {
-            saveState = true
+            saveState = saveCurrentState
         }
         launchSingleTop = true
-        restoreState = true
+        restoreState = restoreTargetState
     }
 }

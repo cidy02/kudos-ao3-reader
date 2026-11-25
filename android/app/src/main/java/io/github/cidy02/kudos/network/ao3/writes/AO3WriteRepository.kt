@@ -215,12 +215,14 @@ class AO3WriteRepository(
     }
 
     /** iOS saveWork: the loaded token/body/action, zero preparation reads, one single-shot POST. */
-    suspend fun saveWork(form: AO3WorkForm, expectedGeneration: Int): AO3Result<Unit> =
-        submitWork(form, expectedGeneration, form.actionUrl).also { result ->
-            if (result is AO3Result.Success) {
-                io.github.cidy02.kudos.app.WritingTabEvents.notifyDraftSaved(client.username())
+    suspend fun saveWork(form: AO3WorkForm, expectedGeneration: Int): AO3Result<Unit> {
+        val writer = client.username()
+        return submitWork(form, expectedGeneration, form.actionUrl).also { result ->
+            if (result is AO3Result.Success && writer != null && client.sessionGeneration() == expectedGeneration) {
+                io.github.cidy02.kudos.app.WritingTabEvents.notifyDraftSaved(writer, expectedGeneration)
             }
         }
+    }
 
     /** iOS editTags: fresh form/token/action, desired tags, one single-shot POST. */
     suspend fun editWorkTags(desired: AO3WorkForm, expectedGeneration: Int): AO3Result<Unit> {
@@ -271,12 +273,12 @@ class AO3WriteRepository(
     /** Work Post is direct (not the chapter's preview-first path), including a new work. */
     suspend fun postWork(form: AO3WorkForm, expectedGeneration: Int): AO3Result<Unit> {
         requireCollectionSession(expectedGeneration)
-        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        val writer = client.username() ?: return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
         val missing = form.missingRequiredFields()
         if (missing.isNotEmpty()) return AO3Result.Failure(AO3Error.Validation("AO3 still needs ${missing.joinToString(" and ")}."))
         return submitWork(form, expectedGeneration, form.actionUrl, submit = AO3WorkSubmitAction.Post).also { result ->
-            if (result is AO3Result.Success) {
-                io.github.cidy02.kudos.app.WritingTabEvents.notifyDraftSaved(client.username())
+            if (result is AO3Result.Success && client.sessionGeneration() == expectedGeneration) {
+                io.github.cidy02.kudos.app.WritingTabEvents.notifyDraftSaved(writer, expectedGeneration)
             }
         }
     }
@@ -324,15 +326,15 @@ class AO3WriteRepository(
     /** Captured chapter action/token; no preparation GET, one single-shot POST. */
     suspend fun saveChapter(form: AO3ChapterForm, submit: AO3WorkSubmitAction, expectedGeneration: Int): AO3Result<Unit> {
         requireCollectionSession(expectedGeneration)
-        if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
+        val writer = client.username() ?: return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
         if (submit !in listOf(AO3WorkSubmitAction.SaveDraft, AO3WorkSubmitAction.Post,
                 AO3WorkSubmitAction.PostWithoutPreview, AO3WorkSubmitAction.Update))
             return AO3Result.Failure(AO3Error.Validation("AO3 didn't accept the change."))
         val fields = form.parameters(submit)
         if (fields.none { it.first == submit.fieldName }) return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
         return workVerdict(postWriting(form.actionUrl, fields, form.csrfToken, form.actionUrl, expectedGeneration)).also { result ->
-            if (result is AO3Result.Success) {
-                io.github.cidy02.kudos.app.WritingTabEvents.notifyDraftSaved(client.username())
+            if (result is AO3Result.Success && client.sessionGeneration() == expectedGeneration) {
+                io.github.cidy02.kudos.app.WritingTabEvents.notifyDraftSaved(writer, expectedGeneration)
             }
         }
     }

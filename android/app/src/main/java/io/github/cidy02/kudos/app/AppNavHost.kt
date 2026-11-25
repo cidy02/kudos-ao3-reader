@@ -722,7 +722,8 @@ fun AppNavHost(
                 },
                 onOpenAO3Collections = { leaveAccount(Routes.Writing, Routes.AO3Collections) },
                 authRepository = container.authRepository,
-                onNewWork = { leaveAccount(Routes.Writing, io.github.cidy02.kudos.account.WritingWorkDestination.route()) }
+                onNewWork = { leaveAccount(Routes.Writing, io.github.cidy02.kudos.account.WritingWorkDestination.route()) },
+                countsCache = container.accountListCountsCache
             )
         }
         sharedComposable(Routes.About) {

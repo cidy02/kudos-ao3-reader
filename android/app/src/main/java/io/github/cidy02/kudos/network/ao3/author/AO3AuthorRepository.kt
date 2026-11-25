@@ -24,11 +24,14 @@ class AO3AuthorRepository(
 
     suspend fun loadDashboard(route: AO3AuthorRoute, bypassCache: Boolean = false): AO3Result<AO3AuthorHeader> {
         val url = route.dashboardUrl
+        val expectedGeneration = authenticatedClient?.sessionGeneration()
         val result = cached(url, AO3PageCache.Kind.Dashboard, bypassCache) { parser.parseDashboard(it, route) }
+        val currentGeneration = authenticatedClient?.sessionGeneration()
         if (result is AO3Result.Success &&
+            currentGeneration == expectedGeneration &&
             authenticatedClient?.username()?.equals(route.username, ignoreCase = true) == true
         ) {
-            io.github.cidy02.kudos.app.WritingTabEvents.notifyDashboardLoaded(result.value, route)
+            io.github.cidy02.kudos.app.WritingTabEvents.notifyDashboardLoaded(result.value, route, currentGeneration)
         }
         return result
     }

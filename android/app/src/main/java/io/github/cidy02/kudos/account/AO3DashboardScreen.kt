@@ -29,7 +29,8 @@ fun AO3DashboardScreen(
     authRepository: io.github.cidy02.kudos.auth.AO3AuthRepository? = null,
     onNewWork: (() -> Unit)? = null,
     onOpenAuthorTab: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute, io.github.cidy02.kudos.author.AuthorTab) -> Unit = { _, _ -> },
-    onOpenSeriesSummary: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary) -> Unit = { onOpenSeries(it.url) }
+    onOpenSeriesSummary: (io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesSummary) -> Unit = { onOpenSeries(it.url) },
+    countsCache: AO3AccountListCountsCache? = null
 ) {
     if (username.isNullOrBlank()) {
         ProvidePushedShellChrome()
@@ -54,6 +55,7 @@ fun AO3DashboardScreen(
         onOpenAO3Collections = onOpenAO3Collections,
         modifier = modifier,
         authRepository = authRepository,
-        onNewWork = onNewWork
+        onNewWork = onNewWork,
+        countsCache = countsCache
     )
 }

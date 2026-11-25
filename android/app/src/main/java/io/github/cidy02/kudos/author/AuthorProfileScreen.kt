@@ -211,6 +211,19 @@ fun AuthorProfileScreen(
                 when (result) {
                     is AO3Result.Success -> {
                         header = result.value; headerError = null; headerStale = result.isStale; tabStale = false
+                        if (expectedRoute.pseud == null &&
+                            signedInUsername != null &&
+                            expectedRoute.username.equals(signedInUsername, ignoreCase = true)
+                        ) {
+                            countsCache?.recordDashboard(
+                                result.value.actions,
+                                expectedRoute.username,
+                                io.github.cidy02.kudos.account.AO3AccountListCountsCache.scope(
+                                    signedInUsername,
+                                    expectedSession
+                                )
+                            )
+                        }
                         afterLoad?.invoke()
                     }
                     is AO3Result.Failure -> { header = null; headerError = result.error; headerStale = false }

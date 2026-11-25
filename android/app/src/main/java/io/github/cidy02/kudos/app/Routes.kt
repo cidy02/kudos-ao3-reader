@@ -146,6 +146,7 @@ class AccountSheetState(
  */
 sealed interface RestoredNavigation {
     data class AccountSheet(val route: AccountSheetRoute, val popCount: Int, val tabRoute: String) : RestoredNavigation
+    data class SwitchTab(val tabRoute: String) : RestoredNavigation
     data class TabPush(val tabRoute: String, val pushRoute: String) : RestoredNavigation
     data class Push(val route: String) : RestoredNavigation
     data class PendingWriting(val tabRoute: String = Routes.Home, val writingRoute: WritingRoute? = null) : RestoredNavigation
@@ -584,15 +585,26 @@ object Routes {
         if (concreteTop == Writing && !showsWriting) {
             return RestoredNavigation.PendingWriting(tabRoute = Home, writingRoute = null)
         }
+        val hasLegacyAccountRoot = stackFromRoot.any {
+            it?.substringBefore("?")?.substringBefore("/") == Account
+        }
+        val hasWritingRoot = stackFromRoot.any {
+            it?.substringBefore("?")?.substringBefore("/") == Writing
+        }
         return when (val legacy = resolveFormerAccountRoute(concreteTop)) {
-            is LegacyAccountDestination.Writing ->
-                if (showsWriting) {
-                    concreteTop?.let { RestoredNavigation.TabPush(Writing, it) }
-                } else {
+            is LegacyAccountDestination.Writing -> when {
+                hasLegacyAccountRoot ->
+                    if (showsWriting) {
+                        concreteTop?.let { RestoredNavigation.TabPush(Writing, it) }
+                    } else {
+                        RestoredNavigation.PendingWriting(tabRoute = Home, writingRoute = legacy.route)
+                    }
+                hasWritingRoot && !showsWriting ->
                     RestoredNavigation.PendingWriting(tabRoute = Home, writingRoute = legacy.route)
-                }
+                else -> null
+            }
             is LegacyAccountDestination.Library ->
-                concreteTop?.let { RestoredNavigation.TabPush(Library, it) }
+                if (hasLegacyAccountRoot) concreteTop?.let { RestoredNavigation.TabPush(Library, it) } else null
             is LegacyAccountDestination.Account, null -> null
         }
     }
@@ -613,7 +625,11 @@ object Routes {
                     RestoredNavigation.PendingWriting(tabRoute = Home, writingRoute = legacy.route)
                 }
             is LegacyAccountDestination.Library -> RestoredNavigation.TabPush(Library, route)
-            null -> if (route != restored.tabRoute) RestoredNavigation.Push(route) else null
+            null -> when {
+                route != restored.tabRoute -> RestoredNavigation.Push(route)
+                restored.tabRoute != Home -> RestoredNavigation.SwitchTab(restored.tabRoute)
+                else -> null
+            }
         }
     }
 

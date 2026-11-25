@@ -83,14 +83,20 @@ fun WritingTextEditorScreen(
     ruleTitle: String? = null,
     onCheckpoint: (String) -> Unit = {},
     chapterActions: WritingChapterEditorActions? = null,
+    notifyWritingTab: Boolean = true,
 ) {
     val context = LocalContext.current
     val updatedCheckpoint by rememberUpdatedState(onCheckpoint)
-    val session = remember(account, target, field) {
+    val session = remember(account, target, field, notifyWritingTab) {
         WritingEditorSession(WritingNativeTextField(context, text), text,
-            WritingTextRecovery.inFilesDir(context.filesDir.toPath()) { savedAccount ->
-                io.github.cidy02.kudos.app.WritingTabEvents.notifyDraftSaved(savedAccount)
-            }, account, target, field,
+            WritingTextRecovery.inFilesDir(
+                context.filesDir.toPath(),
+                onDraftSaved = if (notifyWritingTab) {
+                    { savedAccount -> io.github.cidy02.kudos.app.WritingTabEvents.notifyDraftSaved(savedAccount) }
+                } else {
+                    null
+                }
+            ), account, target, field,
             CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate), SystemClock::uptimeMillis,
             onCheckpoint = { updatedCheckpoint(it) })
     }
