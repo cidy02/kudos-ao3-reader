@@ -3,6 +3,11 @@ package io.github.cidy02.kudos.backup.streaming
 import io.github.cidy02.kudos.backup.A567Corpus
 import io.github.cidy02.kudos.backup.BackupError
 import io.github.cidy02.kudos.backup.BackupWork
+import io.github.cidy02.kudos.backup.BackupValidator
+import io.github.cidy02.kudos.backup.BackupJson
+import io.github.cidy02.kudos.backup.BackupSettingsPayload
+import io.github.cidy02.kudos.backup.KudosBackupManifest
+import io.github.cidy02.kudos.reader.speech.PronunciationCorrections
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.time.Instant
@@ -17,6 +22,7 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import kotlinx.serialization.ExperimentalSerializationApi
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -102,6 +108,97 @@ class ManifestRound5Test {
             fail("accepted")
         } catch (e: ManifestStageException.ResourceExhausted) {
             assertTrue(e.reason.contains("documents"))
+        }
+    }
+
+    @Test fun knownRootStopsWritingAtItsSourceByteLimitAndStillFindsSyntax() {
+        var highWater = 0L
+        val options = ManifestStageOptions(checkpoint = {
+            highWater = maxOf(highWater, root.walkTopDown().filter { it.isFile }.sumOf { it.length() })
+        })
+        val huge = "a".repeat(40 shl 20)
+        try {
+            stage(doc("\"settings\":\"$huge\""), options).close()
+            fail("accepted oversized settings")
+        } catch (e: ManifestStageException.ResourceExhausted) {
+            assertTrue(e.reason.contains("settings"))
+        }
+        assertTrue("root_chunk wrote $highWater bytes", highWater < (36L shl 20))
+        try {
+            stage(doc("\"settings\":\"$huge\"") + "x", options).close()
+            fail("accepted trailing garbage")
+        } catch (e: ManifestStageException.Invalid) {
+            assertTrue(e.syntactic)
+        }
+    }
+
+    @Test fun duplicateIdentityPrecedesLaterBadRecordAndMatchesValidatorMessage() {
+        val id = A567Corpus.uuid(1)
+        val other = A567Corpus.uuid(2)
+        val date = "2026-01-01T00:00:00Z"
+        val cases = listOf(
+            "works" to """{"id":"$id"},{"id":"$id"},{"id":"$other","dateAdded":"bad"}""",
+            "fonts" to """{"name":"A","fileName":"FONT.ttf","dateAdded":"$date"},{"name":"B","fileName":"font.ttf","dateAdded":"$date"},{"name":"C","fileName":"other.ttf","dateAdded":"bad"}""",
+            "collections" to """{"id":"$id","name":"A","dateAdded":"$date"},{"id":"$id","name":"B","dateAdded":"$date"},{"id":"$other","name":"C","dateAdded":"bad"}""",
+            "savedSearches" to """{"id":"$id","name":"A","dateAdded":"$date"},{"id":"$id","name":"B","dateAdded":"$date"},{"id":"$other","name":"C","dateAdded":"bad"}"""
+        )
+        for ((section, records) in cases) {
+            val text = if (section == "works")
+                """{"version":8,"exportedAt":"2026-06-01T00:00:00Z","works":[$records]}"""
+            else doc("\"$section\":[$records]")
+            stage(text).use { staged ->
+                val oracle = try {
+                    BackupValidator.validateManifest(staged.reconstruct().first, now)
+                    fail("oracle accepted duplicate $section")
+                    ""
+                } catch (e: BackupError.InvalidPackage) { e.message }
+                val seen = mutableListOf<Long>()
+                try {
+                    staged.validate(now, onValidatedRecord = { _, ord, _ -> seen += ord })
+                    fail("staged validator accepted duplicate $section")
+                } catch (e: BackupError.InvalidPackage) {
+                    assertEquals(section, oracle, e.message)
+                }
+                assertEquals(section, listOf(0L), seen)
+            }
+        }
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    @Test fun streamedRootShapesKeepProductionSchemaAndIgnoreOnlyTheJsonElementPayload() {
+        val production = BackupSettingsPayload.serializer().descriptor
+        val shape = RootSettingsShape.serializer().descriptor
+        fun fields(d: kotlinx.serialization.descriptors.SerialDescriptor) =
+            (0 until d.elementsCount).map { i ->
+                Triple(d.getElementName(i), d.getElementDescriptor(i).serialName, d.isElementOptional(i))
+            }
+        assertEquals(
+            fields(production).filterNot { it.first == "libraryPageArrangement" },
+            fields(shape)
+        )
+        assertEquals(fields(PronunciationCorrections.serializer().descriptor), fields(RootPronunciationShape.serializer().descriptor))
+        val values = listOf(
+            "\"settings\":{\"libraryPageArrangement\":{\"shelves\":[{\"id\":1}]},\"readerFontPt\":19.5},\"pronunciations\":{\"global\":{\"a\":\"b\"},\"fandoms\":{\"f\":{\"x\":\"y\"}}}",
+            "\"settings\":{\"readerFontPt\":\"bad\"}",
+            "\"pronunciations\":{\"global\":{\"a\":[]}}",
+            "\"pronunciations\":{\"fandoms\":{\"f\":5}}"
+        )
+        for (value in values) {
+            val text = doc(value)
+            val productionAccepts = runCatching { BackupJson.decodeFromString(KudosBackupManifest.serializer(), text) }.isSuccess
+            val stagedAccepts = try { stage(text).close(); true }
+                catch (_: ManifestStageException.Invalid) { false }
+            assertEquals(value, productionAccepts, stagedAccepts)
+        }
+    }
+
+    @Test fun invalidUuidTakesPrecedenceOverAnIndexKeyThatNormalizesToAnEarlierId() {
+        val id = A567Corpus.uuid(1)
+        val text = """{"version":8,"exportedAt":"2026-06-01T00:00:00Z","works":[{"id":"$id"},{"id":"$id "}]}"""
+        stage(text).use { staged ->
+            assertEquals(staged.records("works")[0].keys["k_id"], staged.records("works")[1].keys["k_id"])
+            try { staged.validate(now); fail("accepted malformed UUID") }
+            catch (e: BackupError.InvalidUuid) { assertEquals("works[1].id", e.field) }
         }
     }
 }

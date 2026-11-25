@@ -61,6 +61,36 @@ class ManifestStagingLargeTest {
         return "works=$n sessions=${staged.count("readingSessions")} annotations=${staged.count("annotations")}"
     }
 
+    /** A near-limit structured known root used to build a large JsonElement DOM before root streaming validation. */
+    @Test
+    fun structuredSettingsRootPeak() {
+        assumeTrue("opt-in", System.getenv("A567_P2_OUT") != null)
+        val dir = Files.createTempDirectory("a567p2-root").toFile()
+        try {
+            val file = File(dir, "manifest.json")
+            file.bufferedWriter().use { out ->
+                out.write("""{"version":8,"exportedAt":"2026-06-01T00:00:00Z","settings":{"libraryPageArrangement":[""")
+                val row = """{"x":"${"a".repeat(90)}"}"""
+                repeat(150_000) { i -> if (i > 0) out.write(','.code); out.write(row) }
+                out.write("]}}")
+            }
+            val staging = File(dir, "staging")
+            val result = A567Run(listOf(staging)).measure {
+                file.inputStream().buffered(1 shl 16).use { input ->
+                    ManifestStager.stage(input, staging, ManifestStageOptions(expectedBytes = file.length())).use { staged ->
+                        assertEquals("object", staged.rootEntries().first { it.key == "settings" }.kind)
+                    }
+                }
+                "ok"
+            }
+            println("A567P2 structured settings root: ${file.length()} bytes, sampled JVM heap delta ${"%.1f".format(result.peakHeapMiB)} MiB")
+            assertEquals("ok", result.outcome)
+            assertTrue("root sampled heap delta ${result.peakHeapMiB} MiB exceeds 64 MiB", result.peakHeapMiB <= 64.0)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
     /** Opt-in three real near-8 MiB strict rows, both flat and 160k-tag-heavy. JVM heap excludes native SQLite. */
     @Test
     fun threeNearBudgetRecordsPeak() {

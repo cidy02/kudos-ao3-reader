@@ -10,7 +10,7 @@ import java.io.File
  *  - `root(ord, key, kind, known, oversize, chars, records)`: every distinct top-level key in source order
  *    (first occurrence wins) with its value kind and presence; `root_chunk` holds its compact JSON text.
  *    A known record array has kind `records` and no chunk rows.
- *  - `s_<section>(ord, kind, chars, oversize, typed_ok, k_*)` and `s_<section>_chunk(ord, start, len, data)`:
+ *  - `s_<section>(ord, kind, chars, source_bytes, oversize, typed_ok, k_*)` and `s_<section>_chunk(ord, start, len, data)`:
  *    one row per array element in source order, the element's compact JSON text in chunks of at most
  *    [CHUNK_CHARS] chars addressed by their char offset `start` (primary key `(ord, start)`, so a range read
  *    touches only the chunks it overlaps), and indexed natural-key columns (see [ManifestSections]).
@@ -75,7 +75,7 @@ internal class StagingWriter(
         maybeCommit()
     }
 
-    /** The whole staged text of one element or root value; bounded by the typed budget or the root limit, for decoding only. */
+    /** Whole staged text for tests and small inputs; production decoding uses [openTextStream]. */
     fun readText(table: String, ord: Long): String {
         val sb = StringBuilder()
         var at = 0L

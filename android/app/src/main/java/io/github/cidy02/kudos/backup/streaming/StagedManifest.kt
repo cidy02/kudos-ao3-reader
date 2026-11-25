@@ -7,6 +7,7 @@ import io.github.cidy02.kudos.backup.BackupValidator
 import io.github.cidy02.kudos.backup.BackupWork
 import io.github.cidy02.kudos.backup.BackupBookmark
 import io.github.cidy02.kudos.backup.BackupFont
+import io.github.cidy02.kudos.backup.BackupPaths
 import io.github.cidy02.kudos.backup.BackupCollection
 import io.github.cidy02.kudos.backup.BackupSavedSearch
 import io.github.cidy02.kudos.backup.KudosBackupManifest
@@ -122,7 +123,8 @@ class StagedManifest internal constructor(
     /**
      * Semantic validation over the final staged metadata (today's `BackupValidator.validateManifest` rules, with the clock
      * fixed by [now]): one record is decoded at a time and batch accounting flushes at 200 records or 16 MiB of
-     * source bytes. Duplicate ids across batches use indexed key columns. Call before any mutation.
+     * source bytes. Indexed duplicate checks run at each record's source position, before that record's
+     * other semantic checks, matching BackupValidator's first-error order. Call before any mutation.
      */
     fun validate(
         now: Instant = Instant.now(),
@@ -151,11 +153,6 @@ class StagedManifest internal constructor(
                 last = batch.last().ord
             }
             if (batchCount > 0) onBatch(batchCount, batchBytes)
-            val idColumn = spec(name).keys.firstOrNull { it.column == "k_id" }?.column ?: spec(name).keys.first().column
-            val dup = db.rawQuery("SELECT $idColumn FROM s_$name WHERE $idColumn IS NOT NULL GROUP BY $idColumn HAVING COUNT(*) > 1 LIMIT 1", null).use { c ->
-                if (c.moveToFirst()) c.getString(0) else null
-            }
-            if (dup != null && name != "bookmarks") throw BackupError.InvalidPackage("Duplicate ${if (name == "works") "work" else name} id: $dup")
         }
     }
 
@@ -171,6 +168,30 @@ class StagedManifest internal constructor(
             "collections" -> head.copy(collections = listOf(decodeRecord(name, ord, BackupCollection.serializer())))
             "savedSearches" -> head.copy(savedSearches = listOf(decodeRecord(name, ord, BackupSavedSearch.serializer())))
             else -> error("unsupported validation section $name")
+        }
+        val key = when (name) {
+            "works" -> BackupPaths.canonicalUuid(partial.works.single().id, "works[$ord].id")
+            "fonts" -> partial.fonts.single().fileName.also(BackupPaths::requireSafeFontFileName)
+                .let(BackupPaths::fontFileNameKey)
+            "collections" -> BackupPaths.canonicalUuid(partial.collections.single().id, "collections[$ord].id")
+            "savedSearches" -> BackupPaths.canonicalUuid(partial.savedSearches.single().id, "savedSearches[$ord].id")
+            else -> null
+        }
+        if (key != null) {
+            val column = if (name == "fonts") "k_file" else "k_id"
+            val duplicate = db.rawQuery(
+                "SELECT 1 FROM s_$name WHERE $column = ? AND ord < ? LIMIT 1",
+                arrayOf(key, ord.toString())
+            ).use { it.moveToFirst() }
+            if (duplicate) {
+                val message = when (name) {
+                    "works" -> "Duplicate work id: $key"
+                    "fonts" -> "Duplicate font file name: ${partial.fonts.single().fileName}"
+                    "collections" -> "Duplicate collection id: $key"
+                    else -> "Duplicate saved search id: $key"
+                }
+                throw BackupError.InvalidPackage(message)
+            }
         }
         val canonical = BackupValidator.validateManifest(partial, now)
         onValidatedRecord(name, ord, when (name) {

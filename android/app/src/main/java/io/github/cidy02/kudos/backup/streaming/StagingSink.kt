@@ -156,7 +156,14 @@ internal class StagingSink(
                     out = null
                 } else {
                     rootSection = null
-                    out = StagedText(w, "root_chunk", rootOrd)
+                    val boundedValue = rootKey in ManifestSections.knownRootKeys ||
+                        (rootKey in IOS_LOSSY_ROOT_KEYS && kind != "array")
+                    out = StagedText(w, "root_chunk", rootOrd) {
+                        if (boundedValue && src.sourceBytes() - rootStart > MAX_ROOT_VALUE_BYTES) {
+                            resource("the value of '$rootKey' is larger than $MAX_ROOT_VALUE_BYTES source bytes")
+                            true
+                        } else false
+                    }
                 }
             }
             SECTION -> {

@@ -10,11 +10,21 @@ import io.github.cidy02.kudos.backup.KudosBackupManifest
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.io.ByteArrayInputStream
+import java.io.SequenceInputStream
 import java.nio.file.Files
+import java.util.Collections
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.CompositeDecoder
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.decodeFromStream
 
 class ManifestStageOptions(
     /** Size of the input when known; sizes the up-front disk reservation and the staging budget. */
@@ -46,8 +56,8 @@ enum class RecoveryVerdict { WELL_FORMED, MALFORMED, PROTECT }
  * A later I/O error cannot be discovered after an earlier decided syntax error.
  * `BackupValidator.validateManifest` is a separate step ([StagedManifest.validate]).
  *
- * shortcut: the root fields (version, exportedAt, settings, exportedBy, pronunciations) are decoded in memory, so each is
- * limited to [StagingSink.MAX_ROOT_VALUE_BYTES] source bytes; record arrays and unknown top-level values have no such limit.
+ * Known root fields are decoded from staged chunks, each bounded by [StagingSink.MAX_ROOT_VALUE_BYTES].
+ * Record arrays and unknown top-level values have no such limit.
  */
 object ManifestStager {
     /** Measured staging high-water is about 1.5x the input; the shared component budget is 2.5x + 32 MiB. */
@@ -145,14 +155,49 @@ object ManifestStager {
 
     class SweepResult(val deleted: List<File>, val failed: List<File>)
 
-    /** Typed decode of the root fields (every known key that is not a record array); the arrays decode to their defaults. */
+    /** Decode and release one known root value at a time, without assembling root strings or trees. */
+    @OptIn(ExperimentalSerializationApi::class)
     private fun decodeRoot(w: StagingWriter): KudosBackupManifest {
-        val slim = LinkedHashMap<String, JsonElement>()
-        w.db.rawQuery("SELECT ord, key FROM root WHERE known = 1 AND kind != 'records' ORDER BY ord", null).use { c ->
-            while (c.moveToNext()) slim[c.getString(1)] = Json.parseToJsonElement(w.readText("root_chunk", c.getLong(0)))
-        }
-        return try {
-            BackupJson.decodeFromJsonElement(KudosBackupManifest.serializer(), JsonObject(slim))
+        var version: Int? = null
+        var exportedAt: String? = null
+        try {
+            w.db.rawQuery("SELECT ord, key, kind FROM root WHERE known = 1 AND kind != 'records' ORDER BY ord", null).use { c ->
+                while (c.moveToNext()) {
+                    val key = c.getString(1) // known serializer field names are ASCII literals
+                    val ord = c.getLong(0)
+                    if (c.getString(2) == "null" && key in setOf("settings", "pronunciations")) continue
+                    if (key == "settings") {
+                        w.openTextStream("root_chunk", ord).use { BackupJson.decodeFromStream(RootSettingsShape.serializer(), it) }
+                        continue
+                    }
+                    if (key == "pronunciations") {
+                        w.openTextStream("root_chunk", ord).use { BackupJson.decodeFromStream(RootPronunciationShape.serializer(), it) }
+                        continue
+                    }
+                    val prefix = when (key) {
+                        "version" -> "{\"exportedAt\":\"\",\"version\":"
+                        "exportedAt" -> "{\"version\":8,\"exportedAt\":"
+                        else -> "{\"version\":8,\"exportedAt\":\"\",\"$key\":"
+                    }
+                    val parts = listOf(
+                        ByteArrayInputStream(prefix.toByteArray(Charsets.UTF_8)),
+                        w.openTextStream("root_chunk", ord),
+                        ByteArrayInputStream("}".toByteArray(Charsets.UTF_8))
+                    )
+                    val decoded = SequenceInputStream(Collections.enumeration(parts)).use {
+                        BackupJson.decodeFromStream(KudosBackupManifest.serializer(), it)
+                    }
+                    when (key) {
+                        "version" -> version = decoded.version
+                        "exportedAt" -> exportedAt = decoded.exportedAt
+                    }
+                }
+            }
+            // Required fields retain the production serializer's missing-field failure.
+            if (version == null || exportedAt == null) {
+                BackupJson.decodeFromStream(KudosBackupManifest.serializer(), "{}".byteInputStream())
+            }
+            return KudosBackupManifest(version = version!!, exportedAt = exportedAt!!)
         } catch (e: SerializationException) {
             throw ManifestStageException.Invalid(e.message ?: "typed decode failed", syntactic = false)
         } catch (e: IllegalArgumentException) {
@@ -169,4 +214,85 @@ object ManifestStager {
         is OutOfMemoryError -> ManifestStageException.ResourceExhausted("out of memory", t)
         else -> t
     }
+}
+
+/** Mirrors BackupSettingsPayload's typed fields. Its JsonElement field accepts any valid JSON, already
+ * checked by ManifestTokenizer, so it is deliberately omitted to avoid building a large DOM. */
+@Serializable
+internal data class RootSettingsShape(
+    val readerFontID: String = "system",
+    val readerMode: String = "scroll",
+    val readerTwoPage: Boolean = false,
+    val readerCustomize: Boolean = false,
+    val readerBoldText: Boolean = false,
+    val readerFontPt: Double = 18.0,
+    val readerLineHeight: Double = 1.65,
+    val readerLetterSpacing: Double = 0.0,
+    val readerWordSpacing: Double = 0.0,
+    val readerMargin: Double = 28.0,
+    val readerJustify: Boolean = false,
+    val confirmBeforeDelete: Boolean = true,
+    val hideMatureContent: Boolean = true,
+    val matureContentMode: String = "obscure",
+    val requireBiometricToReveal: Boolean = false,
+    val appTheme: String = "light",
+    val readerTheme: String = "light",
+    val matchAppReaderTheme: Boolean = true,
+    val accentColorHex: String? = null,
+    val workSymbolPlacement: String? = null,
+    val autoPreserveSmallSeriesOnSaveForLater: Boolean = false,
+    val autoPreserveSeriesWorkThreshold: Int = 5
+)
+
+@Serializable
+internal data class RootPronunciationShape(
+    @Serializable(with = DiscardStringMap::class) val global: Unit = Unit,
+    @Serializable(with = DiscardNestedStringMap::class) val fandoms: Unit = Unit,
+    @Serializable(with = DiscardNestedStringMap::class) val works: Unit = Unit
+)
+
+/** Decode every map entry through the production primitive decoder, then discard it before the next entry. */
+internal object DiscardStringMap : KSerializer<Unit> {
+    override val descriptor: SerialDescriptor = MapSerializer(String.serializer(), String.serializer()).descriptor
+    override fun deserialize(decoder: Decoder) {
+        val map = decoder.beginStructure(descriptor)
+        if (map.decodeSequentially()) {
+            val count = map.decodeCollectionSize(descriptor)
+            for (i in 0 until count) {
+                map.decodeStringElement(descriptor, 2 * i)
+                map.decodeStringElement(descriptor, 2 * i + 1)
+            }
+        } else {
+            while (true) {
+                val index = map.decodeElementIndex(descriptor)
+                if (index == CompositeDecoder.DECODE_DONE) break
+                map.decodeStringElement(descriptor, index)
+            }
+        }
+        map.endStructure(descriptor)
+    }
+    override fun serialize(encoder: Encoder, value: Unit): Nothing = error("validation serializer is decode-only")
+}
+
+internal object DiscardNestedStringMap : KSerializer<Unit> {
+    override val descriptor: SerialDescriptor = MapSerializer(String.serializer(), DiscardStringMap).descriptor
+    override fun deserialize(decoder: Decoder) {
+        val map = decoder.beginStructure(descriptor)
+        if (map.decodeSequentially()) {
+            val count = map.decodeCollectionSize(descriptor)
+            for (i in 0 until count) {
+                map.decodeStringElement(descriptor, 2 * i)
+                map.decodeSerializableElement(descriptor, 2 * i + 1, DiscardStringMap)
+            }
+        } else {
+            while (true) {
+                val index = map.decodeElementIndex(descriptor)
+                if (index == CompositeDecoder.DECODE_DONE) break
+                if (index % 2 == 0) map.decodeStringElement(descriptor, index)
+                else map.decodeSerializableElement(descriptor, index, DiscardStringMap)
+            }
+        }
+        map.endStructure(descriptor)
+    }
+    override fun serialize(encoder: Encoder, value: Unit): Nothing = error("validation serializer is decode-only")
 }
