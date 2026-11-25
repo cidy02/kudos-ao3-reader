@@ -6342,12 +6342,19 @@ enum KudosBackupService {
         // `lastModifiedAt` (reading, refreshing, favouriting) plays no part. Replace Library adopts any
         // present value so a restore rolls back; an absent key never clears in any mode.
         if let archivedPreference = archived.coverArtPreference {
+            let now = Date()
+            // A stamp from a fast clock is healed to the ceiling here, so it cannot outrank every later edit
+            // from other devices for as long as it stays in the future.
+            if let local = work.coverArtPreferenceChangedAt,
+               case let healed = KudosBackupContents.clampedArchiveDate(local, now: now), healed != local {
+                work.coverArtPreferenceChangedAt = healed
+            }
             let incomingStamp = archived.coverArtPreferenceChangedAt.map {
-                KudosBackupContents.clampedArchiveDate($0)
+                KudosBackupContents.clampedArchiveDate($0, now: now)
             }
             if mode == .replaceLibrary || CoverArtPreference.incomingWins(
                 localRaw: work.coverArtPreferenceRaw, localStamp: work.coverArtPreferenceChangedAt,
-                incomingRaw: archivedPreference, incomingStamp: incomingStamp) {
+                incomingRaw: archivedPreference, incomingStamp: incomingStamp, now: now) {
                 work.coverArtPreferenceRaw = archivedPreference
                 work.coverArtPreferenceChangedAt = incomingStamp
             }

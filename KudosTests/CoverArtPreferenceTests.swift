@@ -89,7 +89,7 @@ struct CoverArtPreferenceTests {
         work.coverArtPreferenceChangedAt = ahead
         work.setCoverArtPreference(.generated)
         #expect(work.coverArtPreferenceRaw == "generated")
-        #expect(work.coverArtPreferenceChangedAt! >= ahead.addingTimeInterval(0.001))
+        #expect(work.coverArtPreferenceChangedAt! >= ahead.addingTimeInterval(0.002))
         let first = work.coverArtPreferenceChangedAt!
         work.setCoverArtPreference(.generated) // same option: no write
         #expect(work.coverArtPreferenceChangedAt == first)
@@ -253,6 +253,20 @@ struct CoverArtPreferenceTests {
         let ceiling = Date().addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew)
         #expect(work.coverArtPreferenceChangedAt! <= ceiling)
         #expect(work.coverArtPreferenceChangedAt! < Date().addingTimeInterval(60))
+    }
+
+    /// A fast clock's stamp is healed to the ceiling when another device's value is merged, so it cannot
+    /// outrank every later edit from other devices for as long as it stays in the future.
+    @Test func aFarFutureLocalStampIsHealedOnMerge() throws {
+        let id = UUID()
+        let skew = KudosBackupContents.maxFutureTimestampSkew
+        let peerSource = try makeContext()
+        let peer = try contents(work(id: id, raw: "generated", at: Date().timeIntervalSince1970, in: peerSource))
+        let local = try makeContext()
+        let mine = work(id: id, raw: "embedded", at: Date().addingTimeInterval(skew * 3).timeIntervalSince1970, in: local)
+        try local.save()
+        _ = try KudosBackupService.restore(peer, into: local, defaults: try testDefaults(), mode: .reconcile)
+        #expect(mine.coverArtPreferenceChangedAt! <= Date().addingTimeInterval(skew))
     }
 
     @Test func replaceLibraryAdoptsAnyPresentValueSoARestoreRollsBack() throws {
