@@ -632,7 +632,8 @@ struct ReadingInsightsView: View {
 
             HabitsCalendarCard(
                 days: habits.calendarDays,
-                longestStreak: habits.longestStreak
+                longestStreak: habits.longestStreak,
+                thresholds: habits.calendarWordThresholds
             )
 
             HabitsSittingsCard(
@@ -648,11 +649,18 @@ struct ReadingInsightsView: View {
             if habits.savedToOpenedMedianDays != nil || habits.openedToFinishedMedianDays != nil {
                 HabitsSavedToFinishedCard(
                     savedToOpenedDays: habits.savedToOpenedMedianDays,
-                    openedToFinishedDays: habits.openedToFinishedMedianDays
+                    openedToFinishedDays: habits.openedToFinishedMedianDays,
+                    savedToOpenedCount: habits.savedToOpenedCount,
+                    openedToFinishedCount: habits.openedToFinishedCount
                 )
             }
 
-            HabitsRereadsCard(rereads: habits.rereads, discreetMode: discreetMode, discreetMasker: discreetMasker)
+            HabitsRereadsCard(
+                rereads: habits.rereads,
+                rereadTimeShare: habits.rereadTimeShare,
+                discreetMode: discreetMode,
+                discreetMasker: discreetMasker
+            )
 
             if !habits.fandomTimeline.isEmpty {
                 HabitsFandomTimelineCard(lanes: habits.fandomTimeline, discreetMode: discreetMode, discreetMasker: discreetMasker)
@@ -661,7 +669,9 @@ struct ReadingInsightsView: View {
             if habits.stoppedCount > 0 {
                 HabitsStoppedCard(
                     stoppedCount: habits.stoppedCount,
+                    stoppedInPeriodCount: habits.stoppedInPeriodCount,
                     medianProgress: habits.stoppedMedianProgress,
+                    reasons: habits.stopReasons,
                     commonTags: habits.commonStopTags,
                     discreetMode: discreetMode,
                     discreetMasker: discreetMasker
@@ -679,6 +689,7 @@ struct ReadingInsightsView: View {
                 unreadWords: lib.unreadWords,
                 unreadCount: lib.unreadWorksCount,
                 monthsToClear: lib.monthsToClear,
+                monthsToClearRange: lib.monthsToClearRange,
                 addedWords: lib.addedWordsInPeriod,
                 readWords: lib.readWordsInPeriod
             )
@@ -729,7 +740,7 @@ struct ReadingInsightsView: View {
             if lib.arrivalRows.isEmpty {
                 InsightsUnavailableCard(title: "How Finished Works Arrived", explanation: "Import source recording has not begun for these works.")
             } else {
-                LibraryArrivalCard(rows: lib.arrivalRows)
+                LibraryArrivalCard(rows: lib.arrivalRows, since: lib.arrivalSince)
             }
 
             if lib.foundEarlyCount == 0 {
@@ -738,6 +749,7 @@ struct ReadingInsightsView: View {
                 LibraryFoundEarlyCard(
                     count: lib.foundEarlyCount,
                     grownCount: lib.foundEarlyGrownCount,
+                    grownShare: lib.foundEarlyGrowthShare,
                     example: lib.foundEarlyExample,
                     discreetMode: discreetMode
                 )

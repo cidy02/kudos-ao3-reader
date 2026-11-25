@@ -1175,6 +1175,7 @@ enum ReadingLogService {
             libraryWorks: libraryWorks,
             facts: periodFacts,
             allFacts: allFacts,
+            periodInterval: req.period,
             calendar: req.calendar,
             aliases: resolvedAliases
         )

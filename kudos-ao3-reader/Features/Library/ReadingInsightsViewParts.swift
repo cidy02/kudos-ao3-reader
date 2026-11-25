@@ -342,11 +342,16 @@ struct InsightsUnavailableCard: View {
 
 struct LibraryArrivalCard: View {
     let rows: [ReadingLibraryInsights.ArrivalRow]
+    let since: Date?
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("How Finished Works Arrived").font(.subheadline.weight(.semibold))
+            if let since {
+                Text("Recorded since \(since.formatted(date: .abbreviated, time: .omitted))")
+                    .font(.caption).foregroundStyle(.secondaryInk)
+            }
             ForEach(rows) { row in
                 HStack {
                     Text(row.label).frame(maxWidth: .infinity, alignment: .leading)
@@ -365,6 +370,7 @@ struct LibraryArrivalCard: View {
 struct LibraryFoundEarlyCard: View {
     let count: Int
     let grownCount: Int
+    let grownShare: Double?
     let example: String?
     let discreetMode: Bool
     @Environment(ThemeManager.self) private var theme
@@ -374,6 +380,10 @@ struct LibraryFoundEarlyCard: View {
             Text("Found Early").font(.subheadline.weight(.semibold))
             Text("\(count) finished works had fewer than 500 kudos when saved")
             Text("\(grownCount) have at least tripled since")
+            if let grownShare {
+                Text("\(Int((grownShare * 100).rounded()))% of the recorded group")
+                    .foregroundStyle(.secondaryInk)
+            }
             if let example, !discreetMode {
                 Text(example).foregroundStyle(.secondaryInk)
             }
@@ -1457,6 +1467,7 @@ struct HabitsTimeOfDayCard: View {
 struct HabitsCalendarCard: View {
     let days: [ReadingInsights.DailyWordsBucket]
     let longestStreak: Int
+    let thresholds: [Int]
     @Environment(ThemeManager.self) private var theme
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
@@ -1541,9 +1552,9 @@ struct HabitsCalendarCard: View {
 
     private func heatColor(for words: Int) -> Color {
         if words == 0 { return Color.primary.opacity(0.06) }
-        if words < 5_000 { return theme.accentInk.opacity(0.55) }
-        if words < 10_000 { return theme.accentInk.opacity(0.70) }
-        if words < 20_000 { return theme.accentInk.opacity(0.85) }
+        if words < thresholds[0] { return theme.accentInk.opacity(0.55) }
+        if words < thresholds[1] { return theme.accentInk.opacity(0.70) }
+        if words < thresholds[2] { return theme.accentInk.opacity(0.85) }
         return theme.accentInk
     }
 }
@@ -1624,6 +1635,8 @@ struct HabitsSittingsCard: View {
 struct HabitsSavedToFinishedCard: View {
     let savedToOpenedDays: Int?
     let openedToFinishedDays: Int?
+    let savedToOpenedCount: Int
+    let openedToFinishedCount: Int
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -1673,6 +1686,9 @@ struct HabitsSavedToFinishedCard: View {
                         Text("saved to opened, median")
                             .font(.caption2)
                             .foregroundStyle(.secondaryInk)
+                        Text("\(savedToOpenedCount) works")
+                            .font(.caption2)
+                            .foregroundStyle(.secondaryInk)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -1682,6 +1698,9 @@ struct HabitsSavedToFinishedCard: View {
                         Text("\(days) days")
                             .font(.headline)
                         Text("opened to finished, median")
+                            .font(.caption2)
+                            .foregroundStyle(.secondaryInk)
+                        Text("\(openedToFinishedCount) works")
                             .font(.caption2)
                             .foregroundStyle(.secondaryInk)
                     }
@@ -1701,6 +1720,7 @@ struct HabitsSavedToFinishedCard: View {
 
 struct HabitsRereadsCard: View {
     let rereads: [ReadingHabitsInsights.RereadWork]
+    let rereadTimeShare: Double?
     let discreetMode: Bool
     var discreetMasker: InsightsDiscreetMasker = .empty
     @Environment(ThemeManager.self) private var theme
@@ -1711,6 +1731,13 @@ struct HabitsRereadsCard: View {
                 .font(.title3.weight(.bold))
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 4)
+
+            if let rereadTimeShare {
+                Text("\(Int((rereadTimeShare * 100).rounded()))% of reading time")
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .padding(.horizontal, 4)
+            }
 
             VStack(spacing: 0) {
                 if rereads.isEmpty {
@@ -1815,7 +1842,9 @@ struct HabitsFandomTimelineCard: View {
 
 struct HabitsStoppedCard: View {
     let stoppedCount: Int
+    let stoppedInPeriodCount: Int
     let medianProgress: Double?
+    let reasons: [ReadingHabitsInsights.StopReasonCount]
     let commonTags: [(name: String, count: Int)]
     let discreetMode: Bool
     var discreetMasker: InsightsDiscreetMasker = .empty
@@ -1828,7 +1857,7 @@ struct HabitsStoppedCard: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                 Spacer()
-                Text("\(stoppedCount) in all")
+                Text("\(stoppedInPeriodCount) this period · \(stoppedCount) in all")
                     .font(.footnote)
                     .foregroundStyle(.secondaryInk)
             }
@@ -1841,6 +1870,15 @@ struct HabitsStoppedCard: View {
                         .font(.footnote)
                         .foregroundStyle(.secondaryInk)
                 }
+            }
+
+            ForEach(reasons) { reason in
+                HStack {
+                    Text(reason.label)
+                    Spacer()
+                    Text("\(reason.count)").monospacedDigit()
+                }
+                .font(.footnote)
             }
 
             if !commonTags.isEmpty {
@@ -1879,6 +1917,7 @@ struct LibraryUnreadCard: View {
     let unreadWords: Int
     let unreadCount: Int
     let monthsToClear: Int?
+    let monthsToClearRange: ClosedRange<Int>?
     let addedWords: Int
     let readWords: Int
     @Environment(ThemeManager.self) private var theme
@@ -1901,6 +1940,10 @@ struct LibraryUnreadCard: View {
 
             if let m = monthsToClear, m > 0 {
                 Text("About \(m) month\(m == 1 ? "" : "s") at your recent pace")
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+            } else if let range = monthsToClearRange {
+                Text("About \(range.lowerBound) to \(range.upperBound) months at this pace")
                     .font(.footnote)
                     .foregroundStyle(.secondaryInk)
             }

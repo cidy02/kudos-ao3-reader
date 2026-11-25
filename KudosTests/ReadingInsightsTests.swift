@@ -238,6 +238,19 @@ struct ReadingInsightsTests {
         #expect(conc.first?.fandom == "Persuasion")
     }
 
+    @Test func shipConcentrationUsesFandomWordsAndFourUniqueWorks() {
+        let ship = RelationshipShare(name: "A/B", isRomantic: true, fandom: "F",
+            worksCount: 2, words: 3_000)
+        let tooFew = ReadingInsights.shipConcentrations(
+            relationships: [ship], fandomWords: ["F": 10_000], fandomWorkCounts: ["F": 3]
+        )
+        #expect(tooFew.isEmpty)
+        let enough = ReadingInsights.shipConcentrations(
+            relationships: [ship], fandomWords: ["F": 10_000], fandomWorkCounts: ["F": 4]
+        )
+        #expect(enough.first?.percentage == 30)
+    }
+
     @Test func sittingBucketsDistributeCorrectlyByDuration() {
         let facts = [
             fact(on: 1, minutes: 5),    // < 10 m
@@ -522,6 +535,40 @@ struct ReadingInsightsTests {
         #expect(habits.calendarDays.reduce(0) { $0 + $1.words } == total)
     }
 
+    @Test func allTabsReconcileFromOneFilteredPeriod() {
+        let (facts, period, range) = checkFixture()
+        let works = Set(facts.map(\.workID)).map { id -> SavedWork in
+            let work = SavedWork(id: id, title: "\(id)", author: "A")
+            work.wordCount = 30_000
+            return work
+        }
+        let overview = ReadingInsights.make(facts: facts, dayRange: range, calendar: calendar)
+        let taste = ReadingTasteInsights.make(works: works, facts: facts)
+        let habits = ReadingHabitsInsights.make(
+            works: works, facts: facts, allFacts: facts,
+            periodInterval: period, calendar: calendar
+        )
+        let library = ReadingLibraryInsights.make(
+            works: works, facts: facts, allFacts: facts,
+            periodInterval: period, calendar: calendar
+        )
+        let words = overview.totalWordsRead
+        #expect(overview.dailyWords.reduce(0) { $0 + $1.words } == words)
+        #expect(overview.fandomWordsShares.reduce(0) { $0 + $1.words } == words)
+        #expect(taste.fandoms.reduce(0) { $0 + $1.words } == words)
+        #expect(habits.calendarDays.reduce(0) { $0 + $1.words } == words)
+        #expect(library.readWordsInPeriod == words)
+        #expect(overview.silentReadingSeconds + overview.listeningSeconds == overview.readingSeconds)
+        #expect(habits.hourlyDuration.reduce(0) { $0 + $1.seconds } == overview.readingSeconds)
+        #expect(habits.sittingBuckets.reduce(0) { $0 + $1.count } == facts.count)
+        #expect(overview.lengthMix.totalWorks == works.count)
+        #expect(taste.ratings.reduce(0) { $0 + $1.count } == works.count)
+        #expect(taste.languages.reduce(0) { $0 + $1.count } == works.count)
+        #expect(library.statuses.total == works.count)
+        let hours = overview.silentReadingSeconds / 3_600
+        #expect(overview.wordsPerHour == Double(words) / hours)
+    }
+
     @Test func checkTimeAddsUp() {
         let (facts, _, range) = checkFixture()
         let insights = ReadingInsights.make(facts: facts, dayRange: range, calendar: calendar)
@@ -607,6 +654,7 @@ struct ReadingInsightsTests {
         let early = SavedWork(title: "Early", author: "A")
         early.isFinished = true
         early.importSourceRaw = WorkImportSource.search.rawValue
+        early.importSourceSince = day(1)
         early.statsSavedAt = day(1)
         early.kudosAtSave = 100
         early.kudos = 350
@@ -620,8 +668,10 @@ struct ReadingInsightsTests {
         #expect(figures.arrivalRows.first?.finished == 1)
         #expect(figures.arrivalRows.first?.saved == 1)
         #expect(figures.arrivalRows.first?.label == "Other")
+        #expect(figures.arrivalSince == day(1))
         #expect(figures.foundEarlyCount == 1)
         #expect(figures.foundEarlyGrownCount == 1)
+        #expect(figures.foundEarlyGrowthShare == 1)
         #expect(figures.foundEarlyExample?.contains("100 then, 350 now") == true)
 
         let beforeRecording = ReadingLibraryInsights.make(
@@ -629,7 +679,9 @@ struct ReadingInsightsTests {
             periodInterval: DateInterval(start: day(1), end: day(2)), calendar: calendar
         )
         #expect(beforeRecording.arrivalRows.isEmpty)
+        #expect(beforeRecording.arrivalSince == nil)
         #expect(beforeRecording.foundEarlyCount == 0)
+        #expect(beforeRecording.foundEarlyGrowthShare == nil)
     }
 
     @Test func seriesAuthorsAndFavoritesUseRecordedIdentityAndLastPart() {
@@ -701,6 +753,134 @@ struct ReadingInsightsTests {
         #expect(pairs.first?.tagA == "A")
         #expect(pairs.first?.tagB == "B")
         #expect(ReadingInsights.oftenTogetherTags(from: Array(works.prefix(2))).isEmpty)
+    }
+
+    @Test func habitsUseExplicitStopsAndFirstOpenCohort() {
+        let stopped = SavedWork(title: "Stopped", author: "A")
+        stopped.readingStatusRaw = "stopped"
+        stopped.stoppedAt = day(2)
+        stopped.stopReasonRaw = "lostInterest"
+        stopped.lastReadDate = day(1)
+        let openedEarlier = SavedWork(title: "Earlier", author: "A")
+        openedEarlier.dateAdded = day(1)
+        let old = fact(work: openedEarlier.id, on: 1, minutes: 20)
+        let current = fact(work: openedEarlier.id, on: 2, minutes: 20)
+        let period = DateInterval(start: day(2, hour: 0), end: day(3, hour: 0))
+        let habits = ReadingHabitsInsights.make(
+            works: [stopped, openedEarlier], facts: [current], allFacts: [old, current],
+            periodInterval: period, calendar: calendar
+        )
+        #expect(habits.stoppedCount == 1)
+        #expect(habits.stoppedInPeriodCount == 1)
+        #expect(habits.stopReasons.first?.label == "Lost interest")
+        #expect(habits.savedToOpenedCount == 0)
+    }
+
+    @Test func rereadTimeCountsOnlySittingsAfterFirstFinish() {
+        let work = SavedWork(title: "Reread", author: "A")
+        var finish = fact(work: work.id, on: 1, minutes: 30, didFinish: true)
+        finish.sessionID = UUID()
+        var reread = fact(work: work.id, on: 2, minutes: 60)
+        reread.sessionID = UUID()
+        let habits = ReadingHabitsInsights.make(
+            works: [work], facts: [finish, reread], allFacts: [finish, reread], calendar: calendar
+        )
+        #expect(habits.rereadTimeShare == 2.0 / 3.0)
+    }
+
+    @Test func stoppedTagsNeedFiveOpenedWorksAndDoubleTheBaseline() {
+        let works = (0..<10).map { SavedWork(title: "\($0)", author: "A") }
+        for work in works { work.lastReadDate = day(1) }
+        for work in works.prefix(5) { work.workTags = ["Trigger"] }
+        for work in works.prefix(4) { work.readingStatusRaw = "stopped" }
+        let habits = ReadingHabitsInsights.make(works: works, facts: [], allFacts: [], calendar: calendar)
+        #expect(habits.commonStopTags.first?.name == "Trigger")
+        #expect(habits.commonStopTags.first?.count == 4)
+        works[4].workTags = []
+        let belowFive = ReadingHabitsInsights.make(works: works, facts: [], allFacts: [], calendar: calendar)
+        #expect(belowFive.commonStopTags.isEmpty)
+    }
+
+    @Test func timelineLeavesQuietMonthsBlankAndExcludesOtherYears() {
+        let current = fact(on: 2, minutes: 30, words: 4_000, fandom: "F")
+        var previousYear = fact(on: 2, minutes: 30, words: 100_000, fandom: "F")
+        previousYear.startedAt = calendar.date(byAdding: .year, value: -1, to: current.startedAt) ?? current.startedAt
+        let period = DateInterval(start: day(1), end: day(28))
+        let quiet = ReadingHabitsInsights.make(
+            works: [], facts: [current], allFacts: [previousYear, current],
+            periodInterval: period, calendar: calendar
+        )
+        #expect(quiet.fandomTimeline.first?.monthlyActivity[7] == 0)
+        var louder = current
+        louder.wordsRead = 6_000
+        let active = ReadingHabitsInsights.make(
+            works: [], facts: [louder], allFacts: [previousYear, louder],
+            periodInterval: period, calendar: calendar
+        )
+        #expect((active.fandomTimeline.first?.monthlyActivity[7] ?? 0) > 0)
+    }
+
+    @Test func calendarUsesPriorTwelveMonthReadingDayQuartiles() {
+        let rows = (1...20).map { dayNumber in
+            fact(on: dayNumber, minutes: 20, words: dayNumber * 1_000)
+        }
+        let end = day(28)
+        let thresholds = ReadingHabitsInsights.calendarThresholds(
+            allFacts: rows, through: end, calendar: calendar
+        )
+        #expect(thresholds == [6_000, 11_000, 16_000])
+        let sparse = ReadingHabitsInsights.calendarThresholds(
+            allFacts: Array(rows.prefix(19)), through: end, calendar: calendar
+        )
+        #expect(sparse == [5_000, 10_000, 20_000])
+    }
+
+    @Test func unreadPaceUsesNinetyDayHistoryAndRequiresReadingDays() {
+        let unread = SavedWork(title: "Unread", author: "A")
+        unread.wordCount = 30_000
+        let interval = DateInterval(start: day(1), end: day(31))
+        let sixDays = (21...26).map { fact(on: $0, minutes: 20, words: 1_000) }
+        let six = ReadingLibraryInsights.make(
+            works: [unread], facts: sixDays, allFacts: sixDays,
+            periodInterval: interval, calendar: calendar, now: day(28)
+        )
+        #expect(six.monthsToClear == nil)
+        #expect(six.monthsToClearRange == nil)
+        let sevenDays = (21...27).map { fact(on: $0, minutes: 20, words: 1_000) }
+        let seven = ReadingLibraryInsights.make(
+            works: [unread], facts: sevenDays, allFacts: sevenDays,
+            periodInterval: interval, calendar: calendar, now: day(28)
+        )
+        #expect(seven.monthsToClear == nil)
+        #expect(seven.monthsToClearRange != nil)
+        let thirtyDays = (1...30).map { fact(on: $0, minutes: 20, words: 1_000) }
+        let thirty = ReadingLibraryInsights.make(
+            works: [unread], facts: thirtyDays, allFacts: thirtyDays,
+            periodInterval: interval, calendar: calendar, now: day(31)
+        )
+        #expect(thirty.monthsToClear == 1)
+        #expect(thirty.monthsToClearRange == nil)
+    }
+
+    @Test func stillReadingPromptRequiresAnUnreadPostedChapter() {
+        let work = SavedWork(title: "WIP", author: "A")
+        work.isComplete = false
+        work.chapters = "5/10"
+        work.lastSpineIndex = 2
+        work.lastReadDate = day(1)
+        let period = DateInterval(start: day(1), end: day(31))
+        let eligible = ReadingLibraryInsights.make(
+            works: [work], facts: [], periodInterval: period,
+            calendar: calendar, now: day(31)
+        )
+        #expect(eligible.stillReadingCandidate?.id == work.id)
+        work.lastSpineIndex = 4
+        work.lastScrollFraction = 1
+        let caughtUp = ReadingLibraryInsights.make(
+            works: [work], facts: [], periodInterval: period,
+            calendar: calendar, now: day(31)
+        )
+        #expect(caughtUp.stillReadingCandidate == nil)
     }
 
     @Test func checkShownFiguresReproduce() {
