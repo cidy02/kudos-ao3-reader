@@ -40,7 +40,7 @@ internal const val EMBEDDED_COVER_ART_IMAGE_TAG = "embeddedCoverArtImage"
  *
  * Port of iOS `GeneratedCoverArtLoader` (`UIComponents/GeneratedCoverArtLoader.swift:5-118`).
  */
-class EmbeddedCoverArtLoader(
+open class EmbeddedCoverArtLoader(
     private val directory: File,
     private val scan: (File, () -> Boolean) -> ByteArray? = { file, isCancelled ->
         EmbeddedWorkCoverImage.data(file, isCancelled)
@@ -78,7 +78,7 @@ class EmbeddedCoverArtLoader(
      * draw without flicker or main-thread `stat()` calls. Staleness is verified off-main-thread
      * in [load] / [hasEmbeddedArt].
      */
-    fun peekCached(epubFile: File): CacheEntry? = memory.get(epubFile.absolutePath)
+    open fun peekCached(epubFile: File): CacheEntry? = memory.get(epubFile.absolutePath)
 
     /** Synchronous in-memory "has embedded art" lookup with zero filesystem I/O. */
     fun peekHasArt(epubFile: File): Boolean? {
@@ -123,7 +123,7 @@ class EmbeddedCoverArtLoader(
         return load(workId = workId, epubFile = epubFile) != null
     }
 
-    suspend fun load(workId: String, epubFile: File): Bitmap? {
+    open suspend fun load(workId: String, epubFile: File): Bitmap? {
         val path = epubFile.absolutePath
         val prepared = withContext(scanDispatcher) {
             val revision = revisionOf(epubFile)

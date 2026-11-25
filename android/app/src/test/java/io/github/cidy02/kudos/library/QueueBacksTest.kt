@@ -11,10 +11,19 @@ class QueueBacksTest {
 
     @Test
     fun backsStartWithUpNextThenTheRestInOrderAndSkipHiddenWorks() {
-        val queue = listOf(work("done", finished = true), work("next"), work("hidden"), work("later"))
+        // "hidden" sits before "next": without the visibility filter it would lead as Up Next.
+        val queue = listOf(work("done", finished = true), work("hidden"), work("next"), work("later"))
         val backs = queueBacks(queue, visibleWorkIds = setOf("done", "next", "later"))
         // Home's order: the first unfinished work leads, the finished one follows in line.
         assertEquals(listOf("next", "done", "later").take(CoverStackLayout.maxBacks), backs.map { it.id })
+    }
+
+    @Test
+    fun aHiddenFirstWorkNeverShowsEvenWhenItIsTheOnlyUnfinishedOne() {
+        val queue = listOf(work("hidden"), work("a", true), work("b", true))
+        val backs = queueBacks(queue, setOf("a", "b"))
+        assertEquals(listOf("a", "b").take(CoverStackLayout.maxBacks), backs.map { it.id })
+        assertEquals(false, backs.any { it.id == "hidden" })
     }
 
     @Test

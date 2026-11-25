@@ -28,7 +28,7 @@ class RevealCapsuleContrastTest {
         )
         for (ground in grounds) {
             val behindText = RevealCapsuleColors.backing.compositeOver(ground)
-            val ratio = contrast(RevealCapsuleColors.ink, behindText)
+            val ratio = contrast(RevealCapsuleColors.ink.compositeOver(behindText), behindText)
             assertTrue("Tap to reveal is $ratio:1 on $ground", ratio >= 4.5)
         }
     }

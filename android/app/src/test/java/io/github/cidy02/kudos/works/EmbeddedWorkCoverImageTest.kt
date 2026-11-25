@@ -167,7 +167,7 @@ class EmbeddedWorkCoverImageTest {
         val needle = "OEBPS/front.png".toByteArray()
         var patched = false
         var i = 0
-        while (i < raw.size - 46) {
+        while (i <= raw.size - 46 - needle.size) {
             // Central directory header signature PK\u0001\u0002; name starts 46 bytes in.
             if (raw[i] == 0x50.toByte() && raw[i + 1] == 0x4b.toByte() && raw[i + 2] == 1.toByte() && raw[i + 3] == 2.toByte() &&
                 raw.copyOfRange(i + 46, i + 46 + needle.size).contentEquals(needle)

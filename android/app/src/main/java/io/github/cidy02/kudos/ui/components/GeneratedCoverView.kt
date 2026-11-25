@@ -66,6 +66,8 @@ import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sin
 
+/** Lets a test (or a host) supply the art loader; production uses the shared one. */
+val LocalEmbeddedCoverArtLoader = staticCompositionLocalOf<EmbeddedCoverArtLoader?> { null }
 val LocalWorkEpubFileResolver = staticCompositionLocalOf<(String) -> File?> { { null } }
 
 private class PreparedArt(
@@ -161,7 +163,8 @@ fun GeneratedCoverView(
 
     // The shared loader and its keyed-state pattern (see rememberWorkEmbeddedCoverArt): state keyed like the load,
     // so a reused composable never shows the previous work's art while the new one loads.
-    val loader = remember(context) { EmbeddedCoverArtLoader.shared(context) }
+    val provided = LocalEmbeddedCoverArtLoader.current
+    val loader = remember(context, provided) { provided ?: EmbeddedCoverArtLoader.shared(context) }
     val active = epub.takeIf { showsArt }
     val workId = active?.workId
     val file = active?.file

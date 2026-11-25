@@ -661,7 +661,6 @@ internal object RevealCapsuleColors {
 
 @Composable
 internal fun RevealCapsule(modifier: Modifier = Modifier) {
-    val tokens = LocalKudosTokens.current
     Row(
         modifier
             .background(RevealCapsuleColors.backing, CircleShape)

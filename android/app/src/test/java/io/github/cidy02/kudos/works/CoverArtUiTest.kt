@@ -58,6 +58,7 @@ import io.github.cidy02.kudos.ui.components.CoverEpub
 import io.github.cidy02.kudos.ui.components.CoverStack
 import io.github.cidy02.kudos.ui.components.CoverStackKind
 import io.github.cidy02.kudos.ui.components.GeneratedCoverView
+import io.github.cidy02.kudos.ui.components.LocalEmbeddedCoverArtLoader
 import io.github.cidy02.kudos.ui.components.LocalUseEmbeddedCoverArt
 import io.github.cidy02.kudos.ui.components.generatedCoverRecipe
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
@@ -72,6 +73,7 @@ import java.time.Instant
 import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -464,6 +466,18 @@ class CoverArtUiTest {
     private fun embeddedArtCount(): Int =
         compose.onAllNodesWithTag(EMBEDDED_COVER_ART_IMAGE_TAG, useUnmergedTree = true).fetchSemanticsNodes().size
 
+    /** A loader whose scans the test controls: work B's load stays pending until [gate] completes. */
+    private class ControlledLoader(directory: File, private val gatedWorkId: String) : EmbeddedCoverArtLoader(directory) {
+        val gate = CompletableDeferred<Unit>()
+        val loadsFor = java.util.Collections.synchronizedList(mutableListOf<String>())
+
+        override suspend fun load(workId: String, epubFile: File): android.graphics.Bitmap? {
+            loadsFor += workId
+            if (workId == gatedWorkId) gate.await()
+            return super.load(workId, epubFile)
+        }
+    }
+
     @Test
     fun generatedCoverViewDrawsArtOnlyWhenAskedAndReloadsOnWorkAndRevisionKeys() {
         val context = ApplicationProvider.getApplicationContext<Context>()
@@ -474,38 +488,51 @@ class CoverArtUiTest {
         val bFile = writeFixtureEpub(fileStore.workEpubPath(bId).toFile(), includeCoverArt = false)
         createdFiles += aFile
         createdFiles += bFile
+        val loader = ControlledLoader(File(root.toFile(), "controlled-cache"), gatedWorkId = bId)
         var epub by mutableStateOf<CoverEpub?>(CoverEpub(aId, aFile, "digest-1", 1L))
         var showsArt by mutableStateOf(false)
         val recipe = SavedWork(id = aId, title = "Keyed", author = "Author").generatedCoverRecipe()
         compose.setContent {
-            KudosTheme(KudosThemeMode.Light) {
-                GeneratedCoverView(recipe = recipe, width = 164.dp, epub = epub, showsArt = showsArt)
+            CompositionLocalProvider(LocalEmbeddedCoverArtLoader provides loader) {
+                KudosTheme(KudosThemeMode.Light) {
+                    GeneratedCoverView(recipe = recipe, width = 164.dp, epub = epub, showsArt = showsArt)
+                }
             }
         }
 
-        // showsArt = false never draws the art, even with an EPUB that has some.
-        Thread.sleep(400)
+        // showsArt = false never even asks the loader, however long we look (no sleeping: the loader is the witness).
         compose.waitForIdle()
+        assertEquals(emptyList<String>(), loader.loadsFor.toList())
         assertEquals(0, embeddedArtCount())
 
-        showsArt = true
+        compose.runOnIdle { showsArt = true }
         compose.waitUntil(5_000) { embeddedArtCount() == 1 }
 
-        // Work B reuses the same slot: A picture must be gone within two frames, not once B load ends.
-        compose.mainClock.autoAdvance = false
-        compose.runOnIdle { epub = CoverEpub(bId, bFile, "digest-b", 1L) }
-        // Composition then semantics settle within a few frames; B's own scan runs on another thread and has not
-        // been delivered, because the clock is paused.
-        repeat(5) { if (embeddedArtCount() != 0) compose.mainClock.advanceTimeByFrame() }
-        assertEquals("work A's art leaked into work B's cover", 0, embeddedArtCount())
-        compose.mainClock.autoAdvance = true
+        try {
+            // Work B reuses the same slot and its load cannot finish (gated): A's picture must not stand in for it.
+            compose.runOnIdle { epub = CoverEpub(bId, bFile, "digest-b", 1L) }
+            compose.waitForIdle()
+            assertTrue("B's load was never requested", bId in loader.loadsFor.toList())
+            assertEquals("work A's art leaked into work B's cover", 0, embeddedArtCount())
+        } finally {
+            loader.gate.complete(Unit)
+        }
 
-        // Back on A, then A's EPUB is replaced (new digest + downloadedAt, no art now): the cached art must not stay.
-        epub = CoverEpub(aId, aFile, "digest-1", 1L)
+        // Back on A. Each revision key alone must reload: replace the EPUB (no art now), change only one key.
+        compose.runOnIdle { epub = CoverEpub(aId, aFile, "digest-1", 1L) }
         compose.waitUntil(5_000) { embeddedArtCount() == 1 }
         writeFixtureEpub(aFile, includeCoverArt = false)
         assertTrue(aFile.setLastModified(aFile.lastModified() + 10_000L))
-        epub = CoverEpub(aId, aFile, "digest-2", 2L)
+        compose.runOnIdle { epub = CoverEpub(aId, aFile, "digest-2", 1L) } // only epubDigest changed
+        compose.waitUntil(5_000) { embeddedArtCount() == 0 }
+
+        writeFixtureEpub(aFile, includeCoverArt = true)
+        assertTrue(aFile.setLastModified(aFile.lastModified() + 10_000L))
+        compose.runOnIdle { epub = CoverEpub(aId, aFile, "digest-2", 2L) } // only downloadedAt changed
+        compose.waitUntil(5_000) { embeddedArtCount() == 1 }
+        writeFixtureEpub(aFile, includeCoverArt = false)
+        assertTrue(aFile.setLastModified(aFile.lastModified() + 20_000L))
+        compose.runOnIdle { epub = CoverEpub(aId, aFile, "digest-2", 3L) } // only downloadedAt changed again
         compose.waitUntil(5_000) { embeddedArtCount() == 0 }
     }
 
