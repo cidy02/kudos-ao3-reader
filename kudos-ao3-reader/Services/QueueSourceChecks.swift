@@ -5,6 +5,27 @@ enum QueueSourceChecks {
     static let cooldown: TimeInterval = 6 * 60 * 60
     static let spacing: TimeInterval = 3
 
+    /// Baseline filters for a tag's works listing (newest first by Date Updated),
+    /// shared with `TagWorksView` so count fetches and Find More hit the same URL.
+    nonisolated static var tagBaselineFilters: AO3SearchFilters {
+        var filters = AO3SearchFilters()
+        filters.sort = .dateUpdated
+        filters.sortDirection = AO3SearchFilters.Sort.dateUpdated.naturalDirection
+        return filters
+    }
+
+    /// Counts only run when the reader has visibly opened a non-smart queue page
+    /// with at least one visible source on the active tab while the app is active.
+    static func shouldCheckOnOpen(
+        isPageVisible: Bool,
+        isAppActive: Bool,
+        isSelectedTab: Bool,
+        isSmartQueue: Bool,
+        hasVisibleSources: Bool
+    ) -> Bool {
+        isPageVisible && isAppActive && isSelectedTab && !isSmartQueue && hasVisibleSources
+    }
+
     static func eligible<T>(
         _ sources: [T], checkedAt: (T) -> Date?, now: Date
     ) -> [T] {
@@ -16,7 +37,7 @@ enum QueueSourceChecks {
     }
 
     /// AO3 search blurbs carry a calendar day, not a time. A work is new when
-    /// that day is on or after the UTC day of `lastOpenedAt`. A search that has
+    /// that day is on or after the UTC day of `lastOpenedAt`. A source that has
     /// never been opened or baselined counts 0 — never the whole first page.
     static func count(_ page: AO3SearchPage, since opened: Date?) -> Int {
         guard let opened else { return 0 }
@@ -35,14 +56,34 @@ enum QueueSourceChecks {
         return 0
     }
 
-    /// New-result counts are only meaningful when page 1 is newest-first.
+    /// New-result counts for saved searches are only meaningful when page 1 is newest-first.
     static func countsNewResults(_ filters: AO3SearchFilters) -> Bool {
         (filters.sort == .dateUpdated || filters.sort == .datePosted)
             && filters.sortDirection == .descending
     }
 
+    /// Whether a source of `kind` counts new results. Unknown kinds (`nil`) never fetch or count.
+    static func countsNewResults(kind: QueueSourceKind?, filters: AO3SearchFilters? = nil) -> Bool {
+        guard let kind else { return false }
+        switch kind {
+        case .savedSearch:
+            return filters.map(countsNewResults) ?? false
+        case .author, .series, .tag:
+            return true
+        }
+    }
+
     static func displayedCount(_ count: Int?, filters: AO3SearchFilters) -> Int? {
         guard countsNewResults(filters), let count, count > 0 else { return nil }
+        return count
+    }
+
+    static func displayedCount(
+        _ count: Int?,
+        kind: QueueSourceKind?,
+        filters: AO3SearchFilters? = nil
+    ) -> Int? {
+        guard countsNewResults(kind: kind, filters: filters), let count, count > 0 else { return nil }
         return count
     }
 
@@ -69,9 +110,40 @@ enum QueueSourceChecks {
         return "\(base), \(badge(shown)) on AO3"
     }
 
+    static func sourceAccessibilityLabel(
+        name: String,
+        kind: QueueSourceKind,
+        count: Int?,
+        filters: AO3SearchFilters? = nil
+    ) -> String {
+        if kind == .savedSearch {
+            return findMoreAccessibilityLabel(
+                name: name, count: count, filters: filters ?? AO3SearchFilters()
+            )
+        }
+        let prefix = switch kind {
+        case .savedSearch: "Find more works"
+        case .author: "Open author \(name)"
+        case .series: "Open series \(name)"
+        case .tag: "Open tag \(name)"
+        }
+        guard let shown = displayedCount(count, kind: kind, filters: filters) else {
+            return "\(prefix) on AO3"
+        }
+        return "\(prefix), \(badge(shown)) on AO3"
+    }
+
     /// Queue counts stay anonymous. A signed-in Find More must load its own page.
     static func cachedPageForFindMore(_ page: AO3SearchPage?, isLoggedIn: Bool) -> AO3SearchPage? {
         isLoggedIn ? nil : page
+    }
+
+    /// Queue counts stay anonymous. A signed-in Find More must load its own page.
+    static func cachedFetchForFindMore(
+        _ fetched: QueueSourceFetchedPage?,
+        isLoggedIn: Bool
+    ) -> QueueSourceFetchedPage? {
+        isLoggedIn ? nil : fetched
     }
 
     static func recordsOpenImmediately(hasCachedPage: Bool) -> Bool {
@@ -104,6 +176,50 @@ enum QueueSourceChecks {
         attempt: (Source, Date) -> Bool,
         fetch: (Source) async throws -> AO3SearchPage,
         received: (Source, AO3SearchPage) -> Void
+    ) async {
+        await runPass(
+            sources: sources,
+            checkedAt: checkedAt,
+            now: now,
+            sleep: sleep,
+            attempt: attempt,
+            fetch: fetch,
+            received: received
+        )
+    }
+
+    @MainActor
+    // swiftlint:disable:next function_parameter_count
+    static func runFetched<Source>(
+        sources: [Source],
+        checkedAt: (Source) -> Date?,
+        now: () -> Date,
+        sleep: (TimeInterval) async throws -> Void,
+        attempt: (Source, Date) -> Bool,
+        fetch: (Source) async throws -> QueueSourceFetchedPage,
+        received: (Source, QueueSourceFetchedPage) -> Void
+    ) async {
+        await runPass(
+            sources: sources,
+            checkedAt: checkedAt,
+            now: now,
+            sleep: sleep,
+            attempt: attempt,
+            fetch: fetch,
+            received: received
+        )
+    }
+
+    @MainActor
+    // swiftlint:disable:next function_parameter_count
+    private static func runPass<Source, Payload>(
+        sources: [Source],
+        checkedAt: (Source) -> Date?,
+        now: () -> Date,
+        sleep: (TimeInterval) async throws -> Void,
+        attempt: (Source, Date) -> Bool,
+        fetch: (Source) async throws -> Payload,
+        received: (Source, Payload) -> Void
     ) async {
         let selected = eligible(sources, checkedAt: checkedAt, now: now())
         var previousStart: Date?

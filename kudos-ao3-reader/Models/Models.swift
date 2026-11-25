@@ -1143,6 +1143,10 @@ extension SavedWork {
     @Relationship(deleteRule: .cascade, inverse: \QueueSavedSearchLink.queue)
     var searchLinks: [QueueSavedSearchLink] = []
     var searchSourcesModifiedAt: Date?
+    /// Records intentional edits to non-search sources (author, series, tag),
+    /// including clearing the list, so folder sync and restore can distinguish
+    /// an intentional empty list from an older archive that omitted the key.
+    var sourcesModifiedAt: Date?
     /// The reader's own tags on this queue — 1h draws them under the header with
     /// a dashed "+ Tag", and 1i filters the organizer by them. Shares `Tag` with
     /// `SavedWork.tags` so the vocabulary is one list, not two.

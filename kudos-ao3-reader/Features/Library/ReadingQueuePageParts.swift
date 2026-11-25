@@ -305,7 +305,9 @@ struct QueuePageHeader<FilterRail: View>: View {
     let preservedIDs: Set<UUID>
     let palette: SubjectPalette
     let onAddTag: () -> Void
-    let onFindMore: (SavedSearch) -> Void
+    let onOpenSource: (QueueSavedSearchLink) -> Void
+    let onManageSources: () -> Void
+    let onRemoveSource: (QueueSavedSearchLink) -> Void
     @ViewBuilder var filterRail: () -> FilterRail
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -325,46 +327,8 @@ struct QueuePageHeader<FilterRail: View>: View {
         VStack(alignment: .leading, spacing: 14) {
             headerTop(detailLine: detailLine)
 
-            if queue.kind != .smart {
-                ForEach(queue.searchLinks.filter { $0.search != nil }.sorted {
-                    ($0.search?.name ?? "") < ($1.search?.name ?? "")
-                }) { link in
-                    if let search = link.search {
-                        let count = QueueSourceChecks.displayedCount(
-                            link.newResultCount, filters: search.filters
-                        )
-                        let layout = dynamicTypeSize.isAccessibilitySize
-                            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
-                            : AnyLayout(HStackLayout(alignment: .center, spacing: 10))
-                        Button { onFindMore(search) } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundStyle(.secondary)
-                                layout {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Find More").font(.subheadline.weight(.semibold))
-                                        Text(search.name).font(.caption).foregroundStyle(.secondary)
-                                    }
-                                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 4) }
-                                    if let count {
-                                        Text(QueueSourceChecks.badge(count))
-                                            .font(.caption.weight(.semibold))
-                                            .foregroundStyle(.tint)
-                                    }
-                                }
-                                // Stacked at AX sizes there is no Spacer: keep the card full width (third review).
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
-                            }
-                            .padding(12)
-                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(QueueSourceChecks.findMoreAccessibilityLabel(
-                            name: search.name, count: link.newResultCount, filters: search.filters
-                        ))
-                    }
-                }
+            if queue.kind != .smart, !queue.allVisibleSources.isEmpty {
+                fromSourcesBlock
             }
 
             if !works.isEmpty {
@@ -382,6 +346,110 @@ struct QueuePageHeader<FilterRail: View>: View {
             }
 
             filterRail()
+        }
+    }
+
+    @ViewBuilder
+    private var fromSourcesBlock: some View {
+        let sources = queue.allVisibleSources
+        VStack(alignment: .leading, spacing: 8) {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    fromSourcesHeading(count: sources.count)
+                    manageSourcesButton
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    fromSourcesHeading(count: sources.count)
+                    Spacer(minLength: 8)
+                    manageSourcesButton
+                }
+            }
+
+            ForEach(sources) { link in
+                if let kind = link.knownSourceKind {
+                    sourceCard(link: link, kind: kind)
+                }
+            }
+        }
+    }
+
+    private func fromSourcesHeading(count: Int) -> some View {
+        Text("From sources")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.secondaryInk)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityLabel("From sources, \(count)")
+    }
+
+    private var manageSourcesButton: some View {
+        Button("Sources", action: onManageSources)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.accentInk)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Manage sources for \(queue.displayName)")
+    }
+
+    private func sourceCard(link: QueueSavedSearchLink, kind: QueueSourceKind) -> some View {
+        let name = link.effectiveDisplayName
+        let subtitle = link.effectiveSubtitle
+        let count = link.displayedNewCount
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 10))
+        return Button { onOpenSource(link) } label: {
+            HStack(spacing: 10) {
+                Image(systemName: kind.symbolName)
+                    .foregroundStyle(.secondaryInk)
+                    .frame(width: 20)
+                    .accessibilityHidden(true)
+                layout {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(name)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let subtitle, !subtitle.isEmpty {
+                            Text(subtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondaryInk)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 4) }
+                    if let count {
+                        Text(QueueSourceChecks.badge(count))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.accentInk)
+                    }
+                }
+                // Stacked at AX sizes there is no Spacer: keep the card full width (third review).
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondaryInk)
+                    .accessibilityHidden(true)
+            }
+            .padding(12)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(QueueSourceChecks.sourceAccessibilityLabel(
+            name: name,
+            kind: kind,
+            count: link.newResultCount,
+            filters: link.search?.filters
+        ))
+        .accessibilityAction(named: "Remove source") {
+            onRemoveSource(link)
+        }
+        .contextMenu {
+            Button { onOpenSource(link) } label: {
+                Label("Open on AO3", systemImage: kind.symbolName)
+            }
+            Button(role: .destructive) { onRemoveSource(link) } label: {
+                Label("Remove Source", systemImage: "trash")
+            }
         }
     }
 

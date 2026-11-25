@@ -227,12 +227,19 @@ final class AO3AuthorProfileModel {
     private let dashboardOnly: Bool
     private let overviewMode: Bool
     private let reloadsHeaderAfterModeration: Bool
+    /// Optional anonymous page-1 works HTML fetched by queue-source counts,
+    /// consumed once when opening Works signed out.
+    private var pendingPreloadedWorksHTML: String?
+    private let onWorksPageOneLoaded: (@MainActor () -> Void)?
+    private var didNotifyWorksPageOneLoaded = false
 
     init(
         route: AO3AuthorRoute,
         dashboardOnly: Bool = false,
         overviewMode: Bool = false,
         reloadsHeaderAfterModeration: Bool = true,
+        preloadedWorksHTML: String? = nil,
+        onWorksPageOneLoaded: (@MainActor () -> Void)? = nil,
         pageLoader: PageLoader? = nil,
         moderationSubmitter: ModerationSubmitter? = nil
     ) {
@@ -240,6 +247,8 @@ final class AO3AuthorProfileModel {
         self.dashboardOnly = dashboardOnly
         self.overviewMode = overviewMode
         self.reloadsHeaderAfterModeration = reloadsHeaderAfterModeration
+        pendingPreloadedWorksHTML = preloadedWorksHTML
+        self.onWorksPageOneLoaded = onWorksPageOneLoaded
         self.moderationSubmitter = moderationSubmitter ?? { form, auth in
             try await auth.submitAuthorModeration(form)
         }
@@ -915,9 +924,20 @@ final class AO3AuthorProfileModel {
         replace: Bool,
         bypassCache: Bool = false
     ) async throws {
-        let url = Self.pageURL(worksBaseURL, page: page)
-        let cached = try await parsedPage(at: url, auth: auth, bypassCache: bypassCache) {
-            try AO3Client.parseAuthorWorksPage($0, page: page)
+        let isDefaultFirstWorksPage = page == 1 && replace && worksScope == .works
+            && worksSort == .default && selectedFandom == nil
+        let cached: (value: AO3SearchPage, isStale: Bool)
+        if isDefaultFirstWorksPage, !bypassCache, !auth.isLoggedIn,
+           let preloadedHTML = pendingPreloadedWorksHTML {
+            pendingPreloadedWorksHTML = nil
+            let parsed = try AO3Client.parseAuthorWorksPage(preloadedHTML, page: 1)
+            cached = (parsed, false)
+        } else {
+            if bypassCache || auth.isLoggedIn { pendingPreloadedWorksHTML = nil }
+            let url = Self.pageURL(worksBaseURL, page: page)
+            cached = try await parsedPage(at: url, auth: auth, bypassCache: bypassCache) {
+                try AO3Client.parseAuthorWorksPage($0, page: page)
+            }
         }
         try Task.checkCancellation()
         works = replace
@@ -926,6 +946,10 @@ final class AO3AuthorProfileModel {
         worksPage = cached.value.currentPage
         worksTotalPages = cached.value.totalPages
         isShowingStaleCache = isShowingStaleCache || cached.isStale
+        if isDefaultFirstWorksPage, !didNotifyWorksPageOneLoaded {
+            didNotifyWorksPageOneLoaded = true
+            onWorksPageOneLoaded?()
+        }
     }
 
     private func loadPopular(auth: AO3AuthService, bypassCache: Bool = false) async {

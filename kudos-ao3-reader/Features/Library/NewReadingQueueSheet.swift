@@ -88,7 +88,7 @@ struct NewReadingQueueSheet: View {
     @State private var seedCount: Int?
     @State private var saveFailed = false
     @State private var showingAddWorks = false
-    @State private var showingSearchPicker = false
+    @State private var showingSourcePicker = false
     @State private var colorWellSession = CustomColorWellSession()
 
     @ScaledMetric(relativeTo: .subheadline) private var nameFieldSize: CGFloat = 16
@@ -160,23 +160,66 @@ struct NewReadingQueueSheet: View {
 
                 if isEditing {
                     Section {
-                        groupLabel("Find More")
+                        groupLabel("Sources")
                         ForEach(savedSearches.filter { options.searchIDs.contains($0.id) }) { search in
-                            HStack {
-                                Label(search.name, systemImage: "magnifyingglass")
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            HStack(spacing: 10) {
+                                Image(systemName: QueueSourceKind.savedSearch.symbolName)
+                                    .foregroundStyle(.secondaryInk)
+                                    .frame(width: 20)
+                                    .accessibilityHidden(true)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(search.name)
+                                        .foregroundStyle(.primary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Text("Saved search")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondaryInk)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 Button("Remove \(search.name)", systemImage: "minus.circle") {
                                     options.searchIDs.removeAll { $0 == search.id }
                                 }
                                 .labelStyle(.iconOnly)
+                                .foregroundStyle(.accentInk)
                                 .accessibilityLabel("Remove saved search \(search.name) from queue")
                             }
                             .pageBodyRow(top: 8, gutter: gutter)
                         }
-                        Button("Choose a Saved Search…") { showingSearchPicker = true }
-                            .accessibilityLabel("Choose a saved search for Find More")
+                        ForEach(options.sources) { source in
+                            HStack(spacing: 10) {
+                                Image(systemName: source.kind.symbolName)
+                                    .foregroundStyle(.secondaryInk)
+                                    .frame(width: 20)
+                                    .accessibilityHidden(true)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(source.displayName)
+                                        .foregroundStyle(.primary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Text(source.subtitle ?? source.kind.kindLabel)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondaryInk)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                Button("Remove \(source.displayName)", systemImage: "minus.circle") {
+                                    options.sources.removeAll { $0.dedupKey == source.dedupKey }
+                                }
+                                .labelStyle(.iconOnly)
+                                .foregroundStyle(.accentInk)
+                                .accessibilityLabel(
+                                    "Remove \(source.kind.kindLabel.lowercased()) \(source.displayName) from queue"
+                                )
+                            }
                             .pageBodyRow(top: 8, gutter: gutter)
-                        footnote("The queue opens this search from Find More and counts results posted since your last visit.")
+                        }
+                        Button("Add a Source…") { showingSourcePicker = true }
+                            .foregroundStyle(.accentInk)
+                            .accessibilityLabel("Add a source to this queue")
+                            .pageBodyRow(top: 8, gutter: gutter)
+                        footnote(
+                            "Kudos checks a source when you open this queue. "
+                                + "Nothing is fetched in the background."
+                        )
                     }
                 }
 
@@ -275,43 +318,26 @@ struct NewReadingQueueSheet: View {
                 initialSelection: Set(options.seedWorkIDs)
             )
         }
-        .sheet(isPresented: $showingSearchPicker) {
-            NavigationStack {
-                Group {
-                    if savedSearches.isEmpty {
-                        ContentUnavailableView {
-                            Label("No Saved Searches", systemImage: "magnifyingglass")
-                        } description: {
-                            Text("Save a search from the Search tab, then add it here.")
-                        }
-                    } else {
-                        List(savedSearches) { search in
-                            Button {
-                                if !options.searchIDs.contains(search.id) {
-                                    options.searchIDs.append(search.id)
-                                }
-                                showingSearchPicker = false
-                            } label: {
-                                HStack {
-                                    Text(search.name)
-                                    Spacer()
-                                    if options.searchIDs.contains(search.id) {
-                                        Image(systemName: "checkmark").foregroundStyle(.tint)
-                                    }
-                                }
-                            }
-                            .accessibilityLabel("Choose saved search \(search.name)")
-                        }
+        .sheet(isPresented: $showingSourcePicker) {
+            AddQueueSourceSheet(
+                queueName: previewName,
+                existingSearchIDs: Set(options.searchIDs),
+                existingSourceKeys: Set(options.sources.map(\.dedupKey)),
+                onAddSearch: { search in
+                    if !options.searchIDs.contains(search.id) {
+                        options.searchIDs.append(search.id)
                     }
-                }
-                .appThemedScroll()
-                .navigationTitle("Saved Searches")
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { showingSearchPicker = false }
+                },
+                onAddSource: { draft in
+                    if !options.sources.contains(where: { $0.dedupKey == draft.dedupKey }) {
+                        options.sources.append(draft)
                     }
+                    options.syncsNonSearchSources = true
                 }
-            }
+            )
+            #if os(iOS)
+            .modifier(ScopeSurfaceAccent())
+            #endif
         }
     }
 
@@ -478,11 +504,15 @@ struct NewReadingQueueSheet: View {
         submitted.seedWorkIDs = []
         if let queue = editingQueue {
             submitted.tagNames = queue.tags.map(\.name).sorted()
-            submitted.searchIDs = queue.searchLinks.compactMap { $0.search?.id }
+            submitted.searchIDs = queue.savedSearchLinks.compactMap { $0.search?.id }
+            submitted.sources = []
+            submitted.syncsNonSearchSources = false
             submitted.colorHex = queue.colorHex
         } else {
             submitted.tagNames = []
             submitted.searchIDs = []
+            submitted.sources = []
+            submitted.syncsNonSearchSources = false
             submitted.colorHex = nil
         }
         if rulesUnreadable {
@@ -881,7 +911,9 @@ struct EditReadingQueueSheet: View {
             keepsWorksOffline: queue.kind == .smart ? false : KeepOffline.queueKeeps(queue.keepsWorksOffline),
             tagNames: queue.tags.map(\.name).sorted(),
             colorHex: queue.colorHex,
-            searchIDs: queue.searchLinks.compactMap { $0.search?.id },
+            searchIDs: queue.savedSearchLinks.compactMap { $0.search?.id },
+            sources: queue.visibleNonSearchSources.compactMap(\.sourceDraft),
+            syncsNonSearchSources: queue.kind != .smart,
             draftID: queue.id,
             isSmart: queue.kind == .smart,
             smartRulesJSON: queue.smartRulesJSON
@@ -948,6 +980,11 @@ nonisolated struct NewQueueOptions: Equatable, Sendable {
     /// that does not exist yet.
     var seedWorkIDs: [UUID] = []
     var searchIDs: [UUID] = []
+    /// Non-search sources (author, series, tag) edited in Edit Queue.
+    var sources: [QueueSourceDraft] = []
+    /// Set by Edit Queue so `updateQueue` reconciles `sources` only when the
+    /// caller actually loaded and edited them.
+    var syncsNonSearchSources = false
     /// Stable draft identity made when New Queue opens so its preview cover
     /// matches the created queue; Edit Queue passes the existing queue's id.
     var draftID = UUID()

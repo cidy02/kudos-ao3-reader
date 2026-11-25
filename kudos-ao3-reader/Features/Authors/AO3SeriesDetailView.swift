@@ -10,7 +10,14 @@ struct AO3SeriesDetailView: View {
     }
 
     let series: AO3SeriesSummary
+    /// Optional anonymous page-1 HTML fetched by queue-source counts, reused
+    /// once when signed out so Find More makes no second request.
+    var preloadedPageOneHTML: String?
+    var initialOrigin: ReadingQueueMembershipOrigin?
+    var onPageOneLoaded: (() -> Void)?
     @State private var recordedSeriesView = false
+    @State private var didConsumePreloaded = false
+    @State private var didNotifyPageOneLoaded = false
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
@@ -137,6 +144,12 @@ struct AO3SeriesDetailView: View {
                 }
             }
             .remoteWorkSelectionChrome(bulkSelection)
+            .environment(\.queueMembershipOrigin, bulkSelection.origin ?? initialOrigin)
+            .onAppear {
+                if bulkSelection.origin == nil, let initialOrigin {
+                    bulkSelection.origin = initialOrigin
+                }
+            }
             .navigationDestination(isPresented: $isEditingSeries) {
                 SeriesEditDestination(series: series, works: works)
             }
@@ -492,16 +505,24 @@ struct AO3SeriesDetailView: View {
             guard let url = AO3Client.seriesPageURL(series.url, page: page) else {
                 throw AO3Error.network("Bad series URL.")
             }
-            let cached = try await AO3AuthorProfileFetcher.page(
-                at: url,
-                auth: auth,
-                cacheScope: expectedCacheScope,
-                isCurrent: {
-                    authenticationScope == expectedAuthenticationScope
-                        && auth.sessionGeneration == expectedSessionGeneration
-                },
-                bypassCache: bypassCache
-            )
+            let cached: AO3AuthorProfileFetcher.Page
+            if page == 1, replace, !bypassCache, !didConsumePreloaded, !auth.isLoggedIn,
+               let html = preloadedPageOneHTML {
+                didConsumePreloaded = true
+                cached = AO3AuthorProfileFetcher.Page(html: html, isStale: false)
+            } else {
+                didConsumePreloaded = true
+                cached = try await AO3AuthorProfileFetcher.page(
+                    at: url,
+                    auth: auth,
+                    cacheScope: expectedCacheScope,
+                    isCurrent: {
+                        authenticationScope == expectedAuthenticationScope
+                            && auth.sessionGeneration == expectedSessionGeneration
+                    },
+                    bypassCache: bypassCache
+                )
+            }
             let result: AO3SearchPage
             do {
                 result = try AO3Client.parseAuthorWorksPage(cached.html, page: page)
@@ -536,6 +557,10 @@ struct AO3SeriesDetailView: View {
                 ? cached.isStale
                 : isShowingStaleCache || cached.isStale
             phase = .loaded
+            if page == 1, !didNotifyPageOneLoaded {
+                didNotifyPageOneLoaded = true
+                onPageOneLoaded?()
+            }
         } catch is CancellationError {
             return
         } catch AO3Error.authenticationRequired {

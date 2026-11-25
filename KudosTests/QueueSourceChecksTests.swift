@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import Testing
 @testable import Kudos
 
@@ -198,5 +199,227 @@ struct QueueSourceChecksTests {
         ) == "Open saved search Unlinked")
         #expect(QueueSourceChecks.cachedPageForFindMore(page(["01 Jan 2025"]), isLoggedIn: true) == nil)
         #expect(QueueSourceChecks.cachedPageForFindMore(page(["01 Jan 2025"]), isLoggedIn: false) != nil)
+    }
+
+    private func testContext() throws -> ModelContext {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self, WorkCollection.self,
+            ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self,
+            QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self,
+            ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self
+        ])
+        return ModelContext(try ModelContainer(
+            for: schema,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        ))
+    }
+
+    @Test func noRequestWithoutQueueOpenTrigger() {
+        #expect(QueueSourceChecks.shouldCheckOnOpen(
+            isPageVisible: true, isAppActive: true, isSelectedTab: true,
+            isSmartQueue: false, hasVisibleSources: true
+        ))
+        #expect(!QueueSourceChecks.shouldCheckOnOpen(
+            isPageVisible: false, isAppActive: true, isSelectedTab: true,
+            isSmartQueue: false, hasVisibleSources: true
+        ))
+        #expect(!QueueSourceChecks.shouldCheckOnOpen(
+            isPageVisible: true, isAppActive: false, isSelectedTab: true,
+            isSmartQueue: false, hasVisibleSources: true
+        ))
+        #expect(!QueueSourceChecks.shouldCheckOnOpen(
+            isPageVisible: true, isAppActive: true, isSelectedTab: false,
+            isSmartQueue: false, hasVisibleSources: true
+        ))
+        #expect(!QueueSourceChecks.shouldCheckOnOpen(
+            isPageVisible: true, isAppActive: true, isSelectedTab: true,
+            isSmartQueue: true, hasVisibleSources: true
+        ))
+        #expect(!QueueSourceChecks.shouldCheckOnOpen(
+            isPageVisible: true, isAppActive: true, isSelectedTab: true,
+            isSmartQueue: false, hasVisibleSources: false
+        ))
+        #expect(!QueueSourceChecks.countsNewResults(kind: nil))
+        #expect(QueueSourceChecks.countsNewResults(kind: .author))
+        #expect(QueueSourceChecks.countsNewResults(kind: .series))
+        #expect(QueueSourceChecks.countsNewResults(kind: .tag))
+    }
+
+    @Test func fiveSourceCapAndOldestFirstSpanAllFourKindsAndSkipUnknown() throws {
+        let context = try testContext()
+        let queue = ReadingQueue(name: "Mixed Sources")
+        context.insert(queue)
+
+        let searchA = SavedSearch(name: "Search A", filters: filters(sort: .dateUpdated))
+        let searchB = SavedSearch(name: "Search B", filters: filters(sort: .datePosted))
+        let searchKudos = SavedSearch(name: "Search Kudos", filters: filters(sort: .kudos))
+        for search in [searchA, searchB, searchKudos] { context.insert(search) }
+
+        let now = Date(timeIntervalSince1970: 200_000)
+        let linkSearchA = QueueSavedSearchLink(queue: queue, search: searchA)
+        linkSearchA.lastCheckedAt = now.addingTimeInterval(-60_000)
+        let linkSearchB = QueueSavedSearchLink(queue: queue, search: searchB)
+        linkSearchB.lastCheckedAt = now.addingTimeInterval(-25_000)
+        let linkKudos = QueueSavedSearchLink(queue: queue, search: searchKudos)
+        let linkAuthor1 = QueueSavedSearchLink(
+            queue: queue, kindRaw: QueueSourceKind.author.rawValue,
+            targetKey: "user:alice", displayName: "alice", authorUsername: "alice",
+            lastOpenedAt: now, lastCheckedAt: nil
+        )
+        let linkAuthor2 = QueueSavedSearchLink(
+            queue: queue, kindRaw: QueueSourceKind.author.rawValue,
+            targetKey: "user:bob/pseud:pen", displayName: "pen (bob)",
+            authorUsername: "bob", authorPseud: "pen",
+            lastOpenedAt: now, lastCheckedAt: now.addingTimeInterval(-100) // inside 6h gate
+        )
+        let linkSeries = QueueSavedSearchLink(
+            queue: queue, kindRaw: QueueSourceKind.series.rawValue,
+            targetKey: "series:42", displayName: "Grand Arc", ao3SeriesID: 42,
+            lastOpenedAt: now, lastCheckedAt: now.addingTimeInterval(-50_000)
+        )
+        let linkTag1 = QueueSavedSearchLink(
+            queue: queue, kindRaw: QueueSourceKind.tag.rawValue,
+            targetKey: "tag:slow burn", displayName: "Slow Burn", tagName: "Slow Burn",
+            lastOpenedAt: now, lastCheckedAt: now.addingTimeInterval(-40_000)
+        )
+        let linkTag2 = QueueSavedSearchLink(
+            queue: queue, kindRaw: QueueSourceKind.tag.rawValue,
+            targetKey: "tag:angst", displayName: "Angst", tagName: "Angst",
+            lastOpenedAt: now, lastCheckedAt: now.addingTimeInterval(-30_000)
+        )
+        let linkUnknown = QueueSavedSearchLink(
+            queue: queue, kindRaw: "collection", targetKey: "collection:fest",
+            displayName: "Fest", lastOpenedAt: now, lastCheckedAt: nil
+        )
+        for link in [
+            linkSearchA, linkSearchB, linkKudos, linkAuthor1, linkAuthor2,
+            linkSeries, linkTag1, linkTag2, linkUnknown
+        ] {
+            context.insert(link)
+        }
+        try context.save()
+
+        #expect(!queue.allVisibleSources.contains(where: { $0.id == linkUnknown.id }))
+        #expect(!queue.countableSources.contains(where: { $0.id == linkUnknown.id }))
+        #expect(!queue.countableSources.contains(where: { $0.id == linkKudos.id }))
+
+        let selected = QueueSourceChecks.eligible(
+            queue.countableSources, checkedAt: \.lastCheckedAt, now: now
+        )
+        #expect(selected.map(\.id) == [
+            linkAuthor1.id, linkSearchA.id, linkSeries.id, linkTag1.id, linkTag2.id
+        ])
+    }
+
+    @Test func runFetchedEnforcesSequentialSpacingCancellationAndPageReuse() async throws {
+        var now = Date(timeIntervalSince1970: 100_000)
+        var starts: [Date] = []
+        var inFlight = 0
+        var peak = 0
+        var receivedIDs: [Int] = []
+        let url = try #require(URL(string: "https://archiveofourown.org/series/99"))
+        let sample = QueueSourceFetchedPage(url: url, page: page(["02 Jan 2025"]), html: "<ol></ol>")
+
+        await QueueSourceChecks.runFetched(
+            sources: [1, 2, 3],
+            checkedAt: { _ in nil },
+            now: { now },
+            sleep: { now.addTimeInterval($0) },
+            attempt: { _, date in starts.append(date); return true },
+            fetch: { _ in
+                inFlight += 1
+                peak = max(peak, inFlight)
+                await Task.yield()
+                inFlight -= 1
+                return sample
+            },
+            received: { id, _ in receivedIDs.append(id) }
+        )
+        #expect(peak == 1)
+        #expect(receivedIDs == [1, 2, 3])
+        #expect(starts.count == 3)
+        #expect(starts[1].timeIntervalSince(starts[0]) >= 3)
+        #expect(starts[2].timeIntervalSince(starts[1]) >= 3)
+
+        #expect(QueueSourceChecks.cachedFetchForFindMore(sample, isLoggedIn: false)?.html == "<ol></ol>")
+        #expect(QueueSourceChecks.cachedFetchForFindMore(sample, isLoggedIn: true) == nil)
+    }
+
+    @Test func openingSourceResetsCountWithoutAddingAnyWork() throws {
+        let context = try testContext()
+        let queue = ReadingQueue(name: "Sources Queue")
+        context.insert(queue)
+        let draft = try #require(QueueSourceDraft.series(id: 555, title: "Long Fic Series"))
+        #expect(ReadingQueueService.addSource(draft, to: queue, in: context))
+        let link = try #require(queue.visibleNonSearchSources.first)
+        let baseline = Date(timeIntervalSince1970: 1_735_689_600) // 2025-01-01 00:00 UTC
+        link.lastOpenedAt = baseline
+        link.newResultCount = QueueSourceChecks.count(
+            page(Array(repeating: "02 Jan 2025", count: 20)),
+            since: link.effectiveLastOpenedAt
+        )
+        #expect(link.newResultCount == 20)
+        #expect(QueueSourceChecks.badge(20) == "20+ new")
+        #expect(ReadingQueueService.orderedWorks(in: queue).isEmpty)
+
+        let visited = baseline.addingTimeInterval(3_600)
+        ReadingQueueService.recordSourceOpen(link, at: visited, in: context)
+        #expect(link.lastOpenedAt == visited)
+        #expect(link.newResultCount == 0)
+        #expect(link.displayedNewCount == nil)
+        #expect(ReadingQueueService.orderedWorks(in: queue).isEmpty)
+    }
+
+    @Test func sourceDraftURLParsingAndListingURLsCoverAllKindsAndRejectUntrusted() throws {
+        let context = try testContext()
+        let queue = ReadingQueue(name: "URLs")
+        context.insert(queue)
+
+        let author = try #require(
+            QueueSourceDraft.fromAO3URL("https://archiveofourown.org/users/writer/pseuds/pen/works")
+        )
+        #expect(author.kind == .author)
+        #expect(author.authorUsername == "writer")
+        #expect(author.authorPseud == "pen")
+
+        let series = try #require(
+            QueueSourceDraft.fromAO3URL("https://archiveofourown.org/series/7777", fallbackTitle: "Seven")
+        )
+        #expect(series.kind == .series)
+        #expect(series.ao3SeriesID == 7777)
+
+        let tag = try #require(
+            QueueSourceDraft.fromAO3URL("https://archiveofourown.org/tags/Coffee%20Shop%20AU/works")
+        )
+        #expect(tag.kind == .tag)
+        #expect(tag.tagName == "Coffee Shop AU")
+
+        #expect(QueueSourceDraft.fromAO3URL("https://archiveofourown.org.evil.com/series/7777") == nil)
+        #expect(QueueSourceDraft.fromAO3URL("https://example.com/users/writer") == nil)
+
+        for draft in [author, series, tag] {
+            #expect(ReadingQueueService.addSource(draft, to: queue, in: context))
+        }
+        let byKind = Dictionary(
+            uniqueKeysWithValues: queue.visibleNonSearchSources.compactMap { link in
+                link.knownSourceKind.map { ($0, link) }
+            }
+        )
+        #expect(byKind[.author]?.listingURL?.absoluteString
+            == "https://archiveofourown.org/users/writer/pseuds/pen/works")
+        #expect(byKind[.series]?.listingURL?.absoluteString
+            == "https://archiveofourown.org/series/7777")
+        #expect(byKind[.tag]?.listingURL?.path.contains("/tags/") == true)
+        #expect(byKind[.tag]?.listingURL?.query?.contains("page=1") == true)
+
+        #expect(QueueSourceChecks.sourceAccessibilityLabel(
+            name: "pen (writer)", kind: .author, count: 3
+        ) == "Open author pen (writer), 3 new on AO3")
+        #expect(QueueSourceChecks.sourceAccessibilityLabel(
+            name: "Seven", kind: .series, count: 20
+        ) == "Open series Seven, 20+ new on AO3")
+        #expect(QueueSourceChecks.sourceAccessibilityLabel(
+            name: "Coffee Shop AU", kind: .tag, count: 0
+        ) == "Open tag Coffee Shop AU on AO3")
     }
 }

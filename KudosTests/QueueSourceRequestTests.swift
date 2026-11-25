@@ -6,11 +6,15 @@ private final class QueueSourceProbe: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()
     private static var requests: [URLRequest] = []
     private static var retryAfter: String?
+    private static var statusCode = 429
+    private static var body = Data()
 
-    static func reset(retryAfter: String?) {
+    static func reset(retryAfter: String?, statusCode: Int = 429, body: Data = Data()) {
         lock.lock()
         requests = []
         self.retryAfter = retryAfter
+        self.statusCode = statusCode
+        self.body = body
         lock.unlock()
     }
 
@@ -27,13 +31,15 @@ private final class QueueSourceProbe: URLProtocol, @unchecked Sendable {
         Self.lock.lock()
         Self.requests.append(request)
         let retryAfter = Self.retryAfter
+        let statusCode = Self.statusCode
+        let body = Self.body
         Self.lock.unlock()
         let response = HTTPURLResponse(
-            url: request.url!, statusCode: 429, httpVersion: "HTTP/1.1",
+            url: request.url!, statusCode: statusCode, httpVersion: "HTTP/1.1",
             headerFields: retryAfter.map { ["Retry-After": $0] } ?? [:]
         )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data())
+        client?.urlProtocol(self, didLoad: body)
         client?.urlProtocolDidFinishLoading(self)
     }
 
@@ -100,5 +106,67 @@ struct QueueSourceRequestTests {
         }
         #expect(paced == 0)
         #expect(QueueSourceProbe.sent.isEmpty)
+    }
+
+    @Test func allFourSourceKindsFetchPageOneAnonymouslyAndRejectPageTwoOrUntrustedHost() async throws {
+        let holdKey = AO3Client.queueSourceHoldKey
+        UserDefaults.standard.removeObject(forKey: holdKey)
+        defer { UserDefaults.standard.removeObject(forKey: holdKey) }
+
+        let html = """
+        <html><body>
+        <ol class="work index group">
+          <li id="work_101" class="work blurb group">
+            <div class="header module">
+              <h4 class="heading"><a href="/works/101">New Fic</a> by <a rel="author" href="/users/alice/pseuds/alice">alice</a></h4>
+              <p class="datetime">02 Jan 2025</p>
+            </div>
+          </li>
+        </ol>
+        </body></html>
+        """
+        QueueSourceProbe.reset(retryAfter: nil, statusCode: 200, body: Data(html.utf8))
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [QueueSourceProbe.self]
+        let client = AO3Client(
+            session: URLSession(configuration: configuration),
+            paceSleep: { _ in }
+        )
+
+        let authorRoute = try #require(AO3AuthorRoute(username: "alice", pseud: "pen"))
+        let seriesBase = try #require(URL(string: "https://archiveofourown.org/series/42"))
+        let tagBase = try #require(AO3Client.tagWorksURL(tagName: "Slow Burn"))
+        let pageOneURLs = [
+            try #require(AO3Client.searchURL(filters: AO3SearchFilters(), page: 1)),
+            authorRoute.contentURL(.works, page: 1),
+            try #require(AO3Client.seriesPageURL(seriesBase, page: 1)),
+            AO3Client.filteredWorksURL(tagBase, filters: QueueSourceChecks.tagBaselineFilters, page: 1)
+        ]
+        let forbiddenURLs = [
+            authorRoute.contentURL(.works, page: 2),
+            try #require(AO3Client.seriesPageURL(seriesBase, page: 2)),
+            AO3Client.filteredWorksURL(tagBase, filters: QueueSourceChecks.tagBaselineFilters, page: 2),
+            try #require(URL(string: "https://archiveofourown.org.evil.com/series/42"))
+        ]
+
+        for bad in forbiddenURLs {
+            await #expect(throws: AO3Error.self) { _ = try await client.queueSourceFetch(bad) }
+        }
+        #expect(QueueSourceProbe.sent.isEmpty)
+
+        for url in pageOneURLs {
+            let fetched = try await client.queueSourceFetch(url)
+            #expect(fetched.url == url)
+            #expect(fetched.page.works.count == 1)
+            #expect(fetched.page.works.first?.id == 101)
+            #expect(fetched.html.contains("work_101"))
+        }
+
+        let sent = QueueSourceProbe.sent
+        #expect(sent.count == 4)
+        for request in sent {
+            #expect(request.httpShouldHandleCookies == false)
+            #expect(request.value(forHTTPHeaderField: "User-Agent")?.contains("feature=queue-source-counts") == true)
+        }
     }
 }

@@ -1477,6 +1477,217 @@ nonisolated struct KudosBackupQueueSearchLink: Codable, Equatable {
     }
 }
 
+/// Lossless JSON value used to carry unknown keys on future queue-source kinds
+/// through SwiftData and back out to `.kudosbackup` / Folder Sync untouched.
+nonisolated enum KudosBackupJSONValue: Codable, Equatable, Sendable {
+    case string(String)
+    case int(Int)
+    case double(Double)
+    case bool(Bool)
+    case array([KudosBackupJSONValue])
+    case object([String: KudosBackupJSONValue])
+    case null
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let bool = try? container.decode(Bool.self) {
+            self = .bool(bool)
+        } else if let int = try? container.decode(Int.self) {
+            self = .int(int)
+        } else if let double = try? container.decode(Double.self) {
+            self = .double(double)
+        } else if let string = try? container.decode(String.self) {
+            self = .string(string)
+        } else if let array = try? container.decode([KudosBackupJSONValue].self) {
+            self = .array(array)
+        } else if let object = try? container.decode([String: KudosBackupJSONValue].self) {
+            self = .object(object)
+        } else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unsupported JSON value"
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case let .string(value): try container.encode(value)
+        case let .int(value): try container.encode(value)
+        case let .double(value): try container.encode(value)
+        case let .bool(value): try container.encode(value)
+        case let .array(value): try container.encode(value)
+        case let .object(value): try container.encode(value)
+        case .null: try container.encodeNil()
+        }
+    }
+}
+
+/// Additive backup representation of a non-search queue source (author, series,
+/// tag, or an unknown kind from a newer build kept verbatim with any extra keys).
+nonisolated struct KudosBackupQueueSource: Codable, Equatable {
+    let id: UUID
+    let kindRaw: String
+    let targetKey: String
+    let displayName: String?
+    let subtitle: String?
+    let authorUsername: String?
+    let authorPseud: String?
+    let ao3SeriesID: Int?
+    let tagName: String?
+    let tagCategoryRaw: String?
+    let urlString: String?
+    let dateAdded: Date?
+    let lastOpenedAt: Date?
+    let lastCheckedAt: Date?
+    let newResultCount: Int?
+    let unknownFields: [String: KudosBackupJSONValue]?
+
+    private enum CodingKeys: String, CodingKey, CaseIterable {
+        case id, kindRaw, targetKey, displayName, subtitle
+        case authorUsername, authorPseud, ao3SeriesID, tagName, tagCategoryRaw
+        case urlString, dateAdded, lastOpenedAt, lastCheckedAt, newResultCount
+    }
+
+    private struct DynamicKey: CodingKey {
+        var stringValue: String
+        var intValue: Int? { nil }
+        init(_ stringValue: String) { self.stringValue = stringValue }
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
+    }
+
+    private static let knownKeyNames = Set(CodingKeys.allCases.map(\.rawValue))
+
+    @MainActor
+    init(link: QueueSavedSearchLink) {
+        id = link.id
+        kindRaw = link.effectiveSourceKindRaw
+        targetKey = link.targetKey ?? ""
+        displayName = link.displayName
+        subtitle = link.subtitle
+        authorUsername = link.authorUsername
+        authorPseud = link.authorPseud
+        ao3SeriesID = link.ao3SeriesID
+        tagName = link.tagName
+        tagCategoryRaw = link.tagCategoryRaw
+        urlString = link.urlString
+        dateAdded = link.dateAdded
+        lastOpenedAt = link.lastOpenedAt
+        lastCheckedAt = link.lastCheckedAt
+        newResultCount = link.newResultCount
+        unknownFields = Self.decodeUnknownFields(from: link.unknownPayloadJSON)
+    }
+
+    init(
+        id: UUID = UUID(),
+        kindRaw: String,
+        targetKey: String,
+        displayName: String? = nil,
+        subtitle: String? = nil,
+        authorUsername: String? = nil,
+        authorPseud: String? = nil,
+        ao3SeriesID: Int? = nil,
+        tagName: String? = nil,
+        tagCategoryRaw: String? = nil,
+        urlString: String? = nil,
+        dateAdded: Date? = nil,
+        lastOpenedAt: Date? = nil,
+        lastCheckedAt: Date? = nil,
+        newResultCount: Int? = nil,
+        unknownFields: [String: KudosBackupJSONValue]? = nil
+    ) {
+        self.id = id
+        self.kindRaw = kindRaw
+        self.targetKey = targetKey
+        self.displayName = displayName
+        self.subtitle = subtitle
+        self.authorUsername = authorUsername
+        self.authorPseud = authorPseud
+        self.ao3SeriesID = ao3SeriesID
+        self.tagName = tagName
+        self.tagCategoryRaw = tagCategoryRaw
+        self.urlString = urlString
+        self.dateAdded = dateAdded
+        self.lastOpenedAt = lastOpenedAt
+        self.lastCheckedAt = lastCheckedAt
+        self.newResultCount = newResultCount
+        self.unknownFields = unknownFields?.isEmpty == true ? nil : unknownFields
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        kindRaw = try container.decodeIfPresent(String.self, forKey: .kindRaw) ?? ""
+        targetKey = try container.decodeIfPresent(String.self, forKey: .targetKey) ?? ""
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+        subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle)
+        authorUsername = try container.decodeIfPresent(String.self, forKey: .authorUsername)
+        authorPseud = try container.decodeIfPresent(String.self, forKey: .authorPseud)
+        ao3SeriesID = try container.decodeIfPresent(Int.self, forKey: .ao3SeriesID)
+        tagName = try container.decodeIfPresent(String.self, forKey: .tagName)
+        tagCategoryRaw = try container.decodeIfPresent(String.self, forKey: .tagCategoryRaw)
+        urlString = try container.decodeIfPresent(String.self, forKey: .urlString)
+        dateAdded = try container.decodeIfPresent(Date.self, forKey: .dateAdded)
+        lastOpenedAt = try container.decodeIfPresent(Date.self, forKey: .lastOpenedAt)
+        lastCheckedAt = try container.decodeIfPresent(Date.self, forKey: .lastCheckedAt)
+        newResultCount = try container.decodeIfPresent(Int.self, forKey: .newResultCount)
+        let dynamic = try decoder.container(keyedBy: DynamicKey.self)
+        var extras: [String: KudosBackupJSONValue] = [:]
+        for key in dynamic.allKeys where !Self.knownKeyNames.contains(key.stringValue) {
+            if let value = try? dynamic.decode(KudosBackupJSONValue.self, forKey: key) {
+                extras[key.stringValue] = value
+            }
+        }
+        unknownFields = extras.isEmpty ? nil : extras
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: DynamicKey.self)
+        try container.encode(id, forKey: DynamicKey(CodingKeys.id.rawValue))
+        try container.encode(kindRaw, forKey: DynamicKey(CodingKeys.kindRaw.rawValue))
+        try container.encode(targetKey, forKey: DynamicKey(CodingKeys.targetKey.rawValue))
+        try container.encodeIfPresent(displayName, forKey: DynamicKey(CodingKeys.displayName.rawValue))
+        try container.encodeIfPresent(subtitle, forKey: DynamicKey(CodingKeys.subtitle.rawValue))
+        try container.encodeIfPresent(authorUsername, forKey: DynamicKey(CodingKeys.authorUsername.rawValue))
+        try container.encodeIfPresent(authorPseud, forKey: DynamicKey(CodingKeys.authorPseud.rawValue))
+        try container.encodeIfPresent(ao3SeriesID, forKey: DynamicKey(CodingKeys.ao3SeriesID.rawValue))
+        try container.encodeIfPresent(tagName, forKey: DynamicKey(CodingKeys.tagName.rawValue))
+        try container.encodeIfPresent(tagCategoryRaw, forKey: DynamicKey(CodingKeys.tagCategoryRaw.rawValue))
+        try container.encodeIfPresent(urlString, forKey: DynamicKey(CodingKeys.urlString.rawValue))
+        try container.encodeIfPresent(dateAdded, forKey: DynamicKey(CodingKeys.dateAdded.rawValue))
+        try container.encodeIfPresent(lastOpenedAt, forKey: DynamicKey(CodingKeys.lastOpenedAt.rawValue))
+        try container.encodeIfPresent(lastCheckedAt, forKey: DynamicKey(CodingKeys.lastCheckedAt.rawValue))
+        try container.encodeIfPresent(newResultCount, forKey: DynamicKey(CodingKeys.newResultCount.rawValue))
+        if let unknownFields {
+            for keyName in unknownFields.keys.sorted() where !Self.knownKeyNames.contains(keyName) {
+                if let value = unknownFields[keyName] {
+                    try container.encode(value, forKey: DynamicKey(keyName))
+                }
+            }
+        }
+    }
+
+    var encodedUnknownPayloadJSON: String? {
+        guard let unknownFields, !unknownFields.isEmpty else { return nil }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(unknownFields) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func decodeUnknownFields(from json: String?) -> [String: KudosBackupJSONValue]? {
+        guard let json, !json.isEmpty, let data = json.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([String: KudosBackupJSONValue].self, from: data),
+              !decoded.isEmpty
+        else { return nil }
+        return decoded
+    }
+}
+
 /// Transport form of one reading-history row. Additive on v8; missing keys
 /// decode to the empty defaults so a v7/v8 archive without this array still
 /// imports.
@@ -1937,6 +2148,10 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
     let smartRulesJSON: String?
     let searchSources: [KudosBackupQueueSearchLink]?
     let searchSourcesModifiedAt: Date?
+    /// T-530 non-search queue sources (author, series, tag, and unknown future
+    /// kinds preserved verbatim). Additive on v8; omitted when unrecorded/empty.
+    let sources: [KudosBackupQueueSource]?
+    let sourcesModifiedAt: Date?
 
     @MainActor
     init(queue: ReadingQueue) {
@@ -1960,10 +2175,18 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
         // never carries rules that would read as a smart queue elsewhere.
         smartRulesJSON = queue.kindRaw == ReadingQueueKind.custom.rawValue || queue.kind == .savedForLater
             ? nil : queue.smartRulesJSON
-        let links = queue.kind == .smart ? [] : queue.searchLinks.filter { $0.search != nil }
+        let links = queue.kind == .smart
+            ? []
+            : queue.searchLinks.filter { $0.isSavedSearchSource && $0.search != nil }
         searchSources = queue.kind == .smart || (queue.searchSourcesModifiedAt == nil && links.isEmpty)
             ? nil : links.map(KudosBackupQueueSearchLink.init)
         searchSourcesModifiedAt = queue.kind == .smart ? nil : queue.searchSourcesModifiedAt
+        let otherSources = queue.kind == .smart
+            ? []
+            : queue.searchLinks.filter { !$0.isSavedSearchSource }.sorted { $0.dedupKey < $1.dedupKey }
+        sources = queue.kind == .smart || (queue.sourcesModifiedAt == nil && otherSources.isEmpty)
+            ? nil : otherSources.map(KudosBackupQueueSource.init)
+        sourcesModifiedAt = queue.kind == .smart ? nil : queue.sourcesModifiedAt
     }
 
     func effectiveModifiedAt(memberships: [KudosBackupReadingQueueMembership]) -> Date? {
@@ -3328,6 +3551,106 @@ enum KudosBackupService {
         if work.preservedAt == nil { work.preservedAt = Date() }
     }
 
+    /// Restores additive non-search queue sources (author, series, tag, and unknown
+    /// kinds preserved verbatim) while honoring snapshot vs recency rules.
+    private static func restoreQueueNonSearchSources(
+        _ incoming: [KudosBackupQueueSource],
+        modifiedAt sourceStamp: Date,
+        into queue: ReadingQueue,
+        mode: BackupImportMode,
+        context: ModelContext
+    ) {
+        guard queue.kind != .smart else { return }
+        let applyMembership = mode == .replaceLibrary
+            || sourceStamp > (queue.sourcesModifiedAt ?? .distantPast)
+        let validIncoming = incoming.filter { entry in
+            let kind = entry.kindRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !kind.isEmpty && kind != QueueSourceKind.savedSearch.rawValue
+        }
+        if applyMembership {
+            let incomingKeys = Set(validIncoming.map { entry in
+                QueueSourceDraft.dedupKey(
+                    kindRaw: entry.kindRaw,
+                    targetKey: entry.targetKey,
+                    fallbackID: entry.id
+                )
+            })
+            for link in queue.searchLinks
+            where !link.isSavedSearchSource && !incomingKeys.contains(link.dedupKey) {
+                context.delete(link)
+            }
+            queue.sourcesModifiedAt = sourceStamp
+        }
+        var seenKeys = Set<String>()
+        for entry in validIncoming {
+            let kind = entry.kindRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = QueueSourceDraft.dedupKey(
+                kindRaw: kind,
+                targetKey: entry.targetKey,
+                fallbackID: entry.id
+            )
+            guard seenKeys.insert(key).inserted else { continue }
+            let existing = queue.searchLinks.first { link in
+                !link.isSavedSearchSource && (link.dedupKey == key || link.id == entry.id)
+            }
+            guard applyMembership || existing != nil else { continue }
+            let link: QueueSavedSearchLink
+            if let existing {
+                link = existing
+                if applyMembership {
+                    link.sourceKindRaw = kind
+                    link.targetKey = entry.targetKey
+                    link.displayName = entry.displayName
+                    link.subtitle = entry.subtitle
+                    link.authorUsername = entry.authorUsername
+                    link.authorPseud = entry.authorPseud
+                    link.ao3SeriesID = entry.ao3SeriesID
+                    link.tagName = entry.tagName
+                    link.tagCategoryRaw = entry.tagCategoryRaw
+                    link.urlString = entry.urlString
+                    link.dateAdded = entry.dateAdded ?? link.dateAdded
+                    link.unknownPayloadJSON = entry.encodedUnknownPayloadJSON
+                }
+            } else {
+                let created = QueueSavedSearchLink(
+                    id: entry.id,
+                    queue: queue,
+                    kindRaw: kind,
+                    targetKey: entry.targetKey,
+                    displayName: entry.displayName,
+                    subtitle: entry.subtitle,
+                    authorUsername: entry.authorUsername,
+                    authorPseud: entry.authorPseud,
+                    ao3SeriesID: entry.ao3SeriesID,
+                    tagName: entry.tagName,
+                    tagCategoryRaw: entry.tagCategoryRaw,
+                    urlString: entry.urlString,
+                    lastOpenedAt: entry.lastOpenedAt,
+                    lastCheckedAt: entry.lastCheckedAt,
+                    newResultCount: entry.newResultCount,
+                    dateAdded: entry.dateAdded,
+                    unknownPayloadJSON: entry.encodedUnknownPayloadJSON
+                )
+                context.insert(created)
+                link = created
+            }
+            if let opened = entry.lastOpenedAt,
+               mode == .replaceLibrary || opened > (link.lastOpenedAt ?? .distantPast) {
+                link.lastOpenedAt = opened
+            }
+            if let checked = entry.lastCheckedAt,
+               mode == .replaceLibrary || checked > (link.lastCheckedAt ?? .distantPast) {
+                link.lastCheckedAt = checked
+                link.newResultCount = entry.newResultCount
+            }
+            // A visit clears the badge even when no new check has run.
+            if let opened = link.lastOpenedAt,
+               opened > (link.lastCheckedAt ?? .distantPast) {
+                link.newResultCount = 0
+            }
+        }
+    }
+
     // Intentionally linear for data-safety review.
     //
     // RC merge (G5): WP-A's M15 split `restore` into this inner implementation
@@ -4310,42 +4633,63 @@ enum KudosBackupService {
         // detach sources already recorded on this device.
         for archived in contents.manifest.readingQueues {
             guard !suppressedQueueIDs.contains(archived.id),
-                  let sources = archived.searchSources,
                   let queue = queuesByID[archived.id],
                   queue.kind != .smart
             else { continue }
-            let sourceStamp = archived.searchSourcesModifiedAt ?? archived.dateUpdated
-            let applyMembership = mode == .replaceLibrary
-                || sourceStamp > (queue.searchSourcesModifiedAt ?? .distantPast)
-            if applyMembership {
-                let incomingIDs = Set(sources.map(\.searchID))
-                for link in queue.searchLinks where link.search.map({ !incomingIDs.contains($0.id) }) ?? true {
-                    context.delete(link)
+            if let searchSources = archived.searchSources {
+                let sourceStamp = archived.searchSourcesModifiedAt ?? archived.dateUpdated
+                let applyMembership = mode == .replaceLibrary
+                    || sourceStamp > (queue.searchSourcesModifiedAt ?? .distantPast)
+                if applyMembership {
+                    let incomingIDs = Set(searchSources.map(\.searchID))
+                    for link in queue.searchLinks
+                    where link.isSavedSearchSource && (link.search.map({ !incomingIDs.contains($0.id) }) ?? true) {
+                        context.delete(link)
+                    }
+                    queue.searchSourcesModifiedAt = sourceStamp
                 }
-                queue.searchSourcesModifiedAt = sourceStamp
+                var seenSourceIDs = Set<UUID>()
+                for source in searchSources {
+                    guard seenSourceIDs.insert(source.searchID).inserted else { continue }
+                    guard let search = savedSearchesByID[source.searchID] else { continue }
+                    let existing = queue.searchLinks.first {
+                        $0.isSavedSearchSource && $0.search?.id == source.searchID
+                    }
+                    guard applyMembership || existing != nil else { continue }
+                    let link = existing ?? {
+                        let created = QueueSavedSearchLink(queue: queue, search: search)
+                        context.insert(created)
+                        return created
+                    }()
+                    if let checked = source.lastCheckedAt,
+                       mode == .replaceLibrary || checked > (link.lastCheckedAt ?? .distantPast) {
+                        link.lastCheckedAt = checked
+                        link.newResultCount = source.newResultCount
+                    }
+                    // A visit clears the badge even when no new check has run.
+                    if let opened = search.lastOpenedAt,
+                       opened > (link.lastCheckedAt ?? .distantPast) {
+                        link.newResultCount = 0
+                    }
+                }
             }
-            var seenSourceIDs = Set<UUID>()
-            for source in sources {
-                guard seenSourceIDs.insert(source.searchID).inserted else { continue }
-                guard let search = savedSearchesByID[source.searchID] else { continue }
-                let existing = queue.searchLinks.first { $0.search?.id == source.searchID }
-                guard applyMembership || existing != nil else { continue }
-                let link = existing ?? {
-                    let created = QueueSavedSearchLink(queue: queue, search: search)
-                    context.insert(created)
-                    return created
-                }()
-                if let checked = source.lastCheckedAt,
-                   mode == .replaceLibrary || checked > (link.lastCheckedAt ?? .distantPast) {
-                    link.lastCheckedAt = checked
-                    link.newResultCount = source.newResultCount
-                }
-                // A visit clears the badge even when no new check has run.
-                if let opened = search.lastOpenedAt,
-                   opened > (link.lastCheckedAt ?? .distantPast) {
-                    link.newResultCount = 0
-                }
+            if let nonSearchSources = archived.sources {
+                restoreQueueNonSearchSources(
+                    nonSearchSources,
+                    modifiedAt: archived.sourcesModifiedAt ?? archived.dateUpdated,
+                    into: queue,
+                    mode: mode,
+                    context: context
+                )
             }
+        }
+        // Smart queues never carry sources; sweep any stray links targeting them.
+        for queue in queuesByID.values where queue.kind == .smart && !queue.searchLinks.isEmpty {
+            for link in queue.searchLinks {
+                context.delete(link)
+            }
+            queue.searchSourcesModifiedAt = nil
+            queue.sourcesModifiedAt = nil
         }
         // Searches this device still has that a trusted tombstone says were
         // deleted elsewhere. The loop above only declines to *add* one back;
