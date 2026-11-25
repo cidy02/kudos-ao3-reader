@@ -2,11 +2,15 @@ import Foundation
 
 /// T-573: a work's own choice between the generated cover and the art inside its EPUB.
 /// Stored as `SavedWork.coverArtPreferenceRaw` (a plain optional string, never a composite).
-/// nil follows the global "Use art from the work" setting; an unknown value (a newer build or
-/// Android wrote it) is kept as-is and read as nil.
+/// nil follows the global "Use art from the work" setting; so does `followRaw`, which a reader's
+/// reset writes so the reset reaches other devices (an absent key never clears a choice in merge).
+/// An unknown value (a newer build or Android wrote it) is kept as-is and read as nil.
 enum CoverArtPreference: String, CaseIterable {
     case generated
     case embedded
+
+    /// Stored when a reader goes back to Follow Settings after choosing; read like nil.
+    static let followRaw = "follow"
 
     static func resolved(_ raw: String?) -> CoverArtPreference? { raw.flatMap(Self.init(rawValue:)) }
 
@@ -29,8 +33,10 @@ extension SavedWork {
     /// A reader's edit: stamps `lastModifiedAt` (a newer edit wins in backup/sync merge) and wakes Folder Sync.
     @MainActor
     func setCoverArtPreference(_ preference: CoverArtPreference?) {
-        guard coverArtPreferenceRaw != preference?.rawValue else { return }
-        coverArtPreferenceRaw = preference?.rawValue
+        // Back to Follow Settings: an explicit value, so the newer edit wins on other devices too.
+        let raw = preference?.rawValue ?? (coverArtPreferenceRaw == nil ? nil : CoverArtPreference.followRaw)
+        guard coverArtPreferenceRaw != raw else { return }
+        coverArtPreferenceRaw = raw
         markModified()
         FolderSyncService.markDirty()
         NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)

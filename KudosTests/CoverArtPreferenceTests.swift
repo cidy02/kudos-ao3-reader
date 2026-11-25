@@ -82,7 +82,24 @@ struct CoverArtPreferenceTests {
         #expect(work.coverArtPreferenceRaw == "generated")
         #expect(work.lastModifiedAt > Date(timeIntervalSince1970: 1_000))
         work.setCoverArtPreference(nil)
-        #expect(work.coverArtPreferenceRaw == nil)
+        #expect(work.coverArtPreferenceRaw == CoverArtPreference.followRaw)
+        #expect(CoverArtPreference.resolved(work.coverArtPreferenceRaw) == nil)
+        let untouched = SavedWork(title: "Never chosen", author: "Writer")
+        untouched.setCoverArtPreference(nil)
+        #expect(untouched.coverArtPreferenceRaw == nil, "a work that never had a choice stays unset")
+    }
+
+    /// A reset to Follow Settings must reach a device that still holds the old choice.
+    @Test func aResetToFollowSettingsReachesOtherDevices() throws {
+        let id = UUID()
+        let remote = try makeContext()
+        let reset = try contents(work(id: id, raw: CoverArtPreference.followRaw, modifiedAt: 9_000, in: remote))
+        let other = try makeContext()
+        let theirs = work(id: id, raw: "generated", modifiedAt: 1_000, in: other)
+        try other.save()
+        _ = try KudosBackupService.restore(reset, into: other, defaults: try testDefaults(), mode: .reconcile)
+        #expect(theirs.coverArtPreferenceRaw == CoverArtPreference.followRaw)
+        #expect(CoverArtPreference.wantsEmbeddedArt(override: theirs.coverArtPreferenceRaw, global: true))
     }
 
     // MARK: Backup and merge
