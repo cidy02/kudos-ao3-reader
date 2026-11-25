@@ -360,9 +360,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// Changes when the EPUB appears, is replaced or removed, so the art check runs again.
     private var embeddedArtKey: String {
         guard let work = localWork else { return "" }
-        let modified = (try? FileManager.default.attributesOfItem(atPath: work.fileURL.path))?[.modificationDate]
-            .flatMap { $0 as? Date }?.timeIntervalSince1970 ?? 0
-        return "\(work.id)|\(work.hasEPUB)|\(work.epubDigest)|\(modified)"
+        // `replaceEPUB` rewrites the digest with every file it writes, so no file read is needed here.
+        return "\(work.id)|\(work.hasEPUB)|\(work.epubDigest)"
     }
 
     /// T-573: Follow Settings / Work's Art / Generated, saved on the work and applied to every

@@ -23,6 +23,30 @@ enum CoverArtPreference: String, CaseIterable {
         }
     }
 
+    /// The global "Use art from the work" setting (default on).
+    static func globalUsesEmbeddedArt(_ defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: "useEmbeddedCoverArt") as? Bool ?? true
+    }
+
+    /// Whether a work's resolved choice wants its own art (export and drawing agree).
+    static func wantsEmbeddedArt(for work: SavedWork, defaults: UserDefaults = .standard) -> Bool {
+        wantsEmbeddedArt(override: work.coverArtPreferenceRaw, global: globalUsesEmbeddedArt(defaults))
+    }
+
+    /// Merge (Merge / Reconcile / Folder Sync) for a present incoming value, per the contract table.
+    /// Stamps beyond `now + maxFutureTimestampSkew` are clamped. An absent key never reaches here.
+    static func incomingWins(localRaw: String?, localStamp: Date?, incomingRaw: String,
+                             incomingStamp: Date?, now: Date = Date()) -> Bool {
+        let local = localStamp.map { KudosBackupContents.clampedArchiveDate($0, now: now) }
+        let incoming = incomingStamp.map { KudosBackupContents.clampedArchiveDate($0, now: now) }
+        switch (local, incoming) {
+        case (nil, nil): return localRaw == nil || incomingRaw > localRaw!
+        case (nil, _?): return true
+        case (_?, nil): return false
+        case let (l?, i?): return i != l ? i > l : incomingRaw > (localRaw ?? "")
+        }
+    }
+
     /// What is actually drawn: the work's art only when it is wanted and the work has some.
     static func showsEmbeddedArt(override raw: String?, global: Bool, hasArt: Bool) -> Bool {
         hasArt && wantsEmbeddedArt(override: raw, global: global)
@@ -30,9 +54,11 @@ enum CoverArtPreference: String, CaseIterable {
 }
 
 extension SavedWork {
-    /// A reader's edit: stamps `coverArtPreferenceChangedAt` (the merge clock for this field, monotonic
-    /// so a slow clock cannot lose to its own earlier edit) and wakes Folder Sync. Choosing what is
-    /// already selected writes nothing, so an unknown future value is kept.
+    /// A reader's edit: stamps `coverArtPreferenceChangedAt` (the merge clock for this field) and wakes
+    /// Folder Sync. It never touches `lastModifiedAt`, so a cover tap cannot override another device's
+    /// concurrent edits to the work. The stamp is max(now, previous + 2 ms), capped at now + the
+    /// allowed skew; a previous stamp beyond that cap counts as now (a fast clock heals on the next
+    /// edit). Choosing what is already selected writes nothing, so an unknown future value is kept.
     @MainActor
     func setCoverArtPreference(_ preference: CoverArtPreference?) {
         let raw: String?
@@ -47,8 +73,9 @@ extension SavedWork {
         guard coverArtPreferenceRaw != raw else { return }
         coverArtPreferenceRaw = raw
         let now = Date()
-        coverArtPreferenceChangedAt = max(now, coverArtPreferenceChangedAt.map { $0.addingTimeInterval(0.001) } ?? now)
-        markModified()
+        let ceiling = now.addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew)
+        let previous = coverArtPreferenceChangedAt.map { $0 > ceiling ? now : $0 }
+        coverArtPreferenceChangedAt = min(max(now, previous?.addingTimeInterval(0.002) ?? now), ceiling)
         FolderSyncService.markDirty()
         NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
     }

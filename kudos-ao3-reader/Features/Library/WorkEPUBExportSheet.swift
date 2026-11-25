@@ -138,9 +138,7 @@ struct WorkEPUBExportSheet: View {
                 var cover: Data?
                 if wantsCover {
                     // The work's own art only when its resolved Cover choice wants it (T-573).
-                    let wantsArt = CoverArtPreference.wantsEmbeddedArt(
-                        override: work.coverArtPreferenceRaw,
-                        global: UserDefaults.standard.object(forKey: "useEmbeddedCoverArt") as? Bool ?? true)
+                    let wantsArt = CoverArtPreference.wantsEmbeddedArt(for: work)
                     let embedded = Task.detached { wantsArt ? EPUBCoverExport.embeddedJPEG(at: source) : nil }
                     cover = await withTaskCancellationHandler {
                         await embedded.value

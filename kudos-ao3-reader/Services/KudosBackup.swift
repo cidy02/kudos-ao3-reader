@@ -6338,19 +6338,16 @@ enum KudosBackupService {
            ) {
             work.coverRecipeJSON = GeneratedCoverRecipe.clampingFuturePinIfSupported(coverRecipeJSON)
         }
-        // T-573: the choice is its own field with its own clock: the incoming value wins only when its
-        // stamp is newer than the local stamp (or there is none locally); an absent key never clears,
-        // and `lastModifiedAt` (reading, refreshing, favouriting) plays no part.
+        // T-573: the choice is its own field with its own clock (`CoverArtPreference.incomingWins`);
+        // `lastModifiedAt` (reading, refreshing, favouriting) plays no part. Replace Library adopts any
+        // present value so a restore rolls back; an absent key never clears in any mode.
         if let archivedPreference = archived.coverArtPreference {
             let incomingStamp = archived.coverArtPreferenceChangedAt.map {
                 KudosBackupContents.clampedArchiveDate($0)
             }
-            let wins = switch (work.coverArtPreferenceChangedAt, incomingStamp) {
-            case (nil, _): true
-            case (_?, nil): false
-            case let (local?, incoming?): incoming > local
-            }
-            if wins {
+            if mode == .replaceLibrary || CoverArtPreference.incomingWins(
+                localRaw: work.coverArtPreferenceRaw, localStamp: work.coverArtPreferenceChangedAt,
+                incomingRaw: archivedPreference, incomingStamp: incomingStamp) {
                 work.coverArtPreferenceRaw = archivedPreference
                 work.coverArtPreferenceChangedAt = incomingStamp
             }

@@ -45,10 +45,10 @@ struct CoverArtPreferenceTests {
         return KudosBackupContents(manifest: try KudosBackupContents.decodeManifest(try raw.manifestData()))
     }
 
-    private func stripped(_ contents: KudosBackupContents) throws -> KudosBackupContents {
+    private func stripped(_ contents: KudosBackupContents, key: String = "coverArtPreference") throws -> KudosBackupContents {
         var root = try #require(try JSONSerialization.jsonObject(with: contents.manifestData()) as? [String: Any])
         var works = try #require(root["works"] as? [[String: Any]])
-        for index in works.indices { works[index].removeValue(forKey: "coverArtPreference") }
+        for index in works.indices { works[index].removeValue(forKey: key) }
         root["works"] = works
         return KudosBackupContents(manifest: try KudosBackupContents.decodeManifest(
             try JSONSerialization.data(withJSONObject: root)))
@@ -208,6 +208,160 @@ struct CoverArtPreferenceTests {
         let back = try contents(theirs)
         _ = try KudosBackupService.restore(back, into: fastDevice, defaults: try testDefaults(), mode: .reconcile)
         #expect(fast.coverArtPreferenceRaw == "embedded")
+    }
+
+    // MARK: Contract update 2
+
+    /// Every row of the merge table (Merge / Reconcile / Folder Sync), both directions where it matters.
+    @Test func theMergeTableDecidesEveryRow() {
+        let now = Date(timeIntervalSince1970: 100_000)
+        let t1 = Date(timeIntervalSince1970: 1_000), t2 = Date(timeIntervalSince1970: 2_000)
+        func wins(_ lr: String?, _ ls: Date?, _ ir: String, _ istamp: Date?) -> Bool {
+            CoverArtPreference.incomingWins(localRaw: lr, localStamp: ls, incomingRaw: ir, incomingStamp: istamp, now: now)
+        }
+        #expect(wins("generated", t1, "embedded", t2))            // stamped vs stamped: newer wins
+        #expect(wins("generated", t2, "embedded", t1) == false)
+        #expect(wins("embedded", t1, "generated", t1))             // equal stamps: greater value wins, on both devices
+        #expect(wins("generated", t1, "embedded", t1) == false)
+        #expect(wins("generated", t1, "embedded", nil) == false)   // stamped local beats unstamped incoming
+        #expect(wins("generated", nil, "embedded", t1))            // unstamped local loses to stamped incoming
+        #expect(wins("embedded", nil, "generated", nil))           // unstamped vs unstamped: greater value
+        #expect(wins("generated", nil, "embedded", nil) == false)
+        #expect(wins("embedded", nil, "follow", nil))              // an older unstamped archive can only
+        #expect(wins("follow", nil, "embedded", nil) == false)     // win by value, so both devices agree
+        #expect(wins(nil, nil, "follow", nil))                     // nil local takes any present value
+        #expect(wins(nil, nil, "embedded", t1))
+        // a far-future stamp is clamped to now + skew on both sides
+        let far = now.addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew * 3)
+        #expect(wins("generated", far, "embedded", far.addingTimeInterval(500)) == false) // equal once clamped: "embedded" < "generated"
+        #expect(wins("embedded", far, "generated", far.addingTimeInterval(500)))
+    }
+
+    @Test func aCoverEditLeavesTheWorkClockAloneAndHealsAFarFutureStamp() {
+        let work = SavedWork(title: "Edit", author: "Writer")
+        let clock = Date(timeIntervalSince1970: 1_234)
+        work.markModified(clock)
+        work.setCoverArtPreference(.generated)
+        #expect(work.lastModifiedAt == clock, "a cover edit must not override concurrent edits elsewhere")
+
+        let first = work.coverArtPreferenceChangedAt!
+        work.setCoverArtPreference(.embedded)
+        #expect(work.coverArtPreferenceChangedAt! >= first.addingTimeInterval(0.002))
+
+        work.coverArtPreferenceChangedAt = Date().addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew * 3)
+        work.setCoverArtPreference(.generated) // a fast clock's stamp counts as now on the next edit
+        let ceiling = Date().addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew)
+        #expect(work.coverArtPreferenceChangedAt! <= ceiling)
+        #expect(work.coverArtPreferenceChangedAt! < Date().addingTimeInterval(60))
+    }
+
+    @Test func replaceLibraryAdoptsAnyPresentValueSoARestoreRollsBack() throws {
+        let id = UUID()
+        let snapshotSource = try makeContext()
+        let snapshot = try contents(work(id: id, raw: "embedded", at: 1_000, in: snapshotSource))
+        let local = try makeContext()
+        let mine = work(id: id, raw: "generated", at: 2_000, in: local) // edited after the backup
+        try local.save()
+        _ = try KudosBackupService.restore(snapshot, into: local, defaults: try testDefaults(), mode: .replaceLibrary)
+        #expect(mine.coverArtPreferenceRaw == "embedded")
+
+        // An unstamped (Android) export replaces a stamped local choice too.
+        let androidSource = try makeContext()
+        let android = try stripped(try contents(work(id: id, raw: "generated", at: 1, in: androidSource)),
+                                   key: "coverArtPreferenceChangedAt")
+        #expect(try #require(android.manifest.works.first).coverArtPreferenceChangedAt == nil)
+        let other = try makeContext()
+        let theirs = work(id: id, raw: "embedded", at: 5_000, in: other)
+        try other.save()
+        _ = try KudosBackupService.restore(android, into: other, defaults: try testDefaults(), mode: .replaceLibrary)
+        #expect(theirs.coverArtPreferenceRaw == "generated")
+        #expect(theirs.coverArtPreferenceChangedAt == nil)
+    }
+
+    @Test func anUnstampedAndroidExportNeverBeatsAStampedLocalChoiceInEveryMergeMode() throws {
+        let id = UUID()
+        let source = try makeContext()
+        let android = try stripped(try contents(work(id: id, raw: "generated", at: 1, in: source)),
+                                   key: "coverArtPreferenceChangedAt")
+        for mode in [BackupImportMode.reconcile, .merge] {
+            let local = try makeContext()
+            let mine = work(id: id, raw: "embedded", at: 1_000, in: local)
+            try local.save()
+            _ = try KudosBackupService.restore(android, into: local, defaults: try testDefaults(), mode: mode)
+            #expect(mine.coverArtPreferenceRaw == "embedded")
+        }
+        // Reconcile fills a work that has no choice at all; Merge leaves an existing work entirely alone
+        // but gives a work it adds the archived value.
+        let bare = try makeContext()
+        let empty = work(id: id, raw: nil, in: bare)
+        try bare.save()
+        _ = try KudosBackupService.restore(android, into: bare, defaults: try testDefaults(), mode: .merge)
+        #expect(empty.coverArtPreferenceRaw == nil)
+        _ = try KudosBackupService.restore(android, into: bare, defaults: try testDefaults(), mode: .reconcile)
+        #expect(empty.coverArtPreferenceRaw == "generated")
+        let added = try makeContext()
+        _ = try KudosBackupService.restore(android, into: added, defaults: try testDefaults(), mode: .merge)
+        #expect(try added.fetch(FetchDescriptor<SavedWork>()).first?.coverArtPreferenceRaw == "generated")
+    }
+
+    @Test func aFutureStampIsClampedWhenItArrives() throws {
+        let id = UUID()
+        let source = try makeContext()
+        let far = Date().addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew * 10)
+        let archive = try contents(work(id: id, raw: "generated", at: far.timeIntervalSince1970, in: source))
+        let local = try makeContext()
+        let mine = work(id: id, raw: nil, in: local)
+        try local.save()
+        _ = try KudosBackupService.restore(archive, into: local, defaults: try testDefaults(), mode: .reconcile)
+        #expect(mine.coverArtPreferenceRaw == "generated")
+        #expect(mine.coverArtPreferenceChangedAt! <= Date().addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew + 5))
+    }
+
+    @Test func malformedValuesDecodeAsAbsentAndNeverClear() throws {
+        let id = UUID()
+        let source = try makeContext()
+        var root = try #require(try JSONSerialization.jsonObject(
+            with: try contents(work(id: id, raw: "generated", at: 9_000, in: source)).manifestData()) as? [String: Any])
+        var works = try #require(root["works"] as? [[String: Any]])
+        works[0]["coverArtPreference"] = 42            // not a string
+        works[0]["coverArtPreferenceChangedAt"] = "yesterday-ish" // not a date
+        root["works"] = works
+        let archive = KudosBackupContents(manifest: try KudosBackupContents.decodeManifest(
+            try JSONSerialization.data(withJSONObject: root)))
+        let decoded = try #require(archive.manifest.works.first)
+        #expect(decoded.coverArtPreference == nil && decoded.coverArtPreferenceChangedAt == nil)
+
+        let local = try makeContext()
+        let mine = work(id: id, raw: "embedded", at: 1_000, in: local)
+        try local.save()
+        _ = try KudosBackupService.restore(archive, into: local, defaults: try testDefaults(), mode: .reconcile)
+        #expect(mine.coverArtPreferenceRaw == "embedded")
+    }
+
+    @Test func aMergeThatAdoptsTheChoiceLeavesTheWorkClockToTheUsualRule() throws {
+        let id = UUID()
+        let remote = try makeContext()
+        let archive = try contents(work(id: id, raw: "generated", at: 500, modifiedAt: 500, in: remote))
+        let local = try makeContext()
+        let read = work(id: id, raw: nil, modifiedAt: 9_000, in: local)
+        try local.save()
+        _ = try KudosBackupService.restore(archive, into: local, defaults: try testDefaults(), mode: .reconcile)
+        #expect(read.coverArtPreferenceRaw == "generated")
+        #expect(read.lastModifiedAt == Date(timeIntervalSince1970: 9_000))
+    }
+
+    /// Export ("Include Cover") and drawing read the same resolved choice.
+    @Test func exportFollowsTheResolvedChoice() throws {
+        let defaults = try testDefaults()
+        let work = SavedWork(title: "Export", author: "Writer")
+        #expect(CoverArtPreference.wantsEmbeddedArt(for: work, defaults: defaults))      // global default on
+        defaults.set(false, forKey: "useEmbeddedCoverArt")
+        #expect(CoverArtPreference.wantsEmbeddedArt(for: work, defaults: defaults) == false)
+        work.coverArtPreferenceRaw = "embedded"
+        #expect(CoverArtPreference.wantsEmbeddedArt(for: work, defaults: defaults))
+        defaults.set(true, forKey: "useEmbeddedCoverArt")
+        work.coverArtPreferenceRaw = "generated"
+        #expect(CoverArtPreference.wantsEmbeddedArt(for: work, defaults: defaults) == false)
     }
 }
 }
