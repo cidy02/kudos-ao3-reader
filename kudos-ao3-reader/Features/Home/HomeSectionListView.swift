@@ -214,7 +214,7 @@ struct HomeSectionListView: View {
             // floating tab/search glass hides meanwhile, matching HomeView's
             // dashboard — this page is reached by pushing past it, and previously
             // kept showing the tab bar underneath/instead of the bulk-action bar.
-            .tabBarHidden(isSelecting)
+            .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
         #endif
             .filterPanelPresentation(isPresented: $showingFilters) {
                 LibraryFilterPanel(filters: $filters, works: items, userTagNames: allTags.map(\.name))

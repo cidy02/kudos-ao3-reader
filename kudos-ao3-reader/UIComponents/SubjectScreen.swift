@@ -132,13 +132,11 @@ extension View {
     /// visual role. Tab-bar hiding deliberately remains outside this choice.
     @ViewBuilder
     func subjectScreenSurface(_ role: SubjectScreenRole, palette: SubjectPalette) -> some View {
-        // Pushed screens shrink the tab bar on scroll too (T-572), through this shared surface.
         if role.usesSubjectWash {
-            subjectWash(palette).shrinksTabBarOnScroll()
+            subjectWash(palette)
         } else {
             appScreenSurface(role)
                 .screenTint(palette)
-                .shrinksTabBarOnScroll()
         }
     }
 

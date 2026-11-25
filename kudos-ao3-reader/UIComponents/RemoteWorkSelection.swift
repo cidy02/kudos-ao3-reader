@@ -773,7 +773,7 @@ extension View {
                 Text(controller.batchActionError ?? "")
             }
             #if os(iOS)
-            .tabBarHidden(controller.isSelecting)
+            .toolbar(controller.isSelecting ? .hidden : .automatic, for: .tabBar)
             #endif
             .onDisappear { controller.batchTask?.cancel() }
             .safeAreaInset(edge: .bottom) {

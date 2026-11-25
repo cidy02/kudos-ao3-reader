@@ -40,7 +40,7 @@ struct SmartQueueWorksPage<FilterRail: View>: View {
                         .accessibilityLabel("Edit Rules")
                 }
             } else if arrangement == .grid {
-                smartGrid.shrinksTabBarOnScroll()
+                smartGrid
             } else {
                 smartList
             }

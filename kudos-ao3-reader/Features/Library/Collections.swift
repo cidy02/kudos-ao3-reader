@@ -546,7 +546,7 @@ struct CollectionDetailView: View {
             #if os(iOS)
                 // Select mode owns the bottom edge with its bulk-action bar (matches
                 // LibraryView's own selection-mode tab-bar hide).
-                .tabBarHidden(isSelecting)
+                .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
             #endif
             .sheet(isPresented: $showingAddWorks) {
                 AddLibraryWorksSheet(

@@ -710,7 +710,7 @@ struct ReadingQueueBrowserView: View {
     private func compactLayout(works: [SavedWork], smartVisible: [SavedWork], smartHeader: [SavedWork]) -> some View {
         pageContent(works: works, smartVisible: smartVisible, smartHeader: smartHeader)
             #if os(iOS)
-            .tabBarHidden(isSelecting)
+            .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
             #endif
     }
 
@@ -750,7 +750,7 @@ struct ReadingQueueBrowserView: View {
         }
         #if os(iOS)
         // No phone-style tab bar here to begin with; hidden for the sidebar.
-        .tabBarHidden()
+        .toolbar(.hidden, for: .tabBar)
         #endif
     }
 }

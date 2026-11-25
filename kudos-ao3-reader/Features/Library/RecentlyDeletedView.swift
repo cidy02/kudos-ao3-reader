@@ -80,7 +80,7 @@ struct RecentlyDeletedView: View {
         .toolbar { toolbarContent(entries) }
         #if os(iOS)
         // Select mode owns the bottom edge with its action bar.
-        .tabBarHidden(isSelecting)
+        .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
         #endif
         .onChange(of: entries.isEmpty) { _, isEmpty in
             if isEmpty { exitSelectMode() }

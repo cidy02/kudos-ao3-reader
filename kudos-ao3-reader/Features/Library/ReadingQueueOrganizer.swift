@@ -329,7 +329,7 @@ struct AllReadingQueuesGridView: View {
             .constant(isReordering && canReorder ? .active : .inactive)
         )
         // Select mode owns the bottom edge with its bulk bar.
-        .tabBarHidden(isSelecting)
+        .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
         #endif
         .sheet(isPresented: $showingBulkTags) {
             QueueTagSheet(queues: selectedQueues)

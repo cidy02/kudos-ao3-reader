@@ -178,7 +178,6 @@ struct ReadingInsightsView: View {
                 #endif
             }
         }
-        .shrinksTabBarOnScroll()
         .background(theme.appTheme.cardBackdrop.ignoresSafeArea())
         .navigationTitle("Reading Insights")
         #if os(iOS)

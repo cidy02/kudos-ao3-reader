@@ -584,9 +584,6 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(speechAccessoryAccessibilityLabel)
-            .accessibilityShowsLargeContentViewer {
-                Label(speechAccessoryTitle, systemImage: "waveform")
-            }
 
             Button { speech.toggle(from: nil) } label: {
                 Image(systemName: speech.isPlaying ? "pause.fill" : "play.fill")
@@ -750,8 +747,6 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
     @Environment(\.duoLayout) private var duoLayout
     @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.displayScale) private var displayScale
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @State private var chrome = TabChromeState()
     /// Once Duo has been observed, stay on `role: .prominent` across fold/rotation
     /// transitions so a single transient layout tick never rebuilds the `TabView`.
     @State private var latchedSeparatesSearchTab = false
@@ -794,30 +789,6 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
         latchedSeparatesSearchTab || duoLayout.separatesSearchTab
     }
 
-    /// T-572: iPhone draws Kudos's own shrinking bar; iPad, Duo and macOS keep the system one.
-    private var usesCustomBar: Bool {
-        ShrinkingTabBarPolicy.usesCustomBar(
-            isPhone: UIDevice.current.userInterfaceIdiom == .phone,
-            isCompactWidth: horizontalSizeClass == .compact,
-            isDuo: usesProminentSearchTab || duoLayout.isDuo
-        )
-    }
-
-    private var showsMiniPlayer: Bool {
-        ReaderSpeechSessionPolicy.showsMiniPlayer(
-            sessionActive: speech.isSessionActive,
-            readerOpen: speech.isReaderOpen,
-            commentAccessoryTab: router.commentAccessoryTab,
-            selectedTab: router.selection
-        )
-    }
-
-    private var customBarInset: CGFloat {
-        usesCustomBar
-            ? ShrinkingTabBarPolicy.contentInset(barHidden: chrome.isBarHidden, hasAccessory: showsMiniPlayer)
-            : 0
-    }
-
     private func accountSheetBinding() -> Binding<Bool> {
         presentationBox.usesInspector = usesAccountInspector
         let box = presentationBox
@@ -851,14 +822,10 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
 
     var body: some View {
         let accountSheetPresented = accountSheetBinding()
-        let tabSelection = tabSelectionBinding()
-        TabView(selection: tabSelection) {
+        TabView(selection: tabSelectionBinding()) {
             ForEach(router.mainTabs) { tab in
                 Tab(value: tab) {
-                    // A TabView-level toolbar() does not reach tabs whose roots never say
-                    // anything about the bar (Browse, Writing), so say it on every tab.
-                    destination(tab).toolbar(usesCustomBar ? .hidden : .automatic, for: .tabBar)
-                        .onPreferenceChange(TabBarHiddenKey.self) { chrome.setHidden($0, in: tab) }
+                    destination(tab)
                 } label: {
                     if duoLayout.hasVerticalBar {
                         Label {
@@ -886,69 +853,28 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
                 // `UISearchTab` into a prominent `UITab` in place.
                 Tab(AppTab.search.title, systemImage: AppTab.search.symbol,
                     value: AppTab.search, role: .prominent) {
-                    destination(.search).toolbar(usesCustomBar ? .hidden : .automatic, for: .tabBar)
-                        .onPreferenceChange(TabBarHiddenKey.self) { chrome.setHidden($0, in: .search) }
+                    destination(.search)
                 }
             } else {
                 Tab(AppTab.search.title, systemImage: AppTab.search.symbol,
                     value: AppTab.search, role: .search) {
-                    destination(.search).toolbar(usesCustomBar ? .hidden : .automatic, for: .tabBar)
-                        .onPreferenceChange(TabBarHiddenKey.self) { chrome.setHidden($0, in: .search) }
+                    destination(.search)
                 }
             }
         }
         .id(usesProminentSearchTab)
         .tabViewStyle(.sidebarAdaptable)
-        // Owner, 2026-10-01: the tab bar shrinks while you scroll down. On iPhone (T-572)
-        // Kudos's own bar does it (whole bar, labels fade); this is the system bar's
-        // corner form, kept for iPad / Duo / macOS.
+        // Owner, 2026-10-01: the tab bar shrinks while you scroll down.
         .tabBarMinimizeBehavior(.onScrollDown)
-        .toolbar(usesCustomBar ? .hidden : .automatic, for: .tabBar)
-        .tabViewBottomAccessory(isEnabled: showsMiniPlayer && !usesCustomBar) {
+        .tabViewBottomAccessory(
+            isEnabled: ReaderSpeechSessionPolicy.showsMiniPlayer(
+                sessionActive: speech.isSessionActive,
+                readerOpen: speech.isReaderOpen,
+                commentAccessoryTab: router.commentAccessoryTab,
+                selectedTab: router.selection
+            )
+        ) {
             speechAccessory()
-        }
-        .environment(chrome)
-        .environment(\.usesCustomTabBar, usesCustomBar)
-        .background { TabBarContentInset(inset: customBarInset) }
-        .overlay {
-            // A full-size, bottom-aligned layer that ignores the keyboard region, so the keyboard
-            // simply covers the bar like the system bar (the TabView's content keeps avoiding it).
-            ZStack(alignment: .bottom) {
-            if usesCustomBar, !chrome.isBarHidden {
-                VStack(spacing: ShrinkingTabBarPolicy.gap) {
-                    if showsMiniPlayer {
-                        speechAccessory()
-                            // Fixed-height capsule: cap the text scale (the title also has a
-                            // Large Content Viewer) so AX5 never clips it.
-                            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-                            .frame(height: chrome.isShrunk ? 46 : ShrinkingTabBarPolicy.accessoryHeight)
-                            .glassEffect(.regular, in: .capsule)
-                            .padding(.horizontal, 17)
-                    }
-                    ShrinkingTabBar(
-                        tabs: router.mainTabs,
-                        selection: router.selection,
-                        isShrunk: chrome.isShrunk
-                    ) { tab in
-                        if tab == router.selection {
-                            chrome.reselected(tab)
-                        } else {
-                            tabSelection.wrappedValue = tab
-                        }
-                    }
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            .ignoresSafeArea(.keyboard, edges: .bottom)
-        }
-        .animation(unlessReduced: .easeInOut(duration: 0.22), value: chrome.isBarHidden)
-        .animation(unlessReduced: .easeInOut(duration: 0.22), value: chrome.isShrunk)
-        .onChange(of: usesCustomBar, initial: true) { _, custom in chrome.usesCustomBar = custom }
-        .onChange(of: router.selection, initial: true) { _, tab in
-            chrome.selectedTab = tab
-            chrome.isShrunk = false
         }
         .onChange(of: duoLayout.separatesSearchTab, initial: true) { _, separates in
             if separates { latchedSeparatesSearchTab = true }
@@ -962,8 +888,6 @@ private struct IOSTabShell<Destination: View, SpeechAccessory: View>: View {
         }) {
             AccountView()
                 .duoAccountSheetSizing(isFormSheet: accountPresentation == .formSheet)
-                // A sheet's screens must not hide or re-inset the bar behind it.
-                .environment(nil as TabChromeState?)
         }
         .onChange(of: router.selection) { _, selection in
             // Switching tabs from the live rail while Account's inspector is open

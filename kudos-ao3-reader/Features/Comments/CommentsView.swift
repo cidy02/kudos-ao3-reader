@@ -39,8 +39,6 @@ private struct CommentReaderDestination: Identifiable, Hashable {
 private struct CommentWriteBarPlacement<Bar: View>: ViewModifier {
     var isAccessoryActive: Bool
     var accessibilitySize: Bool
-    /// Points to drop the pill when Kudos's own bar is shrunk (0 everywhere else).
-    var customBarDrop: CGFloat = 0
     @ViewBuilder var bar: () -> Bar
 
     func body(content: Content) -> some View {
@@ -50,12 +48,7 @@ private struct CommentWriteBarPlacement<Bar: View>: ViewModifier {
                 bar()
             }
         } else if !isAccessoryActive {
-            // The safe-area inset is the bar's EXPANDED top; follow it down when the bar shrinks
-            // so the pill never hovers above a shorter bar.
-            content.safeAreaInset(edge: .bottom) {
-                bar().offset(y: customBarDrop)
-                    .animation(unlessReduced: .easeInOut(duration: 0.22), value: customBarDrop)
-            }
+            content.safeAreaInset(edge: .bottom) { bar() }
         } else {
             content
         }
@@ -100,8 +93,6 @@ struct CommentsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(TabChromeState.self) private var tabChrome: TabChromeState?
-    @Environment(\.usesCustomTabBar) private var usesCustomTabBar
     @ScaledMetric(relativeTo: .caption) private var noteSize: CGFloat = 11.5
     @ScaledMetric(relativeTo: .footnote) private var writeCommentButtonSize: CGFloat = 14
 
@@ -268,10 +259,7 @@ struct CommentsView: View {
             .modifier(
                 CommentWriteBarPlacement(
                     isAccessoryActive: usesTabViewBottomAccessory,
-                    accessibilitySize: dynamicTypeSize.isAccessibilitySize,
-                    customBarDrop: CommentsWriteBarPlacementPolicy.customBarDrop(
-                        customBar: usesCustomTabBar, isModal: isModal, isShrunk: tabChrome?.isShrunk == true
-                    )
+                    accessibilitySize: dynamicTypeSize.isAccessibilitySize
                 ) {
                     writeCommentBar
                 }
@@ -1266,8 +1254,7 @@ struct CommentsView: View {
             .accessibilityLabel(title)
     }
 
-    /// The composer takes the accessory slot (the speech mini-player yields to it).
-    private var composerOwnsAccessory: Bool {
+    private var usesTabViewBottomAccessory: Bool {
         #if os(iOS)
         CommentsWriteBarPlacementPolicy.usesBottomAccessory(
             isModal: isModal,
@@ -1278,17 +1265,8 @@ struct CommentsView: View {
         #endif
     }
 
-    /// The system accessory rides the system bar; Kudos's own iPhone bar (T-572) has none,
-    /// so there the composer sits in-view just above it, in the same slot.
-    private var usesTabViewBottomAccessory: Bool {
-        CommentsWriteBarPlacementPolicy.usesSystemAccessory(
-            composerOwnsAccessory: composerOwnsAccessory,
-            customBar: usesCustomTabBar
-        )
-    }
-
     private var commentAccessoryActive: Bool {
-        guard composerOwnsAccessory else { return false }
+        guard usesTabViewBottomAccessory else { return false }
         if case .loaded = model.phase { return true }
         return false
     }
