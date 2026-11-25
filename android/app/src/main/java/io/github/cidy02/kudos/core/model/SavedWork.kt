@@ -112,8 +112,9 @@ data class SavedWork(
     val coverArtPreferenceRaw: String? = null,
     /**
      * Per-field merge clock for [coverArtPreferenceRaw] (iOS `SavedWork.coverArtPreferenceChangedAt`).
-     * Updated monotonically (`max(now, previous + 1 ms)`) on reader cover-choice edits only;
-     * reading, refreshing, or favouriting never touches it.
+     * Updated on reader cover-choice edits only to `min(max(now, previous + 2 ms), now + maxFutureSkew)`
+     * (healing stamps already past the cap) without moving [lastModifiedAt]; reading, refreshing,
+     * or favouriting never touches it.
      */
     val coverArtPreferenceChangedAt: Instant? = null
 ) {

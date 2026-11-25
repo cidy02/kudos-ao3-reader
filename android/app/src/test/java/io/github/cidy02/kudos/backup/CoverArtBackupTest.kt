@@ -26,16 +26,21 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -63,7 +68,10 @@ class CoverArtBackupTest {
         val workRepo: WorkRepository,
         val backupRepo: BackupRepository,
         val settingsRepo: SettingsRepository,
-        private val scope: CoroutineScope,
+        val workFileStore: WorkFileStore,
+        val fontFileStore: FontFileStore,
+        val persistenceGate: PersistenceGate,
+        val scope: CoroutineScope,
         private val root: File
     ) : AutoCloseable {
         override fun close() {
@@ -91,6 +99,7 @@ class CoverArtBackupTest {
         )
         val workFileStore = WorkFileStore(root.toPath())
         val fontFileStore = FontFileStore(root.toPath())
+        val persistenceGate = PersistenceGate()
         val workRepo = WorkRepository(
             database = db,
             fileStore = workFileStore,
@@ -101,11 +110,11 @@ class CoverArtBackupTest {
             workFileStore = workFileStore,
             fontFileStore = fontFileStore,
             settingsRepository = settings,
-            persistenceGate = PersistenceGate(),
+            persistenceGate = persistenceGate,
             clock = clock,
             appVersion = "test"
         )
-        return TestDevice(db, workRepo, backupRepo, settings, scope, root)
+        return TestDevice(db, workRepo, backupRepo, settings, workFileStore, fontFileStore, persistenceGate, scope, root)
     }
 
     private fun manifestBytesFromZip(zipBytes: ByteArray): ByteArray {
@@ -122,10 +131,13 @@ class CoverArtBackupTest {
     private fun manifestJsonFromZip(zipBytes: ByteArray): JsonObject =
         Json.parseToJsonElement(manifestBytesFromZip(zipBytes).toString(Charsets.UTF_8)).jsonObject
 
-    private fun strippedCoverPreferencePackage(zipBytes: ByteArray): KudosBackupPackage {
+    private fun strippedCoverPreferencePackage(
+        zipBytes: ByteArray,
+        key: String = "coverArtPreference"
+    ): KudosBackupPackage {
         val root = manifestJsonFromZip(zipBytes)
         val works = root.getValue("works").jsonArray.map { element ->
-            JsonObject(element.jsonObject.filterKeys { it != "coverArtPreference" })
+            JsonObject(element.jsonObject.filterKeys { it != key })
         }
         val modified = JsonObject(root + ("works" to JsonArray(works)))
         val bytes = BackupJson.encodeToString(JsonObject.serializer(), modified).toByteArray(Charsets.UTF_8)
@@ -230,19 +242,20 @@ class CoverArtBackupTest {
             val afterGenerated = checkNotNull(device.db.workDao().getById(workId)?.toDomain())
             assertEquals("generated", afterGenerated.coverArtPreferenceRaw)
             val first = checkNotNull(afterGenerated.coverArtPreferenceChangedAt)
-            assertFalse(first.isBefore(ahead.plusMillis(1)))
+            assertFalse(first.isBefore(ahead.plusMillis(2)))
+            assertEquals(now, afterGenerated.lastModifiedAt)
 
             // Same option: no write.
             device.workRepo.updateCoverArtPreference(workId, CoverArtPreference.Generated)
             val afterRepeat = checkNotNull(device.db.workDao().getById(workId)?.toDomain())
             assertEquals(first, afterRepeat.coverArtPreferenceChangedAt)
 
-            // Reset to Follow Settings writes "follow" and advances stamp.
+            // Reset to Follow Settings writes "follow" and advances stamp by at least 2 ms.
             device.workRepo.updateCoverArtPreference(workId, CoverArtPreference.FollowSettings)
             val afterReset = checkNotNull(device.db.workDao().getById(workId)?.toDomain())
             assertEquals(CoverArtPreference.FOLLOW_RAW, afterReset.coverArtPreferenceRaw)
             val resetStamp = checkNotNull(afterReset.coverArtPreferenceChangedAt)
-            assertTrue(resetStamp.isAfter(first))
+            assertFalse(resetStamp.isBefore(first.plusMillis(2)))
 
             // Tapping Follow Settings again after reset writes nothing.
             device.workRepo.updateCoverArtPreference(workId, CoverArtPreference.FollowSettings)
@@ -598,6 +611,474 @@ class CoverArtBackupTest {
                 assertEquals("future-choice", unk.coverArtPreferenceRaw)
                 assertEquals(stampUnk, unk.coverArtPreferenceChangedAt)
             }
+        }
+    }
+
+    // MARK: Contract update 2 (ported from iOS KudosTests/CoverArtPreferenceTests.swift)
+
+    @Test
+    fun theMergeTableDecidesEveryRowAndEqualStampsConvergeAcrossReconcile() = runTest {
+        val now = Instant.ofEpochSecond(100_000)
+        val t1 = Instant.ofEpochSecond(1_000)
+        val t2 = Instant.ofEpochSecond(2_000)
+        fun wins(lr: String?, ls: Instant?, ir: String, istamp: Instant?): Boolean =
+            CoverArtResolution.incomingWins(
+                localRaw = lr,
+                localStamp = ls,
+                incomingRaw = ir,
+                incomingStamp = istamp,
+                now = now
+            )
+
+        assertTrue(wins("generated", t1, "embedded", t2))            // stamped vs stamped: newer wins
+        assertFalse(wins("generated", t2, "embedded", t1))
+        assertTrue(wins("embedded", t1, "generated", t1))            // equal stamps: greater value wins, on both devices
+        assertFalse(wins("generated", t1, "embedded", t1))
+        assertFalse(wins("generated", t1, "embedded", null))         // stamped local beats unstamped incoming
+        assertTrue(wins("generated", null, "embedded", t1))          // unstamped local loses to stamped incoming
+        assertTrue(wins("embedded", null, "generated", null))        // unstamped vs unstamped: greater value
+        assertFalse(wins("generated", null, "embedded", null))
+        assertTrue(wins("embedded", null, "follow", null))           // an older unstamped archive can only
+        assertFalse(wins("follow", null, "embedded", null))          // win by value, so both devices agree
+        assertTrue(wins(null, null, "follow", null))                 // nil local takes any present value
+        assertTrue(wins(null, null, "embedded", t1))
+        val far = now.plus(BackupMergeService.FUTURE_CLOCK_SKEW.multipliedBy(3))
+        assertFalse(wins("generated", far, "embedded", far.plusSeconds(500))) // equal once clamped: "embedded" < "generated"
+        assertTrue(wins("embedded", far, "generated", far.plusSeconds(500)))
+
+        // End-to-end equal-stamp convergence through real backup JSON + Reconcile, both directions.
+        val archiveEmbedded = makeDevice("kudos-cover-eq-emb").use { src ->
+            src.db.workDao().upsert(sampleWork("embedded", changedAt = t1).toEntity())
+            src.backupRepo.exportV2ZipBytes()
+        }
+        val archiveGenerated = makeDevice("kudos-cover-eq-gen").use { src ->
+            src.db.workDao().upsert(sampleWork("generated", changedAt = t1).toEntity())
+            src.backupRepo.exportV2ZipBytes()
+        }
+        makeDevice("kudos-cover-eq-local-emb").use { local ->
+            local.db.workDao().upsert(sampleWork("embedded", changedAt = t1).toEntity())
+            local.backupRepo.importV2ZipBytes(archiveGenerated, mode = BackupImportMode.RECONCILE)
+            val resolved = checkNotNull(local.db.workDao().getById(workId)?.toDomain())
+            assertEquals("generated", resolved.coverArtPreferenceRaw)
+            assertEquals(t1, resolved.coverArtPreferenceChangedAt)
+        }
+        makeDevice("kudos-cover-eq-local-gen").use { local ->
+            local.db.workDao().upsert(sampleWork("generated", changedAt = t1).toEntity())
+            local.backupRepo.importV2ZipBytes(archiveEmbedded, mode = BackupImportMode.RECONCILE)
+            val resolved = checkNotNull(local.db.workDao().getById(workId)?.toDomain())
+            assertEquals("generated", resolved.coverArtPreferenceRaw)
+            assertEquals(t1, resolved.coverArtPreferenceChangedAt)
+        }
+
+        // Unstamped vs unstamped converges both directions; unstamped local loses to stamped incoming.
+        val unstampedEmbedded = strippedCoverPreferencePackage(archiveEmbedded, key = "coverArtPreferenceChangedAt")
+        val unstampedGenerated = strippedCoverPreferencePackage(archiveGenerated, key = "coverArtPreferenceChangedAt")
+        makeDevice("kudos-cover-unstamped-emb").use { local ->
+            local.db.workDao().upsert(sampleWork("embedded", changedAt = null).toEntity())
+            local.backupRepo.importPackage(unstampedGenerated, mode = BackupImportMode.RECONCILE)
+            val resolved = checkNotNull(local.db.workDao().getById(workId)?.toDomain())
+            assertEquals("generated", resolved.coverArtPreferenceRaw)
+            assertNull(resolved.coverArtPreferenceChangedAt)
+        }
+        makeDevice("kudos-cover-unstamped-gen").use { local ->
+            local.db.workDao().upsert(sampleWork("generated", changedAt = null).toEntity())
+            local.backupRepo.importPackage(unstampedEmbedded, mode = BackupImportMode.RECONCILE)
+            val resolved = checkNotNull(local.db.workDao().getById(workId)?.toDomain())
+            assertEquals("generated", resolved.coverArtPreferenceRaw)
+            assertNull(resolved.coverArtPreferenceChangedAt)
+
+            // Now a stamped incoming beats the unstamped local.
+            local.backupRepo.importV2ZipBytes(archiveEmbedded, mode = BackupImportMode.RECONCILE)
+            val stamped = checkNotNull(local.db.workDao().getById(workId)?.toDomain())
+            assertEquals("embedded", stamped.coverArtPreferenceRaw)
+            assertEquals(t1, stamped.coverArtPreferenceChangedAt)
+        }
+    }
+
+    @Test
+    fun aCoverEditLeavesTheWorkClockAloneMarksSyncDirtyAndHealsAFarFutureStamp() = runTest {
+        val now = Instant.now().truncatedTo(ChronoUnit.MILLIS)
+        val workClock = Instant.ofEpochSecond(1_234)
+        makeDevice("kudos-cover-edit-clock", clock = { now }).use { device ->
+            device.db.workDao().upsert(
+                sampleWork(preferenceRaw = null, changedAt = null, lastModifiedAt = workClock).toEntity()
+            )
+            assertFalse(device.settingsRepo.snapshot().sync.hasPendingChanges)
+            DatabaseChangeTracker(device.db, device.settingsRepo, device.scope).start()
+
+            device.workRepo.updateCoverArtPreference(workId, CoverArtPreference.Generated)
+            val afterFirst = checkNotNull(device.db.workDao().getById(workId)?.toDomain())
+            assertEquals("generated", afterFirst.coverArtPreferenceRaw)
+            assertEquals(
+                "a cover edit must not override concurrent edits elsewhere",
+                workClock,
+                afterFirst.lastModifiedAt
+            )
+            val first = checkNotNull(afterFirst.coverArtPreferenceChangedAt)
+            withContext(Dispatchers.IO) {
+                withTimeout(5_000) {
+                    device.settingsRepo.settings.first { it.sync.hasPendingChanges }
+                }
+            }
+            assertTrue(device.settingsRepo.snapshot().sync.hasPendingChanges)
+
+            // Rapid second edit advances by at least 2 ms without touching lastModifiedAt.
+            device.workRepo.updateCoverArtPreference(workId, CoverArtPreference.Embedded)
+            val afterSecond = checkNotNull(device.db.workDao().getById(workId)?.toDomain())
+            val second = checkNotNull(afterSecond.coverArtPreferenceChangedAt)
+            assertFalse(second.isBefore(first.plusMillis(2)))
+            assertEquals(workClock, afterSecond.lastModifiedAt)
+
+            // Previous stamp just under the cap is capped at now + FUTURE_CLOCK_SKEW.
+            val ceiling = now.plus(BackupMergeService.FUTURE_CLOCK_SKEW)
+            device.db.workDao().upsert(
+                afterSecond.copy(coverArtPreferenceChangedAt = ceiling.minusMillis(1)).toEntity()
+            )
+            device.workRepo.updateCoverArtPreference(workId, CoverArtPreference.Generated)
+            val afterCap = checkNotNull(device.db.workDao().getById(workId)?.toDomain())
+            assertEquals(ceiling, afterCap.coverArtPreferenceChangedAt)
+            assertEquals(workClock, afterCap.lastModifiedAt)
+
+            // Stored stamp already beyond the cap counts as now on the next edit (heals a fast clock).
+            val farFuture = now.plus(BackupMergeService.FUTURE_CLOCK_SKEW.multipliedBy(3))
+            device.db.workDao().upsert(
+                afterCap.copy(coverArtPreferenceChangedAt = farFuture).toEntity()
+            )
+            device.workRepo.updateCoverArtPreference(workId, CoverArtPreference.Embedded)
+            val afterHeal = checkNotNull(device.db.workDao().getById(workId)?.toDomain())
+            val healed = checkNotNull(afterHeal.coverArtPreferenceChangedAt)
+            assertFalse(healed.isAfter(ceiling))
+            assertTrue(healed.isBefore(now.plusSeconds(60)))
+            assertEquals(now.plusMillis(2), healed)
+            assertEquals(workClock, afterHeal.lastModifiedAt)
+        }
+    }
+
+    @Test
+    fun replaceLibraryAdoptsAnyPresentValueSoARestoreRollsBack() = runTest {
+        val snapshot = makeDevice("kudos-cover-replace-snap").use { source ->
+            source.db.workDao().upsert(
+                sampleWork("embedded", changedAt = Instant.ofEpochSecond(1_000)).toEntity()
+            )
+            source.backupRepo.exportV2ZipBytes()
+        }
+        makeDevice("kudos-cover-replace-local").use { local ->
+            // Edited after the backup: Replace Library rolls it back.
+            local.db.workDao().upsert(
+                sampleWork("generated", changedAt = Instant.ofEpochSecond(2_000)).toEntity()
+            )
+            local.backupRepo.importV2ZipBytes(snapshot, mode = BackupImportMode.REPLACE_LIBRARY)
+            val rolledBack = checkNotNull(local.db.workDao().getById(workId)?.toDomain())
+            assertEquals("embedded", rolledBack.coverArtPreferenceRaw)
+            assertEquals(Instant.ofEpochSecond(1_000), rolledBack.coverArtPreferenceChangedAt)
+        }
+
+        // An unstamped export replaces a stamped local choice too under Replace Library.
+        val unstamped = makeDevice("kudos-cover-replace-unstamped-src").use { source ->
+            source.db.workDao().upsert(
+                sampleWork("generated", changedAt = Instant.ofEpochSecond(1)).toEntity()
+            )
+            strippedCoverPreferencePackage(
+                source.backupRepo.exportV2ZipBytes(),
+                key = "coverArtPreferenceChangedAt"
+            )
+        }
+        assertNull(unstamped.manifest.works.single().coverArtPreferenceChangedAt)
+        makeDevice("kudos-cover-replace-unstamped-dst").use { other ->
+            other.db.workDao().upsert(
+                sampleWork("embedded", changedAt = Instant.ofEpochSecond(5_000)).toEntity()
+            )
+            other.backupRepo.importPackage(unstamped, mode = BackupImportMode.REPLACE_LIBRARY)
+            val theirs = checkNotNull(other.db.workDao().getById(workId)?.toDomain())
+            assertEquals("generated", theirs.coverArtPreferenceRaw)
+            assertNull(theirs.coverArtPreferenceChangedAt)
+        }
+    }
+
+    @Test
+    fun anUnstampedExportNeverBeatsAStampedLocalChoiceInEveryMergeMode() = runTest {
+        val unstamped = makeDevice("kudos-cover-unstamped-src").use { source ->
+            source.db.workDao().upsert(
+                sampleWork("generated", changedAt = Instant.ofEpochSecond(1)).toEntity()
+            )
+            strippedCoverPreferencePackage(
+                source.backupRepo.exportV2ZipBytes(),
+                key = "coverArtPreferenceChangedAt"
+            )
+        }
+        assertNull(unstamped.manifest.works.single().coverArtPreferenceChangedAt)
+
+        for (mode in listOf(BackupImportMode.RECONCILE, BackupImportMode.MERGE)) {
+            makeDevice("kudos-cover-unstamped-${mode.name}").use { local ->
+                local.db.workDao().upsert(
+                    sampleWork("embedded", changedAt = Instant.ofEpochSecond(1_000)).toEntity()
+                )
+                local.backupRepo.importPackage(unstamped, mode = mode)
+                val mine = checkNotNull(local.db.workDao().getById(workId)?.toDomain())
+                assertEquals("mode=$mode", "embedded", mine.coverArtPreferenceRaw)
+                assertEquals("mode=$mode", Instant.ofEpochSecond(1_000), mine.coverArtPreferenceChangedAt)
+            }
+        }
+
+        // Reconcile fills a work that has no choice at all; Merge leaves an existing work alone
+        // but gives a work it adds the archived value.
+        makeDevice("kudos-cover-unstamped-bare").use { bare ->
+            bare.db.workDao().upsert(sampleWork(null, changedAt = null).toEntity())
+            bare.backupRepo.importPackage(unstamped, mode = BackupImportMode.MERGE)
+            assertNull(checkNotNull(bare.db.workDao().getById(workId)?.toDomain()).coverArtPreferenceRaw)
+
+            bare.backupRepo.importPackage(unstamped, mode = BackupImportMode.RECONCILE)
+            val filled = checkNotNull(bare.db.workDao().getById(workId)?.toDomain())
+            assertEquals("generated", filled.coverArtPreferenceRaw)
+            assertNull(filled.coverArtPreferenceChangedAt)
+        }
+        makeDevice("kudos-cover-unstamped-added").use { addedDevice ->
+            addedDevice.backupRepo.importPackage(unstamped, mode = BackupImportMode.MERGE)
+            val inserted = checkNotNull(addedDevice.db.workDao().getById(workId)?.toDomain())
+            assertEquals("generated", inserted.coverArtPreferenceRaw)
+            assertNull(inserted.coverArtPreferenceChangedAt)
+        }
+        // Soft-deleted local work revived by live archive in MERGE also applies incomingWins.
+        makeDevice("kudos-cover-unstamped-revive").use { revived ->
+            revived.db.workDao().upsert(
+                sampleWork("embedded", changedAt = Instant.ofEpochSecond(1_000))
+                    .copy(isDeleted = true, deletedAt = added)
+                    .toEntity()
+            )
+            revived.backupRepo.importPackage(unstamped, mode = BackupImportMode.MERGE)
+            val restored = checkNotNull(revived.db.workDao().getById(workId)?.toDomain())
+            assertFalse(restored.isDeleted)
+            assertEquals("embedded", restored.coverArtPreferenceRaw)
+            assertEquals(Instant.ofEpochSecond(1_000), restored.coverArtPreferenceChangedAt)
+        }
+    }
+
+    @Test
+    fun aFarFutureLocalStampIsHealedOnMerge() = runTest {
+        val now = Instant.now().truncatedTo(ChronoUnit.MILLIS)
+        val ceiling = now.plus(BackupMergeService.FUTURE_CLOCK_SKEW)
+        val archive = makeDevice("kudos-cover-heal-src", clock = { now }).use { source ->
+            source.db.workDao().upsert(sampleWork("generated", changedAt = now).toEntity())
+            source.backupRepo.exportV2ZipBytes()
+        }
+        makeDevice("kudos-cover-heal-local", clock = { now }).use { local ->
+            val far = now.plus(BackupMergeService.FUTURE_CLOCK_SKEW.multipliedBy(3))
+            local.db.workDao().upsert(sampleWork("embedded", changedAt = far).toEntity())
+            local.backupRepo.importV2ZipBytes(archive, mode = BackupImportMode.RECONCILE)
+            val realCeiling = Instant.now().plus(BackupMergeService.FUTURE_CLOCK_SKEW) // the import clamps on the real clock
+            val mine = checkNotNull(local.db.workDao().getById(workId)?.toDomain())
+            assertEquals("embedded", mine.coverArtPreferenceRaw)
+            val stamp = checkNotNull(mine.coverArtPreferenceChangedAt)
+            assertFalse("a fast clock's stamp must be healed to the ceiling", stamp.isAfter(realCeiling))
+            assertFalse(stamp.isBefore(ceiling))
+        }
+    }
+
+    @Test
+    fun aFutureStampIsClampedWhenItArrives() = runTest {
+        val now = Instant.now().truncatedTo(ChronoUnit.MILLIS)
+        val far = now.plus(BackupMergeService.FUTURE_CLOCK_SKEW.multipliedBy(10))
+        val expectedClamped = now.plus(BackupMergeService.FUTURE_CLOCK_SKEW)
+        val archive = makeDevice("kudos-cover-future-src", clock = { now }).use { source ->
+            source.db.workDao().upsert(sampleWork("generated", changedAt = far).toEntity())
+            source.backupRepo.exportV2ZipBytes()
+        }
+        makeDevice("kudos-cover-future-local", clock = { now }).use { local ->
+            local.db.workDao().upsert(sampleWork(null, changedAt = null).toEntity())
+            local.backupRepo.importV2ZipBytes(archive, mode = BackupImportMode.RECONCILE)
+            val mine = checkNotNull(local.db.workDao().getById(workId)?.toDomain())
+            val stamp = checkNotNull(mine.coverArtPreferenceChangedAt)
+            assertEquals("generated", mine.coverArtPreferenceRaw)
+            assertClampedNear(expectedClamped, stamp)
+        }
+        makeDevice("kudos-cover-future-new", clock = { now }).use { fresh ->
+            fresh.backupRepo.importV2ZipBytes(archive, mode = BackupImportMode.MERGE)
+            val created = checkNotNull(fresh.db.workDao().getById(workId)?.toDomain())
+            val stamp = checkNotNull(created.coverArtPreferenceChangedAt)
+            assertEquals("generated", created.coverArtPreferenceRaw)
+            assertClampedNear(expectedClamped, stamp)
+        }
+    }
+
+    /** The import clamps against the real clock, which runs a few ms past the test's fixed `now`. */
+    private fun assertClampedNear(expected: Instant, actual: Instant) {
+        assertFalse(actual.isBefore(expected))
+        assertFalse(actual.isAfter(Instant.now().plus(BackupMergeService.FUTURE_CLOCK_SKEW)))
+    }
+
+    @Test
+    fun malformedValuesDecodeAsAbsentAndNeverClear() = runTest {
+        val sourceZip = makeDevice("kudos-cover-malformed-src").use { source ->
+            source.db.workDao().upsert(
+                sampleWork("generated", changedAt = Instant.ofEpochSecond(9_000)).toEntity()
+            )
+            source.backupRepo.exportV2ZipBytes()
+        }
+        val root = manifestJsonFromZip(sourceZip)
+        val badPrimitiveWorks = root.getValue("works").jsonArray.map { element ->
+            JsonObject(
+                element.jsonObject + mapOf(
+                    "coverArtPreference" to JsonPrimitive(42),                // not a string
+                    "coverArtPreferenceChangedAt" to JsonPrimitive("yesterday-ish") // not a date
+                )
+            )
+        }
+        val badPrimitiveBytes = BackupJson.encodeToString(
+            JsonObject.serializer(),
+            JsonObject(root + ("works" to JsonArray(badPrimitiveWorks)))
+        ).toByteArray(Charsets.UTF_8)
+        val decoded = BackupValidator.decodeManifest(badPrimitiveBytes)
+        val decodedWork = decoded.works.single()
+        assertNull(decodedWork.coverArtPreference)
+        assertNull(decodedWork.coverArtPreferenceChangedAt)
+
+        for (mode in listOf(BackupImportMode.RECONCILE, BackupImportMode.REPLACE_LIBRARY)) {
+            makeDevice("kudos-cover-malformed-dst-${mode.name}").use { local ->
+                local.db.workDao().upsert(
+                    sampleWork("embedded", changedAt = Instant.ofEpochSecond(1_000)).toEntity()
+                )
+                local.backupRepo.importPackage(KudosBackupPackage(manifest = decoded), mode = mode)
+                val mine = checkNotNull(local.db.workDao().getById(workId)?.toDomain())
+                assertEquals("mode=$mode", "embedded", mine.coverArtPreferenceRaw)
+                assertEquals("mode=$mode", Instant.ofEpochSecond(1_000), mine.coverArtPreferenceChangedAt)
+            }
+        }
+
+        // Non-primitive JSON values (object/array) also decode as absent without rejecting the manifest.
+        val badStructuredWorks = root.getValue("works").jsonArray.map { element ->
+            JsonObject(
+                element.jsonObject + mapOf(
+                    "coverArtPreference" to buildJsonObject { put("bad", 1) },
+                    "coverArtPreferenceChangedAt" to JsonArray(emptyList())
+                )
+            )
+        }
+        val badStructuredBytes = BackupJson.encodeToString(
+            JsonObject.serializer(),
+            JsonObject(root + ("works" to JsonArray(badStructuredWorks)))
+        ).toByteArray(Charsets.UTF_8)
+        val decodedStructured = BackupValidator.decodeManifest(badStructuredBytes).works.single()
+        assertNull(decodedStructured.coverArtPreference)
+        assertNull(decodedStructured.coverArtPreferenceChangedAt)
+    }
+
+    @Test
+    fun aMergeThatAdoptsTheChoiceLeavesTheWorkClockToTheUsualRule() = runTest {
+        val archive = makeDevice("kudos-cover-workclock-remote").use { remote ->
+            remote.db.workDao().upsert(
+                sampleWork(
+                    preferenceRaw = "generated",
+                    changedAt = Instant.ofEpochSecond(500),
+                    lastModifiedAt = Instant.ofEpochSecond(500)
+                ).toEntity()
+            )
+            remote.backupRepo.exportV2ZipBytes()
+        }
+        makeDevice("kudos-cover-workclock-local").use { local ->
+            local.db.workDao().upsert(
+                sampleWork(
+                    preferenceRaw = null,
+                    changedAt = null,
+                    lastModifiedAt = Instant.ofEpochSecond(9_000)
+                ).toEntity()
+            )
+            local.backupRepo.importV2ZipBytes(archive, mode = BackupImportMode.RECONCILE)
+            val read = checkNotNull(local.db.workDao().getById(workId)?.toDomain())
+            assertEquals("generated", read.coverArtPreferenceRaw)
+            assertEquals(Instant.ofEpochSecond(500), read.coverArtPreferenceChangedAt)
+            assertEquals(Instant.ofEpochSecond(9_000), read.lastModifiedAt)
+        }
+    }
+
+    @Test
+    fun folderSyncUsesTheSameMergeTableWithoutMovingWorkClock() = runTest {
+        val t1 = Instant.parse("2026-01-10T12:00:00Z")
+        val t2 = Instant.parse("2026-01-10T12:02:00Z")
+        val t3 = Instant.parse("2026-01-10T12:05:00Z")
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val safRoot = Files.createTempDirectory("kudos-cover-sync-saf").toFile()
+        try {
+            val treeUri = FakeTempDocumentsProvider().install(context, safRoot)
+            var syncAClock = t3
+            makeDevice("kudos-cover-sync-a", clock = { t3 }).use { deviceA ->
+                makeDevice("kudos-cover-sync-b", clock = { t2 }).use { deviceB ->
+                    val base = sampleWork(preferenceRaw = null, changedAt = null, lastModifiedAt = t1)
+                        .copy(isFavorite = false)
+                    deviceA.db.workDao().upsert(base.toEntity())
+                    deviceB.db.workDao().upsert(base.toEntity())
+
+                    // Device A makes a cover-only edit at t3 (later than B's favourite at t2),
+                    // leaving lastModifiedAt at t1 so it cannot override B's concurrent edit.
+                    deviceA.workRepo.updateCoverArtPreference(workId, CoverArtPreference.Generated)
+                    val localA = checkNotNull(deviceA.db.workDao().getById(workId)?.toDomain())
+                    assertEquals(t1, localA.lastModifiedAt)
+                    assertEquals("generated", localA.coverArtPreferenceRaw)
+                    assertEquals(t3, localA.coverArtPreferenceChangedAt)
+
+                    deviceB.workRepo.setFavorite(workId, true)
+
+                    deviceA.settingsRepo.updateSyncFolderUri(treeUri.toString())
+                    deviceA.settingsRepo.updateSyncIsEnabled(true)
+                    deviceB.settingsRepo.updateSyncFolderUri(treeUri.toString())
+                    deviceB.settingsRepo.updateSyncIsEnabled(true)
+
+                    val syncA = SyncRepository(
+                        context = context,
+                        settingsRepository = deviceA.settingsRepo,
+                        backupRepository = deviceA.backupRepo,
+                        workFileStore = deviceA.workFileStore,
+                        fontFileStore = deviceA.fontFileStore,
+                        persistenceGate = deviceA.persistenceGate,
+                        clock = { syncAClock },
+                        scheduleBackgroundSync = {}
+                    )
+                    val syncB = SyncRepository(
+                        context = context,
+                        settingsRepository = deviceB.settingsRepo,
+                        backupRepository = deviceB.backupRepo,
+                        workFileStore = deviceB.workFileStore,
+                        fontFileStore = deviceB.fontFileStore,
+                        persistenceGate = deviceB.persistenceGate,
+                        clock = { t3.plusSeconds(10) },
+                        scheduleBackgroundSync = {}
+                    )
+
+                    assertTrue(syncA.runSync() is SyncResult.Success)
+                    assertTrue(syncB.runSync() is SyncResult.Success)
+
+                    val afterB = checkNotNull(deviceB.db.workDao().getById(workId)?.toDomain())
+                    assertTrue(afterB.isFavorite)
+                    assertEquals(t2, afterB.lastModifiedAt)
+                    assertEquals("generated", afterB.coverArtPreferenceRaw)
+                    assertEquals(t3, afterB.coverArtPreferenceChangedAt)
+
+                    syncAClock = t3.plusSeconds(20)
+                    assertTrue(syncA.runSync() is SyncResult.Success)
+
+                    val afterA = checkNotNull(deviceA.db.workDao().getById(workId)?.toDomain())
+                    assertTrue(afterA.isFavorite)
+                    assertEquals("generated", afterA.coverArtPreferenceRaw)
+                    assertEquals(t3, afterA.coverArtPreferenceChangedAt)
+                }
+            }
+        } finally {
+            safRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun exportFollowsTheResolvedChoice() = runTest {
+        makeDevice("kudos-cover-export-choice").use { device ->
+            var work = sampleWork(preferenceRaw = null)
+            // Global setting defaults on.
+            assertTrue(CoverArtResolution.wantsEmbeddedArt(work, device.settingsRepo.snapshot().app.useEmbeddedCoverArt))
+            device.settingsRepo.updateUseEmbeddedCoverArt(false)
+            assertFalse(CoverArtResolution.wantsEmbeddedArt(work, device.settingsRepo.snapshot().app.useEmbeddedCoverArt))
+            work = work.copy(coverArtPreferenceRaw = "embedded")
+            assertTrue(CoverArtResolution.wantsEmbeddedArt(work, device.settingsRepo.snapshot().app.useEmbeddedCoverArt))
+            device.settingsRepo.updateUseEmbeddedCoverArt(true)
+            work = work.copy(coverArtPreferenceRaw = "generated")
+            assertFalse(CoverArtResolution.wantsEmbeddedArt(work, device.settingsRepo.snapshot().app.useEmbeddedCoverArt))
         }
     }
 

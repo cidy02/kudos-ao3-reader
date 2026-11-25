@@ -221,10 +221,13 @@ class WorkRepository(
 
     /**
      * Persists a reader's per-work cover choice (`"embedded"`, `"generated"`, or `"follow"` on
-     * reset after an explicit choice), stamps [SavedWork.coverArtPreferenceChangedAt] monotonically
-     * (`max(now, previous + 1 ms)`), and bumps `lastModifiedAt` (which wakes sync via
-     * `DatabaseChangeTracker`). Selecting the already-selected option writes nothing, preserving
-     * untouched `null` rows and unknown future strings. Mirrors iOS `SavedWork.setCoverArtPreference`.
+     * reset after an explicit choice), stamping ONLY [SavedWork.coverArtPreferenceChangedAt]
+     * (`min(max(now, previous + 2 ms), now + FUTURE_CLOCK_SKEW)`, healing stamps past the cap).
+     * Never touches [SavedWork.lastModifiedAt], so a cover tap cannot override another device's
+     * concurrent favourite/finished/status edits; the Room write to `works` still marks Folder Sync
+     * dirty via [io.github.cidy02.kudos.backup.DatabaseChangeTracker]. Selecting the already-selected
+     * option writes nothing, preserving untouched `null` rows and unknown future strings.
+     * Mirrors iOS `SavedWork.setCoverArtPreference`.
      */
     suspend fun updateCoverArtPreference(workId: String, preference: CoverArtPreference): SavedWork? =
         database.withTransaction {
@@ -239,8 +242,7 @@ class WorkRepository(
             upsert(
                 work.copy(
                     coverArtPreferenceRaw = edit.raw,
-                    coverArtPreferenceChangedAt = edit.changedAt,
-                    lastModifiedAt = now
+                    coverArtPreferenceChangedAt = edit.changedAt
                 )
             )
         }

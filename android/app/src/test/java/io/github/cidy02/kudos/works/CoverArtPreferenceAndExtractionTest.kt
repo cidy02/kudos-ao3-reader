@@ -4,11 +4,15 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import io.github.cidy02.kudos.backup.BackupMergeService
+import io.github.cidy02.kudos.core.model.AppSettings
 import io.github.cidy02.kudos.core.model.CoverArtPreference
 import io.github.cidy02.kudos.core.model.CoverArtResolution
+import io.github.cidy02.kudos.core.model.SavedWork
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
+import java.time.Instant
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -83,6 +87,94 @@ class CoverArtPreferenceAndExtractionTest {
 
         assertEquals("Currently Work's Art", CoverArtResolution.followSettingsSummary(true))
         assertEquals("Currently Generated", CoverArtResolution.followSettingsSummary(false))
+    }
+
+    @Test
+    fun theMergeTableDecidesEveryRow() {
+        // Port of iOS CoverArtPreferenceTests.theMergeTableDecidesEveryRow.
+        val now = Instant.ofEpochSecond(100_000)
+        val t1 = Instant.ofEpochSecond(1_000)
+        val t2 = Instant.ofEpochSecond(2_000)
+        fun wins(lr: String?, ls: Instant?, ir: String, istamp: Instant?): Boolean =
+            CoverArtResolution.incomingWins(
+                localRaw = lr,
+                localStamp = ls,
+                incomingRaw = ir,
+                incomingStamp = istamp,
+                now = now
+            )
+
+        assertTrue(wins("generated", t1, "embedded", t2))            // stamped vs stamped: newer wins
+        assertFalse(wins("generated", t2, "embedded", t1))
+        assertTrue(wins("embedded", t1, "generated", t1))            // equal stamps: greater value wins, on both devices
+        assertFalse(wins("generated", t1, "embedded", t1))
+        assertFalse(wins("generated", t1, "embedded", null))         // stamped local beats unstamped incoming
+        assertTrue(wins("generated", null, "embedded", t1))          // unstamped local loses to stamped incoming
+        assertTrue(wins("embedded", null, "generated", null))        // unstamped vs unstamped: greater value
+        assertFalse(wins("generated", null, "embedded", null))
+        assertTrue(wins("embedded", null, "follow", null))           // an older unstamped archive can only
+        assertFalse(wins("follow", null, "embedded", null))          // win by value, so both devices agree
+        assertTrue(wins(null, null, "follow", null))                 // nil local takes any present value
+        assertTrue(wins(null, null, "embedded", t1))
+        // a far-future stamp is clamped to now + skew on both sides
+        val far = now.plus(BackupMergeService.FUTURE_CLOCK_SKEW.multipliedBy(3))
+        assertFalse(wins("generated", far, "embedded", far.plusSeconds(500))) // equal once clamped: "embedded" < "generated"
+        assertTrue(wins("embedded", far, "generated", far.plusSeconds(500)))
+    }
+
+    @Test
+    fun applyEditStepsByTwoMillisCapsAtMaxSkewAndHealsBeyondCap() {
+        val now = Instant.parse("2026-11-24T12:00:00.000Z")
+        val ceiling = now.plus(BackupMergeService.FUTURE_CLOCK_SKEW)
+
+        val first = checkNotNull(
+            CoverArtResolution.applyEdit(null, null, CoverArtPreference.Generated, now = now)
+        )
+        assertEquals("generated", first.raw)
+        assertEquals(now, first.changedAt)
+
+        // Rapid second edit at the same instant steps by 2 ms (clears ISO-8601 ms rounding).
+        val second = checkNotNull(
+            CoverArtResolution.applyEdit(first.raw, first.changedAt, CoverArtPreference.Embedded, now = now)
+        )
+        assertEquals("embedded", second.raw)
+        assertEquals(now.plusMillis(2), second.changedAt)
+
+        // A previous stamp just under the cap is capped at now + FUTURE_CLOCK_SKEW.
+        val capped = checkNotNull(
+            CoverArtResolution.applyEdit("embedded", ceiling.minusMillis(1), CoverArtPreference.Generated, now = now)
+        )
+        assertEquals(ceiling, capped.changedAt)
+
+        // A stored stamp already beyond the cap counts as now on the next edit (heals a fast clock).
+        val farFuture = now.plus(BackupMergeService.FUTURE_CLOCK_SKEW.multipliedBy(3))
+        val healed = checkNotNull(
+            CoverArtResolution.applyEdit("generated", farFuture, CoverArtPreference.Embedded, now = now)
+        )
+        assertEquals("embedded", healed.raw)
+        assertEquals(now.plusMillis(2), healed.changedAt)
+        assertFalse(healed.changedAt.isAfter(ceiling))
+        assertTrue(healed.changedAt.isBefore(now.plusSeconds(60)))
+
+        // Selecting what is already active writes nothing; unknown future value is preserved.
+        assertNull(CoverArtResolution.applyEdit("embedded", now, CoverArtPreference.Embedded, now = now))
+        assertNull(CoverArtResolution.applyEdit(null, null, CoverArtPreference.FollowSettings, now = now))
+        assertNull(CoverArtResolution.applyEdit(CoverArtPreference.FOLLOW_RAW, now, CoverArtPreference.FollowSettings, now = now))
+        assertNull(CoverArtResolution.applyEdit("sepia-photo", now, CoverArtPreference.FollowSettings, now = now))
+    }
+
+    @Test
+    fun exportFollowsTheResolvedChoice() {
+        // Port of iOS CoverArtPreferenceTests.exportFollowsTheResolvedChoice.
+        val defaultGlobal = AppSettings().useEmbeddedCoverArt
+        assertTrue(defaultGlobal)
+        var work = SavedWork(title = "Export", author = "Writer")
+        assertTrue(CoverArtResolution.wantsEmbeddedArt(work, defaultGlobal))
+        assertFalse(CoverArtResolution.wantsEmbeddedArt(work, globalUseEmbeddedCoverArt = false))
+        work = work.copy(coverArtPreferenceRaw = "embedded")
+        assertTrue(CoverArtResolution.wantsEmbeddedArt(work, globalUseEmbeddedCoverArt = false))
+        work = work.copy(coverArtPreferenceRaw = "generated")
+        assertFalse(CoverArtResolution.wantsEmbeddedArt(work, globalUseEmbeddedCoverArt = true))
     }
 
     @Test

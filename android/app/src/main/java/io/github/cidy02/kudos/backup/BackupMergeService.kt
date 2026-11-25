@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.backup
 
 import io.github.cidy02.kudos.core.model.Bookmark
+import io.github.cidy02.kudos.core.model.CoverArtResolution
 import io.github.cidy02.kudos.core.model.CustomFont
 import io.github.cidy02.kudos.core.model.ReadingAnnotation
 import io.github.cidy02.kudos.core.model.ReadingQueue
@@ -625,7 +626,9 @@ object BackupMergeService {
                 if (original != null && archived != null && live.copy(
                     progressModifiedAt = original.progressModifiedAt, lastReadDate = original.lastReadDate,
                     readiumLocator = original.readiumLocator, lastSpineIndex = original.lastSpineIndex,
-                    lastScrollFraction = original.lastScrollFraction, legacyReaderProgress = original.legacyReaderProgress
+                    lastScrollFraction = original.lastScrollFraction, legacyReaderProgress = original.legacyReaderProgress,
+                    coverArtPreferenceRaw = original.coverArtPreferenceRaw,
+                    coverArtPreferenceChangedAt = original.coverArtPreferenceChangedAt
                 ) != original && resolveIncomingLastModifiedAt(archived.lastModifiedAt, archived.dateAdded,
                     parseOptionalInstant(result.sourceManifest.exportedAt), result.mergedAt) == live.effectiveLastModifiedAt
                 ) {
@@ -897,7 +900,12 @@ object BackupMergeService {
         }
 
         // A-573 / iOS T-573: cover choice merges ONLY on its own clock, never on lastModifiedAt.
-        val (mergedCoverPreference, mergedCoverChangedAt) = mergeCoverArtPreference(existing, archived, now)
+        val (mergedCoverPreference, mergedCoverChangedAt) = mergeCoverArtPreference(
+            existing = existing,
+            archived = archived,
+            mode = BackupImportMode.RECONCILE,
+            now = now
+        )
 
         // Preservation trio: store/re-emit only. Never invent a status. Prefer the
         // non-null side when one is absent so a local-wins merge does not wipe
@@ -942,14 +950,16 @@ object BackupMergeService {
     }
 
     /**
-     * A-573 / iOS T-573 (`KudosBackup.swift:6344-6357`): the per-work cover choice is its own
-     * field with its own clock. Incoming wins only when `archived.coverArtPreference != null` AND
-     * (`existing.coverArtPreferenceChangedAt == null` or `incomingStamp > localStamp`). An absent
-     * key never clears a local choice or stamp, in every mode; `lastModifiedAt` plays no part.
+     * A-573 / iOS T-573 (`KudosBackup.swift:6341-6354`): the per-work cover choice is its own
+     * field with its own clock ([CoverArtResolution.incomingWins]); `lastModifiedAt` (reading,
+     * refreshing, favouriting) plays no part. [BackupImportMode.REPLACE_LIBRARY] adopts any
+     * present archived value whatever the stamps so a restore rolls back; an absent key never
+     * clears a local choice or stamp in any mode.
      */
     internal fun mergeCoverArtPreference(
         existing: SavedWork,
         archived: BackupWork,
+        mode: BackupImportMode = BackupImportMode.RECONCILE,
         now: Instant = Instant.now()
     ): Pair<String?, Instant?> {
         val archivedPreference = archived.coverArtPreference
@@ -958,16 +968,20 @@ object BackupMergeService {
             archived.coverArtPreferenceChangedAt,
             now
         )
-        val localStamp = existing.coverArtPreferenceChangedAt
-        val wins = when {
-            localStamp == null -> true
-            incomingStamp == null -> false
-            else -> incomingStamp.isAfter(localStamp)
-        }
-        return if (wins) {
+        val adopt = mode == BackupImportMode.REPLACE_LIBRARY || CoverArtResolution.incomingWins(
+            localRaw = existing.coverArtPreferenceRaw,
+            localStamp = existing.coverArtPreferenceChangedAt,
+            incomingRaw = archivedPreference,
+            incomingStamp = incomingStamp,
+            now = now
+        )
+        return if (adopt) {
             archivedPreference to incomingStamp
         } else {
-            existing.coverArtPreferenceRaw to existing.coverArtPreferenceChangedAt
+            // A fast clock's stamp is healed to the ceiling, so it cannot outrank every later peer edit (iOS T-573).
+            existing.coverArtPreferenceRaw to existing.coverArtPreferenceChangedAt?.let {
+                minOf(it, now.plus(FUTURE_CLOCK_SKEW))
+            }
         }
     }
 
@@ -1291,8 +1305,12 @@ object BackupMergeService {
         archived: BackupWork,
         now: Instant
     ): SavedWork {
-        val (coverArtPreferenceRaw, coverArtPreferenceChangedAt) =
-            mergeCoverArtPreference(existing, archived, now)
+        val (coverArtPreferenceRaw, coverArtPreferenceChangedAt) = mergeCoverArtPreference(
+            existing = existing,
+            archived = archived,
+            mode = BackupImportMode.REPLACE_LIBRARY,
+            now = now
+        )
         return restored.copy(
             id = existing.id,
             hasEpub = existing.hasEpub || restored.hasEpub,
@@ -2485,7 +2503,8 @@ object BackupMergeService {
         val suppressed: Int
     )
 
-    private val FUTURE_CLOCK_SKEW: Duration = Duration.ofHours(24)
+    /** Maximum future clock skew allowed on backup/sync timestamps (iOS `maxFutureTimestampSkew`). */
+    val FUTURE_CLOCK_SKEW: Duration = Duration.ofHours(24)
 
     /**
      * Queued-work half of Apple `ReadingQueueService.normalize`. A membership
