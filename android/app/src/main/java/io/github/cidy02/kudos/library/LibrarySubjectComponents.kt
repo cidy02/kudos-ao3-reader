@@ -47,7 +47,7 @@ import io.github.cidy02.kudos.ui.components.CoverStack
 import io.github.cidy02.kudos.ui.components.CoverStackKind
 import io.github.cidy02.kudos.ui.components.CoverStackLayout
 import io.github.cidy02.kudos.ui.components.GeneratedCoverView
-import io.github.cidy02.kudos.ui.components.rememberCoverEpubFile
+import io.github.cidy02.kudos.ui.components.rememberCoverEpub
 import io.github.cidy02.kudos.ui.components.generatedCoverRecipe
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCardMetrics
@@ -168,14 +168,13 @@ private fun MiniatureWorkCover(
     modifier: Modifier = Modifier,
     height: Dp = 54.dp
 ) {
-    val epubFile = rememberCoverEpubFile(work)
+    val epub = rememberCoverEpub(work)
     val recipe = remember(work) { work.generatedCoverRecipe() }
     GeneratedCoverView(
         recipe = recipe,
         width = 61.dp,
         height = height,
-        epubFile = epubFile,
-        epubWorkId = work.id,
+        epub = epub,
         showsWords = false,
         modifier = modifier
     )

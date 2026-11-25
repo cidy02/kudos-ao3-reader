@@ -395,7 +395,7 @@ private fun BackCover(
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
-    val epubFile = rememberCoverEpubFile(work)
+    val epub = rememberCoverEpub(work)
     val recipe = remember(work) { work.generatedCoverRecipe() }
     Box(
         modifier = modifier
@@ -406,8 +406,7 @@ private fun BackCover(
             recipe = recipe,
             width = width,
             height = height,
-            epubFile = epubFile,
-            epubWorkId = work.id,
+            epub = epub,
             showsWords = false,
             cornerRadius = cornerRadius
         )

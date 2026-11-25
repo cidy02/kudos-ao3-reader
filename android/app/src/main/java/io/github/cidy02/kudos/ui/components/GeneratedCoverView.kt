@@ -31,6 +31,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -45,6 +46,7 @@ import io.github.cidy02.kudos.core.model.CoverArtResolution
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.works.EMBEDDED_COVER_ART_IMAGE_TAG
+import io.github.cidy02.kudos.works.EmbeddedCoverArtLoader
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.PlatformTextStyle
@@ -68,7 +70,6 @@ import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sin
 
-val LocalGeneratedCoverArtLoader = staticCompositionLocalOf<GeneratedCoverArtLoader<ImageBitmap>?> { null }
 val LocalWorkEpubFileResolver = staticCompositionLocalOf<(String) -> File?> { { null } }
 
 private class PreparedArt(
@@ -101,20 +102,36 @@ private object PreparedArtCache {
         map.getOrPut(key, create)
 }
 
+/** The EPUB a cover may draw art from, with the revision keys that decide when its cached art is stale. */
+data class CoverEpub(
+    val workId: String,
+    val file: File,
+    val epubDigest: String,
+    val downloadedAtMillis: Long
+)
+
 /**
  * The EPUB a work's cover may draw art from: only when the work has one and [CoverArtResolution]
  * (global switch plus per-work choice) wants the work's own art; otherwise null, so the generated cover shows.
  * Only builds a path (no file IO); [GeneratedCoverView] loads the art off the main thread.
  */
 @Composable
-fun rememberCoverEpubFile(work: SavedWork, enabled: Boolean = true): File? {
+fun rememberCoverEpub(work: SavedWork, enabled: Boolean = true): CoverEpub? {
     val context = LocalContext.current
     val resolve = LocalWorkEpubFileResolver.current
     val global = LocalUseEmbeddedCoverArt.current
-    return remember(work.id, work.hasEpub, work.coverArtPreferenceRaw, global, enabled, resolve, context) {
-        if (!enabled || !work.hasEpub || !CoverArtResolution.wantsEmbeddedArt(work, global)) null
-        else resolve(work.id)
-            ?: runCatching { WorkFileStore(context.filesDir.toPath()).workEpubPath(work.id).toFile() }.getOrNull()
+    val downloadedAtMillis = work.downloadedAt?.toEpochMilli() ?: 0L
+    return remember(
+        work.id, work.hasEpub, work.coverArtPreferenceRaw, work.epubDigest, downloadedAtMillis,
+        global, enabled, resolve, context
+    ) {
+        if (!enabled || !work.hasEpub || !CoverArtResolution.wantsEmbeddedArt(work, global)) {
+            null
+        } else {
+            val file = resolve(work.id)
+                ?: runCatching { WorkFileStore(context.filesDir.toPath()).workEpubPath(work.id).toFile() }.getOrNull()
+            file?.let { CoverEpub(work.id, it, work.epubDigest, downloadedAtMillis) }
+        }
     }
 }
 
@@ -127,8 +144,7 @@ fun GeneratedCoverView(
     recipe: GeneratedCoverRecipe,
     width: Dp,
     modifier: Modifier = Modifier,
-    epubFile: File? = null,
-    epubWorkId: String? = null,
+    epub: CoverEpub? = null,
     height: Dp? = null,
     showsWords: Boolean = true,
     showsArt: Boolean = true,
@@ -136,25 +152,27 @@ fun GeneratedCoverView(
 ) {
     val coverHeight = height ?: (width * 1.42f)
     val context = LocalContext.current
-    val providedLoader = LocalGeneratedCoverArtLoader.current
     val cacheKey = remember(recipe, width, coverHeight) {
         artCacheKey(recipe, width.value.toDouble(), coverHeight.value.toDouble())
     }
 
-    var loadedFile by remember { mutableStateOf<File?>(null) }
-    var embeddedImage by remember { mutableStateOf<ImageBitmap?>(null) }
-
-    LaunchedEffect(showsArt, epubFile, epubWorkId) {
-        if (!showsArt || epubFile == null || epubWorkId == null) {
-            loadedFile = null
-            embeddedImage = null
-            return@LaunchedEffect
-        }
-        val loader = providedLoader ?: GeneratedCoverArtLoader.forCacheDir(context.cacheDir)
-        val decoded = loader.image(workId = epubWorkId, file = epubFile)
-        embeddedImage = decoded
-        loadedFile = epubFile
+    // The shared loader and its keyed-state pattern (see rememberWorkEmbeddedCoverArt): state keyed like the load,
+    // so a reused composable never shows the previous work's art while the new one loads.
+    val loader = remember(context) { EmbeddedCoverArtLoader.shared(context) }
+    val active = epub.takeIf { showsArt }
+    val workId = active?.workId
+    val file = active?.file
+    val digest = active?.epubDigest.orEmpty()
+    val downloadedAt = active?.downloadedAtMillis ?: 0L
+    val initialBitmap = remember(workId, file, digest, downloadedAt) {
+        if (workId == null || file == null) null else loader.peekCached(file)?.bitmap
     }
+    val bitmapState = remember(workId, file, digest, downloadedAt) { mutableStateOf(initialBitmap) }
+    LaunchedEffect(workId, file, digest, downloadedAt) {
+        bitmapState.value = if (workId == null || file == null) null else loader.load(workId = workId, epubFile = file)
+    }
+    val bitmap = bitmapState.value
+    val embeddedImage = remember(workId, bitmap) { if (workId == null) null else bitmap?.asImageBitmap() }
 
     val a11yLabel = remember(recipe) {
         listOf(recipe.title, recipe.subtitle, recipe.author, recipe.fandom)
@@ -173,10 +191,9 @@ fun GeneratedCoverView(
             .clip(RoundedCornerShape(cornerRadius))
             .then(semanticsModifier)
     ) {
-        val currentEmbedded = embeddedImage
-        if (showsArt && loadedFile == epubFile && currentEmbedded != null) {
+        if (embeddedImage != null) {
             Image(
-                bitmap = currentEmbedded,
+                bitmap = embeddedImage,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

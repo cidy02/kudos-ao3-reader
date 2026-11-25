@@ -175,26 +175,4 @@ class GeneratedCoverViewTest {
             ).placement
         )
     }
-
-    @Test fun androidEmbeddedImageCodecCompressesJpegAtQuality100() {
-        val bitmap = Bitmap.createBitmap(320, 480, Bitmap.Config.ARGB_8888)
-        val pngBytes = ByteArrayOutputStream().also {
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
-        }.toByteArray()
-        bitmap.recycle()
-
-        val previous = AndroidEmbeddedImageCodec.compressBitmap
-        var capturedQuality: Int? = null
-        AndroidEmbeddedImageCodec.compressBitmap = { bmp, format, quality, out ->
-            capturedQuality = quality
-            previous(bmp, format, quality, out)
-        }
-        try {
-            val jpeg = AndroidEmbeddedImageCodec.downsampledJpeg(pngBytes)
-            assertNotNull(jpeg)
-            assertEquals(100, capturedQuality)
-        } finally {
-            AndroidEmbeddedImageCodec.compressBitmap = previous
-        }
-    }
 }

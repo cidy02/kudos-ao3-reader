@@ -14,7 +14,9 @@ import java.io.File
 import java.io.FilterInputStream
 import java.io.InputStream
 import java.net.URI
-import java.net.URLDecoder
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
+import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -292,7 +294,8 @@ object EmbeddedWorkCoverImage {
                 val doc = Jsoup.parse(navBytes.toString(Charsets.UTF_8))
                 val navs = doc.select("nav")
                 val nav = navs.firstOrNull { navEl ->
-                    navEl.attr("epub:type").split(Regex("\\s+")).any { it.equals("toc", ignoreCase = true) }
+                    navEl.attr("epub:type").split(Regex("\\s+")).any { it.equals("toc", ignoreCase = true) } ||
+                        navEl.id() == "toc"
                 } ?: navs.firstOrNull { navEl ->
                     navEl.attr("role").split(Regex("\\s+")).any { it.equals("doc-toc", ignoreCase = true) }
                 } ?: navs.firstOrNull()
@@ -562,10 +565,50 @@ object EmbeddedWorkCoverImage {
 
     private fun fileKey(path: String): String {
         val base = path.substringBefore('#').substringBefore('?').substringAfterLast('/')
-        val decoded = runCatching {
-            URLDecoder.decode(base.replace("+", "%2B"), "UTF-8")
-        }.getOrDefault(base)
-        return decoded.lowercase(Locale.ROOT)
+        // Swift `removingPercentEncoding`: decodes %xx, leaves '+' alone, returns the input unchanged if malformed.
+        return percentDecode(base).lowercase(Locale.ROOT)
+    }
+
+    internal fun percentDecode(value: String): String {
+        if ('%' !in value) return value
+        val out = StringBuilder(value.length)
+        val pending = ByteArrayOutputStream()
+        val decoder = StandardCharsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+
+        fun flushPending(): Boolean {
+            if (pending.size() == 0) return true
+            val decoded = runCatching {
+                decoder.reset().decode(ByteBuffer.wrap(pending.toByteArray())).toString()
+            }.getOrNull() ?: return false
+            out.append(decoded)
+            pending.reset()
+            return true
+        }
+
+        var index = 0
+        while (index < value.length) {
+            val char = value[index]
+            if (char == '%') {
+                if (index + 2 >= value.length) return value
+                val byte = hexByte(value[index + 1], value[index + 2]) ?: return value
+                pending.write(byte)
+                index += 3
+                continue
+            }
+            if (!flushPending()) return value
+            out.append(char)
+            index += 1
+        }
+        return if (flushPending()) out.toString() else value
+    }
+
+    private fun hexByte(hi: Char, lo: Char): Int? {
+        val high = Character.digit(hi, 16)
+        val low = Character.digit(lo, 16)
+        if (high < 0 || low < 0) return null
+        return (high shl 4) or low
     }
 
     private fun Element.localTagName(): String =

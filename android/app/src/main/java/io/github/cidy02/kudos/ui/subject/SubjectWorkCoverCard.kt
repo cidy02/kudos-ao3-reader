@@ -55,14 +55,14 @@ import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.ui.components.GeneratedCoverRecipe
 import io.github.cidy02.kudos.ui.components.GeneratedCoverView
-import io.github.cidy02.kudos.ui.components.rememberCoverEpubFile
+import io.github.cidy02.kudos.ui.components.CoverEpub
+import io.github.cidy02.kudos.ui.components.rememberCoverEpub
 import io.github.cidy02.kudos.ui.components.generatedCoverRecipe
 import io.github.cidy02.kudos.ui.components.statusChips
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.DownloadQueueStatus
 import io.github.cidy02.kudos.works.EMBEDDED_COVER_ART_IMAGE_TAG
 import io.github.cidy02.kudos.works.WorkTags
-import java.io.File
 import kotlin.math.roundToInt
 import io.github.cidy02.kudos.works.rememberWorkEmbeddedCoverArt
 
@@ -154,7 +154,7 @@ fun SubjectWorkCoverCard(
     ) {
         work.generatedCoverRecipe()
     }
-    val epubFile = rememberCoverEpubFile(work, enabled = !obscured)
+    val epub = rememberCoverEpub(work, enabled = !obscured)
     val resolvedProgress = HomeFacts.resolvedCoverProgress(
         explicit = progress,
         footer = footer,
@@ -175,8 +175,7 @@ fun SubjectWorkCoverCard(
     WorkSummaryCoverSurface(
         recipe = recipe,
         modifier = modifier,
-        epubFile = epubFile,
-        epubWorkId = work.id,
+        epub = epub,
         obscured = obscured,
         isSelecting = isSelecting,
         isSelected = isSelected,
@@ -305,8 +304,7 @@ fun SubjectRemoteCoverCard(
 private fun WorkSummaryCoverSurface(
     recipe: GeneratedCoverRecipe,
     modifier: Modifier = Modifier,
-    epubFile: File? = null,
-    epubWorkId: String? = null,
+    epub: CoverEpub? = null,
     obscured: Boolean = false,
     isSelecting: Boolean = false,
     isSelected: Boolean = false,
@@ -343,8 +341,7 @@ private fun WorkSummaryCoverSurface(
                     recipe = recipe,
                     width = coverWidth,
                     height = coverHeight,
-                    epubFile = if (obscured) null else epubFile,
-                    epubWorkId = if (obscured) null else epubWorkId,
+                    epub = if (obscured) null else epub,
                     showsWords = !obscured,
                     showsArt = !obscured,
                     cornerRadius = HomeCardMetrics.radius,
