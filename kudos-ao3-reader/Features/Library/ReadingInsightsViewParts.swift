@@ -345,6 +345,8 @@ struct LibraryArrivalCard: View {
     let since: Date?
     @Environment(ThemeManager.self) private var theme
 
+    private var totalFinished: Int { rows.reduce(0) { $0 + $1.finished } }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("How Finished Works Arrived").font(.subheadline.weight(.semibold))
@@ -355,10 +357,12 @@ struct LibraryArrivalCard: View {
             ForEach(rows) { row in
                 HStack {
                     Text(row.label).frame(maxWidth: .infinity, alignment: .leading)
-                    Text("\(row.finished) finished · \(row.saved) saved · \(row.saved == 0 ? 0 : Int((Double(row.finished) / Double(row.saved) * 100).rounded()))%")
+                    Text("\(row.finishedSharePercent(totalFinished: totalFinished))% share · \(row.finishRatePercent)% finish rate")
                         .monospacedDigit().foregroundStyle(.secondaryInk)
                 }
                 .font(.footnote)
+                Text("\(row.finished) finished of \(row.saved) saved")
+                    .font(.caption).foregroundStyle(.secondaryInk)
             }
         }
         .padding(16)
@@ -405,12 +409,12 @@ struct HabitsChapterTimingCard: View {
             Text("Chapter Habits").font(.subheadline.weight(.semibold))
             metric("Chapters each, average", value: figure.averageChaptersEach.map { String(format: "%.1f", $0) } ?? "No chapter spans yet")
             metric("End on a chapter", value: figure.chapterEndShare.map { "\(Int(($0 * 100).rounded()))%" } ?? "No eligible sittings yet")
-            if figure.judgedSittings > 0 {
+            if figure.canShowSkimAndPeek {
                 metric("Skimmed", value: "\(figure.skimmedWords) words left out of totals")
+                metric("Peeked at the Ending", value: "\(figure.peekedWorks) works")
             } else {
-                metric("Skimmed", value: "No chapter pace history yet")
+                metric("Skimmed · Peeked at the Ending", value: "Available after 20 measured chapters")
             }
-            metric("Peeked at the Ending", value: "\(figure.peekedWorks) works")
         }
         .padding(16)
         .background(theme.appTheme.cardSurface)
@@ -785,6 +789,7 @@ struct YourUsualFicCard: View {
         guard discreetMode else { return taste.usualFicTags }
         if !taste.usualChips.isEmpty {
             return taste.usualChips.map { chip in
+                if chip.text == "varied" { return "varied" }
                 switch chip.kind {
                 case .metadata: return chip.text
                 case .tag: return discreetMasker.tag(chip.text)
@@ -802,18 +807,11 @@ struct YourUsualFicCard: View {
         let summaryText: String = {
             if taste.usualFicTags.isEmpty { return taste.usualFicSummary }
             if !discreetMode { return taste.usualFicSummary }
-            let workStatus = taste.usualStatus.isEmpty ? "complete" : taste.usualStatus
-            let rating = taste.usualRating.isEmpty ? "Teen" : taste.usualRating
-            let cat = taste.usualCategory.isEmpty ? "F/M" : taste.usualCategory
-            let topTag = taste.usualTopTag.map { status.tag($0) } ?? "Tag A"
-            let topFandom = taste.usualTopFandom.map { status.fandom($0) } ?? "Fandom A"
-            let topRel = taste.usualTopRelationship.map { status.ship($0) } ?? ""
-            let extraTags = taste.usualExtraTagNames.map { status.tag($0) }.joined(separator: " and ")
-            if !topRel.isEmpty && !extraTags.isEmpty {
-                return "A \(workStatus), \(rating)-rated \(cat) \(topTag) in \(topFandom), "
-                    + "50–150k words long, with \(topRel), \(extraTags)."
-            }
-            return "A \(workStatus), \(rating)-rated \(cat) \(topTag) in \(topFandom)."
+            let topTag = taste.usualTopTag.map { status.tag($0) } ?? "varied"
+            let secondTag = taste.usualSecondTag.map { status.tag($0) } ?? "varied"
+            let topFandom = taste.usualTopFandom.map { status.fandom($0) } ?? "varied"
+            let topRel = taste.usualTopRelationship.map { status.ship($0) } ?? "varied"
+            return "Usually \(taste.usualStatus) · \(taste.usualRating) · \(taste.usualCategory) · \(taste.usualLengthBand) · \(topFandom) · \(topRel) · \(topTag) · \(secondTag)."
         }()
 
         VStack(alignment: .leading, spacing: 10) {
@@ -978,6 +976,7 @@ struct TasteFandomsCard: View {
 struct TasteRelationshipsCard: View {
     let relationships: [RelationshipShare]
     let shipConcentrations: [ShipConcentration]
+    let rankByWorks: Bool
     let discreetMode: Bool
     var discreetMasker: InsightsDiscreetMasker = .empty
     @Environment(ThemeManager.self) private var theme
@@ -1024,7 +1023,7 @@ struct TasteRelationshipsCard: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                        Text(formatK(rel.words))
+                        Text(rankByWorks ? "\(rel.worksCount)" : formatK(rel.words))
                             .font(.subheadline.weight(.semibold))
                             .monospacedDigit()
                     }
@@ -1139,12 +1138,13 @@ struct TasteCharactersCard: View {
 struct TasteTagsCard: View {
     let tags: [ReadingTasteInsights.TagShare]
     let oftenTogether: [TagPair]
+    let rankByWorks: Bool
     let discreetMode: Bool
     var discreetMasker: InsightsDiscreetMasker = .empty
     @Environment(ThemeManager.self) private var theme
 
     private var maxWords: Int {
-        max(1, tags.map(\.words).max() ?? 1)
+        rankByWorks ? max(1, tags.map(\.count).max() ?? 1) : max(1, tags.map(\.words).max() ?? 1)
     }
 
     var body: some View {
@@ -1169,13 +1169,14 @@ struct TasteTagsCard: View {
                                 .font(.subheadline)
                                 .lineLimit(1)
                             Spacer()
-                            Text("\(tag.words / 1000)k")
+                            Text(rankByWorks ? "\(tag.count) works" : "\(tag.words / 1000)k")
                                 .font(.subheadline.weight(.semibold))
                                 .monospacedDigit()
                         }
 
                         GeometryReader { proxy in
-                            let ratio = min(1.0, max(0.04, Double(tag.words) / Double(maxWords)))
+                            let value = rankByWorks ? tag.count : tag.words
+                            let ratio = min(1.0, max(0.04, Double(value) / Double(maxWords)))
                             Capsule()
                                 .fill(Color.primary.opacity(0.08))
                                 .overlay(alignment: .leading) {
@@ -1230,15 +1231,21 @@ struct TasteTagsCard: View {
 
 struct TasteRatingsCategoriesWarningsCard: View {
     let ratings: [ReadingTasteInsights.CountBreakdown]
+    let statuses: [ReadingTasteInsights.CountBreakdown]
     let categories: [ReadingTasteInsights.CountBreakdown]
     let warnings: [ReadingTasteInsights.CountBreakdown]
+    let rankByWorks: Bool
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
         VStack(spacing: 12) {
             breakdownCard(title: "Rating", items: ratings)
+            breakdownCard(title: "Status", items: statuses)
             breakdownCard(title: "Category", items: categories)
             breakdownCard(title: "Warnings", items: warnings)
+            Text("A work may have several categories or warnings, so those totals may exceed works read.")
+                .font(.caption2)
+                .foregroundStyle(.secondaryInk)
         }
     }
 
@@ -1248,7 +1255,11 @@ struct TasteRatingsCategoriesWarningsCard: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
 
-            let total = max(1, items.reduce(0) { $0 + $1.count })
+            // All four bars use the same works/words denominator. Multiple
+            // categories or warnings can therefore add to over 100%.
+            let total = max(1, ratings.reduce(0) { partial, row in
+                partial + (rankByWorks ? row.count : row.words)
+            })
             VStack(spacing: 6) {
                 ForEach(items) { item in
                     HStack(spacing: 8) {
@@ -1258,7 +1269,8 @@ struct TasteRatingsCategoriesWarningsCard: View {
                             .lineLimit(1)
 
                         GeometryReader { proxy in
-                            let ratio = min(1.0, max(0.04, Double(item.count) / Double(total)))
+                            let value = rankByWorks ? item.count : item.words
+                            let ratio = min(1.0, max(0.04, Double(value) / Double(total)))
                             Capsule()
                                 .fill(Color.primary.opacity(0.08))
                                 .overlay(alignment: .leading) {
@@ -1269,7 +1281,7 @@ struct TasteRatingsCategoriesWarningsCard: View {
                         }
                         .frame(height: 5)
 
-                        Text("\(item.count)")
+                        Text(rankByWorks ? "\(item.count)" : "\(item.words / 1000)k")
                             .font(.caption.weight(.semibold))
                             .monospacedDigit()
                             .frame(width: 30, alignment: .trailing)
@@ -1802,7 +1814,9 @@ struct HabitsFandomTimelineCard: View {
                 VStack(spacing: 8) {
                     ForEach(Array(lanes.enumerated()), id: \.element.id) { _, lane in
                         HStack(spacing: 6) {
-                            Text(discreetMode ? discreetMasker.fandom(lane.name) : lane.name)
+                            let label = discreetMode && lane.name != ReadingInsights.remainderName
+                                ? discreetMasker.fandom(lane.name) : lane.name
+                            Text(label)
                                 .font(.caption)
                                 .lineLimit(1)
                                 .frame(width: 90, alignment: .leading)
@@ -2080,6 +2094,7 @@ struct LibraryStillReadingCard: View {
     let discreetMode: Bool
     var discreetMasker: InsightsDiscreetMasker = .empty
     let onStillReading: () -> Void
+    let onStoppedReading: () -> Void
     @Environment(ThemeManager.self) private var theme
 
     private var untouchedDurationLabel: String {
@@ -2140,6 +2155,10 @@ struct LibraryStillReadingCard: View {
                 }
                 .buttonStyle(.plain)
             }
+            Button("Stopped Reading?") { onStoppedReading() }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(theme.effectiveTint)
+                .accessibilityHint("Record a reason or put this work on hold")
         }
         .padding(14)
         .background(theme.appTheme.cardSurface)

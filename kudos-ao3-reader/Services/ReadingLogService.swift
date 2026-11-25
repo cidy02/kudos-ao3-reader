@@ -742,6 +742,7 @@ enum ReadingLogService {
             return ReadingSessionFacts(
                 workID: session.workID,
                 startedAt: session.startedAt,
+                endedAt: session.endedAt,
                 durationSeconds: session.durationSeconds,
                 wordCount: session.wordCount,
                 didFinish: session.didFinish,
@@ -757,7 +758,8 @@ enum ReadingLogService {
                 startProgress: session.startProgress,
                 tzOffsetSeconds: session.tzOffsetSeconds,
                 mode: session.mode,
-                wordUnit: work?.wordUnit ?? .words
+                wordUnit: work?.wordUnit ?? .words,
+                authorAccounts: session.authorAccounts
             )
         }
     }

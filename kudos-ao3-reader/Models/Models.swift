@@ -271,6 +271,14 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         markModified(date)
     }
 
+    func recordStopped(reason: String, tag: String, note: String, at date: Date = .now) {
+        setReadingStatus(.stopped, at: date)
+        stoppedAt = date
+        stopReasonRaw = reason
+        stopTag = tag
+        stopNote = note
+    }
+
     enum ExplicitReadingStatus: String { case reading, onHold, stacking, stopped }
     enum InsightsReadingStatus: String, CaseIterable {
         case stopped, onHold, stacking, finished, caughtUp, reading, savedForLater

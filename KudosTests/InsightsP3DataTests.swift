@@ -63,6 +63,23 @@ struct InsightsP3DataTests {
         #expect(InsightsProvenance.chapterTiming(sessions: []).chapterEndShare == nil)
     }
 
+    @Test func skimAndPeekWaitForTwentyMeasuredChapters() {
+        let session = ReadingSession(
+            workID: UUID(), startedAt: t0, endedAt: t0.addingTimeInterval(120),
+            durationSeconds: 120
+        )
+        session.chapterSeconds = Dictionary(uniqueKeysWithValues: (0..<19).map { ($0, 60.0) })
+        session.chapterWords = Dictionary(uniqueKeysWithValues: (0..<19).map { ($0, 400) })
+        #expect(!InsightsProvenance.chapterTiming(sessions: [session]).canShowSkimAndPeek)
+        var seconds = session.chapterSeconds
+        var words = session.chapterWords
+        seconds[19] = 60
+        words[19] = 400
+        session.chapterSeconds = seconds
+        session.chapterWords = words
+        #expect(InsightsProvenance.chapterTiming(sessions: [session]).canShowSkimAndPeek)
+    }
+
     @Test func medianPaceNeedsTwentyChaptersOfHistory() {
         let sample = ChapterTiming.PaceSample(words: 3_000, seconds: 600) // 5 words a second
         #expect(ChapterTiming.medianWordsPerSecond(Array(repeating: sample, count: 19)) == nil)

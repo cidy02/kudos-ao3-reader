@@ -23,6 +23,8 @@ enum InsightsProvenance {
         var peekedWorks = 0
         /// Sittings the skim rule was applied to (read-mode sittings that stored a judgement).
         var judgedSittings = 0
+        var paceHistoryChapters = 0
+        var canShowSkimAndPeek: Bool { paceHistoryChapters >= 20 }
         var chaptersEntered = 0
         var chapterSpansMeasured = 0
         var eligibleChapterEnds = 0
@@ -54,12 +56,17 @@ enum InsightsProvenance {
                 }
             }
             if session.peekedAtEnding == true { peeked.insert(session.workID) }
+            let timed = session.chapterSeconds
+            let measuredWords = session.chapterWords
+            let skimmed = Set(session.skimmedChapters)
+            for (spine, words) in measuredWords where words > 0 && !skimmed.contains(spine) {
+                if (timed[spine] ?? 0) > 0 { figure.paceHistoryChapters += 1 }
+            }
             guard session.skimmedChaptersJSON != nil else { continue }
             figure.judgedSittings += 1
-            let words = session.chapterWords
             for spine in session.skimmedChapters {
                 figure.skimmedChapters += 1
-                let (sum, overflow) = figure.skimmedWords.addingReportingOverflow(words[spine] ?? 0)
+                let (sum, overflow) = figure.skimmedWords.addingReportingOverflow(measuredWords[spine] ?? 0)
                 figure.skimmedWords = overflow ? Int.max : sum
             }
         }

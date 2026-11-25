@@ -5,6 +5,128 @@ import UniformTypeIdentifiers
 import UIKit
 #endif
 
+/// A status decision from Library's untouched-work prompt. The saved reason and
+/// note stay local; this sheet never visits AO3.
+struct InsightsStoppedSheet: View {
+    let work: SavedWork
+    let discreetMode: Bool
+    let discreetMasker: InsightsDiscreetMasker
+    let onChanged: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
+    @Environment(ThemeManager.self) private var theme
+
+    @State private var reason = "lostInterest"
+    @State private var tag = ""
+    @State private var note = ""
+    @State private var saveError: String?
+
+    private struct ReasonChoice: Identifiable {
+        let id: String
+        let label: String
+    }
+    private let reasons: [ReasonChoice] = [
+        .init(id: "lostInterest", label: "Lost Interest"),
+        .init(id: "tooLong", label: "Too Long"),
+        .init(id: "writingStyle", label: "Writing Style"),
+        .init(id: "tagDealbreaker", label: "Tag Dealbreaker"),
+        .init(id: "gotSpoiled", label: "Got Spoiled"),
+        .init(id: "other", label: "Other")
+    ]
+
+    private var availableTags: [String] {
+        Array(Set(work.workTags + work.workWarnings)).sorted()
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text(discreetMode ? discreetMasker.work(id: work.id, title: work.title) : work.title)
+                        .font(.headline)
+                    let fandom = work.workFandoms.first ?? "Work"
+                    Text(discreetMode ? discreetMasker.fandom(fandom) : fandom)
+                        .font(.footnote).foregroundStyle(.secondaryInk)
+                }
+
+                Section("Reason") {
+                    FlowLayout(spacing: 8, rowSpacing: 8) {
+                        ForEach(reasons) { choice in
+                            Button(choice.label) { reason = choice.id }
+                                .buttonStyle(.bordered)
+                                .tint(reason == choice.id ? theme.effectiveTint : .secondary)
+                                .accessibilityAddTraits(reason == choice.id ? .isSelected : [])
+                        }
+                    }
+                }
+
+                if !availableTags.isEmpty {
+                    Section("Which Tag") {
+                        FlowLayout(spacing: 8, rowSpacing: 8) {
+                            ForEach(availableTags, id: \.self) { choice in
+                                Button(discreetMode ? discreetMasker.tag(choice) : choice) {
+                                    tag = tag == choice ? "" : choice
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(tag == choice ? theme.effectiveTint : .secondary)
+                                .accessibilityAddTraits(tag == choice ? .isSelected : [])
+                            }
+                        }
+                    }
+                }
+
+                Section("Private Note") {
+                    TextField("Optional note", text: $note, axis: .vertical)
+                        .lineLimit(2...5)
+                }
+
+                Section {
+                    Button("Mark as Stopped") {
+                        work.recordStopped(reason: reason, tag: tag, note: note)
+                        saveAndDismiss()
+                    }
+                    .fontWeight(.semibold)
+                    Button("Put On Hold Instead") {
+                        work.setReadingStatus(.onHold)
+                        saveAndDismiss()
+                    }
+                }
+            }
+            .appThemedRows()
+            .navigationTitle("Stopped Reading?")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar { ToolbarItem(placement: .cancellationAction) {
+                Button("Close") { dismiss() }
+            } }
+        }
+        .onAppear {
+            if !work.stopReasonRaw.isEmpty { reason = work.stopReasonRaw }
+            tag = work.stopTag
+            note = work.stopNote
+        }
+        .alert("Couldn’t Save Reading Status", isPresented: Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(saveError ?? "")
+        }
+    }
+
+    private func saveAndDismiss() {
+        do {
+            try context.save()
+            onChanged()
+            dismiss()
+        } catch {
+            saveError = error.localizedDescription
+        }
+    }
+}
+
 /// Artboard **07** / `Insights-Options.dc.html` — Insights Options sheet.
 ///
 /// Controls privacy, counting rules, exclusions, export (CSV / JSON), and log reset.

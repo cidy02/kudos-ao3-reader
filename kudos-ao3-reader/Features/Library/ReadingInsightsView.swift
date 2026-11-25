@@ -53,6 +53,7 @@ struct ReadingInsightsView: View {
     @State private var rankTasteByWorks: Bool = false
     @State private var showingOptionsSheet: Bool = false
     @State private var showingHowCountedSheet: Bool = false
+    @State private var stoppedWork: SavedWork?
     @State private var finishedWorksInPeriod: [SavedWork] = []
     @State private var discreetMasker: InsightsDiscreetMasker = .empty
     @State private var optionsRevision: Int = 0
@@ -290,6 +291,12 @@ struct ReadingInsightsView: View {
         }
         .sheet(isPresented: $showingHowCountedSheet) {
             HowInsightsAreCountedSheet()
+        }
+        .sheet(item: $stoppedWork) { work in
+            InsightsStoppedSheet(work: work, discreetMode: discreetMode,
+                                 discreetMasker: discreetMasker) {
+                reload()
+            }
         }
         .alert("Couldn’t Export Reading History", isPresented: Binding(
             get: { exportFailure != nil },
@@ -556,8 +563,9 @@ struct ReadingInsightsView: View {
 
     @ViewBuilder
     private var tasteContent: some View {
-        if let taste = tasteInsights {
-            YourUsualFicCard(taste: taste, discreetMode: discreetMode, discreetMasker: discreetMasker)
+        if let taste = tasteInsights, taste.totalWorksCount > 0 {
+            let rankedTaste = taste.ranked(byWorks: rankTasteByWorks)
+            YourUsualFicCard(taste: rankedTaste, discreetMode: discreetMode, discreetMasker: discreetMasker)
 
             TasteFandomsCard(
                 fandoms: taste.fandoms,
@@ -568,8 +576,9 @@ struct ReadingInsightsView: View {
             )
 
             TasteRelationshipsCard(
-                relationships: taste.relationships,
+                relationships: rankedTaste.relationships,
                 shipConcentrations: taste.shipConcentrations,
+                rankByWorks: rankTasteByWorks,
                 discreetMode: discreetMode,
                 discreetMasker: discreetMasker
             )
@@ -584,17 +593,20 @@ struct ReadingInsightsView: View {
 
             if !taste.tags.isEmpty {
                 TasteTagsCard(
-                    tags: taste.tags,
+                    tags: rankedTaste.tags,
                     oftenTogether: taste.oftenTogether,
+                    rankByWorks: rankTasteByWorks,
                     discreetMode: discreetMode,
                     discreetMasker: discreetMasker
                 )
             }
 
             TasteRatingsCategoriesWarningsCard(
-                ratings: taste.ratings,
-                categories: taste.categories,
-                warnings: taste.warnings
+                ratings: rankedTaste.ratings,
+                statuses: rankedTaste.statuses,
+                categories: rankedTaste.categories,
+                warnings: rankedTaste.warnings,
+                rankByWorks: rankTasteByWorks
             )
 
             if !taste.yearCounts.isEmpty {
@@ -704,6 +716,9 @@ struct ReadingInsightsView: View {
                     onStillReading: {
                         WorkLifecycle.keepInProgress(candidate.work, in: context)
                         reload()
+                    },
+                    onStoppedReading: {
+                        stoppedWork = candidate.work
                     }
                 )
             }

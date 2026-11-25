@@ -122,20 +122,38 @@ struct InsightsDataTests {
         #expect(work.stopNote.isEmpty)
     }
 
-    @Test func snapshotUsesStoredBylineOrVerifiedDisplayNames() {
+    @Test func stopSheetChoiceRecordsReasonTagNoteAndPeriodDate() {
+        let work = SavedWork(title: "A", author: "B")
+        let date = Date(timeIntervalSince1970: 12_345)
+        work.recordStopped(reason: "tagDealbreaker", tag: "Slow Burn", note: "Lost interest", at: date)
+        #expect(work.insightsReadingStatus == .stopped)
+        #expect(work.stoppedAt == date)
+        #expect(work.stopReasonRaw == "tagDealbreaker")
+        #expect(work.stopTag == "Slow Burn")
+        #expect(work.stopNote == "Lost interest")
+        work.setReadingStatus(.onHold)
+        #expect(work.stoppedAt == nil)
+    }
+
+    @Test func snapshotKeepsOnlyVerifiedRegisteredAccounts() {
         let work = SavedWork(title: "A", author: "First, Second")
         work.datePublished = "2020-01-01"
         let session = ReadingSession(
             workID: work.id, startedAt: .now, endedAt: .now, durationSeconds: 1
         )
         session.snapshot(from: work)
-        #expect(session.authorAccounts == ["First", "Second"])
+        #expect(session.authorAccounts.isEmpty)
         #expect(session.publishedYear == 2020)
         work.verifiedAuthorIdentities = [
             AO3AuthorIdentity.nonNavigable("Anonymous", kind: .anonymous),
             AO3AuthorIdentity(route: AO3AuthorRoute(username: "orphan_account")!)
         ]
         session.snapshot(from: work)
-        #expect(session.authorAccounts == ["Anonymous", "orphan_account"])
+        #expect(session.authorAccounts.isEmpty)
+        work.verifiedAuthorIdentities.append(
+            AO3AuthorIdentity(route: AO3AuthorRoute(username: "actual_writer")!)
+        )
+        session.snapshot(from: work)
+        #expect(session.authorAccounts == ["actual_writer"])
     }
 }
