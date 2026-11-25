@@ -146,6 +146,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectFormRow
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectSegmentedControl
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
+import androidx.compose.ui.unit.Dp
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectChip
 import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
@@ -2347,6 +2348,14 @@ private fun ReadingQueuesShelf(
     onCreate: () -> Unit,
     onOpenQueue: (String) -> Unit
 ) {
+    val accessibility = isAccessibilityFontScale()
+    // Like CollectionCard: one tile width for the whole shelf, a full-width tile at accessibility sizes.
+    val cardWidth = if (accessibility) {
+        (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp - 32.dp).coerceAtLeast(1.dp)
+    } else {
+        io.github.cidy02.kudos.ui.subject.SubjectWorkCardMetrics.width
+    }
+    val tileHeight = cardWidth * (140f / 150f)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         CollapsibleSectionHeader(
             title = "Reading Queues",
@@ -2367,15 +2376,19 @@ private fun ReadingQueuesShelf(
                     CreateShelfTile(
                         title = "New Queue",
                         subtitle = "Tap to create",
+                        width = cardWidth,
+                        tileHeight = tileHeight,
+                        accessibility = accessibility,
                         onClick = onCreate
                     )
                 }
                 items(queues, key = { "queue-${it.id}" }) { queue ->
                     QueueShelfTile(
                         queue = queue,
-                        visibleBacks = queue.previewWorks
-                            .filter { it.id in visibleWorkIds }
-                            .take(CoverStackLayout.maxBacks),
+                        visibleBacks = queueBacks(queue.previewWorks, visibleWorkIds),
+                        width = cardWidth,
+                        tileHeight = tileHeight,
+                        accessibility = accessibility,
                         onClick = { onOpenQueue(queue.id) }
                     )
                 }
@@ -2474,16 +2487,25 @@ internal fun CollectionCardMenu(expanded: Boolean, onDismiss: () -> Unit, onDele
     }
 }
 
+/** Back covers for a queue tile: the visible works in Home's order, Up Next first (iOS ReadingQueues.swift). */
+internal fun queueBacks(works: List<SavedWork>, visibleWorkIds: Set<String>): List<SavedWork> {
+    val (upNext, inLine) = ReadingQueueFacts.upNext(works.filter { it.id in visibleWorkIds })
+    return (listOfNotNull(upNext) + inLine).take(CoverStackLayout.maxBacks)
+}
+
 /** Dashed + create tile (Apple NewCollectionCard / New Queue). */
 @Composable
 private fun CreateShelfTile(
     title: String,
     subtitle: String,
+    width: Dp,
+    tileHeight: Dp,
+    accessibility: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.width(WorkCoverCardMetrics.width),
+        modifier = modifier.width(width),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Surface(
@@ -2496,7 +2518,7 @@ private fun CreateShelfTile(
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(WorkCoverCardMetrics.height - 48.dp)
+                .height(tileHeight)
                 .semantics { contentDescription = title }
         ) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -2511,14 +2533,14 @@ private fun CreateShelfTile(
         Text(
             text = title,
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-            maxLines = 1,
+            maxLines = if (accessibility) Int.MAX_VALUE else 1,
             overflow = TextOverflow.Ellipsis
         )
         Text(
             text = subtitle,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
+            maxLines = if (accessibility) Int.MAX_VALUE else 1,
             overflow = TextOverflow.Ellipsis
         )
     }
@@ -2528,12 +2550,14 @@ private fun CreateShelfTile(
 private fun QueueShelfTile(
     queue: LibraryQueuePreview,
     visibleBacks: List<SavedWork>,
+    width: Dp,
+    tileHeight: Dp,
+    accessibility: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
-    val cardWidth = io.github.cidy02.kudos.ui.subject.SubjectWorkCardMetrics.width
-    val tileHeight = cardWidth * (140f / 150f)
+    val cardWidth = width
     val subtitle = when (queue.workCount) {
         0 -> "Empty"
         1 -> "1 work"
@@ -2561,14 +2585,16 @@ private fun QueueShelfTile(
             color = tokens.primaryInk,
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
-            maxLines = 2,
+            lineHeight = if (accessibility) 21.sp else androidx.compose.ui.unit.TextUnit.Unspecified,
+            maxLines = if (accessibility) Int.MAX_VALUE else 2,
             overflow = TextOverflow.Ellipsis
         )
         Text(
             text = subtitle,
             color = tokens.secondaryInk,
             fontSize = 12.sp,
-            maxLines = 1,
+            lineHeight = if (accessibility) 17.sp else androidx.compose.ui.unit.TextUnit.Unspecified,
+            maxLines = if (accessibility) Int.MAX_VALUE else 1,
             overflow = TextOverflow.Ellipsis
         )
     }

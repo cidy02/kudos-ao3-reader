@@ -317,6 +317,38 @@ class GeneratedCoverRecipeTest {
     }
 
     @Test
+    fun seriesWorksStillShuffleWithSalt() {
+        fun series(salt: Int) = GeneratedCoverRecipe.create(
+            id = 1001L,
+            title = "The Long Frost",
+            author = "fogandlamplight",
+            fandoms = listOf("Sherlock Holmes"),
+            seriesID = 77L,
+            part = 1,
+            salt = salt
+        )
+        // iOS keys a shuffled series cover "77:1"; the series shape seed follows the key.
+        assertNotEquals(series(0).shapeSeed, series(1).shapeSeed)
+        assertNotEquals(series(1).shapeSeed, series(2).shapeSeed)
+        assertEquals(series(1).shapeSeed, series(1).shapeSeed)
+    }
+
+    @Test
+    fun trailingNoBreakSpaceInAFandomIsStrippedBeforeTheBareTitle() {
+        fun cover(fandom: String) = GeneratedCoverRecipe.create(
+            id = 1009L,
+            title = "Tenth Doctor",
+            author = "someone",
+            fandoms = listOf(fandom)
+        )
+        val plain = cover("Doctor Who (2005)")
+        val padded = cover("Doctor Who (2005)\u00A0")
+        assertEquals("Doctor Who", padded.fandom)
+        assertEquals(plain.fandom, padded.fandom)
+        assertEquals(plain.hues, padded.hues)
+    }
+
+    @Test
     fun subtitlesAndFirstAuthor() {
         for (title in listOf("The Work (A Subtitle)", "The Work [A Subtitle]")) {
             val recipe = GeneratedCoverRecipe.create(

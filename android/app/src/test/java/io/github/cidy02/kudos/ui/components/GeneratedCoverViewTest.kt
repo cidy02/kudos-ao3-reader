@@ -1,7 +1,6 @@
 package io.github.cidy02.kudos.ui.components
 
 import android.app.Application
-import android.graphics.Bitmap
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -20,10 +19,8 @@ import io.github.cidy02.kudos.ui.subject.SubjectRemoteCoverCard
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
-import java.io.ByteArrayOutputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertSame
 import org.junit.Rule
 import org.junit.Test
@@ -103,6 +100,21 @@ class GeneratedCoverViewTest {
         compose.onAllNodesWithText("Ch 2 of 3", substring = true).assertCountEquals(0)
         compose.onAllNodesWithContentDescription("A Secret Work", substring = true).assertCountEquals(0)
         compose.onNodeWithContentDescription("Hidden mature work. Activate to reveal.").assertExists()
+    }
+
+    @Test fun subjectWorkCoverCardNamesTheChapterTheReaderIsInsideNotTheNearestOne() {
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                SubjectWorkCoverCard(
+                    work = work.copy(chapters = "10/10"),
+                    obscured = false,
+                    downloadFraction = null,
+                    progress = 0.06
+                )
+            }
+        }
+        // 6% of ten chapters is still inside chapter 1 (rounding to the nearest boundary said "Ch 2").
+        compose.onNodeWithText("Ch 1 of 10 \u00B7 6%").assertExists()
     }
 
     @Test fun subjectRemoteCoverCardRespectsProvenanceAndObscuredMode() {

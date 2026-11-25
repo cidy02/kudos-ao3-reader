@@ -161,12 +161,30 @@ object EmbeddedWorkCoverImage {
                 val candidates = mutableListOf<SelectedEntry>()
                 var inspectedEntries = 0
                 var examinedTags = 0
-                var hasFrontMatterCandidate = false
+                // Best candidate first (front matter, then area); the first whose bytes actually read wins.
+                fun readBest(pool: List<SelectedEntry>): ByteArray? {
+                    val ordered = pool.sortedWith(
+                        compareByDescending<SelectedEntry> { it.frontMatter }
+                            .thenByDescending { it.pixelArea }
+                            .thenBy { it.order }
+                    )
+                    for (selected in ordered) {
+                        if (isCancelled()) return null
+                        val entry = zip.getEntry(selected.entryName) ?: continue
+                        readEntryBounded(zip, entry, MAX_IMAGE_BYTES, isCancelled)?.let { return it }
+                    }
+                    return null
+                }
                 for (index in 0..minOf(firstChapter, pages.lastIndex)) {
                     if (isCancelled()) return@use null
                     if (inspectedEntries >= MAX_IMAGE_CANDIDATES || examinedTags >= MAX_IMAGE_TAGS) break
-                    // Front matter always beats chapter 1; skip reading chapter 1 when front matter already qualified.
-                    if (index == firstChapter && hasFrontMatterCandidate) break
+                    // Front matter always beats chapter 1, but only if its image really reads: an over-cap or corrupt
+                    // front-matter image falls through to chapter 1.
+                    if (index == firstChapter && candidates.any { it.frontMatter }) {
+                        readBest(candidates.filter { it.frontMatter })?.let { return@use it }
+                        candidates.removeAll { it.frontMatter }
+                        if (isCancelled()) return@use null
+                    }
                     val pageName = pages[index]
                     val pageUri = toVirtualUri(pageName) ?: continue
                     val pageEntry = zip.getEntry(pageName) ?: continue
@@ -189,7 +207,6 @@ object EmbeddedWorkCoverImage {
                         val (width, height) = dimensions
                         if (!accepts(width, height)) continue
                         val isFrontMatter = index < firstChapter
-                        if (isFrontMatter) hasFrontMatterCandidate = true
                         candidates += SelectedEntry(
                             entryName = imageName,
                             frontMatter = isFrontMatter,
@@ -199,19 +216,7 @@ object EmbeddedWorkCoverImage {
                     }
                 }
                 if (candidates.isEmpty() || isCancelled()) return@use null
-
-                candidates.sortWith(
-                    compareByDescending<SelectedEntry> { it.frontMatter }
-                        .thenByDescending { it.pixelArea }
-                        .thenBy { it.order }
-                )
-                for (selected in candidates) {
-                    if (isCancelled()) return@use null
-                    val entry = zip.getEntry(selected.entryName) ?: continue
-                    val bytes = readEntryBounded(zip, entry, MAX_IMAGE_BYTES, isCancelled)
-                    if (bytes != null) return@use bytes
-                }
-                null
+                readBest(candidates)
             }
         }.getOrNull()
     }
@@ -427,62 +432,37 @@ object EmbeddedWorkCoverImage {
         return flattened
     }
 
-    private fun readEntryBounded(
+    /**
+     * Streams the entry into a buffer that grows (doubling, never past [maxBytes]) as bytes actually arrive.
+     * The declared size is only a rejection hint: it can be -1 (unknown) or spoofed, so it never sizes an allocation.
+     */
+    internal fun readEntryBounded(
         zip: ZipFile,
         entry: ZipEntry,
         maxBytes: Int,
         isCancelled: () -> Boolean = { false }
     ): ByteArray? {
-        val declared = entry.size
-        if (declared > maxBytes.toLong() || isCancelled()) return null
+        if (entry.size > maxBytes.toLong() || isCancelled()) return null
         return runCatching {
             zip.getInputStream(entry).use { input ->
-                if (declared in 1L..maxBytes.toLong()) {
-                    val expected = declared.toInt()
-                    val exact = ByteArray(expected)
-                    var offset = 0
-                    while (offset < expected) {
-                        if (isCancelled()) return@runCatching null
-                        val count = input.read(exact, offset, minOf(65_536, expected - offset))
-                        if (count < 0) break
-                        offset += count
+                var buffer = ByteArray(minOf(8_192, maxBytes))
+                var total = 0
+                while (true) {
+                    if (isCancelled()) return@runCatching null
+                    if (total == buffer.size) {
+                        if (total >= maxBytes) {
+                            // Full to the cap: only a clean end of stream is acceptable.
+                            return@runCatching if (input.read() < 0) buffer else null
+                        }
+                        buffer = buffer.copyOf(minOf(maxBytes.toLong(), buffer.size * 2L).toInt())
                     }
-                    if (offset == expected) {
-                        if (isCancelled()) return@runCatching null
-                        val extra = input.read()
-                        if (extra < 0) return@runCatching exact
-                        if (expected + 1 > maxBytes) return@runCatching null
-                        val out = ByteArrayOutputStream(minOf(maxBytes, expected + 8_192))
-                        out.write(exact, 0, offset)
-                        out.write(extra)
-                        return@runCatching readRemainingBounded(input, out, offset + 1, maxBytes, isCancelled)
-                    }
-                    return@runCatching exact.copyOf(offset)
+                    val count = input.read(buffer, total, buffer.size - total)
+                    if (count < 0) break
+                    total += count
                 }
-                val out = ByteArrayOutputStream(8_192)
-                readRemainingBounded(input, out, 0, maxBytes, isCancelled)
+                if (total == buffer.size) buffer else buffer.copyOf(total)
             }
         }.getOrNull()
-    }
-
-    private fun readRemainingBounded(
-        input: InputStream,
-        out: ByteArrayOutputStream,
-        initialTotal: Int,
-        maxBytes: Int,
-        isCancelled: () -> Boolean
-    ): ByteArray? {
-        val buffer = ByteArray(8_192)
-        var total = initialTotal
-        while (true) {
-            if (isCancelled()) return null
-            val count = input.read(buffer)
-            if (count < 0) break
-            total += count
-            if (total > maxBytes) return null
-            out.write(buffer, 0, count)
-        }
-        return out.toByteArray()
     }
 
     /** Caps header-sniffing reads and aborts promptly if the scan's waiters leave composition. */

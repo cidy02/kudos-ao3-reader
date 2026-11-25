@@ -64,7 +64,6 @@ import io.github.cidy02.kudos.works.DownloadQueueStatus
 import io.github.cidy02.kudos.works.EMBEDDED_COVER_ART_IMAGE_TAG
 import io.github.cidy02.kudos.works.WorkTags
 import kotlin.math.roundToInt
-import io.github.cidy02.kudos.works.rememberWorkEmbeddedCoverArt
 
 /** `CarouselCardMetrics`: 164 × 164√2, work corner 16, queue tile corner 12. */
 object HomeCardMetrics {
@@ -416,7 +415,7 @@ private fun workCoverMetaLine(
         val fraction = progress.coerceIn(0.0, 1.0)
         val parts = buildList {
             if (posted > 0) {
-                val current = (kotlin.math.round(fraction * (posted - 1)).toInt() + 1).coerceIn(1, posted)
+                val current = io.github.cidy02.kudos.ui.components.ChapterBarGeometry.readingChapter(posted, fraction, null)
                 add(if (total != null) "Ch $current of $total" else "Ch $current")
             }
             add("${(fraction * 100.0).roundToInt()}%")
@@ -650,19 +649,29 @@ internal fun UpdateBadge(text: String) {
     )
 }
 
+/**
+ * The capsule sits on a cover's dark ground (or a blurred card) in every theme, so it is dark glass with white ink
+ * whatever the theme, not the theme's translucent glass and secondary ink (1.0:1 to 2.8:1 on those grounds).
+ */
+internal object RevealCapsuleColors {
+    val backing = Color.Black.copy(alpha = 0.68f)
+    val stroke = Color.White.copy(alpha = 0.20f)
+    val ink = Color.White
+}
+
 @Composable
 internal fun RevealCapsule(modifier: Modifier = Modifier) {
     val tokens = LocalKudosTokens.current
     Row(
         modifier
-            .background(tokens.glassFill(0.28), CircleShape)
-            .border(0.5.dp, tokens.glassStroke(0.16), CircleShape)
+            .background(RevealCapsuleColors.backing, CircleShape)
+            .border(0.5.dp, RevealCapsuleColors.stroke, CircleShape)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Icon(Icons.Outlined.VisibilityOff, contentDescription = null, tint = tokens.secondaryInk, modifier = Modifier.size(14.dp))
-        Text("Tap to reveal", color = tokens.secondaryInk, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        Icon(Icons.Outlined.VisibilityOff, contentDescription = null, tint = RevealCapsuleColors.ink, modifier = Modifier.size(14.dp))
+        Text("Tap to reveal", color = RevealCapsuleColors.ink, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 

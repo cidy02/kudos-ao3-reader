@@ -214,7 +214,7 @@ data class GeneratedCoverRecipe(
             val selectedFamilies = tags.mapNotNullTo(LinkedHashSet()) { tones[it] }
             val workKey = (id ?: hash("work:$mainTitle|$author").toLong()).toString()
             val seriesKey = seriesID?.toString()
-            val key = seriesKey ?: (workKey + if (salt == 0) "" else ":$salt")
+            val key = (seriesKey ?: workKey) + if (salt == 0) "" else ":$salt"
             val motif = when {
                 seriesKey != null -> kinds[(hash("series-kind:$seriesKey") % kinds.size.toUInt()).toInt()]
                 selectedFamilies.size == 1 -> families.getValue(selectedFamilies.first())[(authorHash % 4u).toInt()]

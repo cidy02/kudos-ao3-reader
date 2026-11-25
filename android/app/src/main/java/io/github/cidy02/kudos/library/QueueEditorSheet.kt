@@ -199,9 +199,6 @@ fun QueueEditorSheet(
                 if (!editing) {
                     val trimmedName = name.trim()
                     val previewName = trimmedName.ifEmpty { "New queue" }
-                    val previewHue = hue ?: ReadingQueueFacts.coverHue(
-                        trimmedName.ifEmpty { "Reading Queue" }
-                    )
                     val previewWorks = seedWorkIds.mapNotNull { id -> libraryWorks.firstOrNull { it.id == id } }
                     val previewBacks = previewWorks.filter {
                         LibraryPrivacy.visibility(it, privacy, reveal) == LibraryPrivacyVisibility.Visible
@@ -220,7 +217,7 @@ fun QueueEditorSheet(
                         io.github.cidy02.kudos.ui.components.CoverStack(
                             kind = io.github.cidy02.kudos.ui.components.CoverStackKind.Queue,
                             name = previewName,
-                            hue = previewHue,
+                            hue = hue,
                             pickedHex = colorHex,
                             backs = previewBacks,
                             width = 88.dp,

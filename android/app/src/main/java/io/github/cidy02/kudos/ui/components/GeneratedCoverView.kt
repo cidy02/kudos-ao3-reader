@@ -17,10 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,7 +28,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -59,7 +56,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import java.io.File
 import java.util.Locale
 import kotlin.math.PI
@@ -85,7 +81,14 @@ private class PreparedArt(
 )
 
 private sealed class GroundPiece {
-    class Gradient(val startColor: Color, val endColor: Color, val height: Float) : GroundPiece()
+    class Gradient(val startColor: Color, val endColor: Color, val height: Float) : GroundPiece() {
+        // Built once per prepared cover, not on every draw pass.
+        val brush: Brush = Brush.linearGradient(
+            colors = listOf(startColor, endColor),
+            start = Offset(19f, 0f),
+            end = Offset(93f, height)
+        )
+    }
     class SolidRect(val left: Float, val top: Float, val width: Float, val height: Float, val color: Color) : GroundPiece()
     class SolidPath(val path: Path, val color: Color) : GroundPiece()
 }
@@ -213,11 +216,7 @@ fun GeneratedCoverView(
                     for (piece in art.groundRects) {
                         when (piece) {
                             is GroundPiece.Gradient -> drawRect(
-                                brush = Brush.linearGradient(
-                                    colors = listOf(piece.startColor, piece.endColor),
-                                    start = Offset(19f, 0f),
-                                    end = Offset(93f, piece.height)
-                                ),
+                                brush = piece.brush,
                                 topLeft = Offset.Zero,
                                 size = Size(112f, piece.height)
                             )

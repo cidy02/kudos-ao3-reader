@@ -51,7 +51,15 @@ import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
 import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
 import io.github.cidy02.kudos.settings.SettingsAppearancePage
+import androidx.compose.ui.unit.dp
+import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.library.CollectionLedgerRow
+import io.github.cidy02.kudos.ui.components.CoverEpub
+import io.github.cidy02.kudos.ui.components.CoverStack
+import io.github.cidy02.kudos.ui.components.CoverStackKind
+import io.github.cidy02.kudos.ui.components.GeneratedCoverView
 import io.github.cidy02.kudos.ui.components.LocalUseEmbeddedCoverArt
+import io.github.cidy02.kudos.ui.components.generatedCoverRecipe
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
@@ -451,6 +459,103 @@ class CoverArtUiTest {
                 }
             }
         }
+    }
+
+    private fun embeddedArtCount(): Int =
+        compose.onAllNodesWithTag(EMBEDDED_COVER_ART_IMAGE_TAG, useUnmergedTree = true).fetchSemanticsNodes().size
+
+    @Test
+    fun generatedCoverViewDrawsArtOnlyWhenAskedAndReloadsOnWorkAndRevisionKeys() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val fileStore = WorkFileStore(context.filesDir.toPath())
+        val aId = UUID.randomUUID().toString()
+        val bId = UUID.randomUUID().toString()
+        val aFile = writeFixtureEpub(fileStore.workEpubPath(aId).toFile(), includeCoverArt = true)
+        val bFile = writeFixtureEpub(fileStore.workEpubPath(bId).toFile(), includeCoverArt = false)
+        createdFiles += aFile
+        createdFiles += bFile
+        var epub by mutableStateOf<CoverEpub?>(CoverEpub(aId, aFile, "digest-1", 1L))
+        var showsArt by mutableStateOf(false)
+        val recipe = SavedWork(id = aId, title = "Keyed", author = "Author").generatedCoverRecipe()
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                GeneratedCoverView(recipe = recipe, width = 164.dp, epub = epub, showsArt = showsArt)
+            }
+        }
+
+        // showsArt = false never draws the art, even with an EPUB that has some.
+        Thread.sleep(400)
+        compose.waitForIdle()
+        assertEquals(0, embeddedArtCount())
+
+        showsArt = true
+        compose.waitUntil(5_000) { embeddedArtCount() == 1 }
+
+        // Work B reuses the same slot: A picture must be gone within two frames, not once B load ends.
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { epub = CoverEpub(bId, bFile, "digest-b", 1L) }
+        // Composition then semantics settle within a few frames; B's own scan runs on another thread and has not
+        // been delivered, because the clock is paused.
+        repeat(5) { if (embeddedArtCount() != 0) compose.mainClock.advanceTimeByFrame() }
+        assertEquals("work A's art leaked into work B's cover", 0, embeddedArtCount())
+        compose.mainClock.autoAdvance = true
+
+        // Back on A, then A's EPUB is replaced (new digest + downloadedAt, no art now): the cached art must not stay.
+        epub = CoverEpub(aId, aFile, "digest-1", 1L)
+        compose.waitUntil(5_000) { embeddedArtCount() == 1 }
+        writeFixtureEpub(aFile, includeCoverArt = false)
+        assertTrue(aFile.setLastModified(aFile.lastModified() + 10_000L))
+        epub = CoverEpub(aId, aFile, "digest-2", 2L)
+        compose.waitUntil(5_000) { embeddedArtCount() == 0 }
+    }
+
+    @Test
+    fun coverStackBackCoversAndMiniatureCoversFollowTheCoverChoice() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val fileStore = WorkFileStore(context.filesDir.toPath())
+        val workId = UUID.randomUUID().toString()
+        createdFiles += writeFixtureEpub(fileStore.workEpubPath(workId).toFile(), includeCoverArt = true)
+        val globalArt = mutableStateOf(true)
+        val workState = mutableStateOf(
+            SavedWork(id = workId, title = "Stack Work", author = "Author", hasEpub = true)
+        )
+        val collection = WorkCollection(id = "col", name = "Shelf", workIds = listOf(workId))
+        compose.setContent {
+            CompositionLocalProvider(LocalUseEmbeddedCoverArt provides globalArt.value) {
+                KudosTheme(KudosThemeMode.Light) {
+                    Column {
+                        CoverStack(
+                            kind = CoverStackKind.Queue,
+                            name = "Queue",
+                            hue = null,
+                            pickedHex = null,
+                            backs = listOf(workState.value),
+                            width = 164.dp,
+                            height = 150.dp
+                        )
+                        CollectionLedgerRow(
+                            collection = collection,
+                            previewWorks = listOf(workState.value),
+                            onClick = {},
+                            onLongClick = {}
+                        )
+                    }
+                }
+            }
+        }
+
+        // Global on + follow: the stack's back cover and the miniature both wear the work's art.
+        compose.waitUntil(5_000) { embeddedArtCount() == 2 }
+
+        globalArt.value = false
+        compose.waitUntil(5_000) { embeddedArtCount() == 0 }
+
+        workState.value = workState.value.copy(coverArtPreferenceRaw = "embedded")
+        compose.waitUntil(5_000) { embeddedArtCount() == 2 }
+
+        globalArt.value = true
+        workState.value = workState.value.copy(coverArtPreferenceRaw = "generated")
+        compose.waitUntil(5_000) { embeddedArtCount() == 0 }
     }
 
     private val unusedAo3Client = object : AO3Client {
