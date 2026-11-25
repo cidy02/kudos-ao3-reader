@@ -14,6 +14,8 @@ struct GeneratedCoverView: View {
     var showsArt = true
     var ink = 1.0
     var cornerRadius: CGFloat?
+    /// The work's own `coverArtPreferenceRaw`; nil follows the global setting.
+    var coverArtPreference: String?
     @AppStorage("useEmbeddedCoverArt") private var useEmbeddedCoverArt = true
     @State private var loadedURL: URL?
     @State private var embeddedImage: Image?
@@ -52,7 +54,7 @@ struct GeneratedCoverView: View {
     init(recipe: GeneratedCoverRecipe, width: CGFloat, epubURL: URL? = nil, epubWorkID: UUID? = nil,
          height: CGFloat? = nil,
          showsWords: Bool = true, showsArt: Bool = true, ink: Double = 1,
-         cornerRadius: CGFloat? = nil) {
+         cornerRadius: CGFloat? = nil, coverArtPreference: String? = nil) {
         self.recipe = recipe
         self.width = width
         artCacheKey = "\(String(reflecting: recipe))|\(width)|\(height ?? width * 1.42)"
@@ -63,7 +65,13 @@ struct GeneratedCoverView: View {
         self.showsArt = showsArt
         self.ink = ink
         self.cornerRadius = cornerRadius
+        self.coverArtPreference = coverArtPreference
     }
+
+    private var wantsEmbeddedArt: Bool {
+        CoverArtPreference.wantsEmbeddedArt(override: coverArtPreference, global: useEmbeddedCoverArt)
+    }
+    private var hasLoadedArt: Bool { loadedURL == epubURL && embeddedImage != nil }
 
     private var coverHeight: CGFloat { height ?? width * 1.42 }
     var body: some View {
@@ -74,11 +82,12 @@ struct GeneratedCoverView: View {
                 let art = Self.prepared(recipe: recipe, width: width, height: size.height,
                                         key: artCacheKey as NSString)
                 drawGround(in: &context, art: art)
-                if showsArt && !(useEmbeddedCoverArt && loadedURL == epubURL && embeddedImage != nil) {
+                if showsArt && !CoverArtPreference.showsEmbeddedArt(
+                    override: coverArtPreference, global: useEmbeddedCoverArt, hasArt: hasLoadedArt) {
                     drawMotif(in: &context, art: art)
                 }
             }
-            if showsArt, useEmbeddedCoverArt, loadedURL == epubURL, let embeddedImage {
+            if showsArt, wantsEmbeddedArt, loadedURL == epubURL, let embeddedImage {
                 embeddedImage.resizable().scaledToFill()
                     .frame(width: width, height: coverHeight).clipped().opacity(ink)
             }
@@ -91,8 +100,8 @@ struct GeneratedCoverView: View {
         .accessibilityLabel([recipe.title, recipe.subtitle, recipe.author, recipe.fandom]
             .filter { !$0.isEmpty }.joined(separator: ", "))
         .accessibilityHidden(!showsWords)
-        .task(id: useEmbeddedCoverArt ? epubURL : nil) {
-            guard showsArt, useEmbeddedCoverArt, let epubURL, let epubWorkID else { return }
+        .task(id: wantsEmbeddedArt ? epubURL : nil) {
+            guard showsArt, wantsEmbeddedArt, let epubURL, let epubWorkID else { return }
             let image = await GeneratedCoverArtLoader.shared.image(workID: epubWorkID, fileURL: epubURL)
             guard !Task.isCancelled else { return }
             embeddedImage = image.map { Image(decorative: $0, scale: 1) }

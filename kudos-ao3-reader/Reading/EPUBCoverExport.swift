@@ -206,7 +206,8 @@ nonisolated enum EPUBCoverExport {
 
     @MainActor
     static func jpeg(for work: SavedWork) -> Data? {
-        embeddedJPEG(at: work.fileURL) ?? generatedJPEG(for: work)
+        (CoverArtPreference.wantsEmbeddedArt(for: work) ? embeddedJPEG(at: work.fileURL) : nil)
+            ?? generatedJPEG(for: work)
     }
 
     @MainActor

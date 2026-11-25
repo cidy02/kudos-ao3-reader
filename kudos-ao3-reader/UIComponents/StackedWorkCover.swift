@@ -217,7 +217,8 @@ struct StackedWorkCover<Face: View>: View {
     private func backCover(_ work: SavedWork, width: CGFloat, height: CGFloat, dimming: Double) -> some View {
         return GeneratedCoverView(recipe: work.generatedCoverRecipe, width: width,
                                   epubURL: work.hasEPUB ? work.fileURL : nil,
-                                  epubWorkID: work.id, height: height, showsWords: false)
+                                  epubWorkID: work.id, height: height, showsWords: false,
+                                  coverArtPreference: work.coverArtPreferenceRaw)
             .brightness(-dimming)
             .accessibilityHidden(true)
     }

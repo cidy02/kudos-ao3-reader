@@ -137,7 +137,9 @@ struct WorkEPUBExportSheet: View {
                 }
                 var cover: Data?
                 if wantsCover {
-                    let embedded = Task.detached { EPUBCoverExport.embeddedJPEG(at: source) }
+                    // The work's own art only when its resolved Cover choice wants it (T-573).
+                    let wantsArt = CoverArtPreference.wantsEmbeddedArt(for: work)
+                    let embedded = Task.detached { wantsArt ? EPUBCoverExport.embeddedJPEG(at: source) : nil }
                     cover = await withTaskCancellationHandler {
                         await embedded.value
                     } onCancel: { embedded.cancel() }

@@ -110,13 +110,15 @@ struct CompactWorkCover: View {
     let recipe: GeneratedCoverRecipe
     var epubURL: URL?
     var epubWorkID: UUID?
+    var coverArtPreference: String?
     var showsInitial: Bool = true
 
     var body: some View {
         GeneratedCoverView(recipe: recipe, width: 40,
                            epubURL: showsInitial ? epubURL : nil,
                            epubWorkID: showsInitial ? epubWorkID : nil,
-                           showsWords: false, showsArt: showsInitial)
+                           showsWords: false, showsArt: showsInitial,
+                           coverArtPreference: coverArtPreference)
         .shadow(color: Color.black.opacity(0.18), radius: 3, x: 0, y: 2)
         .accessibilityHidden(true)
     }

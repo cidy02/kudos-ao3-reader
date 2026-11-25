@@ -115,6 +115,7 @@ struct WorkCoverCard: View {
             recipe: work.generatedCoverRecipe,
             epubURL: work.hasEPUB ? work.fileURL : nil,
             epubWorkID: work.id,
+            coverArtPreference: work.coverArtPreferenceRaw,
             showsInitial: showsInitial,
             isMatureObscured: isMatureObscured,
             showsMatureRevealCapsule: showsMatureRevealCapsule
@@ -424,6 +425,7 @@ private struct WorkSummaryCardSurface<Content: View>: View {
     let recipe: GeneratedCoverRecipe
     var epubURL: URL?
     var epubWorkID: UUID?
+    var coverArtPreference: String?
     var showsInitial: Bool = true
     var isMatureObscured: Bool = false
     var showsMatureRevealCapsule: Bool = true
@@ -442,7 +444,8 @@ private struct WorkSummaryCardSurface<Content: View>: View {
             GeneratedCoverView(recipe: recipe, width: cardSize.width,
                                epubURL: showsInitial ? epubURL : nil,
                                epubWorkID: showsInitial ? epubWorkID : nil,
-                               showsWords: showsInitial, showsArt: showsInitial)
+                               showsWords: showsInitial, showsArt: showsInitial,
+                               coverArtPreference: coverArtPreference)
             .frame(width: cardSize.width, height: cardSize.width * 1.42)
             .blur(radius: isMatureObscured ? 6 : 0)
             .overlay {
