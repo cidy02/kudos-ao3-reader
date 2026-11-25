@@ -1692,7 +1692,7 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         for (label, counts) in grouped {
             arrivalRows.append(ArrivalRow(label: label, finished: counts.finished, saved: counts.saved))
         }
-        arrivalRows.sort { lhs: ArrivalRow, rhs: ArrivalRow in
+        arrivalRows.sort { (lhs: ArrivalRow, rhs: ArrivalRow) -> Bool in
             if lhs.finished != rhs.finished { return lhs.finished > rhs.finished }
             return lhs.label < rhs.label
         }
@@ -1749,7 +1749,7 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         for (name, total) in authorTotals {
             authors.append(AuthorRow(name: name, works: total.works, words: total.words, finished: total.finished))
         }
-        authors.sort { lhs: AuthorRow, rhs: AuthorRow in
+        authors.sort { (lhs: AuthorRow, rhs: AuthorRow) -> Bool in
             if lhs.works != rhs.works { return lhs.works > rhs.works }
             return lhs.name < rhs.name
         }
