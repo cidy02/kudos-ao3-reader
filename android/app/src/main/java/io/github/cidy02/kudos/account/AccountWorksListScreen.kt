@@ -1683,6 +1683,7 @@ internal fun AO3WorkSummary.coverFace() = SavedWork(
     id = "ao3-$id",
     title = title,
     author = if (authors.any { it.isNotBlank() }) authorText else "",
+    hasEpub = false,
     rating = rating,
     isComplete = isComplete == true,
     workFandoms = fandoms.filter { it.isNotBlank() },

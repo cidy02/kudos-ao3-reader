@@ -17,6 +17,8 @@ import io.github.cidy02.kudos.ui.components.LocalUseEmbeddedCoverArt
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -29,6 +31,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+internal const val EMBEDDED_COVER_ART_IMAGE_TAG = "embeddedCoverArtImage"
+
 /**
  * One queued scan per EPUB file revision, caching decoded thumbnails in memory and under
  * `cacheDir/GeneratedCoverArt` (derived data only, never a library field).
@@ -37,36 +41,103 @@ import kotlinx.coroutines.withContext
  */
 class EmbeddedCoverArtLoader(
     private val directory: File,
-    private val scan: (File) -> ByteArray? = { EmbeddedWorkCoverImage.data(it) },
+    private val scan: (File, () -> Boolean) -> ByteArray? = { file, isCancelled ->
+        EmbeddedWorkCoverImage.data(file, isCancelled)
+    },
     private val scanDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     /** `bitmap == null` represents a scanned "no embedded art" negative cache entry. */
-    class CacheEntry(val bitmap: Bitmap?)
+    class CacheEntry(val bitmap: Bitmap?, internal val revision: String = "")
+
+    private data class HasArtEntry(val hasArt: Boolean, val revision: String)
+
+    private sealed interface PreparedLoad {
+        data class Resolved(val bitmap: Bitmap?) : PreparedLoad
+        data class NeedsScan(
+            val revision: String,
+            val safeWorkId: String,
+            val scanKey: String
+        ) : PreparedLoad
+    }
 
     private val memory = MemoryCache(
         maxCount = MAX_MEMORY_ENTRIES,
         maxBytes = memoryBudgetBytes()
     )
+    private val hasArtMemory = HasArtCache(maxCount = MAX_HAS_ART_ENTRIES)
     private val scope = CoroutineScope(SupervisorJob() + scanDispatcher)
     private val mutex = Mutex()
     private var tail: Job? = null
     private val scanning = mutableSetOf<String>()
     private val waiters = mutableMapOf<String, MutableMap<String, CompletableDeferred<Bitmap?>>>()
+    private val waiterCounts = ConcurrentHashMap<String, AtomicInteger>()
 
-    /** Synchronous in-memory cache lookup so scrolled/recomposed cards draw without flicker. */
-    fun peekCached(epubFile: File): CacheEntry? {
-        val revision = revisionOf(epubFile) ?: return null
-        return memory.get(cacheKey(epubFile, revision))
+    /**
+     * Synchronous in-memory cache lookup with zero filesystem I/O so scrolled/recomposed cards
+     * draw without flicker or main-thread `stat()` calls. Staleness is verified off-main-thread
+     * in [load] / [hasEmbeddedArt].
+     */
+    fun peekCached(epubFile: File): CacheEntry? = memory.get(epubFile.absolutePath)
+
+    /** Synchronous in-memory "has embedded art" lookup with zero filesystem I/O. */
+    fun peekHasArt(epubFile: File): Boolean? {
+        val path = epubFile.absolutePath
+        hasArtMemory.get(path)?.let { return it.hasArt }
+        return memory.get(path)?.let { it.bitmap != null }
+    }
+
+    /**
+     * Checks off the main thread whether [epubFile] contains qualifying embedded cover art,
+     * caching the boolean result in a small LRU cache without decoding the JPEG bitmap when
+     * the disk cache already knows the answer.
+     */
+    suspend fun hasEmbeddedArt(workId: String, epubFile: File): Boolean {
+        val path = epubFile.absolutePath
+        val known = withContext(scanDispatcher) {
+            val revision = revisionOf(epubFile)
+            if (revision == null) {
+                memory.remove(path)
+                hasArtMemory.remove(path)
+                return@withContext false
+            }
+            hasArtMemory.get(path)?.takeIf { it.revision == revision }?.let { return@withContext it.hasArt }
+            memory.get(path)?.takeIf { it.revision == revision }?.let { cached ->
+                val hasArt = cached.bitmap != null
+                hasArtMemory.put(path, HasArtEntry(hasArt, revision))
+                return@withContext hasArt
+            }
+            val safeWorkId = sanitizeId(workId)
+            val basename = "$safeWorkId-$revision"
+            if (File(directory, "$basename.jpg").isFile) {
+                hasArtMemory.put(path, HasArtEntry(true, revision))
+                return@withContext true
+            }
+            if (File(directory, "$basename.empty").isFile) {
+                hasArtMemory.put(path, HasArtEntry(false, revision))
+                return@withContext false
+            }
+            null
+        }
+        if (known != null) return known
+        return load(workId = workId, epubFile = epubFile) != null
     }
 
     suspend fun load(workId: String, epubFile: File): Bitmap? {
-        val revision = revisionOf(epubFile) ?: return null
-        val key = cacheKey(epubFile, revision)
-        memory.get(key)?.let { return it.bitmap }
+        val path = epubFile.absolutePath
+        val prepared = withContext(scanDispatcher) {
+            val revision = revisionOf(epubFile)
+            if (revision == null) {
+                memory.remove(path)
+                hasArtMemory.remove(path)
+                return@withContext PreparedLoad.Resolved(null)
+            }
+            memory.get(path)?.takeIf { it.revision == revision }?.let { cached ->
+                hasArtMemory.put(path, HasArtEntry(cached.bitmap != null, revision))
+                return@withContext PreparedLoad.Resolved(cached.bitmap)
+            }
 
-        val safeWorkId = sanitizeId(workId)
-        val basename = "$safeWorkId-$revision"
-        val diskHit = withContext(scanDispatcher) {
+            val safeWorkId = sanitizeId(workId)
+            val basename = "$safeWorkId-$revision"
             val jpeg = File(directory, "$basename.jpg")
             if (jpeg.isFile) {
                 val decoded = runCatching {
@@ -74,41 +145,71 @@ class EmbeddedCoverArtLoader(
                     BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 }.getOrNull()
                 if (decoded != null) {
-                    memory.put(key, CacheEntry(decoded))
-                    return@withContext CacheEntry(decoded)
+                    memory.put(path, CacheEntry(decoded, revision))
+                    hasArtMemory.put(path, HasArtEntry(true, revision))
+                    return@withContext PreparedLoad.Resolved(decoded)
                 }
             }
             val empty = File(directory, "$basename.empty")
             if (empty.isFile) {
-                memory.put(key, CacheEntry(null))
-                return@withContext CacheEntry(null)
+                memory.put(path, CacheEntry(null, revision))
+                hasArtMemory.put(path, HasArtEntry(false, revision))
+                return@withContext PreparedLoad.Resolved(null)
             }
-            null
+            PreparedLoad.NeedsScan(
+                revision = revision,
+                safeWorkId = safeWorkId,
+                scanKey = cacheKey(epubFile, revision)
+            )
         }
-        if (diskHit != null) return diskHit.bitmap
+        val request = when (prepared) {
+            is PreparedLoad.Resolved -> return prepared.bitmap
+            is PreparedLoad.NeedsScan -> prepared
+        }
 
+        val scanKey = request.scanKey
         val waiterId = UUID.randomUUID().toString()
         val deferred = CompletableDeferred<Bitmap?>()
         mutex.withLock {
-            memory.get(key)?.let { return it.bitmap }
-            waiters.getOrPut(key) { linkedMapOf() }[waiterId] = deferred
-            if (scanning.add(key)) {
+            memory.get(path)?.takeIf { it.revision == request.revision }?.let { return it.bitmap }
+            waiters.getOrPut(scanKey) { linkedMapOf() }[waiterId] = deferred
+            waiterCounts.computeIfAbsent(scanKey) { AtomicInteger(0) }.incrementAndGet()
+            if (scanning.add(scanKey)) {
                 val previous = tail
                 tail = scope.launch(scanDispatcher) {
                     previous?.join()
-                    if (!hasWaiters(key)) {
-                        abandon(key)
+                    while (true) {
+                        if (!hasWaiters(scanKey)) {
+                            if (abandonIfEmpty(scanKey)) return@launch
+                            continue
+                        }
+                        val aborted = AtomicBoolean(false)
+                        val isCancelled = {
+                            val noWaiters = (waiterCounts[scanKey]?.get() ?: 0) <= 0
+                            if (noWaiters) aborted.set(true)
+                            noWaiters
+                        }
+                        val raw = runCatching { scan(epubFile, isCancelled) }.getOrNull()
+                        if (aborted.get()) {
+                            // Never write `.empty` or negative-cache a scan aborted by cancellation.
+                            if (abandonIfEmpty(scanKey)) return@launch
+                            continue
+                        }
+                        if (raw != null && (waiterCounts[scanKey]?.get() ?: 0) <= 0) {
+                            if (abandonIfEmpty(scanKey)) return@launch
+                            continue
+                        }
+                        val jpegBytes = EmbeddedWorkCoverImage.downsampledJPEG(raw)
+                        finish(
+                            scanKey = scanKey,
+                            path = path,
+                            safeWorkId = request.safeWorkId,
+                            epubFile = epubFile,
+                            revision = request.revision,
+                            jpegBytes = jpegBytes
+                        )
                         return@launch
                     }
-                    val raw = runCatching { scan(epubFile) }.getOrNull()
-                    val jpegBytes = EmbeddedWorkCoverImage.downsampledJPEG(raw)
-                    finish(
-                        key = key,
-                        safeWorkId = safeWorkId,
-                        epubFile = epubFile,
-                        revision = revision,
-                        jpegBytes = jpegBytes
-                    )
                 }
             }
         }
@@ -118,36 +219,43 @@ class EmbeddedCoverArtLoader(
         } finally {
             if (!deferred.isCompleted) {
                 withContext(NonCancellable) {
-                    cancelWaiter(key, waiterId)
+                    cancelWaiter(scanKey, waiterId)
                 }
             }
         }
     }
 
-    private suspend fun cancelWaiter(key: String, waiterId: String) {
+    private suspend fun cancelWaiter(scanKey: String, waiterId: String) {
         val removed = mutex.withLock {
-            val entries = waiters[key] ?: return@withLock null
+            val entries = waiters[scanKey] ?: return@withLock null
             val waiter = entries.remove(waiterId)
-            if (entries.isEmpty()) waiters.remove(key)
+            if (waiter != null) {
+                waiterCounts[scanKey]?.decrementAndGet()
+            }
+            if (entries.isEmpty()) waiters.remove(scanKey)
             waiter
         }
         removed?.complete(null)
     }
 
-    private suspend fun hasWaiters(key: String): Boolean = mutex.withLock {
-        waiters[key]?.isNotEmpty() == true
+    private suspend fun hasWaiters(scanKey: String): Boolean = mutex.withLock {
+        waiters[scanKey]?.isNotEmpty() == true
     }
 
-    private suspend fun abandon(key: String) {
-        val pending = mutex.withLock {
-            scanning.remove(key)
-            waiters.remove(key)
+    private suspend fun abandonIfEmpty(scanKey: String): Boolean = mutex.withLock {
+        if (waiters[scanKey]?.isNotEmpty() == true) {
+            false
+        } else {
+            scanning.remove(scanKey)
+            waiters.remove(scanKey)
+            waiterCounts.remove(scanKey)
+            true
         }
-        pending?.values?.forEach { it.complete(null) }
     }
 
     private suspend fun finish(
-        key: String,
+        scanKey: String,
+        path: String,
         safeWorkId: String,
         epubFile: File,
         revision: String,
@@ -172,11 +280,13 @@ class EmbeddedCoverArtLoader(
                     }
                 }
             }
-            memory.put(key, CacheEntry(bitmap))
+            memory.put(path, CacheEntry(bitmap, revision))
+            hasArtMemory.put(path, HasArtEntry(bitmap != null, revision))
         }
         val pending = mutex.withLock {
-            scanning.remove(key)
-            waiters.remove(key)
+            scanning.remove(scanKey)
+            waiterCounts.remove(scanKey)
+            waiters.remove(scanKey)
         }
         pending?.values?.forEach { it.complete(bitmap) }
     }
@@ -192,6 +302,28 @@ class EmbeddedCoverArtLoader(
         } catch (error: Throwable) {
             temp.delete()
             throw error
+        }
+    }
+
+    private class HasArtCache(private val maxCount: Int) {
+        private val entries = LinkedHashMap<String, HasArtEntry>(maxCount, 0.75f, true)
+
+        @Synchronized
+        fun get(key: String): HasArtEntry? = entries[key]
+
+        @Synchronized
+        fun put(key: String, entry: HasArtEntry) {
+            entries[key] = entry
+            val iterator = entries.entries.iterator()
+            while (entries.size > maxCount && iterator.hasNext()) {
+                iterator.next()
+                iterator.remove()
+            }
+        }
+
+        @Synchronized
+        fun remove(key: String) {
+            entries.remove(key)
         }
     }
 
@@ -219,6 +351,11 @@ class EmbeddedCoverArtLoader(
             }
         }
 
+        @Synchronized
+        fun remove(key: String) {
+            entries.remove(key)?.let { (_, previousCost) -> currentBytes -= previousCost }
+        }
+
         private fun costOf(bitmap: Bitmap?): Long {
             if (bitmap == null) return 1L
             return maxOf(1L, bitmap.allocationByteCount.toLong())
@@ -227,6 +364,7 @@ class EmbeddedCoverArtLoader(
 
     companion object {
         private const val MAX_MEMORY_ENTRIES = 64
+        private const val MAX_HAS_ART_ENTRIES = 256
         private const val MAX_MEMORY_BYTES = 80L * 1024L * 1024L
         private const val MIN_MEMORY_BYTES = 8L * 1024L * 1024L
         private const val CACHE_DIR_NAME = "GeneratedCoverArt"
@@ -281,7 +419,8 @@ fun rememberWorkEmbeddedCoverArt(
         )
     return rememberLoadedEmbeddedCoverArt(
         workId = if (shouldShow) work?.id else null,
-        epubDigest = if (shouldShow) work?.epubDigest.orEmpty() else ""
+        epubDigest = if (shouldShow) work?.epubDigest.orEmpty() else "",
+        downloadedAtMillis = if (shouldShow) work?.downloadedAt?.toEpochMilli() ?: 0L else 0L
     )
 }
 
@@ -291,18 +430,41 @@ fun rememberWorkEmbeddedCoverArt(
  */
 @Composable
 fun rememberWorkHasEmbeddedCoverArt(work: SavedWork?): Boolean {
+    val context = LocalContext.current
+    val loader = remember(context) { EmbeddedCoverArtLoader.shared(context) }
     val activeWork = work?.takeIf { it.hasEpub }
-    val bitmap = rememberLoadedEmbeddedCoverArt(
-        workId = activeWork?.id,
-        epubDigest = activeWork?.epubDigest.orEmpty()
-    )
-    return bitmap != null
+    val workId = activeWork?.id
+    val epubDigest = activeWork?.epubDigest.orEmpty()
+    val downloadedAtMillis = activeWork?.downloadedAt?.toEpochMilli() ?: 0L
+    val epubFile = remember(workId, context) {
+        workId?.let { id ->
+            runCatching { WorkFileStore(context.filesDir.toPath()).workEpubPath(id).toFile() }.getOrNull()
+        }
+    }
+    val initialHasArt = remember(workId, epubFile, epubDigest, downloadedAtMillis) {
+        if (workId == null || epubFile == null) false else loader.peekHasArt(epubFile) ?: false
+    }
+    val hasArt by produceState(
+        initialValue = initialHasArt,
+        workId,
+        epubFile,
+        epubDigest,
+        downloadedAtMillis
+    ) {
+        if (workId == null || epubFile == null) {
+            value = false
+            return@produceState
+        }
+        value = loader.hasEmbeddedArt(workId = workId, epubFile = epubFile)
+    }
+    return workId != null && hasArt
 }
 
 @Composable
 private fun rememberLoadedEmbeddedCoverArt(
     workId: String?,
-    epubDigest: String
+    epubDigest: String,
+    downloadedAtMillis: Long
 ): ImageBitmap? {
     val context = LocalContext.current
     val loader = remember(context) { EmbeddedCoverArtLoader.shared(context) }
@@ -311,18 +473,18 @@ private fun rememberLoadedEmbeddedCoverArt(
             runCatching { WorkFileStore(context.filesDir.toPath()).workEpubPath(id).toFile() }.getOrNull()
         }
     }
-    val fileRevision = epubFile?.let(EmbeddedCoverArtLoader::revisionOf)
-    val initialBitmap = remember(workId, epubFile, epubDigest, fileRevision) {
+    val initialBitmap = remember(workId, epubFile, epubDigest, downloadedAtMillis) {
         if (workId == null || epubFile == null) null else loader.peekCached(epubFile)?.bitmap
     }
-    val bitmap by produceState<Bitmap?>(initialValue = initialBitmap, workId, epubFile, epubDigest, fileRevision) {
+    val bitmap by produceState<Bitmap?>(
+        initialValue = initialBitmap,
+        workId,
+        epubFile,
+        epubDigest,
+        downloadedAtMillis
+    ) {
         if (workId == null || epubFile == null) {
             value = null
-            return@produceState
-        }
-        val cached = loader.peekCached(epubFile)
-        if (cached != null) {
-            value = cached.bitmap
             return@produceState
         }
         value = loader.load(workId = workId, epubFile = epubFile)

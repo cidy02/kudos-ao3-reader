@@ -11,6 +11,8 @@ import io.github.cidy02.kudos.reader.ReaderSectionKind
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FilterInputStream
+import java.io.InputStream
 import java.net.URI
 import java.net.URLDecoder
 import java.util.Locale
@@ -34,6 +36,9 @@ object EmbeddedWorkCoverImage {
     const val MIN_ASPECT_RATIO: Double = 0.40
     const val MAX_ASPECT_RATIO: Double = 1.85
     const val MAX_THUMBNAIL_PX: Int = 600
+    const val MAX_IMAGE_CANDIDATES: Int = 64
+    private const val MAX_IMAGE_TAGS: Int = 512
+    private const val MAX_HEADER_BYTES: Int = 1_048_576
     private const val MAX_TEXT_ENTRY_BYTES: Int = 4_000_000
     private const val JPEG_QUALITY: Int = 86
     private const val VIRTUAL_ROOT: String = "/KudosGeneratedCoverArt/"
@@ -44,13 +49,32 @@ object EmbeddedWorkCoverImage {
         val pixelArea: Long
     )
 
+    private data class SelectedEntry(
+        val entryName: String,
+        val frontMatter: Boolean,
+        val pixelArea: Long,
+        val order: Int
+    )
+
     /** Front matter always beats chapter images; ties break by larger pixel area. */
     fun preferred(current: Candidate?, candidate: Candidate): Candidate {
         if (current == null) return candidate
-        if (candidate.frontMatter != current.frontMatter) {
-            return if (candidate.frontMatter) candidate else current
+        return if (beats(current.frontMatter, current.pixelArea, candidate.frontMatter, candidate.pixelArea)) {
+            candidate
+        } else {
+            current
         }
-        return if (candidate.pixelArea > current.pixelArea) candidate else current
+    }
+
+    private fun beats(
+        currentFrontMatter: Boolean,
+        currentPixelArea: Long,
+        candidateFrontMatter: Boolean,
+        candidatePixelArea: Long
+    ): Boolean = if (candidateFrontMatter != currentFrontMatter) {
+        candidateFrontMatter
+    } else {
+        candidatePixelArea > currentPixelArea
     }
 
     /** Exact iOS `EmbeddedWorkCoverImage.accepts(width:height:)` bounds. */
@@ -64,15 +88,19 @@ object EmbeddedWorkCoverImage {
 
     /**
      * Reads only the central-directory entries needed (`META-INF/container.xml`, OPF, TOC,
-     * spine XHTML documents `0..firstChapter`, and local candidate images) without unpacking
-     * the archive.
+     * spine XHTML documents `0..firstChapter`, and local candidate image headers) without unpacking
+     * the archive. Image dimensions are decoded from bounded streams before buffering full bytes,
+     * repeated hrefs are deduplicated, candidates are capped at [MAX_IMAGE_CANDIDATES], and only
+     * the winning image entry is read into memory.
      */
     fun data(epubFile: File, isCancelled: () -> Boolean = { false }): ByteArray? {
         if (!epubFile.isFile || isCancelled()) return null
         return runCatching {
             ZipFile(epubFile).use { zip ->
                 val containerEntry = zip.getEntry("META-INF/container.xml") ?: return@use null
-                val containerBytes = readEntryBounded(zip, containerEntry, MAX_TEXT_ENTRY_BYTES) ?: return@use null
+                val containerBytes = readEntryBounded(zip, containerEntry, MAX_TEXT_ENTRY_BYTES, isCancelled)
+                    ?: return@use null
+                if (isCancelled()) return@use null
                 val opfRawPath = rootfilePath(containerBytes.toString(Charsets.UTF_8)) ?: return@use null
 
                 val rootUri = URI(null, null, VIRTUAL_ROOT, null)
@@ -82,7 +110,9 @@ object EmbeddedWorkCoverImage {
                     ?: return@use null
                 val opfUri = toVirtualUri(opfName) ?: return@use null
                 val opfEntry = zip.getEntry(opfName) ?: return@use null
-                val opfBytes = readEntryBounded(zip, opfEntry, MAX_TEXT_ENTRY_BYTES) ?: return@use null
+                val opfBytes = readEntryBounded(zip, opfEntry, MAX_TEXT_ENTRY_BYTES, isCancelled)
+                    ?: return@use null
+                if (isCancelled()) return@use null
                 val opfDoc = Jsoup.parse(opfBytes.toString(Charsets.UTF_8), "", Parser.xmlParser())
 
                 val manifestById = linkedMapOf<String, ManifestItem>()
@@ -104,7 +134,7 @@ object EmbeddedWorkCoverImage {
                 val pages = opfDoc.getAllElements()
                     .filter { it.localTagName() == "itemref" }
                     .mapNotNull { itemRef -> manifestById[itemRef.attr("idref").trim()]?.path }
-                if (pages.isEmpty()) return@use null
+                if (pages.isEmpty() || isCancelled()) return@use null
 
                 val spineIndexByKey = linkedMapOf<String, Int>()
                 pages.forEachIndexed { index, path ->
@@ -115,41 +145,71 @@ object EmbeddedWorkCoverImage {
                     zip = zip,
                     opfDoc = opfDoc,
                     manifestById = manifestById,
-                    spineIndexByKey = spineIndexByKey
+                    spineIndexByKey = spineIndexByKey,
+                    isCancelled = isCancelled
                 )
+                if (isCancelled()) return@use null
                 val sections = ReaderSectionBuilder.build(
                     tocEntries = tocEntries,
                     spineHrefs = pages.map { it.substringAfterLast('/') }
                 )
                 val firstChapter = sections.firstOrNull { it.kind == ReaderSectionKind.CHAPTER }?.spineIndex ?: 0
 
-                var best: Candidate? = null
+                val seenImageNames = hashSetOf<String>()
+                val candidates = mutableListOf<SelectedEntry>()
+                var inspectedEntries = 0
+                var examinedTags = 0
+                var hasFrontMatterCandidate = false
                 for (index in 0..minOf(firstChapter, pages.lastIndex)) {
                     if (isCancelled()) return@use null
+                    if (inspectedEntries >= MAX_IMAGE_CANDIDATES || examinedTags >= MAX_IMAGE_TAGS) break
+                    // Front matter always beats chapter 1; skip reading chapter 1 when front matter already qualified.
+                    if (index == firstChapter && hasFrontMatterCandidate) break
                     val pageName = pages[index]
                     val pageUri = toVirtualUri(pageName) ?: continue
                     val pageEntry = zip.getEntry(pageName) ?: continue
-                    val pageBytes = readEntryBounded(zip, pageEntry, MAX_TEXT_ENTRY_BYTES) ?: continue
+                    val pageBytes = readEntryBounded(zip, pageEntry, MAX_TEXT_ENTRY_BYTES, isCancelled)
+                        ?: continue
+                    if (isCancelled()) return@use null
                     val pageDoc = Jsoup.parse(pageBytes.toString(Charsets.UTF_8))
                     val images = pageDoc.select("img[src]")
                     for (image in images) {
                         if (isCancelled()) return@use null
+                        if (inspectedEntries >= MAX_IMAGE_CANDIDATES || examinedTags >= MAX_IMAGE_TAGS) break
+                        examinedTags += 1
                         val src = image.attr("src").trim()
                         val imageName = resolveRelative(pageUri, src) ?: continue
+                        if (!seenImageNames.add(imageName)) continue
                         val imageEntry = zip.getEntry(imageName) ?: continue
-                        val imageBytes = readEntryBounded(zip, imageEntry, MAX_IMAGE_BYTES) ?: continue
-                        val dimensions = decodeBounds(imageBytes) ?: continue
+                        inspectedEntries += 1
+                        if (imageEntry.size > MAX_IMAGE_BYTES.toLong()) continue
+                        val dimensions = decodeBounds(zip, imageEntry, isCancelled) ?: continue
                         val (width, height) = dimensions
                         if (!accepts(width, height)) continue
-                        val candidate = Candidate(
-                            data = imageBytes,
-                            frontMatter = index < firstChapter,
-                            pixelArea = width.toLong() * height.toLong()
+                        val isFrontMatter = index < firstChapter
+                        if (isFrontMatter) hasFrontMatterCandidate = true
+                        candidates += SelectedEntry(
+                            entryName = imageName,
+                            frontMatter = isFrontMatter,
+                            pixelArea = width.toLong() * height.toLong(),
+                            order = candidates.size
                         )
-                        best = preferred(best, candidate)
                     }
                 }
-                best?.data
+                if (candidates.isEmpty() || isCancelled()) return@use null
+
+                candidates.sortWith(
+                    compareByDescending<SelectedEntry> { it.frontMatter }
+                        .thenByDescending { it.pixelArea }
+                        .thenBy { it.order }
+                )
+                for (selected in candidates) {
+                    if (isCancelled()) return@use null
+                    val entry = zip.getEntry(selected.entryName) ?: continue
+                    val bytes = readEntryBounded(zip, entry, MAX_IMAGE_BYTES, isCancelled)
+                    if (bytes != null) return@use bytes
+                }
+                null
             }
         }.getOrNull()
     }
@@ -215,7 +275,8 @@ object EmbeddedWorkCoverImage {
         zip: ZipFile,
         opfDoc: Document,
         manifestById: Map<String, ManifestItem>,
-        spineIndexByKey: Map<String, Int>
+        spineIndexByKey: Map<String, Int>,
+        isCancelled: () -> Boolean = { false }
     ): List<ReaderSectionBuilder.RawTOCEntry> {
         val results = mutableListOf<ReaderSectionBuilder.RawTOCEntry>()
         val seen = mutableSetOf<Int>()
@@ -223,13 +284,18 @@ object EmbeddedWorkCoverImage {
         val navPath = manifestById.values.firstOrNull { item ->
             item.properties.split(Regex("\\s+")).any { it.equals("nav", ignoreCase = true) }
         }?.path
-        if (navPath != null) {
+        if (navPath != null && !isCancelled()) {
             val navUri = toVirtualUri(navPath)
             val navEntry = zip.getEntry(navPath)
-            val navBytes = navEntry?.let { readEntryBounded(zip, it, MAX_TEXT_ENTRY_BYTES) }
+            val navBytes = navEntry?.let { readEntryBounded(zip, it, MAX_TEXT_ENTRY_BYTES, isCancelled) }
             if (navUri != null && navBytes != null) {
                 val doc = Jsoup.parse(navBytes.toString(Charsets.UTF_8))
-                val nav = doc.select("nav[epub\\:type=toc], nav[role=doc-toc], nav").firstOrNull()
+                val navs = doc.select("nav")
+                val nav = navs.firstOrNull { navEl ->
+                    navEl.attr("epub:type").split(Regex("\\s+")).any { it.equals("toc", ignoreCase = true) }
+                } ?: navs.firstOrNull { navEl ->
+                    navEl.attr("role").split(Regex("\\s+")).any { it.equals("doc-toc", ignoreCase = true) }
+                } ?: navs.firstOrNull()
                 nav?.select("a[href]")?.forEach { anchor ->
                     val rawHref = anchor.attr("href").trim()
                     val resolved = resolveRelative(navUri, rawHref)
@@ -243,7 +309,7 @@ object EmbeddedWorkCoverImage {
                 }
             }
         }
-        if (results.isNotEmpty()) return results
+        if (results.isNotEmpty() || isCancelled()) return results
 
         val ncxId = opfDoc.getAllElements()
             .firstOrNull { it.localTagName() == "spine" }
@@ -261,7 +327,7 @@ object EmbeddedWorkCoverImage {
 
         val ncxUri = toVirtualUri(ncxPath) ?: return emptyList()
         val ncxEntry = zip.getEntry(ncxPath) ?: return emptyList()
-        val ncxBytes = readEntryBounded(zip, ncxEntry, MAX_TEXT_ENTRY_BYTES) ?: return emptyList()
+        val ncxBytes = readEntryBounded(zip, ncxEntry, MAX_TEXT_ENTRY_BYTES, isCancelled) ?: return emptyList()
         val ncxDoc = Jsoup.parse(ncxBytes.toString(Charsets.UTF_8), "", Parser.xmlParser())
         ncxDoc.getAllElements()
             .filter { it.localTagName() == "navpoint" }
@@ -289,10 +355,25 @@ object EmbeddedWorkCoverImage {
         return results
     }
 
-    private fun decodeBounds(bytes: ByteArray): Pair<Int, Int>? {
-        val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
-        return if (opts.outWidth > 0 && opts.outHeight > 0) opts.outWidth to opts.outHeight else null
+    private fun decodeBounds(
+        zip: ZipFile,
+        entry: ZipEntry,
+        isCancelled: () -> Boolean
+    ): Pair<Int, Int>? {
+        if (entry.size > MAX_IMAGE_BYTES.toLong() || isCancelled()) return null
+        return runCatching {
+            zip.getInputStream(entry).use { raw ->
+                val bounded = BoundedCancellableInputStream(
+                    delegate = raw,
+                    maxBytes = minOf(MAX_IMAGE_BYTES, MAX_HEADER_BYTES),
+                    isCancelled = isCancelled
+                )
+                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeStream(bounded, null, opts)
+                if (bounded.cancelled) return@runCatching null
+                if (opts.outWidth > 0 && opts.outHeight > 0) opts.outWidth to opts.outHeight else null
+            }
+        }.getOrNull()
     }
 
     private fun applyExifOrientation(bitmap: Bitmap, rawBytes: ByteArray): Bitmap {
@@ -343,25 +424,111 @@ object EmbeddedWorkCoverImage {
         return flattened
     }
 
-    private fun readEntryBounded(zip: ZipFile, entry: ZipEntry, maxBytes: Int): ByteArray? {
+    private fun readEntryBounded(
+        zip: ZipFile,
+        entry: ZipEntry,
+        maxBytes: Int,
+        isCancelled: () -> Boolean = { false }
+    ): ByteArray? {
         val declared = entry.size
-        if (declared > maxBytes.toLong()) return null
+        if (declared > maxBytes.toLong() || isCancelled()) return null
         return runCatching {
             zip.getInputStream(entry).use { input ->
-                val initial = if (declared in 1..65_536) declared.toInt() else 8_192
-                val out = ByteArrayOutputStream(initial)
-                val buffer = ByteArray(8_192)
-                var total = 0
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count < 0) break
-                    total += count
-                    if (total > maxBytes) return@runCatching null
-                    out.write(buffer, 0, count)
+                if (declared in 1L..maxBytes.toLong()) {
+                    val expected = declared.toInt()
+                    val exact = ByteArray(expected)
+                    var offset = 0
+                    while (offset < expected) {
+                        if (isCancelled()) return@runCatching null
+                        val count = input.read(exact, offset, minOf(65_536, expected - offset))
+                        if (count < 0) break
+                        offset += count
+                    }
+                    if (offset == expected) {
+                        if (isCancelled()) return@runCatching null
+                        val extra = input.read()
+                        if (extra < 0) return@runCatching exact
+                        if (expected + 1 > maxBytes) return@runCatching null
+                        val out = ByteArrayOutputStream(minOf(maxBytes, expected + 8_192))
+                        out.write(exact, 0, offset)
+                        out.write(extra)
+                        return@runCatching readRemainingBounded(input, out, offset + 1, maxBytes, isCancelled)
+                    }
+                    return@runCatching exact.copyOf(offset)
                 }
-                out.toByteArray()
+                val out = ByteArrayOutputStream(8_192)
+                readRemainingBounded(input, out, 0, maxBytes, isCancelled)
             }
         }.getOrNull()
+    }
+
+    private fun readRemainingBounded(
+        input: InputStream,
+        out: ByteArrayOutputStream,
+        initialTotal: Int,
+        maxBytes: Int,
+        isCancelled: () -> Boolean
+    ): ByteArray? {
+        val buffer = ByteArray(8_192)
+        var total = initialTotal
+        while (true) {
+            if (isCancelled()) return null
+            val count = input.read(buffer)
+            if (count < 0) break
+            total += count
+            if (total > maxBytes) return null
+            out.write(buffer, 0, count)
+        }
+        return out.toByteArray()
+    }
+
+    /** Caps header-sniffing reads and aborts promptly if the scan's waiters leave composition. */
+    private class BoundedCancellableInputStream(
+        delegate: InputStream,
+        maxBytes: Int,
+        private val isCancelled: () -> Boolean
+    ) : FilterInputStream(delegate) {
+        private var remaining: Int = maxBytes
+        var cancelled: Boolean = false
+            private set
+
+        override fun markSupported(): Boolean = false
+
+        override fun read(): Int {
+            if (isCancelled()) {
+                cancelled = true
+                return -1
+            }
+            if (remaining <= 0) return -1
+            val value = `in`.read()
+            if (value >= 0) remaining -= 1
+            return value
+        }
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            if (len == 0) return 0
+            if (isCancelled()) {
+                cancelled = true
+                return -1
+            }
+            if (remaining <= 0) return -1
+            val toRead = minOf(len, remaining)
+            val count = `in`.read(b, off, toRead)
+            if (count > 0) remaining -= count
+            return count
+        }
+
+        override fun skip(n: Long): Long {
+            if (n <= 0L) return 0L
+            if (isCancelled()) {
+                cancelled = true
+                return 0L
+            }
+            if (remaining <= 0) return 0L
+            val skipped = `in`.skip(minOf(n, remaining.toLong()))
+            if (skipped > 0L) remaining -= skipped.toInt()
+            return skipped
+        }
     }
 
     private fun toVirtualUri(entryName: String): URI? {

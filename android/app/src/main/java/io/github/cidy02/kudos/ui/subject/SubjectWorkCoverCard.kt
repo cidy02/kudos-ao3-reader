@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -52,6 +53,7 @@ import androidx.compose.ui.semantics.contentDescription
 import io.github.cidy02.kudos.ui.components.statusChips
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.DownloadQueueStatus
+import io.github.cidy02.kudos.works.EMBEDDED_COVER_ART_IMAGE_TAG
 import io.github.cidy02.kudos.works.WorkTags
 import io.github.cidy02.kudos.works.rememberWorkEmbeddedCoverArt
 
@@ -360,7 +362,9 @@ internal fun CoverSurface(
                 bitmap = coverArt,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.matchParentSize()
+                modifier = Modifier
+                    .matchParentSize()
+                    .testTag(EMBEDDED_COVER_ART_IMAGE_TAG)
             )
             val scrim = if (hero) {
                 Brush.verticalGradient(

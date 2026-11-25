@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -52,6 +53,7 @@ import io.github.cidy02.kudos.ui.subject.downloadDimmed
 import io.github.cidy02.kudos.ui.subject.photoOverlayTokens
 import io.github.cidy02.kudos.ui.subject.WorkReadingOrDownloadRing
 import io.github.cidy02.kudos.works.ChapterLengths
+import io.github.cidy02.kudos.works.EMBEDDED_COVER_ART_IMAGE_TAG
 import io.github.cidy02.kudos.works.WorkReadingPosition
 import java.time.Instant
 
@@ -411,7 +413,9 @@ fun WorkDetailResumeCard(
                 bitmap = coverArt,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.matchParentSize()
+                modifier = Modifier
+                    .matchParentSize()
+                    .testTag(EMBEDDED_COVER_ART_IMAGE_TAG)
             )
             Box(
                 Modifier

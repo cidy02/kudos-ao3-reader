@@ -963,6 +963,43 @@ class CoverArtBackupTest {
     }
 
     @Test
+    fun malformedUseEmbeddedCoverArtSettingDecodesAsAbsentAndDoesNotCoerceStrings() = runTest {
+        val sourceZip = makeDevice("kudos-cover-bad-setting-src").use { source ->
+            source.settingsRepo.updateUseEmbeddedCoverArt(false)
+            source.backupRepo.exportV2ZipBytes()
+        }
+        val root = manifestJsonFromZip(sourceZip)
+        val settings = root.getValue("settings").jsonObject
+
+        val invalidValues = listOf(
+            JsonPrimitive("true"),
+            JsonPrimitive("false"),
+            JsonPrimitive("yes"),
+            JsonPrimitive(1),
+            buildJsonObject { put("enabled", true) },
+            JsonArray(listOf(JsonPrimitive(true)))
+        )
+        for (bad in invalidValues) {
+            val modified = JsonObject(
+                root + ("settings" to JsonObject(settings + ("useEmbeddedCoverArt" to bad)))
+            )
+            val bytes = BackupJson.encodeToString(JsonObject.serializer(), modified).toByteArray(Charsets.UTF_8)
+            val decoded = BackupValidator.decodeManifest(bytes)
+            assertNull("Expected null for malformed settings.useEmbeddedCoverArt=$bad", decoded.settings.useEmbeddedCoverArt)
+
+            // Restoring a manifest with malformed useEmbeddedCoverArt leaves local preference intact.
+            makeDevice("kudos-cover-bad-setting-dst").use { local ->
+                local.settingsRepo.updateUseEmbeddedCoverArt(false)
+                local.backupRepo.importPackage(
+                    KudosBackupPackage(manifest = decoded),
+                    mode = BackupImportMode.REPLACE_LIBRARY
+                )
+                assertFalse(local.settingsRepo.snapshot().app.useEmbeddedCoverArt)
+            }
+        }
+    }
+
+    @Test
     fun aMergeThatAdoptsTheChoiceLeavesTheWorkClockToTheUsualRule() = runTest {
         val archive = makeDevice("kudos-cover-workclock-remote").use { remote ->
             remote.db.workDao().upsert(

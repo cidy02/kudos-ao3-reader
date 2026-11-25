@@ -4,17 +4,20 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import io.github.cidy02.kudos.account.coverFace
 import io.github.cidy02.kudos.backup.BackupMergeService
 import io.github.cidy02.kudos.core.model.AppSettings
 import io.github.cidy02.kudos.core.model.CoverArtPreference
 import io.github.cidy02.kudos.core.model.CoverArtResolution
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -28,6 +31,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -312,7 +316,7 @@ class CoverArtPreferenceAndExtractionTest {
 
         val loader = EmbeddedCoverArtLoader(
             directory = cacheDir,
-            scan = {
+            scan = { _, _ ->
                 if (scanCalls.incrementAndGet() == 1) {
                     started.countDown()
                     release.await(5, TimeUnit.SECONDS)
@@ -334,13 +338,15 @@ class CoverArtPreferenceAndExtractionTest {
         // In-memory negative cache hit avoids rescanning.
         assertNotNull(loader.peekCached(epub))
         assertNull(loader.peekCached(epub)?.bitmap)
+        assertEquals(false, loader.peekHasArt(epub))
         assertNull(loader.load("work-1", epub))
+        assertFalse(loader.hasEmbeddedArt("work-1", epub))
         assertEquals(1, scanCalls.get())
 
         // Fresh loader reads the .empty disk sentinel without rescanning.
         val reloaded = EmbeddedCoverArtLoader(
             directory = cacheDir,
-            scan = {
+            scan = { _, _ ->
                 scanCalls.incrementAndGet()
                 nextScanResult
             }
@@ -358,6 +364,7 @@ class CoverArtPreferenceAndExtractionTest {
         assertEquals(1, files.size)
         assertTrue(files.single().name.endsWith(".jpg"))
         assertNotNull(reloaded.peekCached(epub)?.bitmap)
+        assertEquals(true, reloaded.peekHasArt(epub))
     }
 
     @Test
@@ -377,7 +384,7 @@ class CoverArtPreferenceAndExtractionTest {
 
         val loader = EmbeddedCoverArtLoader(
             directory = cacheDir,
-            scan = {
+            scan = { _, _ ->
                 if (scanCount.incrementAndGet() == 1) {
                     firstStarted.countDown()
                     releaseFirst.await(5, TimeUnit.SECONDS)
@@ -398,6 +405,217 @@ class CoverArtPreferenceAndExtractionTest {
         // Allow tail job to observe abandoned waiter and exit.
         kotlinx.coroutines.delay(50)
         assertEquals(1, scanCount.get())
+    }
+
+    @Test
+    fun loaderNeverStatsOnCallerThreadAndCachesHasEmbeddedArt() = runBlocking {
+        val callerThread = Thread.currentThread()
+        val cacheDir = File(tempDir, "no-main-stat-cache")
+        val realEpub = File(tempDir, "guarded.epub").apply {
+            writeBytes(byteArrayOf(7, 8, 9))
+            setLastModified(1_700_000_000_000L)
+        }
+        val guardedFile = object : File(realEpub.absolutePath) {
+            override fun isFile(): Boolean {
+                assertNotSame("isFile() must not run on caller thread", callerThread, Thread.currentThread())
+                return super.isFile()
+            }
+
+            override fun lastModified(): Long {
+                assertNotSame("lastModified() must not run on caller thread", callerThread, Thread.currentThread())
+                return super.lastModified()
+            }
+
+            override fun length(): Long {
+                assertNotSame("length() must not run on caller thread", callerThread, Thread.currentThread())
+                return super.length()
+            }
+        }
+
+        val scanCalls = AtomicInteger(0)
+        val png = pngBytes(400, 600, Color.CYAN)
+        val loader = EmbeddedCoverArtLoader(
+            directory = cacheDir,
+            scan = { _, _ ->
+                scanCalls.incrementAndGet()
+                png
+            },
+            scanDispatcher = Dispatchers.IO
+        )
+
+        // Synchronous peeks do zero stat() calls on the caller thread.
+        assertNull(loader.peekCached(guardedFile))
+        assertNull(loader.peekHasArt(guardedFile))
+
+        // Off-main-thread hasEmbeddedArt scans once and populates both caches.
+        assertTrue(loader.hasEmbeddedArt("work-guarded", guardedFile))
+        assertEquals(1, scanCalls.get())
+        assertEquals(true, loader.peekHasArt(guardedFile))
+        assertNotNull(loader.peekCached(guardedFile)?.bitmap)
+
+        // Subsequent calls hit cache without rescanning or stat'ing on callerThread.
+        assertTrue(loader.hasEmbeddedArt("work-guarded", guardedFile))
+        assertNotNull(loader.load("work-guarded", guardedFile))
+        assertEquals(1, scanCalls.get())
+    }
+
+    @Test
+    fun cancellingActiveScanSignalsIsCancelledDoesNotWriteEmptyAndUnblocksQueue() = runBlocking {
+        val cacheDir = File(tempDir, "active-cancel-cache")
+        val epub1 = File(tempDir, "active-one.epub").apply {
+            writeBytes(byteArrayOf(1))
+            setLastModified(1_700_000_000_000L)
+        }
+        val epub2 = File(tempDir, "active-two.epub").apply {
+            writeBytes(byteArrayOf(2))
+            setLastModified(1_700_000_000_000L)
+        }
+        val firstScanStarted = CountDownLatch(1)
+        val firstSawCancel = AtomicBoolean(false)
+        val firstScanAttempts = AtomicInteger(0)
+        val coverPng = pngBytes(400, 600, Color.BLUE)
+
+        val loader = EmbeddedCoverArtLoader(
+            directory = cacheDir,
+            scan = { file, isCancelled ->
+                if (file.name == epub1.name && firstScanAttempts.incrementAndGet() == 1) {
+                    firstScanStarted.countDown()
+                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                    while (!isCancelled() && System.nanoTime() < deadline) {
+                        Thread.sleep(5)
+                    }
+                    if (isCancelled()) {
+                        firstSawCancel.set(true)
+                        null
+                    } else {
+                        coverPng
+                    }
+                } else {
+                    coverPng
+                }
+            },
+            scanDispatcher = Dispatchers.IO
+        )
+
+        val job1 = launch(Dispatchers.Default) { loader.load("work-1", epub1) }
+        assertTrue(firstScanStarted.await(5, TimeUnit.SECONDS))
+        val deferred2 = async(Dispatchers.Default) { loader.load("work-2", epub2) }
+
+        // Cancel active scan for work-1; scan receives isCancelled() == true and unblocks work-2.
+        job1.cancelAndJoin()
+        assertNotNull(deferred2.await())
+        assertTrue("Active scan should have observed cancellation", firstSawCancel.get())
+        assertNull("Cancelled scan must not negative-cache work-1", loader.peekCached(epub1))
+        assertNull("Cancelled scan must not cache hasArt=false for work-1", loader.peekHasArt(epub1))
+        assertTrue(
+            "Cancelled scan must not persist a .empty sentinel for work-1",
+            cacheDir.listFiles().orEmpty().none { it.name.startsWith("work-1-") && it.name.endsWith(".empty") }
+        )
+
+        // Retrying work-1 now succeeds and extracts its real cover.
+        assertNotNull(loader.load("work-1", epub1))
+        assertEquals(2, firstScanAttempts.get())
+    }
+
+    @Test
+    fun epub3NavSelectsTocTokenOverEarlierLandmarksAndRejectsSubstringMatches() {
+        val frontPng = pngBytes(360, 540, Color.RED)
+        val chapterPng = pngBytes(600, 900, Color.GREEN)
+        val navXhtml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+            <body>
+                <nav epub:type="landmarks">
+                    <ol><li><a href="front.xhtml">Chapter 1</a></li></ol>
+                </nav>
+                <nav epub:type="notoc">
+                    <ol><li><a href="front.xhtml">Chapter 1</a></li></ol>
+                </nav>
+                <nav epub:type="landmarks toc">
+                    <ol>
+                        <li><a href="front.xhtml">Preface</a></li>
+                        <li><a href="chapter1.xhtml">Chapter 1</a></li>
+                    </ol>
+                </nav>
+            </body>
+            </html>
+        """.trimIndent()
+        val epub = writeZip(
+            File(tempDir, "epub3-nav.epub"),
+            mapOf(
+                "META-INF/container.xml" to containerXml("OEBPS/content.opf"),
+                "OEBPS/content.opf" to opfXml(
+                    manifestItems = listOf(
+                        """<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>""",
+                        """<item id="front" href="front.xhtml" media-type="application/xhtml+xml"/>""",
+                        """<item id="ch1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>"""
+                    ),
+                    spineIds = listOf("front", "ch1")
+                ),
+                "OEBPS/nav.xhtml" to navXhtml,
+                "OEBPS/front.xhtml" to xhtmlWithBody("""<img src="front.png"/>"""),
+                "OEBPS/chapter1.xhtml" to xhtmlWithBody("""<img src="chapter1.png"/>"""),
+                "OEBPS/front.png" to frontPng,
+                "OEBPS/chapter1.png" to chapterPng
+            )
+        )
+
+        // Because the multi-token `epub:type="landmarks toc"` nav is picked (not earlier landmarks/notoc),
+        // front.xhtml is front matter and beats the larger chapter1.png.
+        val extracted = EmbeddedWorkCoverImage.data(epub)
+        assertNotNull(extracted)
+        assertArrayEquals(frontPng, extracted)
+    }
+
+    @Test
+    fun deduplicatesRepeatedHrefsCapsCandidateCountAndRespectsCancellation() {
+        val smallPng = pngBytes(360, 500, Color.GRAY)
+        val mediumPng = pngBytes(480, 720, Color.MAGENTA)
+        val hugePng = pngBytes(800, 1000, Color.YELLOW)
+        val repeatedTags = (1..200).joinToString("\n") { """<img src="dup.png"/>""" }
+        val distinctTags = (1..70).joinToString("\n") { idx -> """<img src="img-$idx.png"/>""" }
+        val entries = linkedMapOf<String, Any>(
+            "META-INF/container.xml" to containerXml("OEBPS/content.opf"),
+            "OEBPS/content.opf" to opfXml(
+                manifestItems = listOf(
+                    """<item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>"""
+                ),
+                spineIds = listOf("ch1")
+            ),
+            "OEBPS/ch1.xhtml" to xhtmlWithBody("$repeatedTags\n$distinctTags"),
+            "OEBPS/dup.png" to smallPng
+        )
+        // dup.png repeats 200 times (deduplicated to 1 candidate), img-1 is medium (wins over dup.png
+        // only when repeated hrefs are deduplicated), and img-70 is beyond MAX_IMAGE_CANDIDATES = 64.
+        entries["OEBPS/img-1.png"] = mediumPng
+        for (i in 2..69) {
+            entries["OEBPS/img-$i.png"] = smallPng
+        }
+        entries["OEBPS/img-70.png"] = hugePng
+
+        val epub = writeZip(File(tempDir, "capped.epub"), entries)
+
+        // Cancelled immediately returns null.
+        assertNull(EmbeddedWorkCoverImage.data(epub, isCancelled = { true }))
+
+        // Deduplication lets img-1 beat dup.png; candidate cap (64) stops before img-70.
+        val extracted = EmbeddedWorkCoverImage.data(epub)
+        assertNotNull(extracted)
+        assertArrayEquals(mediumPng, extracted)
+    }
+
+    @Test
+    fun remoteSummaryCoverFaceSetsHasEpubFalse() {
+        val summary = AO3WorkSummary(
+            id = 12345L,
+            title = "Remote Work",
+            authors = listOf("Author"),
+            fandoms = listOf("Fandom"),
+            rating = "General Audiences",
+            warnings = listOf("No Archive Warnings Apply"),
+            categories = listOf("Gen")
+        )
+        assertFalse(summary.coverFace().hasEpub)
     }
 
     private fun pngBytes(width: Int, height: Int, color: Int): ByteArray {
