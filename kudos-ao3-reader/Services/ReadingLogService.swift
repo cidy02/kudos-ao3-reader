@@ -755,6 +755,7 @@ enum ReadingLogService {
                 chapterCount: session.chapterCountAtVisit > 0
                     ? session.chapterCountAtVisit : work?.postedChapterCount ?? 0,
                 startProgress: session.startProgress,
+                tzOffsetSeconds: session.tzOffsetSeconds,
                 mode: session.mode,
                 wordUnit: work?.wordUnit ?? .words
             )
@@ -1046,6 +1047,7 @@ enum ReadingLogService {
         var insights: ReadingInsights
         var taste: ReadingTasteInsights?
         var habits: ReadingHabitsInsights
+        var chapterTiming: InsightsProvenance.ChapterTimingFigure
         var library: ReadingLibraryInsights
         var libraryStats: ReadingStatistics
         var finishedWorksInPeriod: [SavedWork]
@@ -1176,9 +1178,14 @@ enum ReadingLogService {
             calendar: req.calendar,
             aliases: resolvedAliases
         )
+        let chapterTiming = InsightsProvenance.chapterTiming(
+            sessions: filtered.sessions.filter { req.period.contains($0.startedAt) }
+        )
         let library = ReadingLibraryInsights.make(
             works: libraryWorks,
             facts: periodFacts,
+            allFacts: allFacts,
+            seriesSnapshots: SavedSeriesStore.snapshots(in: req.context),
             periodInterval: req.period,
             periodMonths: req.periodMonths,
             calendar: req.calendar,
@@ -1193,9 +1200,8 @@ enum ReadingLogService {
             calendar: req.calendar,
             aliases: resolvedAliases
         )
-        let finishedWorksInPeriod = filtered.works.filter { w in
-            w.isFinished && periodFacts.contains { $0.workID == w.id && $0.didFinish }
-        }
+        let finishedIDs = Set(periodFacts.filter(\.didFinish).map(\.workID))
+        let finishedWorksInPeriod = filtered.works.filter { $0.isFinished && finishedIDs.contains($0.id) }
         let masker = InsightsDiscreetMasker.forScreen(
             InsightsDiscreetMasker.ScreenSeed(
                 insights: figures,
@@ -1213,6 +1219,7 @@ enum ReadingLogService {
             insights: figures,
             taste: taste,
             habits: habits,
+            chapterTiming: chapterTiming,
             library: library,
             libraryStats: libraryStats,
             finishedWorksInPeriod: finishedWorksInPeriod,

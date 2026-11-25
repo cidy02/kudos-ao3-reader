@@ -36,6 +36,33 @@ struct InsightsP3DataTests {
 
     // MARK: D7 pure rules
 
+    @Test func chapterCardUsesMeasuredSpansAndExcludesFinishesFromEndShare() {
+        let work = UUID()
+        let first = ReadingSession(
+            workID: work, startedAt: t0, endedAt: t0.addingTimeInterval(120),
+            durationSeconds: 120, startSpineIndex: 2, lastSpineIndex: 3,
+            chapterCountAtVisit: 12
+        )
+        first.endedAtChapterEnd = true
+        first.peekedAtEnding = true
+        first.skimmedChapters = [2]
+        first.chapterWords = [2: 400]
+        let finish = ReadingSession(
+            workID: work, startedAt: t0.addingTimeInterval(3600),
+            endedAt: t0.addingTimeInterval(3720), durationSeconds: 120,
+            startSpineIndex: 4, lastSpineIndex: 4,
+            chapterCountAtVisit: 12, didFinish: true
+        )
+        finish.endedAtChapterEnd = false
+        let figure = InsightsProvenance.chapterTiming(sessions: [first, finish])
+        #expect(figure.averageChaptersEach == 1.5)
+        #expect(figure.chapterEndShare == 1)
+        #expect(figure.skimmedWords == 400)
+        #expect(figure.peekedWorks == 1)
+        #expect(InsightsProvenance.chapterTiming(sessions: []).averageChaptersEach == nil)
+        #expect(InsightsProvenance.chapterTiming(sessions: []).chapterEndShare == nil)
+    }
+
     @Test func medianPaceNeedsTwentyChaptersOfHistory() {
         let sample = ChapterTiming.PaceSample(words: 3_000, seconds: 600) // 5 words a second
         #expect(ChapterTiming.medianWordsPerSecond(Array(repeating: sample, count: 19)) == nil)

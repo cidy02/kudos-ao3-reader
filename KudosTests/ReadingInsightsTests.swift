@@ -632,6 +632,77 @@ struct ReadingInsightsTests {
         #expect(beforeRecording.foundEarlyCount == 0)
     }
 
+    @Test func seriesAuthorsAndFavoritesUseRecordedIdentityAndLastPart() {
+        let first = SavedWork(title: "First", author: "A")
+        first.ao3SeriesID = 7
+        first.seriesPosition = 1
+        first.lastSpineIndex = 1
+        first.lastReadDate = day(1)
+        first.isFinished = true
+        first.isFavorite = true
+        first.verifiedAuthorIdentities = [AO3AuthorIdentity(route: AO3AuthorRoute(username: "writer")!)]
+        let last = SavedWork(title: "Last", author: "A")
+        last.ao3SeriesID = 7
+        last.seriesPosition = 3
+        last.lastSpineIndex = 1
+        last.lastReadDate = day(2)
+        last.isFinished = true
+        last.verifiedAuthorIdentities = first.verifiedAuthorIdentities
+        let series = SavedSeriesSnapshot(ao3SeriesID: 7, title: "Series", partCount: 3,
+            isComplete: true, wordCount: 30_000)
+        let allFacts = [fact(work: first.id, on: 1, minutes: 30, words: 1_000),
+                        fact(work: last.id, on: 2, minutes: 30, words: 2_000)]
+        let figures = ReadingLibraryInsights.make(
+            works: [first, last], facts: allFacts, allFacts: allFacts,
+            seriesSnapshots: [series], periodInterval: DateInterval(start: day(1), end: day(3)),
+            calendar: calendar
+        )
+        #expect(figures.favoriteWithoutKudosCount == 1)
+        #expect(figures.seriesStartedCount == 1)
+        #expect(figures.seriesReadToLastCount == 1)
+        #expect(figures.seriesNextWaitingCount == 0)
+        #expect(figures.authors.first?.name == "writer")
+        #expect(figures.authors.first?.works == 2)
+        #expect(figures.authors.first?.words == 3_000)
+    }
+
+    @Test func tasteTagsCountWorksAndUnknownLabelsFillBreakdowns() {
+        let work = SavedWork(title: "T", author: "A")
+        work.workTags = ["Shared"]
+        let facts = [fact(work: work.id, on: 1, minutes: 30, words: 100),
+                     fact(work: work.id, on: 2, minutes: 30, words: 200)]
+        let taste = ReadingTasteInsights.make(works: [work], facts: facts)
+        #expect(taste.tags.first?.count == 1)
+        #expect(taste.tags.first?.words == 300)
+        #expect(taste.ratings.reduce(0) { $0 + $1.count } == 1)
+        #expect(taste.languages.reduce(0) { $0 + $1.count } == 1)
+        #expect(taste.yearCounts.isEmpty)
+        #expect(taste.usualFicTags.isEmpty)
+        #expect(taste.usualFicSummary.contains("five works"))
+    }
+
+    @Test func usualFicCallsUnsharedFieldsVariedAfterFiveWorks() {
+        let works = (0..<5).map { SavedWork(title: "\($0)", author: "A") }
+        for (index, work) in works.enumerated() { work.rating = "Rating \(index)" }
+        let facts = works.enumerated().map { index, work in
+            fact(work: work.id, on: index + 1, minutes: 20, words: 100)
+        }
+        let taste = ReadingTasteInsights.make(works: works, facts: facts)
+        #expect(taste.usualRating == "varied")
+        #expect(taste.usualFicSummary.contains("varied"))
+    }
+
+    @Test func oftenTogetherRequiresThreeWorksAndLiftAboveChance() {
+        let works = (0..<6).map { SavedWork(title: "\($0)", author: "A") }
+        for work in works.prefix(3) { work.workTags = ["A", "B"] }
+        for work in works.dropFirst(3) { work.workTags = ["C"] }
+        let pairs = ReadingInsights.oftenTogetherTags(from: works)
+        #expect(pairs.count == 1)
+        #expect(pairs.first?.tagA == "A")
+        #expect(pairs.first?.tagB == "B")
+        #expect(ReadingInsights.oftenTogetherTags(from: Array(works.prefix(2))).isEmpty)
+    }
+
     @Test func checkShownFiguresReproduce() {
         let (facts, _, _) = checkFixture()
         let insights = ReadingInsights.make(facts: facts, calendar: calendar)

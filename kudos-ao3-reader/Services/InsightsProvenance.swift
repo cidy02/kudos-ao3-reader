@@ -23,15 +23,35 @@ enum InsightsProvenance {
         var peekedWorks = 0
         /// Sittings the skim rule was applied to (read-mode sittings that stored a judgement).
         var judgedSittings = 0
+        var chaptersEntered = 0
+        var chapterSpansMeasured = 0
+        var eligibleChapterEnds = 0
+        var chapterEnds = 0
+
+        var averageChaptersEach: Double? {
+            chapterSpansMeasured == 0 ? nil : Double(chaptersEntered) / Double(chapterSpansMeasured)
+        }
+
+        var chapterEndShare: Double? {
+            eligibleChapterEnds == 0 ? nil : Double(chapterEnds) / Double(eligibleChapterEnds)
+        }
     }
 
     static func chapterTiming(sessions: [ReadingSession]) -> ChapterTimingFigure {
         var figure = ChapterTimingFigure()
         var peeked: Set<UUID> = []
         for session in sessions {
+            if let start = session.startSpineIndex, session.lastSpineIndex >= start {
+                figure.chapterSpansMeasured += 1
+                figure.chaptersEntered += session.lastSpineIndex - start + 1
+            }
             if let ended = session.endedAtChapterEnd {
                 figure.sittingsMeasured += 1
                 if ended { figure.sittingsEndedAtChapterEnd += 1 }
+                if !session.didFinish && session.chapterCountAtVisit > 1 {
+                    figure.eligibleChapterEnds += 1
+                    if ended { figure.chapterEnds += 1 }
+                }
             }
             if session.peekedAtEnding == true { peeked.insert(session.workID) }
             guard session.skimmedChaptersJSON != nil else { continue }

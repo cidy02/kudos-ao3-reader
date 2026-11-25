@@ -46,6 +46,7 @@ struct ReadingInsightsView: View {
     @State private var insights = ReadingInsights()
     @State private var tasteInsights: ReadingTasteInsights?
     @State private var habitsInsights: ReadingHabitsInsights?
+    @State private var chapterTiming = InsightsProvenance.ChapterTimingFigure()
     @State private var libraryInsights: ReadingLibraryInsights?
     @State private var libraryStats: ReadingStatistics?
 
@@ -465,6 +466,7 @@ struct ReadingInsightsView: View {
             biggestDayWords: insights.biggestDay?.words ?? 0,
             medianSessionSeconds: insights.medianSessionSeconds,
             wordsPerHour: insights.wordsPerHour,
+            charactersPerHour: insights.charactersPerHour,
             hideReadingTime: hideReadingTime
         )
 
@@ -476,6 +478,8 @@ struct ReadingInsightsView: View {
                 discreetMode: discreetMode,
                 discreetMasker: discreetMasker
             )
+        } else {
+            InsightsUnavailableCard(title: "Finished", explanation: "No works finished in this period.")
         }
 
         if hideMature {
@@ -637,6 +641,8 @@ struct ReadingInsightsView: View {
                 hideReadingTime: hideReadingTime
             )
 
+            HabitsChapterTimingCard(figure: chapterTiming)
+
             InsightsUnavailableCard(title: "New Chapters", explanation: "Chapter posting and first-read dates are not available yet.")
 
             if habits.savedToOpenedMedianDays != nil || habits.openedToFinishedMedianDays != nil {
@@ -706,6 +712,19 @@ struct ReadingInsightsView: View {
             }
 
             InsightsUnavailableCard(title: "Bookmarked · Commented", explanation: "Your AO3 bookmark and comment actions are not recorded yet.")
+
+            LibraryFavouritesAndSeriesCard(
+                favoritesWithoutKudos: lib.favoriteWithoutKudosCount,
+                seriesStarted: lib.seriesStartedCount,
+                seriesReadToLast: lib.seriesReadToLastCount,
+                nextWaiting: lib.seriesNextWaitingCount
+            )
+
+            if lib.authors.isEmpty {
+                InsightsUnavailableCard(title: "Authors", explanation: "No read works have a recorded AO3 author account yet.")
+            } else {
+                LibraryAuthorsCard(authors: lib.authors, discreetMode: discreetMode)
+            }
 
             if lib.arrivalRows.isEmpty {
                 InsightsUnavailableCard(title: "How Finished Works Arrived", explanation: "Import source recording has not begun for these works.")
@@ -812,6 +831,7 @@ struct ReadingInsightsView: View {
         insights = ReadingInsights()
         tasteInsights = nil
         habitsInsights = nil
+        chapterTiming = InsightsProvenance.ChapterTimingFigure()
         libraryInsights = nil
         libraryStats = nil
         finishedWorksInPeriod = []
@@ -868,6 +888,7 @@ struct ReadingInsightsView: View {
         insights = gathered.insights
         tasteInsights = gathered.taste
         habitsInsights = gathered.habits
+        chapterTiming = gathered.chapterTiming
         libraryInsights = gathered.library
         libraryStats = gathered.libraryStats
         finishedWorksInPeriod = gathered.finishedWorksInPeriod

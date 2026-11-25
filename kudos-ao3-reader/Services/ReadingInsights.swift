@@ -796,12 +796,14 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
     /// Tag pairs that appear together on >= minimumCount works.
     static func oftenTogetherTags(
         from works: [SavedWork],
-        minimumCount: Int = 2,
+        minimumCount: Int = 3,
         aliases: TagAliasResolver = .empty
     ) -> [TagPair] {
         var pairCounts: [String: (a: String, b: String, count: Int)] = [:]
+        var tagCounts: [String: Int] = [:]
         for work in works {
             let tags = aliases.resolvedUnique(work.workTags, kind: .freeform).sorted()
+            for tag in tags { tagCounts[tag, default: 0] += 1 }
             guard tags.count >= 2 else { continue }
             for i in 0..<tags.count {
                 for j in (i + 1)..<tags.count {
@@ -814,8 +816,15 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
             }
         }
         return pairCounts.values
-            .filter { $0.count >= minimumCount }
-            .sorted { $0.count > $1.count }
+            .filter {
+                $0.count >= minimumCount
+                    && Double($0.count * works.count) >= 1.5 * Double((tagCounts[$0.a] ?? 0) * (tagCounts[$0.b] ?? 0))
+            }
+            .sorted {
+                let lhs = Double($0.count * works.count) / Double(max(1, (tagCounts[$0.a] ?? 0) * (tagCounts[$0.b] ?? 0)))
+                let rhs = Double($1.count * works.count) / Double(max(1, (tagCounts[$1.a] ?? 0) * (tagCounts[$1.b] ?? 0)))
+                return lhs == rhs ? $0.count > $1.count : lhs > rhs
+            }
             .prefix(4)
             .map { TagPair(tagA: $0.a, tagB: $0.b, worksCount: $0.count) }
     }
@@ -1023,15 +1032,16 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
         }.sorted { $0.count > $1.count }
 
         var tagWords: [String: (words: Int, count: Int)] = [:]
+        var seenTagWorks: [String: Set<UUID>] = [:]
         for fact in facts where fact.wordUnit == .words {
             let work = worksByID[fact.workID]
             for tag in aliases.resolvedUnique(work?.workTags ?? [], kind: .freeform) {
                 tagWords[tag, default: (words: 0, count: 0)].words += fact.wordsRead
-                tagWords[tag]?.count += 1
+                seenTagWorks[tag, default: []].insert(fact.workID)
             }
         }
         let tags = tagWords.map { key, val in
-            TagShare(name: key, words: val.words, count: val.count)
+            TagShare(name: key, words: val.words, count: seenTagWorks[key]?.count ?? 0)
         }.sorted { $0.words > $1.words }
 
         let oftenTogether = ReadingInsights.oftenTogetherTags(from: effectiveWorks, aliases: aliases)
@@ -1039,7 +1049,7 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
         var ratingCounts: [String: Int] = [:]
         for work in effectiveWorks {
             let r = work.rating.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !r.isEmpty { ratingCounts[r, default: 0] += 1 }
+            ratingCounts[r.isEmpty ? "Not Rated" : r, default: 0] += 1
         }
         let ratingsOrder = ["General Audiences", "Teen And Up Audiences", "Mature", "Explicit", "Not Rated"]
         let ratings = ratingsOrder.compactMap { label -> CountBreakdown? in
@@ -1077,7 +1087,7 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
         var yearMap: [Int: Int] = [:]
         let calendar = Calendar.current
         for work in effectiveWorks {
-            if let date = WorkStat.date(from: work.datePublished) ?? work.downloadedAt {
+            if let date = WorkStat.date(from: work.datePublished) {
                 let y = calendar.component(.year, from: date)
                 if y > 1990 && y <= calendar.component(.year, from: Date()) {
                     yearMap[y, default: 0] += 1
@@ -1094,39 +1104,41 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
         var langCounts: [String: Int] = [:]
         for work in effectiveWorks {
             let l = work.language.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !l.isEmpty { langCounts[l, default: 0] += 1 }
+            langCounts[l.isEmpty ? "Unknown" : l, default: 0] += 1
         }
         let languages = langCounts.map { CountBreakdown(label: $0.key, count: $0.value) }
             .sorted { $0.count > $1.count }
 
-        let statusStr = (effectiveWorks.filter(\.isFinished).count >= max(1, effectiveWorks.count / 2)) ? "complete" : "in-progress"
-        let ratingStr = ratings.first?.label ?? "Teen"
-        let catStr = categories.first?.label ?? "F/M"
-        let topTagStr = tags.first?.name.lowercased() ?? "slow burn"
-        let topFandomStr = fandomShares.first(where: { !$0.isRemainder })?.name ?? "AO3"
-        let topRel = relationships.first?.name ?? ""
-        let extraTags = tags.dropFirst().prefix(2).map { $0.name.lowercased() }.joined(separator: " and ")
-
-        let summary: String
-        if !topRel.isEmpty && !extraTags.isEmpty {
-            summary = "A \(statusStr), \(ratingStr)-rated \(catStr) \(topTagStr) in \(topFandomStr), 50–150k words long, with \(topRel), \(extraTags)."
-        } else {
-            summary = "A \(statusStr), \(ratingStr)-rated \(catStr) \(topTagStr) in \(topFandomStr)."
+        func common(_ values: [String]) -> String {
+            let counts = Dictionary(grouping: values.filter { !$0.isEmpty }, by: { $0 }).mapValues(\.count)
+            guard let top = counts.max(by: { $0.value < $1.value }),
+                  Double(top.value) / Double(max(1, effectiveWorks.count)) >= 0.4
+            else { return "varied" }
+            return top.key
         }
+        let statusStr = common(effectiveWorks.map { $0.isFinished ? "complete" : "in-progress" })
+        let ratingStr = common(effectiveWorks.map(\.rating))
+        let catStr = common(effectiveWorks.flatMap(\.workCategories))
+        let topTagStr = common(effectiveWorks.flatMap(\.workTags))
+        let topFandomStr = common(effectiveWorks.compactMap { $0.workFandoms.first })
+        let topRel = common(effectiveWorks.flatMap(\.workRelationships))
+        let summary = effectiveWorks.count < 5
+            ? "Read at least five works in this period to find your usual fic."
+            : "Usually \(statusStr) · \(ratingStr) · \(catStr) · \(topTagStr) · \(topFandomStr) · \(topRel)."
 
-        var usualChipStrings: [String] = [statusStr.capitalized, ratingStr, catStr, topTagStr.capitalized]
-        var structuredChips: [UsualChip] = [
+        var usualChipStrings: [String] = effectiveWorks.count < 5 ? [] : [statusStr.capitalized, ratingStr, catStr, topTagStr.capitalized]
+        var structuredChips: [UsualChip] = effectiveWorks.count < 5 ? [] : [
             UsualChip(text: statusStr.capitalized, kind: .metadata),
             UsualChip(text: ratingStr, kind: .metadata),
             UsualChip(text: catStr, kind: .metadata),
             UsualChip(text: topTagStr.capitalized, kind: .tag)
         ]
-        if !topRel.isEmpty {
+        if effectiveWorks.count >= 5 && topRel != "varied" {
             usualChipStrings.append(topRel)
             structuredChips.append(UsualChip(text: topRel, kind: .ship))
         }
         let extraTagValues = tags.dropFirst().prefix(2).map(\.name)
-        for t in extraTagValues {
+        for t in extraTagValues where effectiveWorks.count >= 5 {
             usualChipStrings.append(t)
             structuredChips.append(UsualChip(text: t, kind: .tag))
         }
@@ -1357,6 +1369,13 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
 // MARK: - Library Insights
 
 nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
+    nonisolated struct AuthorRow: Equatable, Sendable, Identifiable {
+        var id: String { name }
+        var name: String
+        var works: Int
+        var words: Int
+        var finished: Int
+    }
     nonisolated struct ArrivalRow: Equatable, Sendable, Identifiable {
         var id: String { label }
         var label: String
@@ -1381,6 +1400,11 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
     var foundEarlyCount: Int = 0
     var foundEarlyGrownCount: Int = 0
     var foundEarlyExample: String?
+    var favoriteWithoutKudosCount: Int = 0
+    var seriesStartedCount: Int = 0
+    var seriesReadToLastCount: Int = 0
+    var seriesNextWaitingCount: Int = 0
+    var authors: [AuthorRow] = []
 
     static func == (lhs: ReadingLibraryInsights, rhs: ReadingLibraryInsights) -> Bool {
         lhs.unreadWords == rhs.unreadWords
@@ -1400,6 +1424,11 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
             && lhs.foundEarlyCount == rhs.foundEarlyCount
             && lhs.foundEarlyGrownCount == rhs.foundEarlyGrownCount
             && lhs.foundEarlyExample == rhs.foundEarlyExample
+            && lhs.favoriteWithoutKudosCount == rhs.favoriteWithoutKudosCount
+            && lhs.seriesStartedCount == rhs.seriesStartedCount
+            && lhs.seriesReadToLastCount == rhs.seriesReadToLastCount
+            && lhs.seriesNextWaitingCount == rhs.seriesNextWaitingCount
+            && lhs.authors == rhs.authors
     }
 
     nonisolated struct StillReadingCandidate: Equatable, Sendable, Identifiable {
@@ -1423,6 +1452,8 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
     static func make(
         works: [SavedWork],
         facts: [ReadingSessionFacts],
+        allFacts: [ReadingSessionFacts] = [],
+        seriesSnapshots: [SavedSeriesSnapshot] = [],
         periodInterval: DateInterval,
         periodMonths: Double = 1,
         calendar: Calendar = .current,
@@ -1513,6 +1544,49 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
             "\($0.title) · \($0.kudosAtSave ?? 0) then, \($0.kudos) now"
         }
 
+        let finishCounts = Dictionary(grouping: allFacts.filter(\.didFinish), by: \.workID)
+            .mapValues(\.count)
+        let favoriteWithoutKudos = finished.filter {
+            !$0.hasGivenKudos && ($0.isFavorite || (finishCounts[$0.id] ?? 0) > 1)
+        }.count
+
+        let seriesByID = Dictionary(seriesSnapshots.map { ($0.ao3SeriesID, $0) },
+            uniquingKeysWith: { first, _ in first })
+        let readSeriesWorks = works.filter { $0.hasStartedReading && $0.ao3SeriesID != nil }
+        let seriesParts = Dictionary(grouping: readSeriesWorks, by: { $0.ao3SeriesID ?? 0 })
+            .mapValues { Set($0.map(\.seriesPosition)) }
+        let startedSeries = Set(seriesParts.keys)
+        let readToLast = startedSeries.filter { id in
+            guard let lastPart = seriesByID[id]?.effectivePartCount, lastPart > 0 else { return false }
+            return seriesParts[id]?.contains(lastPart) == true
+        }
+        let nextWaiting = startedSeries.filter { id in
+            guard let highest = seriesParts[id]?.max(),
+                  let count = seriesByID[id]?.effectivePartCount else { return false }
+            return highest > 0 && count > highest
+        }
+
+        let wordsByWork = Dictionary(grouping: allFacts, by: \.workID)
+            .mapValues { $0.reduce(0) { $0 + ($1.wordUnit == .words ? $1.wordsRead : 0) } }
+        var authorTotals: [String: (works: Int, words: Int, finished: Int)] = [:]
+        for work in works where wordsByWork[work.id] != nil {
+            let names = Set(work.verifiedAuthorIdentities.compactMap { identity -> String? in
+                guard identity.kind == .registered, let username = identity.username,
+                      !username.isEmpty, username != "orphan_account" else { return nil }
+                return username
+            })
+            for name in names {
+                var total = authorTotals[name] ?? (works: 0, words: 0, finished: 0)
+                total.works += 1
+                total.words += wordsByWork[work.id] ?? 0
+                if work.isFinished { total.finished += 1 }
+                authorTotals[name] = total
+            }
+        }
+        let authors = authorTotals.map { name, total in
+            AuthorRow(name: name, works: total.works, words: total.words, finished: total.finished)
+        }.sorted { $0.works == $1.works ? $0.name < $1.name : $0.works > $1.works }
+
         return ReadingLibraryInsights(
             unreadWords: unreadWords,
             unreadWorksCount: unread.count,
@@ -1530,7 +1604,12 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
             arrivalRows: arrivalRows,
             foundEarlyCount: foundEarly.count,
             foundEarlyGrownCount: grown.count,
-            foundEarlyExample: example
+            foundEarlyExample: example,
+            favoriteWithoutKudosCount: favoriteWithoutKudos,
+            seriesStartedCount: startedSeries.count,
+            seriesReadToLastCount: readToLast.count,
+            seriesNextWaitingCount: nextWaiting.count,
+            authors: authors
         )
     }
 }

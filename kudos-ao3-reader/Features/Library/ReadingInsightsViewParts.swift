@@ -386,11 +386,90 @@ struct LibraryFoundEarlyCard: View {
     }
 }
 
+struct HabitsChapterTimingCard: View {
+    let figure: InsightsProvenance.ChapterTimingFigure
+    @Environment(ThemeManager.self) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Chapter Habits").font(.subheadline.weight(.semibold))
+            metric("Chapters each, average", value: figure.averageChaptersEach.map { String(format: "%.1f", $0) } ?? "No chapter spans yet")
+            metric("End on a chapter", value: figure.chapterEndShare.map { "\(Int(($0 * 100).rounded()))%" } ?? "No eligible sittings yet")
+            if figure.judgedSittings > 0 {
+                metric("Skimmed", value: "\(figure.skimmedWords) words left out of totals")
+            } else {
+                metric("Skimmed", value: "No chapter pace history yet")
+            }
+            metric("Peeked at the Ending", value: "\(figure.peekedWorks) works")
+        }
+        .padding(16)
+        .background(theme.appTheme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+    }
+
+    private func metric(_ label: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label).foregroundStyle(.secondaryInk)
+            Spacer(minLength: 8)
+            Text(value).multilineTextAlignment(.trailing)
+        }
+        .font(.footnote)
+    }
+}
+
+struct LibraryFavouritesAndSeriesCard: View {
+    let favoritesWithoutKudos: Int
+    let seriesStarted: Int
+    let seriesReadToLast: Int
+    let nextWaiting: Int
+    @Environment(ThemeManager.self) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Favourites Without Kudos").font(.subheadline.weight(.semibold))
+            Text("\(favoritesWithoutKudos) finished favorites or rereads")
+            Divider()
+            Text("Series").font(.subheadline.weight(.semibold))
+            Text("\(seriesStarted) started · \(seriesReadToLast) read to the last part")
+            Text("\(nextWaiting) with a next part waiting").foregroundStyle(.secondaryInk)
+        }
+        .font(.footnote)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(theme.appTheme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+    }
+}
+
+struct LibraryAuthorsCard: View {
+    let authors: [ReadingLibraryInsights.AuthorRow]
+    let discreetMode: Bool
+    @Environment(ThemeManager.self) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Authors").font(.subheadline.weight(.semibold))
+            ForEach(authors.prefix(5)) { author in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(discreetMode ? "Author" : author.name).font(.footnote.weight(.medium))
+                    Text("\(author.works) read · \(author.words) words · \(author.finished) finished")
+                        .font(.caption).foregroundStyle(.secondaryInk)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(theme.appTheme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+    }
+}
+
 struct RecordsGridCard: View {
     let streakDays: Int
     let biggestDayWords: Int
     let medianSessionSeconds: Double
     let wordsPerHour: Double
+    let charactersPerHour: Double
     let hideReadingTime: Bool
     @Environment(ThemeManager.self) private var theme
 
@@ -419,6 +498,14 @@ struct RecordsGridCard: View {
                 value: wordsPerHour > 0 ? String(format: "%.1fk", wordsPerHour / 1000.0) : "—",
                 detail: "words an hour"
             )
+
+            if charactersPerHour > 0 {
+                recordTile(
+                    title: "Character pace",
+                    value: String(format: "%.1fk", charactersPerHour / 1000.0),
+                    detail: "characters an hour"
+                )
+            }
         }
     }
 
@@ -703,6 +790,7 @@ struct YourUsualFicCard: View {
     var body: some View {
         let status = discreetMode ? discreetMasker : InsightsDiscreetMasker.empty
         let summaryText: String = {
+            if taste.usualFicTags.isEmpty { return taste.usualFicSummary }
             if !discreetMode { return taste.usualFicSummary }
             let workStatus = taste.usualStatus.isEmpty ? "complete" : taste.usualStatus
             let rating = taste.usualRating.isEmpty ? "Teen" : taste.usualRating
