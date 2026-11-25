@@ -27,7 +27,8 @@
   "W-C": "33333333-3333-4333-8333-333333333333",
   "W-Z": "44444444-4444-4444-8444-444444444444",
   "X": "55555555-5555-4555-8555-555555555555",
-  "Y": "66666666-6666-4666-8666-666666666666"
+  "Y": "66666666-6666-4666-8666-666666666666",
+  "q1": "77777777-7777-4777-8777-777777777777"
  },
  "universes": [
   {
@@ -49,7 +50,8 @@
       "payload": {
        "groups": {
         "name": "Later"
-       }
+       },
+       "kind": "custom"
       }
      }
     ]
@@ -350,12 +352,14 @@
        "works": {
         "W-A": {
          "lifecycle": "live"
-        },
+        }
+       },
+       "diagnostics": [],
+       "queues": {
         "q1": {
          "lifecycle": "live"
         }
-       },
-       "diagnostics": []
+       }
       }
      }
     ],
@@ -380,15 +384,6 @@
        "groups": {
         "title": "T"
        }
-      },
-      "q1": {
-       "lifecycle": "live",
-       "members": [
-        "q1"
-       ],
-       "groups": {
-        "name": "Later"
-       }
       }
      },
      "memberships": [
@@ -405,7 +400,7 @@
      ],
      "annotations": [
       {
-       "id": "ae406080-33c1-5972-aec1-6c5fbec46aba",
+       "id": "a5f757a8-1403-54c1-ab10-035799802ba6",
        "live": false,
        "parkedNote": "y",
        "source": "annB",
@@ -419,7 +414,18 @@
       }
      ],
      "settings": {},
-     "pronunciations": {}
+     "pronunciations": {},
+     "queues": {
+      "q1": {
+       "lifecycle": "live",
+       "members": [
+        "q1"
+       ],
+       "groups": {
+        "name": "Later"
+       }
+      }
+     }
     },
     "appliedCut": {
      "inc-a": 5,
@@ -448,7 +454,8 @@
       "payload": {
        "groups": {
         "name": "Later"
-       }
+       },
+       "kind": "custom"
       }
      }
     ]
@@ -609,18 +616,18 @@
      }
     },
     {
-     "id": "a5",
-     "writer": "inc-a",
-     "seq": 6,
+     "id": "b5",
+     "writer": "inc-b",
+     "seq": 5,
      "stamp": [
       6,
-      "inc-a",
-      6
+      "inc-b",
+      5
      ],
      "kind": "annotation.edit",
-     "target": "annA",
+     "target": "annB",
      "payload": {
-      "note": "x2"
+      "note": "y2"
      }
     }
    ],
@@ -648,8 +655,8 @@
        "a4",
        "b4",
        "b4",
-       "a5",
-       "a5"
+       "b5",
+       "b5"
       ]
      },
      {
@@ -663,7 +670,7 @@
        "b3",
        "a4",
        "b4",
-       "a5",
+       "b5",
        "a1",
        "b1",
        "a2",
@@ -672,7 +679,7 @@
        "b3",
        "a4",
        "b4",
-       "a5"
+       "b5"
       ]
      }
     ],
@@ -688,7 +695,7 @@
        "b3",
        "a4",
        "b4",
-       "a5"
+       "b5"
       ],
       "restartAfter": "every"
      }
@@ -707,11 +714,11 @@
        "b3",
        "a4",
        "b4",
-       "a5"
+       "b5"
       ],
       "expectedPendingAtEnd": [
        "a4",
-       "a5"
+       "b5"
       ],
       "thenDeliver": [
        "a3"
@@ -731,7 +738,7 @@
        "a3",
        "a4",
        "b4",
-       "a5"
+       "b5"
       ],
       "expectedPendingAtEnd": [
        "b4"
@@ -756,7 +763,7 @@
        "b4"
       ],
       "thenOrder": [
-       "a5"
+       "b5"
       ],
       "checkpointCut": [
        "a1",
@@ -777,12 +784,14 @@
        "works": {
         "W-A": {
          "lifecycle": "live"
-        },
+        }
+       },
+       "diagnostics": [],
+       "queues": {
         "q1": {
          "lifecycle": "live"
         }
-       },
-       "diagnostics": []
+       }
       }
      }
     ],
@@ -807,15 +816,6 @@
        "groups": {
         "title": "T"
        }
-      },
-      "q1": {
-       "lifecycle": "live",
-       "members": [
-        "q1"
-       ],
-       "groups": {
-        "name": "Later"
-       }
       }
      },
      "memberships": [
@@ -832,25 +832,36 @@
      ],
      "annotations": [
       {
-       "id": "ae406080-33c1-5972-aec1-6c5fbec46aba",
+       "id": "c3556019-2d2f-5892-91be-3955630d0429",
        "live": false,
-       "parkedNote": "y",
-       "source": "annB",
-       "noteVersion": "b2"
+       "parkedNote": "x",
+       "source": "annA",
+       "noteVersion": "a2"
       },
       {
-       "id": "annA",
-       "work": "W-A",
-       "note": "x2",
+       "id": "annB",
+       "work": "W-B",
+       "note": "y2",
        "live": true
       }
      ],
      "settings": {},
-     "pronunciations": {}
+     "pronunciations": {},
+     "queues": {
+      "q1": {
+       "lifecycle": "live",
+       "members": [
+        "q1"
+       ],
+       "groups": {
+        "name": "Later"
+       }
+      }
+     }
     },
     "appliedCut": {
-     "inc-a": 6,
-     "inc-b": 4
+     "inc-a": 5,
+     "inc-b": 5
     },
     "pending": [],
     "diagnostics": []
@@ -1015,7 +1026,7 @@
      "memberships": [],
      "annotations": [
       {
-       "id": "089d3450-2fcf-56a6-81c9-fd1ffcd56340",
+       "id": "274cb641-e68a-5310-8e93-43ec190dbd36",
        "live": false,
        "parkedNote": "n1",
        "source": "annA",
@@ -2297,5 +2308,6 @@
     "diagnostics": []
    }
   }
- ]
+ ],
+ "libraryID": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 }

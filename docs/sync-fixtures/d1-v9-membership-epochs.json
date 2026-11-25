@@ -18,7 +18,8 @@
   "W-C": "33333333-3333-4333-8333-333333333333",
   "W-Z": "44444444-4444-4444-8444-444444444444",
   "X": "55555555-5555-4555-8555-555555555555",
-  "Y": "66666666-6666-4666-8666-666666666666"
+  "Y": "66666666-6666-4666-8666-666666666666",
+  "q1": "77777777-7777-4777-8777-777777777777"
  },
  "universes": [
   {
@@ -40,7 +41,8 @@
       "payload": {
        "groups": {
         "name": "Later"
-       }
+       },
+       "kind": "custom"
       }
      },
      {
@@ -182,7 +184,7 @@
    ],
    "events": [],
    "schedules": {
-    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
+    "missingPrerequisiteEmptyBecause": "all required cross-writer operations are included in the complete replay; missing delivery is exercised separately",
     "orders": "allInterleavings",
     "orderCount": 3,
     "duplicates": [
@@ -245,12 +247,14 @@
         },
         "Y": {
          "lifecycle": "live"
-        },
+        }
+       },
+       "diagnostics": [],
+       "queues": {
         "q1": {
          "lifecycle": "live"
         }
-       },
-       "diagnostics": []
+       }
       }
      }
     ],
@@ -283,15 +287,6 @@
        "groups": {
         "title": "Y"
        }
-      },
-      "q1": {
-       "lifecycle": "live",
-       "members": [
-        "q1"
-       ],
-       "groups": {
-        "name": "Later"
-       }
       }
      },
      "memberships": [
@@ -316,7 +311,18 @@
      ],
      "annotations": [],
      "settings": {},
-     "pronunciations": {}
+     "pronunciations": {},
+     "queues": {
+      "q1": {
+       "lifecycle": "live",
+       "members": [
+        "q1"
+       ],
+       "groups": {
+        "name": "Later"
+       }
+      }
+     }
     },
     "appliedCut": {
      "inc-a": 7,
@@ -345,7 +351,8 @@
       "payload": {
        "groups": {
         "name": "Later"
-       }
+       },
+       "kind": "custom"
       }
      },
      {
@@ -455,7 +462,7 @@
    ],
    "events": [],
    "schedules": {
-    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
+    "missingPrerequisiteEmptyBecause": "all required cross-writer operations are included in the complete replay; missing delivery is exercised separately",
     "orders": "allInterleavings",
     "orderCount": 1,
     "duplicates": [
@@ -514,15 +521,6 @@
        "groups": {
         "title": "Y"
        }
-      },
-      "q1": {
-       "lifecycle": "live",
-       "members": [
-        "q1"
-       ],
-       "groups": {
-        "name": "Later"
-       }
       }
      },
      "memberships": [
@@ -547,7 +545,18 @@
      ],
      "annotations": [],
      "settings": {},
-     "pronunciations": {}
+     "pronunciations": {},
+     "queues": {
+      "q1": {
+       "lifecycle": "live",
+       "members": [
+        "q1"
+       ],
+       "groups": {
+        "name": "Later"
+       }
+      }
+     }
     },
     "appliedCut": {
      "inc-a": 5,
@@ -576,7 +585,8 @@
       "payload": {
        "groups": {
         "name": "Later"
-       }
+       },
+       "kind": "custom"
       }
      },
      {
@@ -808,15 +818,6 @@
        "groups": {
         "title": "Y"
        }
-      },
-      "q1": {
-       "lifecycle": "live",
-       "members": [
-        "q1"
-       ],
-       "groups": {
-        "name": "Later"
-       }
       }
      },
      "memberships": [
@@ -832,7 +833,18 @@
      ],
      "annotations": [],
      "settings": {},
-     "pronunciations": {}
+     "pronunciations": {},
+     "queues": {
+      "q1": {
+       "lifecycle": "live",
+       "members": [
+        "q1"
+       ],
+       "groups": {
+        "name": "Later"
+       }
+      }
+     }
     },
     "appliedCut": {
      "inc-a": 5,
@@ -861,7 +873,8 @@
       "payload": {
        "groups": {
         "name": "Later"
-       }
+       },
+       "kind": "custom"
       }
      },
      {
@@ -1107,12 +1120,14 @@
        "works": {
         "Y": {
          "lifecycle": "live"
-        },
+        }
+       },
+       "diagnostics": [],
+       "queues": {
         "q1": {
          "lifecycle": "live"
         }
-       },
-       "diagnostics": []
+       }
       }
      }
     ],
@@ -1136,15 +1151,6 @@
        "groups": {
         "title": "Y"
        }
-      },
-      "q1": {
-       "lifecycle": "live",
-       "members": [
-        "q1"
-       ],
-       "groups": {
-        "name": "Later"
-       }
       }
      },
      "memberships": [
@@ -1160,7 +1166,18 @@
      ],
      "annotations": [],
      "settings": {},
-     "pronunciations": {}
+     "pronunciations": {},
+     "queues": {
+      "q1": {
+       "lifecycle": "live",
+       "members": [
+        "q1"
+       ],
+       "groups": {
+        "name": "Later"
+       }
+      }
+     }
     },
     "appliedCut": {
      "inc-a": 5,
@@ -1339,7 +1356,8 @@
       "payload": {
        "groups": {
         "name": "Later"
-       }
+       },
+       "kind": "custom"
       }
      },
      {
@@ -1466,7 +1484,7 @@
    ],
    "events": [],
    "schedules": {
-    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
+    "missingPrerequisiteEmptyBecause": "all required cross-writer operations are included in the complete replay; missing delivery is exercised separately",
     "orders": "allInterleavings",
     "orderCount": 2,
     "duplicates": [
@@ -1523,12 +1541,14 @@
         },
         "Y": {
          "lifecycle": "live"
-        },
+        }
+       },
+       "diagnostics": [],
+       "queues": {
         "q1": {
          "lifecycle": "live"
         }
-       },
-       "diagnostics": []
+       }
       }
      }
     ],
@@ -1561,15 +1581,6 @@
        "groups": {
         "title": "Y"
        }
-      },
-      "q1": {
-       "lifecycle": "live",
-       "members": [
-        "q1"
-       ],
-       "groups": {
-        "name": "Later"
-       }
       }
      },
      "memberships": [
@@ -1585,7 +1596,18 @@
      ],
      "annotations": [],
      "settings": {},
-     "pronunciations": {}
+     "pronunciations": {},
+     "queues": {
+      "q1": {
+       "lifecycle": "live",
+       "members": [
+        "q1"
+       ],
+       "groups": {
+        "name": "Later"
+       }
+      }
+     }
     },
     "appliedCut": {
      "inc-a": 6,
@@ -1622,7 +1644,8 @@
      "payload": {
       "groups": {
        "name": "Later"
-      }
+      },
+      "kind": "custom"
      }
     },
     {
@@ -1765,12 +1788,13 @@
         "inc-a": 3
        },
        "pending": [],
-       "works": {
+       "works": {},
+       "diagnostics": [],
+       "queues": {
         "q1": {
          "lifecycle": "live"
         }
-       },
-       "diagnostics": []
+       }
       }
      }
     ],
@@ -1794,15 +1818,6 @@
        "groups": {
         "title": "Z"
        }
-      },
-      "q1": {
-       "lifecycle": "live",
-       "members": [
-        "q1"
-       ],
-       "groups": {
-        "name": "Later"
-       }
       }
      },
      "memberships": [
@@ -1818,11 +1833,293 @@
      ],
      "annotations": [],
      "settings": {},
-     "pronunciations": {}
+     "pronunciations": {},
+     "queues": {
+      "q1": {
+       "lifecycle": "live",
+       "members": [
+        "q1"
+       ],
+       "groups": {
+        "name": "Later"
+       }
+      }
+     }
     },
     "appliedCut": {
      "inc-a": 3,
      "inc-b": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "merged-work-removal-splits-original-endpoints",
+   "description": "A visible merged membership with a2 and b2 emits separate original-endpoint removals c2 and c3; neither validates against a dynamic component.",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "qa",
+      "writer": "inc-c",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-c",
+       1
+      ],
+      "kind": "queue.create",
+      "target": "q1",
+      "payload": {
+       "kind": "custom",
+       "groups": {
+        "name": "Later"
+       }
+      }
+     },
+     {
+      "id": "wa",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "title": "A"
+       }
+      }
+     },
+     {
+      "id": "wb",
+      "writer": "inc-b",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-b",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-B",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "title": "B"
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
+   "ops": [
+    {
+     "id": "a2",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "queue.membership.add",
+     "target": "q1|W-A",
+     "payload": {
+      "rank": 1
+     }
+    },
+    {
+     "id": "b2",
+     "writer": "inc-b",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-b",
+      2
+     ],
+     "kind": "queue.membership.add",
+     "target": "q1|W-B",
+     "payload": {
+      "rank": 2
+     }
+    },
+    {
+     "id": "c2",
+     "writer": "inc-c",
+     "seq": 2,
+     "stamp": [
+      3,
+      "inc-c",
+      2
+     ],
+     "kind": "queue.membership.remove",
+     "target": "q1|W-A",
+     "observed": {
+      "epochs": [
+       "a2"
+      ]
+     },
+     "requires": [
+      "a2"
+     ]
+    },
+    {
+     "id": "c3",
+     "writer": "inc-c",
+     "seq": 3,
+     "stamp": [
+      4,
+      "inc-c",
+      3
+     ],
+     "kind": "queue.membership.remove",
+     "target": "q1|W-B",
+     "observed": {
+      "epochs": [
+       "b2"
+      ]
+     },
+     "requires": [
+      "b2"
+     ]
+    }
+   ],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 12,
+    "duplicates": [
+     {
+      "name": "each twice",
+      "order": [
+       "a2",
+       "a2",
+       "b2",
+       "b2",
+       "c2",
+       "c2",
+       "c3",
+       "c3"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "each",
+      "order": [
+       "a2",
+       "b2",
+       "c2",
+       "c3"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold b2",
+      "withheld": [
+       "b2"
+      ],
+      "order": [
+       "a2",
+       "c2",
+       "c3"
+      ],
+      "expectedPendingAtEnd": [
+       "c3"
+      ],
+      "thenDeliver": [
+       "b2"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "both adds before per-endpoint removes",
+      "cutAfter": [
+       "a2",
+       "b2"
+      ],
+      "thenOrder": [
+       "c2",
+       "c3"
+      ],
+      "checkpointCut": [
+       "a2",
+       "b2"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 2,
+        "inc-b": 2,
+        "inc-c": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "live"
+        }
+       },
+       "diagnostics": []
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "sampled",
+     "orders": 2,
+     "cutsChecked": 16,
+     "seed": 7,
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A",
+        "W-B"
+       ],
+       "groups": {
+        "title": "B"
+       }
+      }
+     },
+     "queues": {
+      "q1": {
+       "lifecycle": "live",
+       "groups": {
+        "name": "Later"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 2,
+     "inc-b": 2,
+     "inc-c": 3
     },
     "pending": [],
     "diagnostics": []

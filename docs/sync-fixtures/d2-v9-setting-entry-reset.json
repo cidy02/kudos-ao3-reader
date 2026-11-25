@@ -203,12 +203,18 @@
       "winningReset": [
        4,
        "inc-b",
-       2
+       1
       ]
      },
      "global|tomato": {
-      "note": "set (5,inc-b,3) wins the tie over reset (5,inc-a,3): \"inc-b\" > \"inc-a\"; both facts in the live log, only the winner is retained in a checkpoint"
+      "note": "set (5,inc-b,2) wins the tie over reset (5,inc-a,3): \"inc-b\" > \"inc-a\"; both facts in the live log, only the winner is retained in a checkpoint"
      }
+    }
+   },
+   "goldenReducer": {
+    "entries": {
+     "commentDrafts|e1": null,
+     "global|tomato": "x"
     }
    }
   }

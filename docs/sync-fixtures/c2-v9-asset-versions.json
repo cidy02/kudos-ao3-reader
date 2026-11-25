@@ -749,7 +749,7 @@
    ],
    "events": [],
    "schedules": {
-    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
+    "missingPrerequisiteEmptyBecause": "all required cross-writer operations are included in the complete replay; missing delivery is exercised separately",
     "orders": "allInterleavings",
     "orderCount": 2,
     "duplicates": [
@@ -1630,7 +1630,7 @@
    ],
    "events": [],
    "schedules": {
-    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
+    "missingPrerequisiteEmptyBecause": "all required cross-writer operations are included in the complete replay; missing delivery is exercised separately",
     "orders": "allInterleavings",
     "orderCount": 1,
     "duplicates": [

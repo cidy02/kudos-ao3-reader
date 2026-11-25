@@ -3,7 +3,7 @@
  "id": "f2",
  "slice": "ext",
  "kind": "v9-concurrency",
- "title": "Checkpoint-plus-suffix equivalence, one universe per retention rule (every cut of 40 orders is also checked by the generator)",
+ "title": "Checkpoint-plus-suffix equivalence, one universe per retention rule (declared orders and all small-universe cuts are checked by the projector)",
  "refs": [
   "\u00a72.1 retention rule",
   "DEC-1",
@@ -17,7 +17,8 @@
   "W-C": "33333333-3333-4333-8333-333333333333",
   "W-Z": "44444444-4444-4444-8444-444444444444",
   "X": "55555555-5555-4555-8555-555555555555",
-  "Y": "66666666-6666-4666-8666-666666666666"
+  "Y": "66666666-6666-4666-8666-666666666666",
+  "q1": "77777777-7777-4777-8777-777777777777"
  },
  "universes": [
   {
@@ -813,7 +814,7 @@
      "memberships": [],
      "annotations": [
       {
-       "id": "089d3450-2fcf-56a6-81c9-fd1ffcd56340",
+       "id": "274cb641-e68a-5310-8e93-43ec190dbd36",
        "live": false,
        "parkedNote": "n",
        "source": "annA",
@@ -1230,7 +1231,8 @@
      "payload": {
       "groups": {
        "name": "Later"
-      }
+      },
+      "kind": "custom"
      }
     },
     {
@@ -1353,13 +1355,15 @@
       "gen": "g0",
       "deletions": [
        "d1"
-      ]
-     },
-     "payload": {
+      ],
       "observedExpiry": [
        "p2"
       ]
-     }
+     },
+     "payload": {},
+     "requires": [
+      "p2"
+     ]
     }
    ],
    "events": [],
@@ -1500,12 +1504,14 @@
          "lifecycle": "purged",
          "reason": "expired",
          "witness": "p2"
-        },
+        }
+       },
+       "diagnostics": [],
+       "queues": {
         "q1": {
          "lifecycle": "live"
         }
-       },
-       "diagnostics": []
+       }
       }
      }
     ],
@@ -1529,15 +1535,6 @@
        "groups": {
         "title": "T"
        }
-      },
-      "q1": {
-       "lifecycle": "live",
-       "members": [
-        "q1"
-       ],
-       "groups": {
-        "name": "Later"
-       }
       }
      },
      "memberships": [
@@ -1553,7 +1550,18 @@
      ],
      "annotations": [],
      "settings": {},
-     "pronunciations": {}
+     "pronunciations": {},
+     "queues": {
+      "q1": {
+       "lifecycle": "live",
+       "members": [
+        "q1"
+       ],
+       "groups": {
+        "name": "Later"
+       }
+      }
+     }
     },
     "appliedCut": {
      "inc-a": 4,
@@ -2168,6 +2176,15 @@
     },
     "pending": [],
     "diagnostics": []
+   },
+   "goldenReducer": {
+    "grow": {
+     "W-A|workTags": [
+      "a",
+      "b",
+      "c"
+     ]
+    }
    }
   },
   {
@@ -2418,7 +2435,7 @@
      "target": "W-A",
      "payload": {
       "groups": {
-       "preservationStatus": "preserved"
+       "epubPreservationStatusRaw": "preserved"
       }
      }
     },
@@ -2435,7 +2452,7 @@
      "target": "W-A",
      "payload": {
       "groups": {
-       "preservationStatus": "queued"
+       "epubPreservationStatusRaw": "queued"
       }
      }
     }
@@ -2543,9 +2560,9 @@
        ],
        "groups": {
         "isFavorite": false,
-        "preservationStatus": "preserved",
         "progress": 0.1,
-        "seriesPosition": 9
+        "seriesPosition": 9,
+        "epubPreservationStatusRaw": "preserved"
        }
       }
      },
@@ -2774,6 +2791,14 @@
     },
     "pending": [],
     "diagnostics": []
+   },
+   "goldenReducer": {
+    "value": {
+     "coverPin": {
+      "tier": 2,
+      "pinnedAt": 0
+     }
+    }
    }
   },
   {
@@ -2799,7 +2824,7 @@
       "inc-a",
       1
      ],
-     "kind": "setting.entry.set",
+     "kind": "setting.set",
      "target": "readerFontPt",
      "payload": {
       "value": "NaN",
@@ -2815,7 +2840,7 @@
       "inc-b",
       1
      ],
-     "kind": "setting.entry.set",
+     "kind": "setting.set",
      "target": "readerFontPt",
      "payload": {
       "value": 18
@@ -2992,5 +3017,6 @@
     ]
    }
   }
- ]
+ ],
+ "libraryID": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 }

@@ -131,7 +131,7 @@
  ],
  "agree": true,
  "v9Outcome": {
-  "case1": "W2 work.delete with deletedAt payload 2026-10-02T09:00:00Z; deadline 2026-12-31T09:00:00Z (anchored to the deletion, DEC-3); v8 deadline is receive time + 90 d",
+  "case1": "W2 work.delete with deletedAt payload 2026-10-02T09:00:00Z; deadline 2026-12-31T09:00:00Z (anchored to the deletion, DEC-5); v8 deadline is receive time + 90 d",
   "case2": "no op (accepted = baseline)"
  }
 }

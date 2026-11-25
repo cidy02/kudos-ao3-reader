@@ -25,7 +25,8 @@
   "W-C": "33333333-3333-4333-8333-333333333333",
   "W-Z": "44444444-4444-4444-8444-444444444444",
   "X": "55555555-5555-4555-8555-555555555555",
-  "Y": "66666666-6666-4666-8666-666666666666"
+  "Y": "66666666-6666-4666-8666-666666666666",
+  "q1": "77777777-7777-4777-8777-777777777777"
  },
  "universes": [
   {
@@ -1740,13 +1741,15 @@
       "gen": "g0",
       "deletions": [
        "d1"
-      ]
-     },
-     "payload": {
+      ],
       "observedExpiry": [
        "p2"
       ]
-     }
+     },
+     "payload": {},
+     "requires": [
+      "p2"
+     ]
     }
    ],
    "events": [],
@@ -6584,15 +6587,15 @@
       "gen": "g0",
       "deletions": [
        "d1"
-      ]
-     },
-     "payload": {
+      ],
       "observedExpiry": [
        "p2"
       ]
      },
+     "payload": {},
      "requires": [
-      "d1"
+      "d1",
+      "p2"
      ]
     },
     {
@@ -7494,15 +7497,15 @@
       "gen": "g0",
       "deletions": [
        "d1"
-      ]
-     },
-     "payload": {
+      ],
       "observedExpiry": [
        "p2"
       ]
      },
+     "payload": {},
      "requires": [
-      "d1"
+      "d1",
+      "p2"
      ]
     },
     {
@@ -7996,7 +7999,8 @@
      "payload": {
       "groups": {
        "name": "Later"
-      }
+      },
+      "kind": "custom"
      }
     },
     {
@@ -8008,14 +8012,13 @@
       "inc-b",
       1
      ],
-     "kind": "work.delete",
+     "kind": "queue.delete",
      "target": "q1",
      "observed": {
       "gen": "g0"
      },
      "payload": {
-      "deletedAt": "2026-10-02T09:00:00Z",
-      "cls": "queue"
+      "deletedAt": "2026-10-02T09:00:00Z"
      }
     },
     {
@@ -8125,7 +8128,13 @@
         "isFavorite": false,
         "progress": 0.1
        }
-      },
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {},
+     "queues": {
       "q1": {
        "lifecycle": "deleted",
        "members": [
@@ -8136,11 +8145,7 @@
         "name": "Later"
        }
       }
-     },
-     "memberships": [],
-     "annotations": [],
-     "settings": {},
-     "pronunciations": {}
+     }
     },
     "appliedCut": {
      "inc-a": 2,
@@ -8774,6 +8779,11 @@
     },
     "pending": [],
     "diagnostics": []
+   },
+   "goldenReducer": {
+    "typedEvidence": {
+     "ev1": true
+    }
    }
   },
   {
@@ -8958,6 +8968,11 @@
       "detail": "legacyEvidence"
      }
     ]
+   },
+   "goldenReducer": {
+    "typedEvidence": {
+     "ev1": false
+    }
    }
   },
   {

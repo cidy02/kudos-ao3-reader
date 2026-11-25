@@ -50,7 +50,8 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       }
-    }
+    },
+    "libraryID": { "type": "string", "pattern": "^[0-9a-f-]{36}$" }
   },
   "allOf": [
     {
@@ -317,7 +318,9 @@
           "$ref": "#/definitions/stamp"
         },
         "kind": {
-          "type": "string"
+          "type": "string",
+          "minLength": 3,
+          "description": "Operation-dependent known kinds are checked by projector dispatch; future.* stays opaque"
         },
         "target": {
           "type": "string"
@@ -377,6 +380,22 @@
         "description": {
           "type": "string"
         },
+        "localIntent": { "type": "object", "required": ["id", "kind", "target", "payload", "state"], "properties": { "state": { "const": "unreserved" } } },
+        "expectedReservation": { "$ref": "#/definitions/op" },
+        "goldenReducer": {
+          "type": "object", "minProperties": 1,
+          "properties": {
+            "groups": { "type": "object" }, "lww": { "type": "object" },
+            "entries": { "type": "object" }, "value": { "type": "object" },
+            "grow": { "type": "object", "additionalProperties": { "type": "array" } },
+            "validRestoreIds": { "type": "array", "items": { "type": "string" } },
+            "authorizedExpiryIds": { "type": "array", "items": { "type": "string" } },
+            "livePutIds": { "type": "array", "items": { "type": "string" } },
+            "recordSeenIds": { "type": "array", "items": { "type": "string" } },
+            "typedEvidence": { "type": "object", "additionalProperties": { "type": "boolean" } }
+          },
+          "additionalProperties": false
+        },
         "initial": {
           "type": "object",
           "required": [
@@ -425,6 +444,10 @@
         },
         "schedules": {
           "type": "object",
+          "allOf": [
+            { "if": { "properties": { "missingPrerequisite": { "maxItems": 0 } } },
+              "then": { "required": ["missingPrerequisiteEmptyBecause"] } }
+          ],
           "required": [
             "orders",
             "orderCount",
@@ -435,6 +458,7 @@
             "retentionEquivalence"
           ],
           "properties": {
+            "missingPrerequisiteEmptyBecause": { "type": "string", "minLength": 1 },
             "orders": {
               "oneOf": [
                 {
@@ -583,9 +607,9 @@
                       "diagnostics"
                     ],
                     "properties": {
-                      "appliedVector": { "type": "object" },
+                      "appliedVector": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 1 } },
                       "pending": { "type": "array", "items": { "type": "string" } },
-                      "works": { "type": "object" },
+                      "works": { "type": "object", "additionalProperties": { "type": "object", "required": ["lifecycle"] } },
                       "diagnostics": { "type": "array", "items": { "$ref": "#/definitions/diagnostic" } }
                     }
                   }
@@ -633,7 +657,18 @@
                   "incomingCheckpointCut",
                   "procedure",
                   "finalCut"
-                ]
+                ],
+                "properties": {
+                  "reservedRecord": {
+                    "type": "object",
+                    "required": ["id", "writer", "seq", "stamp", "referenceEncoding", "bytesHex"],
+                    "properties": {
+                      "referenceEncoding": { "const": "utf8-sorted-keys-json-v1" },
+                      "bytesHex": { "type": "string", "pattern": "^[0-9a-f]+$" }
+                    }
+                  },
+                  "expectedAfterReservation": { "type": "object", "required": ["state", "appliedCut", "pending", "diagnostics"] }
+                }
               }
             }
           }

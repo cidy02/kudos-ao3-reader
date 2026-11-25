@@ -523,6 +523,33 @@
        "inc-a": 2,
        "inc-b": 3,
        "inc-l": 1
+      },
+      "expectedAfterReservation": {
+       "state": {
+        "works": {
+         "W-A": {
+          "lifecycle": "live",
+          "members": [
+           "W-A"
+          ],
+          "groups": {
+           "isFavorite": true,
+           "progress": 0.9
+          }
+         }
+        },
+        "memberships": [],
+        "annotations": [],
+        "settings": {},
+        "pronunciations": {}
+       },
+       "appliedCut": {
+        "inc-a": 2,
+        "inc-b": 3,
+        "inc-l": 1
+       },
+       "pending": [],
+       "diagnostics": []
       }
      }
     ]
@@ -537,7 +564,7 @@
        ],
        "groups": {
         "isFavorite": true,
-        "progress": 0.9
+        "progress": 0.5
        }
       }
      },
@@ -548,8 +575,7 @@
     },
     "appliedCut": {
      "inc-a": 2,
-     "inc-b": 3,
-     "inc-l": 1
+     "inc-b": 3
     },
     "pending": [],
     "diagnostics": []

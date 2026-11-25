@@ -699,15 +699,15 @@
       "gen": "g0",
       "deletions": [
        "d1"
-      ]
-     },
-     "payload": {
+      ],
       "observedExpiry": [
        "p2"
       ]
      },
+     "payload": {},
      "requires": [
-      "d1"
+      "d1",
+      "p2"
      ]
     }
    ],
