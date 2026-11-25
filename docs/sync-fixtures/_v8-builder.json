@@ -1,0 +1,108 @@
+{
+ "schema": "kudos.sync-fixture-builder/1",
+ "description": "Deterministic construction of a v8 manifest fragment from a fixture's `local`/`incoming` spec. A record names only what the case varies; everything else is the default below, so a harness builds byte-identical manifests on every run.",
+ "ids": "A symbolic key (\"W-A\") maps through the fixture's `ids` to its canonical UUID, written uppercase on iOS-shaped manifests and lowercase on Android-shaped ones (both platforms read either). Any other id (\"mA\", \"annA\", \"x1\", \"q1\", \"s1\") is UUIDv5(namespace 6b0b8f0e-6a4c-4a45-9c1c-9e6f1f2d7a10, fixture id + \"/\" + name).",
+ "manifest": {
+  "version": 8,
+  "exportedAt": "2026-10-03T00:00:00Z",
+  "settings": "defaults of KudosBackupSettings / BackupSettingsPayload",
+  "omitKeys": "keys listed here are not written at all; the string value \"<absent>\" on a key does the same"
+ },
+ "defaults": {
+  "work": {
+   "title": "T",
+   "author": "A",
+   "summary": "",
+   "sourceURL": "https://archiveofourown.org/works/<ao3WorkID>",
+   "dateAdded": "2026-09-01T00:00:00Z",
+   "createdAt": "2026-09-01T00:00:00Z",
+   "lastModifiedAt": "= dateAdded",
+   "hasEPUB": true,
+   "epubDigest": "per `epub` digest if named",
+   "isDeleted": false,
+   "workTags": [],
+   "userTags": [],
+   "readiumLocator": null,
+   "lastSpineIndex": 0,
+   "lastScrollFraction": 0,
+   "wordCount": 1000,
+   "kudos": 1,
+   "isFavorite": false,
+   "isSaved": true,
+   "isFinished": false,
+   "epubPreservationStatusRaw": "notPreserved unless harness.preserved says true, then preserved"
+  },
+  "queue": {
+   "name": "Later",
+   "kindRaw": "custom",
+   "sortOrder": 1,
+   "dateCreated": "2026-09-01T00:00:00Z",
+   "dateUpdated": "= max of its memberships' lastModifiedAt, else dateCreated"
+  },
+  "membership": {
+   "queuedAt": "2026-09-01T00:00:00Z",
+   "lastModifiedAt": "= queuedAt",
+   "sortOrderInQueue": "= rank",
+   "note": ""
+  },
+  "annotation": {
+   "kindRaw": "highlight unless `kind` is bookmark",
+   "colorRaw": "yellow",
+   "selectedText": "",
+   "progression": 0,
+   "spineIndex": 0,
+   "chapterTitle": "",
+   "createdAt": "2026-09-01T00:00:00Z",
+   "lastModifiedAt": "= createdAt",
+   "isPendingDeletion": false
+  },
+  "tombstone": {
+   "createdAt": "named",
+   "deletedOnDeviceID": "dev-1",
+   "deletionReason": "named reason",
+   "signature": "valid Ed25519 over the iOS payload (TS:48-65) by the key named in harness.trust when signatureValid, else 64 zero bytes",
+   "signerPublicKey": "the named signer's public key"
+  },
+  "readingSession": {
+   "startedAt": "2026-09-01T00:00:00Z",
+   "endedAt": "2026-09-01T00:30:00Z",
+   "durationSeconds": 1800,
+   "modeRaw": "read",
+   "lastModifiedAt": "= endedAt"
+  }
+ },
+ "assets": "A work naming `epub: <digest>` gets `Works/<UUID>.epub` whose bytes are the harness.assetBytes entry (a minimal valid EPUB package of the stated size whose SHA-256 is recorded as the digest label); a work naming none gets no file and hasEPUB false.",
+ "expectedNormalization": "Compare normalized records: work key, lifecycle (live|deleted|absent), deadline = opClock + 90 d for a locally started countdown, epub digest label, membership rows by (queue, work) with their ids/ranks, annotation rows by id with live/softDeleted/hardDeleted/hidden, a generated parked sibling matched by provenance and note text, tombstones minted by (type, record, reason).",
+ "signing": {
+  "seed": "Ed25519 private seed = SHA-256(\"kudos-fixture-signer/<signer name>\")",
+  "payload": "TombstoneSigning.payload: type, ao3 id, canonical URL, recordID lowercase, createdAt to whole seconds, signer public key, joined by \\n",
+  "tombstoneId": "UUIDv5(namespace, fixtureId + \"/tombstone/\" + index)",
+  "timestamps": "every date in a fixture is an explicit ISO-8601 UTC instant with whole seconds unless stated"
+ },
+ "assetBytesRule": {
+  "summary": "Entire file bytes are fixed by this rule; the digest label L only names the file.",
+  "entries": [
+   "mimetype",
+   "META-INF/container.xml",
+   "OEBPS/content.opf",
+   "OEBPS/ch1.xhtml"
+  ],
+  "mimetype": "ASCII `application/epub+zip`, no newline",
+  "container.xml": "<?xml version=\"1.0\"?>\\n<container version=\"1.0\" xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OEBPS/content.opf\" media-type=\"application/oebps-package+xml\"/></rootfiles></container>\\n",
+  "content.opf": "<?xml version=\"1.0\"?>\\n<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"id\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:identifier id=\"id\">urn:kudos-fixture:<L></dc:identifier><dc:title><L></dc:title><dc:language>en</dc:language></metadata><manifest><item id=\"c1\" href=\"ch1.xhtml\" media-type=\"application/xhtml+xml\"/></manifest><spine><itemref idref=\"c1\"/></spine></package>\\n",
+  "ch1.xhtml": "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body><p><L></p><!--<FILL>--></body></html>\\n where <FILL> is the lowercase hex of SHA-256(\"kudos-fixture-epub/\"+L) repeated and truncated so that the whole ZIP file has exactly the stated size",
+  "zip": "entries in the order above; method 0 (stored); general-purpose flags 0; version needed 20; DOS time 0x0000 and date 0x0021 (1980-01-01); no extra fields, no comments, no data descriptors; classic (non-ZIP64) records; CRC-32 and sizes in the local headers; central directory in the same order",
+  "digest": "SHA-256 of the file bytes; recorded as epubDigest when the case says so"
+ },
+ "canonicalKeyInterpretation": {
+  "locator": "locatorString on the wire",
+  "kind": "kindRaw",
+  "note": "note",
+  "lastModifiedAt": "ISO-8601 with fractional seconds written, whole-second also accepted",
+  "isDeleted": "isDeleted true plus deletedAt; schedule only if named",
+  "omitKeys": "top-level manifest keys not written at all",
+  "<absent>": "same as omitKeys for that key"
+ },
+ "sessions": "a readingSession record names {id, work}; defaults per `defaults.readingSession`; workID is ids[work]; its id is UUIDv5(namespace, fixtureId + \"/\" + name)",
+ "clockHooks": "harness must supply: iOS archivedDeletionState(now:), clampedArchiveDate(now:) and the resurrection test now (KB:5884-5887); Android a patched restoredDeletionState(now) (none today, BMap:98-107) and merge(now:) (BMS:46). A harness without the Android seam cannot run the Android column of a1/a2/c1."
+}

@@ -1,0 +1,820 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "kudos.sync-fixture/2",
+  "title": "Kudos sync fixture",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "slice",
+    "kind",
+    "title",
+    "ids"
+  ],
+  "properties": {
+    "schema": {
+      "const": "kudos.sync-fixture/2"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "slice": {
+      "enum": [
+        "a",
+        "b",
+        "c",
+        "ext"
+      ]
+    },
+    "kind": {
+      "enum": [
+        "v8-compat",
+        "v9-concurrency"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ids": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      }
+    },
+    "libraryID": { "type": "string", "pattern": "^[0-9a-f-]{36}$" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "v8-compat"
+          }
+        }
+      },
+      "then": {
+        "$ref": "#/definitions/v8fixture"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "v9-concurrency"
+          }
+        }
+      },
+      "then": {
+        "$ref": "#/definitions/v9fixture"
+      }
+    }
+  ],
+  "definitions": {
+    "instant": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "v8fixture": {
+      "type": "object",
+      "required": [
+        "harness",
+        "v9Outcome"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "cases"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "local"
+                ]
+              },
+              {
+                "required": [
+                  "incoming"
+                ]
+              },
+              {
+                "required": [
+                  "expected"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "local",
+            "incoming",
+            "expected",
+            "agree"
+          ],
+          "not": {
+            "required": [
+              "cases"
+            ]
+          }
+        }
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "route"
+          ]
+        },
+        {
+          "required": [
+            "cases"
+          ],
+          "properties": {
+            "cases": {
+              "items": {
+                "required": [
+                  "route"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "route": {
+          "enum": [
+            "merge",
+            "reconcile",
+            "replace",
+            "folderImport"
+          ]
+        },
+        "harness": {
+          "type": "object",
+          "required": [
+            "opClock",
+            "trust",
+            "signatureValid",
+            "preserved",
+            "assetBytes",
+            "clockSubstitution"
+          ],
+          "properties": {
+            "opClock": {
+              "$ref": "#/definitions/instant"
+            },
+            "trust": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "signatureValid": {
+              "type": "boolean"
+            },
+            "preserved": {
+              "type": "object"
+            },
+            "assetBytes": {
+              "type": "object"
+            },
+            "clockSubstitution": {
+              "$ref": "#/definitions/clockSubstitution"
+            }
+          }
+        },
+        "cases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/v8case"
+          }
+        },
+        "local": {
+          "type": "object"
+        },
+        "incoming": {
+          "type": "object"
+        },
+        "expected": {
+          "$ref": "#/definitions/v8expected"
+        },
+        "agree": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v8expected": {
+      "type": "object",
+      "required": [
+        "ios",
+        "android"
+      ],
+      "properties": {
+        "ios": {
+          "type": "object",
+          "minProperties": 1
+        },
+        "android": {
+          "type": "object",
+          "minProperties": 1
+        }
+      }
+    },
+    "v8case": {
+      "type": "object",
+      "required": [
+        "name",
+        "local",
+        "incoming",
+        "expected"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "route": {
+          "enum": [
+            "merge",
+            "reconcile",
+            "replace",
+            "folderImport"
+          ]
+        },
+        "harness": {
+          "type": "object"
+        },
+        "local": {
+          "type": "object"
+        },
+        "incoming": {
+          "type": "object"
+        },
+        "expected": {
+          "$ref": "#/definitions/v8expected"
+        },
+        "agree": {
+          "type": "boolean"
+        },
+        "disagreement": {
+          "type": "string"
+        },
+        "defect": {
+          "type": "string"
+        }
+      }
+    },
+    "stamp": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "integer",
+          "minimum": 1
+        }
+      ],
+      "additionalItems": false
+    },
+    "op": {
+      "type": "object",
+      "required": [
+        "id",
+        "writer",
+        "seq",
+        "stamp",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "writer": {
+          "type": "string"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stamp": {
+          "$ref": "#/definitions/stamp"
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 3,
+          "description": "Canonical v9 operation kinds; future.* stays opaque",
+          "oneOf": [
+            { "enum": ["work.create", "work.edit", "work.delete", "work.restore", "work.purge", "queue.create", "queue.edit", "queue.delete", "queue.restore", "queue.purge", "collection.create", "collection.edit", "collection.delete", "collection.restore", "collection.purge", "queue.membership.add", "queue.membership.remove", "queue.membership.move", "queue.membership.note", "queue.membership.state", "queue.membership.origin", "collection.membership.add", "collection.membership.remove", "queueTag.attach", "queueTag.detach", "userTag.attach", "userTag.detach", "annotation.add", "annotation.edit", "annotation.delete", "asset.write", "asset.remove", "writer.enroll", "writer.revoke", "legacy.evidence", "bookmark.put", "bookmark.delete", "favorite.put", "favorite.delete", "session.put", "session.delete", "watermark.put", "watermark.delete", "savedSearch.put", "savedSearch.delete", "followedTag.put", "followedTag.delete", "tagAlias.put", "tagAlias.delete", "queueSavedSearchLink.set", "queueSavedSearchLink.clear", "recoveryDoc.put", "font.add", "font.remove", "original.set", "taglist.add", "setting.entry.set", "setting.entry.reset", "setting.set", "setting.reset", "pronunciation.set", "pronunciation.reset"] },
+            { "pattern": "^future\\." }
+          ]
+        },
+        "target": {
+          "type": "string"
+        },
+        "observed": {
+          "type": "object",
+          "description": "every string or string-array value that names an op id is a semantic prerequisite; gen is provenance only"
+        },
+        "payload": {
+          "type": "object"
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "derived: cross-writer named ops; same-writer order is implicit and never repeated"
+        }
+      }
+    },
+    "orderList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/orderEntry"
+      }
+    },
+    "v9fixture": {
+      "type": "object",
+      "required": [
+        "universes"
+      ],
+      "properties": {
+        "universes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/universe"
+          }
+        }
+      }
+    },
+    "universe": {
+      "type": "object",
+      "required": [
+        "name",
+        "initial",
+        "authorization",
+        "ops",
+        "schedules",
+        "expected"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "localIntent": { "type": "object", "required": ["id", "kind", "target", "payload", "state"], "properties": { "state": { "const": "unreserved" } } },
+        "expectedReservation": { "$ref": "#/definitions/op" },
+        "goldenReducer": {
+          "type": "object", "minProperties": 1,
+          "properties": {
+            "groups": { "type": "object" }, "lww": { "type": "object" },
+            "entries": { "type": "object" }, "value": { "type": "object" },
+            "grow": { "type": "object", "additionalProperties": { "type": "array" } },
+            "validRestoreIds": { "type": "array", "items": { "type": "string" } },
+            "authorizedExpiryIds": { "type": "array", "items": { "type": "string" } },
+            "livePutIds": { "type": "array", "items": { "type": "string" } },
+            "recordSeenIds": { "type": "array", "items": { "type": "string" } },
+            "typedEvidence": { "type": "object", "additionalProperties": { "type": "boolean" } }
+          },
+          "additionalProperties": false
+        },
+        "initial": {
+          "type": "object",
+          "required": [
+            "createHistory"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "createHistory": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/op"
+              }
+            }
+          }
+        },
+        "authorization": {
+          "type": "object",
+          "required": [
+            "founders"
+          ],
+          "properties": {
+            "founders": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "ops": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/op"
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/event"
+          }
+        },
+        "deviceLocal": {
+          "type": "object"
+        },
+        "schedules": {
+          "type": "object",
+          "allOf": [
+            { "if": { "properties": { "missingPrerequisite": { "maxItems": 0 } } },
+              "then": { "required": ["missingPrerequisiteEmptyBecause"] } }
+          ],
+          "required": [
+            "orders",
+            "orderCount",
+            "duplicates",
+            "restarts",
+            "missingPrerequisite",
+            "checkpoints",
+            "retentionEquivalence"
+          ],
+          "properties": {
+            "missingPrerequisiteEmptyBecause": { "type": "string", "minLength": 1 },
+            "orders": {
+              "oneOf": [
+                {
+                  "const": "allInterleavings"
+                },
+                {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "#/definitions/orderList"
+                  }
+                }
+              ]
+            },
+            "orderCount": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "duplicates": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "order"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "order": {
+                    "$ref": "#/definitions/orderList"
+                  }
+                }
+              }
+            },
+            "restarts": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "order",
+                  "restartAfter"
+                ],
+                "properties": {
+                  "order": {
+                    "$ref": "#/definitions/orderList"
+                  },
+                  "restartAfter": {
+                    "oneOf": [
+                      {
+                        "const": "every"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "missingPrerequisite": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "withheld",
+                  "order",
+                  "expectedPendingAtEnd",
+                  "thenDeliver",
+                  "finalPending"
+                ],
+                "properties": {
+                  "withheld": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "order": {
+                    "$ref": "#/definitions/orderList"
+                  },
+                  "expectedPendingAtEnd": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "thenDeliver": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "finalPending": {
+                    "type": "array",
+                    "maxItems": 0
+                  }
+                }
+              }
+            },
+            "checkpoints": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "cutAfter",
+                  "thenOrder",
+                  "checkpointCut",
+                  "expectedAtCut"
+                ],
+                "properties": {
+                  "cutAfter": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "thenOrder": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "checkpointCut": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "expectedAtCut": {
+                    "type": "object",
+                    "required": [
+                      "appliedVector",
+                      "pending",
+                      "works",
+                      "diagnostics"
+                    ],
+                    "properties": {
+                      "appliedVector": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 1 } },
+                      "pending": { "type": "array", "items": { "type": "string" } },
+                      "works": { "type": "object", "additionalProperties": { "type": "object", "required": ["lifecycle"] } },
+                      "queues": { "type": "object", "additionalProperties": { "type": "object", "required": ["lifecycle"] } },
+                      "diagnostics": { "type": "array", "items": { "$ref": "#/definitions/diagnostic" } }
+                    }
+                  }
+                }
+              }
+            },
+            "retentionEquivalence": {
+              "type": "object",
+              "required": [
+                "mode",
+                "orders",
+                "cutsChecked",
+                "rule"
+              ],
+              "properties": {
+                "mode": {
+                  "enum": [
+                    "exhaustive",
+                    "sampled"
+                  ]
+                },
+                "orders": {
+                  "type": "integer"
+                },
+                "cutsChecked": {
+                  "type": "integer"
+                },
+                "seed": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "incomparableCuts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "localCut",
+                  "localApplied",
+                  "localUnpublished",
+                  "incomingCheckpointCut",
+                  "procedure",
+                  "finalCut"
+                ],
+                "properties": {
+                  "reservedRecord": {
+                    "type": "object",
+                    "required": ["id", "writer", "seq", "stamp", "referenceEncoding", "bytesHex"],
+                    "properties": {
+                      "referenceEncoding": { "const": "utf8-sorted-keys-json-v1" },
+                      "bytesHex": { "type": "string", "pattern": "^[0-9a-f]+$" }
+                    }
+                  },
+                  "expectedAfterReservation": { "type": "object", "required": ["state", "appliedCut", "pending", "diagnostics"] }
+                }
+              }
+            }
+          }
+        },
+        "expected": {
+          "type": "object",
+          "required": [
+            "state",
+            "appliedCut",
+            "pending",
+            "diagnostics"
+          ],
+          "properties": {
+            "state": {
+              "type": "object",
+              "required": [
+                "works",
+                "memberships",
+                "annotations",
+                "settings",
+                "pronunciations"
+              ]
+            },
+            "appliedCut": {
+              "type": "object",
+              "minProperties": 1
+            },
+            "pending": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "diagnostics": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/diagnostic"
+              }
+            }
+          }
+        }
+      }
+    },
+    "clockSubstitution": {
+      "type": "object",
+      "required": [
+        "ios",
+        "android"
+      ],
+      "properties": {
+        "ios": {
+          "type": "object",
+          "required": [
+            "function"
+          ]
+        },
+        "android": {
+          "type": "object",
+          "required": [
+            "function",
+            "available"
+          ]
+        }
+      }
+    },
+    "orderEntry": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "event"
+          ],
+          "properties": {
+            "event": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "diagnostic": {
+      "type": "object",
+      "required": [
+        "kind",
+        "key"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "witness": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "id",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "blobVisible"
+          ]
+        },
+        "digest": {
+          "type": "string"
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "installed": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

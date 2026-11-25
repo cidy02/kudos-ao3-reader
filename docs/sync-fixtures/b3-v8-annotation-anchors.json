@@ -1,0 +1,277 @@
+{
+ "schema": "kudos.sync-fixture/2",
+ "id": "b3",
+ "slice": "b",
+ "kind": "v8-compat",
+ "route": "reconcile",
+ "title": "Same-passage dedupe with blank, whitespace-only and present-empty anchors; Replace omission of annotations",
+ "refs": [
+  "X-10",
+  "X-5",
+  "DEC-21",
+  "MC-4",
+  "MC-8",
+  "KB:5633-5645",
+  "BMS:2300-2306"
+ ],
+ "ids": {
+  "W-A": "11111111-1111-4111-8111-111111111111",
+  "W-B": "22222222-2222-4222-8222-222222222222"
+ },
+ "harness": {
+  "opClock": "2026-10-03T00:00:00Z",
+  "trust": [],
+  "signatureValid": true,
+  "preserved": {},
+  "assetBytes": {},
+  "clockSubstitution": {
+   "ios": {
+    "function": "KudosBackupService.archivedDeletionState(now:)",
+    "also": [
+     "clampedArchiveDate(now:)",
+     "TombstoneIndex.suppressesResurrection scheduled > now (KB:5884-5887)"
+    ],
+    "available": true
+   },
+   "android": {
+    "function": "BackupMappers.restoredDeletionState",
+    "available": false,
+    "harnessMustSupply": "a patched build or test seam adding a `now: Instant = Instant.now()` parameter (BMap:98-107 has none today); BackupMergeService.merge(now:) is already injectable (BMS:46)"
+   }
+  },
+  "wireFieldMap": {
+   "locator": "locatorString",
+   "kind": "kindRaw",
+   "note": "note"
+  }
+ },
+ "cases": [
+  {
+   "name": "empty-string locator",
+   "local": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111
+     }
+    ],
+    "annotations": [
+     {
+      "id": "x1",
+      "work": "W-A",
+      "kind": "bookmark",
+      "locator": "",
+      "note": "",
+      "lastModifiedAt": "2026-10-01T10:00:00Z"
+     }
+    ]
+   },
+   "incoming": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111
+     }
+    ],
+    "annotations": [
+     {
+      "id": "x2",
+      "work": "W-A",
+      "kind": "bookmark",
+      "locator": "",
+      "note": "",
+      "lastModifiedAt": "2026-10-01T10:05:00Z"
+     }
+    ]
+   },
+   "expected": {
+    "ios": {
+     "annotations": [
+      {
+       "id": "x2",
+       "live": true
+      },
+      {
+       "id": "x1",
+       "live": false
+      }
+     ]
+    },
+    "android": {
+     "annotations": [
+      {
+       "id": "x1",
+       "live": true
+      },
+      {
+       "id": "x2",
+       "live": true
+      }
+     ]
+    }
+   },
+   "agree": false
+  },
+  {
+   "name": "whitespace-only locator",
+   "local": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111
+     }
+    ],
+    "annotations": [
+     {
+      "id": "x1",
+      "work": "W-A",
+      "kind": "bookmark",
+      "locator": "  ",
+      "note": "",
+      "lastModifiedAt": "2026-10-01T10:00:00Z"
+     }
+    ]
+   },
+   "incoming": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111
+     }
+    ],
+    "annotations": [
+     {
+      "id": "x2",
+      "work": "W-A",
+      "kind": "bookmark",
+      "locator": "  ",
+      "note": "",
+      "lastModifiedAt": "2026-10-01T10:05:00Z"
+     }
+    ]
+   },
+   "expected": {
+    "ios": {
+     "annotations": [
+      {
+       "id": "x2",
+       "live": true
+      },
+      {
+       "id": "x1",
+       "live": false
+      }
+     ]
+    },
+    "android": {
+     "annotations": [
+      {
+       "id": "x1",
+       "live": true
+      },
+      {
+       "id": "x2",
+       "live": true
+      }
+     ]
+    }
+   },
+   "agree": false
+  },
+  {
+   "name": "Replace, annotations key present and []",
+   "route": "replace",
+   "local": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111
+     }
+    ],
+    "annotations": [
+     {
+      "id": "x1",
+      "work": "W-A",
+      "kind": "bookmark",
+      "locator": "epubcfi(/6/4!/4/2)",
+      "note": "n",
+      "lastModifiedAt": "2026-10-01T10:00:00Z"
+     }
+    ]
+   },
+   "incoming": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111
+     }
+    ],
+    "annotations": []
+   },
+   "expected": {
+    "ios": {
+     "annotations": [
+      {
+       "id": "x1",
+       "live": false,
+       "hidden": true,
+       "tombstone": false
+      }
+     ]
+    },
+    "android": {
+     "annotations": []
+    }
+   },
+   "agree": false,
+   "disagreement": "X-5"
+  },
+  {
+   "name": "Replace, annotations key absent",
+   "route": "replace",
+   "local": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111
+     }
+    ],
+    "annotations": [
+     {
+      "id": "x1",
+      "work": "W-A",
+      "kind": "bookmark",
+      "locator": "epubcfi(/6/4!/4/2)",
+      "note": "n",
+      "lastModifiedAt": "2026-10-01T10:00:00Z"
+     }
+    ]
+   },
+   "incoming": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111
+     }
+    ],
+    "annotations": "<absent>"
+   },
+   "expected": {
+    "ios": {
+     "annotations": [
+      {
+       "id": "x1",
+       "live": true
+      }
+     ]
+    },
+    "android": {
+     "annotations": []
+    }
+   },
+   "agree": false,
+   "disagreement": "X-5"
+  }
+ ],
+ "v9Outcome": "DEC-21 (blank and whitespace-only anchors never dedupe) holds in v9 even when MC-8 is off; MC-4: an absent key emits no delete"
+}

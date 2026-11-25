@@ -1,0 +1,186 @@
+{
+ "schema": "kudos.sync-fixture/2",
+ "id": "b1r",
+ "slice": "b",
+ "kind": "v8-compat",
+ "route": "reconcile",
+ "title": "Reverse direction: device A receives device B's manifest; each device keeps its own key (N-3)",
+ "refs": [
+  "N-3",
+  "KB:3469",
+  "BMS:154-164"
+ ],
+ "ids": {
+  "W-A": "11111111-1111-4111-8111-111111111111",
+  "W-B": "22222222-2222-4222-8222-222222222222"
+ },
+ "harness": {
+  "opClock": "2026-10-03T00:00:00Z",
+  "trust": [],
+  "signatureValid": true,
+  "preserved": {},
+  "assetBytes": {},
+  "clockSubstitution": {
+   "ios": {
+    "function": "KudosBackupService.archivedDeletionState(now:)",
+    "also": [
+     "clampedArchiveDate(now:)",
+     "TombstoneIndex.suppressesResurrection scheduled > now (KB:5884-5887)"
+    ],
+    "available": true
+   },
+   "android": {
+    "function": "BackupMappers.restoredDeletionState",
+    "available": false,
+    "harnessMustSupply": "a patched build or test seam adding a `now: Instant = Instant.now()` parameter (BMap:98-107 has none today); BackupMergeService.merge(now:) is already injectable (BMS:46)"
+   }
+  }
+ },
+ "local": {
+  "works": [
+   {
+    "key": "W-A",
+    "ao3WorkID": 111,
+    "lastModifiedAt": "2026-10-01T10:10:00Z"
+   }
+  ],
+  "queues": [
+   {
+    "key": "q1",
+    "name": "Later"
+   }
+  ],
+  "memberships": [
+   {
+    "id": "mA",
+    "queue": "q1",
+    "work": "W-A",
+    "rank": 2,
+    "lastModifiedAt": "2026-10-01T10:10:00Z"
+   }
+  ],
+  "annotations": [
+   {
+    "id": "annA",
+    "work": "W-A",
+    "kind": "highlight",
+    "locator": "epubcfi(/6/4!/4/2)",
+    "note": "x",
+    "lastModifiedAt": "2026-10-01T10:06:00Z"
+   }
+  ]
+ },
+ "incoming": {
+  "works": [
+   {
+    "key": "W-B",
+    "ao3WorkID": 111,
+    "lastModifiedAt": "2026-10-01T10:00:00Z"
+   }
+  ],
+  "queues": [
+   {
+    "key": "q1",
+    "name": "Later"
+   }
+  ],
+  "memberships": [
+   {
+    "id": "mB",
+    "queue": "q1",
+    "work": "W-B",
+    "rank": 1,
+    "lastModifiedAt": "2026-10-01T10:00:00Z"
+   }
+  ],
+  "annotations": [
+   {
+    "id": "annB",
+    "work": "W-B",
+    "kind": "highlight",
+    "locator": "epubcfi(/6/4!/4/2)",
+    "note": "y",
+    "lastModifiedAt": "2026-10-01T10:05:00Z"
+   }
+  ]
+ },
+ "expected": {
+  "ios": {
+   "works": [
+    "W-A"
+   ],
+   "memberships": [
+    {
+     "queue": "q1",
+     "work": "W-A",
+     "count": 1,
+     "id": "mA",
+     "rank": 2
+    }
+   ],
+   "annotations": [
+    {
+     "id": "annA",
+     "work": "W-A",
+     "note": "x",
+     "live": true
+    },
+    {
+     "id": "annB",
+     "live": false,
+     "hardDeleted": true,
+     "tombstone": "samePassageDeduped"
+    },
+    {
+     "parkedSibling": true,
+     "note": "y",
+     "live": false
+    }
+   ]
+  },
+  "android": {
+   "works": [
+    "W-A"
+   ],
+   "memberships": [
+    {
+     "queue": "q1",
+     "work": "W-A",
+     "count": 2,
+     "ids": [
+      "mA",
+      "mB"
+     ],
+     "ranks": {
+      "mA": 2,
+      "mB": 1
+     }
+    }
+   ],
+   "annotations": [
+    {
+     "id": "annA",
+     "work": "W-A",
+     "note": "x",
+     "live": true
+    },
+    {
+     "id": "annB",
+     "live": false,
+     "removed": true,
+     "tombstone": "samePassageDeduped"
+    },
+    {
+     "parkedSibling": true,
+     "note": "y",
+     "live": false
+    }
+   ]
+  }
+ },
+ "agree": false,
+ "disagreement": "X-4",
+ "note": "Both directions keep the local key: the two devices end with different survivors (demonstrated outcome). Whether the shared manifest alternates keys is not asserted.",
+ "v9Outcome": "one survivor W-A (lowest UUID) on both devices (DEC-14)",
+ "compare": "a generated sibling is compared by provenance (parked from annB) and content, not id"
+}

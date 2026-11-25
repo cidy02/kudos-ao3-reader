@@ -1,0 +1,267 @@
+{
+ "schema": "kudos.sync-fixture/2",
+ "id": "c1",
+ "slice": "c",
+ "kind": "v8-compat",
+ "route": "reconcile",
+ "title": "An EPUB replacement racing a soft delete, and a later restore of an older copy; freshness is the record clock",
+ "refs": [
+  "W8",
+  "N-4",
+  "N-5",
+  "KB:6116-6130",
+  "BMS:2775-2797",
+  "FS:837-854",
+  "FS:1003"
+ ],
+ "ids": {
+  "W-A": "11111111-1111-4111-8111-111111111111",
+  "W-B": "22222222-2222-4222-8222-222222222222"
+ },
+ "harness": {
+  "opClock": "2026-10-04T00:00:00Z",
+  "trust": [],
+  "signatureValid": true,
+  "preserved": {},
+  "assetBytes": {
+   "d1": {
+    "seed": "kudos-fixture-epub/d1",
+    "size": 1000
+   },
+   "d2": {
+    "seed": "kudos-fixture-epub/d2",
+    "size": 1200
+   }
+  },
+  "clockSubstitution": {
+   "ios": {
+    "function": "KudosBackupService.archivedDeletionState(now:)",
+    "also": [
+     "clampedArchiveDate(now:)",
+     "TombstoneIndex.suppressesResurrection scheduled > now (KB:5884-5887)"
+    ],
+    "available": true
+   },
+   "android": {
+    "function": "BackupMappers.restoredDeletionState",
+    "available": false,
+    "harnessMustSupply": "a patched build or test seam adding a `now: Instant = Instant.now()` parameter (BMap:98-107 has none today); BackupMergeService.merge(now:) is already injectable (BMS:46)"
+   }
+  }
+ },
+ "cases": [
+  {
+   "name": "replacement newer than deletion (receiver holds the deleted copy, ordinary)",
+   "harness": {
+    "preserved": {
+     "W-A": false
+    }
+   },
+   "local": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "lifecycle": "deleted",
+      "lastModifiedAt": "2026-10-02T12:00:00Z",
+      "epub": "d1"
+     }
+    ]
+   },
+   "incoming": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "lifecycle": "live",
+      "lastModifiedAt": "2026-10-02T13:00:00Z",
+      "epub": "d2"
+     }
+    ]
+   },
+   "expected": {
+    "ios": {
+     "works": [
+      {
+       "key": "W-A",
+       "lifecycle": "live",
+       "epub": "d2",
+       "installedDigest": "d2"
+      }
+     ]
+    },
+    "android": {
+     "works": [
+      {
+       "key": "W-A",
+       "lifecycle": "live",
+       "epub": "d2",
+       "installedDigest": "d2",
+       "recordDigest": "d2"
+      }
+     ]
+    }
+   },
+   "defect": "N-4"
+  },
+  {
+   "name": "replacement older than deletion",
+   "harness": {
+    "preserved": {
+     "W-A": false
+    }
+   },
+   "local": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "lifecycle": "deleted",
+      "lastModifiedAt": "2026-10-02T12:00:00Z",
+      "epub": "d1"
+     }
+    ]
+   },
+   "incoming": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "lifecycle": "live",
+      "lastModifiedAt": "2026-10-02T11:00:00Z",
+      "epub": "d2"
+     }
+    ]
+   },
+   "expected": {
+    "ios": {
+     "works": [
+      {
+       "key": "W-A",
+       "lifecycle": "deleted",
+       "epub": "d1",
+       "installedDigest": "d1"
+      }
+     ]
+    },
+    "android": {
+     "works": [
+      {
+       "key": "W-A",
+       "lifecycle": "deleted",
+       "epub": "d1",
+       "installedDigest": "d1",
+       "recordDigest": "d1"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "receiver holds d2, incoming is the restored older copy (ordinary)",
+   "harness": {
+    "preserved": {
+     "W-A": false
+    }
+   },
+   "local": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "lifecycle": "live",
+      "lastModifiedAt": "2026-10-02T13:00:00Z",
+      "epub": "d2"
+     }
+    ]
+   },
+   "incoming": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "lifecycle": "live",
+      "lastModifiedAt": "2026-10-03T00:00:00Z",
+      "epub": "d1"
+     }
+    ]
+   },
+   "expected": {
+    "ios": {
+     "works": [
+      {
+       "key": "W-A",
+       "epub": "d1",
+       "installedDigest": "d1"
+      }
+     ]
+    },
+    "android": {
+     "works": [
+      {
+       "key": "W-A",
+       "epub": "d1",
+       "installedDigest": "d1",
+       "recordDigest": "d1"
+      }
+     ]
+    }
+   },
+   "defect": "N-5: newer bytes lost to an older book with a newer record clock"
+  },
+  {
+   "name": "same, receiver's copy is preserved",
+   "harness": {
+    "preserved": {
+     "W-A": true
+    }
+   },
+   "local": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "lifecycle": "live",
+      "lastModifiedAt": "2026-10-02T13:00:00Z",
+      "epub": "d2"
+     }
+    ]
+   },
+   "incoming": {
+    "works": [
+     {
+      "key": "W-A",
+      "ao3WorkID": 111,
+      "lifecycle": "live",
+      "lastModifiedAt": "2026-10-03T00:00:00Z",
+      "epub": "d1"
+     }
+    ]
+   },
+   "expected": {
+    "ios": {
+     "works": [
+      {
+       "key": "W-A",
+       "epub": "d2",
+       "installedDigest": "d2"
+      }
+     ]
+    },
+    "android": {
+     "works": [
+      {
+       "key": "W-A",
+       "epub": "d2",
+       "installedDigest": "d2",
+       "recordDigest": "d2"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "agree": true,
+ "v9Outcome": "c2: the asset reference has its own version facts; deletion, restore and a restore of an older record never touch it",
+ "note": "installedDigest is the digest of bytes on disk; recordDigest (Android epubDigest copied from the mapped record) is a separate field and can differ from installed bytes (X-2f)"
+}

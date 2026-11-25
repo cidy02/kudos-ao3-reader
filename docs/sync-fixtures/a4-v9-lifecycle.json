@@ -1,0 +1,10274 @@
+{
+ "schema": "kudos.sync-fixture/2",
+ "id": "a4",
+ "slice": "a",
+ "kind": "v9-concurrency",
+ "title": "Lifecycle as projection over retained facts: delete, restore, expiry, explicit purge, command scope, authority",
+ "refs": [
+  "W2",
+  "W3",
+  "W4",
+  "W4x",
+  "DEC-0",
+  "DEC-1",
+  "DEC-2",
+  "DEC-3",
+  "DEC-4",
+  "DEC-5",
+  "DEC-9",
+  "DEC-10",
+  "DEC-12"
+ ],
+ "ids": {
+  "W-A": "11111111-1111-4111-8111-111111111111",
+  "W-B": "22222222-2222-4222-8222-222222222222",
+  "W-C": "33333333-3333-4333-8333-333333333333",
+  "W-Z": "44444444-4444-4444-8444-444444444444",
+  "X": "55555555-5555-4555-8555-555555555555",
+  "Y": "66666666-6666-4666-8666-666666666666",
+  "q1": "77777777-7777-4777-8777-777777777777"
+ },
+ "universes": [
+  {
+   "name": "edit-delete-restore",
+   "description": "An edit by another device around a delete and its restore: every order keeps the edit",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
+   "ops": [
+    {
+     "id": "e1",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "groups": {
+       "isFavorite": true,
+       "legacyReaderProgress": 0.4
+      }
+     }
+    },
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "r1",
+     "writer": "inc-b",
+     "seq": 2,
+     "stamp": [
+      4,
+      "inc-b",
+      2
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d1"
+      ]
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 3,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "e1",
+       "e1",
+       "d1",
+       "d1",
+       "r1",
+       "r1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "e1",
+       "d1",
+       "r1",
+       "e1",
+       "d1",
+       "r1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "e1",
+       "d1",
+       "r1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "e1",
+       "r1"
+      ],
+      "expectedPendingAtEnd": [
+       "r1"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after delete and edit, then restore",
+      "cutAfter": [
+       "d1",
+       "e1"
+      ],
+      "thenOrder": [
+       "r1"
+      ],
+      "checkpointCut": [
+       "d1",
+       "e1"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 2,
+        "inc-b": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "deleted",
+         "deadline": "2026-12-31T09:00:00Z"
+        }
+       },
+       "diagnostics": []
+      }
+     },
+     {
+      "name": "checkpoint after delete, then restore and edit",
+      "cutAfter": [
+       "d1"
+      ],
+      "thenOrder": [
+       "r1",
+       "e1"
+      ],
+      "checkpointCut": [
+       "d1"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "deleted",
+         "deadline": "2026-12-31T09:00:00Z"
+        }
+       },
+       "diagnostics": []
+      }
+     },
+     {
+      "name": "checkpoint after the restore, then the late edit",
+      "cutAfter": [
+       "d1",
+       "r1"
+      ],
+      "thenOrder": [
+       "e1"
+      ],
+      "checkpointCut": [
+       "d1",
+       "r1"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 2
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "live"
+        }
+       },
+       "diagnostics": []
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 6,
+     "cutsChecked": 24,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "isFavorite": true,
+        "legacyReaderProgress": 0.4
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 2,
+     "inc-b": 2
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "competing-restores-each-names-own-deletion",
+   "description": "Two restores each name only the deletion its device saw; both deletions end cleared",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
+   "ops": [
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "r1",
+     "writer": "inc-b",
+     "seq": 2,
+     "stamp": [
+      3,
+      "inc-b",
+      2
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d1"
+      ]
+     }
+    },
+    {
+     "id": "d2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-c",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-20T09:00:00Z"
+     }
+    },
+    {
+     "id": "r2",
+     "writer": "inc-c",
+     "seq": 2,
+     "stamp": [
+      3,
+      "inc-c",
+      2
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d2"
+      ]
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 6,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "d1",
+       "d1",
+       "r1",
+       "r1",
+       "d2",
+       "d2",
+       "r2",
+       "r2"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "d1",
+       "r1",
+       "d2",
+       "r2",
+       "d1",
+       "r1",
+       "d2",
+       "r2"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "d1",
+       "r1",
+       "d2",
+       "r2"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "r1",
+       "d2",
+       "r2"
+      ],
+      "expectedPendingAtEnd": [
+       "r1"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold d2",
+      "withheld": [
+       "d2"
+      ],
+      "order": [
+       "d1",
+       "r1",
+       "r2"
+      ],
+      "expectedPendingAtEnd": [
+       "r2"
+      ],
+      "thenDeliver": [
+       "d2"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after both deletions, then both restores",
+      "cutAfter": [
+       "d1",
+       "d2"
+      ],
+      "thenOrder": [
+       "r1",
+       "r2"
+      ],
+      "checkpointCut": [
+       "d1",
+       "d2"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 1,
+        "inc-c": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "deleted",
+         "deadline": "2027-01-18T09:00:00Z"
+        }
+       },
+       "diagnostics": []
+      }
+     },
+     {
+      "name": "checkpoint after one restore, then the competing restore",
+      "cutAfter": [
+       "d1",
+       "d2",
+       "r1"
+      ],
+      "thenOrder": [
+       "r2"
+      ],
+      "checkpointCut": [
+       "d1",
+       "d2",
+       "r1"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 2,
+        "inc-c": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "deleted",
+         "deadline": "2027-01-18T09:00:00Z"
+        }
+       },
+       "diagnostics": []
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 2,
+     "inc-c": 2
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "restore-names-only-one-of-two-deletions",
+   "description": "An unnamed concurrent deletion stays effective: deleted, deadline from the later deletedAt",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
+   "ops": [
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "r1",
+     "writer": "inc-b",
+     "seq": 2,
+     "stamp": [
+      3,
+      "inc-b",
+      2
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d1"
+      ]
+     }
+    },
+    {
+     "id": "d2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-c",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-20T09:00:00Z"
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 3,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "d1",
+       "d1",
+       "r1",
+       "r1",
+       "d2",
+       "d2"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "d1",
+       "r1",
+       "d2",
+       "d1",
+       "r1",
+       "d2"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "d1",
+       "r1",
+       "d2"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "r1",
+       "d2"
+      ],
+      "expectedPendingAtEnd": [
+       "r1"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after r1 and d2",
+      "cutAfter": [
+       "d1",
+       "r1",
+       "d2"
+      ],
+      "thenOrder": [],
+      "checkpointCut": [
+       "d1",
+       "d2",
+       "r1"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 2,
+        "inc-c": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "deleted",
+         "deadline": "2027-01-18T09:00:00Z"
+        }
+       },
+       "diagnostics": []
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 6,
+     "cutsChecked": 24,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "deleted",
+       "members": [
+        "W-A"
+       ],
+       "deadline": "2027-01-18T09:00:00Z",
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 2,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "distinct-restore-lists-equal-max",
+   "description": "One restore names both deletions, another a subset; any order is live",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d",
+     "inc-e"
+    ]
+   },
+   "ops": [
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "d2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-c",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-20T09:00:00Z"
+     }
+    },
+    {
+     "id": "r1",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-d",
+      1
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d1",
+       "d2"
+      ]
+     },
+     "requires": [
+      "d1",
+      "d2"
+     ]
+    },
+    {
+     "id": "r2",
+     "writer": "inc-e",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-e",
+      1
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d2"
+      ]
+     },
+     "requires": [
+      "d2"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 24,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "d1",
+       "d1",
+       "d2",
+       "d2",
+       "r1",
+       "r1",
+       "r2",
+       "r2"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "d1",
+       "d2",
+       "r1",
+       "r2",
+       "d1",
+       "d2",
+       "r1",
+       "r2"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "d1",
+       "d2",
+       "r1",
+       "r2"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "d2",
+       "r1",
+       "r2"
+      ],
+      "expectedPendingAtEnd": [
+       "r1"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold d2",
+      "withheld": [
+       "d2"
+      ],
+      "order": [
+       "d1",
+       "r1",
+       "r2"
+      ],
+      "expectedPendingAtEnd": [
+       "r1",
+       "r2"
+      ],
+      "thenDeliver": [
+       "d2"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-c": 1,
+     "inc-d": 1,
+     "inc-e": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "explicit-purge-vs-restore-and-edits",
+   "description": "Explicit purge is terminal in every order; the diagnostic names the greatest edit (e2), not an arrival-dependent one",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
+   "ops": [
+    {
+     "id": "e1",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "groups": {
+       "isFavorite": true
+      }
+     }
+    },
+    {
+     "id": "e2",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      3,
+      "inc-a",
+      3
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "groups": {
+       "isFavorite": false
+      }
+     }
+    },
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "r1",
+     "writer": "inc-b",
+     "seq": 2,
+     "stamp": [
+      4,
+      "inc-b",
+      2
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d1"
+      ]
+     }
+    },
+    {
+     "id": "p1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      4,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "explicit",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      }
+     },
+     "requires": [
+      "d1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 30,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "e1",
+       "e1",
+       "e2",
+       "e2",
+       "d1",
+       "d1",
+       "r1",
+       "r1",
+       "p1",
+       "p1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "e1",
+       "e2",
+       "d1",
+       "r1",
+       "p1",
+       "e1",
+       "e2",
+       "d1",
+       "r1",
+       "p1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "e1",
+       "e2",
+       "d1",
+       "r1",
+       "p1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "e1",
+       "e2",
+       "r1",
+       "p1"
+      ],
+      "expectedPendingAtEnd": [
+       "p1",
+       "r1"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after purge and both edits, then restore",
+      "cutAfter": [
+       "d1",
+       "p1",
+       "e1",
+       "e2"
+      ],
+      "thenOrder": [
+       "r1"
+      ],
+      "checkpointCut": [
+       "d1",
+       "e1",
+       "e2",
+       "p1"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 3,
+        "inc-b": 1,
+        "inc-c": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "purged",
+         "reason": "explicit",
+         "witness": "p1"
+        }
+       },
+       "diagnostics": [
+        {
+         "kind": "editToPurgedLineage",
+         "key": "W-A",
+         "witness": "e2"
+        }
+       ]
+      }
+     },
+     {
+      "name": "checkpoint after e1 and e2 (only e2 retained), then purge",
+      "cutAfter": [
+       "e1",
+       "e2",
+       "d1"
+      ],
+      "thenOrder": [
+       "p1",
+       "r1"
+      ],
+      "checkpointCut": [
+       "d1",
+       "e1",
+       "e2"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 3,
+        "inc-b": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "deleted",
+         "deadline": "2026-12-31T09:00:00Z"
+        }
+       },
+       "diagnostics": []
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 120,
+     "cutsChecked": 720,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "purged",
+       "reason": "explicit",
+       "witness": "p1"
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 2,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "editToPurgedLineage",
+      "key": "W-A",
+      "witness": "e2"
+     },
+     {
+      "kind": "restoreAfterExplicitPurge",
+      "key": "W-A",
+      "witness": "r1"
+     }
+    ]
+   }
+  },
+  {
+   "name": "expired-purge-vs-offline-restore",
+   "description": "A restore authored before the expiry was visible defeats it",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d"
+    ]
+   },
+   "ops": [
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "p2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      },
+      "deadline": "2026-12-31T09:00:00Z"
+     },
+     "requires": [
+      "d1"
+     ]
+    },
+    {
+     "id": "r1",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-d",
+      1
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d1"
+      ]
+     },
+     "requires": [
+      "d1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 6,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "d1",
+       "d1",
+       "p2",
+       "p2",
+       "r1",
+       "r1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "d1",
+       "p2",
+       "r1",
+       "d1",
+       "p2",
+       "r1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "d1",
+       "p2",
+       "r1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "p2",
+       "r1"
+      ],
+      "expectedPendingAtEnd": [
+       "p2",
+       "r1"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after expiry, then restore",
+      "cutAfter": [
+       "d1",
+       "p2"
+      ],
+      "thenOrder": [
+       "r1"
+      ],
+      "checkpointCut": [
+       "d1",
+       "p2"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 1,
+        "inc-c": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "purged",
+         "reason": "expired",
+         "witness": "p2"
+        }
+       },
+       "diagnostics": []
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 6,
+     "cutsChecked": 24,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-c": 1,
+     "inc-d": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "expiryInvalidated",
+      "key": "W-A",
+      "witness": "p2",
+      "detail": "restored"
+     },
+     {
+      "kind": "offlineRestoreDefeatedExpiry",
+      "key": "W-A",
+      "witness": "r1",
+      "detail": "p2"
+     }
+    ]
+   }
+  },
+  {
+   "name": "expired-purge-vs-restore-after-observing-it",
+   "description": "A restore authored after observing the expiry also defeats it; only the diagnostic differs",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
+   "ops": [
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "p2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      },
+      "deadline": "2026-12-31T09:00:00Z"
+     },
+     "requires": [
+      "d1"
+     ]
+    },
+    {
+     "id": "r1",
+     "writer": "inc-b",
+     "seq": 2,
+     "stamp": [
+      4,
+      "inc-b",
+      2
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d1"
+      ],
+      "observedExpiry": [
+       "p2"
+      ]
+     },
+     "payload": {},
+     "requires": [
+      "p2"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 3,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "d1",
+       "d1",
+       "p2",
+       "p2",
+       "r1",
+       "r1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "d1",
+       "p2",
+       "r1",
+       "d1",
+       "p2",
+       "r1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "d1",
+       "p2",
+       "r1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "p2",
+       "r1"
+      ],
+      "expectedPendingAtEnd": [
+       "p2",
+       "r1"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 6,
+     "cutsChecked": 24,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 2,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "expiryInvalidated",
+      "key": "W-A",
+      "witness": "p2",
+      "detail": "restored"
+     },
+     {
+      "kind": "restoredAfterExpiry",
+      "key": "W-A",
+      "witness": "r1",
+      "detail": "p2"
+     }
+    ]
+   }
+  },
+  {
+   "name": "expired-purge-alone",
+   "description": "Expiry with the full basis projects purged(expired) with its witness; all facts remain",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
+   "ops": [
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "p2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      },
+      "deadline": "2026-12-31T09:00:00Z"
+     },
+     "requires": [
+      "d1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 2,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "d1",
+       "d1",
+       "p2",
+       "p2"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "d1",
+       "p2",
+       "d1",
+       "p2"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "d1",
+       "p2"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "p2"
+      ],
+      "expectedPendingAtEnd": [
+       "p2"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 2,
+     "cutsChecked": 6,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "purged",
+       "members": [
+        "W-A"
+       ],
+       "reason": "expired",
+       "witness": "p2"
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "expiry-basis-misses-a-later-deletion",
+   "description": "An unseen deletion invalidates the expiry; deadline extends to the later deletedAt",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d"
+    ]
+   },
+   "ops": [
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "d2",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-20T09:00:00Z"
+     }
+    },
+    {
+     "id": "p2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      }
+     },
+     "requires": [
+      "d1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 6,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "d1",
+       "d1",
+       "d2",
+       "d2",
+       "p2",
+       "p2"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "d1",
+       "d2",
+       "p2",
+       "d1",
+       "d2",
+       "p2"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "d1",
+       "d2",
+       "p2"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "d2",
+       "p2"
+      ],
+      "expectedPendingAtEnd": [
+       "p2"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 6,
+     "cutsChecked": 24,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "deleted",
+       "members": [
+        "W-A"
+       ],
+       "deadline": "2027-01-18T09:00:00Z",
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-c": 1,
+     "inc-d": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "expiryInvalidated",
+      "key": "W-A",
+      "witness": "p2",
+      "detail": "unseenDeletion"
+     }
+    ]
+   }
+  },
+  {
+   "name": "expiry-reissued-with-full-basis",
+   "description": "The old expiry is invalid, the reissued one valid; both retained, the witness is the matching one",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d"
+    ]
+   },
+   "ops": [
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "d2",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-20T09:00:00Z"
+     }
+    },
+    {
+     "id": "p2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      }
+     },
+     "requires": [
+      "d1"
+     ]
+    },
+    {
+     "id": "p3",
+     "writer": "inc-c",
+     "seq": 2,
+     "stamp": [
+      4,
+      "inc-c",
+      2
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1",
+       "d2"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      }
+     },
+     "requires": [
+      "d1",
+      "d2"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 12,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "d1",
+       "d1",
+       "d2",
+       "d2",
+       "p2",
+       "p2",
+       "p3",
+       "p3"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "d1",
+       "d2",
+       "p2",
+       "p3",
+       "d1",
+       "d2",
+       "p2",
+       "p3"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "d1",
+       "d2",
+       "p2",
+       "p3"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "d2",
+       "p2",
+       "p3"
+      ],
+      "expectedPendingAtEnd": [
+       "p2",
+       "p3"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold d2",
+      "withheld": [
+       "d2"
+      ],
+      "order": [
+       "d1",
+       "p2",
+       "p3"
+      ],
+      "expectedPendingAtEnd": [
+       "p3"
+      ],
+      "thenDeliver": [
+       "d2"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after both deletions and the old expiry, then the reissue",
+      "cutAfter": [
+       "d1",
+       "d2",
+       "p2"
+      ],
+      "thenOrder": [
+       "p3"
+      ],
+      "checkpointCut": [
+       "d1",
+       "d2",
+       "p2"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 1,
+        "inc-c": 1,
+        "inc-d": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "deleted",
+         "deadline": "2027-01-18T09:00:00Z"
+        }
+       },
+       "diagnostics": [
+        {
+         "kind": "expiryInvalidated",
+         "key": "W-A",
+         "witness": "p2",
+         "detail": "unseenDeletion"
+        }
+       ]
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "purged",
+       "members": [
+        "W-A"
+       ],
+       "reason": "expired",
+       "witness": "p3"
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-c": 2,
+     "inc-d": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "expiryInvalidated",
+      "key": "W-A",
+      "witness": "p2",
+      "detail": "unseenDeletion"
+     }
+    ]
+   }
+  },
+  {
+   "name": "old-basis-reactivation",
+   "description": "P{D1}, then D2, then R{D2}: U returns to {D1}, so the first expiry is effective again (same facts, same answer)",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d",
+     "inc-e"
+    ]
+   },
+   "ops": [
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "p2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      }
+     },
+     "requires": [
+      "d1"
+     ]
+    },
+    {
+     "id": "d2",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-20T09:00:00Z"
+     }
+    },
+    {
+     "id": "r2",
+     "writer": "inc-e",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-e",
+      1
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d2"
+      ]
+     },
+     "requires": [
+      "d2"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 24,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "d1",
+       "d1",
+       "p2",
+       "p2",
+       "d2",
+       "d2",
+       "r2",
+       "r2"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "d1",
+       "p2",
+       "d2",
+       "r2",
+       "d1",
+       "p2",
+       "d2",
+       "r2"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "d1",
+       "p2",
+       "d2",
+       "r2"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "p2",
+       "d2",
+       "r2"
+      ],
+      "expectedPendingAtEnd": [
+       "p2"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold d2",
+      "withheld": [
+       "d2"
+      ],
+      "order": [
+       "d1",
+       "p2",
+       "r2"
+      ],
+      "expectedPendingAtEnd": [
+       "r2"
+      ],
+      "thenDeliver": [
+       "d2"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after D1, P, D2, then R{D2}",
+      "cutAfter": [
+       "d1",
+       "p2",
+       "d2"
+      ],
+      "thenOrder": [
+       "r2"
+      ],
+      "checkpointCut": [
+       "d1",
+       "d2",
+       "p2"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 1,
+        "inc-c": 1,
+        "inc-d": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "deleted",
+         "deadline": "2027-01-18T09:00:00Z"
+        }
+       },
+       "diagnostics": [
+        {
+         "kind": "expiryInvalidated",
+         "key": "W-A",
+         "witness": "p2",
+         "detail": "unseenDeletion"
+        }
+       ]
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "purged",
+       "members": [
+        "W-A"
+       ],
+       "reason": "expired",
+       "witness": "p2"
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-c": 1,
+     "inc-d": 1,
+     "inc-e": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "delete-observed-component-unseen-duplicate-survives",
+   "description": "Delete on the visible merged work covers the observed members; a concurrent duplicate outside the scope survives with a diagnostic",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d"
+    ]
+   },
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-B",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "c1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-c",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-C",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "del",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-A",
+       "W-B"
+      ],
+      "capture": {
+       "observedLineages": [
+        "W-A",
+        "W-B"
+       ],
+       "note": "capture-only metadata; not a prerequisite (delete is fact-first)"
+      }
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
+    "orders": "allInterleavings",
+    "orderCount": 24,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1",
+       "c1",
+       "c1",
+       "del",
+       "del"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "c1",
+       "del",
+       "a1",
+       "b1",
+       "c1",
+       "del"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1",
+       "c1",
+       "del"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A",
+        "W-B",
+        "W-C"
+       ],
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-c": 1,
+     "inc-d": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "survivingDuplicate",
+      "key": "W-C",
+      "witness": "del"
+     }
+    ]
+   }
+  },
+  {
+   "name": "delete-observed-component-all-members",
+   "description": "The scope covers every member: the component is deleted; deadline from the latest deletion",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d"
+    ]
+   },
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-B",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "c1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-c",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-C",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "del",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-A",
+       "W-B",
+       "W-C"
+      ],
+      "capture": {
+       "observedLineages": [
+        "W-A",
+        "W-B",
+        "W-C"
+       ],
+       "note": "capture-only metadata; not a prerequisite (delete is fact-first)"
+      }
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
+    "orders": "allInterleavings",
+    "orderCount": 24,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1",
+       "c1",
+       "c1",
+       "del",
+       "del"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "c1",
+       "del",
+       "a1",
+       "b1",
+       "c1",
+       "del"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1",
+       "c1",
+       "del"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "deleted",
+       "members": [
+        "W-A",
+        "W-B",
+        "W-C"
+       ],
+       "deadline": "2026-12-31T09:00:00Z",
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-c": 1,
+     "inc-d": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "per-member-deletions-all-member-deadline",
+   "description": "Two members deleted by separate commands: the component deadline is the latest deletion plus 90 days",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-d",
+     "inc-e"
+    ]
+   },
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-B",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "dA",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-A"
+      ]
+     }
+    },
+    {
+     "id": "dB",
+     "writer": "inc-e",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-e",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-B",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-20T09:00:00Z",
+      "scope": [
+       "W-B"
+      ]
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
+    "orders": "allInterleavings",
+    "orderCount": 24,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1",
+       "dA",
+       "dA",
+       "dB",
+       "dB"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "a1",
+       "b1",
+       "dA",
+       "dB"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1",
+       "dA",
+       "dB"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "deleted",
+       "members": [
+        "W-A",
+        "W-B"
+       ],
+       "deadline": "2027-01-18T09:00:00Z",
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-d": 1,
+     "inc-e": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "restore-scope-follows-named-deletion",
+   "description": "A restore names the component deletion; its scope is the union of the named scopes",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-d"
+    ]
+   },
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-B",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "del",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-A",
+       "W-B"
+      ],
+      "capture": {
+       "observedLineages": [
+        "W-A",
+        "W-B"
+       ],
+       "note": "capture-only metadata; not a prerequisite (delete is fact-first)"
+      }
+     }
+    },
+    {
+     "id": "r1",
+     "writer": "inc-d",
+     "seq": 2,
+     "stamp": [
+      3,
+      "inc-d",
+      2
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "del"
+      ]
+     },
+     "payload": {
+      "scope": [
+       "W-A",
+       "W-B"
+      ]
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 12,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1",
+       "del",
+       "del",
+       "r1",
+       "r1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "del",
+       "r1",
+       "a1",
+       "b1",
+       "del",
+       "r1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1",
+       "del",
+       "r1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold del",
+      "withheld": [
+       "del"
+      ],
+      "order": [
+       "a1",
+       "b1",
+       "r1"
+      ],
+      "expectedPendingAtEnd": [
+       "r1"
+      ],
+      "thenDeliver": [
+       "del"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A",
+        "W-B"
+       ],
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-d": 2
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "purge-scope-recorded-item",
+   "description": "Explicit purge of the Recently Deleted item removes exactly its recorded scope",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-d"
+    ]
+   },
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-B",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "del",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-A",
+       "W-B"
+      ],
+      "capture": {
+       "observedLineages": [
+        "W-A",
+        "W-B"
+       ],
+       "note": "capture-only metadata; not a prerequisite (delete is fact-first)"
+      }
+     }
+    },
+    {
+     "id": "p1",
+     "writer": "inc-d",
+     "seq": 2,
+     "stamp": [
+      3,
+      "inc-d",
+      2
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "del"
+      ],
+      "authority": "root:inc-d"
+     },
+     "payload": {
+      "reason": "explicit",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      },
+      "scope": [
+       "W-A",
+       "W-B"
+      ]
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 12,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1",
+       "del",
+       "del",
+       "p1",
+       "p1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "del",
+       "p1",
+       "a1",
+       "b1",
+       "del",
+       "p1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1",
+       "del",
+       "p1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold del",
+      "withheld": [
+       "del"
+      ],
+      "order": [
+       "a1",
+       "b1",
+       "p1"
+      ],
+      "expectedPendingAtEnd": [
+       "p1"
+      ],
+      "thenDeliver": [
+       "del"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "purged",
+       "reason": "explicit",
+       "witness": "p1"
+      },
+      "W-B": {
+       "lifecycle": "purged",
+       "reason": "explicit",
+       "witness": "p1"
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-d": 2
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "lineage-scoped-administrative-purge",
+   "description": "A repair op with scope of one lineage purges only that lineage; the other stays a deleted work",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-d"
+    ]
+   },
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-B",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "del",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-A",
+       "W-B"
+      ],
+      "capture": {
+       "observedLineages": [
+        "W-A",
+        "W-B"
+       ],
+       "note": "capture-only metadata; not a prerequisite (delete is fact-first)"
+      }
+     }
+    },
+    {
+     "id": "p1",
+     "writer": "inc-d",
+     "seq": 2,
+     "stamp": [
+      3,
+      "inc-d",
+      2
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "del"
+      ],
+      "authority": "root:inc-d"
+     },
+     "payload": {
+      "reason": "explicit",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      },
+      "administrative": true,
+      "scope": [
+       "W-A"
+      ]
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 12,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1",
+       "del",
+       "del",
+       "p1",
+       "p1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "del",
+       "p1",
+       "a1",
+       "b1",
+       "del",
+       "p1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1",
+       "del",
+       "p1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold del",
+      "withheld": [
+       "del"
+      ],
+      "order": [
+       "a1",
+       "b1",
+       "p1"
+      ],
+      "expectedPendingAtEnd": [
+       "p1"
+      ],
+      "thenDeliver": [
+       "del"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "purged",
+       "reason": "explicit",
+       "witness": "p1"
+      },
+      "W-B": {
+       "lifecycle": "deleted",
+       "members": [
+        "W-B"
+       ],
+       "deadline": "2026-12-31T09:00:00Z",
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-d": 2
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "late-lower-stamp-revocation-reverses-purge",
+   "description": "A revocation with a lesser stamp than the purge reverses its projection; nothing is discarded",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
+   "ops": [
+    {
+     "id": "e0",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "writer.enroll",
+     "target": "inc-c",
+     "observed": {
+      "authority": "root:inc-a"
+     }
+    },
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "p1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      5,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "e0"
+     },
+     "payload": {
+      "reason": "explicit",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      }
+     },
+     "requires": [
+      "d1",
+      "e0"
+     ]
+    },
+    {
+     "id": "v1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      3,
+      "inc-a",
+      3
+     ],
+     "kind": "writer.revoke",
+     "target": "inc-c",
+     "observed": {
+      "authority": "root:inc-a"
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 12,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "e0",
+       "e0",
+       "d1",
+       "d1",
+       "p1",
+       "p1",
+       "v1",
+       "v1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "e0",
+       "d1",
+       "p1",
+       "v1",
+       "e0",
+       "d1",
+       "p1",
+       "v1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "e0",
+       "d1",
+       "p1",
+       "v1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "e0",
+       "p1",
+       "v1"
+      ],
+      "expectedPendingAtEnd": [
+       "p1"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold e0",
+      "withheld": [
+       "e0"
+      ],
+      "order": [
+       "d1",
+       "p1",
+       "v1"
+      ],
+      "expectedPendingAtEnd": [
+       "p1",
+       "v1"
+      ],
+      "thenDeliver": [
+       "e0"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after e0, d1 and p1 (purge projected), then the lower-stamp revocation",
+      "cutAfter": [
+       "e0",
+       "d1",
+       "p1"
+      ],
+      "thenOrder": [
+       "v1"
+      ],
+      "checkpointCut": [
+       "d1",
+       "e0",
+       "p1"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 2,
+        "inc-b": 1,
+        "inc-c": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "purged",
+         "reason": "explicit",
+         "witness": "p1"
+        }
+       },
+       "diagnostics": []
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "deleted",
+       "members": [
+        "W-A"
+       ],
+       "deadline": "2026-12-31T09:00:00Z",
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "unauthorizedPurge",
+      "key": "W-A",
+      "witness": "p1"
+     }
+    ]
+   }
+  },
+  {
+   "name": "revocation-with-greater-stamp-keeps-purge",
+   "description": "A revocation with a greater stamp does not undo the purge",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
+   "ops": [
+    {
+     "id": "e0",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "writer.enroll",
+     "target": "inc-c",
+     "observed": {
+      "authority": "root:inc-a"
+     }
+    },
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "p1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "e0"
+     },
+     "payload": {
+      "reason": "explicit",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      }
+     },
+     "requires": [
+      "d1",
+      "e0"
+     ]
+    },
+    {
+     "id": "v1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      9,
+      "inc-a",
+      3
+     ],
+     "kind": "writer.revoke",
+     "target": "inc-c",
+     "observed": {
+      "authority": "root:inc-a"
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 12,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "e0",
+       "e0",
+       "d1",
+       "d1",
+       "p1",
+       "p1",
+       "v1",
+       "v1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "e0",
+       "d1",
+       "p1",
+       "v1",
+       "e0",
+       "d1",
+       "p1",
+       "v1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "e0",
+       "d1",
+       "p1",
+       "v1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "e0",
+       "p1",
+       "v1"
+      ],
+      "expectedPendingAtEnd": [
+       "p1"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold e0",
+      "withheld": [
+       "e0"
+      ],
+      "order": [
+       "d1",
+       "p1",
+       "v1"
+      ],
+      "expectedPendingAtEnd": [
+       "p1",
+       "v1"
+      ],
+      "thenDeliver": [
+       "e0"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "purged",
+       "reason": "explicit",
+       "witness": "p1"
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "re-enroll-after-revocation",
+   "description": "A revoked key can be re-enrolled; a purge after the re-enrollment is authorized",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
+   "ops": [
+    {
+     "id": "e0",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "writer.enroll",
+     "target": "inc-c",
+     "observed": {
+      "authority": "root:inc-a"
+     }
+    },
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "v1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      3,
+      "inc-a",
+      3
+     ],
+     "kind": "writer.revoke",
+     "target": "inc-c",
+     "observed": {
+      "authority": "root:inc-a"
+     }
+    },
+    {
+     "id": "e1",
+     "writer": "inc-a",
+     "seq": 4,
+     "stamp": [
+      4,
+      "inc-a",
+      4
+     ],
+     "kind": "writer.enroll",
+     "target": "inc-c",
+     "observed": {
+      "authority": "root:inc-a"
+     }
+    },
+    {
+     "id": "p1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      6,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "e1"
+     },
+     "payload": {
+      "reason": "explicit",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      }
+     },
+     "requires": [
+      "d1",
+      "e1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 20,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "e0",
+       "e0",
+       "d1",
+       "d1",
+       "v1",
+       "v1",
+       "e1",
+       "e1",
+       "p1",
+       "p1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "e0",
+       "d1",
+       "v1",
+       "e1",
+       "p1",
+       "e0",
+       "d1",
+       "v1",
+       "e1",
+       "p1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "e0",
+       "d1",
+       "v1",
+       "e1",
+       "p1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "e0",
+       "v1",
+       "e1",
+       "p1"
+      ],
+      "expectedPendingAtEnd": [
+       "p1"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold e1",
+      "withheld": [
+       "e1"
+      ],
+      "order": [
+       "e0",
+       "d1",
+       "v1",
+       "p1"
+      ],
+      "expectedPendingAtEnd": [
+       "p1"
+      ],
+      "thenDeliver": [
+       "e1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 120,
+     "cutsChecked": 720,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "purged",
+       "reason": "explicit",
+       "witness": "p1"
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 4,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "founder-cannot-be-revoked",
+   "description": "A revocation naming a founder has no effect: the founder's purge stands",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
+   "ops": [
+    {
+     "id": "e0",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "writer.enroll",
+     "target": "inc-c",
+     "observed": {
+      "authority": "root:inc-a"
+     }
+    },
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "v1",
+     "writer": "inc-b",
+     "seq": 2,
+     "stamp": [
+      3,
+      "inc-b",
+      2
+     ],
+     "kind": "writer.revoke",
+     "target": "inc-a",
+     "observed": {
+      "authority": "root:inc-b"
+     }
+    },
+    {
+     "id": "p1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      5,
+      "inc-a",
+      3
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "root:inc-a"
+     },
+     "payload": {
+      "reason": "explicit",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      }
+     },
+     "requires": [
+      "d1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 6,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "e0",
+       "e0",
+       "d1",
+       "d1",
+       "v1",
+       "v1",
+       "p1",
+       "p1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "e0",
+       "d1",
+       "v1",
+       "p1",
+       "e0",
+       "d1",
+       "v1",
+       "p1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "e0",
+       "d1",
+       "v1",
+       "p1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "e0",
+       "v1",
+       "p1"
+      ],
+      "expectedPendingAtEnd": [
+       "p1",
+       "v1"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "purged",
+       "reason": "explicit",
+       "witness": "p1"
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 2
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "multi-lineage-expiry-independent-bases",
+   "description": "scope {A,B}, basis {dA,dB}: each lineage matches its own basis_K; both are purged(expired)",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d",
+     "inc-e"
+    ]
+   },
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-B",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "dA",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-A"
+      ]
+     }
+    },
+    {
+     "id": "dB",
+     "writer": "inc-e",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-e",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-B",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-B"
+      ]
+     }
+    },
+    {
+     "id": "p2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "dA",
+       "dB"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      },
+      "scope": [
+       "W-A",
+       "W-B"
+      ]
+     },
+     "requires": [
+      "dA",
+      "dB"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 120,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1",
+       "dA",
+       "dA",
+       "dB",
+       "dB",
+       "p2",
+       "p2"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "p2",
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "p2"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "p2"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold dA",
+      "withheld": [
+       "dA"
+      ],
+      "order": [
+       "a1",
+       "b1",
+       "dB",
+       "p2"
+      ],
+      "expectedPendingAtEnd": [
+       "p2"
+      ],
+      "thenDeliver": [
+       "dA"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold dB",
+      "withheld": [
+       "dB"
+      ],
+      "order": [
+       "a1",
+       "b1",
+       "dA",
+       "p2"
+      ],
+      "expectedPendingAtEnd": [
+       "p2"
+      ],
+      "thenDeliver": [
+       "dB"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after both deletions and the expiry",
+      "cutAfter": [
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "p2"
+      ],
+      "thenOrder": [],
+      "checkpointCut": [
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "p2"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 1,
+        "inc-c": 1,
+        "inc-d": 1,
+        "inc-e": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "purged",
+         "reason": "expired",
+         "witness": "p2"
+        }
+       },
+       "diagnostics": []
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 120,
+     "cutsChecked": 720,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "purged",
+       "members": [
+        "W-A",
+        "W-B"
+       ],
+       "reason": "expired",
+       "witness": "p2"
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-c": 1,
+     "inc-d": 1,
+     "inc-e": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  },
+  {
+   "name": "multi-lineage-expiry-then-new-deletion-on-one",
+   "description": "A new deletion on A alone invalidates A's expiry only: B stays purged(expired), A is deleted, so the component is deleted",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d",
+     "inc-e",
+     "inc-f"
+    ]
+   },
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-B",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "dA",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-A"
+      ]
+     }
+    },
+    {
+     "id": "dB",
+     "writer": "inc-e",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-e",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-B",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-B"
+      ]
+     }
+    },
+    {
+     "id": "p2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "dA",
+       "dB"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      },
+      "scope": [
+       "W-A",
+       "W-B"
+      ]
+     },
+     "requires": [
+      "dA",
+      "dB"
+     ]
+    },
+    {
+     "id": "dA2",
+     "writer": "inc-f",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-f",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-20T09:00:00Z",
+      "scope": [
+       "W-A"
+      ]
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 720,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1",
+       "dA",
+       "dA",
+       "dB",
+       "dB",
+       "p2",
+       "p2",
+       "dA2",
+       "dA2"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "p2",
+       "dA2",
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "p2",
+       "dA2"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "p2",
+       "dA2"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold dA",
+      "withheld": [
+       "dA"
+      ],
+      "order": [
+       "a1",
+       "b1",
+       "dB",
+       "p2",
+       "dA2"
+      ],
+      "expectedPendingAtEnd": [
+       "p2"
+      ],
+      "thenDeliver": [
+       "dA"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold dB",
+      "withheld": [
+       "dB"
+      ],
+      "order": [
+       "a1",
+       "b1",
+       "dA",
+       "p2",
+       "dA2"
+      ],
+      "expectedPendingAtEnd": [
+       "p2"
+      ],
+      "thenDeliver": [
+       "dB"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint holding the valid expiry, then the new deletion on A",
+      "cutAfter": [
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "p2"
+      ],
+      "thenOrder": [
+       "dA2"
+      ],
+      "checkpointCut": [
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "p2"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 1,
+        "inc-c": 1,
+        "inc-d": 1,
+        "inc-e": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "purged",
+         "reason": "expired",
+         "witness": "p2"
+        }
+       },
+       "diagnostics": []
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "sampled",
+     "orders": 40,
+     "cutsChecked": 280,
+     "seed": 7,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "deleted",
+       "members": [
+        "W-A",
+        "W-B"
+       ],
+       "deadline": "2027-01-18T09:00:00Z",
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-c": 1,
+     "inc-d": 1,
+     "inc-e": 1,
+     "inc-f": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "expiryInvalidated",
+      "key": "W-A",
+      "witness": "p2",
+      "detail": "unseenDeletion"
+     }
+    ]
+   }
+  },
+  {
+   "name": "purge-scope-without-basis-for-a-lineage",
+   "description": "A native purge over scope {A,B} whose basis names only dA: B has no basis_K, so it is not purged (invalidReference)",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d",
+     "inc-e"
+    ]
+   },
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-B",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "dA",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-A"
+      ]
+     }
+    },
+    {
+     "id": "dB",
+     "writer": "inc-e",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-e",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-B",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-B"
+      ]
+     }
+    },
+    {
+     "id": "p1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "dA"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "explicit",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      },
+      "scope": [
+       "W-A",
+       "W-B"
+      ]
+     },
+     "requires": [
+      "dA"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 120,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1",
+       "dA",
+       "dA",
+       "dB",
+       "dB",
+       "p1",
+       "p1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "p1",
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "p1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "p1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold dA",
+      "withheld": [
+       "dA"
+      ],
+      "order": [
+       "a1",
+       "b1",
+       "dB",
+       "p1"
+      ],
+      "expectedPendingAtEnd": [
+       "p1"
+      ],
+      "thenDeliver": [
+       "dA"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 120,
+     "cutsChecked": 720,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "purged",
+       "reason": "explicit",
+       "witness": "p1"
+      },
+      "W-B": {
+       "lifecycle": "deleted",
+       "members": [
+        "W-B"
+       ],
+       "deadline": "2026-12-31T09:00:00Z",
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-c": 1,
+     "inc-d": 1,
+     "inc-e": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "invalidReference",
+      "key": "W-B",
+      "witness": "p1",
+      "detail": "purge"
+     }
+    ]
+   }
+  },
+  {
+   "name": "wrong-kind-reference-is-an-invalid-command",
+   "description": "A restore naming a non-deletion op is invalid as a whole and affects no lineage",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d",
+     "inc-e"
+    ]
+   },
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-B",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "dA",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-A"
+      ]
+     }
+    },
+    {
+     "id": "dB",
+     "writer": "inc-e",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-e",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-B",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-B"
+      ]
+     }
+    },
+    {
+     "id": "r1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "a1"
+      ]
+     },
+     "payload": {
+      "scope": [
+       "W-A",
+       "W-B"
+      ]
+     },
+     "requires": [
+      "a1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 120,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1",
+       "dA",
+       "dA",
+       "dB",
+       "dB",
+       "r1",
+       "r1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "r1",
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "r1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "r1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold a1",
+      "withheld": [
+       "a1"
+      ],
+      "order": [
+       "b1",
+       "dA",
+       "dB",
+       "r1"
+      ],
+      "expectedPendingAtEnd": [
+       "r1"
+      ],
+      "thenDeliver": [
+       "a1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 120,
+     "cutsChecked": 720,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "deleted",
+       "members": [
+        "W-A",
+        "W-B"
+       ],
+       "deadline": "2026-12-31T09:00:00Z",
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-c": 1,
+     "inc-d": 1,
+     "inc-e": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "invalidCommand",
+      "key": "r1",
+      "witness": "r1",
+      "detail": "restore:wrongKind"
+     }
+    ]
+   },
+   "goldenReducer": {
+    "typedEvidence": {
+     "r1": false
+    }
+   }
+  },
+  {
+   "name": "restore-scope-not-covered-by-named-deletions",
+   "description": "A restore whose scope includes a lineage none of its named deletions covers: B gets invalidReference, A is restored",
+   "initial": {
+    "createHistory": []
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d",
+     "inc-e"
+    ]
+   },
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-a",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-A",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      1,
+      "inc-b",
+      1
+     ],
+     "kind": "work.create",
+     "target": "W-B",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "T"
+      }
+     }
+    },
+    {
+     "id": "dA",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-A"
+      ]
+     }
+    },
+    {
+     "id": "dB",
+     "writer": "inc-e",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-e",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-B",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-B"
+      ]
+     }
+    },
+    {
+     "id": "r1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "dA"
+      ]
+     },
+     "payload": {
+      "scope": [
+       "W-A",
+       "W-B"
+      ]
+     },
+     "requires": [
+      "dA"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 120,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "b1",
+       "b1",
+       "dA",
+       "dA",
+       "dB",
+       "dB",
+       "r1",
+       "r1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "r1",
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "r1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "b1",
+       "dA",
+       "dB",
+       "r1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold dA",
+      "withheld": [
+       "dA"
+      ],
+      "order": [
+       "a1",
+       "b1",
+       "dB",
+       "r1"
+      ],
+      "expectedPendingAtEnd": [
+       "r1"
+      ],
+      "thenDeliver": [
+       "dA"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 120,
+     "cutsChecked": 720,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A",
+        "W-B"
+       ],
+       "groups": {
+        "title": "T"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-c": 1,
+     "inc-d": 1,
+     "inc-e": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "invalidReference",
+      "key": "W-B",
+      "witness": "r1",
+      "detail": "restore"
+     },
+     {
+      "kind": "survivingDuplicate",
+      "key": "W-A",
+      "witness": "dB"
+     }
+    ]
+   }
+  },
+  {
+   "name": "two-restores-with-different-expiry-observations",
+   "description": "One restore observed the expiry, one did not; the diagnostic witness is the observing one, whatever arrives last",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d",
+     "inc-e",
+     "inc-f"
+    ]
+   },
+   "ops": [
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "p2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      }
+     },
+     "requires": [
+      "d1"
+     ]
+    },
+    {
+     "id": "r1",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-d",
+      1
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d1"
+      ]
+     },
+     "requires": [
+      "d1"
+     ]
+    },
+    {
+     "id": "r2",
+     "writer": "inc-e",
+     "seq": 1,
+     "stamp": [
+      4,
+      "inc-e",
+      1
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d1"
+      ],
+      "observedExpiry": [
+       "p2"
+      ]
+     },
+     "payload": {},
+     "requires": [
+      "d1",
+      "p2"
+     ]
+    },
+    {
+     "id": "d9",
+     "writer": "inc-f",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-f",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-08T09:00:00Z"
+     }
+    },
+    {
+     "id": "r3",
+     "writer": "inc-f",
+     "seq": 2,
+     "stamp": [
+      3,
+      "inc-f",
+      2
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d9"
+      ]
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 360,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "d1",
+       "d1",
+       "p2",
+       "p2",
+       "r1",
+       "r1",
+       "r2",
+       "r2",
+       "d9",
+       "d9",
+       "r3",
+       "r3"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "d1",
+       "p2",
+       "r1",
+       "r2",
+       "d9",
+       "r3",
+       "d1",
+       "p2",
+       "r1",
+       "r2",
+       "d9",
+       "r3"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "d1",
+       "p2",
+       "r1",
+       "r2",
+       "d9",
+       "r3"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "p2",
+       "r1",
+       "r2",
+       "d9",
+       "r3"
+      ],
+      "expectedPendingAtEnd": [
+       "p2",
+       "r1",
+       "r2"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold d9",
+      "withheld": [
+       "d9"
+      ],
+      "order": [
+       "d1",
+       "p2",
+       "r1",
+       "r2",
+       "r3"
+      ],
+      "expectedPendingAtEnd": [
+       "r3"
+      ],
+      "thenDeliver": [
+       "d9"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after the offline restore and an unrelated restore, then the observing one",
+      "cutAfter": [
+       "d1",
+       "p2",
+       "r1",
+       "d9",
+       "r3"
+      ],
+      "thenOrder": [
+       "r2"
+      ],
+      "checkpointCut": [
+       "d1",
+       "d9",
+       "p2",
+       "r1",
+       "r3"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 1,
+        "inc-c": 1,
+        "inc-d": 1,
+        "inc-f": 2
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "live"
+        }
+       },
+       "diagnostics": [
+        {
+         "kind": "expiryInvalidated",
+         "key": "W-A",
+         "witness": "p2",
+         "detail": "restored"
+        },
+        {
+         "kind": "offlineRestoreDefeatedExpiry",
+         "key": "W-A",
+         "witness": "r1",
+         "detail": "p2"
+        }
+       ]
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "sampled",
+     "orders": 40,
+     "cutsChecked": 280,
+     "seed": 7,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-c": 1,
+     "inc-d": 1,
+     "inc-e": 1,
+     "inc-f": 2
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "expiryInvalidated",
+      "key": "W-A",
+      "witness": "p2",
+      "detail": "restored"
+     },
+     {
+      "kind": "restoredAfterExpiry",
+      "key": "W-A",
+      "witness": "r2",
+      "detail": "p2"
+     }
+    ]
+   }
+  },
+  {
+   "name": "expiry-with-cleared-member-and-unseen-deletion",
+   "description": "Both a cleared basis member and an unseen deletion: reason precedence is restored over unseenDeletion",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d",
+     "inc-g"
+    ]
+   },
+   "ops": [
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "d2",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-20T09:00:00Z"
+     }
+    },
+    {
+     "id": "d3",
+     "writer": "inc-g",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-g",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-09T09:00:00Z"
+     }
+    },
+    {
+     "id": "p2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1",
+       "d3"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      }
+     },
+     "requires": [
+      "d1",
+      "d3"
+     ]
+    },
+    {
+     "id": "r1",
+     "writer": "inc-b",
+     "seq": 2,
+     "stamp": [
+      3,
+      "inc-b",
+      2
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d1"
+      ]
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 60,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "d1",
+       "d1",
+       "d2",
+       "d2",
+       "d3",
+       "d3",
+       "p2",
+       "p2",
+       "r1",
+       "r1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "d1",
+       "d2",
+       "d3",
+       "p2",
+       "r1",
+       "d1",
+       "d2",
+       "d3",
+       "p2",
+       "r1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "d1",
+       "d2",
+       "d3",
+       "p2",
+       "r1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "d2",
+       "d3",
+       "p2",
+       "r1"
+      ],
+      "expectedPendingAtEnd": [
+       "p2",
+       "r1"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold d3",
+      "withheld": [
+       "d3"
+      ],
+      "order": [
+       "d1",
+       "d2",
+       "p2",
+       "r1"
+      ],
+      "expectedPendingAtEnd": [
+       "p2"
+      ],
+      "thenDeliver": [
+       "d3"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 120,
+     "cutsChecked": 720,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "deleted",
+       "members": [
+        "W-A"
+       ],
+       "deadline": "2027-01-18T09:00:00Z",
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 2,
+     "inc-c": 1,
+     "inc-d": 1,
+     "inc-g": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "expiryInvalidated",
+      "key": "W-A",
+      "witness": "p2",
+      "detail": "restored"
+     },
+     {
+      "kind": "offlineRestoreDefeatedExpiry",
+      "key": "W-A",
+      "witness": "r1",
+      "detail": "p2"
+     }
+    ]
+   }
+  },
+  {
+   "name": "old-authority-head-after-re-enrollment",
+   "description": "enroll E0, revoke, enroll E1, purge naming E0: the head must belong to the current authorization interval",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
+   "ops": [
+    {
+     "id": "e0",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "writer.enroll",
+     "target": "inc-c",
+     "observed": {
+      "authority": "root:inc-a"
+     }
+    },
+    {
+     "id": "v1",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      3,
+      "inc-a",
+      3
+     ],
+     "kind": "writer.revoke",
+     "target": "inc-c",
+     "observed": {
+      "authority": "root:inc-a"
+     }
+    },
+    {
+     "id": "e1",
+     "writer": "inc-a",
+     "seq": 4,
+     "stamp": [
+      4,
+      "inc-a",
+      4
+     ],
+     "kind": "writer.enroll",
+     "target": "inc-c",
+     "observed": {
+      "authority": "root:inc-a"
+     }
+    },
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "p1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      6,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "e0"
+     },
+     "payload": {
+      "reason": "explicit",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      }
+     },
+     "requires": [
+      "d1",
+      "e0"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 20,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "e0",
+       "e0",
+       "v1",
+       "v1",
+       "e1",
+       "e1",
+       "d1",
+       "d1",
+       "p1",
+       "p1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "e0",
+       "v1",
+       "e1",
+       "d1",
+       "p1",
+       "e0",
+       "v1",
+       "e1",
+       "d1",
+       "p1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "e0",
+       "v1",
+       "e1",
+       "d1",
+       "p1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "e0",
+       "v1",
+       "e1",
+       "p1"
+      ],
+      "expectedPendingAtEnd": [
+       "p1"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold e0",
+      "withheld": [
+       "e0"
+      ],
+      "order": [
+       "v1",
+       "e1",
+       "d1",
+       "p1"
+      ],
+      "expectedPendingAtEnd": [
+       "e1",
+       "p1",
+       "v1"
+      ],
+      "thenDeliver": [
+       "e0"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 120,
+     "cutsChecked": 720,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "deleted",
+       "members": [
+        "W-A"
+       ],
+       "deadline": "2026-12-31T09:00:00Z",
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 4,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "unauthorizedPurge",
+      "key": "W-A",
+      "witness": "p1"
+     }
+    ]
+   }
+  },
+  {
+   "name": "restore-observing-expiry-before-the-checkpoint",
+   "description": "The observing restore r1 and a greater non-observing restore r2 are both before the cut: the observing witness survives installation",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d",
+     "inc-e"
+    ]
+   },
+   "ops": [
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "p2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      }
+     },
+     "requires": [
+      "d1"
+     ]
+    },
+    {
+     "id": "r1",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      4,
+      "inc-d",
+      1
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d1"
+      ],
+      "observedExpiry": [
+       "p2"
+      ]
+     },
+     "payload": {},
+     "requires": [
+      "d1",
+      "p2"
+     ]
+    },
+    {
+     "id": "r2",
+     "writer": "inc-e",
+     "seq": 1,
+     "stamp": [
+      6,
+      "inc-e",
+      1
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d1"
+      ]
+     },
+     "requires": [
+      "d1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 24,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "d1",
+       "d1",
+       "p2",
+       "p2",
+       "r1",
+       "r1",
+       "r2",
+       "r2"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "d1",
+       "p2",
+       "r1",
+       "r2",
+       "d1",
+       "p2",
+       "r1",
+       "r2"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "d1",
+       "p2",
+       "r1",
+       "r2"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "p2",
+       "r1",
+       "r2"
+      ],
+      "expectedPendingAtEnd": [
+       "p2",
+       "r1",
+       "r2"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after both restores",
+      "cutAfter": [
+       "d1",
+       "p2",
+       "r1",
+       "r2"
+      ],
+      "thenOrder": [],
+      "checkpointCut": [
+       "d1",
+       "p2",
+       "r1",
+       "r2"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 1,
+        "inc-c": 1,
+        "inc-d": 1,
+        "inc-e": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "live"
+        }
+       },
+       "diagnostics": [
+        {
+         "kind": "expiryInvalidated",
+         "key": "W-A",
+         "witness": "p2",
+         "detail": "restored"
+        },
+        {
+         "kind": "restoredAfterExpiry",
+         "key": "W-A",
+         "witness": "r1",
+         "detail": "p2"
+        }
+       ]
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 1,
+     "inc-b": 1,
+     "inc-c": 1,
+     "inc-d": 1,
+     "inc-e": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "expiryInvalidated",
+      "key": "W-A",
+      "witness": "p2",
+      "detail": "restored"
+     },
+     {
+      "kind": "restoredAfterExpiry",
+      "key": "W-A",
+      "witness": "r1",
+      "detail": "p2"
+     }
+    ]
+   }
+  },
+  {
+   "name": "restore-naming-a-discarded-edit",
+   "description": "e1 < e2 on one group: the checkpoint discards e1; a restore naming e1 is a wrong-kind reference, invalid whether or not e1 is retained",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
+   "ops": [
+    {
+     "id": "e1",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "payload": {
+      "groups": {
+       "isFavorite": true
+      }
+     }
+    },
+    {
+     "id": "e2",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      3,
+      "inc-a",
+      3
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "payload": {
+      "groups": {
+       "isFavorite": false
+      }
+     }
+    },
+    {
+     "id": "d1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "r1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      4,
+      "inc-c",
+      1
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "e1"
+      ]
+     },
+     "requires": [
+      "e1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 12,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "e1",
+       "e1",
+       "e2",
+       "e2",
+       "d1",
+       "d1",
+       "r1",
+       "r1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "e1",
+       "e2",
+       "d1",
+       "r1",
+       "e1",
+       "e2",
+       "d1",
+       "r1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "e1",
+       "e2",
+       "d1",
+       "r1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold e1",
+      "withheld": [
+       "e1"
+      ],
+      "order": [
+       "e2",
+       "d1",
+       "r1"
+      ],
+      "expectedPendingAtEnd": [
+       "e2",
+       "r1"
+      ],
+      "thenDeliver": [
+       "e1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after e1,e2,d1 (e1 discarded), then the restore",
+      "cutAfter": [
+       "e1",
+       "e2",
+       "d1"
+      ],
+      "thenOrder": [
+       "r1"
+      ],
+      "checkpointCut": [
+       "d1",
+       "e1",
+       "e2"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 3,
+        "inc-b": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "deleted",
+         "deadline": "2026-12-31T09:00:00Z"
+        }
+       },
+       "diagnostics": []
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "deleted",
+       "members": [
+        "W-A"
+       ],
+       "deadline": "2026-12-31T09:00:00Z",
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "invalidCommand",
+      "key": "r1",
+      "witness": "r1",
+      "detail": "restore:wrongKind"
+     }
+    ]
+   }
+  },
+  {
+   "name": "deletion-class-mismatch",
+   "description": "A work restore naming a queue deletion is a wrong-class reference: invalid command",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
+   "ops": [
+    {
+     "id": "q0",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "queue.create",
+     "target": "q1",
+     "payload": {
+      "groups": {
+       "name": "Later"
+      },
+      "kind": "custom"
+     }
+    },
+    {
+     "id": "dq",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "queue.delete",
+     "target": "q1",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z"
+     }
+    },
+    {
+     "id": "r1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "dq"
+      ]
+     },
+     "payload": {
+      "scope": [
+       "W-A"
+      ]
+     },
+     "requires": [
+      "dq"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 6,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "q0",
+       "q0",
+       "dq",
+       "dq",
+       "r1",
+       "r1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "q0",
+       "dq",
+       "r1",
+       "q0",
+       "dq",
+       "r1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "q0",
+       "dq",
+       "r1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold dq",
+      "withheld": [
+       "dq"
+      ],
+      "order": [
+       "q0",
+       "r1"
+      ],
+      "expectedPendingAtEnd": [
+       "r1"
+      ],
+      "thenDeliver": [
+       "dq"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 6,
+     "cutsChecked": 24,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {},
+     "queues": {
+      "q1": {
+       "lifecycle": "deleted",
+       "members": [
+        "q1"
+       ],
+       "deadline": "2026-12-31T09:00:00Z",
+       "groups": {
+        "name": "Later"
+       }
+      }
+     }
+    },
+    "appliedCut": {
+     "inc-a": 2,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "invalidCommand",
+      "key": "r1",
+      "witness": "r1",
+      "detail": "restore:wrongClass"
+     }
+    ]
+   }
+  },
+  {
+   "name": "unrelated-deletion-name",
+   "description": "A restore of W-A naming a deletion of W-B only: invalid command (unrelated name)",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     },
+     {
+      "id": "i9",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-a",
+       2
+      ],
+      "kind": "work.create",
+      "target": "W-B",
+      "payload": {
+       "ao3WorkID": 222,
+       "urls": [
+        "https://archiveofourown.org/works/222"
+       ],
+       "groups": {
+        "title": "B"
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c"
+    ]
+   },
+   "ops": [
+    {
+     "id": "dB",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-b",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-B",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-B"
+      ]
+     }
+    },
+    {
+     "id": "r1",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      3,
+      "inc-c",
+      1
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "dB"
+      ]
+     },
+     "payload": {
+      "scope": [
+       "W-A"
+      ]
+     },
+     "requires": [
+      "dB"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 2,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "dB",
+       "dB",
+       "r1",
+       "r1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "dB",
+       "r1",
+       "dB",
+       "r1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "dB",
+       "r1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold dB",
+      "withheld": [
+       "dB"
+      ],
+      "order": [
+       "r1"
+      ],
+      "expectedPendingAtEnd": [
+       "r1"
+      ],
+      "thenDeliver": [
+       "dB"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 2,
+     "cutsChecked": 6,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      },
+      "W-B": {
+       "lifecycle": "deleted",
+       "members": [
+        "W-B"
+       ],
+       "deadline": "2026-12-31T09:00:00Z",
+       "groups": {
+        "title": "B"
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 2,
+     "inc-b": 1,
+     "inc-c": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "invalidCommand",
+      "key": "r1",
+      "witness": "r1",
+      "detail": "restore:unrelatedName"
+     }
+    ]
+   }
+  },
+  {
+   "name": "narrowed-scope-needs-administrative-flag",
+   "description": "A restore whose scope is a strict subset of the named deletion's scope is invalid unless administrative",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-d"
+    ]
+   },
+   "ops": [
+    {
+     "id": "a2",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "work.create",
+     "target": "W-B",
+     "payload": {
+      "ao3WorkID": 111,
+      "urls": [
+       "https://archiveofourown.org/works/111"
+      ],
+      "groups": {
+       "title": "B"
+      }
+     }
+    },
+    {
+     "id": "del",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      2,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-A",
+       "W-B"
+      ]
+     }
+    },
+    {
+     "id": "r1",
+     "writer": "inc-d",
+     "seq": 2,
+     "stamp": [
+      3,
+      "inc-d",
+      2
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "del"
+      ]
+     },
+     "payload": {
+      "scope": [
+       "W-A"
+      ]
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 3,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a2",
+       "a2",
+       "del",
+       "del",
+       "r1",
+       "r1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a2",
+       "del",
+       "r1",
+       "a2",
+       "del",
+       "r1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a2",
+       "del",
+       "r1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold del",
+      "withheld": [
+       "del"
+      ],
+      "order": [
+       "a2",
+       "r1"
+      ],
+      "expectedPendingAtEnd": [
+       "r1"
+      ],
+      "thenDeliver": [
+       "del"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 6,
+     "cutsChecked": 24,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "deleted",
+       "members": [
+        "W-A",
+        "W-B"
+       ],
+       "deadline": "2026-12-31T09:00:00Z",
+       "groups": {
+        "isFavorite": false,
+        "title": "B",
+        "legacyReaderProgress": 0.1
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 2,
+     "inc-d": 2
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "invalidCommand",
+      "key": "r1",
+      "witness": "r1",
+      "detail": "restore:scopeNarrowed"
+     }
+    ]
+   }
+  },
+  {
+   "name": "legacy-evidence-purge-after-a-checkpoint",
+   "description": "A checkpoint cut after the verified legacy evidence is adopted but before the legacy-form purge: the evidence is retained by digest, so the suffix purge validates",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a"
+    ]
+   },
+   "ops": [
+    {
+     "id": "ev1",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "legacy.evidence",
+     "target": "L1",
+     "payload": {
+      "digest": "sha256:L1",
+      "verified": true,
+      "adopted": true,
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      }
+     }
+    },
+    {
+     "id": "pl",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      3,
+      "inc-a",
+      3
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [],
+      "authority": "root:inc-a",
+      "evidence": [
+       "ev1"
+      ]
+     },
+     "payload": {
+      "reason": "explicit",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      },
+      "legacyEvidence": "sha256:L1"
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 1,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "ev1",
+       "ev1",
+       "pl",
+       "pl"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "ev1",
+       "pl",
+       "ev1",
+       "pl"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "ev1",
+       "pl"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold ev1",
+      "withheld": [
+       "ev1"
+      ],
+      "order": [
+       "pl"
+      ],
+      "expectedPendingAtEnd": [
+       "pl"
+      ],
+      "thenDeliver": [
+       "ev1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after the adopted evidence, then the legacy purge",
+      "cutAfter": [
+       "ev1"
+      ],
+      "thenOrder": [
+       "pl"
+      ],
+      "checkpointCut": [
+       "ev1"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 2
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "live"
+        }
+       },
+       "diagnostics": []
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 2,
+     "cutsChecked": 6,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "purged",
+       "reason": "explicit",
+       "witness": "pl"
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3
+    },
+    "pending": [],
+    "diagnostics": []
+   },
+   "goldenReducer": {
+    "typedEvidence": {
+     "ev1": true
+    }
+   }
+  },
+  {
+   "name": "legacy-evidence-not-verified",
+   "description": "Unverified evidence cannot authorize a legacy purge: invalidReference, the work stays live",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a"
+    ]
+   },
+   "ops": [
+    {
+     "id": "ev1",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      2,
+      "inc-a",
+      2
+     ],
+     "kind": "legacy.evidence",
+     "target": "L1",
+     "payload": {
+      "digest": "sha256:L1",
+      "verified": false,
+      "adopted": true,
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      }
+     }
+    },
+    {
+     "id": "pl",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      3,
+      "inc-a",
+      3
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [],
+      "authority": "root:inc-a",
+      "evidence": [
+       "ev1"
+      ]
+     },
+     "payload": {
+      "reason": "explicit",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      },
+      "legacyEvidence": "sha256:L1"
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 1,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "ev1",
+       "ev1",
+       "pl",
+       "pl"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "ev1",
+       "pl",
+       "ev1",
+       "pl"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "ev1",
+       "pl"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold ev1",
+      "withheld": [
+       "ev1"
+      ],
+      "order": [
+       "pl"
+      ],
+      "expectedPendingAtEnd": [
+       "pl"
+      ],
+      "thenDeliver": [
+       "ev1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 2,
+     "cutsChecked": 6,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A"
+       ],
+       "groups": {
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "invalidReference",
+      "key": "W-A",
+      "witness": "pl",
+      "detail": "legacyEvidence"
+     }
+    ]
+   },
+   "goldenReducer": {
+    "typedEvidence": {
+     "ev1": false
+    }
+   }
+  },
+  {
+   "name": "expired-member-contributes-nothing",
+   "description": "A (greater stamps, title and EPUB) is deleted then expired; B is live: the component shows B's content, not A's",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "a0",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {}
+      }
+     },
+     {
+      "id": "a1",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       5,
+       "inc-a",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-A",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "dA",
+       "size": 10
+      }
+     },
+     {
+      "id": "a2",
+      "writer": "inc-a",
+      "seq": 3,
+      "stamp": [
+       6,
+       "inc-a",
+       3
+      ],
+      "kind": "work.edit",
+      "target": "W-A",
+      "payload": {
+       "groups": {
+        "title": "TA"
+       }
+      }
+     },
+     {
+      "id": "b0",
+      "writer": "inc-b",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-b",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-B",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "title": "B"
+       }
+      }
+     },
+     {
+      "id": "b1",
+      "writer": "inc-b",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-b",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-B",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "dB",
+       "size": 10
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d"
+    ]
+   },
+   "ops": [
+    {
+     "id": "d1",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      6,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-A"
+      ]
+     }
+    },
+    {
+     "id": "p2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      7,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      },
+      "scope": [
+       "W-A"
+      ]
+     },
+     "requires": [
+      "d1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 2,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "d1",
+       "d1",
+       "p2",
+       "p2"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "d1",
+       "p2",
+       "d1",
+       "p2"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "d1",
+       "p2"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "p2"
+      ],
+      "expectedPendingAtEnd": [
+       "p2"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 2,
+     "cutsChecked": 6,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A",
+        "W-B"
+       ],
+       "groups": {
+        "title": "B"
+       },
+       "asset": {
+        "epub": {
+         "digest": "dB",
+         "alternates": []
+        }
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 2,
+     "inc-c": 1,
+     "inc-d": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "survivingDuplicate",
+      "key": "W-B",
+      "witness": "d1"
+     }
+    ]
+   }
+  },
+  {
+   "name": "expired-member-restored-contributes-again",
+   "description": "Restoring A: both members are live, the greater stamps win content, the other head is an alternate",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "a0",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {}
+      }
+     },
+     {
+      "id": "a1",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       5,
+       "inc-a",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-A",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "dA",
+       "size": 10
+      }
+     },
+     {
+      "id": "a2",
+      "writer": "inc-a",
+      "seq": 3,
+      "stamp": [
+       6,
+       "inc-a",
+       3
+      ],
+      "kind": "work.edit",
+      "target": "W-A",
+      "payload": {
+       "groups": {
+        "title": "TA"
+       }
+      }
+     },
+     {
+      "id": "b0",
+      "writer": "inc-b",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-b",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-B",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "title": "B"
+       }
+      }
+     },
+     {
+      "id": "b1",
+      "writer": "inc-b",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-b",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-B",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "dB",
+       "size": 10
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d",
+     "inc-e"
+    ]
+   },
+   "ops": [
+    {
+     "id": "d1",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      6,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-A"
+      ]
+     }
+    },
+    {
+     "id": "p2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      7,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      },
+      "scope": [
+       "W-A"
+      ]
+     },
+     "requires": [
+      "d1"
+     ]
+    },
+    {
+     "id": "r1",
+     "writer": "inc-e",
+     "seq": 1,
+     "stamp": [
+      8,
+      "inc-e",
+      1
+     ],
+     "kind": "work.restore",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "deletions": [
+       "d1"
+      ]
+     },
+     "payload": {
+      "scope": [
+       "W-A"
+      ]
+     },
+     "requires": [
+      "d1"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 6,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "d1",
+       "d1",
+       "p2",
+       "p2",
+       "r1",
+       "r1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "d1",
+       "p2",
+       "r1",
+       "d1",
+       "p2",
+       "r1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "d1",
+       "p2",
+       "r1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "p2",
+       "r1"
+      ],
+      "expectedPendingAtEnd": [
+       "p2",
+       "r1"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint while A is expired, then the restore",
+      "cutAfter": [
+       "d1",
+       "p2"
+      ],
+      "thenOrder": [
+       "r1"
+      ],
+      "checkpointCut": [
+       "d1",
+       "p2"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 3,
+        "inc-b": 2,
+        "inc-c": 1,
+        "inc-d": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "live"
+        }
+       },
+       "diagnostics": [
+        {
+         "kind": "survivingDuplicate",
+         "key": "W-B",
+         "witness": "d1"
+        }
+       ]
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 6,
+     "cutsChecked": 24,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A",
+        "W-B"
+       ],
+       "groups": {
+        "title": "TA"
+       },
+       "asset": {
+        "epub": {
+         "digest": "dA",
+         "alternates": [
+          "dB"
+         ]
+        }
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 2,
+     "inc-c": 1,
+     "inc-d": 1,
+     "inc-e": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "assetConflict",
+      "key": "W-A",
+      "witness": "a1",
+      "detail": "b1"
+     },
+     {
+      "kind": "expiryInvalidated",
+      "key": "W-A",
+      "witness": "p2",
+      "detail": "restored"
+     },
+     {
+      "kind": "offlineRestoreDefeatedExpiry",
+      "key": "W-A",
+      "witness": "r1",
+      "detail": "p2"
+     }
+    ]
+   }
+  },
+  {
+   "name": "expiry-revoked-A-returns-as-deleted",
+   "description": "An expiry by a later-revoked writer: A returns to deleted and still contributes nothing to the live component",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "a0",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {}
+      }
+     },
+     {
+      "id": "a1",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       5,
+       "inc-a",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-A",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "dA",
+       "size": 10
+      }
+     },
+     {
+      "id": "a2",
+      "writer": "inc-a",
+      "seq": 3,
+      "stamp": [
+       6,
+       "inc-a",
+       3
+      ],
+      "kind": "work.edit",
+      "target": "W-A",
+      "payload": {
+       "groups": {
+        "title": "TA"
+       }
+      }
+     },
+     {
+      "id": "b0",
+      "writer": "inc-b",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-b",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-B",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "title": "B"
+       }
+      }
+     },
+     {
+      "id": "b1",
+      "writer": "inc-b",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-b",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-B",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "dB",
+       "size": 10
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-d"
+    ]
+   },
+   "ops": [
+    {
+     "id": "e0",
+     "writer": "inc-a",
+     "seq": 4,
+     "stamp": [
+      7,
+      "inc-a",
+      4
+     ],
+     "kind": "writer.enroll",
+     "target": "inc-c",
+     "observed": {
+      "authority": "root:inc-a"
+     }
+    },
+    {
+     "id": "d1",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      6,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-A"
+      ]
+     }
+    },
+    {
+     "id": "p2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      9,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1"
+      ],
+      "authority": "e0"
+     },
+     "payload": {
+      "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      },
+      "scope": [
+       "W-A"
+      ]
+     },
+     "requires": [
+      "d1",
+      "e0"
+     ]
+    },
+    {
+     "id": "v1",
+     "writer": "inc-a",
+     "seq": 5,
+     "stamp": [
+      8,
+      "inc-a",
+      5
+     ],
+     "kind": "writer.revoke",
+     "target": "inc-c",
+     "observed": {
+      "authority": "root:inc-a"
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 12,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "e0",
+       "e0",
+       "d1",
+       "d1",
+       "p2",
+       "p2",
+       "v1",
+       "v1"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "e0",
+       "d1",
+       "p2",
+       "v1",
+       "e0",
+       "d1",
+       "p2",
+       "v1"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "e0",
+       "d1",
+       "p2",
+       "v1"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "e0",
+       "p2",
+       "v1"
+      ],
+      "expectedPendingAtEnd": [
+       "p2"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold e0",
+      "withheld": [
+       "e0"
+      ],
+      "order": [
+       "d1",
+       "p2",
+       "v1"
+      ],
+      "expectedPendingAtEnd": [
+       "p2",
+       "v1"
+      ],
+      "thenDeliver": [
+       "e0"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [
+     {
+      "name": "checkpoint after the expiry, then the lower-stamp revocation",
+      "cutAfter": [
+       "e0",
+       "d1",
+       "p2"
+      ],
+      "thenOrder": [
+       "v1"
+      ],
+      "checkpointCut": [
+       "d1",
+       "e0",
+       "p2"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 4,
+        "inc-b": 2,
+        "inc-c": 1,
+        "inc-d": 1
+       },
+       "pending": [],
+       "works": {
+        "W-A": {
+         "lifecycle": "live"
+        }
+       },
+       "diagnostics": [
+        {
+         "kind": "survivingDuplicate",
+         "key": "W-B",
+         "witness": "d1"
+        }
+       ]
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "live",
+       "members": [
+        "W-A",
+        "W-B"
+       ],
+       "groups": {
+        "title": "B"
+       },
+       "asset": {
+        "epub": {
+         "digest": "dB",
+         "alternates": []
+        }
+       }
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 5,
+     "inc-b": 2,
+     "inc-c": 1,
+     "inc-d": 1
+    },
+    "pending": [],
+    "diagnostics": [
+     {
+      "kind": "survivingDuplicate",
+      "key": "W-B",
+      "witness": "d1"
+     },
+     {
+      "kind": "unauthorizedPurge",
+      "key": "W-A",
+      "witness": "p2"
+     }
+    ]
+   }
+  },
+  {
+   "name": "all-members-expired",
+   "description": "Every member expired: the component is purged(expired), no content, key is the survivor",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "a0",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-A",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {}
+      }
+     },
+     {
+      "id": "a1",
+      "writer": "inc-a",
+      "seq": 2,
+      "stamp": [
+       5,
+       "inc-a",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-A",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "dA",
+       "size": 10
+      }
+     },
+     {
+      "id": "a2",
+      "writer": "inc-a",
+      "seq": 3,
+      "stamp": [
+       6,
+       "inc-a",
+       3
+      ],
+      "kind": "work.edit",
+      "target": "W-A",
+      "payload": {
+       "groups": {
+        "title": "TA"
+       }
+      }
+     },
+     {
+      "id": "b0",
+      "writer": "inc-b",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-b",
+       1
+      ],
+      "kind": "work.create",
+      "target": "W-B",
+      "payload": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ],
+       "groups": {
+        "title": "B"
+       }
+      }
+     },
+     {
+      "id": "b1",
+      "writer": "inc-b",
+      "seq": 2,
+      "stamp": [
+       2,
+       "inc-b",
+       2
+      ],
+      "kind": "asset.write",
+      "target": "W-B",
+      "payload": {
+       "assetKind": "epub",
+       "digest": "dB",
+       "size": 10
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b",
+     "inc-c",
+     "inc-d",
+     "inc-e"
+    ]
+   },
+   "ops": [
+    {
+     "id": "d1",
+     "writer": "inc-d",
+     "seq": 1,
+     "stamp": [
+      6,
+      "inc-d",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-A"
+      ]
+     }
+    },
+    {
+     "id": "d2",
+     "writer": "inc-e",
+     "seq": 1,
+     "stamp": [
+      6,
+      "inc-e",
+      1
+     ],
+     "kind": "work.delete",
+     "target": "W-B",
+     "observed": {
+      "gen": "g0"
+     },
+     "payload": {
+      "deletedAt": "2026-10-02T09:00:00Z",
+      "scope": [
+       "W-B"
+      ]
+     }
+    },
+    {
+     "id": "p2",
+     "writer": "inc-c",
+     "seq": 1,
+     "stamp": [
+      7,
+      "inc-c",
+      1
+     ],
+     "kind": "work.purge",
+     "target": "W-A",
+     "observed": {
+      "gen": "g0",
+      "basis": [
+       "d1",
+       "d2"
+      ],
+      "authority": "root:inc-c"
+     },
+     "payload": {
+      "reason": "expired",
+      "identity": {
+       "ao3WorkID": 111,
+       "urls": [
+        "https://archiveofourown.org/works/111"
+       ]
+      },
+      "scope": [
+       "W-A",
+       "W-B"
+      ]
+     },
+     "requires": [
+      "d1",
+      "d2"
+     ]
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "orders": "allInterleavings",
+    "orderCount": 6,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "d1",
+       "d1",
+       "d2",
+       "d2",
+       "p2",
+       "p2"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "d1",
+       "d2",
+       "p2",
+       "d1",
+       "d2",
+       "p2"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "d1",
+       "d2",
+       "p2"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [
+     {
+      "name": "withhold d1",
+      "withheld": [
+       "d1"
+      ],
+      "order": [
+       "d2",
+       "p2"
+      ],
+      "expectedPendingAtEnd": [
+       "p2"
+      ],
+      "thenDeliver": [
+       "d1"
+      ],
+      "finalPending": []
+     },
+     {
+      "name": "withhold d2",
+      "withheld": [
+       "d2"
+      ],
+      "order": [
+       "d1",
+       "p2"
+      ],
+      "expectedPendingAtEnd": [
+       "p2"
+      ],
+      "thenDeliver": [
+       "d2"
+      ],
+      "finalPending": []
+     }
+    ],
+    "checkpoints": [],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 6,
+     "cutsChecked": 24,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {
+      "W-A": {
+       "lifecycle": "purged",
+       "members": [
+        "W-A",
+        "W-B"
+       ],
+       "reason": "expired",
+       "witness": "p2"
+      }
+     },
+     "memberships": [],
+     "annotations": [],
+     "settings": {},
+     "pronunciations": {}
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 2,
+     "inc-c": 1,
+     "inc-d": 1,
+     "inc-e": 1
+    },
+    "pending": [],
+    "diagnostics": []
+   }
+  }
+ ]
+}

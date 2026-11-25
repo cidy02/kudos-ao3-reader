@@ -1,0 +1,224 @@
+{
+ "schema": "kudos.sync-fixture/2",
+ "id": "d2",
+ "slice": "ext",
+ "kind": "v9-concurrency",
+ "title": "Entry-level reset beats an older set",
+ "refs": [
+  "P2",
+  "P3",
+  "DEC-27"
+ ],
+ "ids": {
+  "W-A": "11111111-1111-4111-8111-111111111111",
+  "W-B": "22222222-2222-4222-8222-222222222222",
+  "W-C": "33333333-3333-4333-8333-333333333333",
+  "W-Z": "44444444-4444-4444-8444-444444444444",
+  "X": "55555555-5555-4555-8555-555555555555",
+  "Y": "66666666-6666-4666-8666-666666666666"
+ },
+ "universes": [
+  {
+   "name": "entry-reset-beats-older-set",
+   "description": "A reset carries its own stamp; a later older set cannot revive it; a counter tie breaks by incarnation",
+   "initial": {
+    "createHistory": [
+     {
+      "id": "i1",
+      "writer": "inc-a",
+      "seq": 1,
+      "stamp": [
+       1,
+       "inc-a",
+       1
+      ],
+      "kind": "setting.entry.set",
+      "target": "commentDrafts|e1",
+      "payload": {
+       "value": "hello"
+      }
+     }
+    ]
+   },
+   "authorization": {
+    "founders": [
+     "inc-a",
+     "inc-b"
+    ]
+   },
+   "ops": [
+    {
+     "id": "a1",
+     "writer": "inc-a",
+     "seq": 2,
+     "stamp": [
+      3,
+      "inc-a",
+      2
+     ],
+     "kind": "setting.entry.set",
+     "target": "commentDrafts|e1",
+     "payload": {
+      "value": "hi"
+     }
+    },
+    {
+     "id": "a2",
+     "writer": "inc-a",
+     "seq": 3,
+     "stamp": [
+      5,
+      "inc-a",
+      3
+     ],
+     "kind": "pronunciation.reset",
+     "target": "global|tomato"
+    },
+    {
+     "id": "b1",
+     "writer": "inc-b",
+     "seq": 1,
+     "stamp": [
+      4,
+      "inc-b",
+      1
+     ],
+     "kind": "setting.entry.reset",
+     "target": "commentDrafts|e1"
+    },
+    {
+     "id": "b2",
+     "writer": "inc-b",
+     "seq": 2,
+     "stamp": [
+      5,
+      "inc-b",
+      2
+     ],
+     "kind": "pronunciation.set",
+     "target": "global|tomato",
+     "payload": {
+      "ipa": "x"
+     }
+    }
+   ],
+   "events": [],
+   "schedules": {
+    "missingPrerequisiteEmptyBecause": "no op in this universe has a cross-writer prerequisite",
+    "orders": "allInterleavings",
+    "orderCount": 6,
+    "duplicates": [
+     {
+      "name": "each op delivered twice, back to back",
+      "order": [
+       "a1",
+       "a1",
+       "a2",
+       "a2",
+       "b1",
+       "b1",
+       "b2",
+       "b2"
+      ]
+     },
+     {
+      "name": "full replay after full replay",
+      "order": [
+       "a1",
+       "a2",
+       "b1",
+       "b2",
+       "a1",
+       "a2",
+       "b1",
+       "b2"
+      ]
+     }
+    ],
+    "restarts": [
+     {
+      "name": "kill and reload after every op",
+      "order": [
+       "a1",
+       "a2",
+       "b1",
+       "b2"
+      ],
+      "restartAfter": "every"
+     }
+    ],
+    "missingPrerequisite": [],
+    "checkpoints": [
+     {
+      "name": "checkpoint after the winning reset, then the older set",
+      "cutAfter": [
+       "b1"
+      ],
+      "thenOrder": [
+       "a1",
+       "a2",
+       "b2"
+      ],
+      "checkpointCut": [
+       "b1"
+      ],
+      "expectedAtCut": {
+       "appliedVector": {
+        "inc-a": 1,
+        "inc-b": 1
+       },
+       "pending": [],
+       "works": {},
+       "diagnostics": []
+      }
+     }
+    ],
+    "retentionEquivalence": {
+     "mode": "exhaustive",
+     "orders": 24,
+     "cutsChecked": 120,
+     "seed": null,
+     "compared": "normalized projection, all diagnostics with keys, applied vector and pending set at every step after the cut",
+     "rule": "project(retain(prefix) + suffix) == project(all)"
+    }
+   },
+   "expected": {
+    "state": {
+     "works": {},
+     "memberships": [],
+     "annotations": [],
+     "settings": {
+      "commentDrafts|e1": null
+     },
+     "pronunciations": {
+      "global|tomato": "x"
+     }
+    },
+    "appliedCut": {
+     "inc-a": 3,
+     "inc-b": 2
+    },
+    "pending": [],
+    "diagnostics": [],
+    "retainedMetadata": {
+     "commentDrafts|e1": {
+      "winningReset": [
+       4,
+       "inc-b",
+       1
+      ]
+     },
+     "global|tomato": {
+      "note": "set (5,inc-b,2) wins the tie over reset (5,inc-a,3): \"inc-b\" > \"inc-a\"; both facts in the live log, only the winner is retained in a checkpoint"
+     }
+    }
+   },
+   "goldenReducer": {
+    "entries": {
+     "commentDrafts|e1": null,
+     "global|tomato": "x"
+    }
+   }
+  }
+ ]
+}
