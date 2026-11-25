@@ -437,7 +437,7 @@ enum ReadingQueueService {
             let key = link.dedupKey
             if incomingByKey[key] == nil || existingByKey[key] != nil {
                 // A removal travels as a tombstone so another device's copy goes too.
-                if incomingByKey[key] == nil { SyncTombstones.recordDeletion(of: link, in: context) }
+                if incomingByKey[key] == nil { SyncTombstones.recordDeletion(of: link, in: queue, context: context) }
                 queue.searchLinks.removeAll { $0.id == link.id }
                 context.delete(link)
                 changed = true
@@ -546,7 +546,7 @@ enum ReadingQueueService {
         if wasSavedSearch {
             queue.searchSourcesModifiedAt = now
         } else {
-            if link.isKnownSource { SyncTombstones.recordDeletion(of: link, in: context) }
+            if link.isKnownSource { SyncTombstones.recordDeletion(of: link, in: queue, context: context) }
             queue.sourcesModifiedAt = now
         }
         context.delete(link)

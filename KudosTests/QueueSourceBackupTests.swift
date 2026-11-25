@@ -626,7 +626,7 @@ struct QueueSourceBackupTests {
         let draft = try #require(QueueSourceDraft.author(username: "alice"))
         #expect(ReadingQueueService.addSource(draft, to: q, in: context))
         let link = try #require(q.visibleNonSearchSources.first)
-        let id = link.id
+        let id = QueueSourceDraft.tombstoneID(queue: q, dedupKey: link.dedupKey)
         ReadingQueueService.removeSource(link, from: q, in: context)
         let tombstones = try context.fetch(FetchDescriptor<SyncTombstone>())
         #expect(tombstones.contains { $0.recordType == .queueSource && $0.recordID == id })

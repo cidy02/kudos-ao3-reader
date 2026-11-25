@@ -3605,7 +3605,7 @@ enum KudosBackupService {
         // Rows deleted a moment ago can still sit in the relationship until the
         // save; a lookup must never land on one (it would be updated, then lost).
         func drop(_ link: QueueSavedSearchLink, tombstone: Bool) {
-            if tombstone { SyncTombstones.recordDeletion(of: link, in: context) }
+            if tombstone { SyncTombstones.recordDeletion(of: link, in: queue, context: context) }
             queue.searchLinks.removeAll { $0.id == link.id }
             context.delete(link)
         }
