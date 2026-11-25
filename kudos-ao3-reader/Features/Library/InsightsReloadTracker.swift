@@ -149,9 +149,20 @@ enum InsightsReloadDigest {
         hasher.mix(work.workFandoms)
         hasher.mix(work.workRelationships)
         hasher.mix(work.workCharacters)
+        hasher.mix(work.workFreeforms)
         hasher.mix(work.workTags)
         hasher.mix(work.workWarnings)
         hasher.mix(work.workCategories)
+        hasher.mix(work.stopReasonRaw)
+        hasher.mix(work.stopTag)
+        hasher.mix(work.kudos)
+        hasher.mix(work.kudosAtSave ?? -1)
+        hasher.mix(work.statsSavedAt?.timeIntervalSince1970)
+        hasher.mix(work.importSourceRaw ?? "")
+        hasher.mix(work.importSourceSince?.timeIntervalSince1970)
+        hasher.mix(work.ao3SeriesID ?? -1)
+        hasher.mix(work.seriesPosition)
+        hasher.mix(work.authorIdentitiesJSON)
         return hasher.state
     }
 
@@ -201,6 +212,22 @@ enum InsightsReloadDigest {
         hasher.mix(alias.name)
         hasher.mix(alias.canonicalName)
         hasher.mix(alias.parentFandoms)
+        return hasher.state
+    }
+
+    private static func seriesSignature(_ series: SavedSeries) -> UInt64 {
+        var hasher = DeterministicHasher()
+        hasher.mix(series.id)
+        hasher.mix(series.ao3SeriesID)
+        hasher.mix(series.title)
+        hasher.mix(series.partCount)
+        hasher.mix(series.isComplete)
+        hasher.mix(series.wordCount)
+        hasher.mix(series.partWorkIDs.count)
+        for workID in series.partWorkIDs {
+            hasher.mix(workID)
+        }
+        hasher.mix(series.lastModifiedAt.timeIntervalSince1970)
         return hasher.state
     }
 
@@ -256,7 +283,13 @@ enum InsightsReloadDigest {
             aliasBag.add(aliasSignature(alias))
         }
 
-        let digest = "\(liveBag.token)|\(deletedBag.token)|\(sessionBag.token)|\(aliasBag.token)"
+        let seriesRows = (try? context.fetch(FetchDescriptor<SavedSeries>())) ?? []
+        var seriesBag = BagDigest()
+        for series in seriesRows {
+            seriesBag.add(seriesSignature(series))
+        }
+
+        let digest = "\(liveBag.token)|\(deletedBag.token)|\(sessionBag.token)|\(aliasBag.token)|\(seriesBag.token)"
         return Snapshot(
             digest: digest,
             liveWorkSignatures: liveSignatures,
@@ -360,14 +393,16 @@ final class InsightsReloadTracker {
         let workEntity = Schema.entityName(for: SavedWork.self)
         let sessionEntity = Schema.entityName(for: ReadingSession.self)
         let aliasEntity = Schema.entityName(for: TagAlias.self)
+        let seriesEntity = Schema.entityName(for: SavedSeries.self)
 
         let insertedList = inserted ?? []
         let updatedList = updated ?? []
         let deletedList = deleted ?? []
 
-        // Any ReadingSession or TagAlias change always affects Insights.
+        // Any ReadingSession, TagAlias, or SavedSeries change always affects Insights.
         if containsEntity(sessionEntity, in: insertedList, updatedList, deletedList)
-            || containsEntity(aliasEntity, in: insertedList, updatedList, deletedList) {
+            || containsEntity(aliasEntity, in: insertedList, updatedList, deletedList)
+            || containsEntity(seriesEntity, in: insertedList, updatedList, deletedList) {
             return .needsReload
         }
 

@@ -739,6 +739,8 @@ enum ReadingLogService {
             let work = worksByID[session.workID]
             let rawFandom = session.fandoms.first(where: { !$0.isEmpty })
                 ?? work?.workFandoms.first(where: { !$0.isEmpty }) ?? ""
+            let resolvedWordUnit: SavedWork.WordUnit = work?.wordUnit
+                ?? SavedWork.wordUnit(forLanguage: session.language)
             return ReadingSessionFacts(
                 workID: session.workID,
                 startedAt: session.startedAt,
@@ -758,8 +760,22 @@ enum ReadingLogService {
                 startProgress: session.startProgress,
                 tzOffsetSeconds: session.tzOffsetSeconds,
                 mode: session.mode,
-                wordUnit: work?.wordUnit ?? .words,
-                authorAccounts: session.authorAccounts
+                wordUnit: resolvedWordUnit,
+                authorAccounts: session.authorAccounts,
+                playbackRate: session.playbackRate,
+                fandoms: session.fandoms,
+                relationships: session.relationships,
+                characters: session.characters,
+                freeformTags: session.freeformTags,
+                rating: session.rating,
+                warnings: session.warnings,
+                categories: session.categories,
+                language: session.language,
+                isCompleteAtVisit: session.isCompleteAtVisit,
+                publishedYear: session.publishedYear,
+                ao3SeriesID: session.ao3SeriesID,
+                seriesPosition: session.seriesPosition,
+                ao3WorkID: session.ao3WorkID
             )
         }
     }
@@ -1171,7 +1187,7 @@ enum ReadingLogService {
         )
         let readWorkIDs = Set(periodFacts.map(\.workID))
         let worksInPeriod = filtered.works.filter { readWorkIDs.contains($0.id) }
-        let taste = worksInPeriod.isEmpty
+        let taste = periodFacts.isEmpty
             ? nil
             : ReadingTasteInsights.make(works: worksInPeriod, facts: periodFacts, aliases: resolvedAliases)
         let habits = ReadingHabitsInsights.make(
@@ -1181,12 +1197,18 @@ enum ReadingLogService {
             allFacts: allFacts,
             periodInterval: req.period,
             calendar: req.calendar,
-            aliases: resolvedAliases
+            aliases: resolvedAliases,
+            now: req.now
         )
+        let periodSessions = filtered.sessions.filter { (session: ReadingSession) -> Bool in
+            ReadingInsights.isInPeriod(session, period: req.period, calendar: req.calendar)
+        }
+        let paceHistorySessions = filtered.sessions.filter { (session: ReadingSession) -> Bool in
+            ReadingInsights.readingDay(for: session, calendar: req.calendar) < req.period.end
+        }
         let chapterTiming = InsightsProvenance.chapterTiming(
-            sessions: filtered.sessions.filter {
-                ReadingInsights.isInPeriod($0, period: req.period, calendar: req.calendar)
-            }
+            sessions: periodSessions,
+            paceHistorySessions: paceHistorySessions
         )
         let library = ReadingLibraryInsights.make(
             works: libraryWorks,

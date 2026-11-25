@@ -45,6 +45,22 @@ nonisolated struct ReadingSessionFacts: Equatable, Sendable {
     var wordUnit: SavedWork.WordUnit = .words
     /// Registered AO3 accounts captured at visit; survives deletion of the work.
     var authorAccounts: [String] = []
+    /// Playback rate for `.listen` sittings (`ReadingSession.playbackRate`), when recorded (D4).
+    var playbackRate: Double? = nil
+    /// D1 metadata snapshots captured at visit so deleted works remain in Taste and Series.
+    var fandoms: [String] = []
+    var relationships: [String] = []
+    var characters: [String] = []
+    var freeformTags: [String] = []
+    var rating: String = ""
+    var warnings: [String] = []
+    var categories: [String] = []
+    var language: String = ""
+    var isCompleteAtVisit: Bool = false
+    var publishedYear: Int? = nil
+    var ao3SeriesID: Int? = nil
+    var seriesPosition: Int = 0
+    var ao3WorkID: Int? = nil
 }
 
 /// What the log knows about one work, for a history or favourites row.
@@ -118,6 +134,10 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
     var silentReadingSeconds: Double = 0
     /// Duration spent listening to Read Aloud (`.listen` mode).
     var listeningSeconds: Double = 0
+    /// Duration-weighted average Read Aloud playback rate across `.listen` sittings with a recorded rate (D4).
+    var listeningPlaybackRate: Double? = nil
+    /// Distinct works listened to via Read Aloud in this period (D4).
+    var listeningWorksCount: Int = 0
     /// Characters read for no-space script works (`.characters`), never mixed into words.
     var charactersRead: Int = 0
     /// Visual reading pace in characters per hour for `.characters` works.
@@ -157,6 +177,9 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         var dayNumber: Int
         var words: Int
         var isMax: Bool = false
+        /// True when at least one sitting occurred on this reading day (including `.characters`
+        /// or 0-net-word visits), so calendar reading-day counts agree with `readingDaysCount`.
+        var hasReading: Bool = false
     }
 
     nonisolated struct HourlyBucket: Equatable, Sendable, Identifiable {
@@ -226,8 +249,11 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
             : previousWordFacts.reduce(0) { $0 + $1.wordsRead }
         insights.fandomWordsShares = fandomWordsShares(from: facts, aliases: aliases)
 
+        // Owner review: include every work read in the period (both `.words` and
+        // `.characters`) in Length of What You Read so Overview's works count agrees
+        // with Taste's works read.
         var wordCountsByWork: [UUID: Int] = [:]
-        for f in wordFacts { wordCountsByWork[f.workID] = f.wordCount }
+        for f in facts { wordCountsByWork[f.workID] = f.wordCount }
         insights.lengthMix = lengthMix(words: Array(wordCountsByWork.values))
 
         insights.dailyWords = dailyWordsBuckets(from: facts, in: dayRange, calendar: calendar)
@@ -235,7 +261,20 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         insights.sittingBuckets = sittingBuckets(from: facts)
         insights.readingSeconds = facts.reduce(0) { $0 + $1.durationSeconds }
         insights.silentReadingSeconds = facts.filter { $0.mode == .read }.reduce(0) { $0 + $1.durationSeconds }
-        insights.listeningSeconds = facts.filter { $0.mode == .listen }.reduce(0) { $0 + $1.durationSeconds }
+        let listenFacts = facts.filter { $0.mode == .listen && $0.durationSeconds > 0 }
+        insights.listeningSeconds = listenFacts.reduce(0) { $0 + $1.durationSeconds }
+        insights.listeningWorksCount = Set(listenFacts.map(\.workID)).count
+        var weightedRateSum = 0.0
+        var weightedRateSeconds = 0.0
+        for fact in listenFacts {
+            if let rate = fact.playbackRate, rate > 0 {
+                weightedRateSum += rate * fact.durationSeconds
+                weightedRateSeconds += fact.durationSeconds
+            }
+        }
+        insights.listeningPlaybackRate = weightedRateSeconds > 0
+            ? weightedRateSum / weightedRateSeconds
+            : nil
         insights.finishedWorksCount = Set(facts.filter(\.didFinish).map(\.workID)).count
         insights.readingDaysCount = Set(facts.map { sittingTime(for: $0, calendar: calendar).day }).count
         // Days without reading are empty chart slots, never the biggest day.
@@ -577,6 +616,24 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         return minutes == 0 ? "\(hours)h" : "\(hours)h \(minutes)m"
     }
 
+    /// UTC Gregorian calendar for AO3 posting dates (`WorkStat.date(from:)` produces UTC midnight).
+    static let utcCalendar: Calendar = {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        return cal
+    }()
+
+    /// Compact word label without truncating small counts to `"0k"`: exact below 1,000,
+    /// one decimal in thousands (e.g. `"12.4k"`), one decimal in millions (e.g. `"1.2M"`).
+    static func compactWordsLabel(_ words: Int) -> String {
+        let clamped = max(0, words)
+        if clamped < 1_000 { return clamped.formatted() }
+        if clamped < 1_000_000 {
+            return String(format: "%.1fk", Double(clamped) / 1_000.0)
+        }
+        return String(format: "%.1fM", Double(clamped) / 1_000_000.0)
+    }
+
     // MARK: Redesign Helpers (T-497)
 
     /// Spec: Words read ÷ 70,000, to the nearest half. Hidden under 35,000 words.
@@ -629,28 +686,36 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         calendar: Calendar = .current
     ) -> [DailyWordsBucket] {
         var wordsByDay: [Date: Int] = [:]
-        for fact in facts where fact.wordUnit == .words {
+        var daysWithReading: Set<Date> = []
+        for fact in facts {
             let day = sittingTime(for: fact, calendar: calendar).day
-            wordsByDay[day, default: 0] += fact.wordsRead
+            daysWithReading.insert(day)
+            if fact.wordUnit == .words {
+                wordsByDay[day, default: 0] += fact.wordsRead
+            }
         }
 
         guard let interval else {
-            let sortedDays = wordsByDay.keys.sorted()
+            let sortedDays = daysWithReading.sorted()
             let maxWords = wordsByDay.values.max() ?? 0
-            return sortedDays.map { day in
+            return sortedDays.map { (day: Date) -> DailyWordsBucket in
                 let w = wordsByDay[day] ?? 0
                 return DailyWordsBucket(
                     date: day,
                     dayNumber: calendar.component(.day, from: day),
                     words: w,
-                    isMax: maxWords > 0 && w == maxWords
+                    isMax: maxWords > 0 && w == maxWords,
+                    hasReading: true
                 )
             }
         }
 
         var buckets: [DailyWordsBucket] = []
         var current = calendar.startOfDay(for: interval.start)
-        let end = interval.end
+        let latestReadingNextDay = daysWithReading.max().flatMap { (day: Date) -> Date? in
+            calendar.date(byAdding: .day, value: 1, to: day)
+        }
+        let end = latestReadingNextDay.map { max(interval.end, $0) } ?? interval.end
         let maxWords = wordsByDay.values.max() ?? 0
 
         while current < end {
@@ -660,7 +725,8 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
                     date: current,
                     dayNumber: calendar.component(.day, from: current),
                     words: w,
-                    isMax: maxWords > 0 && w == maxWords
+                    isMax: maxWords > 0 && w == maxWords,
+                    hasReading: daysWithReading.contains(current)
                 )
             )
             guard let next = calendar.date(byAdding: .day, value: 1, to: current) else { break }
@@ -669,12 +735,18 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         return buckets
     }
 
+    /// Owner review: cap wall-clock spread at 6 hours (the sane-sitting ceiling in
+    /// Insights-Metrics) so overnight pauses do not credit sleeping hours to 1:00–5:00
+    /// and a corrupted far-future `endedAt` cannot stall the hourly loop.
+    static let maxHourlyWallSpreadSeconds: Double = 6 * 3_600
+
     /// Hourly duration buckets (0...23) for habits time of day.
     static func hourlyDurationBuckets(
         from facts: [ReadingSessionFacts],
         calendar: Calendar = .current
     ) -> [HourlyBucket] {
         var hours: [Double] = Array(repeating: 0, count: 24)
+        let maxLoopSpan: Double = 24 * 3_600
         for fact in facts {
             // Active duration can be shorter than wall time after a pause. Allocate
             // it in proportion to each hour's wall-clock overlap, with the last
@@ -685,9 +757,15 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
             }
             let start = fact.startedAt
             let duration = max(0, fact.durationSeconds)
+            guard duration > 0 else { continue }
             var cursor = start
-            let wallEnd = fact.endedAt ?? start.addingTimeInterval(duration)
-            let end = wallEnd > start ? wallEnd : start.addingTimeInterval(duration)
+            let clampedDurationSpan = min(duration, maxLoopSpan)
+            let rawWallEnd = fact.endedAt ?? start.addingTimeInterval(clampedDurationSpan)
+            let rawWallSeconds = rawWallEnd.timeIntervalSince(start)
+            let maxAllowedWall = max(clampedDurationSpan, maxHourlyWallSpreadSeconds)
+            let end = (rawWallSeconds > 0 && rawWallSeconds <= maxAllowedWall)
+                ? rawWallEnd
+                : start.addingTimeInterval(clampedDurationSpan)
             let wallSeconds = end.timeIntervalSince(start)
             guard wallSeconds > 0 else { continue }
             var remaining = duration
@@ -831,10 +909,13 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         for (fandom, ships) in byFandom {
             let workCount = fandomWorkCounts[fandom] ?? ships.reduce(0) { $0 + $1.worksCount }
             guard workCount >= 4 else { continue }
-            let sorted = ships.sorted(by: { $0.words > $1.words })
+            let sorted = ships.sorted { (lhs: RelationshipShare, rhs: RelationshipShare) -> Bool in
+                if lhs.words != rhs.words { return lhs.words > rhs.words }
+                return lhs.name < rhs.name
+            }
             guard let top = sorted.first else { continue }
             let totalWords = max(1, fandomWords[fandom] ?? ships.reduce(0) { $0 + $1.words })
-            let pct = Int((Double(top.words) / Double(totalWords) * 100).rounded())
+            let pct = min(100, Int((Double(top.words) / Double(totalWords) * 100).rounded()))
             let label = sorted.count == 1
                 ? "\(pct)% on one ship"
                 : "\(pct)% · \(sorted.count) ships"
@@ -848,7 +929,10 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
                 )
             )
         }
-        return result.sorted(by: { $0.percentage > $1.percentage })
+        return result.sorted { (lhs: ShipConcentration, rhs: ShipConcentration) -> Bool in
+            if lhs.percentage != rhs.percentage { return lhs.percentage > rhs.percentage }
+            return lhs.fandom < rhs.fandom
+        }
     }
 
     /// Freeform tags for tag-only figures (Taste Tags, Often Together, Stopped tags).
@@ -897,10 +981,23 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         minimumCount: Int = 3,
         aliases: TagAliasResolver = .empty
     ) -> [TagPair] {
+        let tagSets = works.map { (work: SavedWork) -> [String] in
+            freeformTags(of: work)
+        }
+        return oftenTogetherTags(fromTagSets: tagSets, minimumCount: minimumCount, aliases: aliases)
+    }
+
+    static func oftenTogetherTags(
+        fromTagSets tagSets: [[String]],
+        minimumCount: Int = 3,
+        aliases: TagAliasResolver = .empty
+    ) -> [TagPair] {
+        let workCount = tagSets.count
+        guard workCount >= minimumCount else { return [] }
         var pairCounts: [String: (a: String, b: String, count: Int)] = [:]
         var tagCounts: [String: Int] = [:]
-        for work in works {
-            let tags = aliases.resolvedUnique(freeformTags(of: work), kind: .freeform).sorted()
+        for rawTags in tagSets {
+            let tags = aliases.resolvedUnique(rawTags, kind: .freeform).sorted()
             for tag in tags { tagCounts[tag, default: 0] += 1 }
             guard tags.count >= 2 else { continue }
             for i in 0..<tags.count {
@@ -914,14 +1011,17 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
             }
         }
         return pairCounts.values
-            .filter {
-                $0.count >= minimumCount
-                    && Double($0.count * works.count) >= 1.5 * Double((tagCounts[$0.a] ?? 0) * (tagCounts[$0.b] ?? 0))
+            .filter { (pair: (a: String, b: String, count: Int)) -> Bool in
+                pair.count >= minimumCount
+                    && Double(pair.count * workCount) >= 1.5 * Double((tagCounts[pair.a] ?? 0) * (tagCounts[pair.b] ?? 0))
             }
-            .sorted {
-                let lhs = Double($0.count * works.count) / Double(max(1, (tagCounts[$0.a] ?? 0) * (tagCounts[$0.b] ?? 0)))
-                let rhs = Double($1.count * works.count) / Double(max(1, (tagCounts[$1.a] ?? 0) * (tagCounts[$1.b] ?? 0)))
-                return lhs == rhs ? $0.count > $1.count : lhs > rhs
+            .sorted { (lhs: (a: String, b: String, count: Int), rhs: (a: String, b: String, count: Int)) -> Bool in
+                let lhsLift = Double(lhs.count * workCount) / Double(max(1, (tagCounts[lhs.a] ?? 0) * (tagCounts[lhs.b] ?? 0)))
+                let rhsLift = Double(rhs.count * workCount) / Double(max(1, (tagCounts[rhs.a] ?? 0) * (tagCounts[rhs.b] ?? 0)))
+                if lhsLift != rhsLift { return lhsLift > rhsLift }
+                if lhs.count != rhs.count { return lhs.count > rhs.count }
+                if lhs.a != rhs.a { return lhs.a < rhs.a }
+                return lhs.b < rhs.b
             }
             .prefix(4)
             .map { TagPair(tagA: $0.a, tagB: $0.b, worksCount: $0.count) }
@@ -971,6 +1071,9 @@ nonisolated struct RelationshipShare: Equatable, Sendable, Identifiable {
     var fandom: String
     var worksCount: Int
     var words: Int
+    /// True when at least one counted work is measured in `.words` (keeps `.characters`
+    /// works out of By Words lists while retaining them in By Works rankings).
+    var hasWordUnitWorks: Bool = true
 }
 
 nonisolated struct ShipConcentration: Equatable, Sendable, Identifiable {
@@ -1052,6 +1155,23 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
     var crossoverCount: Int = 0
     var totalWorksCount: Int = 0
     var languages: [CountBreakdown] = []
+    /// Unfolded per-fandom tallies so `ranked(byWorks:)` can re-fold top 4 + remainder
+    /// under either words or works without hiding high-work-count fandoms in the remainder.
+    var allFandoms: [FandomTally] = []
+    var unattributedFandomWords: Int = 0
+    var unattributedFandomWorksCount: Int = 0
+    var unattributedFandomWordUnitWorksCount: Int = 0
+    /// Unfiltered lists retaining `.characters` works for By Works mode while By Words
+    /// filters to `hasWordUnitWorks`.
+    var allRelationships: [RelationshipShare] = []
+    var allTags: [TagShare] = []
+
+    nonisolated struct FandomTally: Equatable, Sendable {
+        var name: String
+        var words: Int
+        var worksCount: Int
+        var wordUnitWorksCount: Int
+    }
 
     nonisolated struct CharacterShare: Equatable, Sendable, Identifiable {
         var id: String { "\(name)-\(fandom)" }
@@ -1065,6 +1185,7 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
         var name: String
         var words: Int
         var count: Int
+        var hasWordUnitWorks: Bool = true
     }
 
     nonisolated struct CountBreakdown: Equatable, Sendable, Identifiable {
@@ -1074,56 +1195,227 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
         var words: Int = 0
     }
 
+    /// Canonical AO3 rating display order for Taste's Rating breakdown.
+    static let canonicalRatingsOrder: [String] = [
+        "General", "Teen", "Mature", "Explicit", "Not Rated"
+    ]
+
+    /// Normalizes AO3 full labels and common shorthands into one bucket before
+    /// accumulating counts and words. Unknown non-empty ratings keep their trimmed
+    /// label so `ratings` always sums to `totalWorksCount`.
+    static func canonicalRating(for raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "Not Rated" }
+        let lower = trimmed.lowercased()
+        if lower == "g" || lower == "general" || lower.hasPrefix("general audiences") {
+            return "General"
+        }
+        if lower == "t" || lower == "teen" || lower.hasPrefix("teen and up") {
+            return "Teen"
+        }
+        if lower == "m" || lower == "mature" {
+            return "Mature"
+        }
+        if lower == "e" || lower == "explicit" {
+            return "Explicit"
+        }
+        if lower == "nr" || lower == "not rated" || lower == "unrated" {
+            return "Not Rated"
+        }
+        return trimmed
+    }
+
+    private static func ratingOrderIndex(for label: String) -> Int {
+        canonicalRatingsOrder.firstIndex(of: label) ?? canonicalRatingsOrder.count
+    }
+
+    private static func foldFandoms(
+        allFandoms: [FandomTally],
+        unattributedWords: Int,
+        unattributedWorks: Int,
+        unattributedWordUnitWorks: Int,
+        totalWorksCount: Int,
+        byWorks: Bool
+    ) -> [ReadingInsights.FandomWordsShare] {
+        let limit = ReadingInsights.namedWordsFandomLimit
+        if byWorks {
+            let ranked = allFandoms.sorted { (lhs: FandomTally, rhs: FandomTally) -> Bool in
+                if lhs.worksCount != rhs.worksCount { return lhs.worksCount > rhs.worksCount }
+                if lhs.words != rhs.words { return lhs.words > rhs.words }
+                return lhs.name < rhs.name
+            }
+            let totalWorks = max(1, totalWorksCount)
+            var shares: [ReadingInsights.FandomWordsShare] = ranked.prefix(limit).map { (tally: FandomTally) in
+                ReadingInsights.FandomWordsShare(
+                    name: tally.name,
+                    words: tally.words,
+                    worksCount: tally.worksCount,
+                    share: Double(tally.worksCount) / Double(totalWorks),
+                    isRemainder: false
+                )
+            }
+            let tail = ranked.dropFirst(limit)
+            let remWords = tail.reduce(0) { (sum: Int, tally: FandomTally) -> Int in sum + tally.words } + unattributedWords
+            let remWorks = tail.reduce(0) { (sum: Int, tally: FandomTally) -> Int in sum + tally.worksCount } + unattributedWorks
+            if remWorks > 0 || remWords > 0 {
+                shares.append(ReadingInsights.FandomWordsShare(
+                    name: ReadingInsights.remainderName,
+                    words: remWords,
+                    worksCount: remWorks,
+                    share: Double(remWorks) / Double(totalWorks),
+                    isRemainder: true
+                ))
+            }
+            return shares
+        }
+
+        let eligible = allFandoms.filter { (tally: FandomTally) -> Bool in tally.wordUnitWorksCount > 0 }
+        let ranked = eligible.sorted { (lhs: FandomTally, rhs: FandomTally) -> Bool in
+            if lhs.words != rhs.words { return lhs.words > rhs.words }
+            if lhs.wordUnitWorksCount != rhs.wordUnitWorksCount { return lhs.wordUnitWorksCount > rhs.wordUnitWorksCount }
+            return lhs.name < rhs.name
+        }
+        let namedWords = ranked.reduce(0) { (sum: Int, tally: FandomTally) -> Int in sum + tally.words }
+        let totalWords = max(1, namedWords + unattributedWords)
+        var shares: [ReadingInsights.FandomWordsShare] = ranked.prefix(limit).map { (tally: FandomTally) in
+            ReadingInsights.FandomWordsShare(
+                name: tally.name,
+                words: tally.words,
+                worksCount: tally.wordUnitWorksCount,
+                share: Double(tally.words) / Double(totalWords),
+                isRemainder: false
+            )
+        }
+        let tail = ranked.dropFirst(limit)
+        let remWords = tail.reduce(0) { (sum: Int, tally: FandomTally) -> Int in sum + tally.words } + unattributedWords
+        let remWorks = tail.reduce(0) { (sum: Int, tally: FandomTally) -> Int in sum + tally.wordUnitWorksCount } + unattributedWordUnitWorks
+        if remWords > 0 || remWorks > 0 {
+            shares.append(ReadingInsights.FandomWordsShare(
+                name: ReadingInsights.remainderName,
+                words: remWords,
+                worksCount: remWorks,
+                share: Double(remWords) / Double(totalWords),
+                isRemainder: true
+            ))
+        }
+        return shares
+    }
+
     /// The tab's single rank toggle applies to every list that has both measures.
     func ranked(byWorks: Bool) -> ReadingTasteInsights {
         var result = self
-        if byWorks {
-            result.relationships.sort { $0.worksCount > $1.worksCount }
-            result.tags.sort { $0.count > $1.count }
+        if !allFandoms.isEmpty || unattributedFandomWords > 0 || unattributedFandomWorksCount > 0 {
+            result.fandoms = Self.foldFandoms(
+                allFandoms: allFandoms,
+                unattributedWords: unattributedFandomWords,
+                unattributedWorks: unattributedFandomWorksCount,
+                unattributedWordUnitWorks: unattributedFandomWordUnitWorksCount,
+                totalWorksCount: totalWorksCount,
+                byWorks: byWorks
+            )
         } else {
-            result.relationships.sort { $0.words > $1.words }
-            result.tags.sort { $0.words > $1.words }
-        }
-        func sorted(_ rows: [CountBreakdown]) -> [CountBreakdown] {
-            rows.sorted { left, right in
-                if byWorks { return left.count > right.count }
-                return left.words > right.words
+            result.fandoms = fandoms.sorted { (lhs: ReadingInsights.FandomWordsShare, rhs: ReadingInsights.FandomWordsShare) -> Bool in
+                if lhs.isRemainder != rhs.isRemainder { return !lhs.isRemainder }
+                if byWorks {
+                    if lhs.worksCount != rhs.worksCount { return lhs.worksCount > rhs.worksCount }
+                    if lhs.words != rhs.words { return lhs.words > rhs.words }
+                } else {
+                    if lhs.words != rhs.words { return lhs.words > rhs.words }
+                    if lhs.worksCount != rhs.worksCount { return lhs.worksCount > rhs.worksCount }
+                }
+                return lhs.name < rhs.name
             }
         }
-        result.ratings = sorted(ratings)
+
+        let sourceRels = allRelationships.isEmpty ? relationships : allRelationships
+        let sourceTags = allTags.isEmpty ? tags : allTags
+        if byWorks {
+            result.relationships = sourceRels.sorted { (lhs: RelationshipShare, rhs: RelationshipShare) -> Bool in
+                if lhs.worksCount != rhs.worksCount { return lhs.worksCount > rhs.worksCount }
+                if lhs.words != rhs.words { return lhs.words > rhs.words }
+                return lhs.name < rhs.name
+            }
+            result.tags = sourceTags.sorted { (lhs: TagShare, rhs: TagShare) -> Bool in
+                if lhs.count != rhs.count { return lhs.count > rhs.count }
+                if lhs.words != rhs.words { return lhs.words > rhs.words }
+                return lhs.name < rhs.name
+            }
+        } else {
+            result.relationships = sourceRels
+                .filter(\.hasWordUnitWorks)
+                .sorted { (lhs: RelationshipShare, rhs: RelationshipShare) -> Bool in
+                    if lhs.words != rhs.words { return lhs.words > rhs.words }
+                    if lhs.worksCount != rhs.worksCount { return lhs.worksCount > rhs.worksCount }
+                    return lhs.name < rhs.name
+                }
+            result.tags = sourceTags
+                .filter(\.hasWordUnitWorks)
+                .sorted { (lhs: TagShare, rhs: TagShare) -> Bool in
+                    if lhs.words != rhs.words { return lhs.words > rhs.words }
+                    if lhs.count != rhs.count { return lhs.count > rhs.count }
+                    return lhs.name < rhs.name
+                }
+        }
+
+        func sorted(_ rows: [CountBreakdown]) -> [CountBreakdown] {
+            rows.sorted { (lhs: CountBreakdown, rhs: CountBreakdown) -> Bool in
+                if byWorks {
+                    if lhs.count != rhs.count { return lhs.count > rhs.count }
+                    if lhs.words != rhs.words { return lhs.words > rhs.words }
+                } else {
+                    if lhs.words != rhs.words { return lhs.words > rhs.words }
+                    if lhs.count != rhs.count { return lhs.count > rhs.count }
+                }
+                return lhs.label < rhs.label
+            }
+        }
+        // Keep Rating bars in canonical AO3 progression; rank the rest by the active toggle.
+        result.ratings = ratings.sorted { (lhs: CountBreakdown, rhs: CountBreakdown) -> Bool in
+            let li = Self.ratingOrderIndex(for: lhs.label)
+            let ri = Self.ratingOrderIndex(for: rhs.label)
+            if li != ri { return li < ri }
+            return lhs.label < rhs.label
+        }
         result.statuses = sorted(statuses)
         result.lengthBands = sorted(lengthBands)
         result.categories = sorted(categories)
         result.warnings = sorted(warnings)
+
         guard totalWorksCount >= 5 else {
             result.usualFicSummary = "Read at least five works in this period to find your usual fic."
             result.usualChips = []
             result.usualFicTags = []
             return result
         }
-        let totalWeight = max(1, byWorks ? totalWorksCount : fandoms.reduce(0) { $0 + $1.words })
+        let totalWeight = max(1, byWorks ? totalWorksCount : result.fandoms.reduce(0) { (sum: Int, share: ReadingInsights.FandomWordsShare) -> Int in sum + share.words })
         func frequent(_ label: String, weight: Int) -> String {
-            weight * 10 >= totalWeight * 4 ? label : "varied"
+            guard !label.isEmpty else { return "varied" }
+            return weight * 10 >= totalWeight * 4 ? label : "varied"
         }
         func top(_ rows: [CountBreakdown]) -> String {
             guard let first = rows.first else { return "varied" }
             return frequent(first.label, weight: byWorks ? first.count : first.words)
         }
+        let topRatingRow = result.ratings.min { (lhs: CountBreakdown, rhs: CountBreakdown) -> Bool in
+            let lw = byWorks ? lhs.count : lhs.words
+            let rw = byWorks ? rhs.count : rhs.words
+            if lw != rw { return lw > rw }
+            let li = Self.ratingOrderIndex(for: lhs.label)
+            let ri = Self.ratingOrderIndex(for: rhs.label)
+            if li != ri { return li < ri }
+            return lhs.label < rhs.label
+        }
         result.usualStatus = top(result.statuses)
-        result.usualRating = top(result.ratings)
+        result.usualRating = topRatingRow.map { frequent($0.label, weight: byWorks ? $0.count : $0.words) } ?? "varied"
         result.usualCategory = top(result.categories)
         result.usualLengthBand = top(result.lengthBands)
-        let namedFandoms = result.fandoms.filter { !$0.isRemainder }
-        let rankedFandoms = namedFandoms.sorted { left, right in
-            byWorks ? left.worksCount > right.worksCount : left.words > right.words
-        }
-        let firstFandom = rankedFandoms.first
+        let firstFandom = result.fandoms.first { (share: ReadingInsights.FandomWordsShare) -> Bool in !share.isRemainder }
         let fandomWeight = firstFandom.map { byWorks ? $0.worksCount : $0.words } ?? 0
         let fandomName = frequent(firstFandom?.name ?? "", weight: fandomWeight)
         let firstRel = result.relationships.first
         let relWeight = firstRel.map { byWorks ? $0.worksCount : $0.words } ?? 0
         let relationship = frequent(firstRel?.name ?? "", weight: relWeight)
-        let tagNames: [String] = Array(result.tags.prefix(2)).map { tag in
+        let tagNames: [String] = Array(result.tags.prefix(2)).map { (tag: TagShare) -> String in
             frequent(tag.name, weight: byWorks ? tag.count : tag.words)
         }
         let firstTag = tagNames.first ?? "varied"
@@ -1154,124 +1446,269 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
         var count: Int
     }
 
+    private struct TasteWork {
+        var id: UUID
+        var fandoms: [String]
+        var relationships: [String]
+        var characters: [String]
+        var freeformTags: [String]
+        var rating: String
+        var warnings: [String]
+        var categories: [String]
+        var language: String
+        var isComplete: Bool
+        var wordCount: Int
+        var publishedYear: Int?
+        var wordUnit: SavedWork.WordUnit
+    }
+
+    private static func tasteWorks(
+        from works: [SavedWork],
+        facts: [ReadingSessionFacts]
+    ) -> [TasteWork] {
+        let worksByID = Dictionary(
+            works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
+        )
+        let factsByWork = Dictionary(grouping: facts, by: \.workID)
+        var resolved: [TasteWork] = []
+        resolved.reserveCapacity(factsByWork.count)
+        let utc = ReadingInsights.utcCalendar
+
+        for (workID, group) in factsByWork {
+            if let work = worksByID[workID] {
+                let pubYear = WorkStat.date(from: work.datePublished).map { utc.component(.year, from: $0) }
+                resolved.append(TasteWork(
+                    id: work.id,
+                    fandoms: work.workFandoms,
+                    relationships: work.workRelationships,
+                    characters: work.workCharacters,
+                    freeformTags: ReadingInsights.freeformTags(of: work),
+                    rating: work.rating,
+                    warnings: work.workWarnings,
+                    categories: work.workCategories,
+                    language: work.language,
+                    isComplete: work.isComplete,
+                    wordCount: work.wordCount,
+                    publishedYear: pubYear,
+                    wordUnit: work.wordUnit
+                ))
+            } else {
+                // D1 fallback: keep deleted works in Taste via session snapshots.
+                let ordered = group.sorted(by: ReadingInsights.sittingOrder)
+                guard let latest = ordered.last else { continue }
+                let rev = Array(ordered.reversed())
+                let snapFandoms = rev.first(where: { !$0.fandoms.isEmpty })?.fandoms
+                    ?? (latest.fandom.isEmpty ? [] : [latest.fandom])
+                let snapRelationships = rev.first(where: { !$0.relationships.isEmpty })?.relationships ?? []
+                let snapCharacters = rev.first(where: { !$0.characters.isEmpty })?.characters ?? []
+                let snapFreeforms = rev.first(where: { !$0.freeformTags.isEmpty })?.freeformTags ?? []
+                let snapRating = rev.first(where: { !$0.rating.isEmpty })?.rating ?? ""
+                let snapWarnings = rev.first(where: { !$0.warnings.isEmpty })?.warnings ?? []
+                let snapCategories = rev.first(where: { !$0.categories.isEmpty })?.categories ?? []
+                let snapLanguage = rev.first(where: { !$0.language.isEmpty })?.language ?? ""
+                let snapPublishedYear = rev.compactMap(\.publishedYear).first
+                resolved.append(TasteWork(
+                    id: workID,
+                    fandoms: snapFandoms,
+                    relationships: snapRelationships,
+                    characters: snapCharacters,
+                    freeformTags: snapFreeforms,
+                    rating: snapRating,
+                    warnings: snapWarnings,
+                    categories: snapCategories,
+                    language: snapLanguage,
+                    isComplete: latest.isCompleteAtVisit,
+                    wordCount: latest.wordCount,
+                    publishedYear: snapPublishedYear,
+                    wordUnit: latest.wordUnit
+                ))
+            }
+        }
+        return resolved
+    }
+
     static func make(
         works: [SavedWork],
         facts: [ReadingSessionFacts],
         aliases: TagAliasResolver = .empty
     ) -> ReadingTasteInsights {
-        let readWorkIDs = Set(facts.map(\.workID))
-        let targetWorks = works.filter { readWorkIDs.contains($0.id) }
-        let effectiveWorks = targetWorks
-        let worksByID = Dictionary(
-            works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
+        let effectiveWorks = tasteWorks(from: works, facts: facts)
+        let tasteWorksByID = Dictionary(
+            effectiveWorks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
         )
         var wordsByWork: [UUID: Int] = [:]
         for fact in facts where fact.wordUnit == .words {
             wordsByWork[fact.workID, default: 0] += fact.wordsRead
         }
 
-        let fandomShares = ReadingInsights.fandomWordsShares(from: facts, aliases: aliases)
+        // Unfolded fandom tallies across all sittings (words for `.words`, works for all).
+        var fandomWordsMap: [String: Int] = [:]
+        var fandomAllWorks: [String: Set<UUID>] = [:]
+        var fandomWordUnitWorks: [String: Set<UUID>] = [:]
+        var unattributedWords = 0
+        var unattributedWorks: Set<UUID> = []
+        var unattributedWordUnitWorks: Set<UUID> = []
 
-        var relWords: [String: (fandom: String, works: Set<UUID>, words: Int)] = [:]
-        for fact in facts where fact.wordUnit == .words {
-            let work = worksByID[fact.workID]
-            let resolvedFandom = aliases.resolve(fact.fandom, kind: .fandom)
-            for rel in aliases.resolvedUnique(work?.workRelationships ?? [], kind: .relationship) {
-                let current = relWords[rel] ?? (fandom: resolvedFandom, works: [], words: 0)
-                var updatedWorks = current.works
-                updatedWorks.insert(fact.workID)
-                relWords[rel] = (
-                    fandom: current.fandom.isEmpty ? resolvedFandom : current.fandom,
-                    works: updatedWorks,
-                    words: current.words + fact.wordsRead
-                )
+        for fact in facts {
+            let fandom = aliases.resolve(fact.fandom, kind: .fandom)
+            let isWords = fact.wordUnit == .words
+            if fandom.isEmpty {
+                unattributedWorks.insert(fact.workID)
+                if isWords {
+                    unattributedWords += fact.wordsRead
+                    unattributedWordUnitWorks.insert(fact.workID)
+                }
+            } else {
+                fandomAllWorks[fandom, default: []].insert(fact.workID)
+                if isWords {
+                    fandomWordsMap[fandom, default: 0] += fact.wordsRead
+                    fandomWordUnitWorks[fandom, default: []].insert(fact.workID)
+                }
             }
         }
-        let relationships = relWords.map { key, val in
-            RelationshipShare(
+        var allFandoms: [FandomTally] = []
+        allFandoms.reserveCapacity(fandomAllWorks.count)
+        for (name, workSet) in fandomAllWorks {
+            allFandoms.append(FandomTally(
+                name: name,
+                words: fandomWordsMap[name] ?? 0,
+                worksCount: workSet.count,
+                wordUnitWorksCount: fandomWordUnitWorks[name]?.count ?? 0
+            ))
+        }
+
+        // Global relationship shares (for Relationships list) and per-fandom relationship
+        // words (for Ship Concentration, preventing cross-fandom tags from exceeding 100%).
+        var relAccum: [String: (fandom: String, works: Set<UUID>, wordUnitWorks: Set<UUID>, words: Int)] = [:]
+        var fandomRelWords: [String: [String: (works: Set<UUID>, words: Int)]] = [:]
+        for fact in facts {
+            let work = tasteWorksByID[fact.workID]
+            let resolvedFandom = aliases.resolve(fact.fandom, kind: .fandom)
+            let isWords = fact.wordUnit == .words
+            let rels = aliases.resolvedUnique(work?.relationships ?? [], kind: .relationship)
+            for rel in rels {
+                var current = relAccum[rel] ?? (fandom: resolvedFandom, works: [], wordUnitWorks: [], words: 0)
+                if current.fandom.isEmpty { current.fandom = resolvedFandom }
+                current.works.insert(fact.workID)
+                if isWords {
+                    current.wordUnitWorks.insert(fact.workID)
+                    current.words += fact.wordsRead
+                }
+                relAccum[rel] = current
+
+                if isWords && !resolvedFandom.isEmpty {
+                    var perFandom = fandomRelWords[resolvedFandom] ?? [:]
+                    var entry = perFandom[rel] ?? (works: [], words: 0)
+                    entry.works.insert(fact.workID)
+                    entry.words += fact.wordsRead
+                    perFandom[rel] = entry
+                    fandomRelWords[resolvedFandom] = perFandom
+                }
+            }
+        }
+        var allRelationships: [RelationshipShare] = []
+        allRelationships.reserveCapacity(relAccum.count)
+        for (key, val) in relAccum {
+            allRelationships.append(RelationshipShare(
                 name: key,
                 isRomantic: ReadingInsights.isRomanticRelationship(key),
                 fandom: val.fandom,
                 worksCount: val.works.count,
-                words: val.words
-            )
-        }.sorted { $0.words > $1.words }
-
-        var fandomWordTotals: [String: Int] = [:]
-        var fandomWorks: [String: Set<UUID>] = [:]
-        for fact in facts where fact.wordUnit == .words {
-            let name = aliases.resolve(fact.fandom, kind: .fandom)
-            fandomWordTotals[name, default: 0] += fact.wordsRead
-            fandomWorks[name, default: []].insert(fact.workID)
+                words: val.words,
+                hasWordUnitWorks: !val.wordUnitWorks.isEmpty
+            ))
         }
-        let fandomWorkCounts = fandomWorks.mapValues { $0.count }
+
+        var perFandomRelationships: [RelationshipShare] = []
+        for (fandom, shipMap) in fandomRelWords {
+            for (rel, val) in shipMap {
+                perFandomRelationships.append(RelationshipShare(
+                    name: rel,
+                    isRomantic: ReadingInsights.isRomanticRelationship(rel),
+                    fandom: fandom,
+                    worksCount: val.works.count,
+                    words: val.words
+                ))
+            }
+        }
+        let fandomWorkCounts = fandomWordUnitWorks.mapValues { $0.count }
         let shipConcentrations = ReadingInsights.shipConcentrations(
-            relationships: relationships,
-            fandomWords: fandomWordTotals,
+            relationships: perFandomRelationships,
+            fandomWords: fandomWordsMap,
             fandomWorkCounts: fandomWorkCounts
         )
 
         var charCounts: [String: (fandom: String, count: Int)] = [:]
         for work in effectiveWorks {
-            let fandom = aliases.resolve(work.workFandoms.first ?? "", kind: .fandom)
-            for char in aliases.resolvedUnique(work.workCharacters, kind: .character) {
-                charCounts[char, default: (fandom: fandom, count: 0)].count += 1
-                if charCounts[char]?.fandom.isEmpty == true {
-                    charCounts[char]?.fandom = fandom
-                }
+            let fandom = aliases.resolve(work.fandoms.first ?? "", kind: .fandom)
+            for char in aliases.resolvedUnique(work.characters, kind: .character) {
+                var cur = charCounts[char] ?? (fandom: fandom, count: 0)
+                cur.count += 1
+                if cur.fandom.isEmpty { cur.fandom = fandom }
+                charCounts[char] = cur
             }
         }
-        let characters = charCounts.map { key, val in
+        let characters = charCounts.map { (key: String, val: (fandom: String, count: Int)) -> CharacterShare in
             CharacterShare(name: key, count: val.count, fandom: val.fandom)
-        }.sorted { $0.count > $1.count }
+        }.sorted { (lhs: CharacterShare, rhs: CharacterShare) -> Bool in
+            if lhs.count != rhs.count { return lhs.count > rhs.count }
+            return lhs.name < rhs.name
+        }
 
-        var tagWords: [String: (words: Int, count: Int)] = [:]
-        var seenTagWorks: [String: Set<UUID>] = [:]
-        for fact in facts where fact.wordUnit == .words {
-            let work = worksByID[fact.workID]
-            let freeforms = work.map { ReadingInsights.freeformTags(of: $0) } ?? []
-            for tag in aliases.resolvedUnique(freeforms, kind: .freeform) {
-                tagWords[tag, default: (words: 0, count: 0)].words += fact.wordsRead
-                seenTagWorks[tag, default: []].insert(fact.workID)
+        var tagAccum: [String: (words: Int, works: Set<UUID>, wordUnitWorks: Set<UUID>)] = [:]
+        for fact in facts {
+            let work = tasteWorksByID[fact.workID]
+            let isWords = fact.wordUnit == .words
+            for tag in aliases.resolvedUnique(work?.freeformTags ?? [], kind: .freeform) {
+                var cur = tagAccum[tag] ?? (words: 0, works: [], wordUnitWorks: [])
+                cur.works.insert(fact.workID)
+                if isWords {
+                    cur.words += fact.wordsRead
+                    cur.wordUnitWorks.insert(fact.workID)
+                }
+                tagAccum[tag] = cur
             }
         }
-        let tags = tagWords.map { key, val in
-            TagShare(name: key, words: val.words, count: seenTagWorks[key]?.count ?? 0)
-        }.sorted { $0.words > $1.words }
+        var allTags: [TagShare] = []
+        allTags.reserveCapacity(tagAccum.count)
+        for (key, val) in tagAccum {
+            allTags.append(TagShare(
+                name: key,
+                words: val.words,
+                count: val.works.count,
+                hasWordUnitWorks: !val.wordUnitWorks.isEmpty
+            ))
+        }
 
-        let oftenTogether = ReadingInsights.oftenTogetherTags(from: effectiveWorks, aliases: aliases)
+        let oftenTogether = ReadingInsights.oftenTogetherTags(
+            fromTagSets: effectiveWorks.map(\.freeformTags),
+            aliases: aliases
+        )
 
         var ratingCounts: [String: Int] = [:]
         var ratingWords: [String: Int] = [:]
         var statusCounts: [String: Int] = [:]
         var statusWords: [String: Int] = [:]
-        for work in effectiveWorks {
-            let r = work.rating.trimmingCharacters(in: .whitespacesAndNewlines)
-            let rating = r.isEmpty ? "Not Rated" : r
-            ratingCounts[rating, default: 0] += 1
-            ratingWords[rating, default: 0] += wordsByWork[work.id] ?? 0
-            let status = work.isComplete ? "Complete" : "Work in Progress"
-            statusCounts[status, default: 0] += 1
-            statusWords[status, default: 0] += wordsByWork[work.id] ?? 0
-        }
-        let ratingsOrder = ["General Audiences", "Teen And Up Audiences", "Mature", "Explicit", "Not Rated"]
-        let ratings = ratingsOrder.compactMap { label -> CountBreakdown? in
-            let count = ratingCounts[label] ?? ratingCounts.first(where: { $0.key.localizedCaseInsensitiveContains(label.prefix(4)) })?.value ?? 0
-            guard count > 0 else { return nil }
-            let shortLabel: String
-            switch label {
-            case "General Audiences": shortLabel = "General"
-            case "Teen And Up Audiences": shortLabel = "Teen"
-            default: shortLabel = label
-            }
-            return CountBreakdown(label: shortLabel, count: count, words: ratingWords[label] ?? 0)
-        }
-        let statuses: [CountBreakdown] = statusCounts.map { label, count in
-            CountBreakdown(label: label, count: count, words: statusWords[label] ?? 0)
-        }
         var lengthCounts: [String: Int] = [:]
         var lengthWords: [String: Int] = [:]
+        var catCounts: [String: Int] = [:]
+        var catWords: [String: Int] = [:]
+        var warnCounts: [String: Int] = [:]
+        var warnWords: [String: Int] = [:]
+        var yearMap: [Int: Int] = [:]
+        var langCounts: [String: Int] = [:]
+        let currentYear = ReadingInsights.utcCalendar.component(.year, from: Date())
+
         for work in effectiveWorks {
+            let workWords = wordsByWork[work.id] ?? 0
+            let rating = canonicalRating(for: work.rating)
+            ratingCounts[rating, default: 0] += 1
+            ratingWords[rating, default: 0] += workWords
+
+            let status = work.isComplete ? "Complete" : "Work in Progress"
+            statusCounts[status, default: 0] += 1
+            statusWords[status, default: 0] += workWords
+
             let band: String
             switch work.wordCount {
             case ..<5_000: band = "Under 5k"
@@ -1280,115 +1717,77 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
             default: band = "150k+"
             }
             lengthCounts[band, default: 0] += 1
-            lengthWords[band, default: 0] += wordsByWork[work.id] ?? 0
-        }
-        let lengthBands: [CountBreakdown] = lengthCounts.map { label, count in
-            CountBreakdown(label: label, count: count, words: lengthWords[label] ?? 0)
-        }
+            lengthWords[band, default: 0] += workWords
 
-        var catCounts: [String: Int] = [:]
-        var catWords: [String: Int] = [:]
-        for work in effectiveWorks {
-            for cat in Set(work.workCategories) {
+            for cat in Set(work.categories) {
                 let trimmed = cat.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     catCounts[trimmed, default: 0] += 1
-                    catWords[trimmed, default: 0] += wordsByWork[work.id] ?? 0
+                    catWords[trimmed, default: 0] += workWords
                 }
             }
-        }
-        let categories = catCounts.map { CountBreakdown(label: $0.key, count: $0.value, words: catWords[$0.key] ?? 0) }
-            .sorted { $0.count > $1.count }
 
-        var warnCounts: [String: Int] = [:]
-        var warnWords: [String: Int] = [:]
-        for work in effectiveWorks {
-            for w in Set(work.workWarnings) {
+            for w in Set(work.warnings) {
                 let trimmed = w.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     warnCounts[trimmed, default: 0] += 1
-                    warnWords[trimmed, default: 0] += wordsByWork[work.id] ?? 0
+                    warnWords[trimmed, default: 0] += workWords
                 }
             }
-        }
-        let warnings = warnCounts.map { CountBreakdown(label: $0.key, count: $0.value, words: warnWords[$0.key] ?? 0) }
-            .sorted { $0.count > $1.count }
 
-        var yearMap: [Int: Int] = [:]
-        let calendar = Calendar.current
-        for work in effectiveWorks {
-            if let date = WorkStat.date(from: work.datePublished) {
-                let y = calendar.component(.year, from: date)
-                if y > 1990 && y <= calendar.component(.year, from: Date()) {
-                    yearMap[y, default: 0] += 1
-                }
+            if let y = work.publishedYear, y > 1990 && y <= currentYear {
+                yearMap[y, default: 0] += 1
             }
-        }
-        let yearCounts = yearMap.keys.sorted().map { YearCount(year: $0, count: yearMap[$0] ?? 0) }
-        let allYears = yearMap.flatMap { Array(repeating: $0.key, count: $0.value) }.sorted()
-        let medianYear = allYears.isEmpty ? nil : allYears[allYears.count / 2]
 
-        let crossoverCount = effectiveWorks.filter {
-            aliases.isCrossover($0.workFandoms, bareTitle: FandomDisplayName.bareTitle)
-        }.count
-        var langCounts: [String: Int] = [:]
-        for work in effectiveWorks {
             let l = work.language.trimmingCharacters(in: .whitespacesAndNewlines)
             langCounts[l.isEmpty ? "Unknown" : l, default: 0] += 1
         }
-        let languages = langCounts.map { CountBreakdown(label: $0.key, count: $0.value) }
-            .sorted { $0.count > $1.count }
 
-        func common(_ values: [String]) -> String {
-            let counts = Dictionary(grouping: values.filter { !$0.isEmpty }, by: { $0 }).mapValues(\.count)
-            guard let top = counts.max(by: { $0.value < $1.value }),
-                  Double(top.value) / Double(max(1, effectiveWorks.count)) >= 0.4
-            else { return "varied" }
-            return top.key
+        var ratings: [CountBreakdown] = []
+        for label in canonicalRatingsOrder {
+            if let count = ratingCounts[label], count > 0 {
+                ratings.append(CountBreakdown(label: label, count: count, words: ratingWords[label] ?? 0))
+            }
         }
-        let statusStr = common(effectiveWorks.map { $0.isFinished ? "complete" : "in-progress" })
-        let ratingStr = common(effectiveWorks.map(\.rating))
-        let catStr = common(effectiveWorks.flatMap(\.workCategories))
-        let topTagStr = common(effectiveWorks.flatMap { ReadingInsights.freeformTags(of: $0) })
-        let topFandomStr = common(effectiveWorks.compactMap { $0.workFandoms.first })
-        let topRel = common(effectiveWorks.flatMap(\.workRelationships))
-        let summary = effectiveWorks.count < 5
-            ? "Read at least five works in this period to find your usual fic."
-            : "Usually \(statusStr) · \(ratingStr) · \(catStr) · \(topTagStr) · \(topFandomStr) · \(topRel)."
+        let extraRatingKeys = ratingCounts.keys
+            .filter { (key: String) -> Bool in !canonicalRatingsOrder.contains(key) }
+            .sorted()
+        for label in extraRatingKeys {
+            if let count = ratingCounts[label], count > 0 {
+                ratings.append(CountBreakdown(label: label, count: count, words: ratingWords[label] ?? 0))
+            }
+        }
 
-        var usualChipStrings: [String] = effectiveWorks.count < 5 ? [] : [statusStr.capitalized, ratingStr, catStr, topTagStr.capitalized]
-        var structuredChips: [UsualChip] = effectiveWorks.count < 5 ? [] : [
-            UsualChip(text: statusStr.capitalized, kind: .metadata),
-            UsualChip(text: ratingStr, kind: .metadata),
-            UsualChip(text: catStr, kind: .metadata),
-            UsualChip(text: topTagStr.capitalized, kind: .tag)
-        ]
-        if effectiveWorks.count >= 5 && topRel != "varied" {
-            usualChipStrings.append(topRel)
-            structuredChips.append(UsualChip(text: topRel, kind: .ship))
+        let statuses: [CountBreakdown] = statusCounts.map { (label: String, count: Int) in
+            CountBreakdown(label: label, count: count, words: statusWords[label] ?? 0)
         }
-        let extraTagValues = tags.dropFirst().prefix(2).map(\.name)
-        for t in extraTagValues where effectiveWorks.count >= 5 {
-            usualChipStrings.append(t)
-            structuredChips.append(UsualChip(text: t, kind: .tag))
+        let lengthBands: [CountBreakdown] = lengthCounts.map { (label: String, count: Int) in
+            CountBreakdown(label: label, count: count, words: lengthWords[label] ?? 0)
+        }
+        let categories: [CountBreakdown] = catCounts.map { (label: String, count: Int) in
+            CountBreakdown(label: label, count: count, words: catWords[label] ?? 0)
+        }
+        let warnings: [CountBreakdown] = warnCounts.map { (label: String, count: Int) in
+            CountBreakdown(label: label, count: count, words: warnWords[label] ?? 0)
+        }
+
+        let yearCounts = yearMap.keys.sorted().map { (y: Int) in YearCount(year: y, count: yearMap[y] ?? 0) }
+        let allYears = yearMap.flatMap { Array(repeating: $0.key, count: $0.value) }.sorted()
+        let medianYear = allYears.isEmpty ? nil : allYears[allYears.count / 2]
+
+        let crossoverCount = effectiveWorks.filter { (work: TasteWork) -> Bool in
+            aliases.isCrossover(work.fandoms, bareTitle: FandomDisplayName.bareTitle)
+        }.count
+        let languages = langCounts.map { (label: String, count: Int) in
+            CountBreakdown(label: label, count: count)
+        }.sorted { (lhs: CountBreakdown, rhs: CountBreakdown) -> Bool in
+            if lhs.count != rhs.count { return lhs.count > rhs.count }
+            return lhs.label < rhs.label
         }
 
         let result = ReadingTasteInsights(
-            usualFicSummary: summary,
-            usualFicTags: usualChipStrings,
-            usualChips: structuredChips,
-            usualStatus: statusStr,
-            usualRating: ratingStr,
-            usualCategory: catStr,
-            usualTopTag: tags.first?.name,
-            usualTopFandom: fandomShares.first(where: { !$0.isRemainder })?.name,
-            usualTopRelationship: topRel.isEmpty ? nil : topRel,
-            usualExtraTagNames: extraTagValues,
-            fandoms: fandomShares,
-            relationships: relationships,
             shipConcentrations: shipConcentrations,
             characters: characters,
-            tags: tags,
             oftenTogether: oftenTogether,
             ratings: ratings,
             statuses: statuses,
@@ -1399,7 +1798,13 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
             medianYear: medianYear,
             crossoverCount: crossoverCount,
             totalWorksCount: effectiveWorks.count,
-            languages: languages
+            languages: languages,
+            allFandoms: allFandoms,
+            unattributedFandomWords: unattributedWords,
+            unattributedFandomWorksCount: unattributedWorks.count,
+            unattributedFandomWordUnitWorksCount: unattributedWordUnitWorks.count,
+            allRelationships: allRelationships,
+            allTags: allTags
         )
         return result.ranked(byWorks: false)
     }
@@ -1424,6 +1829,7 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
     var rereads: [RereadWork] = []
     var rereadTimeShare: Double? = nil
     var fandomTimeline: [FandomTimelineLane] = []
+    var fandomTimelineYear: Int = 0
     var stoppedCount: Int = 0
     var stoppedInPeriodCount: Int = 0
     var stopReasons: [StopReasonCount] = []
@@ -1446,6 +1852,7 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
             && lhs.rereads == rhs.rereads
             && lhs.rereadTimeShare == rhs.rereadTimeShare
             && lhs.fandomTimeline == rhs.fandomTimeline
+            && lhs.fandomTimelineYear == rhs.fandomTimelineYear
             && lhs.stoppedCount == rhs.stoppedCount
             && lhs.stoppedInPeriodCount == rhs.stoppedInPeriodCount
             && lhs.stopReasons == rhs.stopReasons
@@ -1518,15 +1925,21 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
         allFacts: [ReadingSessionFacts],
         periodInterval: DateInterval? = nil,
         calendar: Calendar = .current,
-        aliases: TagAliasResolver = .empty
+        aliases: TagAliasResolver = .empty,
+        now: Date = Date()
     ) -> ReadingHabitsInsights {
         let hourly = ReadingInsights.hourlyDurationBuckets(from: facts, calendar: calendar)
-        let lateNightSec = ReadingInsights.lateNightDuration(from: facts, calendar: calendar)
+        let lateNightSec = hourly
+            .filter { (bucket: ReadingInsights.HourlyBucket) -> Bool in bucket.hour >= 1 && bucket.hour < 5 }
+            .reduce(0.0) { (sum: Double, bucket: ReadingInsights.HourlyBucket) -> Double in sum + bucket.seconds }
         let totalSec = max(1, facts.reduce(0) { $0 + $1.durationSeconds })
         let lateNightPct = Int((lateNightSec / totalSec * 100).rounded())
 
-        let calDays = ReadingInsights.dailyWordsBuckets(from: facts, calendar: calendar)
-        let thresholdEnd = periodInterval?.end ?? allFacts.map(\.startedAt).max() ?? Date()
+        let calendarRange = periodInterval.flatMap { (interval: DateInterval) -> DateInterval? in
+            ReadingInsights.chartDays(for: interval, now: now, calendar: calendar)
+        }
+        let calDays = ReadingInsights.dailyWordsBuckets(from: facts, in: calendarRange, calendar: calendar)
+        let thresholdEnd = periodInterval?.end ?? allFacts.map(\.startedAt).max() ?? now
         let thresholds = calendarThresholds(allFacts: allFacts, through: thresholdEnd, calendar: calendar)
         let streak = ReadingInsights.longestStreak(of: facts, calendar: calendar)
         let sittings = ReadingInsights.sittingBuckets(from: facts)
@@ -1561,7 +1974,11 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
                 totalWordsAcrossReads: val.words,
                 finishCount: val.count
             )
-        }.sorted { $0.finishCount > $1.finishCount }
+        }.sorted { (lhs: RereadWork, rhs: RereadWork) -> Bool in
+            if lhs.finishCount != rhs.finishCount { return lhs.finishCount > rhs.finishCount }
+            if lhs.totalWordsAcrossReads != rhs.totalWordsAcrossReads { return lhs.totalWordsAcrossReads > rhs.totalWordsAcrossReads }
+            return lhs.title < rhs.title
+        }
 
         let periodSessionIDs = Set(facts.compactMap(\.sessionID))
         var alreadyFinished: Set<UUID> = []
@@ -1576,65 +1993,68 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
         }
         let rereadShare: Double? = facts.isEmpty ? nil : rereadSeconds / totalSec
 
-        let topFandomNames = ReadingInsights.fandomShares(from: facts, aliases: aliases)
-            .filter { !$0.isRemainder }
-            .map(\.name)
-        let timelineYear = calendar.component(.year, from: periodInterval?.start ?? facts.first?.startedAt ?? Date())
+        // Fandom Timeline: top 4 named fandoms by words across `timelineYear` (plus remainder),
+        // with each month shaded by share of that month's total words (blank below 5,000 words).
+        let timelineYear = calendar.component(.year, from: periodInterval?.start ?? facts.first?.startedAt ?? now)
         var totalWordsByMonth = Array(repeating: 0, count: 12)
+        var wordsByFandomMonth: [String: [Int]] = [:]
+        var yearWordsByFandom: [String: Int] = [:]
         for fact in allFacts where fact.wordUnit == .words {
-            let day = ReadingInsights.sittingTime(for: fact, calendar: calendar).day
+            let day = ReadingInsights.readingDay(for: fact, calendar: calendar)
             guard calendar.component(.year, from: day) == timelineYear else { continue }
             let month = calendar.component(.month, from: day) - 1
-            if (0..<12).contains(month) { totalWordsByMonth[month] += fact.wordsRead }
-        }
-        var timelineLanes = topFandomNames.map { name -> FandomTimelineLane in
-            var months = Array(repeating: 0, count: 12)
-            for fact in allFacts where fact.wordUnit == .words
-                && aliases.resolve(fact.fandom, kind: .fandom) == name {
-                let day = ReadingInsights.sittingTime(for: fact, calendar: calendar).day
-                let m = calendar.component(.month, from: day) - 1
-                if calendar.component(.year, from: day) == timelineYear && m >= 0 && m < 12 {
-                    months[m] += fact.wordsRead
-                }
+            guard (0..<12).contains(month) else { continue }
+            totalWordsByMonth[month] += fact.wordsRead
+            let fandom = aliases.resolve(fact.fandom, kind: .fandom)
+            if !fandom.isEmpty {
+                var monthly = wordsByFandomMonth[fandom] ?? Array(repeating: 0, count: 12)
+                monthly[month] += fact.wordsRead
+                wordsByFandomMonth[fandom] = monthly
+                yearWordsByFandom[fandom, default: 0] += fact.wordsRead
             }
-            let maxM = months.max() ?? 0
-            let tiers = months.map { w -> Int in
-                guard maxM > 0 && w > 0 else { return 0 }
-                let ratio = Double(w) / Double(maxM)
-                if ratio < 0.25 { return 1 }
-                if ratio < 0.6 { return 2 }
+        }
+        let topFandomNames: [String] = yearWordsByFandom
+            .sorted { (lhs: (key: String, value: Int), rhs: (key: String, value: Int)) -> Bool in
+                if lhs.value != rhs.value { return lhs.value > rhs.value }
+                return lhs.key < rhs.key
+            }
+            .prefix(ReadingInsights.namedWordsFandomLimit)
+            .map(\.key)
+        func timelineTiers(for monthlyWords: [Int]) -> [Int] {
+            monthlyWords.enumerated().map { (index: Int, words: Int) -> Int in
+                let monthTotal = totalWordsByMonth[index]
+                guard monthTotal >= 5_000, words > 0 else { return 0 }
+                let share = Double(words) / Double(monthTotal)
+                if share < 0.25 { return 1 }
+                if share < 0.60 { return 2 }
                 return 3
             }
-            let visibleTiers = tiers.enumerated().map { index, tier in
-                totalWordsByMonth[index] >= 5_000 ? tier : 0
-            }
-            return FandomTimelineLane(name: name, monthlyActivity: visibleTiers, monthlyWords: months)
+        }
+        var timelineLanes: [FandomTimelineLane] = topFandomNames.map { (name: String) -> FandomTimelineLane in
+            let months = wordsByFandomMonth[name] ?? Array(repeating: 0, count: 12)
+            return FandomTimelineLane(
+                name: name,
+                monthlyActivity: timelineTiers(for: months),
+                monthlyWords: months
+            )
         }
         var remainderWords = totalWordsByMonth
         for lane in timelineLanes {
             for index in 0..<12 { remainderWords[index] -= lane.monthlyWords[index] }
         }
-        if remainderWords.contains(where: { $0 > 0 }) {
-            let maxRemainder = max(1, remainderWords.max() ?? 0)
-            let remainderTiers: [Int] = remainderWords.enumerated().map { index, words in
-                guard totalWordsByMonth[index] >= 5_000 && words > 0 else { return 0 }
-                let share = Double(words) / Double(maxRemainder)
-                if share < 0.25 { return 1 }
-                if share < 0.6 { return 2 }
-                return 3
-            }
+        if remainderWords.contains(where: { (w: Int) -> Bool in w > 0 }) {
             timelineLanes.append(FandomTimelineLane(
                 name: ReadingInsights.remainderName,
-                monthlyActivity: remainderTiers,
+                monthlyActivity: timelineTiers(for: remainderWords),
                 monthlyWords: remainderWords
             ))
         }
 
         let stoppedWorks = (libraryWorks ?? works).filter { $0.insightsReadingStatus == .stopped }
         let stoppedCount = stoppedWorks.count
-        let stoppedInPeriod = stoppedWorks.filter { work in
+        let stoppedInPeriod = stoppedWorks.filter { (work: SavedWork) -> Bool in
             guard let periodInterval, let stoppedAt = work.stoppedAt else { return false }
-            return periodInterval.contains(stoppedAt)
+            return stoppedAt >= periodInterval.start && stoppedAt < periodInterval.end
         }.count
         var reasonCounts: [String: Int] = [:]
         for work in stoppedWorks where !work.stopReasonRaw.isEmpty {
@@ -1644,7 +2064,10 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
         for (reason, count) in reasonCounts {
             stopReasons.append(StopReasonCount(reason: reason, count: count))
         }
-        stopReasons.sort { $0.count > $1.count }
+        stopReasons.sort { (lhs: StopReasonCount, rhs: StopReasonCount) -> Bool in
+            if lhs.count != rhs.count { return lhs.count > rhs.count }
+            return lhs.label < rhs.label
+        }
 
         let stoppedMedianProgress = median(stoppedWorks.compactMap(\.readingProgress))
 
@@ -1675,8 +2098,11 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
             .prefix(3)
             .map { $0 }
 
-        // First sitting per work from the whole log, then the gaps the dates can prove.
+        // First sitting and first-ever finish per work from the whole log.
+        // Owner review: `openedToFinished` counts only complete works whose *first-ever*
+        // finish falls in the period, excluding WIPs and later reread finishes.
         var firstSittingFact: [UUID: ReadingSessionFacts] = [:]
+        var firstFinishFact: [UUID: ReadingSessionFacts] = [:]
         for fact in allFacts {
             if let existing = firstSittingFact[fact.workID] {
                 if ReadingInsights.sittingOrder(fact, existing) {
@@ -1685,26 +2111,42 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
             } else {
                 firstSittingFact[fact.workID] = fact
             }
-        }
-        var firstFinishInPeriod: [UUID: Date] = [:]
-        for fact in facts where fact.didFinish {
-            firstFinishInPeriod[fact.workID] = min(firstFinishInPeriod[fact.workID] ?? fact.startedAt, fact.startedAt)
+            if fact.didFinish {
+                if let existing = firstFinishFact[fact.workID] {
+                    if ReadingInsights.sittingOrder(fact, existing) {
+                        firstFinishFact[fact.workID] = fact
+                    }
+                } else {
+                    firstFinishFact[fact.workID] = fact
+                }
+            }
         }
         let openedInPeriod = Set(facts.map(\.workID))
+        let finishedInPeriod = Set(facts.filter(\.didFinish).map(\.workID))
         let secondsPerDay = 86_400.0
-        let savedToOpened = works.compactMap { work -> Double? in
+        let savedToOpened = works.compactMap { (work: SavedWork) -> Double? in
             guard let firstFact = firstSittingFact[work.id] else { return nil }
-            let firstIsInPeriod: Bool = periodInterval.map {
-                ReadingInsights.isInPeriod(firstFact, period: $0, calendar: calendar)
+            let firstIsInPeriod: Bool = periodInterval.map { (interval: DateInterval) -> Bool in
+                ReadingInsights.isInPeriod(firstFact, period: interval, calendar: calendar)
             } ?? openedInPeriod.contains(work.id)
             guard firstIsInPeriod else { return nil }
             return max(0, firstFact.startedAt.timeIntervalSince(work.dateAdded)) / secondsPerDay
         }
-        let openedToFinished = works.compactMap { work -> Double? in
-            guard let first = firstSittingFact[work.id]?.startedAt,
-                  let done = firstFinishInPeriod[work.id]
+        let openedToFinished = works.compactMap { (work: SavedWork) -> Double? in
+            guard work.isComplete,
+                  let first = firstSittingFact[work.id]?.startedAt,
+                  let firstFinish = firstFinishFact[work.id]
             else { return nil }
-            return max(0, done.timeIntervalSince(first)) / secondsPerDay
+            let finishIsInPeriod: Bool
+            if let interval = periodInterval {
+                finishIsInPeriod = ReadingInsights.isInPeriod(firstFinish, period: interval, calendar: calendar)
+            } else if let sid = firstFinish.sessionID {
+                finishIsInPeriod = periodSessionIDs.contains(sid)
+            } else {
+                finishIsInPeriod = finishedInPeriod.contains(work.id) && facts.contains(firstFinish)
+            }
+            guard finishIsInPeriod else { return nil }
+            return max(0, firstFinish.startedAt.timeIntervalSince(first)) / secondsPerDay
         }
 
         return ReadingHabitsInsights(
@@ -1723,6 +2165,7 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
             rereads: rereads,
             rereadTimeShare: rereadShare,
             fandomTimeline: timelineLanes,
+            fandomTimelineYear: timelineYear,
             stoppedCount: stoppedCount,
             stoppedInPeriodCount: stoppedInPeriod,
             stopReasons: stopReasons,
@@ -1758,6 +2201,20 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
             return Int((Double(finished) / Double(saved) * 100).rounded())
         }
     }
+    nonisolated struct FoundEarlyExample: Equatable, Sendable {
+        var workID: UUID
+        var title: String
+        var kudosAtSave: Int
+        var kudosNow: Int
+    }
+
+    nonisolated struct LongestFinishedSeries: Equatable, Sendable {
+        var seriesID: Int
+        var title: String
+        var partCount: Int
+        var wordCount: Int
+    }
+
     var unreadWords: Int = 0
     var unreadWorksCount: Int = 0
     var monthsToClear: Int? = nil
@@ -1775,14 +2232,19 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
     var bookmarkedPercent: Int?
     var arrivalRows: [ArrivalRow] = []
     var arrivalSince: Date?
+    var foundEarlyRecordedFinishedCount: Int = 0
     var foundEarlyCount: Int = 0
+    var foundEarlyShare: Double?
     var foundEarlyGrownCount: Int = 0
     var foundEarlyGrowthShare: Double?
+    var foundEarlySince: Date?
+    var foundEarlyExampleItem: FoundEarlyExample?
     var foundEarlyExample: String?
     var favoriteWithoutKudosCount: Int = 0
     var seriesStartedCount: Int = 0
     var seriesReadToLastCount: Int = 0
     var seriesNextWaitingCount: Int = 0
+    var longestFinishedSeries: LongestFinishedSeries?
     var authors: [AuthorRow] = []
 
     static func == (lhs: ReadingLibraryInsights, rhs: ReadingLibraryInsights) -> Bool {
@@ -1802,15 +2264,30 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
             && lhs.bookmarkedPercent == rhs.bookmarkedPercent
             && lhs.arrivalRows == rhs.arrivalRows
             && lhs.arrivalSince == rhs.arrivalSince
+            && lhs.foundEarlyRecordedFinishedCount == rhs.foundEarlyRecordedFinishedCount
             && lhs.foundEarlyCount == rhs.foundEarlyCount
+            && lhs.foundEarlyShare == rhs.foundEarlyShare
             && lhs.foundEarlyGrownCount == rhs.foundEarlyGrownCount
             && lhs.foundEarlyGrowthShare == rhs.foundEarlyGrowthShare
+            && lhs.foundEarlySince == rhs.foundEarlySince
+            && lhs.foundEarlyExampleItem == rhs.foundEarlyExampleItem
             && lhs.foundEarlyExample == rhs.foundEarlyExample
             && lhs.favoriteWithoutKudosCount == rhs.favoriteWithoutKudosCount
             && lhs.seriesStartedCount == rhs.seriesStartedCount
             && lhs.seriesReadToLastCount == rhs.seriesReadToLastCount
             && lhs.seriesNextWaitingCount == rhs.seriesNextWaitingCount
+            && lhs.longestFinishedSeries == rhs.longestFinishedSeries
             && lhs.authors == rhs.authors
+    }
+
+    private static func locatorTitle(from locator: String) -> String? {
+        guard !locator.isEmpty,
+              let data = locator.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let raw = object["title"] as? String
+        else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     nonisolated struct StillReadingCandidate: Equatable, Sendable, Identifiable {
@@ -1860,7 +2337,8 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
             : nil
         var monthsRange: ClosedRange<Int>?
         if !allFacts.isEmpty {
-            let windowEnd = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? now
+            let todayStart = calendar.startOfDay(for: now)
+            let windowEnd = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? now
             let windowStart = calendar.date(byAdding: .day, value: -90, to: windowEnd) ?? now
             let recentWindow = DateInterval(start: min(windowStart, windowEnd), end: max(windowStart, windowEnd))
             let recent = allFacts.filter { ReadingInsights.isInPeriod($0, period: recentWindow, calendar: calendar) }
@@ -1868,10 +2346,17 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
             let words = recent.filter { $0.wordUnit == .words }.reduce(0) { $0 + $1.wordsRead }
             monthsToClear = nil
             if unreadWords > 0 && words > 0 && readingDays.count >= 7 {
-                let first = recent.map(\.startedAt).min() ?? now
-                let elapsed = max(1, min(90, (calendar.dateComponents([.day], from: first, to: now).day ?? 0) + 1))
+                // Anchor elapsed days on earliest history (not earliest in-window sitting)
+                // clamped to 90 days, so a reading break inside the last 90 days cannot
+                // shrink the denominator and inflate the daily average.
+                let historyDays = allFacts
+                    .map { ReadingInsights.readingDay(for: $0, calendar: calendar) }
+                    .filter { $0 < windowEnd }
+                let earliestDay = historyDays.min() ?? todayStart
+                let spanDays = (calendar.dateComponents([.day], from: earliestDay, to: todayStart).day ?? 0) + 1
+                let elapsed = max(1, min(90, spanDays))
                 let averagePerDay = Double(words) / Double(elapsed)
-                let estimate = Double(unreadWords) / (averagePerDay * 30)
+                let estimate = Double(unreadWords) / (averagePerDay * 30.0)
                 if readingDays.count >= 30 {
                     monthsToClear = max(1, Int(estimate.rounded()))
                 } else {
@@ -1885,28 +2370,40 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         }
 
         let statuses = ReadingInsights.partitionStatuses(works: works, now: now)
-        // isAbandoned needs lastReadDate, so the untouched time is always real.
+        // isAbandoned already checks `0.05 < readingProgress < 0.95` and `lastReadDate`,
+        // and `!isCaughtUpOnWIP` excludes WIPs caught up on every posted chapter, so
+        // single-chapter works, mid-final-chapter pauses, and local EPUBs without AO3
+        // `chapters` remain eligible.
         let untouchedThreshold = TimeInterval(InsightsOptions.clampUntouchedDays(untouchedDays)) * 86_400
         let candidateWork: SavedWork? = askAboutUntouched
-            ? works.first {
-                ReadingLogService.isAbandoned(work: $0, now: now, threshold: untouchedThreshold)
-                    && $0.lastReadDate != nil
-                    && $0.postedChapterCount > $0.lastSpineIndex + 1
-                    && !$0.isCaughtUpOnWIP
-                    && $0.insightsReadingStatus != .stopped
-                    && $0.insightsReadingStatus != .onHold
-                    && $0.insightsReadingStatus != .stacking
+            ? works.first { (work: SavedWork) -> Bool in
+                ReadingLogService.isAbandoned(work: work, now: now, threshold: untouchedThreshold)
+                    && work.lastReadDate != nil
+                    && !work.isCaughtUpOnWIP
+                    && work.insightsReadingStatus != .stopped
+                    && work.insightsReadingStatus != .onHold
+                    && work.insightsReadingStatus != .stacking
             }
             : nil
-        let candidate: StillReadingCandidate? = candidateWork.map { w in
+        let candidate: StillReadingCandidate? = candidateWork.map { (w: SavedWork) -> StillReadingCandidate in
             let progress = w.readingProgress.map { Int(($0 * 100).rounded()) }
-            let chapters = "Chapter \(w.lastSpineIndex + 1) of \(w.postedChapterCount > 0 ? w.postedChapterCount : 1)"
+            var parts: [String] = []
+            if let title = locatorTitle(from: w.readiumLocator) {
+                parts.append(title)
+            } else if w.postedChapterCount > 0 {
+                let current = min(w.postedChapterCount, max(1, w.lastSpineIndex + 1))
+                parts.append("Chapter \(current) of \(w.postedChapterCount)")
+            }
+            if let progress {
+                parts.append("\(progress)%")
+            }
+            let chapterProgress = parts.isEmpty ? "In progress" : parts.joined(separator: " · ")
             let days = w.lastReadDate.flatMap { calendar.dateComponents([.day], from: $0, to: now).day } ?? 0
             return StillReadingCandidate(
                 id: w.id,
                 title: w.title,
                 fandom: aliases.resolve(w.workFandoms.first ?? "", kind: .fandom),
-                chapterProgress: progress.map { "\(chapters) · \($0)%" } ?? chapters,
+                chapterProgress: chapterProgress,
                 progressPercent: progress,
                 daysUntouched: max(1, days),
                 work: w
@@ -1920,8 +2417,8 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         let lastCopies = works.filter { $0.preservationState == .preservedLastCopy }.count
 
         let finished = works.filter(\.isFinished)
-        let onAO3 = finished.filter {
-            $0.preservationState != .goneWithNoCopy && $0.preservationState != .preservedLastCopy
+        let onAO3 = finished.filter { (work: SavedWork) -> Bool in
+            work.origin == .archiveOfOurOwn && work.preservationState == .available
         }
         let kudosPct: Int? = onAO3.isEmpty ? nil
             : Int(Double(onAO3.filter(\.hasGivenKudos).count) / Double(onAO3.count) * 100)
@@ -1948,60 +2445,192 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
             total.finished += counts.finished
             grouped[label] = total
         }
-        var arrivalRows: [ArrivalRow] = []
-        arrivalRows.reserveCapacity(grouped.count)
-        for (label, counts) in grouped {
-            arrivalRows.append(ArrivalRow(label: label, finished: counts.finished, saved: counts.saved))
+        // Owner review: hide the card when zero recorded works are finished and omit
+        // sources with zero finished works rather than showing 0% share rows.
+        let totalArrivedFinished = grouped.values.reduce(0) { (sum: Int, item: (saved: Int, finished: Int)) -> Int in
+            sum + item.finished
         }
-        arrivalRows.sort { (lhs: ArrivalRow, rhs: ArrivalRow) -> Bool in
-            if lhs.finished != rhs.finished { return lhs.finished > rhs.finished }
-            return lhs.label < rhs.label
+        var arrivalRows: [ArrivalRow] = []
+        if totalArrivedFinished > 0 {
+            arrivalRows.reserveCapacity(grouped.count)
+            for (label, counts) in grouped where counts.finished > 0 {
+                arrivalRows.append(ArrivalRow(label: label, finished: counts.finished, saved: counts.saved))
+            }
+            arrivalRows.sort { (lhs: ArrivalRow, rhs: ArrivalRow) -> Bool in
+                if lhs.finished != rhs.finished { return lhs.finished > rhs.finished }
+                return lhs.label < rhs.label
+            }
+        } else {
+            arrivalSince = nil
         }
 
-        let foundEarly = finished.filter { $0.statsSavedAt != nil && ($0.kudosAtSave ?? Int.max) < 500 }
-        let grown = foundEarly.filter { $0.kudos >= 3 * max(1, $0.kudosAtSave ?? 0) }
+        let recordedFinished = finished.filter { (work: SavedWork) -> Bool in
+            work.statsSavedAt != nil && work.kudosAtSave != nil
+        }
+        let foundEarlySince = recordedFinished.compactMap(\.statsSavedAt).min()
+        let foundEarly = recordedFinished.filter { (work: SavedWork) -> Bool in
+            (work.kudosAtSave ?? Int.max) < 500
+        }
+        let foundEarlyShare: Double? = recordedFinished.isEmpty
+            ? nil : Double(foundEarly.count) / Double(recordedFinished.count)
+        let grown = foundEarly.filter { (work: SavedWork) -> Bool in
+            work.kudos >= 3 * max(1, work.kudosAtSave ?? 0)
+        }
         let grownShare: Double? = foundEarly.isEmpty
             ? nil : Double(grown.count) / Double(foundEarly.count)
-        let example = foundEarly.max { $0.kudos < $1.kudos }.map {
-            "\($0.title) · \($0.kudosAtSave ?? 0) then, \($0.kudos) now"
+        // Owner review: showcase the early-found work with the highest kudos growth ratio
+        // (`kudosNow / max(kudosAtSave, 1)`, tie-broken by `kudosNow` then `title`) among
+        // works that actually gained kudos (`kudos > kudosAtSave`), never a 0-growth work.
+        let growingCandidates = foundEarly.filter { (work: SavedWork) -> Bool in
+            work.kudos > (work.kudosAtSave ?? 0)
         }
+        let bestExampleWork: SavedWork? = growingCandidates.max { (lhs: SavedWork, rhs: SavedWork) -> Bool in
+            let lhsGrowth = Double(lhs.kudos) / Double(max(lhs.kudosAtSave ?? 0, 1))
+            let rhsGrowth = Double(rhs.kudos) / Double(max(rhs.kudosAtSave ?? 0, 1))
+            if lhsGrowth != rhsGrowth { return lhsGrowth < rhsGrowth }
+            if lhs.kudos != rhs.kudos { return lhs.kudos < rhs.kudos }
+            return lhs.title > rhs.title
+        }
+        let exampleItem: FoundEarlyExample? = bestExampleWork.map { (work: SavedWork) -> FoundEarlyExample in
+            FoundEarlyExample(
+                workID: work.id,
+                title: work.title,
+                kudosAtSave: work.kudosAtSave ?? 0,
+                kudosNow: work.kudos
+            )
+        }
+        let example = exampleItem.map { "\($0.title) · \($0.kudosAtSave) then, \($0.kudosNow) now" }
 
         let finishCounts = Dictionary(grouping: allFacts.filter(\.didFinish), by: \.workID)
             .mapValues(\.count)
-        let favoriteWithoutKudos = finished.filter {
-            !$0.hasGivenKudos && ($0.isFavorite || (finishCounts[$0.id] ?? 0) > 1)
+        let favoriteWithoutKudos = onAO3.filter { (work: SavedWork) -> Bool in
+            !work.hasGivenKudos && (work.isFavorite || (finishCounts[work.id] ?? 0) > 1)
         }.count
 
+        let authorWorks = readingWorks ?? works
         let seriesByID = Dictionary(seriesSnapshots.map { ($0.ao3SeriesID, $0) },
             uniquingKeysWith: { first, _ in first })
-        let readSeriesWorks = works.filter { $0.hasStartedReading && $0.ao3SeriesID != nil }
-        let seriesParts = Dictionary(grouping: readSeriesWorks, by: { $0.ao3SeriesID ?? 0 })
-            .mapValues { Set($0.map(\.seriesPosition)) }
-        let startedSeries = Set(seriesParts.keys)
-        let readToLast = startedSeries.filter { id in
-            guard let lastPart = seriesByID[id]?.effectivePartCount, lastPart > 0 else { return false }
-            return seriesParts[id]?.contains(lastPart) == true
+        var readPartsBySeries: [Int: Set<Int>] = [:]
+        var finishedPartsBySeries: [Int: Set<Int>] = [:]
+        var readAO3WorkIDs: Set<Int> = []
+        var finishedAO3WorkIDs: Set<Int> = []
+        var seriesWordFallback: [Int: [Int: Int]] = [:]
+        var seriesTitleFallback: [Int: String] = [:]
+
+        for work in authorWorks {
+            let started = work.hasStartedReading || work.isFinished
+            let workFinished = work.isFinished || (finishCounts[work.id] ?? 0) > 0
+            if started, let ao3ID = work.ao3WorkID { readAO3WorkIDs.insert(ao3ID) }
+            if workFinished, let ao3ID = work.ao3WorkID { finishedAO3WorkIDs.insert(ao3ID) }
+            guard started, let seriesID = work.ao3SeriesID else { continue }
+            if readPartsBySeries[seriesID] == nil { readPartsBySeries[seriesID] = [] }
+            if work.seriesPosition > 0 {
+                readPartsBySeries[seriesID, default: []].insert(work.seriesPosition)
+                if workFinished {
+                    finishedPartsBySeries[seriesID, default: []].insert(work.seriesPosition)
+                }
+                if work.wordUnit == .words {
+                    let prev = seriesWordFallback[seriesID]?[work.seriesPosition] ?? 0
+                    seriesWordFallback[seriesID, default: [:]][work.seriesPosition] = max(prev, max(0, work.wordCount))
+                }
+            }
+            if !work.seriesTitle.isEmpty && seriesTitleFallback[seriesID] == nil {
+                seriesTitleFallback[seriesID] = work.seriesTitle
+            }
         }
-        let nextWaiting = startedSeries.filter { id in
-            guard let highest = seriesParts[id]?.max(), highest > 0 else { return false }
-            let nextPosition = highest + 1
-            let savedNext = works.contains { work in
-                work.ao3SeriesID == id && work.seriesPosition == nextPosition
-                    && !work.hasStartedReading
+        for fact in allFacts {
+            if let ao3ID = fact.ao3WorkID {
+                readAO3WorkIDs.insert(ao3ID)
+                if fact.didFinish { finishedAO3WorkIDs.insert(ao3ID) }
             }
-            let knownAO3Part: Bool
-            if let snapshot = seriesByID[id], snapshot.partWorkIDs.count >= nextPosition {
-                knownAO3Part = snapshot.partWorkIDs[nextPosition - 1] > 0
+            guard let seriesID = fact.ao3SeriesID else { continue }
+            if readPartsBySeries[seriesID] == nil { readPartsBySeries[seriesID] = [] }
+            if fact.seriesPosition > 0 {
+                readPartsBySeries[seriesID, default: []].insert(fact.seriesPosition)
+                if fact.didFinish {
+                    finishedPartsBySeries[seriesID, default: []].insert(fact.seriesPosition)
+                }
+                if fact.wordUnit == .words {
+                    let prev = seriesWordFallback[seriesID]?[fact.seriesPosition] ?? 0
+                    seriesWordFallback[seriesID, default: [:]][fact.seriesPosition] = max(prev, max(0, fact.wordCount))
+                }
+            }
+        }
+        for (seriesID, snapshot) in seriesByID {
+            for (index, partWorkID) in snapshot.partWorkIDs.enumerated() where partWorkID > 0 {
+                let position = index + 1
+                if readAO3WorkIDs.contains(partWorkID) {
+                    readPartsBySeries[seriesID, default: []].insert(position)
+                }
+                if finishedAO3WorkIDs.contains(partWorkID) {
+                    finishedPartsBySeries[seriesID, default: []].insert(position)
+                }
+            }
+        }
+
+        let startedSeries = Set(readPartsBySeries.keys)
+        let readToLast = startedSeries.filter { (id: Int) -> Bool in
+            guard let lastPart = seriesByID[id]?.effectivePartCount, lastPart > 0 else { return false }
+            return finishedPartsBySeries[id]?.contains(lastPart) == true
+        }
+        var longestFinishedSeries: LongestFinishedSeries?
+        for id in readToLast {
+            let snapshot = seriesByID[id]
+            let title = (snapshot?.title.isEmpty == false ? snapshot?.title : nil)
+                ?? seriesTitleFallback[id]
+                ?? ""
+            guard !title.isEmpty else { continue }
+            let partCount = snapshot?.effectivePartCount ?? (finishedPartsBySeries[id]?.count ?? 0)
+            let fallbackWords = seriesWordFallback[id]?.values.reduce(0, +) ?? 0
+            let wordCount = (snapshot?.wordCount ?? 0) > 0 ? (snapshot?.wordCount ?? 0) : fallbackWords
+            let candidateSeries = LongestFinishedSeries(
+                seriesID: id,
+                title: title,
+                partCount: partCount,
+                wordCount: wordCount
+            )
+            if let current = longestFinishedSeries {
+                let isBetter: Bool
+                if candidateSeries.wordCount != current.wordCount {
+                    isBetter = candidateSeries.wordCount > current.wordCount
+                } else if candidateSeries.partCount != current.partCount {
+                    isBetter = candidateSeries.partCount > current.partCount
+                } else {
+                    isBetter = candidateSeries.title < current.title
+                }
+                if isBetter { longestFinishedSeries = candidateSeries }
             } else {
-                knownAO3Part = false
+                longestFinishedSeries = candidateSeries
             }
-            return savedNext || knownAO3Part
+        }
+        // Owner review: Next Part Waiting requires the highest read part in the series
+        // to be finished, and ensures the next part is not already started/finished in
+        // library, queue-only, or deleted history before counting it as waiting.
+        let nextWaiting = startedSeries.filter { (id: Int) -> Bool in
+            let readPositions = readPartsBySeries[id] ?? []
+            guard let highest = readPositions.max(), highest > 0 else { return false }
+            guard finishedPartsBySeries[id]?.contains(highest) == true else { return false }
+            let nextPosition = highest + 1
+            if readPositions.contains(nextPosition) { return false }
+            let snapshot = seriesByID[id]
+            let nextWorkID: Int?
+            if let snapshot, snapshot.partWorkIDs.count >= nextPosition,
+               snapshot.partWorkIDs[nextPosition - 1] > 0 {
+                nextWorkID = snapshot.partWorkIDs[nextPosition - 1]
+            } else {
+                nextWorkID = nil
+            }
+            if let nextWorkID, readAO3WorkIDs.contains(nextWorkID) { return false }
+            let savedNext = works.contains { (work: SavedWork) -> Bool in
+                work.ao3SeriesID == id && work.seriesPosition == nextPosition
+                    && !work.hasStartedReading && !work.isFinished
+            }
+            return savedNext || nextWorkID != nil
         }
 
         let wordsByWork = Dictionary(grouping: allFacts, by: \.workID)
             .mapValues { $0.reduce(0) { $0 + ($1.wordUnit == .words ? $1.wordsRead : 0) } }
         var authorTotals: [String: (works: Int, words: Int, finished: Int)] = [:]
-        let authorWorks = readingWorks ?? works
         let liveWorkIDs = Set(authorWorks.map(\.id))
         for work in authorWorks where wordsByWork[work.id] != nil {
             let names = Set(work.verifiedAuthorIdentities.compactMap { identity -> String? in
@@ -2064,14 +2693,19 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
             bookmarkedPercent: bookmarkPct,
             arrivalRows: arrivalRows,
             arrivalSince: arrivalSince,
+            foundEarlyRecordedFinishedCount: recordedFinished.count,
             foundEarlyCount: foundEarly.count,
+            foundEarlyShare: foundEarlyShare,
             foundEarlyGrownCount: grown.count,
             foundEarlyGrowthShare: grownShare,
+            foundEarlySince: foundEarlySince,
+            foundEarlyExampleItem: exampleItem,
             foundEarlyExample: example,
             favoriteWithoutKudosCount: favoriteWithoutKudos,
             seriesStartedCount: startedSeries.count,
             seriesReadToLastCount: readToLast.count,
             seriesNextWaitingCount: nextWaiting.count,
+            longestFinishedSeries: longestFinishedSeries,
             authors: authors
         )
     }

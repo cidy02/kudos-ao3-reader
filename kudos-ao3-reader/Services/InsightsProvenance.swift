@@ -39,8 +39,25 @@ enum InsightsProvenance {
         }
     }
 
-    static func chapterTiming(sessions: [ReadingSession]) -> ChapterTimingFigure {
+    /// Builds chapter timing figures for `sessions` (the period on screen).
+    /// `paceHistorySessions` (defaulting to `sessions`) supplies all-time `.read`
+    /// sittings up through the period's end so the 20-chapter pace-history gate
+    /// matches `ReadingLogService.applyChapterTiming` instead of resetting every
+    /// new or quiet month.
+    static func chapterTiming(
+        sessions: [ReadingSession],
+        paceHistorySessions: [ReadingSession]? = nil
+    ) -> ChapterTimingFigure {
         var figure = ChapterTimingFigure()
+        let paceSources = paceHistorySessions ?? sessions
+        for session in paceSources where session.mode == .read {
+            let timed = session.chapterSeconds
+            let measuredWords = session.chapterWords
+            let skimmed = Set(session.skimmedChapters)
+            for (spine, words) in measuredWords where words > 0 && !skimmed.contains(spine) {
+                if (timed[spine] ?? 0) > 0 { figure.paceHistoryChapters += 1 }
+            }
+        }
         var peeked: Set<UUID> = []
         for session in sessions {
             if let start = session.startSpineIndex, session.lastSpineIndex >= start {
@@ -56,13 +73,8 @@ enum InsightsProvenance {
                 }
             }
             if session.peekedAtEnding == true { peeked.insert(session.workID) }
-            let timed = session.chapterSeconds
-            let measuredWords = session.chapterWords
-            let skimmed = Set(session.skimmedChapters)
-            for (spine, words) in measuredWords where words > 0 && !skimmed.contains(spine) {
-                if (timed[spine] ?? 0) > 0 { figure.paceHistoryChapters += 1 }
-            }
             guard session.skimmedChaptersJSON != nil else { continue }
+            let measuredWords = session.chapterWords
             figure.judgedSittings += 1
             for spine in session.skimmedChapters {
                 figure.skimmedChapters += 1

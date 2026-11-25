@@ -426,6 +426,7 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
         case tag
         case work
         case author
+        case series
 
         var prefix: String {
             switch self {
@@ -435,6 +436,7 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
             case .tag: return "Tag"
             case .work: return "Work"
             case .author: return "Author"
+            case .series: return "Series"
             }
         }
     }
@@ -446,6 +448,7 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
     private let workByIDMap: [UUID: String]
     private let workByTitleMap: [String: String]
     private let authorMap: [String: String]
+    private let seriesMap: [String: String]
     private let aliases: TagAliasResolver
 
     static let empty = InsightsDiscreetMasker(
@@ -456,6 +459,7 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
         workByIDMap: [:],
         workByTitleMap: [:],
         authorMap: [:],
+        seriesMap: [:],
         aliases: .empty
     )
 
@@ -487,6 +491,7 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
         private var worksByID: [UUID: String] = [:]
         private var worksByTitle: [String: String] = [:]
         private var authors: [String: String] = [:]
+        private var series: [String: String] = [:]
 
         init(aliases: TagAliasResolver = .empty) {
             self.aliases = aliases
@@ -545,6 +550,13 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
             authors[key] = "\(Category.author.prefix) \(letterCode(for: authors.count))"
         }
 
+        mutating func registerSeries(_ raw: String) {
+            let key = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !key.isEmpty else { return }
+            guard series[key] == nil else { return }
+            series[key] = "\(Category.series.prefix) \(letterCode(for: series.count))"
+        }
+
         func build() -> InsightsDiscreetMasker {
             InsightsDiscreetMasker(
                 fandomMap: fandoms,
@@ -554,6 +566,7 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
                 workByIDMap: worksByID,
                 workByTitleMap: worksByTitle,
                 authorMap: authors,
+                seriesMap: series,
                 aliases: aliases
             )
         }
@@ -609,6 +622,13 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
         return authorMap[key] ?? Category.author.prefix
     }
 
+    func series(_ raw: String) -> String {
+        let key = Self.normalizedKey(raw)
+        guard !key.isEmpty else { return Category.series.prefix }
+        return seriesMap[key] ?? Category.series.prefix
+    }
+
+
     /// Snapshot inputs used to seed deterministic Discreet Mode labels.
     @MainActor
     struct ScreenSeed {
@@ -663,7 +683,13 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
         for fandom in taste.fandoms where !fandom.isRemainder {
             builder.registerFandom(fandom.name)
         }
-        for rel in taste.relationships {
+        for tally in taste.allFandoms.sorted(by: { (lhs: ReadingTasteInsights.FandomTally, rhs: ReadingTasteInsights.FandomTally) -> Bool in
+            if lhs.words != rhs.words { return lhs.words > rhs.words }
+            return lhs.name < rhs.name
+        }) {
+            builder.registerFandom(tally.name)
+        }
+        for rel in taste.relationships + taste.allRelationships {
             builder.registerShip(rel.name)
             if !rel.fandom.isEmpty { builder.registerFandom(rel.fandom) }
         }
@@ -674,7 +700,7 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
             builder.registerCharacter(charItem.name)
             if !charItem.fandom.isEmpty { builder.registerFandom(charItem.fandom) }
         }
-        taste.tags.forEach { builder.registerTag($0.name) }
+        (taste.tags + taste.allTags).forEach { builder.registerTag($0.name) }
         for pair in taste.oftenTogether {
             builder.registerTag(pair.tagA)
             builder.registerTag(pair.tagB)
@@ -700,6 +726,12 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
             builder.registerWork(id: candidate.id, title: candidate.title)
             if !candidate.fandom.isEmpty { builder.registerFandom(candidate.fandom) }
         }
+        if let example = library?.foundEarlyExampleItem {
+            builder.registerWork(id: example.workID, title: example.title)
+        }
+        if let series = library?.longestFinishedSeries {
+            builder.registerSeries(series.title)
+        }
         library?.authors.forEach { builder.registerAuthor($0.name) }
         stats?.topFandoms.forEach { builder.registerFandom($0.name) }
     }
@@ -717,6 +749,7 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
             builder.registerWork(id: work.id, title: work.title)
             builder.registerAuthor(work.author)
             work.verifiedAuthorIdentities.compactMap(\.username).forEach { builder.registerAuthor($0) }
+            if !work.seriesTitle.isEmpty { builder.registerSeries(work.seriesTitle) }
             work.workFandoms.forEach { builder.registerFandom($0) }
             work.workRelationships.forEach { builder.registerShip($0) }
             work.workCharacters.forEach { builder.registerCharacter($0) }
