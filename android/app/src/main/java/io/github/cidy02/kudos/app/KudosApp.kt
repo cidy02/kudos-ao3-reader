@@ -348,7 +348,9 @@ fun KudosApp(
                         io.github.cidy02.kudos.ui.components.LocalShowsZeroStats provides
                             settings.app.showsZeroStats,
                         io.github.cidy02.kudos.ui.components.LocalWorkSymbolPlacement provides
-                            settings.app.workSymbolPlacement
+                            settings.app.workSymbolPlacement,
+                        io.github.cidy02.kudos.ui.components.LocalUseEmbeddedCoverArt provides
+                            settings.app.useEmbeddedCoverArt
                     ) {
                         if (whatsNewEntries.isNotEmpty()) {
                             WhatsNewSheet(

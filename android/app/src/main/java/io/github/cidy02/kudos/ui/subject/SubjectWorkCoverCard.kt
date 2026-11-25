@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.ui.subject
 import io.github.cidy02.kudos.ui.components.hiddenMatureWorkSemantics
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -30,7 +32,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
@@ -48,6 +53,7 @@ import io.github.cidy02.kudos.ui.components.statusChips
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.DownloadQueueStatus
 import io.github.cidy02.kudos.works.WorkTags
+import io.github.cidy02.kudos.works.rememberWorkEmbeddedCoverArt
 
 /** `CarouselCardMetrics`: 164 × 164√2, work corner 16, queue tile corner 12. */
 object HomeCardMetrics {
@@ -119,6 +125,8 @@ fun SubjectWorkCoverCard(
     val ringDiameter = SubjectMetrics.ringDiameter * LocalDensity.current.fontScale
     val hue = HomeFacts.workHue(work.workFandoms, work.title)
     val palette = SubjectPalette.fromHue(hue, tokens.theme)
+    val coverArt = rememberWorkEmbeddedCoverArt(work, enabled = !obscured)
+    val facePalette = if (coverArt != null) SubjectPalette.fromHue(hue, ReaderTheme.Dark) else palette
     val shape = RoundedCornerShape(HomeCardMetrics.radius)
     val dim by animateFloatAsState(
         targetValue = if (downloadFraction != null) 1f else 0f,
@@ -143,7 +151,8 @@ fun SubjectWorkCoverCard(
                 .then(if (obscured) Modifier.blur(8.dp) else Modifier)
                 .hiddenMatureWorkSemantics(obscured, isSelecting, isSelected)
         ) {
-            CoverSurface(palette = palette, shape = shape, hero = false) {
+            CoverSurface(palette = palette, shape = shape, hero = false, coverArt = coverArt) {
+                val faceTokens = LocalKudosTokens.current
                 Column(
                     Modifier
                         .fillMaxSize()
@@ -152,11 +161,11 @@ fun SubjectWorkCoverCard(
                 ) {
                     val fandom = HomeFacts.primaryFandom(work.workFandoms)
                     if (fandom != null) {
-                        SubjectKicker(text = fandom, palette = palette, size = 9.sp)
+                        SubjectKicker(text = fandom, palette = facePalette, size = 9.sp)
                     }
                     Text(
                         text = work.title,
-                        color = tokens.primaryInk,
+                        color = faceTokens.primaryInk,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                         // iOS caps the title at two lines without reserving the second,
@@ -182,7 +191,7 @@ fun SubjectWorkCoverCard(
                     if (work.author.isNotBlank()) {
                         Text(
                             text = work.author,
-                            color = tokens.primaryInk.withOpacity(0.78),
+                            color = faceTokens.primaryInk.withOpacity(0.78),
                             fontSize = 12.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -315,12 +324,22 @@ fun HomeCoverSkeleton(modifier: Modifier = Modifier) {
     }
 }
 
+/** High-contrast white ink tokens for text layered over a scrimmed photo cover in any theme. */
+internal fun photoOverlayTokens(tokens: KudosTokens): KudosTokens = tokens.copy(
+    theme = ReaderTheme.Dark,
+    primaryInk = Color.White,
+    secondaryInk = Color.White.copy(alpha = 0.80f),
+    tertiaryInk = Color.White.copy(alpha = 0.55f),
+    accentInk = ReaderTheme.Dark.accentInk(tokens.accent)
+)
+
 @Composable
 internal fun CoverSurface(
     palette: SubjectPalette,
     shape: RoundedCornerShape,
     hero: Boolean,
     modifier: Modifier = Modifier,
+    coverArt: ImageBitmap? = null,
     content: @Composable () -> Unit
 ) {
     val tokens = LocalKudosTokens.current
@@ -330,9 +349,43 @@ internal fun CoverSurface(
             .clip(shape)
             .background(tokens.cardFill)
             .background(palette.cardWash)
-            .border(0.5.dp, palette.cardBorder, shape)
+            .border(
+                0.5.dp,
+                if (coverArt != null) Color.White.copy(alpha = 0.14f) else palette.cardBorder,
+                shape
+            )
     ) {
-        content()
+        if (coverArt != null) {
+            Image(
+                bitmap = coverArt,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize()
+            )
+            val scrim = if (hero) {
+                Brush.verticalGradient(
+                    0f to Color.Black.copy(alpha = 0.62f),
+                    0.5f to Color.Black.copy(alpha = 0.56f),
+                    1f to Color.Black.copy(alpha = 0.68f)
+                )
+            } else {
+                Brush.verticalGradient(
+                    0f to Color.Black.copy(alpha = 0.58f),
+                    0.45f to Color.Black.copy(alpha = 0.32f),
+                    1f to Color.Black.copy(alpha = 0.72f)
+                )
+            }
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(scrim)
+            )
+            CompositionLocalProvider(LocalKudosTokens provides photoOverlayTokens(tokens)) {
+                content()
+            }
+        } else {
+            content()
+        }
     }
 }
 

@@ -1,6 +1,8 @@
 package io.github.cidy02.kudos.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +35,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -71,7 +75,8 @@ fun WorkCoverCard(
     onLongClick: (() -> Unit)? = null,
     isSelecting: Boolean = false,
     isSelected: Boolean = false,
-    onToggleSelection: (() -> Unit)? = null
+    onToggleSelection: (() -> Unit)? = null,
+    coverArt: ImageBitmap? = null
 ) {
     val a11y = contentDescription ?: buildString {
         append(if (obscured) "Hidden mature work. Activate to reveal." else title)
@@ -115,73 +120,92 @@ fun WorkCoverCard(
             return@ElevatedCard
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .clipToBounds()
-                .padding(WorkCoverCardMetrics.contentPadding),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                minLines = 2,
-                modifier = Modifier.fillMaxWidth()
-            )
+        val titleColor = if (coverArt != null) Color.White else MaterialTheme.colorScheme.onSurface
+        val metaColor = if (coverArt != null) Color.White.copy(alpha = 0.82f) else MaterialTheme.colorScheme.onSurfaceVariant
 
-            // Always reserve one attribution line so cards with/without fandom match.
-            CardMetaLine(
-                text = author.ifBlank { "Anonymous" },
-                icon = Icons.Outlined.Person,
-                accessibilityLabel = "Author: ${author.ifBlank { "Anonymous" }}"
-            )
-            if (!fandom.isNullOrBlank()) {
-                CardMetaLine(
-                    text = fandom,
-                    icon = Icons.AutoMirrored.Outlined.MenuBook,
-                    accessibilityLabel = "Fandom: $fandom"
+        Box(Modifier.fillMaxSize().clipToBounds()) {
+            if (coverArt != null) {
+                Image(
+                    bitmap = coverArt,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize()
+                )
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .background(Color.Black.copy(alpha = 0.58f))
                 )
             }
-
-            CardMetaSeparator()
-
-            CoverCardStatsColumn(
-                stats = stats.take(WorkCoverCardMetrics.maxStats)
-            )
-
-            if (statusChips.isNotEmpty()) {
-                MetadataChipRow(labels = statusChips, maxItems = 2)
-            }
-
-            Spacer(Modifier.weight(1f, fill = true))
-
-            // Fixed footer band: progress when present, otherwise equal empty space
-            // so cards with and without progress share the same silhouette.
-            Box(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(WorkCoverCardMetrics.footerHeight),
-                contentAlignment = Alignment.BottomStart
+                    .fillMaxSize()
+                    .padding(WorkCoverCardMetrics.contentPadding),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                progress?.let { value ->
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        LinearProgressIndicator(
-                            progress = { value.coerceIn(0f, 1f) },
-                            modifier = Modifier.fillMaxWidth(),
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = progressLabel
-                                ?: if (value >= 0.999f) "Finished" else "Reading",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = titleColor,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Always reserve one attribution line so cards with/without fandom match.
+                CardMetaLine(
+                    text = author.ifBlank { "Anonymous" },
+                    icon = Icons.Outlined.Person,
+                    accessibilityLabel = "Author: ${author.ifBlank { "Anonymous" }}",
+                    color = metaColor
+                )
+                if (!fandom.isNullOrBlank()) {
+                    CardMetaLine(
+                        text = fandom,
+                        icon = Icons.AutoMirrored.Outlined.MenuBook,
+                        accessibilityLabel = "Fandom: $fandom",
+                        color = metaColor
+                    )
+                }
+
+                CardMetaSeparator()
+
+                CoverCardStatsColumn(
+                    stats = stats.take(WorkCoverCardMetrics.maxStats)
+                )
+
+                if (statusChips.isNotEmpty()) {
+                    MetadataChipRow(labels = statusChips, maxItems = 2)
+                }
+
+                Spacer(Modifier.weight(1f, fill = true))
+
+                // Fixed footer band: progress when present, otherwise equal empty space
+                // so cards with and without progress share the same silhouette.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(WorkCoverCardMetrics.footerHeight),
+                    contentAlignment = Alignment.BottomStart
+                ) {
+                    progress?.let { value ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            LinearProgressIndicator(
+                                progress = { value.coerceIn(0f, 1f) },
+                                modifier = Modifier.fillMaxWidth(),
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = progressLabel
+                                    ?: if (value >= 0.999f) "Finished" else "Reading",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = metaColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }

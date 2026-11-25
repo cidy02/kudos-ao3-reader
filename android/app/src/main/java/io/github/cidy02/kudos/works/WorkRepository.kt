@@ -2,6 +2,8 @@ package io.github.cidy02.kudos.works
 
 import androidx.room.withTransaction
 import io.github.cidy02.kudos.backup.TombstoneSigning
+import io.github.cidy02.kudos.core.model.CoverArtPreference
+import io.github.cidy02.kudos.core.model.CoverArtResolution
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.SyncTombstone
@@ -216,6 +218,32 @@ class WorkRepository(
         val work = getWork(workId) ?: return null
         return upsert(work.copy(downloadedAt = downloadedAt, lastModifiedAt = clock()))
     }
+
+    /**
+     * Persists a reader's per-work cover choice (`"embedded"`, `"generated"`, or `"follow"` on
+     * reset after an explicit choice), stamps [SavedWork.coverArtPreferenceChangedAt] monotonically
+     * (`max(now, previous + 1 ms)`), and bumps `lastModifiedAt` (which wakes sync via
+     * `DatabaseChangeTracker`). Selecting the already-selected option writes nothing, preserving
+     * untouched `null` rows and unknown future strings. Mirrors iOS `SavedWork.setCoverArtPreference`.
+     */
+    suspend fun updateCoverArtPreference(workId: String, preference: CoverArtPreference): SavedWork? =
+        database.withTransaction {
+            val work = getWork(workId) ?: return@withTransaction null
+            val now = clock()
+            val edit = CoverArtResolution.applyEdit(
+                currentRaw = work.coverArtPreferenceRaw,
+                currentChangedAt = work.coverArtPreferenceChangedAt,
+                selection = preference,
+                now = now
+            ) ?: return@withTransaction work
+            upsert(
+                work.copy(
+                    coverArtPreferenceRaw = edit.raw,
+                    coverArtPreferenceChangedAt = edit.changedAt,
+                    lastModifiedAt = now
+                )
+            )
+        }
 
     /**
      * Marks current posted chapter count as seen, clearing Home → Recently Updated.

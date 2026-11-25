@@ -33,6 +33,7 @@ import io.github.cidy02.kudos.ui.components.ChapterBars
 import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
 import io.github.cidy02.kudos.ui.subject.HomeStatusTray
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.SubjectKicker
 import androidx.compose.ui.platform.LocalDensity
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
@@ -42,6 +43,7 @@ import io.github.cidy02.kudos.ui.subject.WorkReadingOrDownloadRing
 import io.github.cidy02.kudos.ui.subject.downloadDimmed
 import io.github.cidy02.kudos.ui.subject.withOpacity
 import io.github.cidy02.kudos.works.rememberChapterLengths
+import io.github.cidy02.kudos.works.rememberWorkEmbeddedCoverArt
 import androidx.compose.runtime.remember
 import java.time.Instant
 
@@ -63,6 +65,8 @@ fun HomeResumeHero(
     val tokens = LocalKudosTokens.current
     val hue = HomeFacts.workHue(work.workFandoms, work.title)
     val palette = SubjectPalette.fromHue(hue, tokens.theme)
+    val coverArt = rememberWorkEmbeddedCoverArt(work, enabled = !obscured)
+    val bodyPalette = if (coverArt != null) SubjectPalette.fromHue(hue, ReaderTheme.Dark) else palette
     val shape = RoundedCornerShape(SubjectMetrics.heroRadius)
     val dim by animateFloatAsState(
         targetValue = if (downloadFraction != null) 1f else 0f,
@@ -81,8 +85,20 @@ fun HomeResumeHero(
                 .then(if (obscured) Modifier.blur(6.dp) else Modifier)
                 .hiddenMatureWorkSemantics(obscured, isSelecting, isSelected)
         ) {
-            CoverSurface(palette = palette, shape = shape, hero = true, modifier = Modifier.fillMaxWidth()) {
-                HeroBody(work = work, palette = palette, downloadFraction = downloadFraction, now = now)
+            CoverSurface(
+                palette = palette,
+                shape = shape,
+                hero = true,
+                modifier = Modifier.fillMaxWidth(),
+                coverArt = coverArt
+            ) {
+                HeroBody(
+                    work = work,
+                    palette = bodyPalette,
+                    downloadFraction = downloadFraction,
+                    now = now,
+                    onPhoto = coverArt != null
+                )
             }
         }
         if (obscured && !isSelecting) {
@@ -99,7 +115,8 @@ private fun HeroBody(
     work: SavedWork,
     palette: SubjectPalette,
     downloadFraction: Double?,
-    now: Instant
+    now: Instant,
+    onPhoto: Boolean = false
 ) {
     val tokens = LocalKudosTokens.current
     val fraction = (work.readingProgressFraction() ?: 0.0).coerceIn(0.0, 1.0)
@@ -202,7 +219,7 @@ private fun HeroBody(
                     ChapterBars(
                         layout = chapterBarLayout,
                         scale = ChapterBarScale.Card,
-                        onGradient = false,
+                        onGradient = onPhoto,
                         height = 52.dp
                     )
                     val chapterCaption = buildString {

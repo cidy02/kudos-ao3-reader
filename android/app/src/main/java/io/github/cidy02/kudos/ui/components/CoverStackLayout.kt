@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.ui.components
 import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +23,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -33,6 +35,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.hsb
 import io.github.cidy02.kudos.ui.subject.parseStoredColor
 import io.github.cidy02.kudos.ui.subject.withOpacity
+import io.github.cidy02.kudos.works.rememberWorkEmbeddedCoverArt
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -409,6 +412,7 @@ private fun BackCover(
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
+    val coverArt = rememberWorkEmbeddedCoverArt(work)
     val hue = remember(work.workFandoms, work.title) {
         workArtHueDegrees(work.workFandoms, work.title)
     }
@@ -423,16 +427,30 @@ private fun BackCover(
             .clip(shape)
             .border(0.5.dp, tokens.glassStroke(0.10), shape)
     ) {
-        Canvas(Modifier.fillMaxSize()) {
-            drawRect(
-                brush = Brush.linearGradient(
-                    colors = colors,
-                    start = Offset(size.width * 0.2887f, size.height * 0.0468f),
-                    end = Offset(size.width * 0.7113f, size.height * 0.9532f)
-                )
+        if (coverArt != null) {
+            Image(
+                bitmap = coverArt,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
             )
             if (dimming > 0.0) {
-                drawRect(Color.Black.copy(alpha = dimming.toFloat().coerceIn(0f, 1f)))
+                Canvas(Modifier.fillMaxSize()) {
+                    drawRect(Color.Black.copy(alpha = dimming.toFloat().coerceIn(0f, 1f)))
+                }
+            }
+        } else {
+            Canvas(Modifier.fillMaxSize()) {
+                drawRect(
+                    brush = Brush.linearGradient(
+                        colors = colors,
+                        start = Offset(size.width * 0.2887f, size.height * 0.0468f),
+                        end = Offset(size.width * 0.7113f, size.height * 0.9532f)
+                    )
+                )
+                if (dimming > 0.0) {
+                    drawRect(Color.Black.copy(alpha = dimming.toFloat().coerceIn(0f, 1f)))
+                }
             }
         }
     }

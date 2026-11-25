@@ -210,6 +210,30 @@ object BackupValidator {
     }
 
     /**
+     * Lenient ISO-8601 parse clamped to `now + 24h` (matching iOS `clampedArchiveDate` +
+     * `try? decodeIfPresent` for `coverArtPreferenceChangedAt`). Does not clamp down to
+     * `exportedAt`, so a monotonic per-field stamp written under small clock skew survives
+     * export/re-export; blank or malformed values yield `null` without rejecting the manifest.
+     */
+    fun parseClampedOptionalInstant(
+        value: String?,
+        now: Instant = Instant.now()
+    ): Instant? {
+        val trimmed = value?.takeIf { it.isNotBlank() } ?: return null
+        val parsed = try {
+            Instant.parse(trimmed)
+        } catch (_: DateTimeParseException) {
+            try {
+                OffsetDateTime.parse(trimmed).toInstant()
+            } catch (_: DateTimeParseException) {
+                return null
+            }
+        }
+        val maxAllowed = now.plus(24, ChronoUnit.HOURS)
+        return if (parsed.isAfter(maxAllowed)) maxAllowed else parsed
+    }
+
+    /**
      * Lead L-2. `Instant.now()` can carry sub-millisecond precision, and
      * `Instant.toString()` then emits six or nine fractional digits. Apple's
      * ISO-8601 decoder accepts at most three, and a single unparseable date

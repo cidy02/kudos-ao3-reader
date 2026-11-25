@@ -89,5 +89,9 @@ data class WorkEntity(
     val legacyReaderProgress: Double? = null,
     @ColumnInfo(defaultValue = "") val authorIdentitiesJSON: String = "",
     @ColumnInfo(defaultValue = "") val epubDigest: String = "",
-    @ColumnInfo(defaultValue = "") val assetIdentifier: String = ""
+    @ColumnInfo(defaultValue = "") val assetIdentifier: String = "",
+    /** A-573 / T-573 per-work cover choice: `"embedded"`, `"generated"`, `"follow"`, or null (follow Settings). */
+    val coverArtPreferenceRaw: String? = null,
+    /** A-573 / T-573 per-field merge clock for [coverArtPreferenceRaw] (nullable INTEGER epoch millis). */
+    val coverArtPreferenceChangedAt: Instant? = null
 )

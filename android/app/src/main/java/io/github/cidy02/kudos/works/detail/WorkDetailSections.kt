@@ -12,8 +12,11 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -27,6 +30,8 @@ import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,6 +41,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -44,6 +51,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.core.model.CoverArtPreference
+import io.github.cidy02.kudos.core.model.CoverArtResolution
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.search.LocalTagSearch
 import io.github.cidy02.kudos.search.SearchSubjectField
@@ -614,6 +623,100 @@ fun WorkDetailSeriesSection(
             fontSize = 12.sp,
             color = tokens.secondaryInk
         )
+    }
+}
+
+const val WORK_DETAIL_COVER_SECTION_TAG = "workDetailCoverSection"
+
+/**
+ * A-573 / T-573 per-work cover choice on Work Detail.
+ * Shown only when the work's downloaded EPUB has embedded cover art.
+ * Uses native Material 3 radio selection tinted in app colour ([KudosTokens.accentInk]),
+ * never the work's subject identity colour.
+ */
+@Composable
+fun WorkDetailCoverSection(
+    selected: CoverArtPreference,
+    globalUseEmbeddedCoverArt: Boolean,
+    onSelect: (CoverArtPreference) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tokens = LocalKudosTokens.current
+    val followSubtitle = CoverArtResolution.followSettingsSummary(globalUseEmbeddedCoverArt)
+    val options = listOf(
+        Triple(CoverArtPreference.FollowSettings, "Follow Settings", followSubtitle),
+        Triple(CoverArtPreference.Embedded, "Work's Art", null),
+        Triple(CoverArtPreference.Generated, "Generated", null)
+    )
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = SubjectMetrics.panelGutter)
+            .testTag(WORK_DETAIL_COVER_SECTION_TAG),
+        verticalArrangement = Arrangement.spacedBy(9.dp)
+    ) {
+        SubjectFieldLabel(text = "Cover")
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .subjectPanel(cornerRadius = 14.dp)
+                .selectableGroup()
+        ) {
+            options.forEachIndexed { index, (option, label, subtitle) ->
+                if (index > 0) SubjectRowSeparator(inset = 14.dp)
+                val isSelected = option == selected
+                val spoken = if (subtitle != null) {
+                    "Cover: $label, $subtitle"
+                } else {
+                    "Cover: $label"
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .selectable(
+                            selected = isSelected,
+                            onClick = { onSelect(option) },
+                            role = Role.RadioButton
+                        )
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = spoken
+                        }
+                        .padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 15.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = tokens.primaryInk
+                        )
+                        if (subtitle != null) {
+                            Text(
+                                text = subtitle,
+                                fontSize = 12.5.sp,
+                                color = tokens.secondaryInk
+                            )
+                        }
+                    }
+                    RadioButton(
+                        selected = isSelected,
+                        onClick = null,
+                        colors = RadioButtonDefaults.colors(
+                            selectedColor = tokens.accentInk,
+                            unselectedColor = tokens.secondaryInk
+                        )
+                    )
+                }
+            }
+        }
     }
 }
 

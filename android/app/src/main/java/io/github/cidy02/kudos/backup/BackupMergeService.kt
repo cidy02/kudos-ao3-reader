@@ -199,7 +199,11 @@ object BackupMergeService {
             val existingHasEpub = existingHasFile || existing?.hasEpub == true
             val restoredHasEpub = incomingEpub != null || existingHasEpub
 
-            val restoredBase = archived.toSavedWork(hasEpub = restoredHasEpub, exportedAt = exportedAt)
+            val restoredBase = archived.toSavedWork(
+                hasEpub = restoredHasEpub,
+                exportedAt = exportedAt,
+                now = now
+            )
             val restored = restoredBase.copy(
                 id = existing?.id ?: restoredBase.id,
                 lastModifiedAt = incomingModifiedAt ?: restoredBase.dateAdded
@@ -226,16 +230,16 @@ object BackupMergeService {
                 tombstonesById.keys.retainAll(retainedIds)
                 mergeWork(
                     existing.copy(isDeleted = false, deletedAt = null, permanentDeletionScheduledAt = null),
-                    restored, archived, incomingModifiedAt, exportedAt
+                    restored, archived, incomingModifiedAt, exportedAt, now
                 ).copy(isDeleted = false, deletedAt = null, permanentDeletionScheduledAt = null)
             } else if (mode == BackupImportMode.MERGE) {
                 existing.copy(downloadedAt = existing.downloadedAt ?: restored.downloadedAt)
             } else if (mode == BackupImportMode.REPLACE_LIBRARY) {
                 summary = summary.copy(worksUpdated = summary.worksUpdated + 1)
-                applyReplaceWork(existing, restored, archived)
+                applyReplaceWork(existing, restored, archived, now)
             } else {
                 summary = summary.copy(worksUpdated = summary.worksUpdated + 1)
-                mergeWork(existing, restored, archived, incomingModifiedAt, exportedAt)
+                mergeWork(existing, restored, archived, incomingModifiedAt, exportedAt, now)
             }
             // Asset state is device-local and follows disk, independently of which
             // metadata snapshot won (including add-only File Merge).
@@ -626,7 +630,7 @@ object BackupMergeService {
                     parseOptionalInstant(result.sourceManifest.exportedAt), result.mergedAt) == live.effectiveLastModifiedAt
                 ) {
                     val kept = mergeWork(live, merged, archived, incomingModifiedAtOverride = null,
-                        exportedAt = parseOptionalInstant(result.sourceManifest.exportedAt))
+                        exportedAt = parseOptionalInstant(result.sourceManifest.exportedAt), now = result.mergedAt)
                     if (kept != merged) deferred += "work:${BackupPaths.normalizeIdForComparison(live.id)}"
                     merged = kept
                 }
@@ -798,7 +802,8 @@ object BackupMergeService {
         restored: SavedWork,
         archived: BackupWork,
         incomingModifiedAtOverride: Instant? = null,
-        exportedAt: Instant? = null
+        exportedAt: Instant? = null,
+        now: Instant = Instant.now()
     ): SavedWork {
         // Null means the archive clock was missing or rejected as future skew.
         val incomingModifiedAt = incomingModifiedAtOverride
@@ -891,6 +896,9 @@ object BackupMergeService {
             )
         }
 
+        // A-573 / iOS T-573: cover choice merges ONLY on its own clock, never on lastModifiedAt.
+        val (mergedCoverPreference, mergedCoverChangedAt) = mergeCoverArtPreference(existing, archived, now)
+
         // Preservation trio: store/re-emit only. Never invent a status. Prefer the
         // non-null side when one is absent so a local-wins merge does not wipe
         // values that only arrived on the archive (and vice versa).
@@ -925,10 +933,42 @@ object BackupMergeService {
             lastPreservationAttemptAt = maxInstant(
                 existing.lastPreservationAttemptAt,
                 restored.lastPreservationAttemptAt
-            )
+            ),
+            coverArtPreferenceRaw = mergedCoverPreference,
+            coverArtPreferenceChangedAt = mergedCoverChangedAt
         )
 
         return applyProgressLww(withPreservation, existing, restored, archived, exportedAt)
+    }
+
+    /**
+     * A-573 / iOS T-573 (`KudosBackup.swift:6344-6357`): the per-work cover choice is its own
+     * field with its own clock. Incoming wins only when `archived.coverArtPreference != null` AND
+     * (`existing.coverArtPreferenceChangedAt == null` or `incomingStamp > localStamp`). An absent
+     * key never clears a local choice or stamp, in every mode; `lastModifiedAt` plays no part.
+     */
+    internal fun mergeCoverArtPreference(
+        existing: SavedWork,
+        archived: BackupWork,
+        now: Instant = Instant.now()
+    ): Pair<String?, Instant?> {
+        val archivedPreference = archived.coverArtPreference
+            ?: return existing.coverArtPreferenceRaw to existing.coverArtPreferenceChangedAt
+        val incomingStamp = BackupValidator.parseClampedOptionalInstant(
+            archived.coverArtPreferenceChangedAt,
+            now
+        )
+        val localStamp = existing.coverArtPreferenceChangedAt
+        val wins = when {
+            localStamp == null -> true
+            incomingStamp == null -> false
+            else -> incomingStamp.isAfter(localStamp)
+        }
+        return if (wins) {
+            archivedPreference to incomingStamp
+        } else {
+            existing.coverArtPreferenceRaw to existing.coverArtPreferenceChangedAt
+        }
     }
 
     /**
@@ -1245,7 +1285,14 @@ object BackupMergeService {
      * new-to-this-device deleted collection is suppressed by its own tombstone
      * rather than silently recreated.
      */
-    private fun applyReplaceWork(existing: SavedWork, restored: SavedWork, archived: BackupWork): SavedWork {
+    private fun applyReplaceWork(
+        existing: SavedWork,
+        restored: SavedWork,
+        archived: BackupWork,
+        now: Instant
+    ): SavedWork {
+        val (coverArtPreferenceRaw, coverArtPreferenceChangedAt) =
+            mergeCoverArtPreference(existing, archived, now)
         return restored.copy(
             id = existing.id,
             hasEpub = existing.hasEpub || restored.hasEpub,
@@ -1261,6 +1308,8 @@ object BackupMergeService {
             freedAt = existing.freedAt,
             authorIdentitiesJSON = existing.authorIdentitiesJSON,
             keepInProgressOverride = archived.keepInProgressOverride ?: existing.keepInProgressOverride,
+            coverArtPreferenceRaw = coverArtPreferenceRaw,
+            coverArtPreferenceChangedAt = coverArtPreferenceChangedAt,
             hiddenFromHistoryAt = if (archived.hiddenFromHistoryAt != null) restored.hiddenFromHistoryAt else existing.hiddenFromHistoryAt,
             comments = archived.comments ?: existing.comments,
             hits = archived.hits ?: existing.hits,

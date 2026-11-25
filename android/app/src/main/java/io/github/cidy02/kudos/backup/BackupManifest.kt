@@ -114,7 +114,11 @@ data class BackupWork(
     val bookmarks: Int? = null,
     val epubDigest: String? = null,
     @Serializable(with = PresentNullJsonSerializer::class) val legacyReaderProgress: JsonElement? = null,
-    @Serializable(with = PresentNullJsonSerializer::class) val hiddenFromHistoryAt: JsonElement? = null
+    @Serializable(with = PresentNullJsonSerializer::class) val hiddenFromHistoryAt: JsonElement? = null,
+    /** Additive v8 per-work cover preference (`"embedded"`, `"generated"`, `"follow"`, or unknown passthrough). Absent = nil. */
+    val coverArtPreference: String? = null,
+    /** Additive v8 ISO-8601 merge stamp for [coverArtPreference]. Absent = nil. */
+    val coverArtPreferenceChangedAt: String? = null
 )
 
 @Serializable
@@ -298,7 +302,9 @@ data class BackupSettingsPayload(
     val autoPreserveSmallSeriesOnSaveForLater: Boolean = false,
     val autoPreserveSeriesWorkThreshold: Int = 5,
     /** iOS `libraryPageArrangement`: kept as raw JSON so an unknown shelf id survives a round trip. */
-    val libraryPageArrangement: JsonElement? = null
+    val libraryPageArrangement: JsonElement? = null,
+    /** iOS `useEmbeddedCoverArt`: absent in older archives so restore leaves local preference untouched. */
+    val useEmbeddedCoverArt: Boolean? = null
 )
 
 /**
