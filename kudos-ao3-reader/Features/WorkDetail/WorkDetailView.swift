@@ -88,6 +88,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// shared summary model (no extra request — same fetched work page).
     @State private var refreshedPublished: String?
     @State private var resolvedExisting = false
+    /// T-573: whether the EPUB has art of its own; the Cover choice is offered only then.
+    @State private var hasEmbeddedArt = false
+    @AppStorage("useEmbeddedCoverArt") private var useEmbeddedCoverArt = true
 
     /// Drives artboard 1a screen 2 — everything this device holds about the
     /// work, behind the My copy row at the foot of the page.
@@ -219,6 +222,10 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         .onChange(of: router.cardNavigationSuppressed) { _, suppressed in
             if suppressed { dismissIfAuthorBylineConflict() }
         }
+        .task(id: localWork?.id) {
+            guard let work = localWork, work.hasEPUB else { hasEmbeddedArt = false; return }
+            hasEmbeddedArt = await GeneratedCoverArtLoader.shared.image(workID: work.id, fileURL: work.fileURL) != nil
+        }
         .task {
             // Resolve an existing library record once (so a browsed work already in the
             // library shows its real saved state), then run the same Work Tags refresh
@@ -346,6 +353,26 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
         .cardList()
         #endif
+    }
+
+    /// T-573: Follow Settings / Work's Art / Generated, saved on the work and applied to every
+    /// surface that draws its cover. Offered only when the EPUB has art of its own.
+    @ViewBuilder
+    private func coverArtChoice(for work: SavedWork) -> some View {
+        let following = useEmbeddedCoverArt ? "Work's Art" : "Generated"
+        Picker("Cover Art", selection: Binding(
+            get: { CoverArtPreference.resolved(work.coverArtPreferenceRaw) },
+            set: {
+                work.setCoverArtPreference($0)
+                context.saveBestEffort(reason: "Saving cover art choice failed")
+            }
+        )) {
+            Text("Follow Settings (\(following))").tag(CoverArtPreference?.none)
+            Text("Work's Art").tag(CoverArtPreference?.some(.embedded))
+            Text("Generated").tag(CoverArtPreference?.some(.generated))
+        }
+        .pickerStyle(.inline)
+        .accessibilityHint("Chooses the cover this work uses everywhere in Kudos.")
     }
 
     // MARK: - Identity and page sections
@@ -644,6 +671,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
                     if let work = localWork {
                         Section("Cover") {
+                            if hasEmbeddedArt { coverArtChoice(for: work) }
                             Button("Shuffle Cover", systemImage: "shuffle") {
                                 work.pinCover(salt: work.generatedCoverRecipe.salt + 1)
                                 context.saveBestEffort(reason: "Saving shuffled cover failed")

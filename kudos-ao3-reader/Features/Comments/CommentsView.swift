@@ -708,6 +708,7 @@ struct CommentsView: View {
                 recipe: saved?.generatedCoverRecipe ?? workSummary.generatedCoverRecipe,
                 epubURL: saved?.hasEPUB == true ? saved?.fileURL : nil,
                 epubWorkID: saved?.id,
+                coverArtPreference: saved?.coverArtPreferenceRaw,
                 showsInitial: !concealed
             )
             VStack(alignment: .leading, spacing: 2) {

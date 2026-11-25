@@ -1093,6 +1093,9 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     let authorIdentitiesJSON: String?
     /// Omitted for older/Android records; absence never clears a local pin.
     let coverRecipeJSON: String?
+    /// T-573 additive: "generated" or "embedded"; omitted when the work follows the global setting.
+    /// Absence never clears a local choice; an unknown value is kept as-is.
+    let coverArtPreference: String?
     /// Additive D3 derived fields; omitted when empty so untouched works emit no key.
     let chapterWordCountsJSON: String?
     let wordUnitRaw: String?
@@ -1192,6 +1195,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         epubDigest = work.epubDigest.isEmpty ? nil : work.epubDigest
         authorIdentitiesJSON = work.authorIdentitiesJSON.isEmpty ? nil : work.authorIdentitiesJSON
         coverRecipeJSON = work.coverRecipeJSON
+        coverArtPreference = work.coverArtPreferenceRaw
         chapterWordCountsJSON = work.chapterWordCountsJSON.isEmpty ? nil : work.chapterWordCountsJSON
         wordUnitRaw = work.wordUnitRaw.isEmpty ? nil : work.wordUnitRaw
         importSourceRaw = work.importSourceRaw
@@ -1277,6 +1281,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case epubDigest
         case authorIdentitiesJSON
         case coverRecipeJSON
+        case coverArtPreference
         case chapterWordCountsJSON
         case wordUnitRaw
         case importSourceRaw, importSourceSince
@@ -1377,6 +1382,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         epubDigest = try container.decodeIfPresent(String.self, forKey: .epubDigest)
         authorIdentitiesJSON = try? container.decodeIfPresent(String.self, forKey: .authorIdentitiesJSON)
         coverRecipeJSON = try container.decodeIfPresent(String.self, forKey: .coverRecipeJSON)
+        coverArtPreference = try? container.decodeIfPresent(String.self, forKey: .coverArtPreference)
         chapterWordCountsJSON = try container.decodeIfPresent(String.self, forKey: .chapterWordCountsJSON)
         wordUnitRaw = try container.decodeIfPresent(String.self, forKey: .wordUnitRaw)
         importSourceRaw = try container.decodeIfPresent(String.self, forKey: .importSourceRaw)
@@ -6327,6 +6333,11 @@ enum KudosBackupService {
                incomingJSON: coverRecipeJSON
            ) {
             work.coverRecipeJSON = GeneratedCoverRecipe.clampingFuturePinIfSupported(coverRecipeJSON)
+        }
+        // T-573: same rule as keepInProgressOverride / readingStatusRaw above: a present value from a
+        // newer edit (`incomingWins`) replaces the local one; an absent key never clears it.
+        if let archivedPreference = archived.coverArtPreference, incomingWins {
+            work.coverArtPreferenceRaw = archivedPreference
         }
         if let incomingCounts = SavedWork.validatedChapterWordCountsJSON(archived.chapterWordCountsJSON),
            work.chapterWordCountsJSON.isEmpty || mode == .replaceLibrary || incomingWins {

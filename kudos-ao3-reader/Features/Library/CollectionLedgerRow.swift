@@ -107,7 +107,7 @@ private struct MiniatureWorkCover: View {
     var body: some View {
         GeneratedCoverView(recipe: work.generatedCoverRecipe,
            width: 61, epubURL: work.hasEPUB ? work.fileURL : nil, epubWorkID: work.id,
-           height: 54, showsWords: false)
+           height: 54, showsWords: false, coverArtPreference: work.coverArtPreferenceRaw)
     }
 }
 

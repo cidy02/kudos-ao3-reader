@@ -382,6 +382,7 @@ struct WorkCoverCardBackground: View {
     let recipe: GeneratedCoverRecipe
     var epubURL: URL?
     var epubWorkID: UUID?
+    var coverArtPreference: String?
     var showsArt = true
 
     static let ink = 0.4
@@ -395,7 +396,8 @@ struct WorkCoverCardBackground: View {
                                epubURL: showsArt ? epubURL : nil,
                                epubWorkID: showsArt ? epubWorkID : nil,
                                height: geometry.size.height, showsWords: false,
-                               showsArt: showsArt, ink: Self.ink, cornerRadius: 0)
+                               showsArt: showsArt, ink: Self.ink, cornerRadius: 0,
+                               coverArtPreference: coverArtPreference)
                 .overlay(Color.black.opacity(Self.scrimOpacity))
             }
             .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
@@ -537,6 +539,7 @@ struct WorkResumeCard: View {
             recipe: model.coverRecipe,
             epubURL: localWork?.hasEPUB == true ? localWork?.fileURL : nil,
             epubWorkID: localWork?.id,
+            coverArtPreference: localWork?.coverArtPreferenceRaw,
             showsArt: showsContent
         )
     }

@@ -149,6 +149,9 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var authorIdentitiesJSON: String = ""
     /// A plain optional JSON column avoids SwiftData composite migration faults.
     var coverRecipeJSON: String?
+    /// T-573: this work's own choice, "generated" or "embedded" (`CoverArtPreference`); nil follows
+    /// the global setting. A plain optional string so no composite attribute can lose it.
+    var coverArtPreferenceRaw: String?
     var summary: String = ""
     var sourceURL: String = ""
     var dateAdded: Date = Date()
