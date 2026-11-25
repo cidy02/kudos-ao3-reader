@@ -579,6 +579,7 @@ struct ReadingQueueBrowserView: View {
                 #if DEBUG
                 if DebugLaunchRoute.opensQueueDetails { showingQueueDetails = true }
                 if DebugLaunchRoute.takeSheet("editqueue") { showingEdit = true }
+                if DebugLaunchRoute.takeSheet("queuesources") { showingSources = true }
                 if DebugLaunchRoute.takeSheet("addworks") { showingAddWorks = true }
                 if DebugLaunchRoute.takeSheet("sortnew"), let queue = selectedQueue {
                     // The demo queues hold no New works, so the shot sorts every

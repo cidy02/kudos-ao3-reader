@@ -217,6 +217,9 @@ struct QueueSourcesSheet: View {
             }
         }
         .screenTint(theme.scopePalette)
+        #if DEBUG
+        .onAppear { if DebugLaunchRoute.takeSheet("addsource") { showingAddSource = true } }
+        #endif
         .sheet(isPresented: $showingAddSource) {
             AddQueueSourceSheet(
                 queueName: queue.displayName,
