@@ -101,6 +101,48 @@ enum WorkLifecycle {
         context.saveBestEffort(reason: "Saving keep-in-progress override failed")
     }
 
+    /// Writes an explicit reading status and saves atomically. Rolls the context
+    /// back on error so a failed status edit never stays dirty for a later autosave.
+    @MainActor
+    static func setReadingStatus(
+        _ status: SavedWork.ExplicitReadingStatus?,
+        for work: SavedWork,
+        in context: ModelContext,
+        at date: Date = Date(),
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws {
+        work.setReadingStatus(status, at: date)
+        do {
+            try save(context)
+            FolderSyncService.markDirty()
+        } catch {
+            context.rollback()
+            throw error
+        }
+    }
+
+    /// Records a work as Stopped with its local reason, tag and note, saving
+    /// atomically and rolling the context back on failure.
+    @MainActor
+    static func recordStopped(
+        _ work: SavedWork,
+        reason: String,
+        tag: String,
+        note: String,
+        in context: ModelContext,
+        at date: Date = Date(),
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws {
+        work.recordStopped(reason: reason, tag: tag, note: note, at: date)
+        do {
+            try save(context)
+            FolderSyncService.markDirty()
+        } catch {
+            context.rollback()
+            throw error
+        }
+    }
+
     /// 1ah's "Remove from history" — "the only destructive thing this page can
     /// do", and it must not delete the work. Sets a hide marker and nothing else:
     /// the record, its EPUB, its progress and its reading log all stay, and

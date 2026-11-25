@@ -321,8 +321,8 @@ struct InsightsD3D4Tests {
         )
         let curEN = ReadingSession(
             workID: english.id,
-            startedAt: monthInterval.start.addingTimeInterval(3_600),
-            endedAt: monthInterval.start.addingTimeInterval(7_200),
+            startedAt: monthInterval.start.addingTimeInterval(18_000),
+            endedAt: monthInterval.start.addingTimeInterval(21_600),
             durationSeconds: 3_600,
             startProgress: 0,
             endingProgress: 1.0,
@@ -331,8 +331,8 @@ struct InsightsD3D4Tests {
         )
         let curJA1 = ReadingSession(
             workID: japanese.id,
-            startedAt: monthInterval.start.addingTimeInterval(10_800),
-            endedAt: monthInterval.start.addingTimeInterval(14_400),
+            startedAt: monthInterval.start.addingTimeInterval(21_600),
+            endedAt: monthInterval.start.addingTimeInterval(25_200),
             durationSeconds: 3_600,
             startProgress: 0,
             endingProgress: 1.0,
@@ -341,8 +341,8 @@ struct InsightsD3D4Tests {
         )
         let hiddenSession = ReadingSession(
             workID: hiddenJapanese.id,
-            startedAt: monthInterval.start.addingTimeInterval(18_000),
-            endedAt: monthInterval.start.addingTimeInterval(19_800),
+            startedAt: monthInterval.start.addingTimeInterval(25_200),
+            endedAt: monthInterval.start.addingTimeInterval(27_000),
             durationSeconds: 1_800,
             startProgress: 0,
             endingProgress: 1.0,

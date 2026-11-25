@@ -739,9 +739,12 @@ enum ReadingLogService {
             let work = worksByID[session.workID]
             let rawFandom = session.fandoms.first(where: { !$0.isEmpty })
                 ?? work?.workFandoms.first(where: { !$0.isEmpty }) ?? ""
+            let resolvedWordUnit: SavedWork.WordUnit = work?.wordUnit
+                ?? SavedWork.wordUnit(forLanguage: session.language)
             return ReadingSessionFacts(
                 workID: session.workID,
                 startedAt: session.startedAt,
+                endedAt: session.endedAt,
                 durationSeconds: session.durationSeconds,
                 wordCount: session.wordCount,
                 didFinish: session.didFinish,
@@ -755,8 +758,26 @@ enum ReadingLogService {
                 chapterCount: session.chapterCountAtVisit > 0
                     ? session.chapterCountAtVisit : work?.postedChapterCount ?? 0,
                 startProgress: session.startProgress,
+                tzOffsetSeconds: session.tzOffsetSeconds,
                 mode: session.mode,
-                wordUnit: work?.wordUnit ?? .words
+                wordUnit: resolvedWordUnit,
+                authorAccounts: session.authorAccounts,
+                playbackRate: session.playbackRate,
+                fandoms: session.fandoms,
+                relationships: session.relationships,
+                characters: session.characters,
+                freeformTags: session.freeformTags,
+                rating: session.rating,
+                warnings: session.warnings,
+                categories: session.categories,
+                language: session.language,
+                isCompleteAtVisit: session.isCompleteAtVisit,
+                publishedYear: session.publishedYear,
+                ao3SeriesID: session.ao3SeriesID,
+                seriesPosition: session.seriesPosition,
+                ao3WorkID: session.ao3WorkID,
+                sourceURL: session.sourceURL,
+                workWordCount: (work?.wordCount ?? 0) > 0 ? work?.wordCount : nil
             )
         }
     }
@@ -1046,6 +1067,7 @@ enum ReadingLogService {
         var insights: ReadingInsights
         var taste: ReadingTasteInsights?
         var habits: ReadingHabitsInsights
+        var chapterTiming: InsightsProvenance.ChapterTimingFigure
         var library: ReadingLibraryInsights
         var libraryStats: ReadingStatistics
         var finishedWorksInPeriod: [SavedWork]
@@ -1151,9 +1173,11 @@ enum ReadingLogService {
             history: filtered.historySessions,
             aliases: resolvedAliases
         )
-        let periodFacts = allFacts.filter { req.period.contains($0.startedAt) }
+        let periodFacts = allFacts.filter {
+            ReadingInsights.isInPeriod($0, period: req.period, calendar: req.calendar)
+        }
         let previousFacts = req.previousPeriod.map { interval in
-            allFacts.filter { interval.contains($0.startedAt) }
+            allFacts.filter { ReadingInsights.isInPeriod($0, period: interval, calendar: req.calendar) }
         } ?? []
 
         let figures = ReadingInsights.make(
@@ -1165,7 +1189,7 @@ enum ReadingLogService {
         )
         let readWorkIDs = Set(periodFacts.map(\.workID))
         let worksInPeriod = filtered.works.filter { readWorkIDs.contains($0.id) }
-        let taste = worksInPeriod.isEmpty
+        let taste = periodFacts.isEmpty
             ? nil
             : ReadingTasteInsights.make(works: worksInPeriod, facts: periodFacts, aliases: resolvedAliases)
         let habits = ReadingHabitsInsights.make(
@@ -1173,12 +1197,27 @@ enum ReadingLogService {
             libraryWorks: libraryWorks,
             facts: periodFacts,
             allFacts: allFacts,
+            periodInterval: req.period,
             calendar: req.calendar,
-            aliases: resolvedAliases
+            aliases: resolvedAliases,
+            now: req.now
+        )
+        let periodSessions = filtered.sessions.filter { (session: ReadingSession) -> Bool in
+            ReadingInsights.isInPeriod(session, period: req.period, calendar: req.calendar)
+        }
+        let paceHistorySessions = filtered.sessions.filter { (session: ReadingSession) -> Bool in
+            ReadingInsights.readingDay(for: session, calendar: req.calendar) < req.period.end
+        }
+        let chapterTiming = InsightsProvenance.chapterTiming(
+            sessions: periodSessions,
+            paceHistorySessions: paceHistorySessions
         )
         let library = ReadingLibraryInsights.make(
             works: libraryWorks,
+            readingWorks: filtered.works,
             facts: periodFacts,
+            allFacts: allFacts,
+            seriesSnapshots: SavedSeriesStore.snapshots(in: req.context),
             periodInterval: req.period,
             periodMonths: req.periodMonths,
             calendar: req.calendar,
@@ -1193,9 +1232,8 @@ enum ReadingLogService {
             calendar: req.calendar,
             aliases: resolvedAliases
         )
-        let finishedWorksInPeriod = filtered.works.filter { w in
-            w.isFinished && periodFacts.contains { $0.workID == w.id && $0.didFinish }
-        }
+        let finishedIDs = Set(periodFacts.filter(\.didFinish).map(\.workID))
+        let finishedWorksInPeriod = filtered.works.filter { $0.isFinished && finishedIDs.contains($0.id) }
         let masker = InsightsDiscreetMasker.forScreen(
             InsightsDiscreetMasker.ScreenSeed(
                 insights: figures,
@@ -1213,6 +1251,7 @@ enum ReadingLogService {
             insights: figures,
             taste: taste,
             habits: habits,
+            chapterTiming: chapterTiming,
             library: library,
             libraryStats: libraryStats,
             finishedWorksInPeriod: finishedWorksInPeriod,
@@ -1244,9 +1283,11 @@ enum ReadingLogService {
             history: filtered.historySessions,
             aliases: resolvedAliases
         )
-        let current = allFacts.filter { period.contains($0.startedAt) }
+        let current = allFacts.filter {
+            ReadingInsights.isInPeriod($0, period: period, calendar: calendar)
+        }
         let previous = previousPeriod.map { interval in
-            allFacts.filter { interval.contains($0.startedAt) }
+            allFacts.filter { ReadingInsights.isInPeriod($0, period: interval, calendar: calendar) }
         } ?? []
         return ReadingInsights.make(
             facts: current, previousPeriodFacts: previous,

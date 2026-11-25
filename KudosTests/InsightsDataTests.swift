@@ -122,6 +122,19 @@ struct InsightsDataTests {
         #expect(work.stopNote.isEmpty)
     }
 
+    @Test func stopSheetChoiceRecordsReasonTagNoteAndPeriodDate() {
+        let work = SavedWork(title: "A", author: "B")
+        let date = Date(timeIntervalSince1970: 12_345)
+        work.recordStopped(reason: "tagDealbreaker", tag: "Slow Burn", note: "Lost interest", at: date)
+        #expect(work.insightsReadingStatus == .stopped)
+        #expect(work.stoppedAt == date)
+        #expect(work.stopReasonRaw == "tagDealbreaker")
+        #expect(work.stopTag == "Slow Burn")
+        #expect(work.stopNote == "Lost interest")
+        work.setReadingStatus(.onHold)
+        #expect(work.stoppedAt == nil)
+    }
+
     @Test func snapshotUsesStoredBylineOrVerifiedDisplayNames() {
         let work = SavedWork(title: "A", author: "First, Second")
         work.datePublished = "2020-01-01"
@@ -137,5 +150,62 @@ struct InsightsDataTests {
         ]
         session.snapshot(from: work)
         #expect(session.authorAccounts == ["Anonymous", "orphan_account"])
+    }
+
+    @Test func stoppedAndOnHoldStatusEditsRollBackContextOnSaveFailure() throws {
+        struct SaveFailure: Error {}
+        let container = try container()
+        let context = ModelContext(container)
+        let work = SavedWork(title: "A", author: "B")
+        work.chapters = "12/12"
+        work.lastSpineIndex = 6
+        work.legacyReaderProgress = 0.58
+        work.lastReadDate = Date(timeIntervalSince1970: 1_759_752_000)
+        context.insert(work)
+        try context.save()
+
+        #expect(throws: SaveFailure.self) {
+            try WorkLifecycle.recordStopped(
+                work,
+                reason: "tagDealbreaker",
+                tag: "Major Character Death",
+                note: "Too sad",
+                in: context,
+                save: { _ in throw SaveFailure() }
+            )
+        }
+        #expect(work.insightsReadingStatus != .stopped)
+        #expect(work.readingStatusRaw.isEmpty)
+        #expect(work.stoppedAt == nil)
+        #expect(work.stopReasonRaw.isEmpty)
+        #expect(work.stopTag.isEmpty)
+        #expect(work.stopNote.isEmpty)
+
+        #expect(throws: SaveFailure.self) {
+            try WorkLifecycle.setReadingStatus(
+                .onHold,
+                for: work,
+                in: context,
+                save: { _ in throw SaveFailure() }
+            )
+        }
+        #expect(work.readingStatusRaw.isEmpty)
+
+        try WorkLifecycle.recordStopped(
+            work,
+            reason: "tooLong",
+            tag: "Slow Burn",
+            note: "Paused",
+            in: context
+        )
+        #expect(work.insightsReadingStatus == .stopped)
+        #expect(work.stopReasonRaw == "tooLong")
+        #expect(work.stopTag == "Slow Burn")
+        #expect(work.stopNote == "Paused")
+
+        let summary = InsightsStoppedSheet.progressSummary(for: work)
+        #expect(summary.contains("Chapter 7 of 12"))
+        #expect(summary.contains("58%"))
+        #expect(summary.contains("last read"))
     }
 }

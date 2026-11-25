@@ -23,23 +23,62 @@ enum InsightsProvenance {
         var peekedWorks = 0
         /// Sittings the skim rule was applied to (read-mode sittings that stored a judgement).
         var judgedSittings = 0
+        var paceHistoryChapters = 0
+        var canShowSkimAndPeek: Bool { paceHistoryChapters >= 20 }
+        var chaptersEntered = 0
+        var chapterSpansMeasured = 0
+        var eligibleChapterEnds = 0
+        var chapterEnds = 0
+
+        var averageChaptersEach: Double? {
+            chapterSpansMeasured == 0 ? nil : Double(chaptersEntered) / Double(chapterSpansMeasured)
+        }
+
+        var chapterEndShare: Double? {
+            eligibleChapterEnds == 0 ? nil : Double(chapterEnds) / Double(eligibleChapterEnds)
+        }
     }
 
-    static func chapterTiming(sessions: [ReadingSession]) -> ChapterTimingFigure {
+    /// Builds chapter timing figures for `sessions` (the period on screen).
+    /// `paceHistorySessions` (defaulting to `sessions`) supplies all-time `.read`
+    /// sittings up through the period's end so the 20-chapter pace-history gate
+    /// matches `ReadingLogService.applyChapterTiming` instead of resetting every
+    /// new or quiet month.
+    static func chapterTiming(
+        sessions: [ReadingSession],
+        paceHistorySessions: [ReadingSession]? = nil
+    ) -> ChapterTimingFigure {
         var figure = ChapterTimingFigure()
+        let paceSources = paceHistorySessions ?? sessions
+        for session in paceSources where session.mode == .read {
+            let timed = session.chapterSeconds
+            let measuredWords = session.chapterWords
+            let skimmed = Set(session.skimmedChapters)
+            for (spine, words) in measuredWords where words > 0 && !skimmed.contains(spine) {
+                if (timed[spine] ?? 0) > 0 { figure.paceHistoryChapters += 1 }
+            }
+        }
         var peeked: Set<UUID> = []
         for session in sessions {
+            if let start = session.startSpineIndex, session.lastSpineIndex >= start {
+                figure.chapterSpansMeasured += 1
+                figure.chaptersEntered += session.lastSpineIndex - start + 1
+            }
             if let ended = session.endedAtChapterEnd {
                 figure.sittingsMeasured += 1
                 if ended { figure.sittingsEndedAtChapterEnd += 1 }
+                if !session.didFinish && session.chapterCountAtVisit > 1 {
+                    figure.eligibleChapterEnds += 1
+                    if ended { figure.chapterEnds += 1 }
+                }
             }
             if session.peekedAtEnding == true { peeked.insert(session.workID) }
             guard session.skimmedChaptersJSON != nil else { continue }
+            let measuredWords = session.chapterWords
             figure.judgedSittings += 1
-            let words = session.chapterWords
             for spine in session.skimmedChapters {
                 figure.skimmedChapters += 1
-                let (sum, overflow) = figure.skimmedWords.addingReportingOverflow(words[spine] ?? 0)
+                let (sum, overflow) = figure.skimmedWords.addingReportingOverflow(measuredWords[spine] ?? 0)
                 figure.skimmedWords = overflow ? Int.max : sum
             }
         }

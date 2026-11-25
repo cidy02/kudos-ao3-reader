@@ -46,12 +46,14 @@ struct ReadingInsightsView: View {
     @State private var insights = ReadingInsights()
     @State private var tasteInsights: ReadingTasteInsights?
     @State private var habitsInsights: ReadingHabitsInsights?
+    @State private var chapterTiming = InsightsProvenance.ChapterTimingFigure()
     @State private var libraryInsights: ReadingLibraryInsights?
     @State private var libraryStats: ReadingStatistics?
 
     @State private var rankTasteByWorks: Bool = false
     @State private var showingOptionsSheet: Bool = false
     @State private var showingHowCountedSheet: Bool = false
+    @State private var stoppedWork: SavedWork?
     @State private var finishedWorksInPeriod: [SavedWork] = []
     @State private var discreetMasker: InsightsDiscreetMasker = .empty
     @State private var optionsRevision: Int = 0
@@ -290,6 +292,12 @@ struct ReadingInsightsView: View {
         .sheet(isPresented: $showingHowCountedSheet) {
             HowInsightsAreCountedSheet()
         }
+        .sheet(item: $stoppedWork) { work in
+            InsightsStoppedSheet(work: work, discreetMode: discreetMode,
+                                 discreetMasker: discreetMasker) {
+                reload()
+            }
+        }
         .alert("Couldn’t Export Reading History", isPresented: Binding(
             get: { exportFailure != nil },
             set: { if !$0 { exportFailure = nil } }
@@ -455,6 +463,10 @@ struct ReadingInsightsView: View {
 
         ReadingAndListeningCard(
             readingSeconds: insights.readingSeconds,
+            silentReadingSeconds: insights.silentReadingSeconds,
+            listeningSeconds: insights.listeningSeconds,
+            listeningPlaybackRate: insights.listeningPlaybackRate,
+            listeningWorksCount: insights.listeningWorksCount,
             hideReadingTime: hideReadingTime
         )
 
@@ -463,6 +475,7 @@ struct ReadingInsightsView: View {
             biggestDayWords: insights.biggestDay?.words ?? 0,
             medianSessionSeconds: insights.medianSessionSeconds,
             wordsPerHour: insights.wordsPerHour,
+            charactersPerHour: insights.charactersPerHour,
             hideReadingTime: hideReadingTime
         )
 
@@ -474,6 +487,8 @@ struct ReadingInsightsView: View {
                 discreetMode: discreetMode,
                 discreetMasker: discreetMasker
             )
+        } else {
+            InsightsUnavailableCard(title: "Finished", explanation: "No works finished in this period.")
         }
 
         if hideMature {
@@ -550,11 +565,12 @@ struct ReadingInsightsView: View {
 
     @ViewBuilder
     private var tasteContent: some View {
-        if let taste = tasteInsights {
-            YourUsualFicCard(taste: taste, discreetMode: discreetMode, discreetMasker: discreetMasker)
+        if let taste = tasteInsights, taste.totalWorksCount > 0 {
+            let rankedTaste = taste.ranked(byWorks: rankTasteByWorks)
+            YourUsualFicCard(taste: rankedTaste, discreetMode: discreetMode, discreetMasker: discreetMasker)
 
             TasteFandomsCard(
-                fandoms: taste.fandoms,
+                fandoms: rankedTaste.fandoms,
                 rankByWorks: rankTasteByWorks,
                 onToggleRank: { rankTasteByWorks.toggle() },
                 discreetMode: discreetMode,
@@ -562,8 +578,9 @@ struct ReadingInsightsView: View {
             )
 
             TasteRelationshipsCard(
-                relationships: taste.relationships,
+                relationships: rankedTaste.relationships,
                 shipConcentrations: taste.shipConcentrations,
+                rankByWorks: rankTasteByWorks,
                 discreetMode: discreetMode,
                 discreetMasker: discreetMasker
             )
@@ -576,19 +593,22 @@ struct ReadingInsightsView: View {
                 )
             }
 
-            if !taste.tags.isEmpty {
+            if !rankedTaste.tags.isEmpty || !taste.oftenTogether.isEmpty {
                 TasteTagsCard(
-                    tags: taste.tags,
+                    tags: rankedTaste.tags,
                     oftenTogether: taste.oftenTogether,
+                    rankByWorks: rankTasteByWorks,
                     discreetMode: discreetMode,
                     discreetMasker: discreetMasker
                 )
             }
 
             TasteRatingsCategoriesWarningsCard(
-                ratings: taste.ratings,
-                categories: taste.categories,
-                warnings: taste.warnings
+                ratings: rankedTaste.ratings,
+                statuses: rankedTaste.statuses,
+                categories: rankedTaste.categories,
+                warnings: rankedTaste.warnings,
+                rankByWorks: rankTasteByWorks
             )
 
             if !taste.yearCounts.isEmpty {
@@ -626,7 +646,10 @@ struct ReadingInsightsView: View {
 
             HabitsCalendarCard(
                 days: habits.calendarDays,
-                longestStreak: habits.longestStreak
+                longestStreak: habits.longestStreak,
+                thresholds: habits.calendarWordThresholds,
+                totalDaysElapsed: totalDaysElapsedInPeriod,
+                isMonthPeriod: range == .month && habits.calendarIsMonthGrid
             )
 
             HabitsSittingsCard(
@@ -635,23 +658,41 @@ struct ReadingInsightsView: View {
                 hideReadingTime: hideReadingTime
             )
 
+            HabitsChapterTimingCard(figure: chapterTiming)
+
+            InsightsUnavailableCard(title: "New Chapters", explanation: "Chapter posting and first-read dates are not available yet.")
+
             if habits.savedToOpenedMedianDays != nil || habits.openedToFinishedMedianDays != nil {
                 HabitsSavedToFinishedCard(
                     savedToOpenedDays: habits.savedToOpenedMedianDays,
-                    openedToFinishedDays: habits.openedToFinishedMedianDays
+                    openedToFinishedDays: habits.openedToFinishedMedianDays,
+                    savedToOpenedCount: habits.savedToOpenedCount,
+                    openedToFinishedCount: habits.openedToFinishedCount
                 )
             }
 
-            HabitsRereadsCard(rereads: habits.rereads, discreetMode: discreetMode, discreetMasker: discreetMasker)
+            HabitsRereadsCard(
+                rereads: habits.rereads,
+                rereadTimeShare: habits.rereadTimeShare,
+                discreetMode: discreetMode,
+                discreetMasker: discreetMasker
+            )
 
             if !habits.fandomTimeline.isEmpty {
-                HabitsFandomTimelineCard(lanes: habits.fandomTimeline, discreetMode: discreetMode, discreetMasker: discreetMasker)
+                HabitsFandomTimelineCard(
+                    lanes: habits.fandomTimeline,
+                    year: habits.fandomTimelineYear,
+                    discreetMode: discreetMode,
+                    discreetMasker: discreetMasker
+                )
             }
 
             if habits.stoppedCount > 0 {
                 HabitsStoppedCard(
                     stoppedCount: habits.stoppedCount,
+                    stoppedInPeriodCount: habits.stoppedInPeriodCount,
                     medianProgress: habits.stoppedMedianProgress,
+                    reasons: habits.stopReasons,
                     commonTags: habits.commonStopTags,
                     discreetMode: discreetMode,
                     discreetMasker: discreetMasker
@@ -669,6 +710,7 @@ struct ReadingInsightsView: View {
                 unreadWords: lib.unreadWords,
                 unreadCount: lib.unreadWorksCount,
                 monthsToClear: lib.monthsToClear,
+                monthsToClearRange: lib.monthsToClearRange,
                 addedWords: lib.addedWordsInPeriod,
                 readWords: lib.readWordsInPeriod
             )
@@ -683,6 +725,9 @@ struct ReadingInsightsView: View {
                     onStillReading: {
                         WorkLifecycle.keepInProgress(candidate.work, in: context)
                         reload()
+                    },
+                    onStoppedReading: {
+                        stoppedWork = candidate.work
                     }
                 )
             }
@@ -697,8 +742,53 @@ struct ReadingInsightsView: View {
                 )
             }
 
-            if let kudos = lib.kudosLeftPercent, let bookmarked = lib.bookmarkedPercent {
-                LibraryFeedbackCard(kudosLeftPercent: kudos, bookmarkedPercent: bookmarked)
+            if let kudos = lib.kudosLeftPercent {
+                LibraryFeedbackCard(kudosLeftPercent: kudos)
+            }
+
+            InsightsUnavailableCard(title: "Bookmarked · Commented", explanation: "Your AO3 bookmark and comment actions are not recorded yet.")
+
+            if lib.favoriteWithoutKudosCount > 0 {
+                LibraryFavoritesWithoutKudosCard(count: lib.favoriteWithoutKudosCount)
+            }
+
+            if lib.seriesStartedCount > 0 {
+                LibrarySeriesCard(
+                    started: lib.seriesStartedCount,
+                    readToLast: lib.seriesReadToLastCount,
+                    longestFinished: lib.longestFinishedSeries,
+                    nextWaiting: lib.seriesNextWaitingCount,
+                    discreetMode: discreetMode,
+                    discreetMasker: discreetMasker
+                )
+            }
+
+            if lib.authors.isEmpty {
+                InsightsUnavailableCard(title: "Authors", explanation: "No read works have a recorded AO3 author account yet.")
+            } else {
+                LibraryAuthorsCard(authors: lib.authors, discreetMode: discreetMode, discreetMasker: discreetMasker)
+            }
+
+            if lib.arrivalRows.isEmpty {
+                InsightsUnavailableCard(title: "How Finished Works Arrived", explanation: "No finished works have a recorded import source yet.")
+            } else {
+                LibraryArrivalCard(rows: lib.arrivalRows, since: lib.arrivalSince)
+            }
+
+            if lib.foundEarlyRecordedFinishedCount == 0 || lib.foundEarlyCount == 0 {
+                InsightsUnavailableCard(title: "Found Early", explanation: "No finished work has a recorded kudos count under 500 at save yet.")
+            } else {
+                LibraryFoundEarlyCard(
+                    recordedFinishedCount: lib.foundEarlyRecordedFinishedCount,
+                    count: lib.foundEarlyCount,
+                    foundEarlyShare: lib.foundEarlyShare,
+                    grownCount: lib.foundEarlyGrownCount,
+                    grownShare: lib.foundEarlyGrowthShare,
+                    since: lib.foundEarlySince,
+                    example: lib.foundEarlyExampleItem,
+                    discreetMode: discreetMode,
+                    discreetMasker: discreetMasker
+                )
             }
 
             LibraryPreservedStatsCard(stats: stats, discreetMode: discreetMode, discreetMasker: discreetMasker)
@@ -789,6 +879,7 @@ struct ReadingInsightsView: View {
         insights = ReadingInsights()
         tasteInsights = nil
         habitsInsights = nil
+        chapterTiming = InsightsProvenance.ChapterTimingFigure()
         libraryInsights = nil
         libraryStats = nil
         finishedWorksInPeriod = []
@@ -845,6 +936,7 @@ struct ReadingInsightsView: View {
         insights = gathered.insights
         tasteInsights = gathered.taste
         habitsInsights = gathered.habits
+        chapterTiming = gathered.chapterTiming
         libraryInsights = gathered.library
         libraryStats = gathered.libraryStats
         finishedWorksInPeriod = gathered.finishedWorksInPeriod

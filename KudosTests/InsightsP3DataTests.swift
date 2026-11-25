@@ -36,6 +36,84 @@ struct InsightsP3DataTests {
 
     // MARK: D7 pure rules
 
+    @Test func chapterCardUsesMeasuredSpansAndExcludesFinishesFromEndShare() {
+        let work = UUID()
+        let first = ReadingSession(
+            workID: work, startedAt: t0, endedAt: t0.addingTimeInterval(120),
+            durationSeconds: 120, startSpineIndex: 2, lastSpineIndex: 3,
+            chapterCountAtVisit: 12
+        )
+        first.endedAtChapterEnd = true
+        first.peekedAtEnding = true
+        first.skimmedChapters = [2]
+        first.chapterWords = [2: 400]
+        let finish = ReadingSession(
+            workID: work, startedAt: t0.addingTimeInterval(3600),
+            endedAt: t0.addingTimeInterval(3720), durationSeconds: 120,
+            startSpineIndex: 4, lastSpineIndex: 4,
+            chapterCountAtVisit: 12, didFinish: true
+        )
+        finish.endedAtChapterEnd = false
+        let figure = InsightsProvenance.chapterTiming(sessions: [first, finish])
+        #expect(figure.averageChaptersEach == 1.5)
+        #expect(figure.chapterEndShare == 1)
+        #expect(figure.skimmedWords == 400)
+        #expect(figure.peekedWorks == 1)
+        #expect(InsightsProvenance.chapterTiming(sessions: []).averageChaptersEach == nil)
+        #expect(InsightsProvenance.chapterTiming(sessions: []).chapterEndShare == nil)
+    }
+
+    @Test func skimAndPeekWaitForTwentyMeasuredChapters() {
+        let prior = ReadingSession(
+            workID: UUID(), startedAt: t0.addingTimeInterval(-40 * 86_400),
+            endedAt: t0.addingTimeInterval(-40 * 86_400 + 3_600),
+            durationSeconds: 3_600, modeRaw: ReadingSession.Mode.read.rawValue
+        )
+        prior.chapterSeconds = Dictionary(uniqueKeysWithValues: (0..<19).map { ($0, 60.0) })
+        prior.chapterWords = Dictionary(uniqueKeysWithValues: (0..<19).map { ($0, 400) })
+
+        // Listen-mode chapters must never count toward visual reading pace history.
+        let listened = ReadingSession(
+            workID: UUID(), startedAt: t0.addingTimeInterval(-20 * 86_400),
+            endedAt: t0.addingTimeInterval(-20 * 86_400 + 600),
+            durationSeconds: 600, modeRaw: ReadingSession.Mode.listen.rawValue
+        )
+        listened.chapterSeconds = [0: 60.0, 1: 60.0]
+        listened.chapterWords = [0: 400, 1: 400]
+
+        let current = ReadingSession(
+            workID: UUID(), startedAt: t0, endedAt: t0.addingTimeInterval(120),
+            durationSeconds: 120, modeRaw: ReadingSession.Mode.read.rawValue
+        )
+        current.chapterSeconds = [0: 10.0]
+        current.chapterWords = [0: 500]
+        current.skimmedChapters = [0]
+        current.peekedAtEnding = true
+
+        // 19 prior non-skimmed read chapters + 0 in current (skimmed) + listened ignored => hidden.
+        let under = InsightsProvenance.chapterTiming(
+            sessions: [current],
+            paceHistorySessions: [prior, listened, current]
+        )
+        #expect(!under.canShowSkimAndPeek)
+
+        // Adding the 20th measured chapter in prior history unlocks Skimmed & Peeked for the new period.
+        var seconds = prior.chapterSeconds
+        var words = prior.chapterWords
+        seconds[19] = 60
+        words[19] = 400
+        prior.chapterSeconds = seconds
+        prior.chapterWords = words
+
+        let unlocked = InsightsProvenance.chapterTiming(
+            sessions: [current],
+            paceHistorySessions: [prior, listened, current]
+        )
+        #expect(unlocked.canShowSkimAndPeek)
+        #expect(unlocked.skimmedWords == 500)
+        #expect(unlocked.peekedWorks == 1)
+    }
+
     @Test func medianPaceNeedsTwentyChaptersOfHistory() {
         let sample = ChapterTiming.PaceSample(words: 3_000, seconds: 600) // 5 words a second
         #expect(ChapterTiming.medianWordsPerSecond(Array(repeating: sample, count: 19)) == nil)

@@ -5,6 +5,201 @@ import UniformTypeIdentifiers
 import UIKit
 #endif
 
+/// A status decision from Library's untouched-work prompt. Edits stay on a draft
+/// until saved through `WorkLifecycle`; this sheet never visits AO3.
+struct InsightsStoppedSheet: View {
+    struct Draft: Equatable {
+        var reason: String
+        var tag: String
+        var note: String
+
+        init(work: SavedWork) {
+            reason = work.stopReasonRaw.isEmpty ? "lostInterest" : work.stopReasonRaw
+            tag = work.stopTag
+            note = work.stopNote
+        }
+    }
+
+    let work: SavedWork
+    let discreetMode: Bool
+    let discreetMasker: InsightsDiscreetMasker
+    let onChanged: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.modelContext) private var context
+    @Environment(ThemeManager.self) private var theme
+
+    @State private var draft: Draft
+    @State private var saveError: String?
+
+    init(
+        work: SavedWork,
+        discreetMode: Bool,
+        discreetMasker: InsightsDiscreetMasker,
+        onChanged: @escaping () -> Void
+    ) {
+        self.work = work
+        self.discreetMode = discreetMode
+        self.discreetMasker = discreetMasker
+        self.onChanged = onChanged
+        _draft = State(initialValue: Draft(work: work))
+    }
+
+    private struct ReasonChoice: Identifiable {
+        let id: String
+        let label: String
+    }
+    private let reasons: [ReasonChoice] = [
+        .init(id: "lostInterest", label: "Lost Interest"),
+        .init(id: "tooLong", label: "Too Long"),
+        .init(id: "writingStyle", label: "Writing Style"),
+        .init(id: "tagDealbreaker", label: "Tag Dealbreaker"),
+        .init(id: "gotSpoiled", label: "Got Spoiled"),
+        .init(id: "other", label: "Other")
+    ]
+
+    private var availableTags: [String] {
+        let freeforms = ReadingInsights.freeformTags(of: work)
+        let cleaned = (work.workWarnings + freeforms)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return Array(Set(cleaned)).sorted()
+    }
+
+    /// Builds the board's chapter / progress / last-read context line (e.g.
+    /// "Chapter 7 of 12 · 58% · last read Oct 6"), omitting unrecorded parts.
+    /// In Discreet Mode, free-text Readium chapter titles are replaced by numeric
+    /// chapter counts so custom AO3 titles cannot leak ship or character names.
+    static func progressSummary(for work: SavedWork, discreetMode: Bool = false) -> String {
+        var parts: [String] = []
+        if !discreetMode, let locatorTitle = WorkReadingPosition.title(from: work.readiumLocator) {
+            parts.append(locatorTitle)
+        } else if work.postedChapterCount > 0 {
+            let current = min(work.postedChapterCount, max(1, work.lastSpineIndex + 1))
+            // Same wording as the reader: the work's total when known, else the bare chapter number.
+            parts.append(SavedWork.totalChapterCount(from: work.chapters).map { (total: Int) -> String in "Chapter \(current) of \(total)" } ?? "Chapter \(current)")
+        }
+        if let progress = work.readingProgress {
+            parts.append("\(Int((progress * 100).rounded()))%")
+        }
+        if let lastRead = work.lastReadDate {
+            parts.append("last read \(lastRead.formatted(.dateTime.month(.abbreviated).day()))")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    if let rawFandom = work.workFandoms.first, !rawFandom.isEmpty {
+                        Text(discreetMode ? discreetMasker.fandom(rawFandom) : rawFandom)
+                            .font(.caption)
+                            .foregroundStyle(.secondaryInk)
+                    }
+                    Text(discreetMode ? discreetMasker.work(id: work.id, title: work.title) : work.title)
+                        .font(.headline)
+                    let progressLine = Self.progressSummary(for: work, discreetMode: discreetMode)
+                    if !progressLine.isEmpty {
+                        Text(progressLine)
+                            .font(.footnote)
+                            .foregroundStyle(.secondaryInk)
+                    }
+                }
+                .appThemedRows()
+
+                Section("Reason") {
+                    FlowLayout(spacing: 8, rowSpacing: 8) {
+                        ForEach(reasons) { choice in
+                            Button(choice.label) { draft.reason = choice.id }
+                                .buttonStyle(.bordered)
+                                .tint(draft.reason == choice.id ? theme.effectiveTint : .secondary)
+                                .accessibilityAddTraits(draft.reason == choice.id ? .isSelected : [])
+                        }
+                    }
+                }
+                .appThemedRows()
+
+                if !availableTags.isEmpty {
+                    Section("Which Tag") {
+                        FlowLayout(spacing: 8, rowSpacing: 8) {
+                            ForEach(availableTags, id: \.self) { choice in
+                                Button(discreetMode ? discreetMasker.tag(choice) : choice) {
+                                    draft.tag = draft.tag == choice ? "" : choice
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(draft.tag == choice ? theme.effectiveTint : .secondary)
+                                .accessibilityAddTraits(draft.tag == choice ? .isSelected : [])
+                            }
+                        }
+                    }
+                    .appThemedRows()
+                }
+
+                Section("Private Note") {
+                    TextField("Optional note", text: $draft.note, axis: .vertical)
+                        .lineLimit(2...5)
+                }
+                .appThemedRows()
+
+                Section {
+                    Button("Mark as Stopped") {
+                        saveStatus {
+                            try WorkLifecycle.recordStopped(
+                                work,
+                                reason: draft.reason,
+                                tag: draft.tag,
+                                note: draft.note,
+                                in: context
+                            )
+                        }
+                    }
+                    .fontWeight(.semibold)
+                    Button("Put On Hold Instead") {
+                        saveStatus {
+                            try WorkLifecycle.setReadingStatus(.onHold, for: work, in: context)
+                        }
+                    }
+                }
+                .appThemedRows()
+            }
+            #if os(macOS)
+            .formStyle(.grouped)
+            #endif
+            .appThemedScroll()
+            .navigationTitle("Stopped Reading?")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .wrappingInlineTitle("Stopped Reading?", isActive: dynamicTypeSize.isAccessibilitySize)
+            .toolbar { ToolbarItem(placement: .cancellationAction) {
+                Button("Close") { dismiss() }
+            } }
+        }
+        #if os(iOS)
+        .modifier(ScopeSurfaceAccent())
+        #endif
+        .alert("Couldn’t Save Reading Status", isPresented: Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(saveError ?? "")
+        }
+    }
+
+    private func saveStatus(_ commit: () throws -> Void) {
+        do {
+            try commit()
+            onChanged()
+            dismiss()
+        } catch {
+            saveError = error.localizedDescription
+        }
+    }
+}
+
 /// Artboard **07** / `Insights-Options.dc.html` — Insights Options sheet.
 ///
 /// Controls privacy, counting rules, exclusions, export (CSV / JSON), and log reset.

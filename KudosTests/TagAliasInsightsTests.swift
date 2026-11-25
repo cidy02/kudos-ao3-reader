@@ -40,6 +40,13 @@ struct TagAliasInsightsTests {
         workB.workCharacters = ["Midoriya Izuku"]
         workB.workTags = ["Hurt/Comfort", "Angst", "Slow Burn"]
 
+        // A third work is required by Insights-Metrics' >=3 works / 1.5x chance
+        // rule. Its canonical spelling joins workA's learned "h/c" alias.
+        let workC = SavedWork(title: "Work C", author: "Author 5")
+        workC.wordCount = 5_000
+        workC.workFandoms = ["Original Work"]
+        workC.workTags = ["Hurt/Comfort", "Angst"]
+
         // Canon + learned umbrella tag on the same work is NOT a crossover.
         let umbrellaWork = SavedWork(title: "Umbrella", author: "Author 3")
         umbrellaWork.wordCount = 5_000
@@ -70,9 +77,13 @@ struct TagAliasInsightsTests {
             ReadingSessionFacts(
                 workID: realCrossover.id, startedAt: day2, durationSeconds: 600,
                 wordCount: 5_000, didFinish: false, fandom: "Boku no Hero Academia", wordsRead: 5_000
+            ),
+            ReadingSessionFacts(
+                workID: workC.id, startedAt: day2, durationSeconds: 600,
+                wordCount: 5_000, didFinish: false, fandom: "Original Work", wordsRead: 5_000
             )
         ]
-        let works = [workA, workB, umbrellaWork, realCrossover]
+        let works = [workA, workB, umbrellaWork, realCrossover, workC]
 
         // Baseline without aliases: names remain identical-strings only.
         let unaliased = ReadingInsights.make(facts: facts, calendar: cal)
@@ -114,15 +125,15 @@ struct TagAliasInsightsTests {
         #expect(taste.characters.first { $0.name == "Midoriya Izuku" }?.count == 2)
         #expect(!taste.characters.contains { $0.name == "Deku" })
 
-        #expect(taste.tags.first { $0.name == "Hurt/Comfort" }?.words == 30_000)
+        #expect(taste.tags.first { $0.name == "Hurt/Comfort" }?.words == 35_000)
         // Unlearned "slow burn" vs "Slow Burn" remain strictly separate (identical strings only).
         #expect(taste.tags.contains { $0.name == "slow burn" && $0.words == 10_000 })
         #expect(taste.tags.contains { $0.name == "Slow Burn" && $0.words == 20_000 })
 
         #expect(
             taste.oftenTogether.contains {
-                ($0.tagA == "Angst" && $0.tagB == "Hurt/Comfort" && $0.worksCount == 2)
-                    || ($0.tagA == "Hurt/Comfort" && $0.tagB == "Angst" && $0.worksCount == 2)
+                ($0.tagA == "Angst" && $0.tagB == "Hurt/Comfort" && $0.worksCount == 3)
+                    || ($0.tagA == "Hurt/Comfort" && $0.tagB == "Angst" && $0.worksCount == 3)
             }
         )
         // Only realCrossover is a crossover; umbrellaWork collapses canon + umbrella fandom.
@@ -177,8 +188,10 @@ struct TagAliasInsightsTests {
             works: works, facts: facts, allFacts: facts, calendar: cal, aliases: resolver
         )
         let mhaLane = try #require(habits.fandomTimeline.first { $0.name == "Boku no Hero Academia" })
-        // Feb (10k via "BNHA") = ratio 0.4 -> tier 2; Mar (25k via canonical) = tier 3.
-        #expect(mhaLane.monthlyActivity[1] == 2)
+        // Feb (10k via "BNHA") is 100% of Feb's words (>= 5k) -> tier 3; Mar (25k canonical) = tier 3.
+        #expect(mhaLane.monthlyWords[1] == 10_000)
+        #expect(mhaLane.monthlyWords[2] == 25_000)
+        #expect(mhaLane.monthlyActivity[1] == 3)
         #expect(mhaLane.monthlyActivity[2] == 3)
 
         let statsRead = ReadingStatistics(
