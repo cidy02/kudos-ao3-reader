@@ -14,6 +14,16 @@ enum QueueSourceChecks {
         return filters
     }
 
+    /// Page 1 only, however the query is spelled: default port, and every
+    /// `page` parameter (any letter case, repeated, or valueless) must be `1`.
+    /// Rails honours the last one, so checking only the first is not enough.
+    nonisolated static func isPageOneListing(_ url: URL) -> Bool {
+        guard url.port == nil,
+              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+        else { return url.port == nil }
+        return items.allSatisfy { $0.name.lowercased() != "page" || $0.value == "1" }
+    }
+
     /// Counts only run when the reader has visibly opened a non-smart queue page
     /// with at least one visible source on the active tab while the app is active.
     static func shouldCheckOnOpen(
@@ -133,17 +143,31 @@ enum QueueSourceChecks {
         return "\(prefix), \(badge(shown)) on AO3"
     }
 
-    /// Queue counts stay anonymous. A signed-in Find More must load its own page.
-    static func cachedPageForFindMore(_ page: AO3SearchPage?, isLoggedIn: Bool) -> AO3SearchPage? {
-        isLoggedIn ? nil : page
+    /// Queue counts stay anonymous. Find More loads its own page unless the
+    /// reader is plainly signed out: signed in, signing in, using the fallback
+    /// and still restoring the session all see restricted works the anonymous
+    /// page lacks.
+    static func cachedPageForFindMore(_ page: AO3SearchPage?, isSignedOut: Bool) -> AO3SearchPage? {
+        isSignedOut ? page : nil
     }
 
-    /// Queue counts stay anonymous. A signed-in Find More must load its own page.
+    /// How long Find More may reuse a counted page (AO3 serves listings with a
+    /// ten-minute max-age); far shorter than the 6 h count cooldown on purpose.
+    static let findMoreReuseTTL: TimeInterval = 10 * 60
+
+    /// The counted page, only while it is fresh and is the page the source's
+    /// listing URL would load now (a filter or URL edit since the count makes it
+    /// somebody else's page).
     static func cachedFetchForFindMore(
         _ fetched: QueueSourceFetchedPage?,
-        isLoggedIn: Bool
+        listingURL: URL?,
+        isSignedOut: Bool,
+        now: Date = Date()
     ) -> QueueSourceFetchedPage? {
-        isLoggedIn ? nil : fetched
+        guard isSignedOut, let fetched, let listingURL, fetched.url == listingURL,
+              now.timeIntervalSince(fetched.fetchedAt) < findMoreReuseTTL
+        else { return nil }
+        return fetched
     }
 
     static func recordsOpenImmediately(hasCachedPage: Bool) -> Bool {
@@ -173,6 +197,7 @@ enum QueueSourceChecks {
         checkedAt: (Source) -> Date?,
         now: () -> Date,
         sleep: (TimeInterval) async throws -> Void,
+        isCurrent: (Source) -> Bool = { _ in true },
         attempt: (Source, Date) -> Bool,
         fetch: (Source) async throws -> AO3SearchPage,
         received: (Source, AO3SearchPage) -> Void
@@ -182,6 +207,7 @@ enum QueueSourceChecks {
             checkedAt: checkedAt,
             now: now,
             sleep: sleep,
+            isCurrent: isCurrent,
             attempt: attempt,
             fetch: fetch,
             received: received
@@ -195,6 +221,7 @@ enum QueueSourceChecks {
         checkedAt: (Source) -> Date?,
         now: () -> Date,
         sleep: (TimeInterval) async throws -> Void,
+        isCurrent: (Source) -> Bool = { _ in true },
         attempt: (Source, Date) -> Bool,
         fetch: (Source) async throws -> QueueSourceFetchedPage,
         received: (Source, QueueSourceFetchedPage) -> Void
@@ -204,6 +231,7 @@ enum QueueSourceChecks {
             checkedAt: checkedAt,
             now: now,
             sleep: sleep,
+            isCurrent: isCurrent,
             attempt: attempt,
             fetch: fetch,
             received: received
@@ -217,6 +245,7 @@ enum QueueSourceChecks {
         checkedAt: (Source) -> Date?,
         now: () -> Date,
         sleep: (TimeInterval) async throws -> Void,
+        isCurrent: (Source) -> Bool = { _ in true },
         attempt: (Source, Date) -> Bool,
         fetch: (Source) async throws -> Payload,
         received: (Source, Payload) -> Void
@@ -226,16 +255,22 @@ enum QueueSourceChecks {
         for source in selected {
             var started: Date?
             do {
+                // `isCurrent` is false once the source was removed (or its queue
+                // left): nothing below may fetch it or touch its row. It is asked
+                // again after every await, because either can happen meanwhile.
+                guard isCurrent(source) else { continue }
                 try Task.checkCancellation()
                 if let previousStart {
                     let remaining = spacing - now().timeIntervalSince(previousStart)
                     if remaining > 0 { try await sleep(remaining) }
                 }
                 try Task.checkCancellation()
+                guard isCurrent(source) else { continue }
                 started = now()
                 previousStart = started
                 let page = try await fetch(source)
                 try Task.checkCancellation()
+                guard isCurrent(source) else { continue }
                 guard let started, attempt(source, started) else { return }
                 received(source, page)
             } catch is CancellationError {
@@ -250,14 +285,14 @@ enum QueueSourceChecks {
                 // have actually requested (a hold can throw before URLSession).
                 return
             } catch AO3Error.forbidden {
-                if let started { _ = attempt(source, started) }
+                if let started, isCurrent(source) { _ = attempt(source, started) }
                 return
             } catch AO3Error.maintenance {
-                if let started { _ = attempt(source, started) }
+                if let started, isCurrent(source) { _ = attempt(source, started) }
                 return
             } catch {
                 // The attempt is stamped; another eligible source may run.
-                if let started { _ = attempt(source, started) }
+                if let started, isCurrent(source) { _ = attempt(source, started) }
             }
         }
     }

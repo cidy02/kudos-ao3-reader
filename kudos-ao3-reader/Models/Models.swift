@@ -70,6 +70,9 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     case followedTag
     /// A learned canonical tag alias removed via delete or replace-mode.
     case tagAlias
+    /// A queue source (author, series, tag, or unknown kind) the user removed
+    /// from a queue. Immediate hard-delete class, like `.savedSearch`.
+    case queueSource
 }
 
 /// Durable marker for an explicit local deletion. Future cloud merge code must treat

@@ -29,11 +29,20 @@ struct QueueSourcePresentationsModifier: ViewModifier {
     let selectedQueue: ReadingQueue?
     let works: [SavedWork]
     let preservedCount: Int
-    let isLoggedIn: Bool
+    let isSignedOut: Bool
     let sourcePages: [UUID: QueueSourceFetchedPage]
     let onQueueOpenSource: (QueueSavedSearchLink) -> Void
     let onDismissSources: () -> Void
     let onRecordOpen: (UUID) -> Void
+
+    /// The counted page for this source, only while it is fresh, still the page
+    /// the source's listing URL loads, and the reader is signed out.
+    private func cachedPage(_ linkID: UUID) -> QueueSourceFetchedPage? {
+        guard let link = selectedQueue?.searchLinks.first(where: { $0.id == linkID }) else { return nil }
+        return QueueSourceChecks.cachedFetchForFindMore(
+            sourcePages[linkID], listingURL: link.listingURL, isSignedOut: isSignedOut
+        )
+    }
 
     func body(content: Content) -> some View {
         content
@@ -54,10 +63,7 @@ struct QueueSourcePresentationsModifier: ViewModifier {
                 AuthorProfileView(
                     route: target.route,
                     initialTab: .works,
-                    preloadedWorksHTML: QueueSourceChecks.cachedFetchForFindMore(
-                        sourcePages[target.linkID],
-                        isLoggedIn: isLoggedIn
-                    )?.html,
+                    preloadedWorksHTML: cachedPage(target.linkID)?.html,
                     onWorksPageOneLoaded: { onRecordOpen(target.linkID) }
                 )
                 .environment(
@@ -73,10 +79,7 @@ struct QueueSourcePresentationsModifier: ViewModifier {
             .navigationDestination(item: $openedSeriesSource) { target in
                 AO3SeriesDetailView(
                     series: target.series,
-                    preloadedPageOneHTML: QueueSourceChecks.cachedFetchForFindMore(
-                        sourcePages[target.linkID],
-                        isLoggedIn: isLoggedIn
-                    )?.html,
+                    preloadedPageOneHTML: cachedPage(target.linkID)?.html,
                     initialOrigin: ReadingQueueMembershipOrigin(
                         kind: .source,
                         searchID: nil,
@@ -89,10 +92,7 @@ struct QueueSourcePresentationsModifier: ViewModifier {
             .navigationDestination(item: $openedTagSource) { target in
                 TagWorksView(
                     request: target.request,
-                    preloadedPage: QueueSourceChecks.cachedFetchForFindMore(
-                        sourcePages[target.linkID],
-                        isLoggedIn: isLoggedIn
-                    )?.page,
+                    preloadedPage: cachedPage(target.linkID)?.page,
                     initialOrigin: ReadingQueueMembershipOrigin(
                         kind: .source,
                         searchID: nil,
@@ -240,7 +240,6 @@ struct QueueSourcesSheet: View {
             works.filter { !gate.isConcealed($0, enabled: hideMature) }
                 .prefix(CoverStackLayout.maxBacks)
         )
-        let workCountText = works.count == 1 ? "1 work" : "\(works.count) works"
         let detail = ReadingQueueFacts.headerDetail(for: works, offlineCount: preservedCount)
         let cover = StackedWorkCover(
             kind: .queue,
@@ -254,7 +253,7 @@ struct QueueSourcesSheet: View {
         .accessibilityHidden(true)
 
         let info = VStack(alignment: .leading, spacing: 3) {
-            Text("Queue · \(workCountText)")
+            Text("Queue")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondaryInk)
             Text(queue.displayName)

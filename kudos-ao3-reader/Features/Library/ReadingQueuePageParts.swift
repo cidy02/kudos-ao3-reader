@@ -387,6 +387,7 @@ struct QueuePageHeader<FilterRail: View>: View {
             .font(.footnote.weight(.semibold))
             .foregroundStyle(.accentInk)
             .buttonStyle(.plain)
+            .minimumHitTarget()
             .accessibilityLabel("Manage sources for \(queue.displayName)")
     }
 

@@ -3552,54 +3552,76 @@ enum KudosBackupService {
     }
 
     /// Restores additive non-search queue sources (author, series, tag, and unknown
-    /// kinds preserved verbatim) while honoring snapshot vs recency rules.
+    /// kinds preserved verbatim).
+    ///
+    /// Same rule as queue memberships and followed tags, per source rather than
+    /// per list: Merge and Reconcile UNION by identity (`dedupKey`) and never
+    /// delete a local source for being absent from the archive; a removal travels
+    /// as that source's own `.queueSource` tombstone, honoured against the
+    /// source's `dateAdded`, so a source re-added later (new id) comes back.
+    /// Replace Library is the snapshot: unlisted local sources go (tombstoned),
+    /// listed ones take the archive's fields and stamps, `nil` included.
     private static func restoreQueueNonSearchSources(
         _ incoming: [KudosBackupQueueSource],
         modifiedAt sourceStamp: Date,
         into queue: ReadingQueue,
         mode: BackupImportMode,
+        tombstones: TombstoneIndex,
         context: ModelContext
     ) {
         guard queue.kind != .smart else { return }
-        let applyMembership = mode == .replaceLibrary
-            || sourceStamp > (queue.sourcesModifiedAt ?? .distantPast)
+        func targetKey(_ entry: KudosBackupQueueSource) -> String {
+            guard entry.targetKey.isEmpty else { return entry.targetKey }
+            return QueueSourceDraft.derivedTargetKey(
+                kindRaw: entry.kindRaw, authorUsername: entry.authorUsername,
+                authorPseud: entry.authorPseud, ao3SeriesID: entry.ao3SeriesID, tagName: entry.tagName
+            ) ?? ""
+        }
+        func key(_ entry: KudosBackupQueueSource, kind: String) -> String {
+            QueueSourceDraft.dedupKey(kindRaw: kind, targetKey: targetKey(entry), fallbackID: entry.id)
+        }
         let validIncoming = incoming.filter { entry in
             let kind = entry.kindRaw.trimmingCharacters(in: .whitespacesAndNewlines)
             return !kind.isEmpty && kind != QueueSourceKind.savedSearch.rawValue
         }
-        if applyMembership {
-            let incomingKeys = Set(validIncoming.map { entry in
-                QueueSourceDraft.dedupKey(
-                    kindRaw: entry.kindRaw,
-                    targetKey: entry.targetKey,
-                    fallbackID: entry.id
-                )
+        // Rows deleted a moment ago can still sit in the relationship until the
+        // save; a lookup must never land on one (it would be updated, then lost).
+        func drop(_ link: QueueSavedSearchLink, tombstone: Bool) {
+            if tombstone { SyncTombstones.recordDeletion(of: link, in: context) }
+            queue.searchLinks.removeAll { $0.id == link.id }
+            context.delete(link)
+        }
+        if mode == .replaceLibrary {
+            let incomingKeys = Set(validIncoming.map {
+                key($0, kind: $0.kindRaw.trimmingCharacters(in: .whitespacesAndNewlines))
             })
-            for link in queue.searchLinks
-            where !link.isSavedSearchSource && !incomingKeys.contains(link.dedupKey) {
-                context.delete(link)
+            for link in queue.searchLinks where !link.isSavedSearchSource && !incomingKeys.contains(link.dedupKey) {
+                drop(link, tombstone: link.isKnownSource)
             }
             queue.sourcesModifiedAt = sourceStamp
+        } else {
+            for link in queue.searchLinks where !link.isSavedSearchSource {
+                if case .suppressStaleData = tombstones.queueSourceResolution(
+                    id: link.id, incomingModifiedAt: link.dateAdded
+                ) { drop(link, tombstone: false) }
+            }
         }
         var seenKeys = Set<String>()
         for entry in validIncoming {
             let kind = entry.kindRaw.trimmingCharacters(in: .whitespacesAndNewlines)
-            let key = QueueSourceDraft.dedupKey(
-                kindRaw: kind,
-                targetKey: entry.targetKey,
-                fallbackID: entry.id
-            )
-            guard seenKeys.insert(key).inserted else { continue }
-            let existing = queue.searchLinks.first { link in
-                !link.isSavedSearchSource && (link.dedupKey == key || link.id == entry.id)
-            }
-            guard applyMembership || existing != nil else { continue }
+            let dedup = key(entry, kind: kind)
+            guard seenKeys.insert(dedup).inserted else { continue }
+            if mode != .replaceLibrary,
+               case .suppressStaleData = tombstones.queueSourceResolution(
+                   id: entry.id, incomingModifiedAt: entry.dateAdded
+               ) { continue }
             let link: QueueSavedSearchLink
-            if let existing {
+            let isReplacing = mode == .replaceLibrary
+            if let existing = queue.searchLinks.first(where: { !$0.isSavedSearchSource && $0.dedupKey == dedup }) {
                 link = existing
-                if applyMembership {
+                if isReplacing {
                     link.sourceKindRaw = kind
-                    link.targetKey = entry.targetKey
+                    link.targetKey = targetKey(entry)
                     link.displayName = entry.displayName
                     link.subtitle = entry.subtitle
                     link.authorUsername = entry.authorUsername
@@ -3610,13 +3632,25 @@ enum KudosBackupService {
                     link.urlString = entry.urlString
                     link.dateAdded = entry.dateAdded ?? link.dateAdded
                     link.unknownPayloadJSON = entry.encodedUnknownPayloadJSON
+                    // A snapshot says what the stamps were then, `nil` included.
+                    link.lastOpenedAt = entry.lastOpenedAt
+                    link.lastCheckedAt = entry.lastCheckedAt
+                    link.newResultCount = entry.newResultCount
+                } else {
+                    if let opened = entry.lastOpenedAt, opened > (link.lastOpenedAt ?? .distantPast) {
+                        link.lastOpenedAt = opened
+                    }
+                    if let checked = entry.lastCheckedAt, checked > (link.lastCheckedAt ?? .distantPast) {
+                        link.lastCheckedAt = checked
+                        link.newResultCount = entry.newResultCount
+                    }
                 }
             } else {
                 let created = QueueSavedSearchLink(
                     id: entry.id,
                     queue: queue,
                     kindRaw: kind,
-                    targetKey: entry.targetKey,
+                    targetKey: targetKey(entry),
                     displayName: entry.displayName,
                     subtitle: entry.subtitle,
                     authorUsername: entry.authorUsername,
@@ -3633,15 +3667,6 @@ enum KudosBackupService {
                 )
                 context.insert(created)
                 link = created
-            }
-            if let opened = entry.lastOpenedAt,
-               mode == .replaceLibrary || opened > (link.lastOpenedAt ?? .distantPast) {
-                link.lastOpenedAt = opened
-            }
-            if let checked = entry.lastCheckedAt,
-               mode == .replaceLibrary || checked > (link.lastCheckedAt ?? .distantPast) {
-                link.lastCheckedAt = checked
-                link.newResultCount = entry.newResultCount
             }
             // A visit clears the badge even when no new check has run.
             if let opened = link.lastOpenedAt,
@@ -4632,8 +4657,10 @@ enum KudosBackupService {
         // An absent key is an older or Android snapshot, not a request to
         // detach sources already recorded on this device.
         for archived in contents.manifest.readingQueues {
+            // Saved for Later restores into this device's own row (its id differs
+            // per device), which `queueIDMap` knows and `queuesByID` does not.
             guard !suppressedQueueIDs.contains(archived.id),
-                  let queue = queuesByID[archived.id],
+                  let queue = queueIDMap[archived.id] ?? queuesByID[archived.id],
                   queue.kind != .smart
             else { continue }
             if let searchSources = archived.searchSources {
@@ -4679,6 +4706,7 @@ enum KudosBackupService {
                     modifiedAt: archived.sourcesModifiedAt ?? archived.dateUpdated,
                     into: queue,
                     mode: mode,
+                    tombstones: tombstones,
                     context: context
                 )
             }
@@ -6038,6 +6066,7 @@ enum KudosBackupService {
         private var fandomReadWatermarkTombstonesByID: [UUID: SyncTombstone] = [:]
         private var followedTagTombstonesByID: [UUID: SyncTombstone] = [:]
         private var tagAliasTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var queueSourceTombstonesByID: [UUID: SyncTombstone] = [:]
 
         init(_ tombstones: [SyncTombstone]) {
             for tombstone in tombstones {
@@ -6077,6 +6106,8 @@ enum KudosBackupService {
                     indexNewest(tombstone, byFollowedTagID: tombstone.recordID)
                 case .tagAlias:
                     indexNewest(tombstone, byTagAliasID: tombstone.recordID)
+                case .queueSource:
+                    indexNewest(tombstone, byQueueSourceID: tombstone.recordID)
                 }
             }
         }
@@ -6146,6 +6177,21 @@ enum KudosBackupService {
                 return
             }
             bookmarkTombstonesByID[id] = tombstone
+        }
+
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byQueueSourceID id: UUID) {
+            if let existing = queueSourceTombstonesByID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            queueSourceTombstonesByID[id] = tombstone
+        }
+
+        func queueSourceResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: queueSourceTombstonesByID[id]?.lastModifiedAt
+            )
         }
 
         private mutating func indexNewest(_ tombstone: SyncTombstone, bySavedSearchID id: UUID) {

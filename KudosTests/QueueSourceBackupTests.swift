@@ -422,15 +422,19 @@ struct QueueSourceBackupTests {
         ReadingQueueService.syncNonSearchSources(for: queue, drafts: [], in: source)
         queue.sourcesModifiedAt = Date(timeIntervalSince1970: 2_000)
         try source.save()
+        // The removal travels as a tombstone; this device trusts the signer here.
+        let trusting = try defaults()
+        #expect(TombstoneTrustStore.add(TombstoneSigning.publicKeyHex(), defaults: trusting))
         let cleared = try KudosBackupService.makeContents(
-            works: [], bookmarks: [], fonts: [], readingQueues: [queue], defaults: try defaults()
+            works: [], bookmarks: [], fonts: [], readingQueues: [queue],
+            tombstones: try source.fetch(FetchDescriptor<SyncTombstone>()), defaults: trusting
         )
         let clearedRoot = try #require(
             JSONSerialization.jsonObject(with: cleared.manifestData()) as? [String: Any]
         )
         let clearedQueue = try #require((clearedRoot["readingQueues"] as? [[String: Any]])?.first)
         #expect((clearedQueue["sources"] as? [Any])?.isEmpty == true)
-        _ = try KudosBackupService.restore(cleared, into: target, defaults: try defaults())
+        _ = try KudosBackupService.restore(cleared, into: target, defaults: trusting)
         #expect(targetQueue.nonSearchSources.isEmpty)
     }
 
@@ -481,6 +485,221 @@ struct QueueSourceBackupTests {
             $0.id == smart.id
         })
         #expect(restoredSmart.searchLinks.isEmpty)
+    }
+
+    // MARK: - Source merge rules (T-530 fix round 1)
+
+    private func authorLink(
+        _ queue: ReadingQueue, _ name: String, id: UUID = UUID(), added: TimeInterval = 1_000
+    ) -> QueueSavedSearchLink {
+        QueueSavedSearchLink(
+            id: id, queue: queue, kindRaw: "author",
+            targetKey: QueueSourceDraft.authorTargetKey(username: name, pseud: nil),
+            displayName: name, authorUsername: name,
+            urlString: "https://archiveofourown.org/users/\(name)/works",
+            dateAdded: Date(timeIntervalSince1970: added)
+        )
+    }
+
+    private func seriesLink(_ queue: ReadingQueue, _ id: Int, added: TimeInterval = 1_000) -> QueueSavedSearchLink {
+        QueueSavedSearchLink(
+            queue: queue, kindRaw: "series", targetKey: QueueSourceDraft.seriesTargetKey(id: id),
+            displayName: "Series \(id)", ao3SeriesID: id, dateAdded: Date(timeIntervalSince1970: added)
+        )
+    }
+
+    /// An archive holding `queue` as its own context knows it.
+    private func archive(
+        of queue: ReadingQueue, tombstones: [SyncTombstone] = []
+    ) throws -> KudosBackupContents {
+        try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], readingQueues: [queue],
+            tombstones: tombstones, defaults: try defaults()
+        )
+    }
+
+    private func queue(_ id: UUID, in context: ModelContext) throws -> ReadingQueue {
+        try #require(try context.fetch(FetchDescriptor<ReadingQueue>()).first { $0.id == id })
+    }
+
+    @Test func wantToReadSourcesSurviveRestoreToAFreshStore() throws {
+        let source = try context()
+        let wantToRead = ReadingQueue(name: "Want to Read", kind: .savedForLater)
+        source.insert(wantToRead)
+        source.insert(authorLink(wantToRead, "alice"))
+        source.insert(seriesLink(wantToRead, 42))
+        let search = SavedSearch(name: "Search", filters: AO3SearchFilters())
+        source.insert(search)
+        source.insert(QueueSavedSearchLink(queue: wantToRead, search: search))
+        wantToRead.sourcesModifiedAt = Date(timeIntervalSince1970: 2_000)
+        wantToRead.searchSourcesModifiedAt = Date(timeIntervalSince1970: 2_000)
+        try source.save()
+        let contents = try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], readingQueues: [wantToRead],
+            savedSearches: [search], defaults: try defaults()
+        )
+
+        // The fresh device already has its own Want to Read, under another id.
+        let target = try context()
+        let own = ReadingQueueService.ensureSavedForLaterQueue(in: target)
+        #expect(own.id != wantToRead.id)
+        _ = try KudosBackupService.restore(contents, into: target, defaults: try defaults())
+        let restored = try #require(try target.fetch(FetchDescriptor<ReadingQueue>())
+            .first { $0.kind == .savedForLater })
+        #expect(restored.visibleNonSearchSources.count == 2)
+        #expect(restored.savedSearchLinks.count == 1)
+    }
+
+    @Test func mergeAndReconcileUnionSourcesAndNeverDeleteLocalOnes() throws {
+        let shared = UUID()
+        // Two devices edit the same queue; the one that edited later has the OLDER stamp ordering below.
+        let a = try context()
+        let queueA = ReadingQueue(id: shared, name: "Queue")
+        a.insert(queueA)
+        a.insert(authorLink(queueA, "alice"))
+        queueA.sourcesModifiedAt = Date(timeIntervalSince1970: 1_000)
+        try a.save()
+        let b = try context()
+        let queueB = ReadingQueue(id: shared, name: "Queue")
+        b.insert(queueB)
+        b.insert(seriesLink(queueB, 42))
+        queueB.sourcesModifiedAt = Date(timeIntervalSince1970: 3_000)
+        try b.save()
+
+        for mode in [BackupImportMode.merge, .reconcile] {
+            let local = try context()
+            let q = ReadingQueue(id: shared, name: "Queue")
+            local.insert(q)
+            local.insert(authorLink(q, "alice"))
+            q.sourcesModifiedAt = Date(timeIntervalSince1970: 2_000)
+            try local.save()
+            // Incoming newer, then incoming older: both leave Alice and gain Series 42.
+            for incoming in [queueB, queueA] {
+                _ = try KudosBackupService.restore(
+                    try archive(of: incoming), into: local, defaults: try defaults(), mode: mode
+                )
+            }
+            let keys = Set(try queue(shared, in: local).visibleNonSearchSources.map(\.dedupKey))
+            #expect(keys == ["author|user:alice", "series|series:42"], "\(mode)")
+        }
+    }
+
+    @Test func aRemovalTravelsAsItsOwnTombstoneAndANewerReAddSurvives() throws {
+        let shared = UUID()
+        let removedID = UUID()
+        let keptID = UUID()
+        let defaults = try self.defaults()
+        let peer = TombstoneSigning.makePrivateKey()
+        #expect(TombstoneTrustStore.add(TombstoneSigning.publicKeyHex(of: peer), defaults: defaults))
+
+        let local = try context()
+        let q = ReadingQueue(id: shared, name: "Queue")
+        local.insert(q)
+        local.insert(authorLink(q, "alice", id: removedID, added: 1_000))
+        local.insert(authorLink(q, "bob", id: keptID, added: 1_000))
+        try local.save()
+
+        // The peer removed Alice at t=5000, and has re-added Carol since.
+        let peerContext = try context()
+        let peerQueue = ReadingQueue(id: shared, name: "Queue")
+        peerContext.insert(peerQueue)
+        peerContext.insert(authorLink(peerQueue, "carol", added: 6_000))
+        peerQueue.sourcesModifiedAt = Date(timeIntervalSince1970: 6_000)
+        let tombstone = SyncTombstone(
+            recordID: removedID, recordType: .queueSource, createdAt: Date(timeIntervalSince1970: 5_000)
+        )
+        tombstone.lastModifiedAt = Date(timeIntervalSince1970: 5_000)
+        TombstoneSigning.sign(tombstone, key: peer)
+        // Exported later than the removal, as the real export clamp requires.
+        let contents = try archive(of: peerQueue, tombstones: [tombstone])
+
+        _ = try KudosBackupService.restore(contents, into: local, defaults: defaults, mode: .reconcile)
+        let keys = Set(try queue(shared, in: local).visibleNonSearchSources.compactMap { $0.authorUsername })
+        #expect(keys == ["bob", "carol"])
+    }
+
+    @Test func removingASourceRecordsItsTombstone() throws {
+        let context = try context()
+        let q = ReadingQueue(name: "Queue")
+        context.insert(q)
+        let draft = try #require(QueueSourceDraft.author(username: "alice"))
+        #expect(ReadingQueueService.addSource(draft, to: q, in: context))
+        let link = try #require(q.visibleNonSearchSources.first)
+        let id = link.id
+        ReadingQueueService.removeSource(link, from: q, in: context)
+        let tombstones = try context.fetch(FetchDescriptor<SyncTombstone>())
+        #expect(tombstones.contains { $0.recordType == .queueSource && $0.recordID == id })
+        #expect(q.nonSearchSources.isEmpty)
+    }
+
+    @Test func replaceLibraryTakesTheSnapshotStampsEvenWhenTheyAreNilAndDropsUnlisted() throws {
+        let shared = UUID()
+        let linkID = UUID()
+        let snapshotContext = try context()
+        let snapshotQueue = ReadingQueue(id: shared, name: "Queue")
+        snapshotContext.insert(snapshotQueue)
+        snapshotContext.insert(authorLink(snapshotQueue, "alice", id: linkID))
+        snapshotQueue.sourcesModifiedAt = Date(timeIntervalSince1970: 1_000)
+        try snapshotContext.save()
+        let snapshot = try archive(of: snapshotQueue)
+
+        let local = try context()
+        let q = ReadingQueue(id: shared, name: "Queue")
+        local.insert(q)
+        let alice = authorLink(q, "alice", id: linkID)
+        alice.lastOpenedAt = Date(timeIntervalSince1970: 9_000)
+        alice.lastCheckedAt = Date(timeIntervalSince1970: 9_000)
+        alice.newResultCount = 7
+        local.insert(alice)
+        local.insert(seriesLink(q, 42))
+        try local.save()
+
+        _ = try KudosBackupService.restore(snapshot, into: local, defaults: try defaults(), mode: .replaceLibrary)
+        let restored = try queue(shared, in: local)
+        let link = try #require(restored.nonSearchSources.first)
+        #expect(restored.nonSearchSources.count == 1)
+        #expect(link.dedupKey == "author|user:alice")
+        #expect(link.lastOpenedAt == nil)
+        #expect(link.lastCheckedAt == nil)
+        #expect(link.newResultCount == nil)
+        #expect(restored.sourcesModifiedAt == Date(timeIntervalSince1970: 1_000))
+    }
+
+    @Test func aRowReplacedUnderTheSameIdNeverAliasesItsDeletedPredecessor() throws {
+        let shared = UUID()
+        let linkID = UUID()
+        let snapshotContext = try context()
+        let snapshotQueue = ReadingQueue(id: shared, name: "Queue")
+        snapshotContext.insert(snapshotQueue)
+        snapshotContext.insert(authorLink(snapshotQueue, "newname", id: linkID))
+        snapshotQueue.sourcesModifiedAt = Date(timeIntervalSince1970: 1_000)
+        try snapshotContext.save()
+        let snapshot = try archive(of: snapshotQueue)
+
+        let local = try context()
+        let q = ReadingQueue(id: shared, name: "Queue")
+        local.insert(q)
+        local.insert(authorLink(q, "oldname", id: linkID))
+        try local.save()
+
+        _ = try KudosBackupService.restore(snapshot, into: local, defaults: try defaults(), mode: .replaceLibrary)
+        let sources = try queue(shared, in: local).nonSearchSources
+        #expect(sources.count == 1)
+        #expect(sources.first?.authorUsername == "newname")
+    }
+
+    @Test func aRestoredRowWithoutATargetKeyGetsItsDerivedKey() throws {
+        let source = try context()
+        let q = ReadingQueue(name: "Queue")
+        source.insert(q)
+        source.insert(QueueSavedSearchLink(queue: q, kindRaw: "author", targetKey: "", authorUsername: "Alice"))
+        q.sourcesModifiedAt = Date(timeIntervalSince1970: 1_000)
+        try source.save()
+        let target = try context()
+        _ = try KudosBackupService.restore(try archive(of: q), into: target, defaults: try defaults())
+        let link = try #require(try queue(q.id, in: target).nonSearchSources.first)
+        #expect(link.targetKey == "user:alice")
+        #expect(link.sourceDraft != nil)
     }
 }
 }

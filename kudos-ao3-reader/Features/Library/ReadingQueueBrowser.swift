@@ -1652,11 +1652,17 @@ extension ReadingQueueBrowserView {
     }
 
     private func checkSources(in queue: ReadingQueue) async {
+        let queueID = queue.id
         await QueueSourceChecks.runFetched(
             sources: queue.countableSources,
             checkedAt: { $0.lastCheckedAt },
             now: Date.init,
             sleep: { try await Task.sleep(for: .seconds($0)) },
+            isCurrent: { link in
+                // A removed row (or a deleted queue) must not be fetched or written.
+                !link.isDeleted && link.modelContext != nil && link.queue?.id == queueID
+                    && !queue.isDeleted && queue.modelContext != nil && selectedQueueID == queueID
+            },
             attempt: { link, date in
                 link.lastCheckedAt = date
                 FolderSyncService.markDirty()
@@ -1669,7 +1675,6 @@ extension ReadingQueueBrowserView {
                 return try await AO3Client.shared.queueSourceFetch(url)
             },
             received: { link, fetched in
-                guard selectedQueue?.id == queue.id else { return }
                 sourcePages[link.id] = fetched
                 link.newResultCount = QueueSourceChecks.count(
                     fetched.page,
@@ -1689,7 +1694,8 @@ extension ReadingQueueBrowserView {
             guard let search = link.search else { return }
             let cachedPage = QueueSourceChecks.cachedFetchForFindMore(
                 sourcePages[link.id],
-                isLoggedIn: auth.isLoggedIn
+                listingURL: link.listingURL,
+                isSignedOut: auth.status == .signedOut
             )?.page
             router.pendingQueueSearch = QueueSearchRoute(
                 searchID: search.id,
@@ -1722,6 +1728,8 @@ extension ReadingQueueBrowserView {
     }
 
     private func recordSourceOpen(linkID: UUID) {
+        // The counted page is spent once Find More has used it.
+        sourcePages.removeValue(forKey: linkID)
         guard let link = allQueues.flatMap(\.searchLinks).first(where: { $0.id == linkID }) else { return }
         ReadingQueueService.recordSourceOpen(link, in: context)
     }
@@ -1735,14 +1743,13 @@ extension ReadingQueueBrowserView {
             selectedQueue: selectedQueue,
             works: currentWorks,
             preservedCount: preservedWorks.count,
-            isLoggedIn: auth.isLoggedIn,
+            isSignedOut: auth.status == .signedOut,
             sourcePages: sourcePages,
             onQueueOpenSource: { pendingSourceToOpen = $0 },
             onDismissSources: {
-                if let link = pendingSourceToOpen, let queue = selectedQueue {
-                    pendingSourceToOpen = nil
-                    openSource(link, in: queue)
-                }
+                let link = pendingSourceToOpen
+                pendingSourceToOpen = nil
+                if let link, let queue = selectedQueue { openSource(link, in: queue) }
             },
             onRecordOpen: { recordSourceOpen(linkID: $0) }
         )

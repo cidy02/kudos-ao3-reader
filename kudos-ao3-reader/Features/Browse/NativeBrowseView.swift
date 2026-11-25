@@ -1335,7 +1335,7 @@ struct TagWorksView: View {
         do {
             let result: AO3SearchPage
             if page == 1, !didConsumePreloaded, filters == Self.baseline,
-               let cached = QueueSourceChecks.cachedPageForFindMore(preloadedPage, isLoggedIn: auth.isLoggedIn) {
+               let cached = QueueSourceChecks.cachedPageForFindMore(preloadedPage, isSignedOut: auth.status == .signedOut) {
                 didConsumePreloaded = true
                 result = cached
             } else {

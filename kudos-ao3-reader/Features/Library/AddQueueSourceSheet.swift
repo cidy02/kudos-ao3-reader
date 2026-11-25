@@ -12,11 +12,14 @@ struct AddQueueSourceSheet: View {
     let onAddSource: (QueueSourceDraft) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(ThemeManager.self) private var theme
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
     @Query(sort: \SavedSearch.name) private var savedSearches: [SavedSearch]
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.title)
-    private var libraryWorks: [SavedWork]
-    @Query(sort: \SavedSeries.title) private var savedSeries: [SavedSeries]
+    private var allLibraryWorks: [SavedWork]
+    @Query(sort: \SavedSeries.title) private var allSavedSeries: [SavedSeries]
     @Query(sort: \FollowedTag.name) private var followedTags: [FollowedTag]
     @Query(sort: \ReadingFavorite.displayName) private var favorites: [ReadingFavorite]
 
@@ -28,21 +31,33 @@ struct AddQueueSourceSheet: View {
     @State private var tagInput = ""
     @State private var tagCategory = ""
 
+    /// Works Hide Mature has not concealed; the lists below never surface an
+    /// author, series or tag that only a concealed work carries.
+    private var libraryWorks: [SavedWork] {
+        allLibraryWorks.filter { !gate.isConcealed($0, enabled: hideMature) }
+    }
+
+    private static func seriesID(of work: SavedWork) -> Int? {
+        work.ao3SeriesID ?? ReadingQueueService.ao3SeriesID(from: work.seriesURL)
+    }
+
+    private var savedSeries: [SavedSeries] {
+        let visible = Set(libraryWorks.compactMap(Self.seriesID(of:)))
+        let concealed = Set(allLibraryWorks.compactMap { work in
+            gate.isConcealed(work, enabled: hideMature) ? Self.seriesID(of: work) : nil
+        })
+        return allSavedSeries.filter { visible.contains($0.ao3SeriesID) || !concealed.contains($0.ao3SeriesID) }
+    }
+
     private static let tagCategories = ["", "Fandom", "Relationship", "Character", "Freeform"]
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    Picker("Source kind", selection: $selectedKind) {
-                        Text("Search").tag(QueueSourceKind.savedSearch)
-                        Text("Author").tag(QueueSourceKind.author)
-                        Text("Series").tag(QueueSourceKind.series)
-                        Text("Tag").tag(QueueSourceKind.tag)
-                    }
-                    .pickerStyle(.segmented)
-                    .accessibilityLabel("Source kind")
-                    .appThemedRows()
+                    kindPicker
+                        .accessibilityLabel("Source kind")
+                        .appThemedRows()
                 }
 
                 switch selectedKind {
@@ -73,6 +88,23 @@ struct AddQueueSourceSheet: View {
             }
         }
         .screenTint(theme.scopePalette)
+    }
+
+    /// Four segments clip to one letter each at accessibility sizes, where a menu
+    /// shows the whole word.
+    @ViewBuilder
+    private var kindPicker: some View {
+        let picker = Picker("Source kind", selection: $selectedKind) {
+            Text("Search").tag(QueueSourceKind.savedSearch)
+            Text("Author").tag(QueueSourceKind.author)
+            Text("Series").tag(QueueSourceKind.series)
+            Text("Tag").tag(QueueSourceKind.tag)
+        }
+        if dynamicTypeSize.isAccessibilitySize {
+            picker.pickerStyle(.menu)
+        } else {
+            picker.pickerStyle(.segmented)
+        }
     }
 
     // MARK: - Saved Searches
@@ -141,12 +173,13 @@ struct AddQueueSourceSheet: View {
     private var parsedAuthorDraft: QueueSourceDraft? {
         let trimmed = authorInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        if trimmed.contains("://") || trimmed.lowercased().contains("archiveofourown.org") {
-            let candidate = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
-            if let draft = QueueSourceDraft.fromAO3URL(candidate), draft.kind == .author {
-                return draft
-            }
-            return nil
+        // AO3 usernames are letters, digits and underscores: anything with a
+        // slash, dot or colon is a link (or nothing), never a literal name.
+        if QueueSourceDraft.isURLInput(trimmed) || trimmed.contains(where: { "/.:".contains($0) }) {
+            guard let draft = QueueSourceDraft.fromAO3URL(trimmed), draft.kind == .author,
+                  let username = draft.authorUsername
+            else { return nil }
+            return QueueSourceDraft.author(username: username, pseud: draft.authorPseud ?? authorPseudInput)
         }
         return QueueSourceDraft.author(username: trimmed, pseud: authorPseudInput)
     }
@@ -231,8 +264,7 @@ struct AddQueueSourceSheet: View {
         if let numericID = Int(trimmed), numericID > 0 {
             return QueueSourceDraft.series(id: numericID, title: titleOverride ?? "Series \(numericID)")
         }
-        let candidate = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
-        if let draft = QueueSourceDraft.fromAO3URL(candidate, fallbackTitle: titleOverride),
+        if let draft = QueueSourceDraft.fromAO3URL(trimmed, fallbackTitle: titleOverride),
            draft.kind == .series {
             return draft
         }
@@ -308,9 +340,8 @@ struct AddQueueSourceSheet: View {
         let trimmed = tagInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         let category = tagCategory.isEmpty ? nil : tagCategory
-        if trimmed.contains("://") || trimmed.lowercased().contains("archiveofourown.org") {
-            let candidate = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
-            if var draft = QueueSourceDraft.fromAO3URL(candidate), draft.kind == .tag {
+        if QueueSourceDraft.isURLInput(trimmed) {
+            if var draft = QueueSourceDraft.fromAO3URL(trimmed), draft.kind == .tag {
                 draft.tagCategoryRaw = category
                 draft.subtitle = category
                 return draft

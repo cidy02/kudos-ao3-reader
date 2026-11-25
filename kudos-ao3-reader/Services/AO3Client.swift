@@ -605,8 +605,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// HTML so Find More can reuse the fetched page without a second request.
     func queueSourceFetch(_ url: URL) async throws -> QueueSourceFetchedPage {
         try Self.rejectIfUntrusted(url)
-        if let page = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-            .queryItems?.first(where: { $0.name == "page" })?.value, page != "1" {
+        guard QueueSourceChecks.isPageOneListing(url) else {
             throw AO3Error.network("Queue counts may fetch page 1 only.")
         }
         try Self.throwIfQueueSourceHeld()

@@ -180,6 +180,8 @@ struct NewReadingQueueSheet: View {
                                     options.searchIDs.removeAll { $0 == search.id }
                                 }
                                 .labelStyle(.iconOnly)
+                                .buttonStyle(.borderless)
+                                .minimumHitTarget()
                                 .foregroundStyle(.accentInk)
                                 .accessibilityLabel("Remove saved search \(search.name) from queue")
                             }
@@ -205,6 +207,8 @@ struct NewReadingQueueSheet: View {
                                     options.sources.removeAll { $0.dedupKey == source.dedupKey }
                                 }
                                 .labelStyle(.iconOnly)
+                                .buttonStyle(.borderless)
+                                .minimumHitTarget()
                                 .foregroundStyle(.accentInk)
                                 .accessibilityLabel(
                                     "Remove \(source.kind.kindLabel.lowercased()) \(source.displayName) from queue"
@@ -912,7 +916,7 @@ struct EditReadingQueueSheet: View {
             tagNames: queue.tags.map(\.name).sorted(),
             colorHex: queue.colorHex,
             searchIDs: queue.savedSearchLinks.compactMap { $0.search?.id },
-            sources: queue.visibleNonSearchSources.compactMap(\.sourceDraft),
+            sources: (queue.authorAndSeriesSources + queue.tagSources).compactMap(\.sourceDraft),
             syncsNonSearchSources: queue.kind != .smart,
             draftID: queue.id,
             isSmart: queue.kind == .smart,

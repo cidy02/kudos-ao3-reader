@@ -124,6 +124,12 @@ enum ReadingQueueService {
                         primary.markMembershipChanged(max(membership.lastModifiedAt, Date()))
                     }
                 }
+                // Its sources would cascade away with it.
+                for link in duplicate.searchLinks
+                where !primary.searchLinks.contains(where: { $0.dedupKey == link.dedupKey }) {
+                    link.queue = primary
+                    primary.searchLinks.append(link)
+                }
                 context.delete(duplicate)
             }
             context.saveBestEffort(reason: "Saving merged Saved for Later queue failed")
@@ -426,8 +432,13 @@ enum ReadingQueueService {
         let existingKnown = queue.searchLinks.filter { !$0.isSavedSearchSource && $0.isKnownSource }
         var existingByKey: [String: QueueSavedSearchLink] = [:]
         for link in existingKnown {
+            // A row the sheet could not show (no draft) is not the reader's to have removed here.
+            guard link.sourceDraft != nil else { continue }
             let key = link.dedupKey
             if incomingByKey[key] == nil || existingByKey[key] != nil {
+                // A removal travels as a tombstone so another device's copy goes too.
+                if incomingByKey[key] == nil { SyncTombstones.recordDeletion(of: link, in: context) }
+                queue.searchLinks.removeAll { $0.id == link.id }
                 context.delete(link)
                 changed = true
             } else {
@@ -532,12 +543,13 @@ enum ReadingQueueService {
         let wasSavedSearch = link.isSavedSearchSource
         let now = Date()
         queue.searchLinks.removeAll { $0.id == link.id }
-        context.delete(link)
         if wasSavedSearch {
             queue.searchSourcesModifiedAt = now
         } else {
+            if link.isKnownSource { SyncTombstones.recordDeletion(of: link, in: context) }
             queue.sourcesModifiedAt = now
         }
+        context.delete(link)
         queue.markModified(now)
         FolderSyncService.markDirty()
         context.saveBestEffort(reason: "Removing queue source failed")

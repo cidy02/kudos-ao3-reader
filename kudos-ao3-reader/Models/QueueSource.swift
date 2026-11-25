@@ -8,6 +8,9 @@ nonisolated struct QueueSourceFetchedPage: Sendable {
     let url: URL
     let page: AO3SearchPage
     let html: String
+    /// When the anonymous fetch finished. Find More reuses a page only while
+    /// it is younger than `QueueSourceChecks.cooldown`.
+    var fetchedAt: Date = Date()
 }
 
 /// The four queue source kinds this build understands. Unknown raw strings from
@@ -64,6 +67,35 @@ nonisolated struct QueueSourceDraft: Identifiable, Hashable, Sendable {
             return "\(normalizedKind)|\(normalizedTarget)"
         }
         return "\(normalizedKind)|\(fallbackID.uuidString.lowercased())"
+    }
+
+    /// The identity key rebuilt from a row's own fields, for a restored row
+    /// that arrived without `targetKey`. `nil` when the fields say nothing.
+    static func derivedTargetKey(
+        kindRaw: String?, authorUsername: String?, authorPseud: String?,
+        ao3SeriesID: Int?, tagName: String?
+    ) -> String? {
+        switch kindRaw.flatMap(QueueSourceKind.init(rawValue:)) {
+        case .author:
+            guard let user = authorUsername, !user.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+            return authorTargetKey(username: user, pseud: authorPseud)
+        case .series:
+            return ao3SeriesID.flatMap { $0 > 0 ? seriesTargetKey(id: $0) : nil }
+        case .tag:
+            guard let name = tagName, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+            return tagTargetKey(name: name)
+        case .savedSearch, nil:
+            return nil
+        }
+    }
+
+    /// A stored tag URL is reusable only when it is exactly AO3's works listing
+    /// for a tag (`/tags/<name>/works`) on the default port; a tag info page,
+    /// a work, or another port is never fetched under the counts feature.
+    static func isTagWorksURL(_ url: URL) -> Bool {
+        guard AO3RequestDefaults.isTrustedURL(url), url.port == nil else { return false }
+        let parts = url.pathComponents
+        return parts.count == 4 && parts[1] == "tags" && parts[3] == "works"
     }
 
     static func authorTargetKey(username: String, pseud: String?) -> String {
@@ -140,7 +172,7 @@ nonisolated struct QueueSourceDraft: Identifiable, Hashable, Sendable {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return nil }
         let canonicalURL: URL?
-        if let existingURL, AO3RequestDefaults.isTrustedURL(existingURL) {
+        if let existingURL, isTagWorksURL(existingURL) {
             canonicalURL = existingURL
         } else {
             canonicalURL = AO3Client.tagWorksURL(tagName: name)
@@ -159,17 +191,22 @@ nonisolated struct QueueSourceDraft: Identifiable, Hashable, Sendable {
         )
     }
 
-    /// Parses a pasted AO3 author, series, or tag URL into a draft source.
-    /// Rejects untrusted hosts and non-source routes.
+    /// True when the typed text is meant as a link rather than a name.
+    static func isURLInput(_ raw: String) -> Bool {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return text.contains("://") || ["ao3.org/", "archiveofourown.org/", "www.archiveofourown.org/"]
+            .contains(where: text.hasPrefix)
+    }
+
+    /// Parses a pasted AO3 author works, series, or tag link (http or https,
+    /// ao3.org or archiveofourown.org, default port, with or without a scheme)
+    /// into a draft. Everything else (bookmarks, an author's series list,
+    /// profiles, other hosts) is `nil`.
     static func fromAO3URL(_ raw: String, fallbackTitle: String? = nil) -> QueueSourceDraft? {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              let url = URL(string: trimmed),
-              AO3RequestDefaults.isTrustedURL(url)
-        else { return nil }
-        if let route = AO3AuthorRoute(url: url) {
-            return .author(username: route.username, pseud: route.pseud, displayName: fallbackTitle)
-        }
+        var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if !trimmed.contains("://") { trimmed = "https://" + trimmed }
+        guard let url = URL(string: trimmed) else { return nil }
         switch AO3Link(url).kind {
         case let .series(id):
             return .series(id: id, title: fallbackTitle ?? "Series \(id)")
@@ -177,6 +214,20 @@ nonisolated struct QueueSourceDraft: Identifiable, Hashable, Sendable {
             return .tag(name: tagName, url: AO3Client.tagWorksURL(tagName: tagName))
         case let .user(username, pseud):
             return .author(username: username, pseud: pseud, displayName: fallbackTitle)
+        case .otherAO3:
+            // AO3Link has no kind for an author's works listing; match it here.
+            let parts = url.path(percentEncoded: true).split(separator: "/")
+                .map { String($0).removingPercentEncoding ?? String($0) }
+            guard parts.first == "users", parts.count == 3 || parts.count == 5,
+                  !["login", "logout", "new", "password"].contains(parts[1])
+            else { return nil }
+            if parts.count == 3, parts[2] == "works" {
+                return .author(username: parts[1], displayName: fallbackTitle)
+            }
+            if parts.count == 5, parts[2] == "pseuds", parts[4] == "works" {
+                return .author(username: parts[1], pseud: parts[3], displayName: fallbackTitle)
+            }
+            return nil
         default:
             return nil
         }
@@ -212,8 +263,18 @@ extension QueueSavedSearchLink {
         }
         return QueueSourceDraft.dedupKey(
             kindRaw: effectiveSourceKindRaw,
-            targetKey: targetKey,
+            targetKey: effectiveTargetKey,
             fallbackID: id
+        )
+    }
+
+    /// `targetKey`, or the key rebuilt from the row's own fields when a
+    /// restored row arrived without one.
+    var effectiveTargetKey: String? {
+        if let key = targetKey, !key.isEmpty { return key }
+        return QueueSourceDraft.derivedTargetKey(
+            kindRaw: sourceKindRaw, authorUsername: authorUsername, authorPseud: authorPseud,
+            ao3SeriesID: ao3SeriesID, tagName: tagName
         )
     }
 
@@ -311,7 +372,7 @@ extension QueueSavedSearchLink {
         let name = (tagName ?? displayName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return nil }
         let resolvedURL: URL?
-        if let urlString, let parsed = URL(string: urlString), AO3RequestDefaults.isTrustedURL(parsed) {
+        if let urlString, let parsed = URL(string: urlString), QueueSourceDraft.isTagWorksURL(parsed) {
             resolvedURL = parsed
         } else {
             resolvedURL = AO3Client.tagWorksURL(tagName: name)
@@ -367,8 +428,7 @@ extension QueueSavedSearchLink {
 
     var sourceDraft: QueueSourceDraft? {
         guard let kind = knownSourceKind, kind != .savedSearch else { return nil }
-        let key = targetKey ?? ""
-        guard !key.isEmpty else { return nil }
+        guard let key = effectiveTargetKey else { return nil }
         return QueueSourceDraft(
             id: id,
             kind: kind,
