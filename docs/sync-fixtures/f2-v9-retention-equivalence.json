@@ -5,7 +5,7 @@
  "kind": "v9-concurrency",
  "title": "Checkpoint-plus-suffix equivalence, one universe per retention rule (declared orders and all small-universe cuts are checked by the projector)",
  "refs": [
-  "\u00a72.1 retention rule",
+  "§2.1 retention rule",
   "DEC-1",
   "DEC-18",
   "DEC-21",
@@ -43,8 +43,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -272,7 +272,9 @@
        "r1"
       ],
       "thenOrder": [
-       "r2"
+       "r2",
+       "dz",
+       "rbad"
       ],
       "checkpointCut": [
        "d1",
@@ -315,7 +317,7 @@
        ],
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       },
       "W-B": {
@@ -373,8 +375,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -1607,7 +1609,7 @@
       "inc-a",
       1
      ],
-     "kind": "rec.put",
+     "kind": "bookmark.put",
      "target": "bookmark|https://x/1",
      "payload": {
       "value": "title-A"
@@ -1622,7 +1624,7 @@
       "inc-b",
       1
      ],
-     "kind": "rec.put",
+     "kind": "bookmark.put",
      "target": "bookmark|https://x/1",
      "payload": {
       "value": "title-B"
@@ -1637,10 +1639,10 @@
       "inc-b",
       2
      ],
-     "kind": "rec.delete",
+     "kind": "bookmark.delete",
      "target": "bookmark|https://x/1",
      "observed": {
-      "epochs": [
+      "puts": [
        "p2"
       ]
      }
@@ -1779,7 +1781,7 @@
       "inc-a",
       1
      ],
-     "kind": "rec.put",
+     "kind": "favorite.put",
      "target": "favorite|work:W-A",
      "payload": {
       "value": "A"
@@ -1794,10 +1796,10 @@
       "inc-a",
       2
      ],
-     "kind": "rec.delete",
+     "kind": "favorite.delete",
      "target": "favorite|work:W-A",
      "observed": {
-      "epochs": [
+      "puts": [
        "p1"
       ]
      }
@@ -1811,7 +1813,7 @@
       "inc-b",
       1
      ],
-     "kind": "rec.put",
+     "kind": "favorite.put",
      "target": "favorite|work:W-A",
      "payload": {
       "value": "A2"
@@ -1951,7 +1953,7 @@
       "inc-a",
       1
      ],
-     "kind": "rec.put",
+     "kind": "session.put",
      "target": "session:s1",
      "payload": {
       "value": "row"
@@ -1966,10 +1968,10 @@
       "inc-a",
       2
      ],
-     "kind": "rec.delete",
+     "kind": "session.delete",
      "target": "session:s1",
      "observed": {
-      "epochs": [
+      "puts": [
        "s1"
       ]
      }
@@ -2007,7 +2009,7 @@
      "kind": "taglist.add",
      "target": "W-A",
      "payload": {
-      "group": "workTags",
+      "group": "tags",
       "values": [
        "a",
        "b"
@@ -2026,7 +2028,7 @@
      "kind": "taglist.add",
      "target": "W-A",
      "payload": {
-      "group": "workTags",
+      "group": "tags",
       "values": [
        "b",
        "c"
@@ -2155,7 +2157,7 @@
        ],
        "groups": {
         "title": "T",
-        "workTags": [
+        "tags": [
          "a",
          "b",
          "c"
@@ -2179,7 +2181,7 @@
    },
    "goldenReducer": {
     "grow": {
-     "W-A|workTags": [
+     "W-A|tags": [
       "a",
       "b",
       "c"
@@ -2356,8 +2358,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -2560,9 +2562,9 @@
        ],
        "groups": {
         "isFavorite": false,
-        "progress": 0.1,
         "seriesPosition": 9,
-        "epubPreservationStatusRaw": "preserved"
+        "epubPreservationStatusRaw": "preserved",
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -2602,8 +2604,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -2630,12 +2632,12 @@
      "target": "W-A",
      "payload": {
       "groups": {
-       "coverPin": {
+       "hasGivenKudos": false,
+       "coverRecipeJSON": {
         "tier": 2,
         "pinnedAt": 0
        },
-       "importSource": "fileA",
-       "hasGivenKudos": false
+       "importSourceRaw": "fileA"
       }
      }
     },
@@ -2652,12 +2654,12 @@
      "target": "W-A",
      "payload": {
       "groups": {
-       "coverPin": {
+       "hasGivenKudos": true,
+       "coverRecipeJSON": {
         "tier": 1,
         "pinnedAt": 0
        },
-       "importSource": "fileB",
-       "hasGivenKudos": true
+       "importSourceRaw": "fileB"
       }
      }
     },
@@ -2675,7 +2677,7 @@
      "payload": {
       "groups": {
        "hasGivenKudos": false,
-       "importSource": "fileC"
+       "importSourceRaw": "fileC"
       }
      }
     }
@@ -2768,14 +2770,14 @@
         "W-A"
        ],
        "groups": {
-        "coverPin": {
+        "hasGivenKudos": true,
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1,
+        "coverRecipeJSON": {
          "tier": 2,
          "pinnedAt": 0
         },
-        "hasGivenKudos": true,
-        "importSource": "fileA",
-        "isFavorite": false,
-        "progress": 0.1
+        "importSourceRaw": "fileA"
        }
       }
      },
@@ -2794,7 +2796,7 @@
    },
    "goldenReducer": {
     "value": {
-     "coverPin": {
+     "coverRecipeJSON": {
       "tier": 2,
       "pinnedAt": 0
      }
@@ -2880,11 +2882,11 @@
      "target": "W-A",
      "payload": {
       "groups": {
-       "progress": "bad",
-       "isFavorite": true
+       "isFavorite": true,
+       "legacyReaderProgress": "bad"
       },
       "malformed": [
-       "progress"
+       "legacyReaderProgress"
       ]
      }
     }
@@ -3006,7 +3008,7 @@
     "diagnostics": [
      {
       "kind": "malformedGroup",
-      "key": "W-A|progress",
+      "key": "W-A|legacyReaderProgress",
       "witness": "w1"
      },
      {

@@ -717,8 +717,7 @@
        "b5"
       ],
       "expectedPendingAtEnd": [
-       "a4",
-       "b5"
+       "a4"
       ],
       "thenDeliver": [
        "a3"
@@ -741,7 +740,8 @@
        "b5"
       ],
       "expectedPendingAtEnd": [
-       "b4"
+       "b4",
+       "b5"
       ],
       "thenDeliver": [
        "b3"

@@ -320,7 +320,11 @@
         "kind": {
           "type": "string",
           "minLength": 3,
-          "description": "Operation-dependent known kinds are checked by projector dispatch; future.* stays opaque"
+          "description": "Canonical v9 operation kinds; future.* stays opaque",
+          "oneOf": [
+            { "enum": ["work.create", "work.edit", "work.delete", "work.restore", "work.purge", "queue.create", "queue.edit", "queue.delete", "queue.restore", "queue.purge", "collection.create", "collection.edit", "collection.delete", "collection.restore", "collection.purge", "queue.membership.add", "queue.membership.remove", "queue.membership.move", "queue.membership.note", "queue.membership.state", "queue.membership.origin", "collection.membership.add", "collection.membership.remove", "queueTag.attach", "queueTag.detach", "userTag.attach", "userTag.detach", "annotation.add", "annotation.edit", "annotation.delete", "asset.write", "asset.remove", "writer.enroll", "writer.revoke", "legacy.evidence", "bookmark.put", "bookmark.delete", "favorite.put", "favorite.delete", "session.put", "session.delete", "watermark.put", "watermark.delete", "savedSearch.put", "savedSearch.delete", "followedTag.put", "followedTag.delete", "tagAlias.put", "tagAlias.delete", "queueSavedSearchLink.set", "queueSavedSearchLink.clear", "recoveryDoc.put", "font.add", "font.remove", "original.set", "taglist.add", "setting.entry.set", "setting.entry.reset", "setting.set", "setting.reset", "pronunciation.set", "pronunciation.reset"] },
+            { "pattern": "^future\\." }
+          ]
         },
         "target": {
           "type": "string"
@@ -610,6 +614,7 @@
                       "appliedVector": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 1 } },
                       "pending": { "type": "array", "items": { "type": "string" } },
                       "works": { "type": "object", "additionalProperties": { "type": "object", "required": ["lifecycle"] } },
+                      "queues": { "type": "object", "additionalProperties": { "type": "object", "required": ["lifecycle"] } },
                       "diagnostics": { "type": "array", "items": { "$ref": "#/definitions/diagnostic" } }
                     }
                   }

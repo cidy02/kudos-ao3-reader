@@ -41,8 +41,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -310,8 +310,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -619,8 +619,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -790,7 +790,7 @@
        ],
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -844,8 +844,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }

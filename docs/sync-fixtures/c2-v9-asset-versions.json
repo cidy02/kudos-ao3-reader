@@ -1803,7 +1803,7 @@
      "target": "W-A",
      "payload": {
       "groups": {
-       "chapterWordCounts": [
+       "chapterWordCountsJSON": [
         1,
         2,
         3
@@ -1825,7 +1825,7 @@
      "target": "W-A",
      "payload": {
       "groups": {
-       "chapterWordCounts": [
+       "chapterWordCountsJSON": [
         4,
         5,
         6
@@ -1847,7 +1847,7 @@
      "target": "W-A",
      "payload": {
       "groups": {
-       "chapterWordCounts": [
+       "chapterWordCountsJSON": [
         9
        ]
       },
@@ -1921,7 +1921,7 @@
        ],
        "groups": {
         "title": "T",
-        "chapterWordCounts": [
+        "chapterWordCountsJSON": [
          4,
          5,
          6
@@ -2418,7 +2418,7 @@
      "target": "W-A",
      "payload": {
       "groups": {
-       "chapterWordCounts": [
+       "chapterWordCountsJSON": [
         1,
         2
        ]
@@ -2439,7 +2439,7 @@
      "target": "W-A",
      "payload": {
       "groups": {
-       "chapterWordCounts": [
+       "chapterWordCountsJSON": [
         7,
         8
        ]
@@ -2601,7 +2601,7 @@
        ],
        "groups": {
         "title": "T",
-        "chapterWordCounts": [
+        "chapterWordCountsJSON": [
          1,
          2
         ]
@@ -2895,6 +2895,13 @@
       "detail": "asset"
      }
     ]
+   },
+   "goldenReducer": {
+    "typedEvidence": {
+     "bad": false,
+     "bad2": false,
+     "ok": true
+    }
    }
   },
   {
@@ -3394,9 +3401,14 @@
       "kind": "invalidCommand",
       "key": "rm1",
       "witness": "rm1",
-      "detail": "assetRemove"
+      "detail": "assetRemove:wrongTarget"
      }
     ]
+   },
+   "goldenReducer": {
+    "typedEvidence": {
+     "rm1": false
+    }
    }
   }
  ]
