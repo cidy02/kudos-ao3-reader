@@ -238,10 +238,11 @@ final class AO3AuthorProfileModel {
         dashboardOnly: Bool = false,
         overviewMode: Bool = false,
         reloadsHeaderAfterModeration: Bool = true,
-        preloadedWorksHTML: String? = nil,
-        onWorksPageOneLoaded: (@MainActor () -> Void)? = nil,
         pageLoader: PageLoader? = nil,
-        moderationSubmitter: ModerationSubmitter? = nil
+        moderationSubmitter: ModerationSubmitter? = nil,
+        // After the closures above so existing trailing-closure callers still bind `pageLoader`.
+        preloadedWorksHTML: String? = nil,
+        onWorksPageOneLoaded: (@MainActor () -> Void)? = nil
     ) {
         self.route = route
         self.dashboardOnly = dashboardOnly

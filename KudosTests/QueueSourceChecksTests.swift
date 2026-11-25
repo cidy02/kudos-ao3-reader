@@ -306,9 +306,9 @@ struct QueueSourceChecksTests {
         let selected = QueueSourceChecks.eligible(
             queue.countableSources, checkedAt: \.lastCheckedAt, now: now
         )
-        #expect(selected.map(\.id) == [
-            linkAuthor1.id, linkSearchA.id, linkSeries.id, linkTag1.id, linkTag2.id
-        ])
+        let expected: [UUID] = [linkAuthor1.id, linkSearchA.id, linkSeries.id, linkTag1.id, linkTag2.id]
+        let selectedIDs: [UUID] = selected.map(\.id)
+        #expect(selectedIDs == expected)
     }
 
     @Test func runFetchedEnforcesSequentialSpacingCancellationAndPageReuse() async throws {
