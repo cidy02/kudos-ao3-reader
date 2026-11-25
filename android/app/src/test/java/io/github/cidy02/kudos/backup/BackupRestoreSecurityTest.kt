@@ -319,7 +319,7 @@ class BackupRestoreSecurityTest {
     }
 
     @Test
-    fun testM2b_MergeRejectsBlankOrUnknownTombstone() {
+    fun testM2b_MergeRejectsBlankAndSkipsUnknownTombstone() {
         val now = Instant.now()
         val nowStr = BackupValidator.formatInstant(now)
 
@@ -357,12 +357,8 @@ class BackupRestoreSecurityTest {
                 )
             )
         )
-        val thrown = assertThrows(IllegalArgumentException::class.java) {
-            BackupMergeService.merge(BackupLibrarySnapshot(), unknownPack)
-        }
-        assertTrue(
-            thrown.message?.contains("recordTypeRaw") == true ||
-                thrown.message?.contains("maliciousType") == true
-        )
+        // Owner decision 18 A (2026-11-25): an unknown, non-blank kind is skipped like iOS does, and the rest merges.
+        val merged = BackupMergeService.merge(BackupLibrarySnapshot(), unknownPack)
+        assertTrue(merged.snapshot.tombstones.none { it.recordTypeRaw == "maliciousType" })
     }
 }

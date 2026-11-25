@@ -16,6 +16,12 @@ object SyncTombstoneRecordType {
     const val READING_SESSION = "readingSession"
     const val READING_FAVORITE = "readingFavorite"
     const val FANDOM_READ_WATERMARK = "fandomReadWatermark"
+
+    /** Kinds this build applies. iOS writes more (followedTag, tagAlias, queueSource); merge skips those (owner decision 18 A). */
+    val KNOWN: Set<String> = setOf(
+        SAVED_WORK, WORK_COLLECTION, READING_QUEUE, READING_QUEUE_MEMBERSHIP, WORK_COLLECTION_MEMBERSHIP,
+        READING_ANNOTATION, BOOKMARK, SAVED_SEARCH, READING_SESSION, READING_FAVORITE, FANDOM_READ_WATERMARK
+    )
 }
 
 /**

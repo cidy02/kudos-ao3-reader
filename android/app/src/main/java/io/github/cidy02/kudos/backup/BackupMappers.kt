@@ -812,20 +812,7 @@ fun BackupTombstone.toSyncTombstone(exportedAt: Instant? = null): SyncTombstone 
         created
     }
     val type = recordTypeRaw.trim()
-    val knownTypes = setOf(
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_WORK,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_QUEUE,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_ANNOTATION,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.BOOKMARK,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_SEARCH,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_SESSION,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_FAVORITE,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.FANDOM_READ_WATERMARK
-    )
-    if (type.isEmpty() || type !in knownTypes) {
+    if (type.isEmpty() || type !in io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.KNOWN) {
         throw IllegalArgumentException("Invalid or unknown tombstone recordTypeRaw: $recordTypeRaw")
     }
     return SyncTombstone(

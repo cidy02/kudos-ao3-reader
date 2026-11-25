@@ -81,6 +81,10 @@ object BackupMergeService {
         // SettingsRepository.recordUnknownSignerTombstoneIds after the merge.
         val unknownSignerIds = linkedSetOf<String>()
         manifest.tombstones.forEach { archived ->
+            // A kind this build does not apply (iOS followedTag/tagAlias/queueSource, or a newer app's kind) is
+            // skipped like iOS does; a blank kind still fails the import (owner decision 18 A, 2026-11-25).
+            val kind = archived.recordTypeRaw.trim()
+            if (kind.isNotEmpty() && kind !in io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.KNOWN) return@forEach
             // Only createdAt is inside the signed payload. lastModifiedAt
             // decides suppression, so never let an unsigned wire field set it.
             // Then min(createdAt, exportedAt) so a pinned tombstone still
