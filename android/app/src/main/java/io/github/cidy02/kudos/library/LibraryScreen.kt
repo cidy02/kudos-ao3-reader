@@ -2127,6 +2127,8 @@ fun LibraryCarouselCard(
         }
     }
 
+    val coverArt = io.github.cidy02.kudos.works.rememberWorkEmbeddedCoverArt(work, enabled = !obscured)
+
     Box(modifier = modifier) {
         WorkCoverCard(
             workId = io.github.cidy02.kudos.works.WorkTags.ao3WorkIdFromUrl(work.sourceUrl),
@@ -2174,7 +2176,8 @@ fun LibraryCarouselCard(
             onLongClick = { if (!obscured) menuOpen = true },
             isSelecting = isSelecting,
             isSelected = isSelected,
-            onToggleSelection = onToggleSelection
+            onToggleSelection = onToggleSelection,
+            coverArt = coverArt
         )
         DropdownMenu(
             expanded = menuOpen,

@@ -24,7 +24,9 @@ data class BackupSettings(
     val autoPreserveSmallSeriesOnSaveForLater: Boolean = false,
     val autoPreserveSeriesWorkThreshold: Int = 5,
     /** Null when absent or malformed: a restore then leaves the local layout (iOS 557b0d18). */
-    val libraryPageArrangement: LibraryPageArrangement? = null
+    val libraryPageArrangement: LibraryPageArrangement? = null,
+    /** Null when absent in older archives: a restore then leaves the local preference untouched. */
+    val useEmbeddedCoverArt: Boolean? = null
 ) {
     fun toSettings(): KudosSettings {
         return KudosSettings(
@@ -52,7 +54,9 @@ data class BackupSettings(
                 storedWorkSymbolPlacement = workSymbolPlacement,
                 autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
                 autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold,
-                libraryPageArrangement = libraryPageArrangement
+                libraryPageArrangement = libraryPageArrangement,
+                useEmbeddedCoverArt = useEmbeddedCoverArt ?: true,
+                storedUseEmbeddedCoverArt = useEmbeddedCoverArt
             ),
             privacy = PrivacySettings(
                 hideMatureContent = hideMatureContent,
@@ -89,7 +93,8 @@ data class BackupSettings(
                 autoPreserveSmallSeriesOnSaveForLater =
                     settings.app.autoPreserveSmallSeriesOnSaveForLater,
                 autoPreserveSeriesWorkThreshold = settings.app.autoPreserveSeriesWorkThreshold,
-                libraryPageArrangement = settings.app.libraryPageArrangement
+                libraryPageArrangement = settings.app.libraryPageArrangement,
+                useEmbeddedCoverArt = settings.app.backupUseEmbeddedCoverArt
             )
         }
     }

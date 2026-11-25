@@ -391,6 +391,14 @@ class SettingsRepository(
         dataStore.edit { it[Keys.WorkSymbolPlacement] = placement.storageValue }
     }
 
+    /** Persist global embedded-cover preference and mark folder sync dirty (iOS `useEmbeddedCoverArt`). */
+    suspend fun updateUseEmbeddedCoverArt(enabled: Boolean) {
+        dataStore.edit {
+            it[Keys.UseEmbeddedCoverArt] = enabled
+            it[Keys.SyncHasPendingChanges] = true
+        }
+    }
+
     suspend fun updateKeepsWorksYouRead(keep: Boolean) {
         dataStore.edit { it[Keys.KeepsWorksYouRead] = keep }
     }
@@ -652,6 +660,8 @@ class SettingsRepository(
             settings.app.libraryPageArrangement?.let {
                 prefs[Keys.LibraryPageArrangement] = it.toJson().toString()
             }
+            // Absent key in older backups leaves the local cover preference untouched.
+            settings.app.backupUseEmbeddedCoverArt?.let { prefs[Keys.UseEmbeddedCoverArt] = it }
         }
     }
 
@@ -735,7 +745,10 @@ class SettingsRepository(
                 autoPreserveSeriesWorkThreshold = preferences[Keys.AutoPreserveSeriesThreshold]
                     ?: defaults.app.autoPreserveSeriesWorkThreshold,
                 libraryPageArrangement = io.github.cidy02.kudos.core.model.LibraryPageArrangement
-                    .fromJsonString(preferences[Keys.LibraryPageArrangement])
+                    .fromJsonString(preferences[Keys.LibraryPageArrangement]),
+                useEmbeddedCoverArt = preferences[Keys.UseEmbeddedCoverArt]
+                    ?: defaults.app.useEmbeddedCoverArt,
+                storedUseEmbeddedCoverArt = preferences[Keys.UseEmbeddedCoverArt]
             ),
             privacy = PrivacySettings(
                 hideMatureContent = preferences[Keys.HideMatureContent]
@@ -796,6 +809,7 @@ class SettingsRepository(
         val ReaderCustomPaperHex = stringPreferencesKey("readerCustomPaperHex")
         val AccentColorHex = stringPreferencesKey("accentColorHex")
         val WorkSymbolPlacement = stringPreferencesKey("workSymbolPlacement")
+        val UseEmbeddedCoverArt = booleanPreferencesKey("useEmbeddedCoverArt")
         val LibraryPageArrangement = stringPreferencesKey("library.page.arrangement")
         val AutoPreserveSmallSeries = booleanPreferencesKey("autoPreserveSmallSeriesOnSaveForLater")
         val AutoPreserveSeriesThreshold = androidx.datastore.preferences.core.intPreferencesKey(

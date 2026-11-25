@@ -169,6 +169,25 @@ fun SettingsAppearancePage(
                 )
             }
         }
+        item {
+            SettingsSection(
+                label = "Covers",
+                footnote = "When this is off, every work shows its generated cover. A work's own page can choose for that work."
+            ) {
+                SubjectFormRow(
+                    label = "Use art from the work when there is some",
+                    trailing = {
+                        SubjectToggle(
+                            checked = settings.app.useEmbeddedCoverArt,
+                            onCheckedChange = { enabled ->
+                                scope.launch { repository.updateUseEmbeddedCoverArt(enabled) }
+                            },
+                            contentDescription = "Use art from the work when there is some"
+                        )
+                    }
+                )
+            }
+        }
     }
     if (showCustomWarning) {
         AlertDialog(

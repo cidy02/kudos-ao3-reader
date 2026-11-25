@@ -186,11 +186,17 @@ fun SavedWork.toBackupWork(
         dateUpdated = dateUpdated,
         ao3SeriesID = ao3SeriesID,
         ao3WorkID = ao3WorkID,
-        assetIdentifier = assetIdentifier.ifBlank { null }
+        assetIdentifier = assetIdentifier.ifBlank { null },
+        coverArtPreference = coverArtPreferenceRaw,
+        coverArtPreferenceChangedAt = coverArtPreferenceChangedAt?.let(BackupValidator::formatInstant)
     )
 }
 
-fun BackupWork.toSavedWork(hasEpub: Boolean, exportedAt: Instant? = null): SavedWork {
+fun BackupWork.toSavedWork(
+    hasEpub: Boolean,
+    exportedAt: Instant? = null,
+    now: Instant = Instant.now()
+): SavedWork {
     val added = if (dateAdded.isNotBlank()) {
         BackupValidator.parseInstant(dateAdded, "work.dateAdded", exportedAt)
     } else {
@@ -322,7 +328,13 @@ fun BackupWork.toSavedWork(hasEpub: Boolean, exportedAt: Instant? = null): Saved
         ao3WorkID = ao3WorkID,
         legacyReaderProgress = readerProgress,
         epubDigest = epubDigest.orEmpty(),
-        assetIdentifier = assetIdentifier.orEmpty()
+        assetIdentifier = assetIdentifier.orEmpty(),
+        coverArtPreferenceRaw = coverArtPreference,
+        coverArtPreferenceChangedAt = if (coverArtPreference != null) {
+            BackupValidator.parseClampedOptionalInstant(coverArtPreferenceChangedAt, now)
+        } else {
+            null
+        }
     )
 }
 
@@ -468,7 +480,8 @@ fun CoreBackupSettings.toBackupSettingsPayload(): BackupSettingsPayload {
         workSymbolPlacement = workSymbolPlacement,
         autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
         autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold,
-        libraryPageArrangement = libraryPageArrangement?.toJson()
+        libraryPageArrangement = libraryPageArrangement?.toJson(),
+        useEmbeddedCoverArt = useEmbeddedCoverArt
     )
 }
 
@@ -497,7 +510,8 @@ fun BackupSettingsPayload.toCoreBackupSettings(): CoreBackupSettings {
         autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
         autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold,
         libraryPageArrangement = io.github.cidy02.kudos.core.model.LibraryPageArrangement
-            .fromJson(libraryPageArrangement)
+            .fromJson(libraryPageArrangement),
+        useEmbeddedCoverArt = useEmbeddedCoverArt
     )
 }
 

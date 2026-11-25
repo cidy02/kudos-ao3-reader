@@ -11,7 +11,10 @@ import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
 object BackupValidator {
     // Derived from the enums / catalog so allowlists cannot drift from storage
@@ -37,7 +40,10 @@ object BackupValidator {
         val raw = parseJsonObjectOrNull(bytes)
         val manifest = try {
             if (raw != null) {
-                BackupJson.decodeFromJsonElement(KudosBackupManifest.serializer(), raw)
+                BackupJson.decodeFromJsonElement(
+                    KudosBackupManifest.serializer(),
+                    sanitizeCoverChoiceForDecode(raw)
+                )
             } else {
                 BackupJson.decodeFromString<KudosBackupManifest>(bytes.toString(Charsets.UTF_8))
             }
@@ -48,6 +54,62 @@ object BackupValidator {
         }
 
         return validateManifest(manifest) to raw
+    }
+
+    /**
+     * Malformed `works[*].coverArtPreference` (non-string JSON such as `42`, `true`, `{}` or `[]`),
+     * `works[*].coverArtPreferenceChangedAt` (non-string or unparseable date), and
+     * `settings.useEmbeddedCoverArt` (non-boolean JSON, including `"true"`/`"false"` strings,
+     * numbers, objects, or arrays) decode as absent (`null`) instead of coercing primitives under
+     * `isLenient` or rejecting the whole manifest.
+     * Mirrors iOS `try? container.decodeIfPresent(...)` in `KudosBackupWork` / `KudosBackupSettings`.
+     */
+    private fun sanitizeCoverChoiceForDecode(raw: JsonObject): JsonObject {
+        var sanitized = raw
+
+        val works = raw["works"] as? JsonArray
+        if (works != null) {
+            var worksChanged = false
+            val cleaned = works.map { element ->
+                val obj = element as? JsonObject ?: return@map element
+                val pref = obj["coverArtPreference"]
+                val stamp = obj["coverArtPreferenceChangedAt"]
+                val badPref = pref != null && (pref !is JsonPrimitive || !pref.isString)
+                val badStamp = stamp != null && (
+                    stamp !is JsonPrimitive ||
+                        !stamp.isString ||
+                        parseClampedOptionalInstant(stamp.content) == null
+                    )
+                if (!badPref && !badStamp) {
+                    element
+                } else {
+                    worksChanged = true
+                    JsonObject(
+                        obj.filterKeys { key ->
+                            !(key == "coverArtPreference" && badPref) &&
+                                !(key == "coverArtPreferenceChangedAt" && badStamp)
+                        }
+                    )
+                }
+            }
+            if (worksChanged) {
+                sanitized = JsonObject(sanitized + ("works" to JsonArray(cleaned)))
+            }
+        }
+
+        val settings = sanitized["settings"] as? JsonObject
+        val useEmbedded = settings?.get("useEmbeddedCoverArt")
+        val badUseEmbedded = useEmbedded != null && (
+            useEmbedded !is JsonPrimitive ||
+                useEmbedded.isString ||
+                useEmbedded.booleanOrNull == null
+            )
+        if (settings != null && badUseEmbedded) {
+            val cleanedSettings = JsonObject(settings.filterKeys { it != "useEmbeddedCoverArt" })
+            sanitized = JsonObject(sanitized + ("settings" to cleanedSettings))
+        }
+
+        return sanitized
     }
 
     fun validateManifest(
@@ -207,6 +269,30 @@ object BackupValidator {
         now: Instant = Instant.now()
     ): Instant? {
         return value?.let { parseInstant(it, field, exportedAt, now) }
+    }
+
+    /**
+     * Lenient ISO-8601 parse clamped to `now + BackupMergeService.FUTURE_CLOCK_SKEW` (matching iOS
+     * `clampedArchiveDate` + `try? decodeIfPresent` for `coverArtPreferenceChangedAt`). Does not
+     * clamp down to `exportedAt`, so a monotonic per-field stamp written under small clock skew
+     * survives export/re-export; blank or malformed values yield `null` without rejecting the manifest.
+     */
+    fun parseClampedOptionalInstant(
+        value: String?,
+        now: Instant = Instant.now()
+    ): Instant? {
+        val trimmed = value?.takeIf { it.isNotBlank() } ?: return null
+        val parsed = try {
+            Instant.parse(trimmed)
+        } catch (_: DateTimeParseException) {
+            try {
+                OffsetDateTime.parse(trimmed).toInstant()
+            } catch (_: DateTimeParseException) {
+                return null
+            }
+        }
+        val maxAllowed = now.plus(BackupMergeService.FUTURE_CLOCK_SKEW)
+        return if (parsed.isAfter(maxAllowed)) maxAllowed else parsed
     }
 
     /**

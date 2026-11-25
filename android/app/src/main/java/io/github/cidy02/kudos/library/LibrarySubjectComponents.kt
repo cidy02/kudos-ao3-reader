@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.library
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import io.github.cidy02.kudos.home.HomeFacts
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -33,7 +34,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -52,6 +55,7 @@ import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCardMetrics
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
+import io.github.cidy02.kudos.works.rememberWorkEmbeddedCoverArt
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -192,26 +196,57 @@ private fun MiniatureWorkCover(
     height: Dp = 54.dp
 ) {
     val tokens = LocalKudosTokens.current
+    val coverArt = rememberWorkEmbeddedCoverArt(work)
     val palette = remember(work.title, tokens.theme) {
         SubjectPalette.fromHue(coverHue(work.workFandoms.firstOrNull() ?: work.title).toDouble() / 360.0, tokens.theme)
     }
-    Column(
+    Box(
         modifier
             .height(height)
             .clip(RoundedCornerShape(7.dp))
             .background(palette.cardWash)
-            .padding(6.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
-        Box(Modifier.size(width = 13.dp, height = 2.dp).background(palette.accent, RoundedCornerShape(50)))
-        Text(
-            work.title,
-            color = tokens.primaryInk,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
+        if (coverArt != null) {
+            Image(
+                bitmap = coverArt,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Black.copy(alpha = 0.32f),
+                            1f to Color.Black.copy(alpha = 0.68f)
+                        )
+                    )
+            )
+        }
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(6.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Box(
+                Modifier
+                    .size(width = 13.dp, height = 2.dp)
+                    .background(
+                        if (coverArt != null) Color.White.copy(alpha = 0.85f) else palette.accent,
+                        RoundedCornerShape(50)
+                    )
+            )
+            Text(
+                work.title,
+                color = if (coverArt != null) Color.White else tokens.primaryInk,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 

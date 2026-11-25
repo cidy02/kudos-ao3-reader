@@ -41,6 +41,7 @@ import io.github.cidy02.kudos.core.model.WorkSymbolPlacement
 
 val LocalShowsZeroStats = staticCompositionLocalOf { true }
 val LocalWorkSymbolPlacement = staticCompositionLocalOf { WorkSymbolPlacement.Default }
+val LocalUseEmbeddedCoverArt = staticCompositionLocalOf { true }
 
 /**
  * Compact work metadata expressed with Material 3 color/type roles.

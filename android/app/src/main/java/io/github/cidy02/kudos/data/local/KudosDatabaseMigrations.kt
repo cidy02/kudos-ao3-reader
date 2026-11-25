@@ -364,4 +364,16 @@ object KudosDatabaseMigrations {
         }
     }
 
+    /**
+     * v15 → v16: A-573 per-work cover choice (`coverArtPreferenceRaw`, nullable TEXT) and its
+     * own merge clock (`coverArtPreferenceChangedAt`, nullable INTEGER epoch millis).
+     * Additive without backfill: existing rows stay NULL (follow the global setting).
+     */
+    val MIGRATION_15_16 = object : Migration(15, 16) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE works ADD COLUMN coverArtPreferenceRaw TEXT")
+            db.execSQL("ALTER TABLE works ADD COLUMN coverArtPreferenceChangedAt INTEGER")
+        }
+    }
+
 }
