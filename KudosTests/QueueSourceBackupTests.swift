@@ -619,6 +619,73 @@ struct QueueSourceBackupTests {
         #expect(keys == ["bob", "carol"])
     }
 
+    /// Confirmation review 2 (P2): an incoming re-add newer than the removal is admitted, not only a local one.
+    @Test func anIncomingReAddNewerThanTheRemovalIsAdmitted() throws {
+        let shared = UUID()
+        let defaults = try self.defaults()
+        let peer = TombstoneSigning.makePrivateKey()
+        #expect(TombstoneTrustStore.add(TombstoneSigning.publicKeyHex(of: peer), defaults: defaults))
+
+        let local = try context()
+        let q = ReadingQueue(id: shared, name: "Queue")
+        local.insert(q)
+        local.insert(authorLink(q, "alice", added: 1_000))
+        try local.save()
+
+        // The peer removed Alice at t=5000 and added her again at t=9000.
+        let peerContext = try context()
+        let peerQueue = ReadingQueue(id: shared, name: "Queue")
+        peerContext.insert(peerQueue)
+        peerContext.insert(authorLink(peerQueue, "alice", added: 9_000))
+        peerQueue.sourcesModifiedAt = Date(timeIntervalSince1970: 9_000)
+        let tombstone = SyncTombstone(
+            recordID: QueueSourceDraft.tombstoneID(queue: peerQueue, dedupKey: "author|user:alice"),
+            recordType: .queueSource, createdAt: Date(timeIntervalSince1970: 5_000)
+        )
+        tombstone.lastModifiedAt = Date(timeIntervalSince1970: 5_000)
+        TombstoneSigning.sign(tombstone, key: peer)
+
+        _ = try KudosBackupService.restore(
+            try archive(of: peerQueue, tombstones: [tombstone]), into: local, defaults: defaults, mode: .reconcile
+        )
+        let names = Set(try queue(shared, in: local).visibleNonSearchSources.compactMap { $0.authorUsername })
+        #expect(names == ["alice"])
+    }
+
+    /// Confirmation review 2 (P2): Want to Read has a different id on every device, so its removals use a
+    /// fixed scope; a removal on one device's Want to Read reaches another device's.
+    @Test func aWantToReadRemovalReachesAnotherDevicesWantToRead() throws {
+        let defaults = try self.defaults()
+        let peer = TombstoneSigning.makePrivateKey()
+        #expect(TombstoneTrustStore.add(TombstoneSigning.publicKeyHex(of: peer), defaults: defaults))
+
+        let local = try context()
+        let mine = ReadingQueueService.ensureSavedForLaterQueue(in: local)
+        local.insert(authorLink(mine, "alice", added: 1_000))
+        local.insert(authorLink(mine, "bob", added: 1_000))
+        try local.save()
+
+        let peerContext = try context()
+        let theirs = ReadingQueue(name: "Want to Read", kind: .savedForLater)
+        peerContext.insert(theirs)
+        peerContext.insert(authorLink(theirs, "bob", added: 1_000))
+        theirs.sourcesModifiedAt = Date(timeIntervalSince1970: 6_000)
+        #expect(theirs.id != mine.id)
+        let tombstone = SyncTombstone(
+            recordID: QueueSourceDraft.tombstoneID(queue: theirs, dedupKey: "author|user:alice"),
+            recordType: .queueSource, createdAt: Date(timeIntervalSince1970: 5_000)
+        )
+        tombstone.lastModifiedAt = Date(timeIntervalSince1970: 5_000)
+        TombstoneSigning.sign(tombstone, key: peer)
+
+        _ = try KudosBackupService.restore(
+            try archive(of: theirs, tombstones: [tombstone]), into: local, defaults: defaults, mode: .reconcile
+        )
+        let restored = try #require(try local.fetch(FetchDescriptor<ReadingQueue>()).first { $0.kind == .savedForLater })
+        let names = Set(restored.visibleNonSearchSources.compactMap { $0.authorUsername })
+        #expect(names == ["bob"])
+    }
+
     @Test func removingASourceRecordsItsTombstone() throws {
         let context = try context()
         let q = ReadingQueue(name: "Queue")
