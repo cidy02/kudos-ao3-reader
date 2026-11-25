@@ -19,8 +19,9 @@ enum QueueSourceChecks {
     /// Rails honours the last one, so checking only the first is not enough.
     nonisolated static func isPageOneListing(_ url: URL) -> Bool {
         guard url.port == nil,
-              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
-        else { return url.port == nil }
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return false }
+        guard let items = components.queryItems else { return true }
         return items.allSatisfy { $0.name.lowercased() != "page" || $0.value == "1" }
     }
 

@@ -586,7 +586,7 @@ struct QueueSourceBackupTests {
 
     @Test func aRemovalTravelsAsItsOwnTombstoneAndANewerReAddSurvives() throws {
         let shared = UUID()
-        let removedID = UUID()
+        let removedID = UUID()  // this device's own UUID for alice; the tombstone does not use it
         let keptID = UUID()
         let defaults = try self.defaults()
         let peer = TombstoneSigning.makePrivateKey()
@@ -606,7 +606,8 @@ struct QueueSourceBackupTests {
         peerContext.insert(authorLink(peerQueue, "carol", added: 6_000))
         peerQueue.sourcesModifiedAt = Date(timeIntervalSince1970: 6_000)
         let tombstone = SyncTombstone(
-            recordID: removedID, recordType: .queueSource, createdAt: Date(timeIntervalSince1970: 5_000)
+            recordID: QueueSourceDraft.tombstoneID(queue: peerQueue, dedupKey: "author|user:alice"),
+            recordType: .queueSource, createdAt: Date(timeIntervalSince1970: 5_000)
         )
         tombstone.lastModifiedAt = Date(timeIntervalSince1970: 5_000)
         TombstoneSigning.sign(tombstone, key: peer)
@@ -700,6 +701,88 @@ struct QueueSourceBackupTests {
         let link = try #require(try queue(q.id, in: target).nonSearchSources.first)
         #expect(link.targetKey == "user:alice")
         #expect(link.sourceDraft != nil)
+    }
+
+    @Test func aRemovalSettlesAcrossDifferentUUIDsAndWhenSourcesIsOmitted() throws {
+        let shared = UUID()
+        let defaults = try self.defaults()
+        let peer = TombstoneSigning.makePrivateKey()
+        #expect(TombstoneTrustStore.add(TombstoneSigning.publicKeyHex(of: peer), defaults: defaults))
+
+        // This device added alice under its own UUID; the peer added her under another and removed her.
+        let local = try context()
+        let q = ReadingQueue(id: shared, name: "Queue")
+        local.insert(q)
+        local.insert(authorLink(q, "alice", id: UUID(), added: 1_000))
+        let nodate = authorLink(q, "bob", id: UUID(), added: 1_000)
+        nodate.dateAdded = nil
+        local.insert(nodate)
+        try local.save()
+
+        let peerContext = try context()
+        let peerQueue = ReadingQueue(id: shared, name: "Queue")
+        peerContext.insert(peerQueue)
+        try peerContext.save()  // no sources, no stamp: the archive omits `sources`
+        func tombstone(for name: String) -> SyncTombstone {
+            let key = QueueSourceDraft.dedupKey(
+                kindRaw: "author", targetKey: QueueSourceDraft.authorTargetKey(username: name, pseud: nil),
+                fallbackID: UUID()
+            )
+            let t = SyncTombstone(
+                recordID: QueueSourceDraft.tombstoneID(queue: peerQueue, dedupKey: key),
+                recordType: .queueSource, createdAt: Date(timeIntervalSince1970: 5_000)
+            )
+            t.lastModifiedAt = Date(timeIntervalSince1970: 5_000)
+            TombstoneSigning.sign(t, key: peer)
+            return t
+        }
+        let contents = try archive(of: peerQueue, tombstones: [tombstone(for: "alice"), tombstone(for: "bob")])
+        _ = try KudosBackupService.restore(contents, into: local, defaults: defaults, mode: .reconcile)
+        #expect(try queue(shared, in: local).nonSearchSources.isEmpty)
+    }
+
+    @Test func aRemovedSourceAddedAgainLaterComesBack() throws {
+        let shared = UUID()
+        let defaults = try self.defaults()
+        let peer = TombstoneSigning.makePrivateKey()
+        #expect(TombstoneTrustStore.add(TombstoneSigning.publicKeyHex(of: peer), defaults: defaults))
+        let local = try context()
+        let q = ReadingQueue(id: shared, name: "Queue")
+        local.insert(q)
+        // Re-added at t=9000, after the removal at t=5000, under a new UUID.
+        local.insert(authorLink(q, "alice", added: 9_000))
+        try local.save()
+        let peerContext = try context()
+        let peerQueue = ReadingQueue(id: shared, name: "Queue")
+        peerContext.insert(peerQueue)
+        try peerContext.save()
+        let t = SyncTombstone(
+            recordID: QueueSourceDraft.tombstoneID(queue: peerQueue, dedupKey: "author|user:alice"),
+            recordType: .queueSource, createdAt: Date(timeIntervalSince1970: 5_000)
+        )
+        t.lastModifiedAt = Date(timeIntervalSince1970: 5_000)
+        TombstoneSigning.sign(t, key: peer)
+        _ = try KudosBackupService.restore(
+            try archive(of: peerQueue, tombstones: [t]), into: local, defaults: defaults, mode: .reconcile
+        )
+        #expect(try queue(shared, in: local).nonSearchSources.count == 1)
+    }
+
+    @Test func aVisitNewerThanTheCheckZeroesTheRestoredCount() throws {
+        let source = try context()
+        let q = ReadingQueue(name: "Queue")
+        source.insert(q)
+        let link = authorLink(q, "alice")
+        link.lastCheckedAt = Date(timeIntervalSince1970: 2_000)
+        link.lastOpenedAt = Date(timeIntervalSince1970: 3_000)
+        link.newResultCount = 9
+        source.insert(link)
+        q.sourcesModifiedAt = Date(timeIntervalSince1970: 1_000)
+        try source.save()
+        let target = try context()
+        _ = try KudosBackupService.restore(try archive(of: q), into: target, defaults: try defaults())
+        let restored = try #require(try queue(q.id, in: target).nonSearchSources.first)
+        #expect(restored.newResultCount == 0)
     }
 }
 }

@@ -34,6 +34,13 @@ enum DemoLibrary {
             work.ao3WorkID = nil
             changed = true
         }
+        // Demo queue sources are stamped `.distantFuture` (never due for a count);
+        // outside demo mode they are fabricated rows, so they go.
+        for link in (try? context.fetch(FetchDescriptor<QueueSavedSearchLink>())) ?? []
+        where link.lastCheckedAt == .distantFuture {
+            context.delete(link)
+            changed = true
+        }
         if changed { try? context.save() }
     }
 
@@ -217,8 +224,8 @@ enum DemoLibrary {
         try? Data(repeating: 0, count: 2_048).write(to: url)
     }
 
-    /// Sources on the first demo queue for the Queue-Sources shots. Each is stamped as
-    /// just checked, so opening the queue starts no count request (the 6 h cooldown).
+    /// Sources on the first demo queue for the Queue-Sources shots. Each is stamped
+    /// `.distantFuture`, so no count is ever due (and `clearSentinelIDs` removes them outside demo mode).
     private static func seedSources(for queue: ReadingQueue, in context: ModelContext) {
         var filters = AO3SearchFilters()
         filters.sort = .dateUpdated
@@ -237,7 +244,7 @@ enum DemoLibrary {
         for draft in drafts { ReadingQueueService.addSource(draft, to: queue, in: context) }
         let counts = [3, 20, 0, 7, 1, 0]
         for (link, count) in zip(queue.searchLinks.sorted { $0.effectiveDisplayName < $1.effectiveDisplayName }, counts) {
-            link.lastCheckedAt = Date()
+            link.lastCheckedAt = .distantFuture
             link.newResultCount = count
         }
     }

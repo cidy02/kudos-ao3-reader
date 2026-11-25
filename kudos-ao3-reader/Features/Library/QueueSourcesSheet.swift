@@ -121,6 +121,7 @@ struct QueueSourcesSheet: View {
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @Query private var savedSeries: [SavedSeries]
+    @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 22
     @State private var showingAddSource = false
 
     private var savedSeriesByID: [Int: SavedSeries] {
@@ -314,7 +315,7 @@ struct QueueSourcesSheet: View {
             HStack(alignment: .center, spacing: 10) {
                 Image(systemName: kind.symbolName)
                     .foregroundStyle(.secondaryInk)
-                    .frame(width: 22)
+                    .frame(width: iconWidth)
                     .accessibilityHidden(true)
                 layout {
                     VStack(alignment: .leading, spacing: 2) {

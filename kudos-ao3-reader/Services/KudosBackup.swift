@@ -3551,6 +3551,24 @@ enum KudosBackupService {
         if work.preservedAt == nil { work.preservedAt = Date() }
     }
 
+    /// Deletes local non-search sources a trusted tombstone says were removed
+    /// elsewhere. Runs for every restored queue, whether or not the archive carries
+    /// `sources` (an archive from a device whose list is empty and unstamped omits
+    /// it but still carries the tombstones). Matched by `dedupKey`, never by row id.
+    private static func sweepRemovedQueueSources(
+        in queue: ReadingQueue, tombstones: TombstoneIndex, context: ModelContext
+    ) {
+        for link in queue.searchLinks where !link.isSavedSearchSource {
+            if case .suppressStaleData = tombstones.queueSourceResolution(
+                id: QueueSourceDraft.tombstoneID(queue: queue, dedupKey: link.dedupKey),
+                incomingModifiedAt: link.dateAdded ?? .distantPast
+            ) {
+                queue.searchLinks.removeAll { $0.id == link.id }
+                context.delete(link)
+            }
+        }
+    }
+
     /// Restores additive non-search queue sources (author, series, tag, and unknown
     /// kinds preserved verbatim).
     ///
@@ -3599,12 +3617,6 @@ enum KudosBackupService {
                 drop(link, tombstone: link.isKnownSource)
             }
             queue.sourcesModifiedAt = sourceStamp
-        } else {
-            for link in queue.searchLinks where !link.isSavedSearchSource {
-                if case .suppressStaleData = tombstones.queueSourceResolution(
-                    id: link.id, incomingModifiedAt: link.dateAdded
-                ) { drop(link, tombstone: false) }
-            }
         }
         var seenKeys = Set<String>()
         for entry in validIncoming {
@@ -3613,7 +3625,8 @@ enum KudosBackupService {
             guard seenKeys.insert(dedup).inserted else { continue }
             if mode != .replaceLibrary,
                case .suppressStaleData = tombstones.queueSourceResolution(
-                   id: entry.id, incomingModifiedAt: entry.dateAdded
+                   id: QueueSourceDraft.tombstoneID(queue: queue, dedupKey: dedup),
+                   incomingModifiedAt: entry.dateAdded ?? .distantPast
                ) { continue }
             let link: QueueSavedSearchLink
             let isReplacing = mode == .replaceLibrary
@@ -4699,6 +4712,9 @@ enum KudosBackupService {
                         link.newResultCount = 0
                     }
                 }
+            }
+            if mode != .replaceLibrary {
+                sweepRemovedQueueSources(in: queue, tombstones: tombstones, context: context)
             }
             if let nonSearchSources = archived.sources {
                 restoreQueueNonSearchSources(

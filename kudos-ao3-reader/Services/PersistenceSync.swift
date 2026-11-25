@@ -585,7 +585,7 @@ enum SyncTombstones {
     static func recordDeletion(of source: QueueSavedSearchLink, in context: ModelContext) {
         insertSigned(
             SyncTombstone(
-                recordID: source.id,
+                recordID: QueueSourceDraft.tombstoneID(queue: source.queue, dedupKey: source.dedupKey),
                 recordType: .queueSource,
                 createdAt: TombstoneSigning.now(),
                 deletedOnDeviceID: PersistenceDevice.currentID(),

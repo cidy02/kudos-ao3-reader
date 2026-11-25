@@ -311,7 +311,7 @@ struct QueueSourceChecksTests {
         #expect(selectedIDs == expected)
     }
 
-    @Test func runFetchedEnforcesSequentialSpacingCancellationAndPageReuse() async throws {
+    @Test func runFetchedEnforcesSequentialSpacingAndStrictlyOneRequestAtATime() async throws {
         var now = Date(timeIntervalSince1970: 100_000)
         var starts: [Date] = []
         var inFlight = 0
@@ -451,6 +451,10 @@ struct QueueSourceChecksTests {
         #expect(accepted("https://archiveofourown.org:8443/tags/Fluff/works") == fallback)
         #expect(accepted("http://archiveofourown.org/tags/Fluff/works") == fallback)
         #expect(accepted("https://archiveofourown.org/tags/Fluff/works/extra") == fallback)
+        #expect(accepted("https://archiveofourown.org/tags/../works") == fallback)
+        #expect(accepted("https://archiveofourown.org/tags/%2e%2e/works") == fallback)
+        #expect(accepted("https://archiveofourown.org/tags/Fluff/works?PAGE=2") == fallback)
+        #expect(accepted("https://archiveofourown.org/tags/Fluff/works#x") == fallback)
 
         // A stored row (restored from a backup) is held to the same rule.
         let context = try testContext()

@@ -1647,7 +1647,9 @@ extension ReadingQueueBrowserView {
         sourceCheckQueueID = selectedQueueID
         sourceCheckTask = Task {
             await previous?.value
-            guard !Task.isCancelled else { return }
+            // The queue may have been deleted or left while the previous pass wound down.
+            guard !Task.isCancelled, !selectedQueue.isDeleted, selectedQueue.modelContext != nil,
+                  self.selectedQueueID == selectedQueue.id else { return }
             await checkSources(in: selectedQueue)
         }
     }
@@ -1693,6 +1695,7 @@ extension ReadingQueueBrowserView {
         switch kind {
         case .savedSearch:
             guard let search = link.search else { return }
+            defer { sourcePages.removeValue(forKey: link.id) }
             let cachedPage = QueueSourceChecks.cachedFetchForFindMore(
                 sourcePages[link.id],
                 listingURL: link.listingURL,

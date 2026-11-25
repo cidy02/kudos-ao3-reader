@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SwiftData
 
@@ -9,7 +10,7 @@ nonisolated struct QueueSourceFetchedPage: Sendable {
     let page: AO3SearchPage
     let html: String
     /// When the anonymous fetch finished. Find More reuses a page only while
-    /// it is younger than `QueueSourceChecks.cooldown`.
+    /// it is younger than `QueueSourceChecks.findMoreReuseTTL`.
     var fetchedAt: Date = Date()
 }
 
@@ -93,9 +94,28 @@ nonisolated struct QueueSourceDraft: Identifiable, Hashable, Sendable {
     /// for a tag (`/tags/<name>/works`) on the default port; a tag info page,
     /// a work, or another port is never fetched under the counts feature.
     static func isTagWorksURL(_ url: URL) -> Bool {
-        guard AO3RequestDefaults.isTrustedURL(url), url.port == nil else { return false }
-        let parts = url.pathComponents
-        return parts.count == 4 && parts[1] == "tags" && parts[3] == "works"
+        guard AO3RequestDefaults.isTrustedURL(url), url.port == nil,
+              url.query == nil, url.fragment == nil
+        else { return false }
+        // Raw segments, so `%2e%2e` is caught too; a dot segment is a traversal.
+        let parts = url.path(percentEncoded: true).split(separator: "/", omittingEmptySubsequences: false)
+            .map { String($0).removingPercentEncoding ?? String($0) }
+        return parts.count == 4 && parts[0].isEmpty && parts[1] == "tags" && parts[3] == "works"
+            && !parts[2].isEmpty && parts[2] != "." && parts[2] != ".."
+            && !url.pathComponents.contains(where: { $0 == "." || $0 == ".." })
+    }
+
+    /// The id a removal's tombstone carries: derived from the queue and the
+    /// source's identity, never from the row's own UUID, so two devices that each
+    /// added the same source (different UUIDs) still agree on its tombstone.
+    /// Want to Read has a different id on every device, so it uses a fixed one.
+    static func tombstoneID(queue: ReadingQueue?, dedupKey: String) -> UUID {
+        let scope = queue.map { $0.kind == .savedForLater ? "savedForLater" : $0.id.uuidString.lowercased() } ?? ""
+        let digest = Array(SHA256.hash(data: Data("queueSource|\(scope)|\(dedupKey)".utf8)).prefix(16))
+        return UUID(uuid: (
+            digest[0], digest[1], digest[2], digest[3], digest[4], digest[5], digest[6], digest[7],
+            digest[8], digest[9], digest[10], digest[11], digest[12], digest[13], digest[14], digest[15]
+        ))
     }
 
     static func authorTargetKey(username: String, pseud: String?) -> String {

@@ -311,6 +311,7 @@ struct QueuePageHeader<FilterRail: View>: View {
     @ViewBuilder var filterRail: () -> FilterRail
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 20
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
 
@@ -402,7 +403,7 @@ struct QueuePageHeader<FilterRail: View>: View {
             HStack(spacing: 10) {
                 Image(systemName: kind.symbolName)
                     .foregroundStyle(.secondaryInk)
-                    .frame(width: 20)
+                    .frame(width: iconWidth)
                     .accessibilityHidden(true)
                 layout {
                     VStack(alignment: .leading, spacing: 2) {
