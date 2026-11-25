@@ -150,3 +150,11 @@ owner decisions document for me to review later". Each row below is one such cal
 | **T-521 Reader Response calibration** | **Not started overnight; still waits for your yes.** | About 1,400 anonymous AO3 requests over several days — new AO3 traffic needs your explicit approval (networking policy); nothing in tonight's instruction covers it. |
 | **Android: a deletion marker of an unknown kind** (Android owner decision 18, unanswered since 2026-10-08) | **A — skip it like iOS; a blank kind still fails.** Landed `753c36320`. | Its premise ("cannot happen today") was no longer true: iOS writes followedTag/tagAlias markers, so Android imports of such iOS backups or sync folders failed; T-530 adds a third kind. |
 | **Overnight order** | iPhone: BUG-14 redo and T-573 (both in confirmation review) → T-530 → T-531 → T-537 → T-536c → T-535k (non-device parts) → T-507. Then Android parity: A-573 first (in progress), then A-509c, A-511, A-512, A-506/458/505, A-459/465, A-475+, A-513. Data-architecture docs (D4/D5/P3) continue in parallel on Codex. | Finishes what is nearly done first, then the iPhone queue in TASKS order, then Android in the order of its parity list. |
+
+## Writing Studio — owner decisions (2026-11-25)
+
+| Question | Decision | Why |
+|---|---|---|
+| **What the Writing tab is** | **Writing Studio:** "a dashboard for everything writing related, almost like it's own app … a word processor and writing dashboard and comments manager and stats board all in one", with file management for the works. Design in progress on the canvas's Writing page. | Owner, 2026-11-25. |
+| **Writing without an AO3 account** | **The offline features work signed out** ("the user need not be logged in to use the offline features of the writing tab"): documents, the editor, local drafts, word counts and goals. Comments, stats, posting and AO3 drafts need an account. | Owner, 2026-11-25. |
+| **How a signed-out person with no draft reaches the Writing tab** | **A "Start Writing" entry** in the account sheet and in Settings. It creates the first document on the device; the existing rule (T-513: the tab shows for an account that writes or when Kudos holds a local draft) then shows the tab. The tab bar stays lean for readers. | Owner chose this over "always show the tab", 2026-11-25. |
