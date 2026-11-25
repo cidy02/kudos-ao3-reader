@@ -689,7 +689,12 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
         }) {
             builder.registerFandom(tally.name)
         }
-        for rel in taste.relationships + taste.allRelationships {
+        let sortedAllRelationships = taste.allRelationships.sorted { (lhs: RelationshipShare, rhs: RelationshipShare) -> Bool in
+            if lhs.words != rhs.words { return lhs.words > rhs.words }
+            if lhs.worksCount != rhs.worksCount { return lhs.worksCount > rhs.worksCount }
+            return lhs.name < rhs.name
+        }
+        for rel in taste.relationships + sortedAllRelationships {
             builder.registerShip(rel.name)
             if !rel.fandom.isEmpty { builder.registerFandom(rel.fandom) }
         }
@@ -700,7 +705,12 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
             builder.registerCharacter(charItem.name)
             if !charItem.fandom.isEmpty { builder.registerFandom(charItem.fandom) }
         }
-        (taste.tags + taste.allTags).forEach { builder.registerTag($0.name) }
+        let sortedAllTags = taste.allTags.sorted { (lhs: ReadingTasteInsights.TagShare, rhs: ReadingTasteInsights.TagShare) -> Bool in
+            if lhs.words != rhs.words { return lhs.words > rhs.words }
+            if lhs.count != rhs.count { return lhs.count > rhs.count }
+            return lhs.name < rhs.name
+        }
+        (taste.tags + sortedAllTags).forEach { builder.registerTag($0.name) }
         for pair in taste.oftenTogether {
             builder.registerTag(pair.tagA)
             builder.registerTag(pair.tagB)

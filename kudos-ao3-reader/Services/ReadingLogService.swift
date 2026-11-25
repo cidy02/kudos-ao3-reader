@@ -775,7 +775,9 @@ enum ReadingLogService {
                 publishedYear: session.publishedYear,
                 ao3SeriesID: session.ao3SeriesID,
                 seriesPosition: session.seriesPosition,
-                ao3WorkID: session.ao3WorkID
+                ao3WorkID: session.ao3WorkID,
+                sourceURL: session.sourceURL,
+                workWordCount: (work?.wordCount ?? 0) > 0 ? work?.wordCount : nil
             )
         }
     }

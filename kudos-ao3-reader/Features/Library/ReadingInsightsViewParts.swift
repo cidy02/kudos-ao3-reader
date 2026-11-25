@@ -1260,16 +1260,32 @@ struct TasteFandomsCard: View {
                                 .truncationMode(.tail)
                                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                            Text("\(f.worksCount) \(f.worksCount == 1 ? "work" : "works")")
-                                .font(.caption)
-                                .foregroundStyle(.secondaryInk)
+                            let worksText = "\(f.worksCount) \(f.worksCount == 1 ? "work" : "works")"
+                            if rankByWorks {
+                                if f.words > 0 {
+                                    Text(formatK(f.words))
+                                        .font(.caption)
+                                        .monospacedDigit()
+                                        .foregroundStyle(.secondaryInk)
+                                }
+                                Text(worksText)
+                                    .font(.subheadline.weight(.semibold))
+                                    .monospacedDigit()
+                                    .lineLimit(1)
+                                    .fixedSize()
+                                    .frame(minWidth: 44, alignment: .trailing)
+                            } else {
+                                Text(worksText)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondaryInk)
 
-                            Text(formatK(f.words))
-                                .font(.subheadline.weight(.semibold))
-                                .monospacedDigit()
-                                .lineLimit(1)
-                                .fixedSize()
-                                .frame(minWidth: 44, alignment: .trailing)
+                                Text(formatK(f.words))
+                                    .font(.subheadline.weight(.semibold))
+                                    .monospacedDigit()
+                                    .lineLimit(1)
+                                    .fixedSize()
+                                    .frame(minWidth: 44, alignment: .trailing)
+                            }
                         }
 
                         // Progress bar
@@ -1826,13 +1842,35 @@ struct HabitsCalendarCard: View {
     let longestStreak: Int
     let thresholds: [Int]
     var totalDaysElapsed: Int? = nil
+    var isMonthPeriod: Bool = false
     @Environment(ThemeManager.self) private var theme
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
     private let weekdayInitials = ["M", "T", "W", "T", "F", "S", "S"]
 
+    /// True only for a real single-month period with a contiguous 1…N day sequence
+    /// inside one calendar month; never true for Year-mode active-day lists.
+    static func isContiguousMonthGrid(
+        days: [ReadingInsights.DailyWordsBucket],
+        isMonthPeriod: Bool,
+        calendar: Calendar = .current
+    ) -> Bool {
+        guard isMonthPeriod, !days.isEmpty, days.count <= 31, let first = days.first else {
+            return false
+        }
+        let firstParts = calendar.dateComponents([.year, .month], from: first.date)
+        for (offset, bucket) in days.enumerated() {
+            guard bucket.dayNumber == offset + 1 else { return false }
+            let parts = calendar.dateComponents([.year, .month], from: bucket.date)
+            guard parts.year == firstParts.year && parts.month == firstParts.month else {
+                return false
+            }
+        }
+        return true
+    }
+
     private var isMonthGrid: Bool {
-        days.first?.dayNumber == 1 && days.count <= 31
+        Self.isContiguousMonthGrid(days: days, isMonthPeriod: isMonthPeriod)
     }
 
     private var leadingBlankCount: Int {
@@ -2561,7 +2599,10 @@ struct LibraryStillReadingCard: View {
                 Text("Still reading \(workLabel)?")
                     .font(.subheadline.weight(.semibold))
 
-                Text(candidate.chapterProgress)
+                let progressText = discreetMode && !candidate.discreetChapterProgress.isEmpty
+                    ? candidate.discreetChapterProgress
+                    : candidate.chapterProgress
+                Text(progressText)
                     .font(.caption)
                     .foregroundStyle(.secondaryInk)
             }

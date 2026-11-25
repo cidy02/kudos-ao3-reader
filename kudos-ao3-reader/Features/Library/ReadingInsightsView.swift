@@ -648,7 +648,8 @@ struct ReadingInsightsView: View {
                 days: habits.calendarDays,
                 longestStreak: habits.longestStreak,
                 thresholds: habits.calendarWordThresholds,
-                totalDaysElapsed: totalDaysElapsedInPeriod
+                totalDaysElapsed: totalDaysElapsedInPeriod,
+                isMonthPeriod: range == .month && habits.calendarIsMonthGrid
             )
 
             HabitsSittingsCard(

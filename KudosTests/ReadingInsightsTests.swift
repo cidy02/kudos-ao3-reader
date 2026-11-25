@@ -958,8 +958,10 @@ struct ReadingInsightsTests {
     @Test func deletedWorkKeepsVerifiedCoauthorTotalsFromSessionSnapshot() {
         let deletedID = UUID()
         var first = fact(work: deletedID, on: 1, minutes: 20, words: 400)
+        first.ao3WorkID = 501
         first.authorAccounts = ["writer", "partner"]
         var finish = fact(work: deletedID, on: 2, minutes: 20, words: 600, didFinish: true)
+        finish.ao3WorkID = 501
         finish.authorAccounts = ["writer", "partner"]
         let interval = DateInterval(start: day(1), end: day(3))
         let result = ReadingLibraryInsights.make(
@@ -1382,6 +1384,7 @@ struct ReadingInsightsTests {
         var queuedFact = fact(work: queued.id, on: 2, minutes: 20, words: 1_500, didFinish: true)
         queuedFact.authorAccounts = ["raw_pseud"]
         var deletedFact = fact(work: deletedID, on: 3, minutes: 20, words: 2_000, didFinish: true)
+        deletedFact.ao3WorkID = 801
         deletedFact.authorAccounts = [
             "deleted_writer", "Anonymous", "anonymous", "orphan_account", "old_pseud (orphan_account)"
         ]
@@ -1720,5 +1723,236 @@ struct ReadingInsightsTests {
         #expect(taste.medianYear == 2020)
         #expect(taste.shipConcentrations.count == 2)
         #expect(taste.shipConcentrations.allSatisfy { $0.percentage == 100 })
+    }
+
+    @MainActor
+    @Test func yearModeCalendarNeverTreatsScatteredDaysAsMonthGrid() {
+        let yearPeriod = DateInterval(start: instant(month: 1, 1, 0), end: instant(month: 12, 31, 23))
+        let scattered = [
+            sitting(at: instant(month: 1, 1, 12), minutes: 30, words: 5_000),
+            sitting(at: instant(month: 1, 10, 12), minutes: 30, words: 4_000),
+            sitting(at: instant(month: 3, 5, 12), minutes: 30, words: 6_000),
+            sitting(at: instant(month: 10, 12, 12), minutes: 30, words: 7_000)
+        ]
+        let yearHabits = ReadingHabitsInsights.make(
+            works: [],
+            facts: scattered,
+            allFacts: scattered,
+            periodInterval: yearPeriod,
+            calendar: calendar,
+            now: instant(month: 10, 15, 12)
+        )
+        #expect(yearHabits.calendarDays.count == 4)
+        #expect(yearHabits.calendarDays.first?.dayNumber == 1)
+        #expect(!yearHabits.calendarIsMonthGrid)
+        #expect(!HabitsCalendarCard.isContiguousMonthGrid(
+            days: yearHabits.calendarDays,
+            isMonthPeriod: yearHabits.calendarIsMonthGrid,
+            calendar: calendar
+        ))
+        // Even if `isMonthPeriod` were passed true, scattered multi-month buckets are still not a month grid.
+        #expect(!HabitsCalendarCard.isContiguousMonthGrid(
+            days: yearHabits.calendarDays,
+            isMonthPeriod: true,
+            calendar: calendar
+        ))
+
+        let octPeriod = DateInterval(start: instant(month: 10, 1, 0), end: instant(month: 11, 1, 0))
+        let octHabits = ReadingHabitsInsights.make(
+            works: [],
+            facts: [scattered[3]],
+            allFacts: scattered,
+            periodInterval: octPeriod,
+            calendar: calendar,
+            now: instant(month: 10, 15, 12)
+        )
+        #expect(octHabits.calendarIsMonthGrid)
+        #expect(octHabits.calendarDays.count == 15)
+        #expect(HabitsCalendarCard.isContiguousMonthGrid(
+            days: octHabits.calendarDays,
+            isMonthPeriod: octHabits.calendarIsMonthGrid,
+            calendar: calendar
+        ))
+    }
+
+    @Test func deletedAO3PseudFoldsIntoAccountAndDeletedLocalEPUBIsExcludedFromAuthors() {
+        let liveWork = SavedWork(title: "Live AO3", author: "quietharbor")
+        liveWork.ao3WorkID = 900
+        liveWork.isFinished = true
+        liveWork.verifiedAuthorIdentities = [
+            AO3AuthorIdentity(route: AO3AuthorRoute(username: "quietharbor")!)
+        ]
+
+        let liveFact = fact(work: liveWork.id, on: 1, minutes: 30, words: 4_000, didFinish: true)
+
+        // Deleted AO3 work posted under a pseud: displayName "penname (quietharbor)" must fold into "quietharbor".
+        let deletedPseudID = UUID()
+        var deletedPseudFact = fact(work: deletedPseudID, on: 2, minutes: 30, words: 6_000, didFinish: true)
+        deletedPseudFact.ao3WorkID = 901
+        deletedPseudFact.authorAccounts = ["penname (quietharbor)"]
+
+        // Deleted AO3 work identified via AO3 sourceURL only: still folds into "quietharbor".
+        let deletedURLOnlyID = UUID()
+        var deletedURLFact = fact(work: deletedURLOnlyID, on: 3, minutes: 20, words: 2_000, didFinish: false)
+        deletedURLFact.sourceURL = "https://archiveofourown.org/works/902"
+        deletedURLFact.authorAccounts = ["alt_pseud (quietharbor)"]
+
+        // Deleted non-AO3 local EPUB: must NOT materialize in Library -> Authors.
+        let deletedLocalID = UUID()
+        var deletedLocalFact = fact(work: deletedLocalID, on: 4, minutes: 30, words: 9_000, didFinish: true)
+        deletedLocalFact.authorAccounts = ["Jane Austen"]
+
+        let all = [liveFact, deletedPseudFact, deletedURLFact, deletedLocalFact]
+        let library = ReadingLibraryInsights.make(
+            works: [liveWork],
+            readingWorks: [liveWork],
+            facts: all,
+            allFacts: all,
+            periodInterval: DateInterval(start: day(1, hour: 0), end: day(10, hour: 0)),
+            calendar: calendar
+        )
+        #expect(library.authors.count == 1)
+        #expect(library.authors.first?.name == "quietharbor")
+        #expect(library.authors.first?.works == 3)
+        #expect(library.authors.first?.words == 12_000)
+        #expect(library.authors.first?.finished == 2)
+        #expect(!library.authors.contains { $0.name == "Jane Austen" || $0.name.contains("penname") })
+    }
+
+    @Test func weeklyBucketsAndHabitsFallbacksUseReadingDay() {
+        // Jan 1 2026 at 01:30 UTC belongs to Dec 31 2025 under the 4:00-to-4:00 readingDay rule.
+        let newYearsNight = sitting(at: instant(month: 1, 1, 1, 30), minutes: 30, words: 6_000, tzHours: 0)
+        var labeled = newYearsNight
+        labeled.fandom = "Persuasion"
+        let habits = ReadingHabitsInsights.make(
+            works: [],
+            facts: [labeled],
+            allFacts: [labeled],
+            periodInterval: nil,
+            calendar: calendar,
+            now: instant(month: 1, 2, 12)
+        )
+        #expect(habits.fandomTimelineYear == 2025)
+
+        let dec31Day = ReadingInsights.readingDay(for: labeled, calendar: calendar)
+        let expectedWeek = calendar.dateInterval(of: .weekOfYear, for: dec31Day)?.start
+        let buckets = ReadingInsights.weeklyBuckets(from: [labeled], calendar: calendar)
+        #expect(buckets.first?.weekStart == expectedWeek)
+    }
+
+    @MainActor
+    @Test func stoppedSheetProgressSummaryHidesCustomChapterTitleInDiscreetMode() {
+        let work = SavedWork(title: "Secret Fic", author: "Author")
+        work.chapters = "4/10"
+        work.lastSpineIndex = 3
+        work.lastReadDate = day(1)
+        work.readiumLocator = "{\"href\":\"c4.xhtml\",\"title\":\"Chapter 4: SecretShip Kiss\",\"locations\":{\"totalProgression\":0.58}}"
+
+        let visible = InsightsStoppedSheet.progressSummary(for: work, discreetMode: false)
+        #expect(visible.contains("SecretShip Kiss"))
+        #expect(visible.contains("58%"))
+
+        let discreet = InsightsStoppedSheet.progressSummary(for: work, discreetMode: true)
+        #expect(!discreet.contains("SecretShip"))
+        #expect(discreet.contains("Chapter 4 of 10"))
+        #expect(discreet.contains("58%"))
+
+        let library = ReadingLibraryInsights.make(
+            works: [work], facts: [], periodInterval: DateInterval(start: day(1), end: day(31)),
+            calendar: calendar, now: day(31)
+        )
+        #expect(library.stillReadingCandidate?.chapterProgress.contains("SecretShip Kiss") == true)
+        #expect(library.stillReadingCandidate?.discreetChapterProgress == "Chapter 4 of 10 · 58%")
+    }
+
+    @MainActor
+    @Test func overviewLengthMixAndTasteLengthBandsMatchOnGrowingWIP() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self, WorkCollection.self,
+            ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self,
+            QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self,
+            ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self,
+            FollowedTag.self, TagAlias.self, SavedSeries.self
+        ])
+        let container = try ModelContainer(
+            for: schema,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        )
+        let context = container.mainContext
+
+        // WIP was 40k (5–50k) during sitting 1, then grew to 60k (50–150k) by now.
+        let wip = SavedWork(title: "Growing WIP", author: "A")
+        wip.wordCount = 60_000
+        wip.workFandoms = ["Persuasion"]
+        context.insert(wip)
+
+        let session = ReadingSession(
+            workID: wip.id,
+            startedAt: instant(month: 10, 5, 12),
+            endedAt: instant(month: 10, 5, 13),
+            durationSeconds: 3_600,
+            tzOffsetSeconds: 0,
+            startProgress: 0,
+            endingProgress: 0.5,
+            wordCount: 40_000,
+            didFinish: false
+        )
+        session.snapshot(from: wip)
+        context.insert(session)
+        try context.save()
+
+        let octPeriod = DateInterval(start: instant(month: 10, 1, 0), end: instant(month: 11, 1, 0))
+        let gathered = ReadingLogService.gatherInsights(
+            for: octPeriod,
+            previousPeriod: nil,
+            works: [wip],
+            readingWorks: [wip],
+            calendar: calendar,
+            context: context,
+            now: instant(month: 10, 15, 12)
+        )
+        #expect(gathered.insights.lengthMix.from50kTo150k == 1)
+        #expect(gathered.insights.lengthMix.from5kTo50k == 0)
+        #expect(gathered.taste?.lengthBands.first { $0.label == "50–150k" }?.count == 1)
+        #expect(gathered.taste?.lengthBands.first { $0.label == "5–50k" } == nil)
+    }
+
+    @MainActor
+    @Test func discreetMaskerRegistersTasteCharacterEntriesDeterministically() {
+        let w1 = SavedWork(title: "JP 1", author: "A")
+        w1.language = "Japanese"
+        w1.wordUnitRaw = SavedWork.WordUnit.characters.rawValue
+        w1.workFandoms = ["Fandom JP"]
+        w1.workRelationships = ["Zeta/Omega"]
+        w1.workFreeforms = ["Zebra Trope"]
+
+        let w2 = SavedWork(title: "JP 2", author: "A")
+        w2.language = "Japanese"
+        w2.wordUnitRaw = SavedWork.WordUnit.characters.rawValue
+        w2.workFandoms = ["Fandom JP"]
+        w2.workRelationships = ["Alpha/Beta"]
+        w2.workFreeforms = ["Alpha Trope"]
+
+        var f1 = fact(work: w1.id, on: 1, minutes: 20, words: 2_000, fandom: "Fandom JP")
+        f1.wordUnit = .characters
+        var f2 = fact(work: w2.id, on: 2, minutes: 20, words: 2_000, fandom: "Fandom JP")
+        f2.wordUnit = .characters
+
+        let taste = ReadingTasteInsights.make(works: [w1, w2], facts: [f1, f2])
+        let seed = InsightsDiscreetMasker.ScreenSeed(
+            insights: ReadingInsights.make(facts: [f1, f2], calendar: calendar),
+            taste: taste,
+            habits: nil,
+            library: nil,
+            stats: nil,
+            finishedWorks: [],
+            works: [w1, w2],
+            sessions: []
+        )
+        let masker = InsightsDiscreetMasker.forScreen(seed)
+        #expect(masker.ship("Alpha/Beta") == "Ship A")
+        #expect(masker.ship("Zeta/Omega") == "Ship B")
+        #expect(masker.tag("Alpha Trope") == "Tag A")
+        #expect(masker.tag("Zebra Trope") == "Tag B")
     }
 }

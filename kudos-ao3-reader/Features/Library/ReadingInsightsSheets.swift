@@ -68,9 +68,11 @@ struct InsightsStoppedSheet: View {
 
     /// Builds the board's chapter / progress / last-read context line (e.g.
     /// "Chapter 7 of 12 · 58% · last read Oct 6"), omitting unrecorded parts.
-    static func progressSummary(for work: SavedWork) -> String {
+    /// In Discreet Mode, free-text Readium chapter titles are replaced by numeric
+    /// chapter counts so custom AO3 titles cannot leak ship or character names.
+    static func progressSummary(for work: SavedWork, discreetMode: Bool = false) -> String {
         var parts: [String] = []
-        if let locatorTitle = WorkReadingPosition.title(from: work.readiumLocator) {
+        if !discreetMode, let locatorTitle = WorkReadingPosition.title(from: work.readiumLocator) {
             parts.append(locatorTitle)
         } else if work.postedChapterCount > 0 {
             let current = min(work.postedChapterCount, max(1, work.lastSpineIndex + 1))
@@ -96,7 +98,7 @@ struct InsightsStoppedSheet: View {
                     }
                     Text(discreetMode ? discreetMasker.work(id: work.id, title: work.title) : work.title)
                         .font(.headline)
-                    let progressLine = Self.progressSummary(for: work)
+                    let progressLine = Self.progressSummary(for: work, discreetMode: discreetMode)
                     if !progressLine.isEmpty {
                         Text(progressLine)
                             .font(.footnote)

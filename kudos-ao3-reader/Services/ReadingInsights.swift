@@ -43,7 +43,7 @@ nonisolated struct ReadingSessionFacts: Equatable, Sendable {
     var mode: ReadingSession.Mode = .read
     /// Measurement unit for the work's counts (`.words` vs `.characters`).
     var wordUnit: SavedWork.WordUnit = .words
-    /// Registered AO3 accounts captured at visit; survives deletion of the work.
+    /// Author byline snapshot captured at visit (verified display names or comma-split author); survives deletion of the work.
     var authorAccounts: [String] = []
     /// Playback rate for `.listen` sittings (`ReadingSession.playbackRate`), when recorded (D4).
     var playbackRate: Double? = nil
@@ -61,6 +61,11 @@ nonisolated struct ReadingSessionFacts: Equatable, Sendable {
     var ao3SeriesID: Int? = nil
     var seriesPosition: Int = 0
     var ao3WorkID: Int? = nil
+    /// Source URL snapshot from `ReadingSession.sourceURL` so deleted works still know their origin.
+    var sourceURL: String = ""
+    /// Live `SavedWork.wordCount` when the work still exists and has a non-zero count, so
+    /// Overview's `lengthMix` and Taste's `lengthBands` always bucket the exact same word count.
+    var workWordCount: Int? = nil
 }
 
 /// What the log knows about one work, for a history or favourites row.
@@ -251,9 +256,16 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
 
         // Owner review: include every work read in the period (both `.words` and
         // `.characters`) in Length of What You Read so Overview's works count agrees
-        // with Taste's works read.
+        // with Taste's works read. Sort by `sittingOrder` and prefer live `workWordCount`
+        // when present so Overview and Taste always bucket the exact same count.
         var wordCountsByWork: [UUID: Int] = [:]
-        for f in facts { wordCountsByWork[f.workID] = f.wordCount }
+        for f in facts.sorted(by: sittingOrder) {
+            if let liveWords = f.workWordCount, liveWords > 0 {
+                wordCountsByWork[f.workID] = liveWords
+            } else if f.wordCount > 0 || wordCountsByWork[f.workID] == nil {
+                wordCountsByWork[f.workID] = f.wordCount
+            }
+        }
         insights.lengthMix = lengthMix(words: Array(wordCountsByWork.values))
 
         insights.dailyWords = dailyWordsBuckets(from: facts, in: dayRange, calendar: calendar)
@@ -395,8 +407,9 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
     ) -> [WeeklyBucket] {
         var buckets: [Date: Double] = [:]
         for fact in facts {
+            let day = readingDay(for: fact, calendar: calendar)
             guard let weekStart = calendar
-                .dateInterval(of: .weekOfYear, for: fact.startedAt)?.start
+                .dateInterval(of: .weekOfYear, for: day)?.start
             else { continue }
             buckets[weekStart, default: 0] += fact.durationSeconds
         }
@@ -975,6 +988,28 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         return lower.hasSuffix("(orphan_account)")
     }
 
+    /// Normalizes a stored `ReadingSession.authorAccounts` display byline to its AO3
+    /// account username for `Library → Authors`: extracts the trailing `"pseud (username)"`
+    /// account so deleted pseud works merge with live works under the same account, and
+    /// drops `orphan_account`, `anonymous`, and `deleted` bylines.
+    static func normalizedAO3AuthorAccount(from raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let account: String
+        if trimmed.hasSuffix(")"),
+           let openParen = trimmed.lastIndex(of: "("),
+           openParen < trimmed.index(before: trimmed.endIndex) {
+            let start = trimmed.index(after: openParen)
+            let end = trimmed.index(before: trimmed.endIndex)
+            let extracted = trimmed[start..<end].trimmingCharacters(in: .whitespacesAndNewlines)
+            account = extracted.isEmpty ? trimmed : extracted
+        } else {
+            account = trimmed
+        }
+        guard !isExcludedAuthorByline(account) else { return nil }
+        return account
+    }
+
     /// Tag pairs that appear together on >= minimumCount works.
     static func oftenTogetherTags(
         from works: [SavedWork],
@@ -1475,6 +1510,10 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
         let utc = ReadingInsights.utcCalendar
 
         for (workID, group) in factsByWork {
+            let ordered = group.sorted(by: ReadingInsights.sittingOrder)
+            let fallbackWordCount = ordered.last(where: { $0.wordCount > 0 })?.wordCount
+                ?? ordered.last?.wordCount
+                ?? 0
             if let work = worksByID[workID] {
                 let pubYear = WorkStat.date(from: work.datePublished).map { utc.component(.year, from: $0) }
                 resolved.append(TasteWork(
@@ -1488,13 +1527,12 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
                     categories: work.workCategories,
                     language: work.language,
                     isComplete: work.isComplete,
-                    wordCount: work.wordCount,
+                    wordCount: work.wordCount > 0 ? work.wordCount : fallbackWordCount,
                     publishedYear: pubYear,
                     wordUnit: work.wordUnit
                 ))
             } else {
                 // D1 fallback: keep deleted works in Taste via session snapshots.
-                let ordered = group.sorted(by: ReadingInsights.sittingOrder)
                 guard let latest = ordered.last else { continue }
                 let rev = Array(ordered.reversed())
                 let snapFandoms = rev.first(where: { !$0.fandoms.isEmpty })?.fandoms
@@ -1518,7 +1556,7 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
                     categories: snapCategories,
                     language: snapLanguage,
                     isComplete: latest.isCompleteAtVisit,
-                    wordCount: latest.wordCount,
+                    wordCount: fallbackWordCount,
                     publishedYear: snapPublishedYear,
                     wordUnit: latest.wordUnit
                 ))
@@ -1576,6 +1614,11 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
                 wordUnitWorksCount: fandomWordUnitWorks[name]?.count ?? 0
             ))
         }
+        allFandoms.sort { (lhs: FandomTally, rhs: FandomTally) -> Bool in
+            if lhs.words != rhs.words { return lhs.words > rhs.words }
+            if lhs.worksCount != rhs.worksCount { return lhs.worksCount > rhs.worksCount }
+            return lhs.name < rhs.name
+        }
 
         // Global relationship shares (for Relationships list) and per-fandom relationship
         // words (for Ship Concentration, preventing cross-fandom tags from exceeding 100%).
@@ -1617,6 +1660,11 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
                 words: val.words,
                 hasWordUnitWorks: !val.wordUnitWorks.isEmpty
             ))
+        }
+        allRelationships.sort { (lhs: RelationshipShare, rhs: RelationshipShare) -> Bool in
+            if lhs.words != rhs.words { return lhs.words > rhs.words }
+            if lhs.worksCount != rhs.worksCount { return lhs.worksCount > rhs.worksCount }
+            return lhs.name < rhs.name
         }
 
         var perFandomRelationships: [RelationshipShare] = []
@@ -1678,6 +1726,11 @@ nonisolated struct ReadingTasteInsights: Equatable, Sendable {
                 count: val.works.count,
                 hasWordUnitWorks: !val.wordUnitWorks.isEmpty
             ))
+        }
+        allTags.sort { (lhs: TagShare, rhs: TagShare) -> Bool in
+            if lhs.words != rhs.words { return lhs.words > rhs.words }
+            if lhs.count != rhs.count { return lhs.count > rhs.count }
+            return lhs.name < rhs.name
         }
 
         let oftenTogether = ReadingInsights.oftenTogetherTags(
@@ -1817,6 +1870,9 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
     var lateNightDuration: Double = 0
     var lateNightSharePercent: Int = 0
     var calendarDays: [ReadingInsights.DailyWordsBucket] = []
+    /// True only when `calendarDays` represents a real contiguous single-month period
+    /// (never a Year-mode sparse reading-day list).
+    var calendarIsMonthGrid: Bool = false
     var calendarWordThresholds: [Int] = [5_000, 10_000, 20_000]
     var longestStreak: Int = 0
     var sittingBuckets: [ReadingInsights.SittingBucket] = []
@@ -1841,6 +1897,7 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
             && lhs.lateNightDuration == rhs.lateNightDuration
             && lhs.lateNightSharePercent == rhs.lateNightSharePercent
             && lhs.calendarDays == rhs.calendarDays
+            && lhs.calendarIsMonthGrid == rhs.calendarIsMonthGrid
             && lhs.calendarWordThresholds == rhs.calendarWordThresholds
             && lhs.longestStreak == rhs.longestStreak
             && lhs.sittingBuckets == rhs.sittingBuckets
@@ -1939,7 +1996,11 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
             ReadingInsights.chartDays(for: interval, now: now, calendar: calendar)
         }
         let calDays = ReadingInsights.dailyWordsBuckets(from: facts, in: calendarRange, calendar: calendar)
-        let thresholdEnd = periodInterval?.end ?? allFacts.map(\.startedAt).max() ?? now
+        let latestReadingEnd = allFacts
+            .map { (fact: ReadingSessionFacts) -> Date in ReadingInsights.readingDay(for: fact, calendar: calendar) }
+            .max()
+            .flatMap { (day: Date) -> Date? in calendar.date(byAdding: .day, value: 1, to: day) }
+        let thresholdEnd = periodInterval?.end ?? latestReadingEnd ?? now
         let thresholds = calendarThresholds(allFacts: allFacts, through: thresholdEnd, calendar: calendar)
         let streak = ReadingInsights.longestStreak(of: facts, calendar: calendar)
         let sittings = ReadingInsights.sittingBuckets(from: facts)
@@ -1995,7 +2056,10 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
 
         // Fandom Timeline: top 4 named fandoms by words across `timelineYear` (plus remainder),
         // with each month shaded by share of that month's total words (blank below 5,000 words).
-        let timelineYear = calendar.component(.year, from: periodInterval?.start ?? facts.first?.startedAt ?? now)
+        let fallbackTimelineDate = facts.first.map { (fact: ReadingSessionFacts) -> Date in
+            ReadingInsights.readingDay(for: fact, calendar: calendar)
+        } ?? now
+        let timelineYear = calendar.component(.year, from: periodInterval?.start ?? fallbackTimelineDate)
         var totalWordsByMonth = Array(repeating: 0, count: 12)
         var wordsByFandomMonth: [String: [Int]] = [:]
         var yearWordsByFandom: [String: Int] = [:]
@@ -2154,6 +2218,7 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
             lateNightDuration: lateNightSec,
             lateNightSharePercent: lateNightPct,
             calendarDays: calDays,
+            calendarIsMonthGrid: calendarRange != nil,
             calendarWordThresholds: thresholds,
             longestStreak: streak,
             sittingBuckets: sittings,
@@ -2295,6 +2360,8 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         var title: String
         var fandom: String
         var chapterProgress: String
+        /// Discreet Mode variant omitting free-text Readium chapter titles.
+        var discreetChapterProgress: String = ""
         /// Nil when the work has no stored position; nothing is guessed.
         var progressPercent: Int?
         var daysUntouched: Int
@@ -2303,7 +2370,9 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         /// Identity plus what the card shows: the model object itself is not comparable off the main actor (macOS).
         nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
             lhs.id == rhs.id && lhs.title == rhs.title && lhs.fandom == rhs.fandom
-                && lhs.chapterProgress == rhs.chapterProgress && lhs.progressPercent == rhs.progressPercent
+                && lhs.chapterProgress == rhs.chapterProgress
+                && lhs.discreetChapterProgress == rhs.discreetChapterProgress
+                && lhs.progressPercent == rhs.progressPercent
                 && lhs.daysUntouched == rhs.daysUntouched
         }
     }
@@ -2388,22 +2457,31 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         let candidate: StillReadingCandidate? = candidateWork.map { (w: SavedWork) -> StillReadingCandidate in
             let progress = w.readingProgress.map { Int(($0 * 100).rounded()) }
             var parts: [String] = []
+            var discreetParts: [String] = []
+            let numericChapter: String? = w.postedChapterCount > 0
+                ? "Chapter \(min(w.postedChapterCount, max(1, w.lastSpineIndex + 1))) of \(w.postedChapterCount)"
+                : nil
             if let title = locatorTitle(from: w.readiumLocator) {
                 parts.append(title)
-            } else if w.postedChapterCount > 0 {
-                let current = min(w.postedChapterCount, max(1, w.lastSpineIndex + 1))
-                parts.append("Chapter \(current) of \(w.postedChapterCount)")
+            } else if let numericChapter {
+                parts.append(numericChapter)
+            }
+            if let numericChapter {
+                discreetParts.append(numericChapter)
             }
             if let progress {
                 parts.append("\(progress)%")
+                discreetParts.append("\(progress)%")
             }
             let chapterProgress = parts.isEmpty ? "In progress" : parts.joined(separator: " · ")
+            let discreetChapterProgress = discreetParts.isEmpty ? "In progress" : discreetParts.joined(separator: " · ")
             let days = w.lastReadDate.flatMap { calendar.dateComponents([.day], from: $0, to: now).day } ?? 0
             return StillReadingCandidate(
                 id: w.id,
                 title: w.title,
                 fandom: aliases.resolve(w.workFandoms.first ?? "", kind: .fandom),
                 chapterProgress: chapterProgress,
+                discreetChapterProgress: discreetChapterProgress,
                 progressPercent: progress,
                 daysUntouched: max(1, days),
                 work: w
@@ -2649,10 +2727,16 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         let deletedFacts = allFacts.filter { !liveWorkIDs.contains($0.workID) }
         let deletedByWork = Dictionary(grouping: deletedFacts, by: \.workID)
         for (_, sessions) in deletedByWork {
+            // Only deleted AO3 works appear in Library -> Authors; deleted non-AO3 local
+            // EPUBs have no AO3 account and must stay excluded just as they are while live.
+            let isAO3Work = sessions.contains { (fact: ReadingSessionFacts) -> Bool in
+                fact.ao3WorkID != nil || WorkOrigin.detect(sourceURL: fact.sourceURL) == .archiveOfOurOwn
+            }
+            guard isAO3Work else { continue }
             let names = Set(
-                sessions.flatMap(\.authorAccounts)
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !ReadingInsights.isExcludedAuthorByline($0) }
+                sessions.flatMap(\.authorAccounts).compactMap { (raw: String) -> String? in
+                    ReadingInsights.normalizedAO3AuthorAccount(from: raw)
+                }
             )
             let words = sessions.reduce(0) { total, fact in
                 total + (fact.wordUnit == .words ? fact.wordsRead : 0)
