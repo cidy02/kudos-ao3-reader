@@ -186,11 +186,17 @@ fun SavedWork.toBackupWork(
         dateUpdated = dateUpdated,
         ao3SeriesID = ao3SeriesID,
         ao3WorkID = ao3WorkID,
-        assetIdentifier = assetIdentifier.ifBlank { null }
+        assetIdentifier = assetIdentifier.ifBlank { null },
+        coverArtPreference = coverArtPreferenceRaw,
+        coverArtPreferenceChangedAt = coverArtPreferenceChangedAt?.let(BackupValidator::formatInstant)
     )
 }
 
-fun BackupWork.toSavedWork(hasEpub: Boolean, exportedAt: Instant? = null): SavedWork {
+fun BackupWork.toSavedWork(
+    hasEpub: Boolean,
+    exportedAt: Instant? = null,
+    now: Instant = Instant.now()
+): SavedWork {
     val added = if (dateAdded.isNotBlank()) {
         BackupValidator.parseInstant(dateAdded, "work.dateAdded", exportedAt)
     } else {
@@ -322,7 +328,13 @@ fun BackupWork.toSavedWork(hasEpub: Boolean, exportedAt: Instant? = null): Saved
         ao3WorkID = ao3WorkID,
         legacyReaderProgress = readerProgress,
         epubDigest = epubDigest.orEmpty(),
-        assetIdentifier = assetIdentifier.orEmpty()
+        assetIdentifier = assetIdentifier.orEmpty(),
+        coverArtPreferenceRaw = coverArtPreference,
+        coverArtPreferenceChangedAt = if (coverArtPreference != null) {
+            BackupValidator.parseClampedOptionalInstant(coverArtPreferenceChangedAt, now)
+        } else {
+            null
+        }
     )
 }
 
@@ -468,7 +480,8 @@ fun CoreBackupSettings.toBackupSettingsPayload(): BackupSettingsPayload {
         workSymbolPlacement = workSymbolPlacement,
         autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
         autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold,
-        libraryPageArrangement = libraryPageArrangement?.toJson()
+        libraryPageArrangement = libraryPageArrangement?.toJson(),
+        useEmbeddedCoverArt = useEmbeddedCoverArt
     )
 }
 
@@ -497,7 +510,8 @@ fun BackupSettingsPayload.toCoreBackupSettings(): CoreBackupSettings {
         autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
         autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold,
         libraryPageArrangement = io.github.cidy02.kudos.core.model.LibraryPageArrangement
-            .fromJson(libraryPageArrangement)
+            .fromJson(libraryPageArrangement),
+        useEmbeddedCoverArt = useEmbeddedCoverArt
     )
 }
 
@@ -812,20 +826,7 @@ fun BackupTombstone.toSyncTombstone(exportedAt: Instant? = null): SyncTombstone 
         created
     }
     val type = recordTypeRaw.trim()
-    val knownTypes = setOf(
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_WORK,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_QUEUE,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_ANNOTATION,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.BOOKMARK,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_SEARCH,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_SESSION,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_FAVORITE,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.FANDOM_READ_WATERMARK
-    )
-    if (type.isEmpty() || type !in knownTypes) {
+    if (type.isEmpty() || type !in io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.KNOWN) {
         throw IllegalArgumentException("Invalid or unknown tombstone recordTypeRaw: $recordTypeRaw")
     }
     return SyncTombstone(

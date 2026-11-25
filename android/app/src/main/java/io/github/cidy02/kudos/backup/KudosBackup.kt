@@ -14,13 +14,16 @@ import io.github.cidy02.kudos.data.local.entity.FandomReadWatermarkEntity
 import io.github.cidy02.kudos.data.local.entity.ReadingFavoriteEntity
 import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
 import java.time.Instant
+import kotlinx.serialization.json.JsonObject
 
 data class KudosBackupPackage(
     val manifest: KudosBackupManifest,
     val epubFilesByWorkId: Map<String, ByteArray> = emptyMap(),
     val fontFilesByFileName: Map<String, ByteArray> = emptyMap(),
     /** `Originals/` by file name, as iOS names them: `<work>.<ext>` and `<work>.conversion.json`. */
-    val originalFilesByName: Map<String, ByteArray> = emptyMap()
+    val originalFilesByName: Map<String, ByteArray> = emptyMap(),
+    /** Raw JSON of `manifest.json` from an imported package so re-exports keep unknown fields. */
+    val rawManifestJson: JsonObject? = null
 )
 
 data class BackupLibrarySnapshot(
@@ -117,6 +120,8 @@ data class BackupRestoreSummary(
     /** Library import succeeded, but the separate corrections file could not be saved. */
     val pronunciationsRestoreFailed: Boolean = false,
     val pronunciationsUnreadable: Boolean = false,
+    /** The library committed, but extra iOS data (the opaque manifest overlay) could not be kept. */
+    val opaqueDataNotSaved: Boolean = false,
     /**
      * Archived works this restore kept (iOS `restoredWorksByArchivedID.count`).
      * A tombstone that suppressed the work is not included. Created plus updated

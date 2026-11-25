@@ -118,7 +118,11 @@ data class AppSettings(
     val autoPreserveSmallSeriesOnSaveForLater: Boolean = false,
     val autoPreserveSeriesWorkThreshold: Int = 5,
     /** The reader's Library shelf layout; null until chosen (or restored), which shows the default. */
-    val libraryPageArrangement: LibraryPageArrangement? = null
+    val libraryPageArrangement: LibraryPageArrangement? = null,
+    /** iOS `useEmbeddedCoverArt`: show author-embedded EPUB art on covers when present (default true). */
+    val useEmbeddedCoverArt: Boolean = true,
+    /** Raw stored preference; null when never explicitly written (omitted on backup export). */
+    val storedUseEmbeddedCoverArt: Boolean? = null
 ) {
     val chosenAccentColorHex: String?
         get() = storedAccentColorHex ?: accentColorHex.takeIf {
@@ -130,6 +134,9 @@ data class AppSettings(
 
     val restorableWorkSymbolPlacement: String?
         get() = WorkSymbolPlacement.knownStorage(storedWorkSymbolPlacement)
+
+    val backupUseEmbeddedCoverArt: Boolean?
+        get() = storedUseEmbeddedCoverArt ?: if (!useEmbeddedCoverArt) false else null
 }
 
 data class PrivacySettings(

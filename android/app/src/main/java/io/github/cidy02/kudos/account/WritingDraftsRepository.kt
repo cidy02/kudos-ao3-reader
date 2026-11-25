@@ -22,7 +22,8 @@ class WritingDraftsRepository(
     val authRepository: AO3AuthRepository,
     private val parser: AO3DraftsParser = AO3DraftsParser(),
     // Compose tests pass Unconfined, as for AO3CollectionDetailRepository.
-    private val parseDispatcher: CoroutineDispatcher = Dispatchers.Default
+    private val parseDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val countsCache: AO3AccountListCountsCache? = null
 ) {
     data class CachedPage(val username: String, val generation: Int, val value: AO3DraftsPage)
 
@@ -44,6 +45,14 @@ class WritingDraftsRepository(
                 val parsed = withContext(parseDispatcher) { parser.parse(response.value.body, page, response.value.url) }
                 if (generation != authRepository.generation.value) throw CancellationException()
                 mutableCachedPage.value = CachedPage(username, generation, parsed)
+                countsCache?.put(
+                    AO3AccountListCountsCache.DRAFTS,
+                    AO3AccountListCountsCache.scope(username, generation),
+                    AO3AccountListCountsCache.Count(
+                        itemsOnPage = parsed.page.works.size,
+                        totalPages = parsed.page.totalPages
+                    )
+                )
                 AO3Result.Success(parsed)
             } catch (error: CancellationException) {
                 throw error

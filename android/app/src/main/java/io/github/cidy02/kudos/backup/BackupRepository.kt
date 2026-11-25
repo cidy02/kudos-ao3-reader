@@ -26,7 +26,9 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Captures the local library into a `.kudosbackup` ZIP and restores
@@ -45,6 +47,25 @@ class BackupRepository(
         io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore(workFileStore.worksDirectory.parent.toFile()),
     private val cacheDirectory: File? = null
 ) {
+    private val lastImportedManifestStore = SyncLastManifestStore(
+        workFileStore.worksDirectory.parent ?: workFileStore.worksDirectory
+    )
+    private val pendingImportManifestStore = SyncLastManifestStore(
+        workFileStore.worksDirectory.parent ?: workFileStore.worksDirectory,
+        fileName = PENDING_IMPORT_MANIFEST_FILE
+    )
+    init {
+        val legacy = SyncLastManifestStore(
+            workFileStore.worksDirectory.parent ?: workFileStore.worksDirectory,
+            fileName = "backup-last-manifest.json"
+        )
+        if (lastImportedManifestStore.load() == null) {
+            legacy.load()?.let(lastImportedManifestStore::save)
+        }
+        if (lastImportedManifestStore.load() != null) legacy.clear()
+    }
+
+    internal fun lastImportedManifestJson(): JsonObject? = lastImportedManifestStore.load()
     val metadataCheck = SyncMetadataCheck(now = clock) {
         persistenceGate.withLock {
             withContext(Dispatchers.IO) {
@@ -98,8 +119,12 @@ class BackupRepository(
                 fontFilesByFileName = fontFiles,
                 originalFilesByName = originalFiles
             )
-            BackupExportResult(BackupExporter.exportV2(pack), omittedBooks, omittedFonts,
-                pronunciationsUnreadable = snapshot.pronunciationsUnreadable)
+            BackupExportResult(
+                BackupExporter.exportV2(pack, baseManifestJson = lastImportedManifestStore.load()),
+                omittedBooks,
+                omittedFonts,
+                pronunciationsUnreadable = snapshot.pronunciationsUnreadable
+            )
         }
     }
 
@@ -113,6 +138,26 @@ class BackupRepository(
         bytes: ByteArray,
         mode: BackupImportMode = BackupImportMode.RECONCILE,
         admit: suspend () -> Boolean = { true }
+    ): BackupRestoreSummary = importV2ZipBytesInternal(bytes, mode, admit, replacePassthroughStore = false)
+
+    internal suspend fun importV2ZipBytesReplacingStore(
+        bytes: ByteArray,
+        admit: suspend () -> Boolean = { true },
+        folderUri: String? = null
+    ): BackupRestoreSummary = importV2ZipBytesInternal(
+        bytes = bytes,
+        mode = BackupImportMode.RECONCILE,
+        admit = admit,
+        replacePassthroughStore = true,
+        folderUri = folderUri
+    )
+
+    private suspend fun importV2ZipBytesInternal(
+        bytes: ByteArray,
+        mode: BackupImportMode,
+        admit: suspend () -> Boolean,
+        replacePassthroughStore: Boolean,
+        folderUri: String? = null
     ): BackupRestoreSummary = persistenceGate.withLock {
         if (!admit()) throw ImportDeclined()
         withContext(Dispatchers.IO) {
@@ -120,7 +165,9 @@ class BackupRepository(
             prepareForImport(mode)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode)
-            applyMergeResultLocked(merge, pack.originalFilesByName)
+            withOverlaysAside(mode) { applyMergeResultLocked(merge, pack.originalFilesByName) }.let { summary ->
+                recordAfterCommit(summary) { recordImportedManifest(pack.rawManifestJson, mode, replacePassthroughStore, folderUri) }
+            }
         }
     }
 
@@ -136,8 +183,85 @@ class BackupRepository(
             prepareForImport(mode)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode, normalizeQueuePreservation)
-            applyMergeResultLocked(merge, pack.originalFilesByName)
+            withOverlaysAside(mode) { applyMergeResultLocked(merge, pack.originalFilesByName) }.let { summary ->
+                recordAfterCommit(summary) { recordImportedManifest(pack.rawManifestJson, mode) }
+            }
         }
+    }
+
+    /**
+     * Replace changes the whole library, so the old library's opaque data must not outlive it. Both
+     * overlays are set aside by rename before the Room transaction; once it commits the asides are
+     * deleted and the new overlays written, and if it fails the asides go back. A crash in between
+     * leaves only asides, which the next start deletes (opaque fields lost, as before A-541, never
+     * paired with the wrong works).
+     */
+    private suspend fun <T> withOverlaysAside(mode: BackupImportMode, apply: suspend () -> T): T {
+        if (mode != BackupImportMode.REPLACE_LIBRARY) return apply()
+        val stores = listOf(lastImportedManifestStore, pendingImportManifestStore)
+        val staged = mutableListOf<SyncLastManifestStore>()
+        try {
+            stores.forEach { it.setAside(); staged += it }
+            afterOverlaysStaged?.invoke()
+            return apply().also { stores.forEach { it.dropAside() } }
+        } catch (error: Throwable) {
+            // Safe to put back only if the new overlays were never written; they are written after this.
+            // A cancellation can surface after Room committed (withTransaction's prompt cancellation),
+            // so it drops the asides instead: opaque fields lost, as before A-541, never put over new works.
+            if (error is kotlinx.coroutines.CancellationException) {
+                staged.forEach { runCatching { it.dropAside() } }
+            } else {
+                staged.forEach { runCatching { it.restoreAside() } }
+            }
+            throw error
+        }
+    }
+
+    /** The library has committed: a failed overlay write must not read as a failed import. */
+    private suspend fun recordAfterCommit(summary: BackupRestoreSummary, record: suspend () -> Unit): BackupRestoreSummary {
+        try {
+            record()
+            return summary
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.w("BackupRepository", "Opaque manifest data was not saved after the import committed", error)
+            return summary.copy(opaqueDataNotSaved = true)
+        }
+    }
+
+    private suspend fun recordImportedManifest(
+        rawJson: JsonObject?,
+        mode: BackupImportMode,
+        replacePassthroughStore: Boolean = false,
+        folderUri: String? = null
+    ) {
+        val connectedFolderUri = folderUri ?: settingsRepository.settings.first().sync.folderUri
+        // A folder's Kudos.kudosbackup: the sync saves its cache itself, after it publishes.
+        if (replacePassthroughStore) return
+        val keepFolderTag = connectedFolderUri?.takeIf { lastImportedManifestStore.belongsToFolder(it) }
+        // A manual import belongs to this device's library: its pending overlay is never
+        // tagged, and a tag left by an older build is dropped in the same save (data kept).
+        if (mode == BackupImportMode.REPLACE_LIBRARY) {
+            if (rawJson != null) {
+                lastImportedManifestStore.save(rawJson, folderUri = keepFolderTag)
+                pendingImportManifestStore.save(rawJson, clearStaleFolderTag = true)
+            } else {
+                lastImportedManifestStore.clear()
+                pendingImportManifestStore.clear()
+            }
+        } else if (rawJson != null) {
+            // Load, merge and save under the store lock, so no other save lands in between.
+            lastImportedManifestStore.update(folderUri = keepFolderTag) { mergeImportedManifestJson(rawJson, it) }
+            pendingImportManifestStore.update(clearStaleFolderTag = true) { mergeImportedManifestJson(rawJson, it) }
+        }
+    }
+
+    internal companion object {
+        /** Test hook: runs after the overlays are set aside and before the Room transaction. */
+        internal var afterOverlaysStaged: (() -> Unit)? = null
+
+        internal const val PENDING_IMPORT_MANIFEST_FILE = "sync-pending-import-manifest.json"
     }
 
     private suspend fun prepareForImport(mode: BackupImportMode) {
@@ -162,6 +286,9 @@ class BackupRepository(
         BackupFileUndo.recover(
             workFileStore.worksDirectory, fontFileStore.fontsDirectory, workFileStore.originalsDirectory
         )
+        // Asides left by a Replace that died: Room's state is not cheaply known, so they are dropped.
+        lastImportedManifestStore.dropAside()
+        pendingImportManifestStore.dropAside()
     }
 
     /**
@@ -819,6 +946,9 @@ fun BackupRestoreSummary.toUserMessage(): String {
         }
         if (pronunciationsRestoreFailed) {
             add("pronunciation corrections could not be saved; import again to retry them")
+        }
+        if (opaqueDataNotSaved) {
+            add("some extra iOS data could not be kept; import again to retry it")
         }
         if (worksCreated > 0) add("$worksCreated work(s) added")
         if (worksUpdated > 0) add("$worksUpdated work(s) updated")

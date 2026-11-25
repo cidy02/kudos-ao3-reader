@@ -8,7 +8,7 @@ import kotlinx.coroutines.withContext
 import java.net.URI
 
 /** iOS AO3AuthorPageCache: process memory only, 5 minutes fresh / 24 hours fallback, 128 pages. */
-class AO3PageCache(
+open class AO3PageCache(
     private val now: () -> Long = System::currentTimeMillis,
     private val ttlMillis: Long = 5 * 60 * 1000L,
     private val staleMillis: Long = 24 * 60 * 60 * 1000L,
@@ -119,7 +119,7 @@ class AO3PageCache(
     private fun revision(): Long = revision
 
     /** Parsing stays in the repository. Only a correctly parsed page can become a saved copy. */
-    suspend fun <T> read(
+    open suspend fun <T> read(
         url: String,
         kind: Kind,
         auth: AO3AuthenticatedClient?,

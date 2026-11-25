@@ -93,7 +93,8 @@ class WritingTextRecoveryTests : RecoveryDiskFixture() {
         val store = makeStore(Clock.fixed(Instant.parse("2001-01-01T00:00:00.250Z"), ZoneOffset.UTC))
         val url = sessionURL(store, "s1")
         store.save("<p>世界\n\"x\" &amp; /</p>", "before", url)
-        val expected = """{"text":"<p>世界\n\"x\" &amp; \/<\/p>","originalDigest":"6db7d803e74f1ffa7d8f5adc0bf95b3e15bf4c8373fffadf546227cc6c6742cb","savedAt":0.25}"""
+        val expected = """{"text":"<p>世界\n\"x\" &amp; \/<\/p>","originalDigest":"6db7d803e74f1ffa7d8f5adc0bf95b3e15bf4c8373fffadf546227cc6c6742cb","savedAt":0.25,"accountDigest":"b93006774cbdd4b299389a03ac3d88c3a76b460d538795bc12718011a909fba5"}"""
+        // The owner is the account the copy was opened for ("writer"), as iOS writes it.
         assertArrayEquals(expected.toByteArray(Charsets.UTF_8), Files.readAllBytes(url))
         assertEquals(0.25, store.load(url)!!.savedAt, 0.0)
         // Foundation's decoder accepts any JSON member order.

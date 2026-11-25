@@ -57,7 +57,7 @@ fun WritingEditorDemoScreen(fromFile: Boolean, onClose: () -> Unit) {
     }
     val text = initialText
     if (text != null) WritingTextEditorScreen(text, "Chapter text", "EditorDemo", target, "content",
-        onDone = { onClose() }, onBack = onClose, ruleTitle = "Chapter 13")
+        onDone = { onClose() }, onBack = onClose, ruleTitle = "Chapter 13", notifyWritingTab = false)
     else Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         val failure = error
         if (failure != null) Text(failure, color = tokens.primaryInk, fontSize = 16.sp, lineHeight = 22.sp)

@@ -78,7 +78,9 @@ fun SavedWork.toEntity(): WorkEntity {
         legacyReaderProgress = legacyReaderProgress,
         authorIdentitiesJSON = authorIdentitiesJSON,
         epubDigest = epubDigest,
-        assetIdentifier = assetIdentifier
+        assetIdentifier = assetIdentifier,
+        coverArtPreferenceRaw = coverArtPreferenceRaw,
+        coverArtPreferenceChangedAt = coverArtPreferenceChangedAt
     )
 }
 
@@ -149,7 +151,9 @@ fun WorkEntity.toDomain(): SavedWork {
         legacyReaderProgress = legacyReaderProgress,
         authorIdentitiesJSON = authorIdentitiesJSON,
         epubDigest = epubDigest,
-        assetIdentifier = assetIdentifier
+        assetIdentifier = assetIdentifier,
+        coverArtPreferenceRaw = coverArtPreferenceRaw,
+        coverArtPreferenceChangedAt = coverArtPreferenceChangedAt
     )
 }
 

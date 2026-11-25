@@ -362,7 +362,9 @@ fun KudosApp(
                         io.github.cidy02.kudos.ui.components.LocalGeneratedCoverArtLoader provides
                             coverArtLoader,
                         io.github.cidy02.kudos.ui.components.LocalWorkEpubFileResolver provides
-                            workEpubFileResolver
+                            workEpubFileResolver,
+                        io.github.cidy02.kudos.ui.components.LocalUseEmbeddedCoverArt provides
+                            settings.app.useEmbeddedCoverArt
                     ) {
                         if (whatsNewEntries.isNotEmpty()) {
                             WhatsNewSheet(

@@ -328,6 +328,8 @@ Android was updated.
 
 Until answered: Android unchanged (B).
 
+**Decided A — Claude, 2026-11-25, for owner review.** The premise "cannot happen today" stopped being true: iOS now writes `followedTag` and `tagAlias` markers (and T-530 adds `queueSource`), so every Android import of such an iOS backup or sync folder failed. Android now skips a non-blank unknown kind and still refuses a blank one (`BackupMergeService` tombstone loop; `BackupRestoreSecurityTest.testM2b_MergeRejectsBlankAndSkipsUnknownTombstone`). Reverse: restore the throw and the old test.
+
 ## 19. In Dark and OLED, text in the accent colour is too dark to read (both apps) (2026-10-08)
 
 Found by audit A6. The default accent is AO3 red (`#990000`). Both apps use it unchanged for

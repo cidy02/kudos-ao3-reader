@@ -103,7 +103,20 @@ data class SavedWork(
     /** First active keep-offline queue or collection, for the `.keptBy` action. */
     val keptOfflineBy: String? = null,
     /** Repository-derived from the shared AO3 identity matcher. Local imports have no AO3 id. */
-    val hasAo3WorkId: Boolean = sourceUrl.isNotBlank()
+    val hasAo3WorkId: Boolean = sourceUrl.isNotBlank(),
+    /**
+     * Per-work cover choice (iOS `SavedWork.coverArtPreferenceRaw`): `"embedded"`, `"generated"`,
+     * `"follow"` (explicit reset after a choice), or `null` (follow Settings). Unknown strings
+     * stay intact and resolve as Follow Settings.
+     */
+    val coverArtPreferenceRaw: String? = null,
+    /**
+     * Per-field merge clock for [coverArtPreferenceRaw] (iOS `SavedWork.coverArtPreferenceChangedAt`).
+     * Updated on reader cover-choice edits only to `min(max(now, previous + 2 ms), now + maxFutureSkew)`
+     * (healing stamps already past the cap) without moving [lastModifiedAt]; reading, refreshing,
+     * or favouriting never touches it.
+     */
+    val coverArtPreferenceChangedAt: Instant? = null
 ) {
     /** iOS WorkOriginTests: unavailable metadata is not evidence that a local copy exists. */
     val preservationBadge: String?

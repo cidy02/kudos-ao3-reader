@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,6 +20,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -392,10 +395,7 @@ private fun BackCover(
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
-    val resolveEpub = LocalWorkEpubFileResolver.current
-    val epubFile = remember(work.id, work.hasEpub) {
-        if (work.hasEpub) resolveEpub(work.id) else null
-    }
+    val epubFile = rememberCoverEpubFile(work)
     val recipe = remember(work) { work.generatedCoverRecipe() }
     Box(
         modifier = modifier

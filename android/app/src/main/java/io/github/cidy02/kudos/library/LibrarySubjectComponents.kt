@@ -1,6 +1,13 @@
 package io.github.cidy02.kudos.library
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import io.github.cidy02.kudos.home.HomeFacts
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -23,6 +30,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -37,7 +47,7 @@ import io.github.cidy02.kudos.ui.components.CoverStack
 import io.github.cidy02.kudos.ui.components.CoverStackKind
 import io.github.cidy02.kudos.ui.components.CoverStackLayout
 import io.github.cidy02.kudos.ui.components.GeneratedCoverView
-import io.github.cidy02.kudos.ui.components.LocalWorkEpubFileResolver
+import io.github.cidy02.kudos.ui.components.rememberCoverEpubFile
 import io.github.cidy02.kudos.ui.components.generatedCoverRecipe
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCardMetrics
@@ -158,10 +168,7 @@ private fun MiniatureWorkCover(
     modifier: Modifier = Modifier,
     height: Dp = 54.dp
 ) {
-    val resolveEpub = LocalWorkEpubFileResolver.current
-    val epubFile = remember(work.id, work.hasEpub) {
-        if (work.hasEpub) resolveEpub(work.id) else null
-    }
+    val epubFile = rememberCoverEpubFile(work)
     val recipe = remember(work) { work.generatedCoverRecipe() }
     GeneratedCoverView(
         recipe = recipe,

@@ -40,6 +40,11 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import io.github.cidy02.kudos.core.model.CoverArtResolution
+import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.files.WorkFileStore
+import io.github.cidy02.kudos.works.EMBEDDED_COVER_ART_IMAGE_TAG
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.PlatformTextStyle
@@ -94,6 +99,23 @@ private object PreparedArtCache {
     @Synchronized
     fun getOrPut(key: String, create: () -> PreparedArt): PreparedArt =
         map.getOrPut(key, create)
+}
+
+/**
+ * The EPUB a work's cover may draw art from: only when the work has one and [CoverArtResolution]
+ * (global switch plus per-work choice) wants the work's own art; otherwise null, so the generated cover shows.
+ * Only builds a path (no file IO); [GeneratedCoverView] loads the art off the main thread.
+ */
+@Composable
+fun rememberCoverEpubFile(work: SavedWork, enabled: Boolean = true): File? {
+    val context = LocalContext.current
+    val resolve = LocalWorkEpubFileResolver.current
+    val global = LocalUseEmbeddedCoverArt.current
+    return remember(work.id, work.hasEpub, work.coverArtPreferenceRaw, global, enabled, resolve, context) {
+        if (!enabled || !work.hasEpub || !CoverArtResolution.wantsEmbeddedArt(work, global)) null
+        else resolve(work.id)
+            ?: runCatching { WorkFileStore(context.filesDir.toPath()).workEpubPath(work.id).toFile() }.getOrNull()
+    }
 }
 
 /**
@@ -157,7 +179,9 @@ fun GeneratedCoverView(
                 bitmap = currentEmbedded,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag(EMBEDDED_COVER_ART_IMAGE_TAG)
             )
         } else {
             val art = remember(cacheKey) {

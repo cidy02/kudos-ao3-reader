@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.ui.subject
 import io.github.cidy02.kudos.ui.components.hiddenMatureWorkSemantics
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -33,11 +35,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -49,14 +55,16 @@ import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.ui.components.GeneratedCoverRecipe
 import io.github.cidy02.kudos.ui.components.GeneratedCoverView
-import io.github.cidy02.kudos.ui.components.LocalWorkEpubFileResolver
+import io.github.cidy02.kudos.ui.components.rememberCoverEpubFile
 import io.github.cidy02.kudos.ui.components.generatedCoverRecipe
 import io.github.cidy02.kudos.ui.components.statusChips
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.DownloadQueueStatus
+import io.github.cidy02.kudos.works.EMBEDDED_COVER_ART_IMAGE_TAG
 import io.github.cidy02.kudos.works.WorkTags
 import java.io.File
 import kotlin.math.roundToInt
+import io.github.cidy02.kudos.works.rememberWorkEmbeddedCoverArt
 
 /** `CarouselCardMetrics`: 164 × 164√2, work corner 16, queue tile corner 12. */
 object HomeCardMetrics {
@@ -124,7 +132,6 @@ fun SubjectWorkCoverCard(
     isSelected: Boolean = false
 ) {
     val tokens = LocalKudosTokens.current
-    val epubResolver = LocalWorkEpubFileResolver.current
     val recipe = remember(
         work.id,
         work.ao3WorkID,
@@ -147,9 +154,7 @@ fun SubjectWorkCoverCard(
     ) {
         work.generatedCoverRecipe()
     }
-    val epubFile = remember(work.id, work.hasEpub, obscured, epubResolver) {
-        if (!obscured && work.hasEpub) epubResolver(work.id) else null
-    }
+    val epubFile = rememberCoverEpubFile(work, enabled = !obscured)
     val resolvedProgress = HomeFacts.resolvedCoverProgress(
         explicit = progress,
         footer = footer,
@@ -445,12 +450,22 @@ fun HomeCoverSkeleton(modifier: Modifier = Modifier) {
     }
 }
 
+/** High-contrast white ink tokens for text layered over a scrimmed photo cover in any theme. */
+internal fun photoOverlayTokens(tokens: KudosTokens): KudosTokens = tokens.copy(
+    theme = ReaderTheme.Dark,
+    primaryInk = Color.White,
+    secondaryInk = Color.White.copy(alpha = 0.80f),
+    tertiaryInk = Color.White.copy(alpha = 0.55f),
+    accentInk = ReaderTheme.Dark.accentInk(tokens.accent)
+)
+
 @Composable
 internal fun CoverSurface(
     palette: SubjectPalette,
     shape: RoundedCornerShape,
     hero: Boolean,
     modifier: Modifier = Modifier,
+    coverArt: ImageBitmap? = null,
     content: @Composable () -> Unit
 ) {
     val tokens = LocalKudosTokens.current
@@ -460,9 +475,45 @@ internal fun CoverSurface(
             .clip(shape)
             .background(tokens.cardFill)
             .background(palette.cardWash)
-            .border(0.5.dp, palette.cardBorder, shape)
+            .border(
+                0.5.dp,
+                if (coverArt != null) Color.White.copy(alpha = 0.14f) else palette.cardBorder,
+                shape
+            )
     ) {
-        content()
+        if (coverArt != null) {
+            Image(
+                bitmap = coverArt,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .matchParentSize()
+                    .testTag(EMBEDDED_COVER_ART_IMAGE_TAG)
+            )
+            val scrim = if (hero) {
+                Brush.verticalGradient(
+                    0f to Color.Black.copy(alpha = 0.62f),
+                    0.5f to Color.Black.copy(alpha = 0.56f),
+                    1f to Color.Black.copy(alpha = 0.68f)
+                )
+            } else {
+                Brush.verticalGradient(
+                    0f to Color.Black.copy(alpha = 0.58f),
+                    0.45f to Color.Black.copy(alpha = 0.32f),
+                    1f to Color.Black.copy(alpha = 0.72f)
+                )
+            }
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(scrim)
+            )
+            CompositionLocalProvider(LocalKudosTokens provides photoOverlayTokens(tokens)) {
+                content()
+            }
+        } else {
+            content()
+        }
     }
 }
 

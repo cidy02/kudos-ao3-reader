@@ -1296,7 +1296,15 @@ fun WorkDetailScreen(
             io.github.cidy02.kudos.library.LibraryPrivacyVisibility.Obscured },
         onOpenLocalWork = onOpenLocalWork,
         onRevealSeriesWork = { privacyGate.reveal(it.id, activity) },
-        onOpenMyCopy = { showingMyCopy = true }
+        onOpenMyCopy = { showingMyCopy = true },
+        globalUseEmbeddedCoverArt = settings.app.useEmbeddedCoverArt,
+        onSetCoverArtPreference = { preference ->
+            val work = state.local ?: return@WorkDetailContent
+            runWorkAction {
+                val updated = workRepository.updateCoverArtPreference(work.id, preference)
+                if (updated != null) refreshLocal(updated.id, state.remote)
+            }
+        }
     )
 }
 
@@ -1338,7 +1346,9 @@ private fun WorkDetailContent(
     seriesWorks: List<SavedWork>,
     seriesObscured: (SavedWork) -> Boolean,
     onOpenLocalWork: (String) -> Unit,
-    onRevealSeriesWork: (SavedWork) -> Unit
+    onRevealSeriesWork: (SavedWork) -> Unit,
+    globalUseEmbeddedCoverArt: Boolean,
+    onSetCoverArtPreference: (io.github.cidy02.kudos.core.model.CoverArtPreference) -> Unit
 ) {
     val tokens = LocalKudosTokens.current
     val context = LocalContext.current
@@ -1637,6 +1647,11 @@ private fun WorkDetailContent(
                 state.local.readingProgress ?: 0.0
             } else null
             val chapterLengths = rememberChapterLengths(state.local)
+            val hasEmbeddedCoverArt = rememberWorkHasEmbeddedCoverArt(state.local)
+            val resumeCoverArt = rememberWorkEmbeddedCoverArt(
+                work = state.local,
+                globalUseEmbeddedCoverArt = globalUseEmbeddedCoverArt
+            )
 
             WorkDetailResumeCard(
                 actionTitle = actionTitle,
@@ -1650,7 +1665,8 @@ private fun WorkDetailContent(
                 chapters = state.chapters,
                 isFinished = state.local?.isFinished == true,
                 readiumLocator = state.local?.readiumLocator,
-                chapterLengths = chapterLengths
+                chapterLengths = chapterLengths,
+                coverArt = resumeCoverArt
             )
 
             // WorkDetailView.swift:328–356: progress, result and Cancel stay in Detail.
@@ -1777,6 +1793,18 @@ private fun WorkDetailContent(
                     onOpenSeries = onOpenSeries,
                     localWorks = seriesWorks, isObscured = seriesObscured,
                     onOpenLocalWork = onOpenLocalWork, onReveal = onRevealSeriesWork
+                )
+            }
+
+            // 12b. Cover Choice: shown only when the downloaded EPUB includes embedded cover art
+            if (state.local != null && hasEmbeddedCoverArt) {
+                Spacer(Modifier.height(20.dp))
+                io.github.cidy02.kudos.works.detail.WorkDetailCoverSection(
+                    selected = io.github.cidy02.kudos.core.model.CoverArtPreference.fromStorage(
+                        state.local.coverArtPreferenceRaw
+                    ),
+                    globalUseEmbeddedCoverArt = globalUseEmbeddedCoverArt,
+                    onSelect = onSetCoverArtPreference
                 )
             }
 

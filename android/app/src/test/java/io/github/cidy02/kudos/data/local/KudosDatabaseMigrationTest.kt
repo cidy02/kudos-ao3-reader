@@ -333,6 +333,77 @@ class KudosDatabaseMigrationTest {
     fun schema14MigratesToCurrentAndPassesRoomValidation() = migrateFromExportedSchema(14)
 
     @Test
+    fun schema15MigratesToCurrentAndPassesRoomValidation() = migrateFromExportedSchema(15)
+
+    @Test
+    fun migrate15To16AddsNullableCoverArtPreferenceWithoutBackfill() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dbName = "kudos-migration-15-16"
+        context.deleteDatabase(dbName)
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name(dbName)
+                .callback(object : SupportSQLiteOpenHelper.Callback(15) {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        createLegacyWorkFixture(db, 15)
+                    }
+
+                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+                })
+                .build()
+        )
+        val db = helper.writableDatabase
+        try {
+            val columnsBefore = columnNames(db, "works")
+            assertFalse(columnsBefore.contains("coverArtPreferenceRaw"))
+            assertFalse(columnsBefore.contains("coverArtPreferenceChangedAt"))
+
+            KudosDatabaseMigrations.MIGRATION_15_16.migrate(db)
+            db.version = 16
+
+            assertEquals(
+                columnsBefore + "coverArtPreferenceRaw" + "coverArtPreferenceChangedAt",
+                columnNames(db, "works")
+            )
+            db.query("SELECT coverArtPreferenceRaw, coverArtPreferenceChangedAt FROM works WHERE id = 'work-pre'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertTrue(cursor.isNull(0))
+                assertTrue(cursor.isNull(1))
+            }
+            db.execSQL(
+                "UPDATE works SET coverArtPreferenceRaw = 'generated', coverArtPreferenceChangedAt = 1700000000123 WHERE id = 'work-pre'"
+            )
+            db.query("SELECT coverArtPreferenceRaw, coverArtPreferenceChangedAt FROM works WHERE id = 'work-pre'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("generated", cursor.getString(0))
+                assertEquals(1700000000123L, cursor.getLong(1))
+            }
+            db.execSQL(
+                "UPDATE works SET coverArtPreferenceRaw = 'follow', coverArtPreferenceChangedAt = 1700000000124 WHERE id = 'work-pre'"
+            )
+            db.query("SELECT coverArtPreferenceRaw, coverArtPreferenceChangedAt FROM works WHERE id = 'work-pre'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("follow", cursor.getString(0))
+                assertEquals(1700000000124L, cursor.getLong(1))
+            }
+            db.execSQL(
+                "UPDATE works SET coverArtPreferenceRaw = 'future-mode', coverArtPreferenceChangedAt = NULL WHERE id = 'work-pre'"
+            )
+            db.query("SELECT coverArtPreferenceRaw, coverArtPreferenceChangedAt FROM works WHERE id = 'work-pre'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("future-mode", cursor.getString(0))
+                assertTrue(cursor.isNull(1))
+            }
+            assertLegacyWorkSurvived(db)
+            assertEquals(16, db.version)
+        } finally {
+            db.close()
+            helper.close()
+            context.deleteDatabase(dbName)
+        }
+    }
+
+    @Test
     fun migrate14To15AddsSittingMetadataDefaultsAndKeepsExistingRows() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val dbName = "kudos-migration-14-15"
@@ -534,11 +605,12 @@ class KudosDatabaseMigrationTest {
                 KudosDatabaseMigrations.MIGRATION_11_12,
                 KudosDatabaseMigrations.MIGRATION_12_13,
                 KudosDatabaseMigrations.MIGRATION_13_14,
-                KudosDatabaseMigrations.MIGRATION_14_15
+                KudosDatabaseMigrations.MIGRATION_14_15,
+                KudosDatabaseMigrations.MIGRATION_15_16
             )
             .build()
         try {
-            assertEquals(15, room.openHelper.writableDatabase.version)
+            assertEquals(16, room.openHelper.writableDatabase.version)
         } finally {
             room.close()
             context.deleteDatabase(name)
@@ -558,11 +630,12 @@ class KudosDatabaseMigrationTest {
                 KudosDatabaseMigrations.MIGRATION_11_12,
                 KudosDatabaseMigrations.MIGRATION_12_13,
                 KudosDatabaseMigrations.MIGRATION_13_14,
-                KudosDatabaseMigrations.MIGRATION_14_15
+                KudosDatabaseMigrations.MIGRATION_14_15,
+                KudosDatabaseMigrations.MIGRATION_15_16
             )
             .build()
         try {
-            assertEquals(15, db.openHelper.readableDatabase.version)
+            assertEquals(16, db.openHelper.readableDatabase.version)
         } finally {
             db.close()
         }
