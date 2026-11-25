@@ -142,7 +142,11 @@ class KudosAppContainer(
     }
 
     val writingDraftsRepository: io.github.cidy02.kudos.account.WritingDraftsRepository by lazy {
-        io.github.cidy02.kudos.account.WritingDraftsRepository(authenticatedClient, authRepository)
+        io.github.cidy02.kudos.account.WritingDraftsRepository(
+            authenticatedClient,
+            authRepository,
+            countsCache = accountListCountsCache
+        )
     }
 
     val accountListRepository: AccountListRepository by lazy {
@@ -197,6 +201,33 @@ class KudosAppContainer(
 
     val accountListCountsCache: AO3AccountListCountsCache by lazy {
         AO3AccountListCountsCache()
+    }
+
+    val writingTabStateStore: WritingTabStateStore by lazy {
+        SharedPreferencesWritingTabStateStore(
+            appContext.getSharedPreferences("ao3_writing_tab_state", Context.MODE_PRIVATE)
+        )
+    }
+
+    val writingTextRecovery: io.github.cidy02.kudos.network.ao3.writing.recovery.WritingTextRecovery by lazy {
+        io.github.cidy02.kudos.network.ao3.writing.recovery.WritingTextRecovery.inFilesDir(
+            appContext.filesDir.toPath()
+        ) { username ->
+            WritingTabEvents.notifyDraftSaved(username)
+        }
+    }
+
+    val writingTabController: WritingTabController by lazy {
+        WritingTabController(
+            writingStateStore = writingTabStateStore,
+            recoveryStore = writingTextRecovery,
+            countsCache = accountListCountsCache,
+            cachedHeaderForUser = { username ->
+                authorRepository.cachedDashboard(
+                    io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute(username)
+                )
+            }
+        )
     }
 
     val commentRepository: AO3CommentRepository by lazy {

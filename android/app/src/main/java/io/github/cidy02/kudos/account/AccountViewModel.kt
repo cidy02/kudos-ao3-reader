@@ -265,7 +265,9 @@ class AccountViewModel(
                     if (route.pseud == null) {
                         // The nav just parsed carries the account's own list sizes (iOS; A59).
                         val scope = AO3AccountListCountsCache.scope(route.username, generation)
-                        countsCache?.recordDashboard(result.value.actions, route.username, scope)
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            countsCache?.recordDashboard(result.value.actions, route.username, scope)
+                        }
                         refreshCounts(scope)
                     }
                     if (aboutFlow.value?.first != generation || bypassCache) {

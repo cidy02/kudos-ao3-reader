@@ -64,20 +64,28 @@ class AO3AccountListCountsCacheTest {
             label, "https://archiveofourown.org$path", io.github.cidy02.kudos.network.ao3.author.AO3AuthorWebAction.Kind.Other)
         val cache = AO3AccountListCountsCache()
         val scope = AO3AccountListCountsCache.scope("astolat", 1)
+        var notifications = 0
+        cache.addWritingCountListener { notifications++ }
         cache.recordDashboard(listOf(
             action("Works (535)", "/users/astolat/works"),
             action("Series (40)", "/users/astolat/series"),
             action("Bookmarks (1,022)", "/users/astolat/bookmarks"),
             action("Collections (33)", "/users/astolat/collections"),
+            action("Drafts (2)", "/users/astolat/works/drafts"),
             action("Gifts (131)", "/users/astolat/gifts"),
             action("Works (7)", "/users/astolat/pseuds/other/works"),
             action("Works (some)", "/users/astolat/works")
         ), "astolat", scope)
+        assertEquals(1, notifications)
         assertEquals(535, cache.get(AccountListType.MyWorks, scope)?.exact)
         assertEquals(1022, cache.get(AccountListType.Bookmarks, scope)?.exact)
         assertEquals(33, cache.get(AO3AccountListCountsCache.COLLECTIONS, scope)?.exact)
         assertEquals(40, cache.get(AO3AccountListCountsCache.SERIES, scope)?.exact)
+        assertEquals(2, cache.get(AO3AccountListCountsCache.DRAFTS, scope)?.exact)
         assertNull(cache.get(AccountListType.Subscriptions, scope))
         assertNull(cache.get(AccountListType.History, scope))
+        assertNull(Count(itemsOnPage = 0, totalPages = 2).knownCount)
+        assertEquals(20, Count(itemsOnPage = 20, totalPages = 2).knownCount)
+        assertEquals(0, Count(exact = 0).knownCount)
     }
 }

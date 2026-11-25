@@ -82,7 +82,8 @@ fun AppNavHost(
     writingChrome: io.github.cidy02.kudos.writing.WritingShellChrome? = null,
     onOpenAccount: () -> Unit = {},
     accountRoutesOnly: Boolean = false,
-    onLeaveAccount: (rootRoute: String, destinationRoute: String?) -> Unit = { _, _ -> }
+    onLeaveAccount: (rootRoute: String, destinationRoute: String?) -> Unit = { _, _ -> },
+    showsWritingTab: Boolean = false
 ) {
     fun NavGraphBuilder.sharedComposable(
         route: String,
@@ -96,10 +97,11 @@ fun AppNavHost(
     }
 
     fun leaveAccount(rootRoute: String, destinationRoute: String? = null) {
+        val effectiveRoot = if (rootRoute == Routes.Writing && !showsWritingTab) Routes.Home else rootRoute
         if (accountRoutesOnly) {
-            onLeaveAccount(rootRoute, destinationRoute)
+            onLeaveAccount(effectiveRoot, destinationRoute)
         } else {
-            navController.navigateShellRoot(rootRoute)
+            navController.navigateShellRoot(effectiveRoot)
             destinationRoute?.let(navController::navigate)
         }
     }
@@ -665,7 +667,11 @@ fun AppNavHost(
                 onOpenInbox = { navController.navigate(Routes.AccountInbox) },
                 onOpenSettings = { navController.navigate(Routes.Settings) { launchSingleTop = true } },
                 onOpenBackup = { navController.navigate(Routes.Backup) },
-                onOpenAbout = { navController.navigate(Routes.About) }
+                onOpenAbout = { navController.navigate(Routes.About) },
+                showsWritingTab = showsWritingTab,
+                onStartWriting = {
+                    leaveAccount(Routes.Home, io.github.cidy02.kudos.account.WritingWorkDestination.route())
+                }
             )
         }
         sharedComposable(Routes.AccountInbox) {
@@ -716,7 +722,8 @@ fun AppNavHost(
                 },
                 onOpenAO3Collections = { leaveAccount(Routes.Writing, Routes.AO3Collections) },
                 authRepository = container.authRepository,
-                onNewWork = { leaveAccount(Routes.Writing, io.github.cidy02.kudos.account.WritingWorkDestination.route()) }
+                onNewWork = { leaveAccount(Routes.Writing, io.github.cidy02.kudos.account.WritingWorkDestination.route()) },
+                countsCache = container.accountListCountsCache
             )
         }
         sharedComposable(Routes.About) {
@@ -1128,7 +1135,8 @@ fun AppNavHost(
                         onOpenWork = { navigateToWorkDetail(WorkDetailSource.RemoteSummary(it)) },
                         onOpenSeries = { navController.navigate(Routes.seriesWorks(it)) },
                         onOpenSeriesSummary = { navController.navigate(Routes.seriesWorks(it)) },
-                        onOpenWeb = { navController.navigate(Routes.webFallback(it)) }
+                        onOpenWeb = { navController.navigate(Routes.webFallback(it)) },
+                        countsCache = container.accountListCountsCache
                     )
                 } else AccountWorksListScreen(
                     type = type,
@@ -1456,7 +1464,8 @@ fun AppNavHost(
                     onOpenSeriesSummary = { navController.navigate(Routes.seriesWorks(it)) },
                     onOpenWeb = { url ->
                         navController.navigate(Routes.webFallback(url))
-                    }
+                    },
+                    countsCache = container.accountListCountsCache
                 )
             }
         }

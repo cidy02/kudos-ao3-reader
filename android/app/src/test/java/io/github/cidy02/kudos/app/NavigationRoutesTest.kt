@@ -13,13 +13,19 @@ import org.junit.Test
 
 class NavigationRoutesTest {
     @Test
-    fun topLevelDestinationsStayLimitedToApprovedAppSections() {
+    fun topLevelDestinationsFollowTheWritingTabRule() {
+        assertEquals(
+            listOf(Routes.Home, Routes.Library, Routes.Browse),
+            Routes.topLevelDestinations(showsWriting = false).map { it.route }
+        )
         assertEquals(
             listOf(Routes.Home, Routes.Library, Routes.Writing, Routes.Browse),
-            Routes.topLevelDestinations.map { it.route }
+            Routes.topLevelDestinations(showsWriting = true).map { it.route }
         )
-        assertFalse(Routes.Account in Routes.topLevelDestinations.map { it.route })
-        assertFalse(Routes.Search in Routes.topLevelDestinations.map { it.route })
+        assertFalse(Routes.Account in Routes.topLevelDestinations(showsWriting = false).map { it.route })
+        assertFalse(Routes.Account in Routes.topLevelDestinations(showsWriting = true).map { it.route })
+        assertFalse(Routes.Search in Routes.topLevelDestinations(showsWriting = false).map { it.route })
+        assertFalse(Routes.Search in Routes.topLevelDestinations(showsWriting = true).map { it.route })
     }
 
     @Test
@@ -202,8 +208,12 @@ class NavigationRoutesTest {
             Routes.restoredSelection(Routes.AccountInbox)
         )
         assertEquals(
+            RestoredTabSelection(tabRoute = Routes.Home, presentsAccount = false, accountRoute = null),
+            Routes.restoredSelection(Routes.Writing, showsWriting = false)
+        )
+        assertEquals(
             RestoredTabSelection(tabRoute = Routes.Writing, presentsAccount = false, accountRoute = null),
-            Routes.restoredSelection(Routes.Writing)
+            Routes.restoredSelection(Routes.Writing, showsWriting = true)
         )
     }
 
@@ -296,13 +306,29 @@ class NavigationRoutesTest {
     @Test
     fun formerAccountRoutesRetargetWritingAndLibrary() {
         assertEquals(
+            RestoredNavigation.PendingWriting(Routes.Home, WritingRoute.Drafts),
+            Routes.restoredNavigation(listOf(Routes.Account, Routes.WritingDrafts), Routes.WritingDrafts, showsWriting = false)
+        )
+        assertEquals(
             RestoredNavigation.TabPush(Routes.Writing, Routes.WritingDrafts),
-            Routes.restoredNavigation(listOf(Routes.Account, Routes.WritingDrafts), Routes.WritingDrafts)
+            Routes.restoredNavigation(listOf(Routes.Account, Routes.WritingDrafts), Routes.WritingDrafts, showsWriting = true)
         )
         val series = Routes.authorSeries("writer")
         assertEquals(
+            RestoredNavigation.PendingWriting(Routes.Home, WritingRoute.Series),
+            Routes.restoredNavigation(listOf(Routes.Account, series), series, showsWriting = false)
+        )
+        assertEquals(
             RestoredNavigation.TabPush(Routes.Writing, series),
-            Routes.restoredNavigation(listOf(Routes.Account, series), series)
+            Routes.restoredNavigation(listOf(Routes.Account, series), series, showsWriting = true)
+        )
+        assertEquals(
+            Routes.Home,
+            Routes.shellRootForAccountList(AccountListType.MyWorks, showsWriting = false)
+        )
+        assertEquals(
+            Routes.Writing,
+            Routes.shellRootForAccountList(AccountListType.MyWorks, showsWriting = true)
         )
         val marked = Routes.accountList("MarkedForLater")
         assertEquals(
@@ -312,6 +338,82 @@ class NavigationRoutesTest {
         assertEquals(
             RestoredNavigation.AccountSheet(AccountSheetRoute.Inbox, popCount = 0, tabRoute = Routes.Home),
             Routes.legacyLaunchNavigation(Routes.AccountInbox)
+        )
+    }
+
+    @Test
+    fun restoredWritingSubRoutesAvoidDuplicatingForWritersAndDoNotEvictReaders() {
+        val subRoutes = listOf(
+            Routes.WritingDrafts to WritingRoute.Drafts,
+            Routes.accountList("MyWorks") to WritingRoute.Works,
+            Routes.AO3Collections to WritingRoute.CollectionsAndChallenges,
+            Routes.authorSeries("writer") to WritingRoute.Series
+        )
+        for ((route, expectedWritingRoute) in subRoutes) {
+            // Writer already on the Writing stack: keep the restored back stack without duplicating.
+            assertNull(
+                Routes.restoredNavigation(
+                    stackFromRoot = listOf(Routes.Home, Routes.Writing, route),
+                    concreteTop = route,
+                    showsWriting = true
+                )
+            )
+            // Restoring a Writing stack while hidden defers to Home until Writing is revealed.
+            assertEquals(
+                RestoredNavigation.PendingWriting(Routes.Home, expectedWritingRoute),
+                Routes.restoredNavigation(
+                    stackFromRoot = listOf(Routes.Home, Routes.Writing, route),
+                    concreteTop = route,
+                    showsWriting = false
+                )
+            )
+            // Signed-in reader opened the sub-route over Home (not Account/Writing): stay on screen.
+            assertNull(
+                Routes.restoredNavigation(
+                    stackFromRoot = listOf(Routes.Home, route),
+                    concreteTop = route,
+                    showsWriting = false
+                )
+            )
+            assertNull(
+                Routes.restoredNavigation(
+                    stackFromRoot = listOf(Routes.Home, route),
+                    concreteTop = route,
+                    showsWriting = true
+                )
+            )
+        }
+
+        val marked = Routes.accountList("MarkedForLater")
+        assertNull(Routes.restoredNavigation(listOf(Routes.Library, marked), marked, showsWriting = false))
+        assertEquals(
+            RestoredNavigation.TabPush(Routes.Library, marked),
+            Routes.restoredNavigation(listOf(Routes.Account, marked), marked, showsWriting = false)
+        )
+    }
+
+    @Test
+    fun legacyLaunchNavigationSwitchesToWritingAndOtherTabsWhenVisible() {
+        assertEquals(
+            RestoredNavigation.SwitchTab(Routes.Writing),
+            Routes.legacyLaunchNavigation(Routes.Writing, showsWriting = true)
+        )
+        assertEquals(
+            RestoredNavigation.PendingWriting(Routes.Home, null),
+            Routes.legacyLaunchNavigation(Routes.Writing, showsWriting = false)
+        )
+        assertEquals(
+            RestoredNavigation.SwitchTab(Routes.Library),
+            Routes.legacyLaunchNavigation(Routes.Library, showsWriting = false)
+        )
+        assertNull(Routes.legacyLaunchNavigation(Routes.Home, showsWriting = false))
+        assertEquals(
+            RestoredNavigation.TabPush(Routes.Writing, Routes.WritingDrafts),
+            Routes.legacyLaunchNavigation(Routes.WritingDrafts, showsWriting = true)
+        )
+        assertEquals(
+            RestoredNavigation.PendingWriting(Routes.Home, WritingRoute.Drafts),
+            Routes.legacyLaunchNavigation(Routes.WritingDrafts, showsWriting = false)
         )
     }
 

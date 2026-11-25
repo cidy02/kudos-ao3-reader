@@ -20,20 +20,50 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
+import java.util.concurrent.ConcurrentHashMap
+
 /** Shared serial IO executor; blocks below never suspend, so state and disk writes cannot interleave. */
 internal val writingRecoveryIO = Dispatchers.IO.limitedParallelism(1)
 
 /** E1 device-local files, independent of Room and Kudos backup/sync. Synchronous methods are IO-only. */
-class WritingTextRecovery(val directory: Path, private val clock: Clock = Clock.systemUTC()) {
+class WritingTextRecovery(
+    val directory: Path,
+    private val clock: Clock = Clock.systemUTC(),
+    private val onDraftSaved: ((String) -> Unit)? = null
+) {
     @Serializable
-    data class Entry(val text: String, val originalDigest: String, val savedAt: Double)
+    data class Entry(
+        val text: String,
+        val originalDigest: String,
+        val savedAt: Double,
+        val accountDigest: String? = null
+    )
     data class Copy(val url: Path, val entry: Entry)
 
-    fun fileURL(account: String, target: String, field: String): Path {
-        val key = listOf(account.lowercase(Locale.ROOT), target, field).joinToString("") {
-            "${it.toByteArray(Charsets.UTF_8).size}:$it"
+    fun hasLocalDrafts(username: String?): Boolean {
+        val normalized = normalizedAccount(username) ?: return false
+        val targetDigest = digest(normalized)
+        val newWorkKeys = NEW_WORK_FIELDS.map { field ->
+            keyDigest(normalizedAccount = normalized, target = "work:new", field = field)
+        }.toSet()
+        for (url in allCopyURLs()) {
+            val keyDigest = keyDigestPrefix(url) ?: continue
+            val entryAccountDigest = runCatching { load(url)?.accountDigest }.getOrNull()
+            if (entryAccountDigest != null) {
+                if (entryAccountDigest == targetDigest) return true
+                continue
+            }
+            // As on iOS: a copy that does not name its owner counts only for the account that opened it here.
+            if (registeredAccountDigest(keyDigest) == targetDigest || keyDigest in newWorkKeys) return true
         }
-        return directory.resolve("${digest(key)}.json")
+        return false
+    }
+
+    fun fileURL(account: String, target: String, field: String): Path {
+        val normalized = account.lowercase(Locale.ROOT)
+        val digestValue = keyDigest(normalizedAccount = normalized, target = target, field = field)
+        normalizedAccount(account)?.let { registerKeyDigest(digestValue, it) }
+        return directory.resolve("$digestValue.json")
     }
 
     fun sessionURL(key: Path, session: UUID = UUID.randomUUID()): Path =
@@ -67,8 +97,12 @@ class WritingTextRecovery(val directory: Path, private val clock: Clock = Clock.
 
     internal fun saveDigest(text: String, originalDigest: String, to: Path) {
         Files.createDirectories(directory)
+        val keyDigest = keyDigestPrefix(to)
         val now = clock.instant()
-        val entry = Entry(text, originalDigest, (now.epochSecond - foundationEpoch).toDouble() + now.nano / 1e9)
+        val entry = Entry(
+            text, originalDigest, (now.epochSecond - foundationEpoch).toDouble() + now.nano / 1e9,
+            keyDigest?.let(::registeredAccountDigest)
+        )
         val bytes = encode(entry)
         val temporary = Files.createTempFile(directory, ".writing-", ".tmp")
         try {
@@ -82,6 +116,9 @@ class WritingTextRecovery(val directory: Path, private val clock: Clock = Clock.
             Files.deleteIfExists(temporary)
         }
         runCatching { prune(to) }
+        if (onDraftSaved != null && keyDigest != null) {
+            registeredUsername(keyDigest)?.let(onDraftSaved)
+        }
     }
 
     /** Keep the current file plus four newest others; metadata only, best-effort deletion. */
@@ -111,11 +148,50 @@ class WritingTextRecovery(val directory: Path, private val clock: Clock = Clock.
     companion object {
         const val copyLimit = 5
         private const val foundationEpoch = 978_307_200L
+        private val NEW_WORK_FIELDS = listOf("content", "summary", "notes", "endnotes")
         private val json = Json { ignoreUnknownKeys = true }
+        private val accountDigestByKeyDigest = ConcurrentHashMap<String, String>()
+        private val usernameByKeyDigest = ConcurrentHashMap<String, String>()
 
         /** Future editor supplies Context.filesDir.toPath(); no app callers are installed by this brief. */
-        fun inFilesDir(filesDir: Path, clock: Clock = Clock.systemUTC()): WritingTextRecovery =
-            WritingTextRecovery(filesDir.resolve("WritingTextRecovery"), clock)
+        fun inFilesDir(
+            filesDir: Path,
+            clock: Clock = Clock.systemUTC(),
+            onDraftSaved: ((String) -> Unit)? = null
+        ): WritingTextRecovery =
+            WritingTextRecovery(filesDir.resolve("WritingTextRecovery"), clock, onDraftSaved)
+
+        private fun normalizedAccount(username: String?): String? {
+            val trimmed = username?.trim()?.lowercase(Locale.ROOT) ?: return null
+            if (trimmed.isEmpty() || trimmed == "signed-out") return null
+            return trimmed
+        }
+
+        private fun keyDigest(normalizedAccount: String, target: String, field: String): String {
+            val key = listOf(normalizedAccount, target, field).joinToString("") {
+                "${it.toByteArray(Charsets.UTF_8).size}:$it"
+            }
+            return digest(key)
+        }
+
+        private fun keyDigestPrefix(url: Path): String? =
+            url.fileName?.toString()?.substringBefore('.')?.takeIf { it.isNotEmpty() }
+
+        private fun registerKeyDigest(keyDigest: String, normalizedAccount: String) {
+            accountDigestByKeyDigest[keyDigest] = digest(normalizedAccount)
+            usernameByKeyDigest[keyDigest] = normalizedAccount
+        }
+
+        private fun registeredAccountDigest(keyDigest: String): String? =
+            accountDigestByKeyDigest[keyDigest]
+
+        private fun registeredUsername(keyDigest: String): String? =
+            usernameByKeyDigest[keyDigest]
+
+        internal fun clearKeyRegistryForTests() {
+            accountDigestByKeyDigest.clear()
+            usernameByKeyDigest.clear()
+        }
 
         fun digest(text: String): String = MessageDigest.getInstance("SHA-256")
             .digest(text.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it.toInt() and 0xff) }
@@ -128,6 +204,8 @@ class WritingTextRecovery(val directory: Path, private val clock: Clock = Clock.
                 put("originalDigest", entry.originalDigest)
                 put("savedAt", if (entry.savedAt == entry.savedAt.toLong().toDouble())
                     JsonPrimitive(entry.savedAt.toLong()) else JsonPrimitive(entry.savedAt))
+                // iOS's JSONEncoder leaves a nil optional out.
+                entry.accountDigest?.let { put("accountDigest", it) }
             }
             // Default Foundation JSONEncoder escapes forward slashes too, without ASCII-escaping Unicode.
             return value.toString().replace("/", "\\/").toByteArray(Charsets.UTF_8)

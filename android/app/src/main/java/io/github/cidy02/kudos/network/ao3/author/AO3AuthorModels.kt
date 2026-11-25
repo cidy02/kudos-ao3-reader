@@ -158,7 +158,15 @@ data class AO3AuthorHeader(
     val recentWorks: List<AO3WorkSummary>? = null,
     val recentSeries: List<AO3AuthorSeriesSummary>? = null,
     val recentBookmarks: List<AO3AuthorBookmark>? = null
-)
+) {
+    /** Matches the dashboard nav's "Drafts (2)" link by path or label (iOS `draftsListCount`). */
+    fun draftsListCount(): Int? = actions.firstNotNullOfOrNull { action ->
+        val path = action.url.toHttpUrlOrNull()?.encodedPath?.lowercase() ?: action.url.lowercase()
+        val matches = path.endsWith("/drafts") || path.contains("drafts") ||
+            action.label.contains("draft", ignoreCase = true)
+        if (matches) action.listCount else null
+    }
+}
 
 /**
  * The account's totals from its stats page (iOS `AO3UserStats`). Each may be missing: an
