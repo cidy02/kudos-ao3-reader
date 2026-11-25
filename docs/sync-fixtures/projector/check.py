@@ -71,8 +71,7 @@ LWW_GROUPS = {"title", "author", "summary", "rating", "language",
               "seriesURL", "ao3SeriesID", "sourceURL", "wordCount", "kudos",
               "comments", "bookmarks", "hits", "knownChapterCount",
               "isFavorite", "isSaved", "isFinished", "isComplete",
-              "status", "statusWasRecorded", "statusChangedAt", "stoppedAt",
-              "keepInProgressOverride", "hiddenFromHistoryAt", "progressCore",
+              "readingStatus", "keepInProgressOverride", "hiddenFromHistoryAt", "progressCore",
               "readiumLocator", "legacyReaderProgress", "metadataSyncStatusRaw",
               "chapterWordCountsJSON", "wordUnitRaw", "authorIdentitiesJSON",
               "downloadedAt", "name", "description", "colour", "pin",
@@ -81,6 +80,9 @@ LWW_GROUPS = {"title", "author", "summary", "rating", "language",
 DATE_GROUPS = {"preservedAt", "lastPreservationAttemptAt", "lastAvailabilityCheck"}
 PRESERVATION_RANK = {"notPreserved": 0, "queued": 1, "preserving": 1,
                      "failed": 1, "missingFile": 1, "preserved": 2}
+READING_STATUS_FIELDS = {"readingStatusRaw", "stopReasonRaw", "stopTag", "stopNote",
+                         "stackThreshold", "stackBaselineChapterCount",
+                         "statusWasRecorded", "statusChangedAt", "stoppedAt"}
 
 
 def canonical(value):
@@ -173,6 +175,27 @@ def atom(op, reducer, group="", value=None):
     return a
 
 
+def scope_of(op):
+    return set(op.get("payload", {}).get("scope", [op.get("target")]))
+
+
+def valid_native_purge(op, lookup):
+    """Only command shape; mutable authorization and basis matching are separate."""
+    observed = op.get("observed", {})
+    payload = op.get("payload", {})
+    if payload.get("reason") not in {"explicit", "expired"}:
+        return False
+    basis = observed.get("basis", [])
+    if not basis:
+        return False
+    named = [lookup.get(name) for name in basis]
+    if any(d is None or d["kind"] != op["kind"].replace(".purge", ".delete") or
+           not scope_of(d) & scope_of(op) for d in named):
+        return False
+    union = set().union(*(scope_of(d) for d in named))
+    return bool(payload.get("administrative") or union <= scope_of(op))
+
+
 def typed_valid(op, visiting=frozenset()):
     """Structural typed-evidence result, independent of delivery and authority."""
     kind = op["kind"]
@@ -180,23 +203,22 @@ def typed_valid(op, visiting=frozenset()):
     payload = op.get("payload", {})
     if kind == "legacy.evidence":
         return bool(payload.get("verified") and payload.get("adopted"))
-    def scope(item):
-        return set(item.get("payload", {}).get("scope", [item.get("target")]))
     if kind.endswith(".restore"):
         names = observed.get("deletions", [])
         if not names or any(name not in EVIDENCE_CONTEXT or
                             EVIDENCE_CONTEXT[name]["kind"] != kind.replace(".restore", ".delete") or
-                            not scope(EVIDENCE_CONTEXT[name]) & scope(op) for name in names):
+                            not scope_of(EVIDENCE_CONTEXT[name]) & scope_of(op) for name in names):
             return False
         if any(name not in EVIDENCE_CONTEXT or
                EVIDENCE_CONTEXT[name]["kind"] != kind.replace(".restore", ".purge") or
                EVIDENCE_CONTEXT[name].get("payload", {}).get("reason") != "expired" or
-               not scope(EVIDENCE_CONTEXT[name]) & scope(op) or
+               not valid_native_purge(EVIDENCE_CONTEXT[name], EVIDENCE_CONTEXT) or
+               not scope_of(EVIDENCE_CONTEXT[name]) & scope_of(op) or
                EVIDENCE_CONTEXT[name]["stamp"][0] >= op["stamp"][0]
                for name in observed.get("observedExpiry", [])):
             return False
-        union = set().union(*(scope(EVIDENCE_CONTEXT[name]) for name in names))
-        return bool(payload.get("administrative") or not scope(op) < union)
+        union = set().union(*(scope_of(EVIDENCE_CONTEXT[name]) for name in names))
+        return bool(payload.get("administrative") or union <= scope_of(op))
     if kind == "asset.write":
         base = observed.get("base")
         if base is None:
@@ -208,24 +230,23 @@ def typed_valid(op, visiting=frozenset()):
                 predecessor.get("payload", {}).get("assetKind") == payload.get("assetKind") and
                 typed_valid(predecessor, visiting | {base}))
     if kind == "asset.remove":
-        return all(name in EVIDENCE_CONTEXT and
+        names = observed.get("names", [])
+        owner = op.get("target", payload.get("owner"))
+        return bool(names) and all(name in EVIDENCE_CONTEXT and
                    EVIDENCE_CONTEXT[name]["kind"] == "asset.write" and
-                   EVIDENCE_CONTEXT[name].get("target") == op.get("target") and
+                   EVIDENCE_CONTEXT[name].get("target") == owner and
                    EVIDENCE_CONTEXT[name].get("payload", {}).get("assetKind") == payload.get("assetKind") and
-                   typed_valid(EVIDENCE_CONTEXT[name]) for name in observed.get("names", []))
+                   typed_valid(EVIDENCE_CONTEXT[name]) for name in names)
     if kind.endswith(".purge"):
         basis = observed.get("basis", [])
         if not basis:
             evidence = observed.get("evidence", [])
-            return bool(evidence and all(name in EVIDENCE_CONTEXT and
+            return bool(payload.get("reason") == "explicit" and evidence and
+                   all(name in EVIDENCE_CONTEXT and
                    EVIDENCE_CONTEXT[name]["kind"] == "legacy.evidence" and
+                   EVIDENCE_CONTEXT[name].get("payload", {}).get("digest") == payload.get("legacyEvidence") and
                    typed_valid(EVIDENCE_CONTEXT[name]) for name in evidence))
-        if not all(name in EVIDENCE_CONTEXT and
-                   EVIDENCE_CONTEXT[name]["kind"] == kind.replace(".purge", ".delete") and
-                   scope(EVIDENCE_CONTEXT[name]) & scope(op) for name in basis):
-            return False
-        union = set().union(*(scope(EVIDENCE_CONTEXT[name]) for name in basis))
-        return bool(payload.get("administrative") or not scope(op) < union)
+        return valid_native_purge(op, EVIDENCE_CONTEXT)
     if kind == "annotation.delete":
         adds, sources = observed.get("adds", []), observed.get("sources", [])
         return bool(adds and len(adds) == len(sources) and all(
@@ -247,10 +268,11 @@ def typed_valid(op, visiting=frozenset()):
                     EVIDENCE_CONTEXT[name]["kind"] == "font.add" for name in names))
     if kind in RECORD_DELETES:
         put_kind = kind.replace(".delete", ".put").replace(".clear", ".set")
-        return all(name in EVIDENCE_CONTEXT and
+        names = observed.get("puts", [])
+        return bool(names) and all(name in EVIDENCE_CONTEXT and
                    EVIDENCE_CONTEXT[name]["kind"] == put_kind and
                    EVIDENCE_CONTEXT[name].get("target") == op.get("target")
-                   for name in observed.get("puts", []))
+                   for name in names)
     return True
 
 
@@ -259,7 +281,7 @@ def expand(op):
     # A covered reference still needs typed evidence after its value lost a
     # register. This compact marker models the checkpoint evidence index.
     marker = atom(op, "RK-DIAG", "@typedEvidence", {
-        "kind": op["kind"], "owner": op.get("target", ""),
+        "kind": op["kind"], "owner": op.get("target", op.get("payload", {}).get("owner", "")),
         "valid": typed_valid(op)})
     marker.pop("source")
     facts.append(marker)
@@ -287,6 +309,9 @@ def expand_semantic(op):
             assert group in GROUPS or group in LWW_GROUPS, (kind, group)
             assert not (kind.startswith("queue.") and group == "tags"), (
                 kind, "queue tags require queueTag.attach/detach")
+            if group == "readingStatus" and group not in malformed:
+                assert isinstance(value, dict) and set(value) == READING_STATUS_FIELDS, (
+                    kind, "readingStatus is one complete atomic group")
             reducer = GROUPS.get(group, "RK-LWW")
             if group in malformed or (isinstance(value, dict) and value.get("malformed")):
                 out.append(atom(op, "RK-DIAG", group, {"error": "malformedGroup"}))
@@ -317,8 +342,10 @@ def expand_semantic(op):
                 math.isfinite(instant_seconds(payload["lastCheckedAt"]))), op
         assert isinstance(payload["newResultCount"], int) and not isinstance(
             payload["newResultCount"], bool) and payload["newResultCount"] >= 0, op
-    if kind.startswith("queueTag."):
+    if kind == "queueTag.attach":
         assert "|" in op["target"] and isinstance(payload.get("tag"), str) and payload["tag"], op
+    if kind == "queueTag.detach":
+        assert "|" in op["target"] and not payload, op
     return [atom(op, reducer, payload.get("group", ""), payload.get("value", payload))]
 
 
@@ -405,6 +432,7 @@ def retain(atoms):
                  if a["source"]["kind"].endswith(".delete")}
     purges = {a["id"]: a["source"] for a in lifecycle
               if a["source"]["kind"].endswith(".purge")}
+    lifecycle_lookup = {a["id"]: a["source"] for a in lifecycle}
     def scope(op):
         return set(op.get("payload", {}).get("scope", [op["target"]]))
     restore_slots = {}
@@ -419,12 +447,13 @@ def retain(atoms):
                              deletions[name]["kind"].split(".")[0] != op["kind"].split(".")[0] or
                              not scope(deletions[name]) & scope(op) for name in names) or
                 any(e not in purges or purges[e].get("payload", {}).get("reason") != "expired" or
+                    not valid_native_purge(purges[e], lifecycle_lookup) or
                     not scope(purges[e]) & scope(op) or purges[e]["stamp"][0] >= op["stamp"][0]
                     for e in expiry)):
             evidence[("RK-LIFECYCLE", a["id"])] = a
             continue
         union_scope = set().union(*(scope(deletions[name]) for name in names))
-        if not op.get("payload", {}).get("administrative") and scope(op) != union_scope:
+        if not op.get("payload", {}).get("administrative") and not union_scope <= scope(op):
             evidence[("RK-LIFECYCLE", a["id"])] = a
             continue
         if any(not any(key in scope(deletions[name]) for name in names) for key in scope(op)):
@@ -440,16 +469,23 @@ def retain(atoms):
     # Add/remove identities remain available for named references; group edits
     # compact to the greatest fact separately for every named epoch.
     epoch_slots = {}
+    epoch_adds = {a["id"]: a["source"] for a in epochs if
+                  a["source"]["kind"].endswith((".add", ".attach"))}
     for a in epochs:
         op = a["source"]
         if op["kind"].endswith((".add", ".attach", ".remove", ".detach")):
             evidence[("RK-EPOCH", a["key"], a["id"])] = a
             continue
         names = op.get("observed", {}).get("epochs", [])
-        if not names:
+        expected_add = (op["kind"].split(".")[0] + ".membership.add"
+                        if ".membership." in op["kind"] else op["kind"].replace(".detach", ".attach"))
+        if not names or any(name not in epoch_adds or
+                            epoch_adds[name]["kind"] != expected_add or
+                            epoch_adds[name].get("target") != a["key"] for name in names):
             evidence[("RK-EPOCH", a["key"], a["id"])] = a
+            continue
         for name in names:
-            slot = (a["key"], name, a["group"] or tuple(sorted(op.get("payload", {}))))
+            slot = (a["key"], name, op["kind"])
             old = epoch_slots.get(slot)
             if old is None or rank(a) > rank(old):
                 epoch_slots[slot] = a
@@ -531,6 +567,7 @@ def oracle_project(atoms):
                        if a["source"]["kind"].endswith(".delete")}
             expiry_ops = {a["id"]: a["source"] for a in facts
                           if a["source"]["kind"].endswith(".purge")}
+            local_lifecycle = {a["id"]: a["source"] for a in facts}
             def scoped(op):
                 return set(op.get("payload", {}).get("scope", [op["target"]]))
             slots = defaultdict(list)
@@ -545,10 +582,11 @@ def oracle_project(atoms):
                     name not in deletes or deletes[name]["kind"].split(".")[0] != op["kind"].split(".")[0]
                     or not scoped(deletes[name]) & scoped(op) for name in named) or any(
                     e not in expiry_ops or expiry_ops[e].get("payload", {}).get("reason") != "expired"
+                    or not valid_native_purge(expiry_ops[e], local_lifecycle)
                     or not scoped(expiry_ops[e]) & scoped(op) or expiry_ops[e]["stamp"][0] >= op["stamp"][0]
                     for e in expiry_names))
                 if not malformed and not op.get("payload", {}).get("administrative"):
-                    malformed = scoped(op) != set().union(*(scoped(deletes[name]) for name in named))
+                    malformed = not set().union(*(scoped(deletes[name]) for name in named)) <= scoped(op)
                 if malformed:
                     unabridged[canonical(a)] = a
                     continue
@@ -561,16 +599,22 @@ def oracle_project(atoms):
                             slots[(key, name, e)].append(a)
         elif family == "RK-EPOCH":
             slots = defaultdict(list)
+            adds = {a["id"]: a["source"] for a in facts if
+                    a["source"]["kind"].endswith((".add", ".attach"))}
             for a in facts:
                 op = a["source"]
                 if op["kind"].endswith((".add", ".attach", ".remove", ".detach")):
                     unabridged[canonical(a)] = a
                     continue
                 named = op.get("observed", {}).get("epochs", [])
-                if not named:
+                add_kind = (op["kind"].split(".")[0] + ".membership.add"
+                            if ".membership." in op["kind"] else op["kind"].replace(".detach", ".attach"))
+                if not named or any(name not in adds or adds[name]["kind"] != add_kind or
+                                    adds[name].get("target") != a["key"] for name in named):
                     unabridged[canonical(a)] = a
+                    continue
                 for name in named:
-                    slots[(a["key"], name, a["group"] or tuple(sorted(op.get("payload", {}))))].append(a)
+                    slots[(a["key"], name, op["kind"])].append(a)
         else:
             slots = defaultdict(list)
             for a in facts:
@@ -630,14 +674,8 @@ def schedule_ids(universe, path):
                     continue
                 assert name in known or (field == "sources" and name in source_keys), (
                     path, op["id"], "observed." + field, name)
-                if field == "observedExpiry":
-                    expiry = by_id[name]
-                    assert expiry["kind"] == "work.purge" and expiry.get("payload", {}).get("reason") == "expired", (
-                        path, op["id"], "observed expiry class", name)
-                    assert expiry["stamp"][0] < op["stamp"][0], (path, op["id"], "observed expiry counter")
-                    scope = set(op.get("payload", {}).get("scope", [op.get("target")]))
-                    expiry_scope = set(expiry.get("payload", {}).get("scope", [expiry.get("target")]))
-                    assert scope & expiry_scope, (path, op["id"], "observed expiry scope")
+                # Wrong-kind/scope/counter observed-expiry references are delivered
+                # and diagnosed by typed_valid(), not rejected as malformed fixtures.
                 if name in known and by_id[name]["writer"] != op["writer"]:
                     expected_requires.add(name)
         for name in op.get("payload", {}).get("observedExpiry", []):
@@ -750,13 +788,9 @@ def check_golden(universe):
         valid_restores = []
         for restore in restores:
             named = restore.get("observed", {}).get("deletions", [])
-            expiry_ids = restore.get("observed", {}).get("observedExpiry", [])
-            if named and all(by_id[i]["kind"] == "work.delete" for i in named) and all(
-                    by_id[i]["kind"] == "work.purge" and
-                    by_id[i]["payload"]["reason"] == "expired" and
-                    by_id[i]["stamp"][0] < restore["stamp"][0] for i in expiry_ids):
+            if named and typed_valid(restore):
                 valid_restores.append(restore["id"])
-        revokes = [op for op in ops if op["kind"] == "writer.revoke"]
+        revokes = [op for op in retained_ops.values() if op["kind"] == "writer.revoke"]
         authorized_expiry = sorted(op["id"] for op in retained_ops.values() if op["kind"] == "work.purge"
                                    and op["payload"]["reason"] == "expired"
                                    and not any(r["target"] == op["writer"] and
@@ -847,8 +881,152 @@ def check_order(ops, order):
     return expected
 
 
+def check_queue_links(universe):
+    """Small state golden for Q2's live queue and saved-search prerequisite."""
+    expected = universe["expected"]["state"].get("queueSavedSearchLinks")
+    if expected is None:
+        return False
+    ops = universe["initial"].get("createHistory", []) + universe["ops"]
+    assert not any(op["kind"] in {"queue.delete", "queue.restore", "queue.purge"}
+                   for op in ops), (universe["name"], "Q2 golden needs lifecycle evaluator")
+    def visible_links(history):
+        queues = {op["target"] for op in history if op["kind"] == "queue.create"}
+        searches = {op["id"]: op for op in history if op["kind"] == "savedSearch.put"}
+        removed = {name for op in history if op["kind"] == "savedSearch.delete"
+                   for name in op.get("observed", {}).get("puts", [])}
+        live_searches = {op["target"] for name, op in searches.items() if name not in removed}
+        cleared = {name for op in history if op["kind"] == "queueSavedSearchLink.clear"
+                   for name in op.get("observed", {}).get("puts", [])}
+        links = {}
+        for op in history:
+            if op["kind"] != "queueSavedSearchLink.set" or op["id"] in cleared:
+                continue
+            queue, search = op["target"].split("|", 1)
+            if queue in queues and search in live_searches:
+                old = links.get(op["target"])
+                if old is None or (op["stamp"], op["id"]) > (old["stamp"], old["id"]):
+                    links[op["target"]] = op
+        return [{"queue": op["target"].split("|", 1)[0],
+                 "savedSearch": op["target"].split("|", 1)[1],
+                 **op["payload"]} for op in links.values()]
+    actual = visible_links(ops)
+    assert sorted(map(canonical, actual)) == sorted(map(canonical, expected)), (
+        universe["name"], "Q2 link projection", actual, expected)
+    first_search = next((i for i, op in enumerate(ops) if op["kind"] == "savedSearch.put"), None)
+    if first_search is not None and any(op["kind"] == "queueSavedSearchLink.set"
+                                        for op in ops[:first_search]):
+        assert visible_links(ops[:first_search]) == [], (universe["name"], "Q2 fact-first cut")
+    return True
+
+
+def queue_tag_display(ops, target):
+    """T2q display spelling from live attach epochs for one original endpoint."""
+    removed = {name for op in ops if op["kind"] == "queueTag.detach" and op["target"] == target
+               for name in op.get("observed", {}).get("epochs", [])}
+    live = [op for op in ops if op["kind"] == "queueTag.attach" and
+            op["target"] == target and op["id"] not in removed]
+    return max(live, key=lambda op: (op["stamp"], op["id"]))["payload"]["tag"] if live else None
+
+
+def check_round9_regressions():
+    """Small semantic counterexamples for review-8 findings 2–4."""
+    previous = EVIDENCE_CONTEXT.copy()
+    def op(id, counter, kind, target=None, payload=None, observed=None):
+        item = {"id": id, "writer": "inc-r9", "seq": counter,
+                "stamp": [counter, "inc-r9", counter], "kind": kind,
+                "payload": payload or {}, "observed": observed or {}}
+        if target is not None:
+            item["target"] = target
+        return item
+    try:
+        write = op("w", 1, "asset.write", "W-A", {"assetKind": "epub", "digest": "d", "size": 1})
+        remove = op("rm", 2, "asset.remove", payload={"owner": "W-A", "assetKind": "epub"},
+                    observed={"names": ["w"]})
+        EVIDENCE_CONTEXT.clear(); EVIDENCE_CONTEXT.update({x["id"]: x for x in (write, remove)})
+        assert typed_valid(remove)
+        marker = next(a for a in expand(remove) if a["group"] == "@typedEvidence")
+        assert marker["value"]["owner"] == "W-A" and marker["value"]["valid"]
+        assert not typed_valid(op("empty", 3, "asset.remove", payload=remove["payload"],
+                                  observed={"names": []}))
+        assert not typed_valid(op("empty-record", 4, "bookmark.delete", "bookmark:x",
+                                  observed={"puts": []}))
+
+        a1 = op("a1", 1, "queue.membership.add", "q1|W-A")
+        a2 = op("a2", 2, "queue.membership.add", "q1|W-B")
+        m1 = op("m1", 3, "queue.membership.move", "q1|W-A", {"rank": 5}, {"epochs": ["a1"]})
+        bad = op("bad", 4, "queue.membership.move", "q1|W-A", {"rank": 99},
+                 {"epochs": ["a1", "a2"]})
+        EVIDENCE_CONTEXT.clear(); EVIDENCE_CONTEXT.update({x["id"]: x for x in (a1, a2, m1, bad)})
+        epoch_atoms = [atom(x, "RK-EPOCH", value=x["payload"]) for x in (a1, a2, m1, bad)]
+        kept = {a["id"] for a in retain(epoch_atoms)}
+        assert {"m1", "bad"} <= kept and not typed_valid(bad)
+        assert project(epoch_atoms) == oracle_project(epoch_atoms)
+        m2 = op("m2", 5, "queue.membership.move", "q1|W-A", {"rank": 6}, {"epochs": ["a1"]})
+        assert "m1" not in {a["id"] for a in retain(epoch_atoms + [atom(m2, "RK-EPOCH", value=m2["payload"])])}
+        state1 = op("state1", 6, "queue.membership.state", "q1|W-A",
+                    {"state": "reading"}, {"epochs": ["a1"]})
+        state2 = op("state2", 7, "queue.membership.state", "q1|W-A",
+                    {"state": "paused", "note": None}, {"epochs": ["a1"]})
+        state_atoms = [atom(x, "RK-EPOCH", value=x["payload"]) for x in (a1, state1, state2)]
+        assert {a["id"] for a in retain(state_atoms)} == {"a1", "state2"}
+        assert project(state_atoms) == oracle_project(state_atoms)
+
+        d = op("d", 1, "work.delete", "W-A", {"scope": ["W-A"]})
+        r0 = op("r0", 2, "work.restore", "W-A", {"scope": ["W-A"]}, {"deletions": ["d"]})
+        r1 = op("r1", 3, "work.restore", "W-A", {"scope": ["W-A", "W-B"]},
+                {"deletions": ["d"]})
+        EVIDENCE_CONTEXT.clear(); EVIDENCE_CONTEXT.update({x["id"]: x for x in (d, r0, r1)})
+        life_atoms = [atom(x, "RK-LIFECYCLE", value=x["payload"]) for x in (d, r0, r1)]
+        assert typed_valid(r1) and {a["id"] for a in retain(life_atoms)} == {"d", "r1"}
+        assert project(life_atoms) == oracle_project(life_atoms)
+        wide = op("wide", 4, "work.delete", "W-A", {"scope": ["W-A", "W-B"]})
+        mixed = op("mixed", 5, "work.restore", "W-A", {"scope": ["W-A", "W-C"]},
+                   {"deletions": ["wide"]})
+        mixed_purge = op("mixed-p", 6, "work.purge", "W-A",
+                         {"reason": "explicit", "scope": ["W-A", "W-C"]}, {"basis": ["wide"]})
+        evidence = op("ev", 7, "legacy.evidence", payload={"verified": True,
+                       "adopted": True, "digest": "d"})
+        bad_expiry = op("bad-expiry", 8, "work.purge", "W-A", {"reason": "expired"},
+                        {"basis": [], "evidence": ["ev"]})
+        wrong_digest = op("wrong-digest", 9, "work.purge", "W-A",
+                          {"reason": "explicit", "legacyEvidence": "other"},
+                          {"basis": [], "evidence": ["ev"]})
+        observing = op("observing", 10, "work.restore", "W-A", {"scope": ["W-A"]},
+                       {"deletions": ["d"], "observedExpiry": ["bad-expiry"]})
+        extra = (wide, mixed, mixed_purge, evidence, bad_expiry, wrong_digest, observing)
+        EVIDENCE_CONTEXT.update({x["id"]: x for x in extra})
+        assert all(not typed_valid(x) for x in (mixed, mixed_purge, bad_expiry,
+                                                wrong_digest, observing))
+        extended = life_atoms + [atom(x, "RK-LIFECYCLE", value=x["payload"]) for x in extra
+                                 if x["kind"].startswith("work.")]
+        assert "r1" in {a["id"] for a in retain(extended)}
+        assert project(extended) == oracle_project(extended)
+
+        status = {name: None for name in READING_STATUS_FIELDS}
+        status_op = op("status", 1, "work.edit", "W-A", {"groups": {"readingStatus": status}})
+        fields = expand_semantic(status_op)
+        assert (len(fields) == 1 and fields[0]["reducer"] == "RK-LWW" and
+                fields[0]["group"] == "readingStatus" and fields[0]["value"] == status)
+        try:
+            expand_semantic(op("split", 2, "work.edit", "W-A", {"groups": {"statusWasRecorded": True}}))
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError("split reading-status field admitted")
+        t1 = op("t1", 2, "queueTag.attach", "q1|wip", {"tag": "WIP"})
+        t2 = op("t2", 3, "queueTag.attach", "q1|wip", {"tag": "wip"})
+        detach = op("td", 4, "queueTag.detach", "q1|wip", observed={"epochs": ["t2"]})
+        EVIDENCE_CONTEXT.clear(); EVIDENCE_CONTEXT.update({x["id"]: x for x in (t1, t2, detach)})
+        assert len(expand_semantic(detach)) == 1 and typed_valid(detach)
+        assert queue_tag_display((t1, t2), "q1|wip") == "wip"
+        assert queue_tag_display((t1, t2, detach), "q1|wip") == "WIP"
+    finally:
+        EVIDENCE_CONTEXT.clear(); EVIDENCE_CONTEXT.update(previous)
+
+
 def main():
     schema = json.loads((ROOT / "_schema.json").read_text())
+    check_round9_regressions()
     matrix = (ROOT.parent / "SYNC_OPERATION_MATRIX.md").read_text()
     assert all("`" + k + "`" in matrix for k in KINDS), "matrix missing reducer kind"
     files = sorted(p for p in ROOT.glob("*.json") if not p.name.startswith("_"))
@@ -856,6 +1034,7 @@ def main():
     exhaustive = 0
     sampled = 0
     goldens = 0
+    link_goldens = 0
     seen = set()
     for path in files:
         doc = json.loads(path.read_text())
@@ -871,6 +1050,7 @@ def main():
                 assert op["stamp"] == [op["stamp"][0], op["writer"], op["seq"]], op
             schedule_ids(universe, path.name + ":" + universe["name"])
             goldens += check_golden(universe)
+            link_goldens += check_queue_links(universe)
             for op in ops:
                 for a in expand(op):
                     seen.add(a["reducer"])
@@ -890,6 +1070,8 @@ def main():
     print(f"schema + matrix: {len(files)} fixtures validated; {len(KINDS)} closed reducer kinds named")
     print(f"fixture reducers: {fixture_cases} universes, {exhaustive} exhaustive orders (<=5), {sampled} larger orders; cuts and arrival order equal")
     print(f"goldens + references: {goldens} independent semantic goldens checked; every scheduled op/event/intent resolved")
+    print(f"Q2 link projection: {link_goldens} live-endpoint golden checked")
+    print("round-9 regressions: asset owner/empty references, epoch/lifecycle validity, atomic reading status and queue-tag casing passed")
     rng = random.Random(56905)
     reducers = sorted(KINDS)
     for case in range(2400):

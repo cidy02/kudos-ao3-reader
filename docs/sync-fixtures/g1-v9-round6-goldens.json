@@ -661,7 +661,7 @@
   },
   {
    "name": "collection-create-edit-membership-and-queue-link",
-   "description": "Explicit collection creation, edit, membership, and queue-search-link payloads have stable original keys.",
+   "description": "Queue-search link is fact-first until its saved-search put arrives; collection creation, edit and membership keep original keys.",
    "initial": {
     "createHistory": []
    },
@@ -772,6 +772,21 @@
       "lastCheckedAt": "2026-01-01T00:00:00Z",
       "newResultCount": 2
      }
+    },
+    {
+     "id": "s1",
+     "writer": "inc-a",
+     "seq": 7,
+     "stamp": [
+      7,
+      "inc-a",
+      7
+     ],
+     "kind": "savedSearch.put",
+     "target": "S-A",
+     "payload": {
+      "name": "Search"
+     }
     }
    ],
    "schedules": {
@@ -792,7 +807,9 @@
        "c3",
        "c3",
        "q2",
-       "q2"
+       "q2",
+       "s1",
+       "s1"
       ]
      }
     ],
@@ -805,7 +822,8 @@
        "q1c",
        "c2",
        "c3",
-       "q2"
+       "q2",
+       "s1"
       ],
       "restartAfter": "every"
      }
@@ -816,7 +834,7 @@
     "retentionEquivalence": {
      "mode": "sampled",
      "orders": 2,
-     "cutsChecked": 14,
+     "cutsChecked": 16,
      "seed": 7,
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
@@ -870,10 +888,15 @@
      ],
      "annotations": [],
      "settings": {},
-     "pronunciations": {}
+     "pronunciations": {},
+     "records": {
+      "S-A": {
+       "name": "Search"
+      }
+     }
     },
     "appliedCut": {
-     "inc-a": 6
+     "inc-a": 7
     },
     "pending": [],
     "diagnostics": []
