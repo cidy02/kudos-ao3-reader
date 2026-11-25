@@ -10,7 +10,14 @@ struct AO3SeriesDetailView: View {
     }
 
     let series: AO3SeriesSummary
+    /// Optional anonymous page-1 HTML fetched by queue-source counts, reused
+    /// once when signed out so Find More makes no second request.
+    var preloadedPageOneHTML: String?
+    var initialOrigin: ReadingQueueMembershipOrigin?
+    var onPageOneLoaded: (() -> Void)?
     @State private var recordedSeriesView = false
+    @State private var didConsumePreloaded = false
+    @State private var didNotifyPageOneLoaded = false
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
@@ -43,6 +50,9 @@ struct AO3SeriesDetailView: View {
     @State private var isReorderingSeries = false
     /// The title this series was last saved with from here, until the list behind is read again.
     @State private var savedTitle: String?
+    /// What page 1 says about the series itself, for a series opened from a
+    /// queue source, which starts as a stub (title "Series N", no stats).
+    @State private var parsedHeader: AO3ParsedSeries?
     /// "Preserve all N" — one run at a time; `preserveStatus` is its progress, then its result.
     @State private var preserveTask: Task<Void, Never>?
     @State private var preserveStatus: String?
@@ -137,6 +147,12 @@ struct AO3SeriesDetailView: View {
                 }
             }
             .remoteWorkSelectionChrome(bulkSelection)
+            .environment(\.queueMembershipOrigin, bulkSelection.origin ?? initialOrigin)
+            .onAppear {
+                if bulkSelection.origin == nil, let initialOrigin {
+                    bulkSelection.origin = initialOrigin
+                }
+            }
             .navigationDestination(isPresented: $isEditingSeries) {
                 SeriesEditDestination(series: series, works: works)
             }
@@ -367,6 +383,12 @@ struct AO3SeriesDetailView: View {
 
     private var shownSeries: AO3SeriesSummary {
         var shown = series
+        if let parsed = parsedHeader {
+            if shown.title == "Series \(series.id)", !parsed.title.isEmpty { shown.title = parsed.title }
+            if shown.workCount == nil { shown.workCount = parsed.partCount }
+            if shown.words == nil { shown.words = parsed.wordCount }
+            if shown.isComplete == nil { shown.isComplete = parsed.isComplete }
+        }
         if let savedTitle { shown.title = savedTitle }
         return shown
     }
@@ -466,6 +488,7 @@ struct AO3SeriesDetailView: View {
            let parsed = AO3ParsedSeries.parse(
                html: html, ao3SeriesID: series.id, pageWorkIDs: ids, isWholeList: isWholeList
            ) {
+            parsedHeader = parsed
             let saved = SavedSeriesStore.upsert(parsed, in: context)
             if auth.isLoggedIn { saved?.isSubscribed = subscribeModel.isSubscribed }
             recordSeriesViewOnce()
@@ -492,16 +515,24 @@ struct AO3SeriesDetailView: View {
             guard let url = AO3Client.seriesPageURL(series.url, page: page) else {
                 throw AO3Error.network("Bad series URL.")
             }
-            let cached = try await AO3AuthorProfileFetcher.page(
-                at: url,
-                auth: auth,
-                cacheScope: expectedCacheScope,
-                isCurrent: {
-                    authenticationScope == expectedAuthenticationScope
-                        && auth.sessionGeneration == expectedSessionGeneration
-                },
-                bypassCache: bypassCache
-            )
+            let cached: AO3AuthorProfileFetcher.Page
+            if page == 1, replace, !bypassCache, !didConsumePreloaded, auth.status == .signedOut,
+               let html = preloadedPageOneHTML {
+                didConsumePreloaded = true
+                cached = AO3AuthorProfileFetcher.Page(html: html, isStale: false)
+            } else {
+                didConsumePreloaded = true
+                cached = try await AO3AuthorProfileFetcher.page(
+                    at: url,
+                    auth: auth,
+                    cacheScope: expectedCacheScope,
+                    isCurrent: {
+                        authenticationScope == expectedAuthenticationScope
+                            && auth.sessionGeneration == expectedSessionGeneration
+                    },
+                    bypassCache: bypassCache
+                )
+            }
             let result: AO3SearchPage
             do {
                 result = try AO3Client.parseAuthorWorksPage(cached.html, page: page)
@@ -536,6 +567,10 @@ struct AO3SeriesDetailView: View {
                 ? cached.isStale
                 : isShowingStaleCache || cached.isStale
             phase = .loaded
+            if page == 1, !cached.isStale, !didNotifyPageOneLoaded {
+                didNotifyPageOneLoaded = true
+                onPageOneLoaded?()
+            }
         } catch is CancellationError {
             return
         } catch AO3Error.authenticationRequired {

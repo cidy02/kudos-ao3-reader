@@ -81,14 +81,18 @@ struct AuthorProfileView: View {
         navigationTitle: String = "Author",
         initialTab: AO3AuthorProfileTab? = nil,
         initialWorksSort: AO3WorksSort? = nil,
-        showsDashboard: Bool = false
+        showsDashboard: Bool = false,
+        preloadedWorksHTML: String? = nil,
+        onWorksPageOneLoaded: (@MainActor () -> Void)? = nil
     ) {
         isContentDestination = initialTab != nil
         let overviewMode = !showsDashboard && initialTab == nil
         let model = AO3AuthorProfileModel(
             route: route,
             dashboardOnly: showsDashboard,
-            overviewMode: overviewMode
+            overviewMode: overviewMode,
+            preloadedWorksHTML: preloadedWorksHTML,
+            onWorksPageOneLoaded: onWorksPageOneLoaded
         )
         if let initialTab { model.applyInitialTab(initialTab) }
         if let initialWorksSort { model.applyInitialWorksSort(initialWorksSort) }

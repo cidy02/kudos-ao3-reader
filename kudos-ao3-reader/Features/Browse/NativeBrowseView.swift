@@ -847,6 +847,11 @@ struct FandomWorksView: View {
 struct TagWorksView: View {
     @AppStorage("hideMatureContent") private var hideMature = true
     let request: AO3TagWorksRequest
+    /// Optional anonymous page-1 payload fetched by queue-source counts, reused
+    /// once on initial load when signed out so Find More makes no second request.
+    var preloadedPage: AO3SearchPage?
+    var initialOrigin: ReadingQueueMembershipOrigin?
+    var onPageOneLoaded: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
     @Environment(AO3AuthService.self) private var auth
@@ -889,6 +894,8 @@ struct TagWorksView: View {
     /// page 7 of a filter nobody applied (audit A20-3).
     @State private var loadedFilters: AO3SearchFilters?
     @State private var bulkSelection = RemoteWorkSelectionController()
+    @State private var didConsumePreloaded = false
+    @State private var didNotifyPageOneLoaded = false
 
     private enum Phase: Equatable { case loading, loaded, failed(String) }
 
@@ -1034,6 +1041,7 @@ struct TagWorksView: View {
                 }
                 .cardList()
                 .refreshable {
+                    didConsumePreloaded = true
                     await AO3Client.shared.invalidateCachedResponses()
                     await load(page: 1)
                 }
@@ -1072,7 +1080,7 @@ struct TagWorksView: View {
             .environment(\.queueMembershipOrigin, bulkSelection.origin)
             .onAppear {
                 if bulkSelection.origin == nil {
-                    bulkSelection.origin = ReadingQueueMembershipOrigin(
+                    bulkSelection.origin = initialOrigin ?? ReadingQueueMembershipOrigin(
                         kind: .search,
                         searchID: nil,
                         label: request.title,
@@ -1325,10 +1333,18 @@ struct TagWorksView: View {
         loadToken += 1
         let token = loadToken
         do {
-            let result = try await AO3RequestCoordinator.shared.withSlot {
-                try await AO3Client.shared.worksPage(
-                    at: request.url, filters: filters, page: page, request: authenticatedRequest
-                )
+            let result: AO3SearchPage
+            if page == 1, !didConsumePreloaded, filters == Self.baseline,
+               let cached = QueueSourceChecks.cachedPageForFindMore(preloadedPage, isSignedOut: auth.status == .signedOut) {
+                didConsumePreloaded = true
+                result = cached
+            } else {
+                didConsumePreloaded = true
+                result = try await AO3RequestCoordinator.shared.withSlot {
+                    try await AO3Client.shared.worksPage(
+                        at: request.url, filters: filters, page: page, request: authenticatedRequest
+                    )
+                }
             }
             guard token == loadToken else { return }
             if let learnedAlias = result.learnedTagAlias {
@@ -1361,6 +1377,10 @@ struct TagWorksView: View {
                 )
             }
             phase = .loaded
+            if page == 1, filters == Self.baseline, !didNotifyPageOneLoaded {
+                didNotifyPageOneLoaded = true
+                onPageOneLoaded?()
+            }
         } catch let error as AO3Error {
             guard token == loadToken else { return }
             if results.isEmpty {

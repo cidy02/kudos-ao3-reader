@@ -227,6 +227,14 @@ final class AO3AuthorProfileModel {
     private let dashboardOnly: Bool
     private let overviewMode: Bool
     private let reloadsHeaderAfterModeration: Bool
+    /// Optional anonymous page-1 works HTML fetched by queue-source counts,
+    /// consumed once when opening Works signed out.
+    private var pendingPreloadedWorksHTML: String?
+    /// True once the Works list was drawn from the queue's own page-1 fetch, so
+    /// a failing (offline) dashboard request cannot hide those works.
+    private var servedPreloadedWorks = false
+    private let onWorksPageOneLoaded: (@MainActor () -> Void)?
+    private var didNotifyWorksPageOneLoaded = false
 
     init(
         route: AO3AuthorRoute,
@@ -234,12 +242,17 @@ final class AO3AuthorProfileModel {
         overviewMode: Bool = false,
         reloadsHeaderAfterModeration: Bool = true,
         pageLoader: PageLoader? = nil,
-        moderationSubmitter: ModerationSubmitter? = nil
+        moderationSubmitter: ModerationSubmitter? = nil,
+        // After the closures above so existing trailing-closure callers still bind `pageLoader`.
+        preloadedWorksHTML: String? = nil,
+        onWorksPageOneLoaded: (@MainActor () -> Void)? = nil
     ) {
         self.route = route
         self.dashboardOnly = dashboardOnly
         self.overviewMode = overviewMode
         self.reloadsHeaderAfterModeration = reloadsHeaderAfterModeration
+        pendingPreloadedWorksHTML = preloadedWorksHTML
+        self.onWorksPageOneLoaded = onWorksPageOneLoaded
         self.moderationSubmitter = moderationSubmitter ?? { form, auth in
             try await auth.submitAuthorModeration(form)
         }
@@ -324,6 +337,13 @@ final class AO3AuthorProfileModel {
         let needsContent = !dashboardOnly && !overviewMode && !loadedTabs.contains(selectedTab)
         guard headerPhase != .loaded || needsContent else { return }
         launch {
+            if self.pendingPreloadedWorksHTML != nil, !self.dashboardOnly, !self.overviewMode,
+               self.selectedTab == .works {
+                // The works page is already in hand: draw it before (and whatever
+                // happens to) the dashboard request that opening an author makes.
+                self.headerPhase = .loaded
+                await self.loadSelectedTab(auth: auth)
+            }
             await self.loadHeader(auth: auth)
             guard self.headerPhase == .loaded else { return }
             if self.overviewMode {
@@ -806,7 +826,7 @@ final class AO3AuthorProfileModel {
     ) async {
         let expectedRoute = route
         let expectedSessionGeneration = auth.sessionGeneration
-        headerPhase = header == nil ? .loading : .loaded
+        headerPhase = header == nil && !servedPreloadedWorks ? .loading : .loaded
         do {
             let page = try await parsedPage(
                 at: expectedRoute.dashboardURL,
@@ -856,6 +876,7 @@ final class AO3AuthorProfileModel {
             guard route == expectedRoute,
                   auth.sessionGeneration == expectedSessionGeneration
             else { return }
+            if servedPreloadedWorks, header == nil { return }
             headerFailureSystemImage = UserFacingError.systemImage(for: error)
             headerPhase = .failed(UserFacingError.message(for: error))
         }
@@ -915,9 +936,21 @@ final class AO3AuthorProfileModel {
         replace: Bool,
         bypassCache: Bool = false
     ) async throws {
-        let url = Self.pageURL(worksBaseURL, page: page)
-        let cached = try await parsedPage(at: url, auth: auth, bypassCache: bypassCache) {
-            try AO3Client.parseAuthorWorksPage($0, page: page)
+        let isDefaultFirstWorksPage = page == 1 && replace && worksScope == .works
+            && worksSort == .default && selectedFandom == nil && worksFilters == AO3SearchFilters()
+        let cached: (value: AO3SearchPage, isStale: Bool)
+        if isDefaultFirstWorksPage, !bypassCache, auth.status == .signedOut,
+           let preloadedHTML = pendingPreloadedWorksHTML {
+            pendingPreloadedWorksHTML = nil
+            let parsed = try AO3Client.parseAuthorWorksPage(preloadedHTML, page: 1)
+            servedPreloadedWorks = true
+            cached = (parsed, false)
+        } else {
+            pendingPreloadedWorksHTML = nil
+            let url = Self.pageURL(worksBaseURL, page: page)
+            cached = try await parsedPage(at: url, auth: auth, bypassCache: bypassCache) {
+                try AO3Client.parseAuthorWorksPage($0, page: page)
+            }
         }
         try Task.checkCancellation()
         works = replace
@@ -926,6 +959,10 @@ final class AO3AuthorProfileModel {
         worksPage = cached.value.currentPage
         worksTotalPages = cached.value.totalPages
         isShowingStaleCache = isShowingStaleCache || cached.isStale
+        if isDefaultFirstWorksPage, !cached.isStale, !didNotifyWorksPageOneLoaded {
+            didNotifyWorksPageOneLoaded = true
+            onWorksPageOneLoaded?()
+        }
     }
 
     private func loadPopular(auth: AO3AuthService, bypassCache: Bool = false) async {
@@ -1101,6 +1138,9 @@ final class AO3AuthorProfileModel {
     }
 
     private func resetScopedContent(keepingAbout: Bool) {
+        // A pseud switch or an account change must never show the queue's page for another scope.
+        pendingPreloadedWorksHTML = nil
+        servedPreloadedWorks = false
         header = nil
         headerPhase = .idle
         works = []

@@ -71,11 +71,16 @@ struct ReadingQueueBrowserView: View {
 
     @State private var isReordering = false
     @State private var refreshTask: Task<Void, Never>?
-    @State private var sourcePages: [UUID: AO3SearchPage] = [:]
+    @State private var sourcePages: [UUID: QueueSourceFetchedPage] = [:]
     @State private var sourceCheckTask: Task<Void, Never>?
     @State private var sourceCheckQueueID: UUID?
     @State private var sourceOpeningTab: AppTab?
     @State private var isPageVisible = false
+    @State private var showingSources = false
+    @State private var pendingSourceToOpen: QueueSavedSearchLink?
+    @State private var openedAuthorSource: OpenedQueueAuthorSource?
+    @State private var openedSeriesSource: OpenedQueueSeriesSource?
+    @State private var openedTagSource: OpenedQueueTagSource?
     @State private var draggedWorkID: UUID?
     @State private var pendingCompactOrder: [UUID]?
     @State private var isSelecting = false
@@ -547,6 +552,7 @@ struct ReadingQueueBrowserView: View {
             snapshot: snapshot
         )
         let smartVisible = resolvedSmartVisible(unfilteredVisible: smartUnfilteredVisible)
+        let showsOwnHeading = !currentWorks.isEmpty || (selectedQueue?.hasVisibleSources == true)
         Group {
             if horizontalSizeClass == .regular {
                 regularLayout(
@@ -562,8 +568,8 @@ struct ReadingQueueBrowserView: View {
         .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
         .subjectOwnHeadingChrome(
             title: queueInlineTitle,
-            overrideInlineTitle: queueOverrideInlineTitle(worksEmpty: currentWorks.isEmpty),
-            isActive: !currentWorks.isEmpty && !isReordering
+            overrideInlineTitle: queueOverrideInlineTitle(worksEmpty: !showsOwnHeading),
+            isActive: showsOwnHeading && !isReordering
         )
             .onAppear {
                 isPageVisible = true
@@ -573,6 +579,7 @@ struct ReadingQueueBrowserView: View {
                 #if DEBUG
                 if DebugLaunchRoute.opensQueueDetails { showingQueueDetails = true }
                 if DebugLaunchRoute.takeSheet("editqueue") { showingEdit = true }
+                if DebugLaunchRoute.takeSheet("queuesources") { showingSources = true }
                 if DebugLaunchRoute.takeSheet("addworks") { showingAddWorks = true }
                 if DebugLaunchRoute.takeSheet("sortnew"), let queue = selectedQueue {
                     // The demo queues hold no New works, so the shot sorts every
@@ -586,8 +593,10 @@ struct ReadingQueueBrowserView: View {
                 }
                 #endif
             }
-            .onChange(of: selectedQueue?.id) { _, _ in startSourceCheck() }
-            .onChange(of: currentWorks.count) { _, _ in startSourceCheck() }
+            .onChange(of: selectedQueue?.id) { _, _ in
+                sourcePages = [:]
+                startSourceCheck()
+            }
             .onChange(of: router.selection) { _, tab in
                 if tab != sourceOpeningTab {
                     sourceCheckTask?.cancel()
@@ -673,6 +682,7 @@ struct ReadingQueueBrowserView: View {
                     EditReadingQueueSheet(queue: selectedQueue)
                 }
             }
+            .modifier(sourcePresentationsModifier(works: currentWorks))
             .confirmationDialog(
                 "Delete “\(selectedQueue?.displayName ?? "Queue")”?",
                 isPresented: $confirmDelete,
@@ -797,22 +807,51 @@ extension ReadingQueueBrowserView {
                 }
             )
         } else if let selectedQueue, works.isEmpty {
-            ContentUnavailableView {
-                Label(
-                    selectedQueue.displayName,
-                    systemImage: selectedQueue.kind == .savedForLater
-                        ? WorkActionLabels.savedForLaterEmptySymbol
-                        : "list.bullet.rectangle"
-                )
-            } description: {
-                Text(KeepOffline.queueKeeps(selectedQueue.keepsWorksOffline)
-                    ? "Works you add here are downloaded and kept for offline reading."
-                    : "Add works to choose what to read next. This queue doesn't keep downloads for you.")
-            } actions: {
-                Button {
-                    showingAddWorks = true
-                } label: {
-                    Label("Add Works", systemImage: "plus")
+            if selectedQueue.hasVisibleSources {
+                List {
+                    subjectHeaderSection
+                    Section {
+                        ContentUnavailableView {
+                            Label("No works yet", systemImage: "list.bullet.rectangle")
+                        } description: {
+                            Text(KeepOffline.queueKeeps(selectedQueue.keepsWorksOffline)
+                                ? "Works you add here are downloaded and kept for offline reading."
+                                : "Add works to choose what to read next. This queue doesn't keep downloads for you.")
+                        } actions: {
+                            Button {
+                                showingAddWorks = true
+                            } label: {
+                                Label("Add Works", systemImage: "plus")
+                            }
+                        }
+                        .bareListRow()
+                    }
+                }
+                .cardList()
+                .environment(\.defaultMinListRowHeight, 0)
+            } else {
+                ContentUnavailableView {
+                    Label(
+                        selectedQueue.displayName,
+                        systemImage: selectedQueue.kind == .savedForLater
+                            ? WorkActionLabels.savedForLaterEmptySymbol
+                            : "list.bullet.rectangle"
+                    )
+                } description: {
+                    Text(KeepOffline.queueKeeps(selectedQueue.keepsWorksOffline)
+                        ? "Works you add here are downloaded and kept for offline reading."
+                        : "Add works to choose what to read next. This queue doesn't keep downloads for you.")
+                } actions: {
+                    Button {
+                        showingAddWorks = true
+                    } label: {
+                        Label("Add Works", systemImage: "plus")
+                    }
+                    Button {
+                        showingSources = true
+                    } label: {
+                        Label("Add Sources", systemImage: "square.stack.3d.up")
+                    }
                 }
             }
         } else {
@@ -991,7 +1030,11 @@ extension ReadingQueueBrowserView {
                         preservedIDs: Set(preservedWorks.map(\.id)),
                         palette: subjectPalette,
                         onAddTag: { showingQueueTags = true },
-                        onFindMore: { openSearch($0, in: selectedQueue) },
+                        onOpenSource: { openSource($0, in: selectedQueue) },
+                        onManageSources: { showingSources = true },
+                        onRemoveSource: {
+                            ReadingQueueService.removeSource($0, from: selectedQueue, in: context)
+                        },
                         filterRail: {
                             if filters.hasActiveFilters || quickFilter != .all {
                                 filterChipRail
@@ -1186,7 +1229,11 @@ extension ReadingQueueBrowserView {
                             preservedIDs: Set(preservedWorks.map(\.id)),
                             palette: subjectPalette,
                             onAddTag: { showingQueueTags = true },
-                            onFindMore: { openSearch($0, in: selectedQueue) },
+                            onOpenSource: { openSource($0, in: selectedQueue) },
+                            onManageSources: { showingSources = true },
+                            onRemoveSource: {
+                                ReadingQueueService.removeSource($0, from: selectedQueue, in: context)
+                            },
                             filterRail: {
                                 if filters.hasActiveFilters || quickFilter != .all {
                                     filterChipRail
@@ -1550,6 +1597,13 @@ extension ReadingQueueBrowserView {
     /// whether or not the queue has works.
     @ViewBuilder
     private var queueMenuItems: some View {
+        if let queue = selectedQueue, queue.kind != .smart {
+            Button {
+                showingSources = true
+            } label: {
+                Label("Sources", systemImage: "square.stack.3d.up")
+            }
+        }
         Button {
             showingQueueDetails = true
         } label: {
@@ -1572,19 +1626,16 @@ extension ReadingQueueBrowserView {
     // MARK: - Actions
 
     private func startSourceCheck() {
-        guard isPageVisible, scenePhase == .active, router.selection == sourceOpeningTab else { return }
         guard let selectedQueueID,
               let selectedQueue = orderedQueues.first(where: { $0.id == selectedQueueID })
         else { return }
-        guard selectedQueue.kind != .smart else {
-            // A smart queue has no Find More sources. Checking them would hit AO3.
-            sourceCheckTask?.cancel()
-            sourceCheckTask = nil
-            sourceCheckQueueID = nil
-            return
-        }
-        guard !ReadingQueueService.orderedWorks(in: selectedQueue).isEmpty else {
-            // An empty queue shows no Find More: stop the previous queue's pass too (third review).
+        guard QueueSourceChecks.shouldCheckOnOpen(
+            isPageVisible: isPageVisible,
+            isAppActive: scenePhase == .active,
+            isSelectedTab: router.selection == sourceOpeningTab,
+            isSmartQueue: selectedQueue.kind == .smart,
+            hasVisibleSources: selectedQueue.hasVisibleSources
+        ) else {
             sourceCheckTask?.cancel()
             sourceCheckTask = nil
             sourceCheckQueueID = nil
@@ -1596,47 +1647,116 @@ extension ReadingQueueBrowserView {
         sourceCheckQueueID = selectedQueueID
         sourceCheckTask = Task {
             await previous?.value
-            guard !Task.isCancelled else { return }
+            // The queue may have been deleted or left while the previous pass wound down.
+            guard !Task.isCancelled, !selectedQueue.isDeleted, selectedQueue.modelContext != nil,
+                  self.selectedQueueID == selectedQueue.id else { return }
             await checkSources(in: selectedQueue)
         }
     }
 
     private func checkSources(in queue: ReadingQueue) async {
-        await QueueSourceChecks.run(
-            sources: queue.searchLinks.filter {
-                $0.search.map { QueueSourceChecks.countsNewResults($0.filters) } ?? false
-            },
+        let queueID = queue.id
+        await QueueSourceChecks.runFetched(
+            sources: queue.countableSources,
             checkedAt: { $0.lastCheckedAt },
             now: Date.init,
             sleep: { try await Task.sleep(for: .seconds($0)) },
+            isCurrent: { link in
+                // A removed row (or a deleted queue) must not be fetched or written.
+                !link.isDeleted && link.modelContext != nil && link.queue?.id == queueID
+                    && !queue.isDeleted && queue.modelContext != nil && selectedQueueID == queueID
+            },
             attempt: { link, date in
                 link.lastCheckedAt = date
                 FolderSyncService.markDirty()
                 return context.saveBestEffort(reason: "Saving queue source check failed")
             },
             fetch: { link in
-                guard let search = link.search,
-                      let url = AO3Client.searchURL(filters: search.filters, page: 1)
-                else { throw AO3Error.network("Bad queue source URL.") }
-                return try await AO3Client.shared.queueSourcePage(url)
+                guard let url = link.listingURL else {
+                    throw AO3Error.network("Bad queue source URL.")
+                }
+                return try await AO3Client.shared.queueSourceFetch(url)
             },
-            received: { link, page in
-                guard selectedQueue?.id == queue.id, let search = link.search else { return }
-                sourcePages[search.id] = page
-                link.newResultCount = QueueSourceChecks.count(page, since: search.lastOpenedAt)
+            received: { link, fetched in
+                sourcePages[link.id] = fetched
+                link.newResultCount = QueueSourceChecks.count(
+                    fetched.page,
+                    since: link.effectiveLastOpenedAt
+                )
                 FolderSyncService.markDirty()
                 _ = context.saveBestEffort(reason: "Saving queue source count failed")
             }
         )
     }
 
-    private func openSearch(_ search: SavedSearch, in queue: ReadingQueue) {
+    private func openSource(_ link: QueueSavedSearchLink, in queue: ReadingQueue) {
+        guard let kind = link.knownSourceKind else { return }
         router.currentQueueID = queue.id
-        router.pendingQueueSearch = QueueSearchRoute(
-            searchID: search.id, queueID: queue.id,
-            page: QueueSourceChecks.cachedPageForFindMore(sourcePages[search.id], isLoggedIn: auth.isLoggedIn)
+        switch kind {
+        case .savedSearch:
+            guard let search = link.search else { return }
+            defer { sourcePages.removeValue(forKey: link.id) }
+            let cachedPage = QueueSourceChecks.cachedFetchForFindMore(
+                sourcePages[link.id],
+                listingURL: link.listingURL,
+                isSignedOut: auth.status == .signedOut
+            )?.page
+            router.pendingQueueSearch = QueueSearchRoute(
+                searchID: search.id,
+                queueID: queue.id,
+                page: cachedPage
+            )
+            router.selection = .search
+        case .author:
+            guard let route = link.authorRoute else { return }
+            openedAuthorSource = OpenedQueueAuthorSource(
+                linkID: link.id,
+                route: route,
+                label: link.effectiveDisplayName
+            )
+        case .series:
+            guard let series = link.seriesSummary else { return }
+            openedSeriesSource = OpenedQueueSeriesSource(
+                linkID: link.id,
+                series: series,
+                label: link.effectiveDisplayName
+            )
+        case .tag:
+            guard let request = link.tagWorksRequest else { return }
+            openedTagSource = OpenedQueueTagSource(
+                linkID: link.id,
+                request: request,
+                label: link.effectiveDisplayName
+            )
+        }
+    }
+
+    private func recordSourceOpen(linkID: UUID) {
+        // The counted page is spent once Find More has used it.
+        sourcePages.removeValue(forKey: linkID)
+        guard let link = allQueues.flatMap(\.searchLinks).first(where: { $0.id == linkID }) else { return }
+        ReadingQueueService.recordSourceOpen(link, in: context)
+    }
+
+    private func sourcePresentationsModifier(works currentWorks: [SavedWork]) -> QueueSourcePresentationsModifier {
+        QueueSourcePresentationsModifier(
+            showingSources: $showingSources,
+            openedAuthorSource: $openedAuthorSource,
+            openedSeriesSource: $openedSeriesSource,
+            openedTagSource: $openedTagSource,
+            selectedQueue: selectedQueue,
+            works: currentWorks,
+            preservedCount: preservedWorks.count,
+            isSignedOut: auth.status == .signedOut,
+            sourcePages: sourcePages,
+            onQueueOpenSource: { pendingSourceToOpen = $0 },
+            onDismissSources: {
+                let link = pendingSourceToOpen
+                pendingSourceToOpen = nil
+                if let link, let queue = selectedQueue { openSource(link, in: queue) }
+            },
+            onRecordOpen: { recordSourceOpen(linkID: $0) }
         )
-        router.selection = .search
     }
 
     private func resolveInitialSelection() {

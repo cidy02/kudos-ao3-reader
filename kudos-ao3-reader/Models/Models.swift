@@ -70,6 +70,9 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     case followedTag
     /// A learned canonical tag alias removed via delete or replace-mode.
     case tagAlias
+    /// A queue source (author, series, tag, or unknown kind) the user removed
+    /// from a queue. Immediate hard-delete class, like `.savedSearch`.
+    case queueSource
 }
 
 /// Durable marker for an explicit local deletion. Future cloud merge code must treat
@@ -1149,6 +1152,10 @@ extension SavedWork {
     @Relationship(deleteRule: .cascade, inverse: \QueueSavedSearchLink.queue)
     var searchLinks: [QueueSavedSearchLink] = []
     var searchSourcesModifiedAt: Date?
+    /// Records intentional edits to non-search sources (author, series, tag),
+    /// including clearing the list, so folder sync and restore can distinguish
+    /// an intentional empty list from an older archive that omitted the key.
+    var sourcesModifiedAt: Date?
     /// The reader's own tags on this queue — 1h draws them under the header with
     /// a dashed "+ Tag", and 1i filters the organizer by them. Shares `Tag` with
     /// `SavedWork.tags` so the vocabulary is one list, not two.

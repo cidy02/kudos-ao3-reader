@@ -124,6 +124,12 @@ enum ReadingQueueService {
                         primary.markMembershipChanged(max(membership.lastModifiedAt, Date()))
                     }
                 }
+                // Its sources would cascade away with it.
+                for link in duplicate.searchLinks
+                where !primary.searchLinks.contains(where: { $0.dedupKey == link.dedupKey }) {
+                    link.queue = primary
+                    primary.searchLinks.append(link)
+                }
                 context.delete(duplicate)
             }
             context.saveBestEffort(reason: "Saving merged Saved for Later queue failed")
@@ -364,6 +370,10 @@ enum ReadingQueueService {
         if queue.kind != .smart, syncSearchLinks(for: queue, searchIDs: options.searchIDs, in: context) {
             changed = true
         }
+        if queue.kind != .smart, options.syncsNonSearchSources,
+           syncNonSearchSources(for: queue, drafts: options.sources, in: context) {
+            changed = true
+        }
         if changed { queue.markModified() }
         context.saveBestEffort(reason: "Saving queue changes failed")
         if queue.kind == .smart { return false }
@@ -376,11 +386,14 @@ enum ReadingQueueService {
         in context: ModelContext
     ) -> Bool {
         var sourcesChanged = false
-        for link in queue.searchLinks where link.search.map({ !searchIDs.contains($0.id) }) ?? true {
+        for link in queue.searchLinks
+        where link.isSavedSearchSource && (link.search.map({ !searchIDs.contains($0.id) }) ?? true) {
             context.delete(link)
             sourcesChanged = true
         }
-        let linkedIDs = Set(queue.searchLinks.compactMap { $0.search?.id })
+        let linkedIDs = Set(
+            queue.searchLinks.filter(\.isSavedSearchSource).compactMap { $0.search?.id }
+        )
         if let searches = try? context.fetch(FetchDescriptor<SavedSearch>()) {
             for search in searches where searchIDs.contains(search.id) && !linkedIDs.contains(search.id) {
                 if search.lastOpenedAt == nil {
@@ -391,8 +404,176 @@ enum ReadingQueueService {
                 sourcesChanged = true
             }
         }
-        if sourcesChanged { queue.searchSourcesModifiedAt = Date() }
+        if sourcesChanged {
+            queue.searchSourcesModifiedAt = Date()
+            FolderSyncService.markDirty()
+        }
         return sourcesChanged
+    }
+
+    /// Reconciles known non-search sources (author, series, tag) against `drafts`.
+    /// Unknown source kinds from newer builds are left untouched so round-trips never drop them.
+    @discardableResult
+    static func syncNonSearchSources(
+        for queue: ReadingQueue,
+        drafts: [QueueSourceDraft],
+        in context: ModelContext
+    ) -> Bool {
+        guard queue.kind != .smart else { return false }
+        var seenKeys = Set<String>()
+        let uniqueDrafts = drafts.filter { draft in
+            draft.kind != .savedSearch && seenKeys.insert(draft.dedupKey).inserted
+        }
+        let incomingByKey = Dictionary(
+            uniqueDrafts.map { ($0.dedupKey, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var changed = false
+        let existingKnown = queue.searchLinks.filter { !$0.isSavedSearchSource && $0.isKnownSource }
+        var existingByKey: [String: QueueSavedSearchLink] = [:]
+        for link in existingKnown {
+            // A row the sheet could not show (no draft) is not the reader's to have removed here.
+            guard link.sourceDraft != nil else { continue }
+            let key = link.dedupKey
+            if incomingByKey[key] == nil || existingByKey[key] != nil {
+                // A removal travels as a tombstone so another device's copy goes too.
+                if incomingByKey[key] == nil { SyncTombstones.recordDeletion(of: link, in: queue, context: context) }
+                queue.searchLinks.removeAll { $0.id == link.id }
+                context.delete(link)
+                changed = true
+            } else {
+                existingByKey[key] = link
+            }
+        }
+        let now = Date()
+        for draft in uniqueDrafts {
+            if let existing = existingByKey[draft.dedupKey] {
+                if existing.displayName != draft.displayName
+                    || existing.subtitle != draft.subtitle
+                    || existing.tagCategoryRaw != draft.tagCategoryRaw
+                    || existing.urlString != draft.urlString {
+                    existing.apply(draft)
+                    changed = true
+                }
+            } else {
+                let created = QueueSavedSearchLink(
+                    id: draft.id,
+                    queue: queue,
+                    kindRaw: draft.kind.rawValue,
+                    targetKey: draft.targetKey,
+                    displayName: draft.displayName,
+                    subtitle: draft.subtitle,
+                    authorUsername: draft.authorUsername,
+                    authorPseud: draft.authorPseud,
+                    ao3SeriesID: draft.ao3SeriesID,
+                    tagName: draft.tagName,
+                    tagCategoryRaw: draft.tagCategoryRaw,
+                    urlString: draft.urlString,
+                    lastOpenedAt: now,
+                    dateAdded: now
+                )
+                context.insert(created)
+                changed = true
+            }
+        }
+        if changed {
+            queue.sourcesModifiedAt = now
+            FolderSyncService.markDirty()
+        }
+        return changed
+    }
+
+    @discardableResult
+    static func addSavedSearchSource(
+        _ search: SavedSearch,
+        to queue: ReadingQueue,
+        in context: ModelContext
+    ) -> Bool {
+        guard queue.kind != .smart else { return false }
+        guard !queue.savedSearchLinks.contains(where: { $0.search?.id == search.id }) else { return false }
+        let now = Date()
+        if search.lastOpenedAt == nil {
+            search.lastOpenedAt = now
+        }
+        context.insert(QueueSavedSearchLink(queue: queue, search: search))
+        queue.searchSourcesModifiedAt = now
+        queue.markModified(now)
+        FolderSyncService.markDirty()
+        return context.saveBestEffort(reason: "Adding saved search source failed")
+    }
+
+    @discardableResult
+    static func addSource(
+        _ draft: QueueSourceDraft,
+        to queue: ReadingQueue,
+        in context: ModelContext
+    ) -> Bool {
+        guard queue.kind != .smart, draft.kind != .savedSearch else { return false }
+        guard !queue.nonSearchSources.contains(where: { $0.dedupKey == draft.dedupKey }) else { return false }
+        let now = Date()
+        let link = QueueSavedSearchLink(
+            id: draft.id,
+            queue: queue,
+            kindRaw: draft.kind.rawValue,
+            targetKey: draft.targetKey,
+            displayName: draft.displayName,
+            subtitle: draft.subtitle,
+            authorUsername: draft.authorUsername,
+            authorPseud: draft.authorPseud,
+            ao3SeriesID: draft.ao3SeriesID,
+            tagName: draft.tagName,
+            tagCategoryRaw: draft.tagCategoryRaw,
+            urlString: draft.urlString,
+            lastOpenedAt: now,
+            dateAdded: now
+        )
+        context.insert(link)
+        queue.sourcesModifiedAt = now
+        queue.markModified(now)
+        FolderSyncService.markDirty()
+        return context.saveBestEffort(reason: "Adding queue source failed")
+    }
+
+    static func removeSource(
+        _ link: QueueSavedSearchLink,
+        from queue: ReadingQueue,
+        in context: ModelContext
+    ) {
+        guard queue.kind != .smart else { return }
+        let wasSavedSearch = link.isSavedSearchSource
+        let now = Date()
+        queue.searchLinks.removeAll { $0.id == link.id }
+        if wasSavedSearch {
+            queue.searchSourcesModifiedAt = now
+        } else {
+            if link.isKnownSource { SyncTombstones.recordDeletion(of: link, in: queue, context: context) }
+            queue.sourcesModifiedAt = now
+        }
+        context.delete(link)
+        queue.markModified(now)
+        FolderSyncService.markDirty()
+        context.saveBestEffort(reason: "Removing queue source failed")
+    }
+
+    /// Stamps `lastOpenedAt` and resets the new-works count after the reader opens
+    /// a queue source's listing (page 1 loaded or cached page displayed).
+    static func recordSourceOpen(
+        _ link: QueueSavedSearchLink,
+        at date: Date = Date(),
+        in context: ModelContext
+    ) {
+        if link.isSavedSearchSource {
+            guard let search = link.search else { return }
+            search.lastOpenedAt = date
+            for queueLink in search.queueLinks {
+                queueLink.newResultCount = 0
+            }
+        } else {
+            link.lastOpenedAt = date
+            link.newResultCount = 0
+        }
+        FolderSyncService.markDirty()
+        context.saveBestEffort(reason: "Saving queue source visit failed")
     }
 
     /// Keep works offline turned on: fetches the works still missing their

@@ -597,9 +597,15 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     /// Queue counts are anonymous: signed-in Find More loads its own page.
     func queueSourcePage(_ url: URL) async throws -> AO3SearchPage {
+        try await queueSourceFetch(url).page
+    }
+
+    /// Anonymous page-1 fetch for any queue source listing (saved search, author
+    /// works, series, or tag works), returning both the parsed page and the raw
+    /// HTML so Find More can reuse the fetched page without a second request.
+    func queueSourceFetch(_ url: URL) async throws -> QueueSourceFetchedPage {
         try Self.rejectIfUntrusted(url)
-        if let page = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-            .queryItems?.first(where: { $0.name == "page" })?.value, page != "1" {
+        guard QueueSourceChecks.isPageOneListing(url) else {
             throw AO3Error.network("Queue counts may fetch page 1 only.")
         }
         try Self.throwIfQueueSourceHeld()
@@ -613,12 +619,20 @@ actor AO3Client { // swiftlint:disable:this type_body_length
                     try Self.throwIfQueueSourceHeld()
                     do {
                         var request = URLRequest(url: url)
+                        request.httpShouldHandleCookies = false
                         request.setValue(AO3RequestDefaults.userAgent(feature: .queueSourceCounts),
                                          forHTTPHeaderField: "User-Agent")
                         let (body, response) = try await session.data(for: request)
                         defer { Self.purgeSessionCookie(from: session.configuration.httpCookieStorage, url: url) }
                         try checkStatus(response) { body }
-                        return try Self.parseSearchPage(Self.htmlString(from: body), page: 1)
+                        let html = Self.htmlString(from: body)
+                        let parsed = try Self.parseSearchPage(
+                            html,
+                            page: 1,
+                            requestedURL: url,
+                            finalURL: response.url
+                        )
+                        return QueueSourceFetchedPage(url: url, page: parsed, html: html)
                     } catch AO3Error.rateLimited(let retryAfter) {
                         // Save before releasing the coordinator slot to close the 429 race.
                         let delay = retryAfter.flatMap { $0.isFinite ? max($0, 0) : nil } ?? 6 * 60 * 60

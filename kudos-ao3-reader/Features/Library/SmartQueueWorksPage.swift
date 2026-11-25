@@ -83,7 +83,9 @@ struct SmartQueueWorksPage<FilterRail: View>: View {
                     preservedIDs: preservedIDs,
                     palette: palette,
                     onAddTag: onAddTag,
-                    onFindMore: { _ in },
+                    onOpenSource: { _ in },
+                    onManageSources: {},
+                    onRemoveSource: { _ in },
                     filterRail: filterRail
                 )
                 .bareListRow()
@@ -123,7 +125,9 @@ struct SmartQueueWorksPage<FilterRail: View>: View {
                     preservedIDs: preservedIDs,
                     palette: palette,
                     onAddTag: onAddTag,
-                    onFindMore: { _ in },
+                    onOpenSource: { _ in },
+                    onManageSources: {},
+                    onRemoveSource: { _ in },
                     filterRail: filterRail
                 )
                 .padding(.horizontal, SubjectMetrics.gutter)

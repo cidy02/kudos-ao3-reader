@@ -34,6 +34,13 @@ enum DemoLibrary {
             work.ao3WorkID = nil
             changed = true
         }
+        // Demo queue sources are stamped `.distantFuture` (never due for a count);
+        // outside demo mode they are fabricated rows, so they go.
+        for link in (try? context.fetch(FetchDescriptor<QueueSavedSearchLink>())) ?? []
+        where link.lastCheckedAt == .distantFuture {
+            context.delete(link)
+            changed = true
+        }
         if changed { try? context.save() }
     }
 
@@ -135,6 +142,7 @@ enum DemoLibrary {
             for index in entry.works where index < works.count {
                 _ = ReadingQueueService.add(works[index], to: queue, in: context)
             }
+            if order == 0 { seedSources(for: queue, in: context) }
         }
         let saved = ReadingQueueService.ensureSavedForLaterQueue(in: context)
         for index in [7, 13] where index < works.count {
@@ -214,6 +222,31 @@ enum DemoLibrary {
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true
         )
         try? Data(repeating: 0, count: 2_048).write(to: url)
+    }
+
+    /// Sources on the first demo queue for the Queue-Sources shots. Each is stamped
+    /// `.distantFuture`, so no count is ever due (and `clearSentinelIDs` removes them outside demo mode).
+    private static func seedSources(for queue: ReadingQueue, in context: ModelContext) {
+        var filters = AO3SearchFilters()
+        filters.sort = .dateUpdated
+        filters.sortDirection = AO3SearchFilters.Sort.dateUpdated.naturalDirection
+        let search = SavedSearch(name: "Slow burn, complete", filters: filters)
+        search.lastOpenedAt = Date().addingTimeInterval(-86_400 * 3)
+        context.insert(search)
+        ReadingQueueService.addSavedSearchSource(search, to: queue, in: context)
+        let drafts = [
+            QueueSourceDraft.author(username: "kestrel", pseud: "alt"),
+            QueueSourceDraft.author(username: "marrowbone"),
+            QueueSourceDraft.series(id: 9876, title: "Starfall Arc"),
+            QueueSourceDraft.tag(name: "Found Family", category: "Freeform"),
+            QueueSourceDraft.tag(name: "Time Loop", category: "Freeform")
+        ].compactMap { $0 }
+        for draft in drafts { ReadingQueueService.addSource(draft, to: queue, in: context) }
+        let counts = [3, 20, 0, 7, 1, 0]
+        for (link, count) in zip(queue.searchLinks.sorted { $0.effectiveDisplayName < $1.effectiveDisplayName }, counts) {
+            link.lastCheckedAt = .distantFuture
+            link.newResultCount = count
+        }
     }
 
     private struct DemoQueue {
@@ -702,6 +735,8 @@ enum DebugShots {
         ("queuesettings", DebugShot(route: neonDetails)),
         ("newqueue", DebugShot(route: "queues", sheets: ["newqueue"])),
         ("editqueue", DebugShot(route: neon, sheets: ["editqueue"])),
+        ("queuesources", DebugShot(route: neon, sheets: ["queuesources"])),
+        ("addsource", DebugShot(route: neon, sheets: ["queuesources", "addsource"])),
         ("addworks", DebugShot(route: neon, sheets: ["addworks"])),
         // T-529 Sort New over the queue page (the demo has no New works, so it sorts them all).
         ("sortnew", DebugShot(route: neon, sheets: ["sortnew"])),
