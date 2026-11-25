@@ -1093,9 +1093,11 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     let authorIdentitiesJSON: String?
     /// Omitted for older/Android records; absence never clears a local pin.
     let coverRecipeJSON: String?
-    /// T-573 additive: "generated" or "embedded"; omitted when the work follows the global setting.
-    /// Absence never clears a local choice; an unknown value is kept as-is.
+    /// T-573 additive: "generated", "embedded" or "follow" (a reset); omitted when the work never had a
+    /// choice. Absence never clears a local choice; an unknown value is kept as-is.
     let coverArtPreference: String?
+    /// T-573 additive: when the choice was last edited; the choice merges by this alone.
+    let coverArtPreferenceChangedAt: Date?
     /// Additive D3 derived fields; omitted when empty so untouched works emit no key.
     let chapterWordCountsJSON: String?
     let wordUnitRaw: String?
@@ -1196,6 +1198,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         authorIdentitiesJSON = work.authorIdentitiesJSON.isEmpty ? nil : work.authorIdentitiesJSON
         coverRecipeJSON = work.coverRecipeJSON
         coverArtPreference = work.coverArtPreferenceRaw
+        coverArtPreferenceChangedAt = work.coverArtPreferenceChangedAt
         chapterWordCountsJSON = work.chapterWordCountsJSON.isEmpty ? nil : work.chapterWordCountsJSON
         wordUnitRaw = work.wordUnitRaw.isEmpty ? nil : work.wordUnitRaw
         importSourceRaw = work.importSourceRaw
@@ -1281,7 +1284,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case epubDigest
         case authorIdentitiesJSON
         case coverRecipeJSON
-        case coverArtPreference
+        case coverArtPreference, coverArtPreferenceChangedAt
         case chapterWordCountsJSON
         case wordUnitRaw
         case importSourceRaw, importSourceSince
@@ -1383,6 +1386,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         authorIdentitiesJSON = try? container.decodeIfPresent(String.self, forKey: .authorIdentitiesJSON)
         coverRecipeJSON = try container.decodeIfPresent(String.self, forKey: .coverRecipeJSON)
         coverArtPreference = try? container.decodeIfPresent(String.self, forKey: .coverArtPreference)
+        coverArtPreferenceChangedAt = try? container.decodeIfPresent(Date.self, forKey: .coverArtPreferenceChangedAt)
         chapterWordCountsJSON = try container.decodeIfPresent(String.self, forKey: .chapterWordCountsJSON)
         wordUnitRaw = try container.decodeIfPresent(String.self, forKey: .wordUnitRaw)
         importSourceRaw = try container.decodeIfPresent(String.self, forKey: .importSourceRaw)
@@ -6334,10 +6338,22 @@ enum KudosBackupService {
            ) {
             work.coverRecipeJSON = GeneratedCoverRecipe.clampingFuturePinIfSupported(coverRecipeJSON)
         }
-        // T-573: same rule as keepInProgressOverride / readingStatusRaw above: a present value from a
-        // newer edit (`incomingWins`) replaces the local one; an absent key never clears it.
-        if let archivedPreference = archived.coverArtPreference, incomingWins {
-            work.coverArtPreferenceRaw = archivedPreference
+        // T-573: the choice is its own field with its own clock: the incoming value wins only when its
+        // stamp is newer than the local stamp (or there is none locally); an absent key never clears,
+        // and `lastModifiedAt` (reading, refreshing, favouriting) plays no part.
+        if let archivedPreference = archived.coverArtPreference {
+            let incomingStamp = archived.coverArtPreferenceChangedAt.map {
+                KudosBackupContents.clampedArchiveDate($0)
+            }
+            let wins = switch (work.coverArtPreferenceChangedAt, incomingStamp) {
+            case (nil, _): true
+            case (_?, nil): false
+            case let (local?, incoming?): incoming > local
+            }
+            if wins {
+                work.coverArtPreferenceRaw = archivedPreference
+                work.coverArtPreferenceChangedAt = incomingStamp
+            }
         }
         if let incomingCounts = SavedWork.validatedChapterWordCountsJSON(archived.chapterWordCountsJSON),
            work.chapterWordCountsJSON.isEmpty || mode == .replaceLibrary || incomingWins {

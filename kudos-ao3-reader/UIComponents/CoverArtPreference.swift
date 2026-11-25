@@ -30,13 +30,24 @@ enum CoverArtPreference: String, CaseIterable {
 }
 
 extension SavedWork {
-    /// A reader's edit: stamps `lastModifiedAt` (a newer edit wins in backup/sync merge) and wakes Folder Sync.
+    /// A reader's edit: stamps `coverArtPreferenceChangedAt` (the merge clock for this field, monotonic
+    /// so a slow clock cannot lose to its own earlier edit) and wakes Folder Sync. Choosing what is
+    /// already selected writes nothing, so an unknown future value is kept.
     @MainActor
     func setCoverArtPreference(_ preference: CoverArtPreference?) {
-        // Back to Follow Settings: an explicit value, so the newer edit wins on other devices too.
-        let raw = preference?.rawValue ?? (coverArtPreferenceRaw == nil ? nil : CoverArtPreference.followRaw)
+        let raw: String?
+        if let preference {
+            raw = preference.rawValue
+        } else {
+            // Follow Settings: already selected when nothing resolves; after a choice write "follow",
+            // an explicit newer edit, since an absent key never clears on other devices.
+            guard CoverArtPreference.resolved(coverArtPreferenceRaw) != nil else { return }
+            raw = CoverArtPreference.followRaw
+        }
         guard coverArtPreferenceRaw != raw else { return }
         coverArtPreferenceRaw = raw
+        let now = Date()
+        coverArtPreferenceChangedAt = max(now, coverArtPreferenceChangedAt.map { $0.addingTimeInterval(0.001) } ?? now)
         markModified()
         FolderSyncService.markDirty()
         NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)

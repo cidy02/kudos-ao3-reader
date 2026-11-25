@@ -222,9 +222,11 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         .onChange(of: router.cardNavigationSuppressed) { _, suppressed in
             if suppressed { dismissIfAuthorBylineConflict() }
         }
-        .task(id: localWork?.id) {
+        .task(id: embeddedArtKey) {
             guard let work = localWork, work.hasEPUB else { hasEmbeddedArt = false; return }
-            hasEmbeddedArt = await GeneratedCoverArtLoader.shared.image(workID: work.id, fileURL: work.fileURL) != nil
+            let hasArt = await GeneratedCoverArtLoader.shared.image(workID: work.id, fileURL: work.fileURL) != nil
+            guard !Task.isCancelled else { return }
+            hasEmbeddedArt = hasArt
         }
         .task {
             // Resolve an existing library record once (so a browsed work already in the
@@ -355,6 +357,14 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         #endif
     }
 
+    /// Changes when the EPUB appears, is replaced or removed, so the art check runs again.
+    private var embeddedArtKey: String {
+        guard let work = localWork else { return "" }
+        let modified = (try? FileManager.default.attributesOfItem(atPath: work.fileURL.path))?[.modificationDate]
+            .flatMap { $0 as? Date }?.timeIntervalSince1970 ?? 0
+        return "\(work.id)|\(work.hasEPUB)|\(work.epubDigest)|\(modified)"
+    }
+
     /// T-573: Follow Settings / Work's Art / Generated, saved on the work and applied to every
     /// surface that draws its cover. Offered only when the EPUB has art of its own.
     @ViewBuilder
@@ -372,6 +382,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             Text("Generated").tag(CoverArtPreference?.some(.generated))
         }
         .pickerStyle(.inline)
+        .labelsHidden()
         .accessibilityHint("Chooses the cover this work uses everywhere in Kudos.")
     }
 
