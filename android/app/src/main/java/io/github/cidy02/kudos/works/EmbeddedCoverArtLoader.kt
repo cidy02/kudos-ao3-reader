@@ -5,7 +5,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -444,20 +445,14 @@ fun rememberWorkHasEmbeddedCoverArt(work: SavedWork?): Boolean {
     val initialHasArt = remember(workId, epubFile, epubDigest, downloadedAtMillis) {
         if (workId == null || epubFile == null) false else loader.peekHasArt(epubFile) ?: false
     }
-    val hasArt by produceState(
-        initialValue = initialHasArt,
-        workId,
-        epubFile,
-        epubDigest,
-        downloadedAtMillis
-    ) {
-        if (workId == null || epubFile == null) {
-            value = false
-            return@produceState
-        }
-        value = loader.hasEmbeddedArt(workId = workId, epubFile = epubFile)
+    // State keyed like the load, so a reused composable never shows the previous work's answer while the new one loads
+    // (produceState would keep the old value until its producer sets a new one).
+    val hasArt = remember(workId, epubFile, epubDigest, downloadedAtMillis) { mutableStateOf(initialHasArt) }
+    LaunchedEffect(workId, epubFile, epubDigest, downloadedAtMillis) {
+        hasArt.value = if (workId == null || epubFile == null) false
+        else loader.hasEmbeddedArt(workId = workId, epubFile = epubFile)
     }
-    return workId != null && hasArt
+    return workId != null && hasArt.value
 }
 
 @Composable
@@ -476,18 +471,12 @@ private fun rememberLoadedEmbeddedCoverArt(
     val initialBitmap = remember(workId, epubFile, epubDigest, downloadedAtMillis) {
         if (workId == null || epubFile == null) null else loader.peekCached(epubFile)?.bitmap
     }
-    val bitmap by produceState<Bitmap?>(
-        initialValue = initialBitmap,
-        workId,
-        epubFile,
-        epubDigest,
-        downloadedAtMillis
-    ) {
-        if (workId == null || epubFile == null) {
-            value = null
-            return@produceState
-        }
-        value = loader.load(workId = workId, epubFile = epubFile)
+    // Keyed state, not produceState: see rememberWorkHasEmbeddedCoverArt.
+    val bitmapState = remember(workId, epubFile, epubDigest, downloadedAtMillis) { mutableStateOf(initialBitmap) }
+    LaunchedEffect(workId, epubFile, epubDigest, downloadedAtMillis) {
+        bitmapState.value = if (workId == null || epubFile == null) null
+        else loader.load(workId = workId, epubFile = epubFile)
     }
+    val bitmap = bitmapState.value
     return remember(workId, bitmap) { if (workId == null) null else bitmap?.asImageBitmap() }
 }
