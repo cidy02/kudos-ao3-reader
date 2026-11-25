@@ -76,7 +76,8 @@ struct InsightsStoppedSheet: View {
             parts.append(locatorTitle)
         } else if work.postedChapterCount > 0 {
             let current = min(work.postedChapterCount, max(1, work.lastSpineIndex + 1))
-            parts.append("Chapter \(current) of \(work.postedChapterCount)")
+            // Same wording as the reader: the work's total when known, else the bare chapter number.
+            parts.append(SavedWork.totalChapterCount(from: work.chapters).map { (total: Int) -> String in "Chapter \(current) of \(total)" } ?? "Chapter \(current)")
         }
         if let progress = work.readingProgress {
             parts.append("\(Int((progress * 100).rounded()))%")

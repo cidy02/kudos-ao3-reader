@@ -2458,8 +2458,10 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
             let progress = w.readingProgress.map { Int(($0 * 100).rounded()) }
             var parts: [String] = []
             var discreetParts: [String] = []
+            // The reader's convention: "Chapter 4 of 10" names the work's total when AO3 knows it, else just "Chapter 4".
+            let currentChapter: Int = min(w.postedChapterCount, max(1, w.lastSpineIndex + 1))
             let numericChapter: String? = w.postedChapterCount > 0
-                ? "Chapter \(min(w.postedChapterCount, max(1, w.lastSpineIndex + 1))) of \(w.postedChapterCount)"
+                ? (SavedWork.totalChapterCount(from: w.chapters).map { (total: Int) -> String in "Chapter \(currentChapter) of \(total)" } ?? "Chapter \(currentChapter)")
                 : nil
             if let title = locatorTitle(from: w.readiumLocator) {
                 parts.append(title)
