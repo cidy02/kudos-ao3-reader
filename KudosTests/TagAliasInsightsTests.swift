@@ -188,8 +188,10 @@ struct TagAliasInsightsTests {
             works: works, facts: facts, allFacts: facts, calendar: cal, aliases: resolver
         )
         let mhaLane = try #require(habits.fandomTimeline.first { $0.name == "Boku no Hero Academia" })
-        // Feb (10k via "BNHA") = ratio 0.4 -> tier 2; Mar (25k via canonical) = tier 3.
-        #expect(mhaLane.monthlyActivity[1] == 2)
+        // Feb (10k via "BNHA") is 100% of Feb's words (>= 5k) -> tier 3; Mar (25k canonical) = tier 3.
+        #expect(mhaLane.monthlyWords[1] == 10_000)
+        #expect(mhaLane.monthlyWords[2] == 25_000)
+        #expect(mhaLane.monthlyActivity[1] == 3)
         #expect(mhaLane.monthlyActivity[2] == 3)
 
         let statsRead = ReadingStatistics(

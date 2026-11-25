@@ -283,7 +283,7 @@ struct WhereTheWordsWentCard: View {
     }
 
     private func formatK(_ words: Int) -> String {
-        String(format: "%.1fk", Double(words) / 1000.0)
+        ReadingInsights.compactWordsLabel(words)
     }
 }
 
@@ -291,16 +291,79 @@ struct ReadingAndListeningCard: View {
     let readingSeconds: Double
     let silentReadingSeconds: Double
     let listeningSeconds: Double
+    var listeningPlaybackRate: Double? = nil
+    var listeningWorksCount: Int = 0
     let hideReadingTime: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(ThemeManager.self) private var theme
 
+    private var listeningDetail: String? {
+        var parts: [String] = []
+        if let rate = listeningPlaybackRate, rate > 0 {
+            parts.append(String(format: "%.1f×", rate))
+        }
+        if listeningWorksCount > 0 {
+            let noun = listeningWorksCount == 1 ? "work" : "works"
+            parts.append("\(listeningWorksCount) \(noun)")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Reading and Listening")
-                .font(.subheadline.weight(.semibold))
-            timeRow("Time reading", seconds: readingSeconds)
-            timeRow("Reading", seconds: silentReadingSeconds)
-            timeRow("Read Aloud", seconds: listeningSeconds)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Reading and Listening")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Spacer()
+                Text(hideReadingTime ? "—" : ReadingInsights.durationLabel(readingSeconds))
+                    .font(.footnote)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondaryInk)
+            }
+
+            if readingSeconds > 0 {
+                GeometryReader { proxy in
+                    let total = max(1.0, silentReadingSeconds + listeningSeconds)
+                    let readRatio = min(1.0, max(0.0, silentReadingSeconds / total))
+                    let listenRatio = min(1.0, max(0.0, listeningSeconds / total))
+                    let gap: CGFloat = (silentReadingSeconds > 0 && listeningSeconds > 0) ? 2 : 0
+                    let usableWidth = max(0, proxy.size.width - gap)
+                    HStack(spacing: gap) {
+                        if silentReadingSeconds > 0 {
+                            Rectangle()
+                                .fill(theme.accentInk)
+                                .frame(width: max(4, usableWidth * CGFloat(readRatio)))
+                        }
+                        if listeningSeconds > 0 {
+                            Rectangle()
+                                .fill(theme.accentInk.opacity(0.35))
+                                .frame(width: max(4, usableWidth * CGFloat(listenRatio)))
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                }
+                .frame(height: 12)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Reading and Read Aloud time split")
+            }
+
+            VStack(spacing: 0) {
+                modeRow(
+                    title: "Reading",
+                    detail: nil,
+                    seconds: silentReadingSeconds,
+                    swatchColor: theme.accentInk
+                )
+                Divider()
+                    .overlay(theme.appTheme.cardBorder)
+                modeRow(
+                    title: "Read Aloud",
+                    detail: listeningDetail,
+                    seconds: listeningSeconds,
+                    swatchColor: theme.accentInk.opacity(0.35)
+                )
+            }
         }
         .padding(16)
         .background(theme.appTheme.cardSurface)
@@ -311,12 +374,53 @@ struct ReadingAndListeningCard: View {
         )
     }
 
-    private func timeRow(_ title: String, seconds: Double) -> some View {
-        HStack {
-            Text(title).font(.footnote).foregroundStyle(.secondaryInk)
-            Spacer()
-            Text(hideReadingTime ? "—" : ReadingInsights.durationLabel(seconds))
-                .font(.footnote.weight(.semibold)).monospacedDigit()
+    @ViewBuilder
+    private func modeRow(title: String, detail: String?, seconds: Double, swatchColor: Color) -> some View {
+        let valueText = hideReadingTime ? "—" : ReadingInsights.durationLabel(seconds)
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(swatchColor)
+                        .frame(width: 10, height: 10)
+                    Text(title)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                }
+                if let detail {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                }
+                Text(valueText)
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 6)
+        } else {
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(swatchColor)
+                    .frame(width: 10, height: 10)
+                Text(title)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let detail {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                }
+                Text(valueText)
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            .frame(minHeight: 32)
         }
     }
 }
@@ -343,60 +447,173 @@ struct InsightsUnavailableCard: View {
 struct LibraryArrivalCard: View {
     let rows: [ReadingLibraryInsights.ArrivalRow]
     let since: Date?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(ThemeManager.self) private var theme
 
-    private var totalFinished: Int { rows.reduce(0) { $0 + $1.finished } }
+    private var visibleRows: [ReadingLibraryInsights.ArrivalRow] {
+        rows.filter { $0.finished > 0 }
+    }
+
+    private var totalFinished: Int {
+        visibleRows.reduce(0) { (partial: Int, row: ReadingLibraryInsights.ArrivalRow) -> Int in
+            partial + row.finished
+        }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("How Finished Works Arrived").font(.subheadline.weight(.semibold))
-            if let since {
-                Text("Recorded since \(since.formatted(date: .abbreviated, time: .omitted))")
-                    .font(.caption).foregroundStyle(.secondaryInk)
-            }
-            ForEach(rows) { row in
-                HStack {
-                    Text(row.label).frame(maxWidth: .infinity, alignment: .leading)
-                    Text("\(row.finishedSharePercent(totalFinished: totalFinished))% share · \(row.finishRatePercent)% finish rate")
-                        .monospacedDigit().foregroundStyle(.secondaryInk)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("How Finished Works Arrived")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Spacer()
+                if let since {
+                    Text("since \(since.formatted(.dateTime.month(.abbreviated).year()))")
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
                 }
-                .font(.footnote)
-                Text("\(row.finished) finished of \(row.saved) saved")
-                    .font(.caption).foregroundStyle(.secondaryInk)
+            }
+
+            VStack(spacing: 8) {
+                ForEach(visibleRows) { row in
+                    let sharePct = row.finishedSharePercent(totalFinished: totalFinished)
+                    let statsText = "\(sharePct)% share · \(row.finishRatePercent)% finish rate"
+                    VStack(alignment: .leading, spacing: 2) {
+                        let layout = dynamicTypeSize.isAccessibilitySize
+                            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
+                        layout {
+                            Text(row.label)
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Text(statsText)
+                                .font(.footnote)
+                                .monospacedDigit()
+                                .foregroundStyle(.secondaryInk)
+                        }
+                        Text("\(row.finished) finished of \(row.saved) saved")
+                            .font(.caption)
+                            .foregroundStyle(.secondaryInk)
+                    }
+                }
             }
         }
         .padding(16)
         .background(theme.appTheme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+        )
     }
 }
 
 struct LibraryFoundEarlyCard: View {
+    let recordedFinishedCount: Int
     let count: Int
+    let foundEarlyShare: Double?
     let grownCount: Int
     let grownShare: Double?
-    let example: String?
+    let since: Date?
+    let example: ReadingLibraryInsights.FoundEarlyExample?
     let discreetMode: Bool
+    var discreetMasker: InsightsDiscreetMasker = .empty
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Found Early").font(.subheadline.weight(.semibold))
-            Text("\(count) finished works had fewer than 500 kudos when saved")
-            Text("\(grownCount) have at least tripled since")
-            if let grownShare {
-                Text("\(Int((grownShare * 100).rounded()))% of the recorded group")
-                    .foregroundStyle(.secondaryInk)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Found Early")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Spacer()
+                if let since {
+                    Text("since \(since.formatted(.dateTime.month(.abbreviated).year()))")
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                }
             }
-            if let example, !discreetMode {
-                Text(example).foregroundStyle(.secondaryInk)
+
+            if let foundEarlyShare {
+                let pct = Int((foundEarlyShare * 100).rounded())
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("\(pct)%")
+                        .font(.title3.weight(.bold))
+                        .monospacedDigit()
+                    Text("of finished works had under 500 kudos when saved (\(count) of \(recordedFinishedCount))")
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                Text("\(count) finished works had fewer than 500 kudos when saved")
+                    .font(.footnote)
+            }
+
+            if let grownShare {
+                let pct = Int((grownShare * 100).rounded())
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("\(pct)%")
+                        .font(.title3.weight(.bold))
+                        .monospacedDigit()
+                    Text("have at least tripled their kudos since (\(grownCount))")
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            if let example {
+                let title = discreetMode
+                    ? discreetMasker.work(id: example.workID, title: example.title)
+                    : example.title
+                let layout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+                    : AnyLayout(HStackLayout(alignment: .center, spacing: 10))
+                layout {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                        Text("\(example.kudosAtSave.formatted()) kudos when saved")
+                            .font(.caption)
+                            .foregroundStyle(.secondaryInk)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        Image(systemName: "arrow.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondaryInk)
+                            .accessibilityHidden(true)
+                    }
+
+                    VStack(alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing, spacing: 2) {
+                        Text(example.kudosNow.formatted())
+                            .font(.subheadline.weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(.primary)
+                        Text("now")
+                            .font(.caption)
+                            .foregroundStyle(.secondaryInk)
+                    }
+                }
+                .padding(12)
+                .background(theme.appTheme.cardBackdrop)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
-        .font(.footnote)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(theme.appTheme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+        )
     }
 }
 
@@ -410,8 +627,9 @@ struct HabitsChapterTimingCard: View {
             metric("Chapters each, average", value: figure.averageChaptersEach.map { String(format: "%.1f", $0) } ?? "No chapter spans yet")
             metric("End on a chapter", value: figure.chapterEndShare.map { "\(Int(($0 * 100).rounded()))%" } ?? "No eligible sittings yet")
             if figure.canShowSkimAndPeek {
-                metric("Skimmed", value: "\(figure.skimmedWords) words left out of totals")
-                metric("Peeked at the Ending", value: "\(figure.peekedWorks) works")
+                metric("Skimmed", value: "\(ReadingInsights.compactWordsLabel(figure.skimmedWords)) words left out of totals")
+                let noun = figure.peekedWorks == 1 ? "work" : "works"
+                metric("Peeked at the Ending", value: "\(figure.peekedWorks) \(noun)")
             } else {
                 metric("Skimmed · Peeked at the Ending", value: "Available after 20 measured chapters")
             }
@@ -419,6 +637,10 @@ struct HabitsChapterTimingCard: View {
         .padding(16)
         .background(theme.appTheme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+        )
     }
 
     private func metric(_ label: String, value: String) -> some View {
@@ -431,27 +653,123 @@ struct HabitsChapterTimingCard: View {
     }
 }
 
-struct LibraryFavouritesAndSeriesCard: View {
-    let favoritesWithoutKudos: Int
-    let seriesStarted: Int
-    let seriesReadToLast: Int
-    let nextWaiting: Int
+struct LibraryFavoritesWithoutKudosCard: View {
+    let count: Int
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Favourites Without Kudos").font(.subheadline.weight(.semibold))
-            Text("\(favoritesWithoutKudos) finished favorites or rereads")
-            Divider()
-            Text("Series").font(.subheadline.weight(.semibold))
-            Text("\(seriesStarted) started · \(seriesReadToLast) read to the last part")
-            Text("\(nextWaiting) with a next part waiting").foregroundStyle(.secondaryInk)
+        HStack(spacing: 12) {
+            Image(systemName: "heart")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(theme.accentInk)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Favourites Without Kudos")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                let noun = count == 1 ? "work" : "works"
+                Text("\(count) finished favourite or reread \(noun) still on AO3")
+                    .font(.caption)
+                    .foregroundStyle(.secondaryInk)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text("\(count)")
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(.secondaryInk)
         }
-        .font(.footnote)
+        .padding(16)
+        .background(theme.appTheme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+        )
+    }
+}
+
+struct LibrarySeriesCard: View {
+    let started: Int
+    let readToLast: Int
+    let longestFinished: ReadingLibraryInsights.LongestFinishedSeries?
+    let nextWaiting: Int
+    let discreetMode: Bool
+    var discreetMasker: InsightsDiscreetMasker = .empty
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(ThemeManager.self) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Series")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+
+            let countsLayout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+            countsLayout {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(started)")
+                        .font(.title3.weight(.bold))
+                        .monospacedDigit()
+                    Text("started")
+                        .font(.caption)
+                        .foregroundStyle(.secondaryInk)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(readToLast)")
+                        .font(.title3.weight(.bold))
+                        .monospacedDigit()
+                    Text("read to the last part")
+                        .font(.caption)
+                        .foregroundStyle(.secondaryInk)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if let longest = longestFinished {
+                let title = discreetMode ? discreetMasker.series(longest.title) : longest.title
+                let partNoun = longest.partCount == 1 ? "part" : "parts"
+                let wordsPart = longest.wordCount > 0
+                    ? ", \(ReadingInsights.compactWordsLabel(longest.wordCount))"
+                    : ""
+                Text("Longest finished: \(title) · \(longest.partCount) \(partNoun)\(wordsPart)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if nextWaiting > 0 {
+                Divider()
+                    .overlay(theme.appTheme.cardBorder)
+                HStack(spacing: 10) {
+                    Image(systemName: "books.vertical")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(theme.accentInk)
+                        .accessibilityHidden(true)
+                    Text("Next Part Waiting")
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("\(nextWaiting) series")
+                        .font(.footnote)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondaryInk)
+                }
+            }
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(theme.appTheme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+        )
     }
 }
 
@@ -466,9 +784,12 @@ struct LibraryAuthorsCard: View {
             Text("Authors").font(.subheadline.weight(.semibold))
             ForEach(authors.prefix(5)) { author in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(discreetMode ? discreetMasker.author(author.name) : author.name).font(.footnote.weight(.medium))
-                    Text("\(author.works) read · \(author.words) words · \(author.finished) finished")
-                        .font(.caption).foregroundStyle(.secondaryInk)
+                    Text(discreetMode ? discreetMasker.author(author.name) : author.name)
+                        .font(.footnote.weight(.medium))
+                    Text("\(author.works) read · \(ReadingInsights.compactWordsLabel(author.words)) words · \(author.finished) finished")
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondaryInk)
                 }
             }
         }
@@ -476,6 +797,10 @@ struct LibraryAuthorsCard: View {
         .padding(16)
         .background(theme.appTheme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+        )
     }
 }
 
@@ -872,10 +1197,18 @@ struct TasteFandomsCard: View {
     @Environment(ThemeManager.self) private var theme
 
     private var sortedFandoms: [ReadingInsights.FandomWordsShare] {
-        if rankByWorks {
-            return fandoms.sorted { $0.worksCount > $1.worksCount }
+        // Keep `"Everything else"` last regardless of rank mode.
+        fandoms.sorted { (lhs: ReadingInsights.FandomWordsShare, rhs: ReadingInsights.FandomWordsShare) -> Bool in
+            if lhs.isRemainder != rhs.isRemainder { return !lhs.isRemainder }
+            if rankByWorks {
+                if lhs.worksCount != rhs.worksCount { return lhs.worksCount > rhs.worksCount }
+                if lhs.words != rhs.words { return lhs.words > rhs.words }
+            } else {
+                if lhs.words != rhs.words { return lhs.words > rhs.words }
+                if lhs.worksCount != rhs.worksCount { return lhs.worksCount > rhs.worksCount }
+            }
+            return lhs.name < rhs.name
         }
-        return fandoms
     }
 
     private var peakMetric: Double {
@@ -934,7 +1267,9 @@ struct TasteFandomsCard: View {
                             Text(formatK(f.words))
                                 .font(.subheadline.weight(.semibold))
                                 .monospacedDigit()
-                                .frame(width: 48, alignment: .trailing)
+                                .lineLimit(1)
+                                .fixedSize()
+                                .frame(minWidth: 44, alignment: .trailing)
                         }
 
                         // Progress bar
@@ -971,7 +1306,7 @@ struct TasteFandomsCard: View {
     }
 
     private func formatK(_ words: Int) -> String {
-        String(format: "%.1fk", Double(words) / 1000.0)
+        ReadingInsights.compactWordsLabel(words)
     }
 }
 
@@ -1014,11 +1349,15 @@ struct TasteRelationshipsCard: View {
                                 .lineLimit(1)
 
                             HStack(spacing: 4) {
-                                Circle()
-                                    .fill(fandomColor(for: rel.fandom))
-                                    .frame(width: 6, height: 6)
-                                let fandomLabel = discreetMode ? discreetMasker.fandom(rel.fandom) : rel.fandom
-                                Text("\(rel.isRomantic ? "Romantic" : "Platonic") · \(fandomLabel) · \(rel.worksCount) \(rel.worksCount == 1 ? "work" : "works")")
+                                if !rel.fandom.isEmpty {
+                                    Circle()
+                                        .fill(fandomColor(for: rel.fandom))
+                                        .frame(width: 6, height: 6)
+                                }
+                                let fandomSegment = rel.fandom.isEmpty
+                                    ? ""
+                                    : "\(discreetMode ? discreetMasker.fandom(rel.fandom) : rel.fandom) · "
+                                Text("\(rel.isRomantic ? "Romantic" : "Platonic") · \(fandomSegment)\(rel.worksCount) \(rel.worksCount == 1 ? "work" : "works")")
                                     .font(.caption2)
                                     .foregroundStyle(.secondaryInk)
                             }
@@ -1051,12 +1390,13 @@ struct TasteRelationshipsCard: View {
                                     .frame(width: 110, alignment: .leading)
 
                                 GeometryReader { proxy in
+                                    let ratio = min(1.0, max(0.0, CGFloat(ship.percentage) / 100.0))
                                     Capsule()
                                         .fill(Color.primary.opacity(0.08))
                                         .overlay(alignment: .leading) {
                                             Capsule()
                                                 .fill(fandomColor(for: ship.fandom))
-                                                .frame(width: proxy.size.width * CGFloat(ship.percentage) / 100.0)
+                                                .frame(width: proxy.size.width * ratio)
                                         }
                                 }
                                 .frame(height: 6)
@@ -1086,7 +1426,7 @@ struct TasteRelationshipsCard: View {
     }
 
     private func formatK(_ words: Int) -> String {
-        String(format: "%.1fk", Double(words) / 1000.0)
+        ReadingInsights.compactWordsLabel(words)
     }
 }
 
@@ -1171,7 +1511,8 @@ struct TasteTagsCard: View {
                                 .font(.subheadline)
                                 .lineLimit(1)
                             Spacer()
-                            Text(rankByWorks ? "\(tag.count) works" : "\(tag.words / 1000)k")
+                            let worksLabel = "\(tag.count) \(tag.count == 1 ? "work" : "works")"
+                            Text(rankByWorks ? worksLabel : ReadingInsights.compactWordsLabel(tag.words))
                                 .font(.subheadline.weight(.semibold))
                                 .monospacedDigit()
                         }
@@ -1283,10 +1624,12 @@ struct TasteRatingsCategoriesWarningsCard: View {
                         }
                         .frame(height: 5)
 
-                        Text(rankByWorks ? "\(item.count)" : "\(item.words / 1000)k")
+                        Text(rankByWorks ? "\(item.count)" : ReadingInsights.compactWordsLabel(item.words))
                             .font(.caption.weight(.semibold))
                             .monospacedDigit()
-                            .frame(width: 30, alignment: .trailing)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .frame(minWidth: 36, alignment: .trailing)
                     }
                 }
             }
@@ -1482,9 +1825,22 @@ struct HabitsCalendarCard: View {
     let days: [ReadingInsights.DailyWordsBucket]
     let longestStreak: Int
     let thresholds: [Int]
+    var totalDaysElapsed: Int? = nil
     @Environment(ThemeManager.self) private var theme
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
+    private let weekdayInitials = ["M", "T", "W", "T", "F", "S", "S"]
+
+    private var isMonthGrid: Bool {
+        days.first?.dayNumber == 1 && days.count <= 31
+    }
+
+    private var leadingBlankCount: Int {
+        guard isMonthGrid, let firstDate = days.first?.date else { return 0 }
+        // Calendar.weekday: 1 = Sun, 2 = Mon, ..., 7 = Sat -> Mon-first offset = (weekday + 5) % 7.
+        let weekday = Calendar.current.component(.weekday, from: firstDate)
+        return (weekday + 5) % 7
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1493,34 +1849,49 @@ struct HabitsCalendarCard: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                 Spacer()
-                let readingDays = days.filter { $0.words > 0 }.count
-                Text("\(readingDays) of \(days.count)")
+                let readingDays = days.filter { $0.hasReading || $0.words > 0 }.count
+                let elapsed = totalDaysElapsed ?? days.count
+                Text("\(readingDays) of \(elapsed)")
                     .font(.footnote)
+                    .monospacedDigit()
                     .foregroundStyle(.secondaryInk)
             }
 
-            // Weekday initials
-            HStack {
-                ForEach(["M", "T", "W", "T", "F", "S", "S"], id: \.self) { day in
-                    Text(day)
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity)
+            if isMonthGrid {
+                HStack {
+                    ForEach(Array(weekdayInitials.enumerated()), id: \.offset) { _, day in
+                        Text(day)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity)
+                    }
                 }
             }
 
             // Days grid
             LazyVGrid(columns: columns, spacing: 6) {
+                if leadingBlankCount > 0 {
+                    ForEach(0..<leadingBlankCount, id: \.self) { _ in
+                        Color.clear
+                            .frame(height: 32)
+                            .accessibilityHidden(true)
+                    }
+                }
                 ForEach(days) { day in
+                    let tier = heatTier(for: day)
                     ZStack(alignment: .topTrailing) {
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(heatColor(for: day.words))
+                            .fill(tierColor(tier))
                             .frame(height: 32)
 
                         Text("\(day.dayNumber)")
                             .font(.system(size: 10, weight: .medium))
                             .monospacedDigit()
-                            .foregroundStyle(day.words > 10_000 ? AnyShapeStyle(ThemeManager.label(on: theme.accentInk)) : AnyShapeStyle(.secondaryInk))
+                            .foregroundStyle(
+                                tier >= 2
+                                    ? AnyShapeStyle(ThemeManager.label(on: theme.accentInk))
+                                    : AnyShapeStyle(.secondaryInk)
+                            )
                             .padding(4)
                     }
                 }
@@ -1528,7 +1899,7 @@ struct HabitsCalendarCard: View {
 
             // Legend & Streak
             HStack {
-                Text("Longest streak \(longestStreak) days")
+                Text("Longest streak \(longestStreak) \(longestStreak == 1 ? "day" : "days")")
                     .font(.caption)
                     .foregroundStyle(.secondaryInk)
 
@@ -1538,10 +1909,9 @@ struct HabitsCalendarCard: View {
                     Text("Less")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
-                    swatch(heatColor(for: 0))
-                    swatch(heatColor(for: 3000))
-                    swatch(heatColor(for: 8000))
-                    swatch(heatColor(for: 15000))
+                    ForEach(0..<5, id: \.self) { tier in
+                        swatch(tierColor(tier))
+                    }
                     Text("More")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
@@ -1564,12 +1934,26 @@ struct HabitsCalendarCard: View {
             .frame(width: 8, height: 8)
     }
 
-    private func heatColor(for words: Int) -> Color {
-        if words == 0 { return Color.primary.opacity(0.06) }
-        if words < thresholds[0] { return theme.accentInk.opacity(0.55) }
-        if words < thresholds[1] { return theme.accentInk.opacity(0.70) }
-        if words < thresholds[2] { return theme.accentInk.opacity(0.85) }
-        return theme.accentInk
+    private func heatTier(for day: ReadingInsights.DailyWordsBucket) -> Int {
+        guard day.words > 0 || day.hasReading else { return 0 }
+        guard day.words > 0 else { return 1 }
+        let q1 = thresholds.indices.contains(0) ? thresholds[0] : 5_000
+        let q2 = thresholds.indices.contains(1) ? thresholds[1] : 10_000
+        let q3 = thresholds.indices.contains(2) ? thresholds[2] : 20_000
+        if day.words < q1 { return 1 }
+        if day.words < q2 { return 2 }
+        if day.words < q3 { return 3 }
+        return 4
+    }
+
+    private func tierColor(_ tier: Int) -> Color {
+        switch tier {
+        case 0: return Color.primary.opacity(0.06)
+        case 1: return theme.accentInk.opacity(0.35)
+        case 2: return theme.accentInk.opacity(0.60)
+        case 3: return theme.accentInk.opacity(0.82)
+        default: return theme.accentInk
+        }
     }
 }
 
@@ -1801,28 +2185,47 @@ struct HabitsRereadsCard: View {
 
 struct HabitsFandomTimelineCard: View {
     let lanes: [ReadingHabitsInsights.FandomTimelineLane]
+    var year: Int = 0
     let discreetMode: Bool
     var discreetMasker: InsightsDiscreetMasker = .empty
     @Environment(ThemeManager.self) private var theme
 
+    private let monthInitials = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"]
+
+    private var yearSubtitle: String? {
+        guard year > 0 else { return nil }
+        let currentYear = Calendar.current.component(.year, from: Date())
+        return year == currentYear ? "\(year) so far" : "\(year)"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Fandom Timeline")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
+            HStack(alignment: .firstTextBaseline) {
+                Text("Fandom Timeline")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Spacer()
+                if let yearSubtitle {
+                    Text(yearSubtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                }
+            }
 
             if lanes.isEmpty {
                 Text("Monthly activity by fandom will appear here as you log reading sessions.")
                     .font(.footnote)
                     .foregroundStyle(.secondaryInk)
             } else {
-                VStack(spacing: 8) {
+                VStack(spacing: 6) {
                     ForEach(Array(lanes.enumerated()), id: \.element.id) { _, lane in
+                        let isRemainder = lane.name == ReadingInsights.remainderName
                         HStack(spacing: 6) {
-                            let label = discreetMode && lane.name != ReadingInsights.remainderName
+                            let label = discreetMode && !isRemainder
                                 ? discreetMasker.fandom(lane.name) : lane.name
                             Text(label)
                                 .font(.caption)
+                                .foregroundStyle(isRemainder ? AnyShapeStyle(.secondaryInk) : AnyShapeStyle(Color.primary))
                                 .lineLimit(1)
                                 .frame(width: 90, alignment: .leading)
 
@@ -1837,6 +2240,20 @@ struct HabitsFandomTimelineCard: View {
                             }
                         }
                     }
+
+                    HStack(spacing: 6) {
+                        Spacer()
+                            .frame(width: 90)
+                        HStack(spacing: 3) {
+                            ForEach(Array(monthInitials.enumerated()), id: \.offset) { _, initial in
+                                Text(initial)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.tertiary)
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                    }
+                    .accessibilityHidden(true)
                 }
             }
         }
@@ -1851,6 +2268,11 @@ struct HabitsFandomTimelineCard: View {
 
     private func timelineColor(tier: Int, fandom: String) -> Color {
         if tier == 0 { return Color.primary.opacity(0.06) }
+        if fandom == ReadingInsights.remainderName {
+            if tier == 1 { return Color.secondary.opacity(0.22) }
+            if tier == 2 { return Color.secondary.opacity(0.45) }
+            return Color.secondary.opacity(0.72)
+        }
         let hue = CoverArt.workHue(fandoms: [fandom], title: "")
         let base = theme.appTheme.subjectPalette(hue: hue).accent
         if tier == 1 { return base.opacity(0.3) }
@@ -1958,13 +2380,19 @@ struct LibraryUnreadCard: View {
             }
 
             if let m = monthsToClear, m > 0 {
-                Text("About \(m) month\(m == 1 ? "" : "s") at your recent pace")
+                Text("About \(m) month\(m == 1 ? "" : "s") at this pace")
                     .font(.footnote)
                     .foregroundStyle(.secondaryInk)
             } else if let range = monthsToClearRange {
-                Text("About \(range.lowerBound) to \(range.upperBound) months at this pace")
-                    .font(.footnote)
-                    .foregroundStyle(.secondaryInk)
+                if range.lowerBound == range.upperBound {
+                    Text("About \(range.lowerBound) month\(range.lowerBound == 1 ? "" : "s") at this pace")
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                } else {
+                    Text("About \(range.lowerBound) to \(range.upperBound) months at this pace")
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                }
             }
 
             Divider()
@@ -2015,11 +2443,11 @@ struct LibraryUnreadCard: View {
         if words >= 1_000_000 {
             return String(format: "%.2fM", Double(words) / 1_000_000.0)
         }
-        return "\(words / 1000)k"
+        return ReadingInsights.compactWordsLabel(words)
     }
 
     private func formatK(_ words: Int) -> String {
-        String(format: "%.1fk", Double(words) / 1000.0)
+        ReadingInsights.compactWordsLabel(words)
     }
 }
 

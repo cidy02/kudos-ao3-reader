@@ -465,6 +465,8 @@ struct ReadingInsightsView: View {
             readingSeconds: insights.readingSeconds,
             silentReadingSeconds: insights.silentReadingSeconds,
             listeningSeconds: insights.listeningSeconds,
+            listeningPlaybackRate: insights.listeningPlaybackRate,
+            listeningWorksCount: insights.listeningWorksCount,
             hideReadingTime: hideReadingTime
         )
 
@@ -568,7 +570,7 @@ struct ReadingInsightsView: View {
             YourUsualFicCard(taste: rankedTaste, discreetMode: discreetMode, discreetMasker: discreetMasker)
 
             TasteFandomsCard(
-                fandoms: taste.fandoms,
+                fandoms: rankedTaste.fandoms,
                 rankByWorks: rankTasteByWorks,
                 onToggleRank: { rankTasteByWorks.toggle() },
                 discreetMode: discreetMode,
@@ -591,7 +593,7 @@ struct ReadingInsightsView: View {
                 )
             }
 
-            if !taste.tags.isEmpty {
+            if !rankedTaste.tags.isEmpty || !taste.oftenTogether.isEmpty {
                 TasteTagsCard(
                     tags: rankedTaste.tags,
                     oftenTogether: taste.oftenTogether,
@@ -645,7 +647,8 @@ struct ReadingInsightsView: View {
             HabitsCalendarCard(
                 days: habits.calendarDays,
                 longestStreak: habits.longestStreak,
-                thresholds: habits.calendarWordThresholds
+                thresholds: habits.calendarWordThresholds,
+                totalDaysElapsed: totalDaysElapsedInPeriod
             )
 
             HabitsSittingsCard(
@@ -675,7 +678,12 @@ struct ReadingInsightsView: View {
             )
 
             if !habits.fandomTimeline.isEmpty {
-                HabitsFandomTimelineCard(lanes: habits.fandomTimeline, discreetMode: discreetMode, discreetMasker: discreetMasker)
+                HabitsFandomTimelineCard(
+                    lanes: habits.fandomTimeline,
+                    year: habits.fandomTimelineYear,
+                    discreetMode: discreetMode,
+                    discreetMasker: discreetMasker
+                )
             }
 
             if habits.stoppedCount > 0 {
@@ -739,12 +747,20 @@ struct ReadingInsightsView: View {
 
             InsightsUnavailableCard(title: "Bookmarked · Commented", explanation: "Your AO3 bookmark and comment actions are not recorded yet.")
 
-            LibraryFavouritesAndSeriesCard(
-                favoritesWithoutKudos: lib.favoriteWithoutKudosCount,
-                seriesStarted: lib.seriesStartedCount,
-                seriesReadToLast: lib.seriesReadToLastCount,
-                nextWaiting: lib.seriesNextWaitingCount
-            )
+            if lib.favoriteWithoutKudosCount > 0 {
+                LibraryFavoritesWithoutKudosCard(count: lib.favoriteWithoutKudosCount)
+            }
+
+            if lib.seriesStartedCount > 0 {
+                LibrarySeriesCard(
+                    started: lib.seriesStartedCount,
+                    readToLast: lib.seriesReadToLastCount,
+                    longestFinished: lib.longestFinishedSeries,
+                    nextWaiting: lib.seriesNextWaitingCount,
+                    discreetMode: discreetMode,
+                    discreetMasker: discreetMasker
+                )
+            }
 
             if lib.authors.isEmpty {
                 InsightsUnavailableCard(title: "Authors", explanation: "No read works have a recorded AO3 author account yet.")
@@ -753,20 +769,24 @@ struct ReadingInsightsView: View {
             }
 
             if lib.arrivalRows.isEmpty {
-                InsightsUnavailableCard(title: "How Finished Works Arrived", explanation: "Import source recording has not begun for these works.")
+                InsightsUnavailableCard(title: "How Finished Works Arrived", explanation: "No finished works have a recorded import source yet.")
             } else {
                 LibraryArrivalCard(rows: lib.arrivalRows, since: lib.arrivalSince)
             }
 
-            if lib.foundEarlyCount == 0 {
+            if lib.foundEarlyRecordedFinishedCount == 0 || lib.foundEarlyCount == 0 {
                 InsightsUnavailableCard(title: "Found Early", explanation: "No finished work has a recorded kudos count under 500 at save yet.")
             } else {
                 LibraryFoundEarlyCard(
+                    recordedFinishedCount: lib.foundEarlyRecordedFinishedCount,
                     count: lib.foundEarlyCount,
+                    foundEarlyShare: lib.foundEarlyShare,
                     grownCount: lib.foundEarlyGrownCount,
                     grownShare: lib.foundEarlyGrowthShare,
-                    example: lib.foundEarlyExample,
-                    discreetMode: discreetMode
+                    since: lib.foundEarlySince,
+                    example: lib.foundEarlyExampleItem,
+                    discreetMode: discreetMode,
+                    discreetMasker: discreetMasker
                 )
             }
 

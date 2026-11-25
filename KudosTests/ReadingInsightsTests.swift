@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import Testing
 @testable import Kudos
 
@@ -375,15 +376,37 @@ struct ReadingInsightsTests {
         #expect(empty.stoppedMedianProgress == nil)
 
         // Saved 10 days before the first sitting, finished 4 days after it.
+        // Insights-Metrics: openedToFinished covers complete works finished in the period.
         let work = SavedWork(title: "W", author: "A")
+        work.isComplete = true
         work.dateAdded = day(1)
-        let facts = [
+        let wip = SavedWork(title: "WIP", author: "A")
+        wip.isComplete = false
+        wip.dateAdded = day(1)
+        let reread = SavedWork(title: "Reread", author: "A")
+        reread.isComplete = true
+        reread.dateAdded = day(1)
+        let period = DateInterval(start: day(10, hour: 0), end: day(20, hour: 0))
+        let priorFinish = ReadingSessionFacts(
+            workID: reread.id, startedAt: day(2), durationSeconds: 600, wordCount: 1000, didFinish: true
+        )
+        let periodFacts = [
             ReadingSessionFacts(workID: work.id, startedAt: day(11), durationSeconds: 600, wordCount: 1000, didFinish: false),
-            ReadingSessionFacts(workID: work.id, startedAt: day(15), durationSeconds: 600, wordCount: 1000, didFinish: true)
+            ReadingSessionFacts(workID: work.id, startedAt: day(15), durationSeconds: 600, wordCount: 1000, didFinish: true),
+            ReadingSessionFacts(workID: wip.id, startedAt: day(11), durationSeconds: 600, wordCount: 1000, didFinish: false),
+            ReadingSessionFacts(workID: wip.id, startedAt: day(19), durationSeconds: 600, wordCount: 1000, didFinish: true),
+            ReadingSessionFacts(workID: reread.id, startedAt: day(18), durationSeconds: 600, wordCount: 1000, didFinish: true)
         ]
-        let habits = ReadingHabitsInsights.make(works: [work], facts: facts, allFacts: facts, calendar: calendar)
+        let habits = ReadingHabitsInsights.make(
+            works: [work, wip, reread],
+            facts: periodFacts,
+            allFacts: [priorFinish] + periodFacts,
+            periodInterval: period,
+            calendar: calendar
+        )
         #expect(habits.savedToOpenedMedianDays == 10)
         #expect(habits.openedToFinishedMedianDays == 4)
+        #expect(habits.openedToFinishedCount == 1)
     }
 
     // MARK: T-517 — the day runs 4:00 to 4:00, in the zone the sitting was read in
@@ -535,47 +558,200 @@ struct ReadingInsightsTests {
         #expect(habits.calendarDays.reduce(0) { $0 + $1.words } == total)
     }
 
-    @Test func allTabsReconcileFromOneFilteredPeriod() {
-        let (facts, period, range) = checkFixture()
-        let works = Set(facts.map(\.workID)).map { id -> SavedWork in
-            let work = SavedWork(id: id, title: "\(id)", author: "A")
-            work.wordCount = 30_000
-            return work
-        }
-        let overview = ReadingInsights.make(facts: facts, dayRange: range, calendar: calendar)
-        let taste = ReadingTasteInsights.make(works: works, facts: facts)
-        let habits = ReadingHabitsInsights.make(
-            works: works, facts: facts, allFacts: facts,
-            periodInterval: period, calendar: calendar
+    @MainActor
+    @Test func allTabsReconcileFromOneFilteredPeriod() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self, WorkCollection.self,
+            ReadingQueue.self, ReadingQueueMembership.self, SavedSearch.self,
+            QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self,
+            ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self,
+            FollowedTag.self, TagAlias.self, SavedSeries.self
+        ])
+        let container = try ModelContainer(
+            for: schema,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
         )
-        let library = ReadingLibraryInsights.make(
-            works: works, facts: facts, allFacts: facts,
-            periodInterval: period, calendar: calendar
+        let context = container.mainContext
+
+        let sepPeriod = DateInterval(start: instant(month: 9, 1, 0), end: instant(month: 10, 1, 0))
+        let octPeriod = DateInterval(start: instant(month: 10, 1, 0), end: instant(month: 11, 1, 0))
+        let now = instant(month: 10, 31, 20)
+
+        let workA = SavedWork(title: "Work A", author: "Author A")
+        workA.ao3WorkID = 1001
+        workA.wordCount = 20_000
+        workA.rating = "Teen"
+        workA.isComplete = true
+        workA.isFinished = true
+        workA.language = "English"
+        workA.workFandoms = ["Persuasion"]
+        workA.workFreeforms = ["Slow Burn"]
+
+        let workB = SavedWork(title: "Work B", author: "Author B")
+        workB.ao3WorkID = 1002
+        workB.wordCount = 30_000
+        workB.rating = "General Audiences"
+        workB.isComplete = true
+        workB.language = "English"
+        workB.workFandoms = ["Sherlock Holmes"]
+
+        let workC = SavedWork(title: "Work C", author: "Author C")
+        workC.ao3WorkID = 1003
+        workC.wordCount = 12_000
+        workC.rating = "Mature"
+        workC.isComplete = true
+        workC.language = "Japanese"
+        workC.wordUnitRaw = SavedWork.WordUnit.characters.rawValue
+        workC.workFandoms = ["BNHA"]
+
+        let workExcluded = SavedWork(title: "Excluded Work", author: "Author E")
+        workExcluded.ao3WorkID = 1004
+        workExcluded.wordCount = 50_000
+        workExcluded.isComplete = true
+        workExcluded.isFinished = true
+        workExcluded.workFandoms = ["Excluded Fandom"]
+
+        let workUnread = SavedWork(title: "Unread Work", author: "Author U")
+        workUnread.ao3WorkID = 1005
+        workUnread.wordCount = 120_000
+        workUnread.isComplete = false
+        workUnread.workFandoms = ["Persuasion"]
+
+        let liveWorks = [workA, workB, workC, workExcluded, workUnread]
+        liveWorks.forEach { context.insert($0) }
+
+        // 01:30 UTC on Oct 1 -> readingDay Sep 30 (previous month, NOT October).
+        let sSep = ReadingSession(
+            workID: workA.id, startedAt: instant(month: 10, 1, 1, 30),
+            endedAt: instant(month: 10, 1, 2, 0), durationSeconds: 1_800,
+            tzOffsetSeconds: 0, startProgress: 0, endingProgress: 0.25,
+            wordCount: 20_000, didFinish: false
         )
-        let words = overview.totalWordsRead
-        #expect(overview.dailyWords.reduce(0) { $0 + $1.words } == words)
-        #expect(overview.fandomWordsShares.reduce(0) { $0 + $1.words } == words)
-        #expect(taste.fandoms.reduce(0) { $0 + $1.words } == words)
-        #expect(habits.calendarDays.reduce(0) { $0 + $1.words } == words)
-        #expect(library.readWordsInPeriod == words)
-        #expect(overview.readingDaysCount == 6)
-        #expect(habits.calendarDays.filter { $0.words > 0 }.count == overview.readingDaysCount)
-        #expect(habits.fandomTimeline.reduce(0) { total, lane in
-            total + lane.monthlyWords[7]
-        } == words)
+        sSep.snapshot(from: workA)
+
+        // Oct 2 noon UTC: 10,000 words read.
+        let sOct2 = ReadingSession(
+            workID: workA.id, startedAt: instant(month: 10, 2, 12, 0),
+            endedAt: instant(month: 10, 2, 13, 0), durationSeconds: 3_600,
+            tzOffsetSeconds: 0, startProgress: 0.25, endingProgress: 0.75,
+            wordCount: 20_000, didFinish: false
+        )
+        sOct2.snapshot(from: workA)
+
+        // 01:30 UTC on Nov 1 -> readingDay Oct 31 (still October, 5,000 words read).
+        let sOct31 = ReadingSession(
+            workID: workA.id, startedAt: instant(month: 11, 1, 1, 30),
+            endedAt: instant(month: 11, 1, 2, 0), durationSeconds: 1_800,
+            tzOffsetSeconds: 0, startProgress: 0.75, endingProgress: 1.0,
+            wordCount: 20_000, didFinish: true
+        )
+        sOct31.snapshot(from: workA)
+
+        // Time-zone change: Oct 1 08:00 +09:00 (= Sep 30 23:00 UTC), Read Aloud 1.25x, 15,000 words.
+        let sTokyoListen = ReadingSession(
+            workID: workB.id, startedAt: instant(month: 10, 1, 8, 0, offsetHours: 9),
+            endedAt: instant(month: 10, 1, 9, 0, offsetHours: 9), durationSeconds: 3_600,
+            tzOffsetSeconds: 9 * 3_600, startProgress: 0, modeRaw: ReadingSession.Mode.listen.rawValue,
+            playbackRate: 1.25, endingProgress: 0.5, wordCount: 30_000, didFinish: false
+        )
+        sTokyoListen.snapshot(from: workB)
+
+        // Oct 10: .characters work (6,000 characters, 0 words).
+        let sJapanese = ReadingSession(
+            workID: workC.id, startedAt: instant(month: 10, 10, 15, 0),
+            endedAt: instant(month: 10, 10, 15, 30), durationSeconds: 1_800,
+            tzOffsetSeconds: 0, startProgress: 0, endingProgress: 0.5,
+            wordCount: 12_000, didFinish: false
+        )
+        sJapanese.snapshot(from: workC)
+
+        // Oct 15: deleted work (not inserted into liveWorks) with D1 snapshot, 10,000 words.
+        let deletedID = UUID()
+        let sDeleted = ReadingSession(
+            workID: deletedID, workTitle: "Deleted Fic",
+            startedAt: instant(month: 10, 15, 20, 0),
+            endedAt: instant(month: 10, 15, 20, 30), durationSeconds: 1_800,
+            tzOffsetSeconds: 0, startProgress: 0, endingProgress: 1.0,
+            wordCount: 10_000, didFinish: true
+        )
+        sDeleted.metadataSnapshotRecorded = true
+        sDeleted.fandoms = ["Jane Eyre"]
+        sDeleted.rating = "Explicit"
+        sDeleted.language = "English"
+        sDeleted.isCompleteAtVisit = true
+
+        // Oct 20: excluded fandom work — must be dropped from every tab by InsightsOptions.filter.
+        let sExcluded = ReadingSession(
+            workID: workExcluded.id, startedAt: instant(month: 10, 20, 12, 0),
+            endedAt: instant(month: 10, 20, 13, 0), durationSeconds: 3_600,
+            tzOffsetSeconds: 0, startProgress: 0, endingProgress: 1.0,
+            wordCount: 50_000, didFinish: true
+        )
+        sExcluded.snapshot(from: workExcluded)
+
+        [sSep, sOct2, sOct31, sTokyoListen, sJapanese, sDeleted, sExcluded].forEach { context.insert($0) }
+        try context.save()
+
+        let options = InsightsOptions(excludedFandoms: ["Excluded Fandom"])
+        let gathered = ReadingLogService.gatherInsights(
+            for: octPeriod,
+            previousPeriod: sepPeriod,
+            works: liveWorks,
+            readingWorks: liveWorks,
+            periodMonths: 1,
+            calendar: calendar,
+            context: context,
+            options: options,
+            now: now
+        )
+        let overview = gathered.insights
+        let taste = try #require(gathered.taste)
+        let habits = gathered.habits
+        let library = gathered.library
+
+        let expectedWords = 40_000
+        #expect(overview.totalWordsRead == expectedWords)
+        #expect(overview.previousPeriodWordsRead == 5_000)
+        #expect(overview.charactersRead == 6_000)
+        #expect(overview.dailyWords.count == 31)
+        #expect(habits.calendarDays.count == overview.dailyWords.count)
+        #expect(overview.dailyWords.reduce(0) { $0 + $1.words } == expectedWords)
+        #expect(overview.fandomWordsShares.reduce(0) { $0 + $1.words } == expectedWords)
+        #expect(taste.fandoms.reduce(0) { $0 + $1.words } == expectedWords)
+        #expect(habits.calendarDays.reduce(0) { $0 + $1.words } == expectedWords)
+        #expect(library.readWordsInPeriod == expectedWords)
+        #expect(habits.fandomTimeline.reduce(0) { (total: Int, lane: ReadingHabitsInsights.FandomTimelineLane) -> Int in
+            total + lane.monthlyWords[9]
+        } == expectedWords)
+
+        #expect(overview.readingDaysCount == 5)
+        #expect(habits.calendarDays.filter { $0.hasReading || $0.words > 0 }.count == overview.readingDaysCount)
+
+        #expect(overview.silentReadingSeconds == 9_000)
+        #expect(overview.listeningSeconds == 3_600)
         #expect(overview.silentReadingSeconds + overview.listeningSeconds == overview.readingSeconds)
+        #expect(overview.listeningPlaybackRate == 1.25)
+        #expect(overview.listeningWorksCount == 1)
         #expect(habits.hourlyDuration.reduce(0) { $0 + $1.seconds } == overview.readingSeconds)
-        #expect(habits.sittingBuckets.reduce(0) { $0 + $1.count } == facts.count)
-        #expect(overview.lengthMix.totalWorks == works.count)
-        #expect(taste.ratings.reduce(0) { $0 + $1.count } == works.count)
-        #expect(taste.statuses.reduce(0) { $0 + $1.count } == works.count)
-        #expect(taste.lengthBands.reduce(0) { $0 + $1.count } == works.count)
-        #expect(taste.languages.reduce(0) { $0 + $1.count } == works.count)
-        #expect(library.statuses.total == works.count)
-        #expect(library.wipFreshness.total == works.filter { !$0.isComplete }.count)
-        let hours = overview.silentReadingSeconds / 3_600
-        #expect(overview.wordsPerHour == Double(words) / hours)
-        #expect(ReadingInsights.novelsWorth(words: words) == 1)
+        #expect(habits.sittingBuckets.reduce(0) { $0 + $1.count } == 5)
+        #expect(habits.typicalSittingSeconds == overview.medianSessionSeconds)
+
+        // Works read = workA, workB, workC (.characters), deletedID (D1 snapshot).
+        #expect(overview.lengthMix.totalWorks == 4)
+        #expect(taste.totalWorksCount == 4)
+        #expect(taste.ratings.reduce(0) { $0 + $1.count } == 4)
+        #expect(taste.ratings.first { $0.label == "Teen" }?.words == 15_000)
+        #expect(taste.statuses.reduce(0) { $0 + $1.count } == 4)
+        #expect(taste.lengthBands.reduce(0) { $0 + $1.count } == 4)
+        #expect(taste.languages.reduce(0) { $0 + $1.count } == 4)
+        #expect(library.statuses.total == 4)
+        #expect(library.wipFreshness.total == 1)
+
+        // Visual reading pace excludes listening (sTokyoListen) and characters (sJapanese): 25k / 2h.
+        #expect(overview.wordsPerHour == 12_500)
+        #expect(overview.charactersPerHour == 12_000)
+        #expect(!overview.fandomWordsShares.contains { $0.name == "Excluded Fandom" })
+        #expect(!taste.fandoms.contains { $0.name == "Excluded Fandom" })
     }
 
     @Test func checkTimeAddsUp() {
@@ -707,6 +883,7 @@ struct ReadingInsightsTests {
 
     @Test func seriesAuthorsAndFavoritesUseRecordedIdentityAndLastPart() {
         let first = SavedWork(title: "First", author: "A")
+        first.ao3WorkID = 101
         first.ao3SeriesID = 7
         first.seriesPosition = 1
         first.lastSpineIndex = 1
@@ -715,6 +892,7 @@ struct ReadingInsightsTests {
         first.isFavorite = true
         first.verifiedAuthorIdentities = [AO3AuthorIdentity(route: AO3AuthorRoute(username: "writer")!)]
         let last = SavedWork(title: "Last", author: "A")
+        last.ao3WorkID = 102
         last.ao3SeriesID = 7
         last.seriesPosition = 3
         last.lastSpineIndex = 1
@@ -733,6 +911,9 @@ struct ReadingInsightsTests {
         #expect(figures.favoriteWithoutKudosCount == 1)
         #expect(figures.seriesStartedCount == 1)
         #expect(figures.seriesReadToLastCount == 1)
+        #expect(figures.longestFinishedSeries?.title == "Series")
+        #expect(figures.longestFinishedSeries?.partCount == 3)
+        #expect(figures.longestFinishedSeries?.wordCount == 30_000)
         #expect(figures.seriesNextWaitingCount == 0)
         #expect(figures.authors.first?.name == "writer")
         #expect(figures.authors.first?.works == 2)
@@ -741,10 +922,19 @@ struct ReadingInsightsTests {
 
     @Test func nextSeriesPartRequiresAStoredPartOrAO3WorkIdentity() {
         let first = SavedWork(title: "First", author: "A")
+        first.ao3WorkID = 701
         first.ao3SeriesID = 77
         first.seriesPosition = 1
         first.lastReadDate = day(1)
+        first.isFinished = true
+        let inProgressFirst = SavedWork(title: "In Progress", author: "A")
+        inProgressFirst.ao3WorkID = 701
+        inProgressFirst.ao3SeriesID = 77
+        inProgressFirst.seriesPosition = 1
+        inProgressFirst.lastReadDate = day(1)
+        inProgressFirst.isFinished = false
         let unread = SavedWork(title: "Next", author: "A")
+        unread.ao3WorkID = 702
         unread.ao3SeriesID = 77
         unread.seriesPosition = 2
         let partial = SavedSeriesSnapshot(ao3SeriesID: 77, title: "Series", partCount: 2,
@@ -760,6 +950,9 @@ struct ReadingInsightsTests {
         #expect(count([first], partial) == 0)
         #expect(count([first, unread], partial) == 1)
         #expect(count([first], known) == 1)
+        // Still reading Part 1: Part 2 is not waiting until Part 1 is finished.
+        #expect(count([inProgressFirst, unread], partial) == 0)
+        #expect(count([inProgressFirst], known) == 0)
     }
 
     @Test func deletedWorkKeepsVerifiedCoauthorTotalsFromSessionSnapshot() {
@@ -844,12 +1037,21 @@ struct ReadingInsightsTests {
     }
 
     @Test func usualFicCallsUnsharedFieldsVariedAfterFiveWorks() {
-        let works = (0..<5).map { SavedWork(title: "\($0)", author: "A") }
-        for (index, work) in works.enumerated() { work.rating = "Rating \(index)" }
-        let facts = works.enumerated().map { index, work in
+        let ao3Ratings = ["General Audiences", "Teen", "Mature", "Explicit", "Not Rated"]
+        let works = ao3Ratings.enumerated().map { (index: Int, rating: String) -> SavedWork in
+            let work = SavedWork(title: "Work \(index)", author: "A")
+            work.rating = rating
+            return work
+        }
+        let facts = works.enumerated().map { (index: Int, work: SavedWork) -> ReadingSessionFacts in
             fact(work: work.id, on: index + 1, minutes: 20, words: 100)
         }
         let taste = ReadingTasteInsights.make(works: works, facts: facts)
+        // Every rating must be counted (never silently dropped) and short labels keep their words.
+        #expect(taste.ratings.reduce(0) { $0 + $1.count } == 5)
+        #expect(taste.ratings.first { $0.label == "Teen" }?.words == 100)
+        #expect(taste.ratings.first { $0.label == "General" }?.words == 100)
+        // Each rating has 20% (< 40% threshold), so Usual Fic reports "varied".
         #expect(taste.usualRating == "varied")
         #expect(taste.usualFicSummary.contains("varied"))
     }
@@ -1031,24 +1233,63 @@ struct ReadingInsightsTests {
     }
 
     @Test func stillReadingPromptRequiresAnUnreadPostedChapter() {
-        let work = SavedWork(title: "WIP", author: "A")
-        work.isComplete = false
-        work.chapters = "5/10"
-        work.lastSpineIndex = 2
-        work.lastReadDate = day(1)
         let period = DateInterval(start: day(1), end: day(31))
+
+        let wip = SavedWork(title: "WIP", author: "A")
+        wip.isComplete = false
+        wip.chapters = "5/10"
+        wip.lastSpineIndex = 2
+        wip.lastReadDate = day(1)
         let eligible = ReadingLibraryInsights.make(
-            works: [work], facts: [], periodInterval: period,
+            works: [wip], facts: [], periodInterval: period,
             calendar: calendar, now: day(31)
         )
-        #expect(eligible.stillReadingCandidate?.id == work.id)
-        work.lastSpineIndex = 4
-        work.lastScrollFraction = 1
+        #expect(eligible.stillReadingCandidate?.id == wip.id)
+
+        // Paused mid-way inside the last posted chapter: NOT caught up, so still eligible.
+        wip.lastSpineIndex = 4
+        wip.lastScrollFraction = 0.30
+        wip.legacyReaderProgress = 0.45
+        let midFinalChapter = ReadingLibraryInsights.make(
+            works: [wip], facts: [], periodInterval: period,
+            calendar: calendar, now: day(31)
+        )
+        #expect(midFinalChapter.stillReadingCandidate?.id == wip.id)
+
+        // Caught up on every posted chapter: never asked.
+        wip.lastScrollFraction = 1
+        wip.legacyReaderProgress = nil
         let caughtUp = ReadingLibraryInsights.make(
-            works: [work], facts: [], periodInterval: period,
+            works: [wip], facts: [], periodInterval: period,
             calendar: calendar, now: day(31)
         )
         #expect(caughtUp.stillReadingCandidate == nil)
+
+        // Single-chapter work (1/1) at 40% untouched for 30 days: eligible.
+        let oneshot = SavedWork(title: "Oneshot", author: "A")
+        oneshot.isComplete = true
+        oneshot.chapters = "1/1"
+        oneshot.lastSpineIndex = 0
+        oneshot.lastScrollFraction = 0.40
+        oneshot.lastReadDate = day(1)
+        let oneshotResult = ReadingLibraryInsights.make(
+            works: [oneshot], facts: [], periodInterval: period,
+            calendar: calendar, now: day(31)
+        )
+        #expect(oneshotResult.stillReadingCandidate?.id == oneshot.id)
+        #expect(oneshotResult.stillReadingCandidate?.chapterProgress == "Chapter 1 of 1 · 40%")
+
+        // Local EPUB with no fetched AO3 `chapters` string at 50%: eligible and no bogus "Chapter 1 of 1".
+        let local = SavedWork(title: "Local EPUB", author: "A")
+        local.chapters = ""
+        local.lastScrollFraction = 0.50
+        local.lastReadDate = day(1)
+        let localResult = ReadingLibraryInsights.make(
+            works: [local], facts: [], periodInterval: period,
+            calendar: calendar, now: day(31)
+        )
+        #expect(localResult.stillReadingCandidate?.id == local.id)
+        #expect(localResult.stillReadingCandidate?.chapterProgress == "50%")
     }
 
     @Test func checkShownFiguresReproduce() {
@@ -1059,15 +1300,24 @@ struct ReadingInsightsTests {
         let words = 212_600
         #expect(ReadingInsights.novelsWorth(words: words) == (Double(words) / 70_000 * 2).rounded() / 2)
 
+        // Production 90-day path with >= 30 reading days: 30 days x 2,000 words = 2,000/day -> 60k/month.
         let unread = SavedWork(title: "U", author: "A")
         unread.wordCount = 120_000
+        let thirtyDays = (1...30).map { (d: Int) -> ReadingSessionFacts in
+            fact(on: d, minutes: 30, words: 2_000)
+        }
         let library = ReadingLibraryInsights.make(
-            works: [unread], facts: facts,
-            periodInterval: DateInterval(start: day(1, hour: 0), end: day(28, hour: 0)),
-            periodMonths: 1, calendar: calendar
+            works: [unread],
+            facts: thirtyDays,
+            allFacts: thirtyDays,
+            periodInterval: DateInterval(start: day(1, hour: 0), end: day(31, hour: 0)),
+            periodMonths: 1,
+            calendar: calendar,
+            now: day(30, hour: 20)
         )
-        let monthly = Double(insights.totalWordsRead)
-        #expect(library.monthsToClear == max(1, Int((120_000 / monthly).rounded())))
+        let dailyAverage = Double(thirtyDays.reduce(0) { $0 + $1.wordsRead }) / 30.0
+        #expect(library.monthsToClear == max(1, Int((120_000.0 / (dailyAverage * 30.0)).rounded())))
+        #expect(library.monthsToClear == 2)
     }
 
     @Test func checkHistoryHoldsStill() {
@@ -1202,5 +1452,273 @@ struct ReadingInsightsTests {
         let habits = ReadingHabitsInsights.make(works: works, facts: facts, allFacts: facts, calendar: calendar)
         #expect(habits.commonStopTags.contains { $0.name == "Major Character Death" && $0.count == 4 })
         #expect(!habits.commonStopTags.contains { $0.name == "Persuasion" || $0.name == "Anne Elliot" })
+    }
+
+    @Test func tasteRankTogglePromotesHighCountFandomKeepsRemainderLastAndFormatsSmallWords() {
+        var works: [SavedWork] = []
+        var facts: [ReadingSessionFacts] = []
+        // Four long fandoms: 1 work x 50,000 words each.
+        for (idx, name) in ["Alpha", "Beta", "Gamma", "Delta"].enumerated() {
+            let w = SavedWork(title: "Long \(name)", author: "A")
+            w.workFandoms = [name]
+            w.wordCount = 50_000
+            works.append(w)
+            facts.append(fact(work: w.id, on: idx + 1, minutes: 60, words: 50_000, fandom: name))
+        }
+        // Fifth fandom: 10 short works x 800 words each (8,000 total -> folded into remainder By Words, #1 By Works).
+        for i in 0..<10 {
+            let w = SavedWork(title: "Short \(i)", author: "A")
+            w.workFandoms = ["Epsilon"]
+            w.wordCount = 800
+            works.append(w)
+            facts.append(fact(work: w.id, on: 5 + i, minutes: 10, words: 800, fandom: "Epsilon"))
+        }
+        let taste = ReadingTasteInsights.make(works: works, facts: facts)
+        let byWords = taste.ranked(byWorks: false)
+        #expect(byWords.fandoms.last?.isRemainder == true)
+        #expect(!byWords.fandoms.contains { $0.name == "Epsilon" })
+
+        let byWorks = taste.ranked(byWorks: true)
+        #expect(byWorks.fandoms.first?.name == "Epsilon")
+        #expect(byWorks.fandoms.first?.worksCount == 10)
+        #expect(byWorks.fandoms.last?.isRemainder == true)
+        #expect(byWorks.usualTopFandom == "Epsilon")
+
+        #expect(ReadingInsights.compactWordsLabel(850) == "850")
+        #expect(ReadingInsights.compactWordsLabel(12_400) == "12.4k")
+        #expect(ReadingInsights.compactWordsLabel(1_250_000) == "1.2M" || ReadingInsights.compactWordsLabel(1_250_000) == "1.3M")
+    }
+
+    @Test func fandomTimelineRanksYearTopFourByWordsAndShadesByMonthShare() {
+        // Jan: FandomA 14k (70% -> tier 3), FandomB 5.5k (27.5% -> tier 2), Tiny 500 (2.5% -> tier 1).
+        // Oct: Only OctFandom 10k. Viewing Oct must STILL keep FandomA in the year's top 4.
+        let janA = sitting(at: instant(month: 1, 5, 12), minutes: 60, words: 14_000)
+        var fJanA = janA; fJanA.fandom = "FandomA"
+        var fJanB = sitting(at: instant(month: 1, 6, 12), minutes: 30, words: 5_500); fJanB.fandom = "FandomB"
+        var fJanTiny = sitting(at: instant(month: 1, 7, 12), minutes: 5, words: 500); fJanTiny.fandom = "Tiny"
+        var fOct = sitting(at: instant(month: 10, 2, 12), minutes: 40, words: 10_000); fOct.fandom = "OctFandom"
+
+        let octPeriod = DateInterval(start: instant(month: 10, 1, 0), end: instant(month: 11, 1, 0))
+        let habits = ReadingHabitsInsights.make(
+            works: [],
+            facts: [fOct],
+            allFacts: [fJanA, fJanB, fJanTiny, fOct],
+            periodInterval: octPeriod,
+            calendar: calendar,
+            now: instant(month: 10, 15, 12)
+        )
+        #expect(habits.fandomTimelineYear == 2026)
+        #expect(habits.fandomTimeline.first?.name == "FandomA")
+        #expect(habits.fandomTimeline.first { $0.name == "FandomA" }?.monthlyActivity[0] == 3)
+        #expect(habits.fandomTimeline.first { $0.name == "FandomB" }?.monthlyActivity[0] == 2)
+        // Tiny's 500 words is its own peak month, yet only 2.5% of Jan's 20k -> tier 1 (NOT tier 3).
+        #expect(habits.fandomTimeline.first { $0.name == "Tiny" }?.monthlyActivity[0] == 1)
+    }
+
+    @Test func unreadNinetyDayPaceAnchorsOnEarliestHistoryAfterReadingBreak() {
+        let unread = SavedWork(title: "Backlog", author: "A")
+        unread.wordCount = 300_000
+        let now = instant(month: 10, 31, 20)
+        // History started > 90 days ago (Jan 10), then a long break, then 15 days x 10k = 150k in Oct.
+        let old = sitting(at: instant(month: 1, 10, 12), minutes: 30, words: 5_000)
+        let recent = (17...31).map { (d: Int) -> ReadingSessionFacts in
+            sitting(at: instant(month: 10, d, 12), minutes: 30, words: 10_000)
+        }
+        let library = ReadingLibraryInsights.make(
+            works: [unread],
+            facts: recent,
+            allFacts: [old] + recent,
+            periodInterval: DateInterval(start: instant(month: 10, 1, 0), end: instant(month: 11, 1, 0)),
+            calendar: calendar,
+            now: now
+        )
+        // Elapsed must be 90 (not 15): 150k / 90 = 1,666.7/day = 50k/month -> 6 months (range 4...8).
+        #expect(library.monthsToClear == nil)
+        #expect(library.monthsToClearRange == 4...8)
+    }
+
+    @Test func foundEarlyPicksHighestGrowthAndReportsRecordedShareAndSince() {
+        let flat = SavedWork(title: "No Growth", author: "A")
+        flat.isFinished = true
+        flat.statsSavedAt = day(2)
+        flat.kudosAtSave = 490
+        flat.kudos = 490
+
+        let riser = SavedWork(title: "Big Riser", author: "A")
+        riser.isFinished = true
+        riser.statsSavedAt = day(1)
+        riser.kudosAtSave = 50
+        riser.kudos = 450
+
+        let popular = SavedWork(title: "Already Popular", author: "A")
+        popular.isFinished = true
+        popular.statsSavedAt = day(3)
+        popular.kudosAtSave = 600
+        popular.kudos = 1_800
+
+        let library = ReadingLibraryInsights.make(
+            works: [flat, riser, popular],
+            facts: [],
+            periodInterval: DateInterval(start: day(1), end: day(10)),
+            calendar: calendar
+        )
+        #expect(library.foundEarlyRecordedFinishedCount == 3)
+        #expect(library.foundEarlyCount == 2)
+        #expect(library.foundEarlyShare == 2.0 / 3.0)
+        #expect(library.foundEarlySince == day(1))
+        #expect(library.foundEarlyExampleItem?.workID == riser.id)
+        #expect(library.foundEarlyExampleItem?.title == "Big Riser")
+        #expect(library.foundEarlyExample?.contains("Big Riser · 50 then, 450 now") == true)
+    }
+
+    @Test func arrivalHidesWhenNoRecordedWorksFinishedAndOmitsZeroFinishedSources() {
+        let unfinishedSearch = (0..<6).map { (i: Int) -> SavedWork in
+            let w = SavedWork(title: "S\(i)", author: "A")
+            w.importSourceRaw = WorkImportSource.search.rawValue
+            w.importSourceSince = day(1)
+            w.isFinished = false
+            return w
+        }
+        let noneFinished = ReadingLibraryInsights.make(
+            works: unfinishedSearch,
+            facts: [],
+            periodInterval: DateInterval(start: day(1), end: day(5)),
+            calendar: calendar
+        )
+        #expect(noneFinished.arrivalRows.isEmpty)
+        #expect(noneFinished.arrivalSince == nil)
+
+        let finishedSeries = SavedWork(title: "Done", author: "A")
+        finishedSeries.importSourceRaw = WorkImportSource.series.rawValue
+        finishedSeries.importSourceSince = day(2)
+        finishedSeries.isFinished = true
+        let mixed = ReadingLibraryInsights.make(
+            works: unfinishedSearch + [finishedSeries],
+            facts: [],
+            periodInterval: DateInterval(start: day(1), end: day(5)),
+            calendar: calendar
+        )
+        // Search has 0 finished works and must not render a 0% share row.
+        #expect(mixed.arrivalRows.count == 1)
+        #expect(mixed.arrivalRows.first?.label == "Other")
+        #expect(mixed.arrivalRows.first?.finished == 1)
+    }
+
+    @Test func seriesRequiresFinishedLastPartChecksDeletedPartsAndKudosRequiresLiveAO3() {
+        let part1 = SavedWork(title: "Part 1", author: "A")
+        part1.ao3WorkID = 201
+        part1.ao3SeriesID = 99
+        part1.seriesPosition = 1
+        part1.lastReadDate = day(1)
+        part1.isFinished = true
+
+        let openedLast = SavedWork(title: "Part 2", author: "A")
+        openedLast.ao3WorkID = 202
+        openedLast.ao3SeriesID = 99
+        openedLast.seriesPosition = 2
+        openedLast.lastReadDate = day(2)
+        openedLast.isFinished = false
+
+        let snapshot = SavedSeriesSnapshot(
+            ao3SeriesID: 99, title: "Duology", partCount: 2,
+            isComplete: true, wordCount: 80_000, partWorkIDs: [201, 202]
+        )
+
+        // Part 2 is only opened (not finished): NOT read to the last part, and NOT waiting either.
+        let openedResult = ReadingLibraryInsights.make(
+            works: [part1, openedLast], facts: [], seriesSnapshots: [snapshot],
+            periodInterval: DateInterval(start: day(1), end: day(5)), calendar: calendar
+        )
+        #expect(openedResult.seriesReadToLastCount == 0)
+        #expect(openedResult.longestFinishedSeries == nil)
+        #expect(openedResult.seriesNextWaitingCount == 0)
+
+        // Deleted Part 2 recorded in allFacts: must NOT falsely report Next Part Waiting, and DOES count readToLast.
+        var deletedPart2Fact = fact(work: UUID(), on: 2, minutes: 30, words: 40_000, didFinish: true)
+        deletedPart2Fact.ao3WorkID = 202
+        deletedPart2Fact.ao3SeriesID = 99
+        deletedPart2Fact.seriesPosition = 2
+        let deletedPartResult = ReadingLibraryInsights.make(
+            works: [part1], facts: [deletedPart2Fact], allFacts: [deletedPart2Fact],
+            seriesSnapshots: [snapshot], periodInterval: DateInterval(start: day(1), end: day(5)), calendar: calendar
+        )
+        #expect(deletedPartResult.seriesReadToLastCount == 1)
+        #expect(deletedPartResult.seriesNextWaitingCount == 0)
+        #expect(deletedPartResult.longestFinishedSeries?.title == "Duology")
+
+        // Non-AO3 imported EPUB and gone AO3 work must be excluded from Kudos left and Favourites Without Kudos.
+        let liveAO3 = SavedWork(title: "Live AO3", author: "A")
+        liveAO3.ao3WorkID = 301
+        liveAO3.isFinished = true
+        liveAO3.hasGivenKudos = true
+
+        let localEPUB = SavedWork(title: "Local", author: "A")
+        localEPUB.isFinished = true
+        localEPUB.isFavorite = true
+        localEPUB.hasGivenKudos = false
+
+        let goneAO3 = SavedWork(title: "Gone AO3", author: "A")
+        goneAO3.ao3WorkID = 302
+        goneAO3.ao3Unavailable = true
+        goneAO3.isFinished = true
+        goneAO3.isFavorite = true
+        goneAO3.hasGivenKudos = false
+
+        let kudosResult = ReadingLibraryInsights.make(
+            works: [liveAO3, localEPUB, goneAO3], facts: [],
+            periodInterval: DateInterval(start: day(1), end: day(5)), calendar: calendar
+        )
+        #expect(kudosResult.kudosLeftPercent == 100)
+        #expect(kudosResult.favoriteWithoutKudosCount == 0)
+    }
+
+    @Test func readingAndListeningComputesWeightedPlaybackRateAndWorksCount() {
+        let w1 = UUID()
+        let w2 = UUID()
+        var l1 = fact(work: w1, on: 1, minutes: 30, words: 3_000)
+        l1.mode = .listen
+        l1.playbackRate = 1.0
+        var l2 = fact(work: w1, on: 2, minutes: 60, words: 6_000)
+        l2.mode = .listen
+        l2.playbackRate = 1.5
+        var l3 = fact(work: w2, on: 3, minutes: 30, words: 4_000)
+        l3.mode = .listen
+        l3.playbackRate = 2.0
+        let read = fact(work: w1, on: 4, minutes: 60, words: 10_000)
+
+        let overview = ReadingInsights.make(facts: [l1, l2, l3, read], calendar: calendar)
+        #expect(overview.listeningWorksCount == 2)
+        // Weighted average: (30*1.0 + 60*1.5 + 30*2.0) / 120 = 1.5
+        #expect(overview.listeningPlaybackRate == 1.5)
+        #expect(overview.listeningSeconds == 120 * 60)
+        #expect(overview.silentReadingSeconds == 60 * 60)
+    }
+
+    @Test func hourlyDurationBucketsCapsCorruptedFarFutureEndDate() {
+        var corrupted = fact(on: 1, hour: 22, minutes: 30)
+        corrupted.tzOffsetSeconds = 0
+        corrupted.endedAt = corrupted.startedAt.addingTimeInterval(60 * 86_400)
+        let hours = ReadingInsights.hourlyDurationBuckets(from: [corrupted], calendar: calendar)
+        #expect(hours[22].seconds == 1_800)
+        #expect(hours[2].seconds == 0)
+        #expect(hours.reduce(0) { $0 + $1.seconds } == 1_800)
+    }
+
+    @Test func whenPostedUsesUtcAndShipConcentrationStaysWithinFandom() {
+        let works = (0..<8).map { (i: Int) -> SavedWork in
+            let w = SavedWork(title: "W\(i)", author: "A")
+            w.workFandoms = [i < 4 ? "Fandom One" : "Fandom Two"]
+            w.workRelationships = ["OFC/OMC"]
+            w.datePublished = "2020-01-01"
+            return w
+        }
+        let facts = works.enumerated().map { (i: Int, w: SavedWork) -> ReadingSessionFacts in
+            fact(work: w.id, on: i + 1, minutes: 30, words: 10_000, fandom: w.workFandoms[0])
+        }
+        let taste = ReadingTasteInsights.make(works: works, facts: facts)
+        #expect(taste.yearCounts.map(\.year) == [2020])
+        #expect(taste.medianYear == 2020)
+        #expect(taste.shipConcentrations.count == 2)
+        #expect(taste.shipConcentrations.allSatisfy { $0.percentage == 100 })
     }
 }
