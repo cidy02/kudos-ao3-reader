@@ -100,7 +100,8 @@ object BackupImporter {
             throw BackupError.InvalidPackage("The backup ZIP could not be read: ${error.message}")
         }
 
-        val manifest = BackupValidator.decodeManifest(manifestBytes ?: throw BackupError.MissingManifest)
+        val rawManifestBytes = manifestBytes ?: throw BackupError.MissingManifest
+        val (manifest, rawManifestJson) = BackupValidator.decodeManifestWithRaw(rawManifestBytes)
         // Apple writes ZIP for modern manifests (v2–v8). Accept any supported
         // version so a Flip7 can restore a phone's v8 .kudosbackup.
         if (!BackupVersion.isZipCompatible(manifest.version)) {
@@ -112,7 +113,8 @@ object BackupImporter {
             manifest = manifest,
             epubFilesByWorkId = epubFiles,
             fontFilesByFileName = fontFiles,
-            originalFilesByName = originalFiles
+            originalFilesByName = originalFiles,
+            rawManifestJson = rawManifestJson
         )
     }
 
@@ -125,7 +127,8 @@ object BackupImporter {
         val manifestPath = resolveInsideRoot(normalizedRoot, BackupPaths.MANIFEST)
         if (!Files.isRegularFile(manifestPath)) throw BackupError.MissingManifest
 
-        val manifest = BackupValidator.decodeManifest(Files.readAllBytes(manifestPath))
+        val rawManifestBytes = Files.readAllBytes(manifestPath)
+        val (manifest, rawManifestJson) = BackupValidator.decodeManifestWithRaw(rawManifestBytes)
         // Directory packages are the legacy Apple shape (typically v1). Still
         // accept any supported version if someone hands us a directory tree.
         if (!BackupVersion.isSupported(manifest.version)) {
@@ -166,7 +169,8 @@ object BackupImporter {
         return KudosBackupPackage(
             manifest = manifest,
             epubFilesByWorkId = epubFiles,
-            fontFilesByFileName = fontFiles
+            fontFilesByFileName = fontFiles,
+            rawManifestJson = rawManifestJson
         )
     }
 
