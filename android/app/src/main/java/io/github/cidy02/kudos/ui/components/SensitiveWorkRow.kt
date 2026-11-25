@@ -77,6 +77,7 @@ import io.github.cidy02.kudos.ui.subject.WorkReadingOrDownloadRing
 import io.github.cidy02.kudos.ui.subject.downloadDimmed
 import io.github.cidy02.kudos.ui.subject.rememberWorkDownloadFraction
 import io.github.cidy02.kudos.library.readingProgressFraction
+import io.github.cidy02.kudos.works.rememberWorkChapterBarState
 import androidx.compose.material3.Checkbox
 
 
@@ -195,8 +196,20 @@ fun SensitiveWorkRow(
     modifier: Modifier = Modifier,
     authorIdentities: String = "",
     authorNames: List<String> = io.github.cidy02.kudos.works.resolveTappableAuthorNames(null, author),
-    leadingProgress: (@Composable () -> Unit)? = null
+    leadingProgress: (@Composable () -> Unit)? = null,
+    chapterBarLayout: ChapterBarLayout? = null,
+    chapterProgressLabel: String? = null,
+    newChapterCount: Int = 0
 ) {
+    val resolvedChapterBarLayout = chapterBarLayout ?: remember(chapters, newChapterCount) {
+        ChapterBarModel.layout(
+            chapters = chapters,
+            progress = null,
+            weights = null,
+            newChapterCount = newChapterCount,
+            scale = ChapterBarScale.Row
+        )
+    }
     val symbolPlacement = LocalWorkSymbolPlacement.current
     var expanded by remember(id) { mutableStateOf(expandAll) }
     LaunchedEffect(expandAll) { expanded = expandAll }
@@ -303,7 +316,9 @@ fun SensitiveWorkRow(
                                 onToggleExpanded = if (obscured || (selecting && !selectionAllowsDetails)) cardTap else { { expanded = !expanded } },
                                 palette = palette, tagSearch = tagSearch,
                                 fandomIsLink = !selecting && !obscured,
-                                rankingSignal = rankingSignal
+                                rankingSignal = rankingSignal,
+                                chapterBarLayout = resolvedChapterBarLayout,
+                                chapterProgressLabel = chapterProgressLabel
                             )
                         } else {
                             // iOS `WorkPlainRow`: the 2x2 grid beside the title; at an accessibility size
@@ -321,52 +336,44 @@ fun SensitiveWorkRow(
                                     modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
                                 )
                             }
-                            if (gridStackedAbove) {
-                                statusTray(HomeStatusArrangement.Grid)
+                            val namedFandoms = fandoms.filter { it.isNotBlank() }
+                            val headingTitle: @Composable () -> Unit = {
+                                // The fandom is a link (opens that fandom), 48 dp to hit; none, no label.
+                                // Not while selecting or hidden: the whole row is then one button (iOS
+                                // `selectingOrNavigating`). A saved card keeps its "+N" open, as `WorkRow`
+                                // does, since it names every fandom in text rather than as chips.
+                                WorkFandomKicker(
+                                    fandoms = namedFandoms,
+                                    palette = palette,
+                                    onOpenFandom = fandomOpener(
+                                        interactive = !selecting && !obscured, search = tagSearch
+                                    ),
+                                    expanded = expanded && !savedCard,
+                                    reachUp = if (gridStackedAbove) 0.dp else KickerTargetReachUp
+                                )
+                                Text(
+                                    text = title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                                ) {
-                                    val namedFandoms = fandoms.filter { it.isNotBlank() }
-                                    // The fandom is a link (opens that fandom), 48 dp to hit; none, no label.
-                                    // Not while selecting or hidden: the whole row is then one button (iOS
-                                    // `selectingOrNavigating`). A saved card keeps its "+N" open, as `WorkRow`
-                                    // does, since it names every fandom in text rather than as chips.
-                                    WorkFandomKicker(
-                                        fandoms = namedFandoms,
-                                        palette = palette,
-                                        onOpenFandom = fandomOpener(
-                                            interactive = !selecting && !obscured, search = tagSearch
-                                        ),
-                                        expanded = expanded && !savedCard,
-                                        reachUp = if (gridStackedAbove) 0.dp else KickerTargetReachUp
-                                    )
+                            val bylineBlock: @Composable () -> Unit = {
+                                io.github.cidy02.kudos.works.detail.VerifiedAuthorByline(
+                                    author, authorIdentities, authorNames, includesBy = true
+                                )
+                                // A saved work's expanded row still names every fandom (iOS `WorkRow`).
+                                // An AO3 work's row lists the others as tappable chips below instead.
+                                if (savedCard && expanded && namedFandoms.size > 1) {
                                     Text(
-                                        text = title,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
+                                        text = namedFandoms.joinToString(", "),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                    io.github.cidy02.kudos.works.detail.VerifiedAuthorByline(
-                                        author, authorIdentities, authorNames, includesBy = true
-                                    )
-                                    // A saved work's expanded row still names every fandom (iOS `WorkRow`).
-                                    // An AO3 work's row lists the others as tappable chips below instead.
-                                    if (savedCard && expanded && namedFandoms.size > 1) {
-                                        Text(
-                                            text = namedFandoms.joinToString(", "),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
                                 }
+                            }
+                            val trailingStar: @Composable () -> Unit = {
                                 if (isFavorite && !selecting) {
                                     Icon(
                                         imageVector = Icons.Filled.Star,
@@ -375,6 +382,8 @@ fun SensitiveWorkRow(
                                         modifier = Modifier.padding(8.dp)
                                     )
                                 }
+                            }
+                            val trailingExpand: @Composable () -> Unit = {
                                 if (savedCard && expandable) {
                                     IconButton(
                                         onClick = if (obscured || (selecting && !selectionAllowsDetails)) cardTap else { { expanded = !expanded } },
@@ -387,14 +396,59 @@ fun SensitiveWorkRow(
                                         )
                                     }
                                 }
-                                // iOS `standardCard`: AO3's required-tag grid beside the title.
-                                if (showsStatusTray && !stacked && symbolPlacement == WorkSymbolPlacement.Beside) {
+                            }
+                            if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
+                                // Under the Title (T-523b): star and expand sit at the top trailing
+                                // edge beside the title block, so the 48 dp target never pushes the strip down.
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            headingTitle()
+                                        }
+                                        if (showsStatusTray) {
+                                            statusTray(HomeStatusArrangement.Row)
+                                        }
+                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            bylineBlock()
+                                        }
+                                    }
+                                    if ((isFavorite && !selecting) || (savedCard && expandable)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            trailingStar()
+                                            trailingExpand()
+                                        }
+                                    }
+                                }
+                            } else {
+                                if (gridStackedAbove) {
                                     statusTray(HomeStatusArrangement.Grid)
                                 }
-                            }
-
-                            if (showsStatusTray && symbolPlacement == WorkSymbolPlacement.UnderTitle) {
-                                statusTray(HomeStatusArrangement.Row)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        headingTitle()
+                                        bylineBlock()
+                                    }
+                                    trailingStar()
+                                    trailingExpand()
+                                    // iOS `standardCard`: AO3's required-tag grid beside the title.
+                                    if (showsStatusTray && !stacked) {
+                                        statusTray(HomeStatusArrangement.Grid)
+                                    }
+                                }
                             }
 
                             if (summary.isNotBlank()) {
@@ -451,6 +505,12 @@ fun SensitiveWorkRow(
                                     showsZeroStats = showsZeroStats
                                 )
                             )
+                            if (!resolvedChapterBarLayout.isEmpty) {
+                                WorkChapterBarLine(
+                                    layout = resolvedChapterBarLayout,
+                                    label = chapterProgressLabel
+                                )
+                            }
                             // iOS's standard card closes with the day AO3 gives the work and the unfold control at the foot.
                             if (dateText.isNotBlank() || (!savedCard && expandable)) {
                                 Row(
@@ -599,54 +659,68 @@ private fun LedgerBody(
     tagSearch: (SearchSubjectField, String) -> Unit,
     /** False while selecting or hidden: the label is then plain text and the row owns the tap. */
     fandomIsLink: Boolean,
-    rankingSignal: String? = null
+    rankingSignal: String? = null,
+    chapterBarLayout: ChapterBarLayout = ChapterBarLayout(),
+    chapterProgressLabel: String? = null
 ) {
     val tokens = LocalKudosTokens.current
     val accessibility = isAccessibilityFontScale()
     val symbolPlacement = LocalWorkSymbolPlacement.current
     val named = fandoms.filter { it.isNotBlank() }
-    val identity: @Composable (Modifier) -> Unit = { modifier ->
-        Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            // The badges too: a private bookmark of a work that names no fandom had no line to
-            // say "Private" on, and said nothing.
-            if (named.isNotEmpty() || badges.isNotEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.Top) {
-                    WorkFandomKicker(
-                        fandoms = named,
-                        palette = palette,
-                        onOpenFandom = fandomOpener(interactive = fandomIsLink, search = tagSearch),
-                        expanded = expanded,
-                        size = 10.sp,
-                        ruleSpacing = 6.dp,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    // iOS draws Private and Rec as `SubjectStateBadge`s in the secondary colour (A70).
-                    badges.forEach { badge -> SubjectStateBadge(text = badge, color = tokens.secondaryInk) }
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = title,
-                    color = tokens.primaryInk,
-                    fontSize = 19.sp,
-                    lineHeight = 24.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = if (accessibility) 3 else 2,
-                    overflow = TextOverflow.Ellipsis,
+    val kickerAndBadges: @Composable () -> Unit = {
+        // The badges too: a private bookmark of a work that names no fandom had no line to
+        // say "Private" on, and said nothing.
+        if (named.isNotEmpty() || badges.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.Top) {
+                WorkFandomKicker(
+                    fandoms = named,
+                    palette = palette,
+                    onOpenFandom = fandomOpener(interactive = fandomIsLink, search = tagSearch),
+                    expanded = expanded,
+                    size = 10.sp,
+                    ruleSpacing = 6.dp,
                     modifier = Modifier.weight(1f, fill = false)
                 )
-                if (isFavorite) {
-                    Icon(Icons.Filled.Star, contentDescription = "Favorite", tint = Color(0xFFFFCC00),
-                        modifier = Modifier.size(16.dp))
-                }
+                // iOS draws Private and Rec as `SubjectStateBadge`s in the secondary colour (A70).
+                badges.forEach { badge -> SubjectStateBadge(text = badge, color = tokens.secondaryInk) }
             }
-            Text(
-                text = "by ${author.ifBlank { "Anonymous" }}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = tokens.secondaryInk,
-                maxLines = if (accessibility) 2 else 1,
-                overflow = TextOverflow.Ellipsis
-            )
+        }
+    }
+    val titleText: @Composable (Modifier) -> Unit = { titleModifier ->
+        Text(
+            text = title,
+            color = tokens.primaryInk,
+            fontSize = 19.sp,
+            lineHeight = 24.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = if (accessibility) 3 else 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = titleModifier
+        )
+    }
+    val favoriteStar: @Composable () -> Unit = {
+        if (isFavorite) {
+            Icon(Icons.Filled.Star, contentDescription = "Favorite", tint = Color(0xFFFFCC00),
+                modifier = Modifier.size(16.dp))
+        }
+    }
+    val authorText: @Composable () -> Unit = {
+        Text(
+            text = "by ${author.ifBlank { "Anonymous" }}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = tokens.secondaryInk,
+            maxLines = if (accessibility) 2 else 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+    val identity: @Composable (Modifier) -> Unit = { modifier ->
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            kickerAndBadges()
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                titleText(Modifier.weight(1f, fill = false))
+                favoriteStar()
+            }
+            authorText()
         }
     }
     val signals: @Composable () -> Unit = {
@@ -661,10 +735,29 @@ private fun LedgerBody(
                 HomeStatusArrangement.Grid
             },
             tileSize = 24.dp,
-            announces = true
+            announces = true,
+            modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
         )
     }
-    if (accessibility || symbolPlacement == WorkSymbolPlacement.UnderTitle) {
+    if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(Modifier.weight(1f)) {
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    kickerAndBadges()
+                    titleText(Modifier)
+                }
+                Spacer(Modifier.height(6.dp))
+                signals()
+                Spacer(Modifier.height(6.dp))
+                authorText()
+            }
+            favoriteStar()
+        }
+    } else if (accessibility) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             identity(Modifier.fillMaxWidth())
             signals()
@@ -755,6 +848,9 @@ private fun LedgerBody(
     if (!rankingSignal.isNullOrBlank()) {
         Text(rankingSignal, fontSize = 11.5.sp, lineHeight = 16.sp, color = tokens.secondaryInk)
     }
+    if (!chapterBarLayout.isEmpty) {
+        WorkChapterBarLine(layout = chapterBarLayout, label = chapterProgressLabel)
+    }
 }
 
 @Composable
@@ -774,7 +870,8 @@ fun SensitiveWorkRow(
     selecting: Boolean = false,
     selected: Boolean = false,
     selectionAllowsDetails: Boolean = false,
-    neutralCard: Boolean = false
+    neutralCard: Boolean = false,
+    newChapterCount: Int = 0
 ) {
     val environment = LocalWorkRowEnvironment.current
     val row: @Composable (SavedWork?, Boolean, () -> Unit, () -> Unit) -> Unit = { local, obscured, click, longClick ->
@@ -827,7 +924,8 @@ fun SensitiveWorkRow(
                 onSelect = { onOpenWork(work) },
                 onTagClick = onTagClick,
                 onTagSearch = onTagSearch,
-                onLongClick = if (obscured) longClick else onLongClick ?: longClick
+                onLongClick = if (obscured) longClick else onLongClick ?: longClick,
+                newChapterCount = newChapterCount
             )
         }
     }
@@ -876,6 +974,14 @@ fun SensitiveWorkRow(
     footer: (@Composable () -> Unit)? = null,
     downloadFraction: Double? = rememberWorkDownloadFraction(work)
 ) {
+    val newChapterCount = if (work.hasUpdate) {
+        maxOf(0, work.postedChapterCount - (work.knownChapterCount ?: work.postedChapterCount))
+    } else 0
+    val (chapterBarLayout, chapterProgressLabel) = rememberWorkChapterBarState(
+        work = work,
+        scale = ChapterBarScale.Row,
+        newChapterCount = newChapterCount
+    )
     SensitiveWorkRow(
         id = work.id,
         title = work.title,
@@ -929,6 +1035,9 @@ fun SensitiveWorkRow(
                     modifier = Modifier.padding(start = 16.dp)
                 )
             }
-        } else null
+        } else null,
+        chapterBarLayout = chapterBarLayout,
+        chapterProgressLabel = chapterProgressLabel,
+        newChapterCount = newChapterCount
     )
 }

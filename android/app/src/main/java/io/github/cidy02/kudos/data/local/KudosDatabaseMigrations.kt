@@ -342,4 +342,26 @@ object KudosDatabaseMigrations {
         }
     }
 
+    /**
+     * v14 → v15: A-516 per-sitting fields on reading_sessions that cannot be backfilled.
+     * Additive with defaults: unavailable measurements stay NULL on old rows, and
+     * modeRaw / deviceID / rulesVersion default to 'read', '', 0.
+     */
+    val MIGRATION_14_15 = object : Migration(14, 15) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            listOf(
+                "tzOffsetSeconds INTEGER",
+                "startProgress REAL",
+                "startSpineIndex INTEGER",
+                "modeRaw TEXT NOT NULL DEFAULT 'read'",
+                "playbackRate REAL",
+                "activeSeconds REAL",
+                "deviceID TEXT NOT NULL DEFAULT ''",
+                "rulesVersion INTEGER NOT NULL DEFAULT 0"
+            ).forEach { column ->
+                db.execSQL("ALTER TABLE reading_sessions ADD COLUMN $column")
+            }
+        }
+    }
+
 }

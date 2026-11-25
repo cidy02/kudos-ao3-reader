@@ -1062,6 +1062,7 @@ internal fun LibrarySubjectLedgerRow(
     val row: @Composable () -> Unit = {
         Column {
             if (ledger) {
+                val (chapterBarLayout, chapterProgressLabel) = io.github.cidy02.kudos.works.rememberWorkChapterBarState(work)
                 io.github.cidy02.kudos.ui.subject.WorkLedgerRow(
                     title = work.title,
                     author = work.author.ifBlank { "Anonymous" },
@@ -1088,7 +1089,9 @@ internal fun LibrarySubjectLedgerRow(
                         }
                     },
                     onLongClick = { if (!obscured && !selecting) menuOpen = true },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    chapterBarLayout = chapterBarLayout,
+                    chapterProgressLabel = chapterProgressLabel
                 )
             } else {
                 SensitiveWorkRow(

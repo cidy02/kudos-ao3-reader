@@ -1627,7 +1627,7 @@ private fun WorkDetailContent(
 
             Spacer(Modifier.height(14.dp))
 
-            // 3. Resume Card: Progress ring, primary/secondary reading labels, 42dp play button
+            // 3. Resume Card: Progress ring, chapter bars, primary/secondary reading labels, play button
             val actionTitle = when {
                 busy -> "Opening…"
                 (state.local?.hasStartedReading == true) && !(state.local.isFinished) -> "Continue Reading"
@@ -1636,6 +1636,7 @@ private fun WorkDetailContent(
             val readingProgress = if (state.local?.hasStartedReading == true) {
                 state.local.readingProgress ?: 0.0
             } else null
+            val chapterLengths = rememberChapterLengths(state.local)
 
             WorkDetailResumeCard(
                 actionTitle = actionTitle,
@@ -1645,7 +1646,11 @@ private fun WorkDetailContent(
                 savedPositionTitle = HomeFacts.locatorTitle(state.local?.readiumLocator),
                 lastReadDate = state.local?.lastReadDate,
                 palette = palette,
-                onClick = onResumeClick
+                onClick = onResumeClick,
+                chapters = state.chapters,
+                isFinished = state.local?.isFinished == true,
+                readiumLocator = state.local?.readiumLocator,
+                chapterLengths = chapterLengths
             )
 
             // WorkDetailView.swift:328–356: progress, result and Cancel stay in Detail.

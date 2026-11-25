@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.cidy02.kudos.core.model.ReaderMode
+import io.github.cidy02.kudos.data.local.entity.ReadingSessionMode
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.AO3Error
@@ -172,12 +173,19 @@ class ReaderViewModel(
      * window ends. An empty locator is not a place.
      */
     fun onProgress(progress: ReaderProgress) {
+        val previousLocator = (_state.value as? ReaderUiState.Reading)?.liveProgress?.locatorJson
         updateReading { it.copy(
             liveProgress = progress,
             viewport = it.viewport?.takeIf { viewport -> viewport.spineIndex == progress.spineIndex }
         ) }
         if (isScrubbing) return
         repository.noteLocation(workId, progress)
+        if (previousLocator != null &&
+            !progress.locatorJson.isNullOrBlank() &&
+            progress.locatorJson != previousLocator
+        ) {
+            noteReadingActivity()
+        }
     }
 
     fun setScrubbing(scrubbing: Boolean) {
@@ -219,6 +227,16 @@ class ReaderViewModel(
 
     fun resumeReadingSession() {
         enqueueSessionLifecycle { readingLogService.resumeSession(workId) }
+    }
+
+    fun noteReadingActivity() {
+        enqueueSessionLifecycle { readingLogService.noteActivity(workId) }
+    }
+
+    fun setListeningMode(rate: Double) {
+        enqueueSessionLifecycle {
+            readingLogService.setMode(ReadingSessionMode.LISTEN, workId, playbackRate = rate)
+        }
     }
 
     fun close() {

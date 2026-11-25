@@ -29,11 +29,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.account.AccountListRepository
+import io.github.cidy02.kudos.account.SubscriptionWatermarks
 import io.github.cidy02.kudos.app.PrivacyGate
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.core.model.ReadingQueue
@@ -48,18 +53,28 @@ import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
+import io.github.cidy02.kudos.ui.components.ChapterBarLayout
+import io.github.cidy02.kudos.ui.components.ChapterBarModel
+import io.github.cidy02.kudos.ui.components.ChapterBarScale
+import io.github.cidy02.kudos.ui.components.ChapterBars
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
+import io.github.cidy02.kudos.ui.components.hiddenMatureWorkSemantics
 import io.github.cidy02.kudos.ui.components.keptForPrivacy
 import io.github.cidy02.kudos.ui.components.rememberCollapsedSections
+import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
+import io.github.cidy02.kudos.ui.subject.HomeStatusTray
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.RevealCapsule
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
-import io.github.cidy02.kudos.ui.subject.SubjectRemoteCoverCard
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
+import io.github.cidy02.kudos.ui.subject.downloadDimmed
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.rememberWorkDownloadFraction
 import io.github.cidy02.kudos.works.CanonicalWorkMerge
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.WorkImporter
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.works.rememberChapterLengths
 import kotlinx.coroutines.launch
 
 private const val HomeShelfLimit = 12
@@ -618,29 +633,46 @@ private fun SubscriptionsBlock(
                     message = HomeSubscriptionsCopy.emptyMessage(state.isSignedIn, state.subscriptionsLoadFailed),
                     icon = HomeEmptyIcons.subscriptions
                 )
-                else -> Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    shown.take(HomeShelfLimit).forEach { entry ->
-                        val local = entry.local
-                        if (local != null) {
-                            val item = displayById[local.id]
-                            if (item != null) {
-                                LocalCard(
-                                    item = item,
-                                    allowSelect = false,
-                                    footer = null,
+                else -> {
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val watermarks = remember(context, shown) {
+                        SubscriptionWatermarks.load(context, SubscriptionWatermarks.NAMESPACE_SUBSCRIPTIONS)
+                    }
+                    val visibleRows = shown.take(HomeShelfLimit)
+                    Column(Modifier.fillMaxWidth()) {
+                        visibleRows.forEachIndexed { index, entry ->
+                            if (index > 0) {
+                                androidx.compose.material3.HorizontalDivider(
+                                    color = LocalKudosTokens.current.separator,
+                                    modifier = Modifier.padding(start = 79.dp)
+                                )
+                            }
+                            val local = entry.local
+                            if (local != null) {
+                                val obscured = displayById[local.id]?.privacyVisibility == LibraryPrivacyVisibility.Obscured
+                                val chapterLengths = rememberChapterLengths(local)
+                                val newCount = if (local.hasUpdate) {
+                                    maxOf(0, local.postedChapterCount - (local.knownChapterCount ?: local.postedChapterCount))
+                                } else 0
+                                val layout = ChapterBarModel.layout(
+                                    chapters = local.chapters,
                                     progress = local.readingProgressFraction(),
+                                    isFinished = local.isFinished,
+                                    weights = chapterLengths?.positions,
+                                    heights = chapterLengths?.words,
+                                    newChapterCount = newCount,
+                                    scale = ChapterBarScale.Row
+                                )
+                                val downloadFraction = rememberWorkDownloadFraction(local, downloadQueue)
+                                LocalFrame(
+                                    work = local,
+                                    obscured = obscured,
+                                    allowSelect = false,
                                     isSelecting = isSelecting,
-                                    isSelected = local.id in selection,
-                                    downloadQueue = downloadQueue,
                                     controller = controller,
                                     workRepository = workRepository,
                                     queueRepository = queueRepository,
+                                    downloadQueue = downloadQueue,
                                     workImporter = workImporter,
                                     onOpen = onOpen,
                                     onDetails = onDetails,
@@ -648,23 +680,90 @@ private fun SubscriptionsBlock(
                                     onReveal = onReveal,
                                     onToggleSelected = {},
                                     onEnterSelect = {}
-                                )
-                            }
-                        } else {
-                            val environment = io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment.current
-                            if (environment != null) {
-                                io.github.cidy02.kudos.ui.components.RemoteWorkActionFrame(entry.remote, environment, onOpenRemote) {
-                                    matched, obscured, click, longClick ->
-                                    Box(Modifier.combinedClickable(onClick = click, onLongClick = longClick)) {
-                                        if (matched != null && obscured) {
-                                            io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard(
-                                                work = matched, obscured = true, downloadFraction = null)
-                                        } else SubjectRemoteCoverCard(
-                                            summary = entry.remote, showsProvenance = true, obscured = obscured)
+                                ) {
+                                    HomeSubscriptionRow(
+                                        title = local.title,
+                                        author = local.author,
+                                        fandoms = local.workFandoms,
+                                        dateUpdated = local.dateUpdated,
+                                        rating = local.rating,
+                                        categories = local.workCategories,
+                                        warnings = local.workWarnings,
+                                        isComplete = local.knownCompletion,
+                                        layout = layout,
+                                        obscured = obscured,
+                                        downloadFraction = downloadFraction
+                                    )
+                                }
+                            } else {
+                                val environment = io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment.current
+                                val newCount = SubscriptionWatermarks.newChapterCount(entry.remote, watermarks)
+                                if (environment != null) {
+                                    io.github.cidy02.kudos.ui.components.RemoteWorkActionFrame(entry.remote, environment, onOpenRemote) {
+                                        matched, obscured, click, longClick ->
+                                        val chapterLengths = rememberChapterLengths(matched)
+                                        val rowLayout = if (matched != null) {
+                                            val localNew = if (matched.hasUpdate) {
+                                                maxOf(0, matched.postedChapterCount - (matched.knownChapterCount ?: matched.postedChapterCount))
+                                            } else 0
+                                            ChapterBarModel.layout(
+                                                chapters = matched.chapters,
+                                                progress = matched.readingProgressFraction(),
+                                                isFinished = matched.isFinished,
+                                                weights = chapterLengths?.positions,
+                                                heights = chapterLengths?.words,
+                                                newChapterCount = localNew,
+                                                scale = ChapterBarScale.Row
+                                            )
+                                        } else {
+                                            ChapterBarModel.layout(
+                                                chapters = entry.remote.chapters,
+                                                progress = null,
+                                                weights = null,
+                                                newChapterCount = newCount,
+                                                scale = ChapterBarScale.Row
+                                            )
+                                        }
+                                        Box(Modifier.combinedClickable(onClick = click, onLongClick = longClick)) {
+                                            HomeSubscriptionRow(
+                                                title = matched?.title ?: entry.remote.title,
+                                                author = matched?.author ?: entry.remote.authorText,
+                                                fandoms = matched?.workFandoms ?: entry.remote.fandoms,
+                                                dateUpdated = matched?.dateUpdated ?: entry.remote.updatedDate,
+                                                rating = matched?.rating ?: entry.remote.rating,
+                                                categories = matched?.workCategories ?: entry.remote.categories,
+                                                warnings = matched?.workWarnings ?: entry.remote.warnings,
+                                                isComplete = matched?.knownCompletion ?: entry.remote.isComplete,
+                                                layout = rowLayout,
+                                                obscured = obscured,
+                                                downloadFraction = matched?.let { rememberWorkDownloadFraction(it, downloadQueue) }
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    val remoteLayout = ChapterBarModel.layout(
+                                        chapters = entry.remote.chapters,
+                                        progress = null,
+                                        weights = null,
+                                        newChapterCount = newCount,
+                                        scale = ChapterBarScale.Row
+                                    )
+                                    HomePress(onClick = { onOpenRemote(entry.remote) }) {
+                                        HomeSubscriptionRow(
+                                            title = entry.remote.title,
+                                            author = entry.remote.authorText,
+                                            fandoms = entry.remote.fandoms,
+                                            dateUpdated = entry.remote.updatedDate,
+                                            rating = entry.remote.rating,
+                                            categories = entry.remote.categories,
+                                            warnings = entry.remote.warnings,
+                                            isComplete = entry.remote.isComplete,
+                                            layout = remoteLayout,
+                                            obscured = false,
+                                            downloadFraction = null
+                                        )
                                     }
                                 }
-                            } else HomePress(onClick = { onOpenRemote(entry.remote) }) {
-                                SubjectRemoteCoverCard(summary = entry.remote, showsProvenance = true)
                             }
                         }
                     }
@@ -767,4 +866,90 @@ private fun LocalFrame(
 @Composable
 private fun HomePress(onClick: () -> Unit, content: @Composable () -> Unit) {
     Box(Modifier.clickable(onClick = onClick)) { content() }
+}
+
+@Composable
+private fun HomeSubscriptionRow(
+    title: String,
+    author: String,
+    fandoms: List<String>,
+    dateUpdated: String,
+    rating: String,
+    categories: List<String>,
+    warnings: List<String>,
+    isComplete: Boolean?,
+    layout: ChapterBarLayout,
+    obscured: Boolean,
+    downloadFraction: Double?,
+    modifier: Modifier = Modifier
+) {
+    val tokens = LocalKudosTokens.current
+    val large = isAccessibilityFontScale()
+    val metaText = remember(author, fandoms, dateUpdated) {
+        val parts = mutableListOf<String>()
+        val cleanAuthor = author.trim()
+        if (cleanAuthor.isNotEmpty()) parts += cleanAuthor
+        HomeFacts.primaryFandom(fandoms)?.let { parts += it }
+        val cleanDate = dateUpdated.trim()
+        if (cleanDate.isNotEmpty()) parts += cleanDate
+        parts.joinToString(" · ")
+    }
+    Box(
+        modifier
+            .fillMaxWidth()
+            .downloadDimmed(if (downloadFraction != null) 1f else 0f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (obscured) Modifier.blur(6.dp) else Modifier)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .hiddenMatureWorkSemantics(obscured),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HomeStatusTray(
+                rating = rating,
+                categories = categories,
+                warnings = warnings,
+                isComplete = isComplete,
+                arrangement = HomeStatusArrangement.Grid,
+                tileSize = 24.dp,
+                announces = true
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = title,
+                    color = tokens.primaryInk,
+                    fontSize = 15.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = if (large) Int.MAX_VALUE else 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (!layout.isEmpty) {
+                    ChapterBars(
+                        layout = layout,
+                        scale = ChapterBarScale.Row,
+                        height = 16.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (metaText.isNotEmpty()) {
+                    Text(
+                        text = metaText,
+                        color = tokens.secondaryInk,
+                        fontSize = 12.5.sp,
+                        maxLines = if (large) Int.MAX_VALUE else 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+        if (obscured) {
+            RevealCapsule(Modifier.align(Alignment.Center))
+        }
+    }
 }

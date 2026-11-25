@@ -868,6 +868,7 @@ internal fun CollectionWorkListItem(
                 } else {
                     // The row Home's lists draw (iOS `WorkRow.ledger`): the reading ring, the
                     // kicker and the tray. This page had a thinner copy of its own.
+                    val (chapterBarLayout, chapterProgressLabel) = io.github.cidy02.kudos.works.rememberWorkChapterBarState(work)
                     WorkLedgerRow(
                         downloadFraction = io.github.cidy02.kudos.ui.subject.rememberWorkDownloadFraction(work),
                         title = work.title,
@@ -900,7 +901,9 @@ internal fun CollectionWorkListItem(
                         onLongClick = {
                             // Not on a blurred work: its menu opens what the blur hides.
                             if (!isSelecting && !obscured) menuOpen = true
-                        }
+                        },
+                        chapterBarLayout = chapterBarLayout,
+                        chapterProgressLabel = chapterProgressLabel
                     )
                 }
             }

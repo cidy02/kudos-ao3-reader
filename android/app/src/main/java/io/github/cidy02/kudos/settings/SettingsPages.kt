@@ -422,7 +422,7 @@ fun SettingsDownloadsPage(
     LaunchedEffect(footprintScanner) {
         storageUsed = footprintScanner?.measure()?.let { LocalStorageFootprint.formatted(it.totalBytes) } ?: "—"
     }
-    SettingsPage(title = "Downloads") {
+    SettingsPage(title = "Storage") {
         item {
             SettingsSection(
                 footnote = "When this is on, every work you open stays downloaded, as if you tapped " +

@@ -64,8 +64,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ScreenLockRotation
-import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -161,8 +159,10 @@ fun ReaderScreen(
     customFontRepository: io.github.cidy02.kudos.files.CustomFontRepository? = null
 ) {
     val uiState by viewModel.state.collectAsState()
-    val settings by (settingsRepository ?: viewModel.readerSettingsRepository)
+    val effectiveSettingsRepository = settingsRepository ?: viewModel.readerSettingsRepository
+    val settings by effectiveSettingsRepository
         .settings.collectAsState(initial = io.github.cidy02.kudos.core.model.KudosSettings.Defaults)
+    val orientationLock = rememberReaderOrientationLock(effectiveSettingsRepository)
 
     val backgroundColor = (uiState as? ReaderUiState.Reading)?.preferences?.let {
         it.pageBackgroundColor ?: it.theme.backgroundColor()
@@ -203,7 +203,7 @@ fun ReaderScreen(
             )
             is ReaderUiState.Reading -> ReaderReading(
                 state, viewModel, onBack, onOpenComments, onOpenWorkDetail, settings,
-                onOpenAo3Link, settingsRepository, customFontRepository
+                onOpenAo3Link, settingsRepository, customFontRepository, orientationLock
             )
         }
     }
@@ -220,7 +220,8 @@ private fun ReaderReading(
     settings: io.github.cidy02.kudos.core.model.KudosSettings,
     onOpenAo3Link: (ReaderLinkDestination) -> Unit,
     settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository?,
-    customFontRepository: io.github.cidy02.kudos.files.CustomFontRepository?
+    customFontRepository: io.github.cidy02.kudos.files.CustomFontRepository?,
+    orientationLock: ReaderOrientationLockState
 ) {
     val context = LocalContext.current
     val workActions = remember(context) { ReaderWorkActions(context) }
@@ -276,7 +277,6 @@ private fun ReaderReading(
         lastHighlightColor = normalized
         annotationPreferences.edit().putString("lastHighlightColor", normalized).apply()
     }
-    var isOrientationLocked by remember { mutableStateOf(false) }
     var showTtsControls by remember { mutableStateOf(false) }
     val pronunciationStore = remember(context) { io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore(context.applicationContext.filesDir) }
     var pronunciationTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -289,25 +289,29 @@ private fun ReaderReading(
 
     val scope = rememberCoroutineScope()
 
-    val speechController = remember(context) { ReaderSpeechController(context) }
+    val speechController = remember(context, viewModel) {
+        ReaderSpeechController(
+            context = context,
+            onUtteranceStart = { viewModel.noteReadingActivity() }
+        )
+    }
     val speechStatus by speechController.status.collectAsState()
     val spokenText by speechController.spokenText.collectAsState()
     val writeMessage by viewModel.writeMessage.collectAsState()
     val kudosWorking by viewModel.kudosWorking.collectAsState()
 
+    LaunchedEffect(speechStatus, state.preferences.speechRate) {
+        if (speechStatus == SpeechStatus.PLAYING) {
+            viewModel.setListeningMode(
+                ReaderSpeechPreferences.clampRate(state.preferences.speechRate).toDouble()
+            )
+        }
+    }
+
     val tokens = readerChromeTokens(state.preferences.theme, settings)
 
     DisposableEffect(speechController) {
         onDispose { speechController.shutdown() }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            // Restore free rotation when leaving the reader (session-only lock).
-            val activity = context as? android.app.Activity
-            activity?.requestedOrientation =
-                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
     }
 
     LaunchedEffect(state.preferences, state.work.title, state.work.workFandoms, state.work.sourceUrl) {
@@ -723,23 +727,7 @@ private fun ReaderReading(
                             )
 
                             // Lock Rotation
-                            add(
-                                ReaderFanRoundAction(
-                                    id = "rotationLock",
-                                    icon = if (isOrientationLocked) Icons.Filled.ScreenLockRotation else Icons.Filled.ScreenRotation,
-                                    accessibilityLabel = if (isOrientationLocked) "Unlock rotation" else "Lock rotation",
-                                    isEmphasized = isOrientationLocked,
-                                    action = {
-                                        isOrientationLocked = !isOrientationLocked
-                                        val activity = context as? android.app.Activity
-                                        activity?.requestedOrientation = if (isOrientationLocked) {
-                                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
-                                        } else {
-                                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                                        }
-                                    }
-                                )
-                            )
+                            add(readerRotationLockAction(orientationLock))
 
                             // Bookmark
                             add(
@@ -1015,6 +1003,11 @@ private fun ReaderReading(
                         repository = settingsRepository ?: viewModel.readerSettingsRepository,
                         onDismiss = { speech ->
                             speechController.configure(speech.applyTo(state.preferences), state.work.title)
+                            if (speechStatus == SpeechStatus.PLAYING) {
+                                viewModel.setListeningMode(
+                                    ReaderSpeechPreferences.clampRate(speech.rate).toDouble()
+                                )
+                            }
                             settingsSheet = null
                         }
                     )

@@ -11,6 +11,7 @@ import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.JsonObject
 
 object BackupValidator {
     // Derived from the enums / catalog so allowlists cannot drift from storage
@@ -21,21 +22,32 @@ object BackupValidator {
     private val matureModes = MatureContentMode.entries.map { it.storageValue }.toSet()
     private val builtInFontIds = ReaderFontCatalog.builtInIds
 
-    fun decodeManifest(bytes: ByteArray): KudosBackupManifest {
+    fun decodeManifest(bytes: ByteArray): KudosBackupManifest = decodeManifestWithRaw(bytes).first
+
+    /**
+     * The validated manifest and the raw JSON object it came from (null when the bytes are not an
+     * object). One parse feeds both: a second parse is a second tree and a second String of the
+     * whole file.
+     */
+    fun decodeManifestWithRaw(bytes: ByteArray): Pair<KudosBackupManifest, JsonObject?> {
         if (bytes.size > BackupLimits.MAX_MANIFEST_BYTES) {
             throw BackupError.EntryTooLarge(BackupPaths.MANIFEST)
         }
 
-        val json = bytes.toString(Charsets.UTF_8)
+        val raw = parseJsonObjectOrNull(bytes)
         val manifest = try {
-            BackupJson.decodeFromString<KudosBackupManifest>(json)
+            if (raw != null) {
+                BackupJson.decodeFromJsonElement(KudosBackupManifest.serializer(), raw)
+            } else {
+                BackupJson.decodeFromString<KudosBackupManifest>(bytes.toString(Charsets.UTF_8))
+            }
         } catch (error: SerializationException) {
             throw BackupError.InvalidJson(error)
         } catch (error: IllegalArgumentException) {
             throw BackupError.InvalidJson(error)
         }
 
-        return validateManifest(manifest)
+        return validateManifest(manifest) to raw
     }
 
     fun validateManifest(

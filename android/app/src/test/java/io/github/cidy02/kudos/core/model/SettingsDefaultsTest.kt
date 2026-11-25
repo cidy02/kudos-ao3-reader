@@ -37,10 +37,21 @@ class SettingsDefaultsTest {
         assertEquals("#821019", defaults.app.accentColorHex)
         assertNull(defaults.app.storedAccentColorHex)
         assertNull(defaults.app.chosenAccentColorHex)
-        assertEquals(WorkSymbolPlacement.Beside, defaults.app.workSymbolPlacement)
+        assertEquals(WorkSymbolPlacement.UnderTitle, defaults.app.workSymbolPlacement)
+        assertEquals(WorkSymbolPlacement.UnderTitle, WorkSymbolPlacement.Default)
         assertNull(defaults.app.storedWorkSymbolPlacement)
         assertNull(defaults.app.backupWorkSymbolPlacement)
         assertNull(defaults.app.restorableWorkSymbolPlacement)
+    }
+
+    @Test
+    fun underTitleIsTheUnchosenDefaultAndStoredBesideWinsWithoutBackupExport() {
+        assertEquals(WorkSymbolPlacement.UnderTitle, WorkSymbolPlacement.Default)
+        assertEquals("underTitle", WorkSymbolPlacement.Default.storageValue)
+        assertEquals(WorkSymbolPlacement.UnderTitle, KudosSettings.Defaults.app.workSymbolPlacement)
+        assertNull(KudosSettings.Defaults.app.backupWorkSymbolPlacement)
+        assertEquals(WorkSymbolPlacement.Beside, WorkSymbolPlacement.fromStorage("beside"))
+        assertTrue(WorkSymbolPlacement.Beside.storageValue != WorkSymbolPlacement.Default.storageValue)
     }
 
     @Test
@@ -66,8 +77,9 @@ class SettingsDefaultsTest {
 
         assertEquals("beside", WorkSymbolPlacement.Beside.storageValue)
         assertEquals("underTitle", WorkSymbolPlacement.UnderTitle.storageValue)
-        assertEquals(WorkSymbolPlacement.Beside, WorkSymbolPlacement.fromStorage(null))
-        assertEquals(WorkSymbolPlacement.Beside, WorkSymbolPlacement.fromStorage("unknown"))
+        assertEquals(WorkSymbolPlacement.UnderTitle, WorkSymbolPlacement.fromStorage(null))
+        assertEquals(WorkSymbolPlacement.UnderTitle, WorkSymbolPlacement.fromStorage("unknown"))
+        assertEquals(WorkSymbolPlacement.Beside, WorkSymbolPlacement.fromStorage("beside"))
     }
 
     @Test
