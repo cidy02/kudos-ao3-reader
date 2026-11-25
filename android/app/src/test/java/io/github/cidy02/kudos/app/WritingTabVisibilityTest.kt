@@ -1445,7 +1445,12 @@ class WritingTabVisibilityTest {
 
         val switchingClient = object : AO3AuthenticatedClient {
             override fun username(): String = currentUser
-            override fun sessionGeneration(): Int = currentGen
+            // The write's own two checks (dispatch, movedOnAfterWrite) still see the session it began in;
+            // only saveWork's final guard sees the switch.
+            var readsBeforeSwitch = Int.MAX_VALUE
+            override fun sessionGeneration(): Int =
+                if (readsBeforeSwitch > 0) { readsBeforeSwitch--; currentGen } else switchedGen
+            var switchedGen = 3
             override suspend fun getAuthenticated(url: String): AO3Result<AO3HttpResponse> {
                 // Same username re-authenticated with a newer generation before the dashboard GET returns.
                 currentGen = 2
@@ -1457,23 +1462,34 @@ class WritingTabVisibilityTest {
                 formFields: List<Pair<String, String>>,
                 headers: Map<String, String>
             ): AO3Result<AO3HttpResponse> {
-                // Session switches to Carol before the POST returns.
+                // The session switches to Carol after the POST returned and the write's own check passed;
+                // the router is told nothing, so an unguarded notice for the old writer would be accepted.
+                readsBeforeSwitch = 1
                 currentUser = "carol_reader"
-                currentGen = 3
-                router.onAuthStateChanged(AO3AuthState.SignedIn(currentUser), generation = currentGen)
                 return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), saveNoticeBody))
             }
         }
 
+        // A cache that never cancels, so only the repository's own post-return guard can stop the notice.
+        val passThroughCache = object : AO3PageCache() {
+            override suspend fun <T> read(
+                url: String,
+                kind: Kind,
+                auth: AO3AuthenticatedClient?,
+                bypassCache: Boolean,
+                fetch: suspend () -> AO3Result<AO3HttpResponse>,
+                parse: suspend (AO3HttpResponse) -> AO3Result<T>
+            ): AO3Result<T> = when (val response = fetch()) {
+                is AO3Result.Failure -> AO3Result.Failure(response.error)
+                is AO3Result.Success -> parse(response.value)
+            }
+        }
         val authorRepo = AO3AuthorRepository(
             authenticatedClient = switchingClient,
-            parseDispatcher = Dispatchers.Unconfined
+            parseDispatcher = Dispatchers.Unconfined,
+            pageCache = passThroughCache
         )
-        try {
-            authorRepo.loadDashboard(AO3AuthorRoute("Avery_Archive"), bypassCache = true)
-        } catch (_: kotlinx.coroutines.CancellationException) {
-            // The page cache drops a page whose viewer session changed mid-fetch; either way nothing may notify.
-        }
+        authorRepo.loadDashboard(AO3AuthorRoute("Avery_Archive"), bypassCache = true)
         assertFalse(router.showsWritingTab)
         assertFalse(store.lastKnownWrites("Avery_Archive"))
 
@@ -1494,5 +1510,75 @@ class WritingTabVisibilityTest {
         assertFalse(router.showsWritingTab)
         assertFalse(store.lastKnownWrites("carol_reader"))
         assertFalse(store.lastKnownWrites("Avery_Archive"))
+    }
+
+    @Test
+    fun restoredWritingSelectionNoted_afterAuthRevealedTabStillReturnsToWriting() {
+        val router = controller()
+        router.onAuthStateChanged(AO3AuthState.SignedIn("writer"), generation = 1)
+        assertFalse(router.showsWritingTab)
+        // The IO evaluation reveals the tab after the Main thread read it hidden and left Writing,
+        // but before it recorded the restored selection.
+        router.evaluateWritingTab(isSignedIn = true, username = "writer", workCount = 3)
+        assertTrue(router.showsWritingTab)
+        assertEquals(0, router.returnToWritingRequestFlow.value)
+
+        router.noteRestoredWritingSelection()
+
+        assertEquals(1, router.returnToWritingRequestFlow.value)
+    }
+
+    @Test
+    fun debugSessionRevealSurvivesLaterSignedOutEvaluation() {
+        val router = controller()
+        router.revealWritingTabForSession()
+        router.onAuthStateChanged(AO3AuthState.SignedOut, generation = 1)
+        assertTrue(router.showsWritingTab)
+    }
+
+    @Test
+    fun openingAccountSheetClearsArmedWritingReturn() {
+        val router = controller()
+        router.onAuthStateChanged(AO3AuthState.SignedIn("writer"), generation = 1)
+        router.noteRestoredWritingSelection()
+        router.onShellStateChanged(Routes.Home, isPresentingAccount = true)
+        router.onShellStateChanged(Routes.Home, isPresentingAccount = false)
+
+        router.evaluateWritingTab(isSignedIn = true, username = "writer", workCount = 2)
+
+        assertTrue(router.showsWritingTab)
+        assertEquals(0, router.returnToWritingRequestFlow.value)
+
+        router.openPendingWritingRoute(WritingRoute.Drafts)
+        assertEquals(1, router.returnToWritingRequestFlow.value)
+        router.onShellStateChanged(Routes.Home, isPresentingAccount = true)
+        assertEquals(0, router.returnToWritingRequestFlow.value)
+        assertNull(router.pendingWritingRoute)
+        assertFalse(router.consumeReturnToWritingRequest())
+    }
+
+    @Test
+    fun returnToWritingReadsLiveRouteNotCapturedState() {
+        val router = controller()
+        router.onAuthStateChanged(AO3AuthState.SignedIn("writer"), generation = 1)
+        router.noteRestoredWritingSelection()
+        router.evaluateWritingTab(isSignedIn = true, username = "writer", workCount = 2)
+        assertEquals(1, router.returnToWritingRequestFlow.value)
+
+        val harness = ShellNavHarness(
+            router = router,
+            initialAuthState = AO3AuthState.SignedIn("writer"),
+            initialUsername = "writer",
+            initialEffectsMounted = false
+        )
+        mountShellNavHarness(harness)
+        // The user is already elsewhere when the stale request would run.
+        compose.runOnIdle {
+            harness.navController.navigateShellRoot(Routes.Library)
+            applyReturnToWritingIfPending(harness.navController, router) { "writer" }
+        }
+        compose.waitForIdle()
+
+        assertEquals(Routes.Library, harness.navController.currentDestination?.route)
     }
 }

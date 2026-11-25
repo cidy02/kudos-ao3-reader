@@ -215,14 +215,15 @@ fun AuthorProfileScreen(
                             signedInUsername != null &&
                             expectedRoute.username.equals(signedInUsername, ignoreCase = true)
                         ) {
-                            countsCache?.recordDashboard(
-                                result.value.actions,
-                                expectedRoute.username,
-                                io.github.cidy02.kudos.account.AO3AccountListCountsCache.scope(
-                                    signedInUsername,
-                                    expectedSession
-                                )
+                            // Listeners scan the drafts directory: never on Main.
+                            val actions = result.value.actions
+                            val scopeKey = io.github.cidy02.kudos.account.AO3AccountListCountsCache.scope(
+                                signedInUsername,
+                                expectedSession
                             )
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                countsCache?.recordDashboard(actions, expectedRoute.username, scopeKey)
+                            }
                         }
                         afterLoad?.invoke()
                     }

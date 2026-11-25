@@ -966,10 +966,6 @@ internal fun MainScaffoldNavigationEffects(
         applyReturnToWritingIfPending(
             navController = navController,
             writingTabController = writingTabController,
-            returnToWritingRequest = returnToWritingRequest,
-            showsWritingTab = showsWritingTab,
-            currentRoute = currentRoute,
-            isPresentingAccount = accountSheetState.isPresentingAccount,
             username = username
         )
     }
@@ -1096,21 +1092,15 @@ internal fun evictHiddenWritingIfNeeded(
     }
 }
 
+/** Reads live route and controller state, never the composition's captured values. */
 internal fun applyReturnToWritingIfPending(
     navController: NavHostController,
     writingTabController: WritingTabController,
-    returnToWritingRequest: Int,
-    showsWritingTab: Boolean,
-    currentRoute: String?,
-    isPresentingAccount: Boolean,
     username: () -> String?
 ) {
-    if (returnToWritingRequest > 0 &&
-        showsWritingTab &&
-        currentRoute == Routes.Home &&
-        !isPresentingAccount
-    ) {
+    if (navController.currentDestination?.route == Routes.Home &&
         writingTabController.consumeReturnToWritingRequest()
+    ) {
         val pending = writingTabController.consumePendingWritingRoute()
         navController.navigateShellRoot(Routes.Writing, restoreTargetState = pending == null)
         val target = when (pending) {

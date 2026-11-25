@@ -201,6 +201,7 @@ class WritingTabController(
     private var authEpoch: Long = 0L
     private var evaluatedAccount: String? = null
     private var restoredWritingSelection = false
+    private var sessionRevealed = false
     private var lastObservedAuth: Pair<AO3AuthState, Int>? = null
     private var unregisterEvents: (() -> Unit)? = null
     private var unregisterCacheListener: (() -> Unit)? = null
@@ -233,11 +234,14 @@ class WritingTabController(
             this.isPresentingAccount = isPresentingAccount
             if (currentRoute != null) {
                 this.currentRoute = currentRoute
-                if (currentRoute != Routes.Home && currentRoute != Routes.Writing) {
-                    restoredWritingSelection = false
-                    pendingWritingRouteValue = null
-                    mutableReturnToWritingRequest.value = 0
-                }
+            }
+            // Leaving Home, or opening the Account sheet from it, is the user moving on: no late reveal may pull them back.
+            if (isPresentingAccount ||
+                (currentRoute != null && currentRoute != Routes.Home && currentRoute != Routes.Writing)
+            ) {
+                restoredWritingSelection = false
+                pendingWritingRouteValue = null
+                mutableReturnToWritingRequest.value = 0
             }
         }
     }
@@ -273,9 +277,12 @@ class WritingTabController(
 
     fun noteRestoredWritingSelection() {
         synchronized(lock) {
+            currentRoute = Routes.Home
+            // The auth evaluation may have revealed the tab since the caller read it: then return now, not never.
             if (!showsWritingTab) {
                 restoredWritingSelection = true
-                currentRoute = Routes.Home
+            } else if (!isPresentingAccount) {
+                mutableReturnToWritingRequest.value += 1
             }
         }
     }
@@ -298,9 +305,12 @@ class WritingTabController(
         }
     }
 
-    fun consumeReturnToWritingRequest() {
+    /** True when a live return-to-Writing request was pending and is now taken; decided under the lock. */
+    fun consumeReturnToWritingRequest(): Boolean {
         synchronized(lock) {
+            val pending = mutableReturnToWritingRequest.value > 0 && showsWritingTab && !isPresentingAccount
             mutableReturnToWritingRequest.value = 0
+            return pending
         }
     }
 
@@ -390,6 +400,8 @@ class WritingTabController(
      */
     fun revealWritingTabForSession() {
         synchronized(lock) {
+            // shortcut: stays for the process (DEBUG demo only), so a later signed-out evaluation cannot bounce it.
+            sessionRevealed = true
             mutableShowsWritingTab.value = true
         }
     }
@@ -516,7 +528,7 @@ class WritingTabController(
     }
 
     private fun applyWritingTabRuleLocked(rule: WritingTabRule): Boolean {
-        val next = rule.showsWritingTab
+        val next = rule.showsWritingTab || sessionRevealed
         if (next) {
             mutableShowsWritingTab.value = true
             if ((restoredWritingSelection || pendingWritingRouteValue != null) &&

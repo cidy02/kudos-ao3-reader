@@ -64,6 +64,8 @@ class AO3AccountListCountsCacheTest {
             label, "https://archiveofourown.org$path", io.github.cidy02.kudos.network.ao3.author.AO3AuthorWebAction.Kind.Other)
         val cache = AO3AccountListCountsCache()
         val scope = AO3AccountListCountsCache.scope("astolat", 1)
+        var notifications = 0
+        cache.addWritingCountListener { notifications++ }
         cache.recordDashboard(listOf(
             action("Works (535)", "/users/astolat/works"),
             action("Series (40)", "/users/astolat/series"),
@@ -74,6 +76,7 @@ class AO3AccountListCountsCacheTest {
             action("Works (7)", "/users/astolat/pseuds/other/works"),
             action("Works (some)", "/users/astolat/works")
         ), "astolat", scope)
+        assertEquals(1, notifications)
         assertEquals(535, cache.get(AccountListType.MyWorks, scope)?.exact)
         assertEquals(1022, cache.get(AccountListType.Bookmarks, scope)?.exact)
         assertEquals(33, cache.get(AO3AccountListCountsCache.COLLECTIONS, scope)?.exact)

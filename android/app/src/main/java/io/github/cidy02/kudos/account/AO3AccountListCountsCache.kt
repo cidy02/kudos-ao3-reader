@@ -90,6 +90,7 @@ class AO3AccountListCountsCache(
     fun recordDashboard(actions: List<io.github.cidy02.kudos.network.ao3.author.AO3AuthorWebAction>,
         username: String, authenticationScope: String) {
         val base = "/users/${username.lowercase()}/"
+        var writingChanged = false
         for (action in actions) {
             val path = runCatching { java.net.URI(action.url).path }.getOrNull()?.lowercase() ?: continue
             if (!path.startsWith(base)) continue
@@ -101,22 +102,35 @@ class AO3AccountListCountsCache(
                 "drafts", "works/drafts" -> DRAFTS
                 else -> continue
             }
-            put(listKey, authenticationScope, Count(exact = action.listCount ?: continue))
+            if (put(listKey, authenticationScope, Count(exact = action.listCount ?: continue), notify = false) &&
+                isWritingKey(listKey)
+            ) {
+                writingChanged = true
+            }
+        }
+        // One notification per dashboard load: each listener re-reads the disk.
+        if (writingChanged) notifyWritingCount(authenticationScope)
+    }
+
+    private fun isWritingKey(listKey: String) =
+        listKey == AccountListType.MyWorks.listKey || listKey == SERIES || listKey == DRAFTS
+
+    private fun notifyWritingCount(authenticationScope: String) {
+        for (listener in writingCountListeners) {
+            listener(authenticationScope)
         }
     }
 
-    fun put(listKey: String, authenticationScope: String, count: Count) {
+    /** True when the count was stored. */
+    fun put(listKey: String, authenticationScope: String, count: Count, notify: Boolean = true): Boolean {
         synchronized(this) {
             val key = key(listKey, authenticationScope)
             val existing = entries[key]?.takeIf { it.expiresAt >= System.currentTimeMillis() }
-            if (existing != null && !count.isAtLeastAsStrongAs(existing.count)) return
+            if (existing != null && !count.isAtLeastAsStrongAs(existing.count)) return false
             entries[key] = Entry(count, System.currentTimeMillis() + ttlMillis)
         }
-        if (listKey == AccountListType.MyWorks.listKey || listKey == SERIES || listKey == DRAFTS) {
-            for (listener in writingCountListeners) {
-                listener(authenticationScope)
-            }
-        }
+        if (notify && isWritingKey(listKey)) notifyWritingCount(authenticationScope)
+        return true
     }
 
     @Synchronized
