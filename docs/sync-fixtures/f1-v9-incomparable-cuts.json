@@ -5,7 +5,7 @@
  "kind": "v9-concurrency",
  "title": "Incomparable checkpoint cuts with local edits: reserved bytes replay unchanged; an unreserved intent is reserved after install",
  "refs": [
-  "plan \u00a7 C Causality",
+  "plan § C Causality",
   "D5 selection"
  ],
  "ids": {
@@ -39,8 +39,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -108,7 +108,7 @@
      },
      "payload": {
       "groups": {
-       "progress": 0.5
+       "legacyReaderProgress": 0.5
       }
      }
     },
@@ -146,7 +146,7 @@
      },
      "payload": {
       "groups": {
-       "progress": 0.9
+       "legacyReaderProgress": 0.9
       }
      }
     }
@@ -255,7 +255,7 @@
         1
        ],
        "referenceEncoding": "utf8-sorted-keys-json-v1",
-       "bytesHex": "7b226964223a227531222c226b696e64223a22776f726b2e65646974222c226f62736572766564223a7b2267656e223a226730227d2c227061796c6f6164223a7b2267726f757073223a7b2270726f6772657373223a302e397d7d2c22736571223a312c227374616d70223a5b352c22696e632d6c222c315d2c22746172676574223a22572d41222c22777269746572223a22696e632d6c227d"
+       "bytesHex": "7b226964223a227531222c226b696e64223a22776f726b2e65646974222c226f62736572766564223a7b2267656e223a226730227d2c227061796c6f6164223a7b2267726f757073223a7b226c656761637952656164657250726f6772657373223a302e397d7d2c22736571223a312c227374616d70223a5b352c22696e632d6c222c315d2c22746172676574223a22572d41222c22777269746572223a22696e632d6c227d"
       },
       "incomingCheckpointCut": {
        "inc-a": 1,
@@ -290,7 +290,7 @@
        ],
        "groups": {
         "isFavorite": true,
-        "progress": 0.9
+        "legacyReaderProgress": 0.9
        }
       }
      },
@@ -330,8 +330,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -399,7 +399,7 @@
      },
      "payload": {
       "groups": {
-       "progress": 0.5
+       "legacyReaderProgress": 0.5
       }
      }
     },
@@ -534,7 +534,7 @@
           ],
           "groups": {
            "isFavorite": true,
-           "progress": 0.9
+           "legacyReaderProgress": 0.9
           }
          }
         },
@@ -564,7 +564,7 @@
        ],
        "groups": {
         "isFavorite": true,
-        "progress": 0.5
+        "legacyReaderProgress": 0.5
        }
       }
      },
@@ -586,7 +586,7 @@
     "target": "W-A",
     "payload": {
      "groups": {
-      "progress": 0.9
+      "legacyReaderProgress": 0.9
      }
     },
     "observed": {
@@ -610,7 +610,7 @@
     },
     "payload": {
      "groups": {
-      "progress": 0.9
+      "legacyReaderProgress": 0.9
      }
     }
    }

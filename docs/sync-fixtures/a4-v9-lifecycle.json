@@ -51,8 +51,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -81,8 +81,8 @@
      },
      "payload": {
       "groups": {
-       "progress": 0.4,
-       "isFavorite": true
+       "isFavorite": true,
+       "legacyReaderProgress": 0.4
       }
      }
     },
@@ -284,7 +284,7 @@
        ],
        "groups": {
         "isFavorite": true,
-        "progress": 0.4
+        "legacyReaderProgress": 0.4
        }
       }
      },
@@ -323,8 +323,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -575,7 +575,7 @@
        ],
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -615,8 +615,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -794,7 +794,7 @@
        "deadline": "2027-01-18T09:00:00Z",
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -834,8 +834,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -1035,7 +1035,7 @@
        ],
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -1077,8 +1077,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -1409,8 +1409,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -1607,7 +1607,7 @@
        ],
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -1661,8 +1661,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -1831,7 +1831,7 @@
        ],
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -1884,8 +1884,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -2060,8 +2060,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -2223,7 +2223,7 @@
        "deadline": "2027-01-18T09:00:00Z",
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -2271,8 +2271,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -2577,8 +2577,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -4105,8 +4105,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -4337,7 +4337,7 @@
        "deadline": "2026-12-31T09:00:00Z",
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -4383,8 +4383,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -4616,8 +4616,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -4870,8 +4870,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -6210,6 +6210,11 @@
       "detail": "restore:wrongKind"
      }
     ]
+   },
+   "goldenReducer": {
+    "typedEvidence": {
+     "r1": false
+    }
    }
   },
   {
@@ -6484,8 +6489,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -6803,7 +6808,7 @@
        ],
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -6859,8 +6864,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -7093,7 +7098,7 @@
        "deadline": "2027-01-18T09:00:00Z",
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -7148,8 +7153,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -7370,7 +7375,7 @@
        "deadline": "2026-12-31T09:00:00Z",
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -7416,8 +7421,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -7662,7 +7667,7 @@
        ],
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -7717,8 +7722,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -7923,7 +7928,7 @@
        "deadline": "2026-12-31T09:00:00Z",
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -7970,8 +7975,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -8126,7 +8131,7 @@
        ],
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -8185,8 +8190,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -8341,7 +8346,7 @@
        ],
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       },
       "W-B": {
@@ -8398,8 +8403,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -8559,8 +8564,8 @@
        "deadline": "2026-12-31T09:00:00Z",
        "groups": {
         "isFavorite": false,
-        "progress": 0.1,
-        "title": "B"
+        "title": "B",
+        "legacyReaderProgress": 0.1
        }
       }
      },
@@ -8606,8 +8611,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -8808,8 +8813,8 @@
         "https://archiveofourown.org/works/111"
        ],
        "groups": {
-        "progress": 0.1,
-        "isFavorite": false
+        "isFavorite": false,
+        "legacyReaderProgress": 0.1
        }
       }
      }
@@ -8947,7 +8952,7 @@
        ],
        "groups": {
         "isFavorite": false,
-        "progress": 0.1
+        "legacyReaderProgress": 0.1
        }
       }
      },

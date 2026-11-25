@@ -155,7 +155,9 @@
        "b1"
       ],
       "thenOrder": [
-       "a1"
+       "a1",
+       "a2",
+       "b2"
       ],
       "checkpointCut": [
        "b1"

@@ -111,7 +111,43 @@
     ],
     "missingPrerequisite": [],
     "missingPrerequisiteEmptyBecause": "these group edits name no cross-writer operation prerequisites",
-    "checkpoints": [],
+    "checkpoints": [
+     {
+      "name": "progress core before locator edit",
+      "cutAfter": [
+       "p1"
+      ],
+      "thenOrder": [
+       "p2"
+      ],
+      "checkpointCut": [
+       "p1"
+      ],
+      "expectedAtCut": {
+       "works": {
+        "W-A": {
+         "lifecycle": "live",
+         "members": [
+          "W-A"
+         ],
+         "groups": {
+          "title": "T",
+          "progressCore": {
+           "lastSpineIndex": 3,
+           "lastScrollFraction": 0.4
+          },
+          "readiumLocator": "epubcfi(/6/8)"
+         }
+        }
+       },
+       "appliedVector": {
+        "inc-a": 2
+       },
+       "pending": [],
+       "diagnostics": []
+      }
+     }
+    ],
     "retentionEquivalence": {
      "mode": "exhaustive",
      "orders": 2,
@@ -225,7 +261,7 @@
      "payload": {
       "groups": {
        "colour": {
-        "hue": 0.8,
+        "hue": 0.5,
         "hex": null
        }
       }
@@ -258,7 +294,43 @@
     ],
     "missingPrerequisite": [],
     "missingPrerequisiteEmptyBecause": "these group edits name no cross-writer operation prerequisites",
-    "checkpoints": [],
+    "checkpoints": [
+     {
+      "name": "atomic color after first edit",
+      "cutAfter": [
+       "c1"
+      ],
+      "thenOrder": [
+       "c2"
+      ],
+      "checkpointCut": [
+       "c1"
+      ],
+      "expectedAtCut": {
+       "works": {},
+       "queues": {
+        "q1": {
+         "lifecycle": "live",
+         "members": [
+          "q1"
+         ],
+         "groups": {
+          "name": "Later",
+          "colour": {
+           "hue": 0.5,
+           "hex": "#111111"
+          }
+         }
+        }
+       },
+       "appliedVector": {
+        "inc-a": 2
+       },
+       "pending": [],
+       "diagnostics": []
+      }
+     }
+    ],
     "retentionEquivalence": {
      "mode": "exhaustive",
      "orders": 2,
@@ -276,10 +348,13 @@
        "groups": {
         "name": "Later",
         "colour": {
-         "hue": 0.8,
+         "hue": 0.5,
          "hex": null
         }
-       }
+       },
+       "members": [
+        "q1"
+       ]
       }
      },
      "memberships": [],
@@ -297,7 +372,7 @@
    "goldenReducer": {
     "lww": {
      "colour": {
-      "hue": 0.8,
+      "hue": 0.5,
       "hex": null
      }
     }

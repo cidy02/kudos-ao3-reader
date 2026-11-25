@@ -12,7 +12,7 @@
  },
  "universes": [
   {
-   "name": "late-revocation-retains-both-restores",
+   "name": "late-revocation-retains-restore-evidence",
    "description": "R1 remains structurally valid after late revocation; R0 is reduced away at the cut because R1 is the greater valid restore.",
    "initial": {
     "createHistory": [
@@ -307,7 +307,6 @@
    },
    "goldenReducer": {
     "validRestoreIds": [
-     "r0",
      "r1"
     ],
     "authorizedExpiryIds": []
@@ -536,7 +535,7 @@
      "target": "W-A",
      "payload": {
       "groups": {
-       "preservedAt": "2026-01-01T00:00:00Z",
+       "preservedAt": "2026-03-01T01:00:00+02:00",
        "epubPreservationStatusRaw": "preserved"
       }
      }
@@ -586,7 +585,7 @@
      }
     ],
     "missingPrerequisite": [],
-    "missingPrerequisiteEmptyBecause": "all named evidence is in this complete universe; missing delivery is covered by the checkpoint schedule",
+    "missingPrerequisiteEmptyBecause": "these preservation group edits name no cross-writer prerequisite",
     "checkpoints": [
      {
       "name": "round-6 cut",
@@ -608,7 +607,7 @@
         "W-A": {
          "lifecycle": "live",
          "groups": {
-          "preservedAt": "2026-01-01T00:00:00Z",
+          "preservedAt": "2026-03-01T01:00:00+02:00",
           "epubPreservationStatusRaw": "preserved"
          }
         }
@@ -882,7 +881,7 @@
   },
   {
    "name": "preservation-enum-domain-and-metadata-lww",
-   "description": "Failed and missingFile are valid EPUB ranks; metadataSyncStatusRaw uses its independent LWW domain.",
+   "description": "A failed then missing-file preservation attempt can be retried into preserving; metadata remains independent.",
    "initial": {
     "createHistory": [
      {
@@ -965,11 +964,28 @@
        "metadataSyncStatusRaw": "complete"
       }
      }
+    },
+    {
+     "id": "e4",
+     "writer": "inc-b",
+     "seq": 3,
+     "stamp": [
+      5,
+      "inc-b",
+      3
+     ],
+     "kind": "work.edit",
+     "target": "W-A",
+     "payload": {
+      "groups": {
+       "epubPreservationStatusRaw": "preserving"
+      }
+     }
     }
    ],
    "schedules": {
     "orders": "allInterleavings",
-    "orderCount": 3,
+    "orderCount": 4,
     "duplicates": [
      {
       "name": "each twice",
@@ -979,7 +995,9 @@
        "e2",
        "e2",
        "e3",
-       "e3"
+       "e3",
+       "e4",
+       "e4"
       ]
      }
     ],
@@ -989,7 +1007,8 @@
       "order": [
        "e1",
        "e2",
-       "e3"
+       "e3",
+       "e4"
       ],
       "restartAfter": "every"
      }
@@ -999,8 +1018,8 @@
     "checkpoints": [],
     "retentionEquivalence": {
      "mode": "exhaustive",
-     "orders": 24,
-     "cutsChecked": 120,
+     "orders": 120,
+     "cutsChecked": 720,
      "seed": null,
      "rule": "project(retain(prefix) + suffix) == project(all)"
     }
@@ -1015,7 +1034,7 @@
        ],
        "groups": {
         "title": "T",
-        "epubPreservationStatusRaw": "missingFile",
+        "epubPreservationStatusRaw": "preserving",
         "metadataSyncStatusRaw": "complete"
        }
       }
@@ -1027,14 +1046,14 @@
     },
     "appliedCut": {
      "inc-a": 2,
-     "inc-b": 2
+     "inc-b": 3
     },
     "pending": [],
     "diagnostics": []
    },
    "goldenReducer": {
     "groups": {
-     "epubPreservationStatusRaw": "missingFile"
+     "epubPreservationStatusRaw": "preserving"
     },
     "lww": {
      "metadataSyncStatusRaw": "complete"
