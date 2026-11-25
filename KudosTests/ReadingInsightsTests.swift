@@ -1103,4 +1103,104 @@ struct ReadingInsightsTests {
         #expect(starts == [0])
         #expect(ReadingInsights.make(facts: [odd], calendar: calendar).totalSeconds >= 0)
     }
+
+    @Test func usualFicFandomChipUsesFandomMaskingKind() {
+        let works = (0..<5).map { index -> SavedWork in
+            let work = SavedWork(title: "W\(index)", author: "A")
+            work.workFandoms = ["Persuasion"]
+            work.workFreeforms = ["Slow Burn"]
+            work.rating = "Teen And Up Audiences"
+            work.isComplete = true
+            return work
+        }
+        let facts = works.enumerated().map { index, work in
+            fact(work: work.id, on: index + 1, minutes: 20, words: 2_000, fandom: "Persuasion")
+        }
+        let taste = ReadingTasteInsights.make(works: works, facts: facts)
+        #expect(taste.usualChips.contains { $0.text == "Persuasion" && $0.kind == .fandom })
+        #expect(!taste.usualChips.contains { $0.text == "Persuasion" && $0.kind == .metadata })
+    }
+
+    @Test func libraryAuthorsFilterOrphanAndAnonymousAtDisplayTimeAndUseLiveQueueOnlyWorks() {
+        let queued = SavedWork(title: "Queued", author: "raw_pseud")
+        queued.isQueuedForLater = true
+        queued.verifiedAuthorIdentities = [
+            AO3AuthorIdentity(route: AO3AuthorRoute(username: "live_writer")!),
+            AO3AuthorIdentity(route: AO3AuthorRoute(username: "orphan_account")!)
+        ]
+        let deletedID = UUID()
+        var queuedFact = fact(work: queued.id, on: 2, minutes: 20, words: 1_500, didFinish: true)
+        queuedFact.authorAccounts = ["raw_pseud"]
+        var deletedFact = fact(work: deletedID, on: 3, minutes: 20, words: 2_000, didFinish: true)
+        deletedFact.authorAccounts = [
+            "deleted_writer", "Anonymous", "anonymous", "orphan_account", "old_pseud (orphan_account)"
+        ]
+        let period = DateInterval(start: day(1, hour: 0), end: day(31, hour: 0))
+        let library = ReadingLibraryInsights.make(
+            works: [],
+            readingWorks: [queued],
+            facts: [queuedFact, deletedFact],
+            allFacts: [queuedFact, deletedFact],
+            periodInterval: period,
+            calendar: calendar
+        )
+        #expect(library.authors.map(\.name) == ["deleted_writer", "live_writer"])
+        #expect(library.authors.first { $0.name == "live_writer" }?.words == 1_500)
+        #expect(library.authors.first { $0.name == "deleted_writer" }?.words == 2_000)
+    }
+
+    @Test func readingDayPeriodFilterUsesFourAmSittingZoneBoundary() {
+        let sep = DateInterval(start: instant(month: 9, 1, 0), end: instant(month: 10, 1, 0))
+        let oct = DateInterval(start: instant(month: 10, 1, 0), end: instant(month: 11, 1, 0))
+        let nov = DateInterval(start: instant(month: 11, 1, 0), end: instant(month: 12, 1, 0))
+
+        let octEarlyMorning = sitting(at: instant(month: 10, 1, 1, 30), words: 1_000, tzHours: 0)
+        #expect(ReadingInsights.isInPeriod(octEarlyMorning, period: sep, calendar: calendar))
+        #expect(!ReadingInsights.isInPeriod(octEarlyMorning, period: oct, calendar: calendar))
+
+        let novEarlyMorning = sitting(at: instant(month: 11, 1, 1, 30), words: 1_000, tzHours: 0)
+        #expect(ReadingInsights.isInPeriod(novEarlyMorning, period: oct, calendar: calendar))
+        #expect(!ReadingInsights.isInPeriod(novEarlyMorning, period: nov, calendar: calendar))
+
+        let novFourAm = sitting(at: instant(month: 11, 1, 4, 0), words: 1_000, tzHours: 0)
+        #expect(!ReadingInsights.isInPeriod(novFourAm, period: oct, calendar: calendar))
+        #expect(ReadingInsights.isInPeriod(novFourAm, period: nov, calendar: calendar))
+
+        // Oct 1 08:00 +09:00 is Sep 30 23:00 UTC; in its sitting zone it belongs to October.
+        let tokyoMorning = sitting(at: instant(month: 10, 1, 8, 0, offsetHours: 9), words: 1_000, tzHours: 9)
+        #expect(!ReadingInsights.isInPeriod(tokyoMorning, period: sep, calendar: calendar))
+        #expect(ReadingInsights.isInPeriod(tokyoMorning, period: oct, calendar: calendar))
+    }
+
+    @Test func tagFiguresUseFreeformTagsOnlyAndStopTagsIncludeArchiveWarnings() {
+        let works = (0..<10).map { index -> SavedWork in
+            let work = SavedWork(title: "W\(index)", author: "A")
+            work.lastReadDate = day(1)
+            work.workFandoms = ["Persuasion"]
+            work.workRelationships = ["Anne Elliot/Frederick Wentworth"]
+            work.workCharacters = ["Anne Elliot"]
+            work.workFreeforms = index < 5 ? ["Slow Burn", "Pining"] : []
+            work.workTags = work.workFandoms + work.workRelationships + work.workCharacters + work.workFreeforms
+            if index < 5 {
+                work.workWarnings = ["Major Character Death"]
+            }
+            if index < 4 {
+                work.readingStatusRaw = "stopped"
+            }
+            return work
+        }
+        let facts = works.enumerated().map { index, work in
+            fact(work: work.id, on: index + 1, minutes: 20, words: 2_000, fandom: "Persuasion")
+        }
+        let taste = ReadingTasteInsights.make(works: works, facts: facts)
+        #expect(Set(taste.tags.map(\.name)) == ["Slow Burn", "Pining"])
+        #expect(taste.oftenTogether.contains {
+            ($0.tagA == "Pining" && $0.tagB == "Slow Burn") || ($0.tagA == "Slow Burn" && $0.tagB == "Pining")
+        })
+        #expect(!taste.oftenTogether.contains { $0.tagA == "Persuasion" || $0.tagB == "Persuasion" })
+
+        let habits = ReadingHabitsInsights.make(works: works, facts: facts, allFacts: facts, calendar: calendar)
+        #expect(habits.commonStopTags.contains { $0.name == "Major Character Death" && $0.count == 4 })
+        #expect(!habits.commonStopTags.contains { $0.name == "Persuasion" || $0.name == "Anne Elliot" })
+    }
 }

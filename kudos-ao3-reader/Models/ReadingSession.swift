@@ -112,13 +112,10 @@ import SwiftData
         rating = work.rating
         warnings = work.workWarnings
         categories = work.workCategories
-        // Only a registered AO3 username is an account. A byline may be an
-        // anonymous/orphan pseud, so never turn that text into an author account.
-        authorAccounts = Array(Set(work.verifiedAuthorIdentities.compactMap { identity -> String? in
-            guard identity.kind == .registered, let username = identity.username,
-                  !username.isEmpty, username != "orphan_account" else { return nil }
-            return username
-        })).sorted()
+        let verified = work.verifiedAuthorIdentities.map(\.displayName)
+        authorAccounts = verified.isEmpty
+            ? work.author.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            : verified
         language = work.language
         isCompleteAtVisit = work.isComplete
         ao3SeriesID = work.ao3SeriesID

@@ -458,6 +458,7 @@ struct LibraryFavouritesAndSeriesCard: View {
 struct LibraryAuthorsCard: View {
     let authors: [ReadingLibraryInsights.AuthorRow]
     let discreetMode: Bool
+    var discreetMasker: InsightsDiscreetMasker = .empty
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -465,7 +466,7 @@ struct LibraryAuthorsCard: View {
             Text("Authors").font(.subheadline.weight(.semibold))
             ForEach(authors.prefix(5)) { author in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(discreetMode ? "Author" : author.name).font(.footnote.weight(.medium))
+                    Text(discreetMode ? discreetMasker.author(author.name) : author.name).font(.footnote.weight(.medium))
                     Text("\(author.works) read · \(author.words) words · \(author.finished) finished")
                         .font(.caption).foregroundStyle(.secondaryInk)
                 }
@@ -792,6 +793,7 @@ struct YourUsualFicCard: View {
                 if chip.text == "varied" { return "varied" }
                 switch chip.kind {
                 case .metadata: return chip.text
+                case .fandom: return discreetMasker.fandom(chip.text)
                 case .tag: return discreetMasker.tag(chip.text)
                 case .ship: return discreetMasker.ship(chip.text)
                 }
@@ -1769,7 +1771,10 @@ struct HabitsRereadsCard: View {
                                 Text(discreetMode ? discreetMasker.work(id: work.id, title: work.title) : work.title)
                                     .font(.subheadline.weight(.semibold))
                                     .lineLimit(1)
-                                Text("\(discreetMode ? discreetMasker.fandom(work.fandom) : work.fandom) · \(work.totalWordsAcrossReads.formatted()) words across reads")
+                                let fandomPrefix = work.fandom.isEmpty
+                                    ? ""
+                                    : "\(discreetMode ? discreetMasker.fandom(work.fandom) : work.fandom) · "
+                                Text("\(fandomPrefix)\(work.totalWordsAcrossReads.formatted()) words across reads")
                                     .font(.caption2)
                                     .foregroundStyle(.secondaryInk)
                             }
@@ -2110,12 +2115,15 @@ struct LibraryStillReadingCard: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Circle()
-                        .fill(fandomColor(for: candidate.fandom))
-                        .frame(width: 8, height: 8)
-                    let fandomLabel = discreetMode
-                        ? discreetMasker.fandom(candidate.fandom) : candidate.fandom
-                    Text("\(fandomLabel) · untouched for \(untouchedDurationLabel)")
+                    if !candidate.fandom.isEmpty {
+                        Circle()
+                            .fill(fandomColor(for: candidate.fandom))
+                            .frame(width: 8, height: 8)
+                    }
+                    let fandomPrefix = candidate.fandom.isEmpty
+                        ? ""
+                        : "\(discreetMode ? discreetMasker.fandom(candidate.fandom) : candidate.fandom) · "
+                    Text("\(fandomPrefix)untouched for \(untouchedDurationLabel)")
                         .font(.caption)
                         .foregroundStyle(.secondaryInk)
                 }

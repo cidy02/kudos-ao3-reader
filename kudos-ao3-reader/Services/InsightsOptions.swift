@@ -700,6 +700,7 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
             builder.registerWork(id: candidate.id, title: candidate.title)
             if !candidate.fandom.isEmpty { builder.registerFandom(candidate.fandom) }
         }
+        library?.authors.forEach { builder.registerAuthor($0.name) }
         stats?.topFandoms.forEach { builder.registerFandom($0.name) }
     }
 
@@ -715,10 +716,11 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
         for work in sortedWorks {
             builder.registerWork(id: work.id, title: work.title)
             builder.registerAuthor(work.author)
+            work.verifiedAuthorIdentities.compactMap(\.username).forEach { builder.registerAuthor($0) }
             work.workFandoms.forEach { builder.registerFandom($0) }
             work.workRelationships.forEach { builder.registerShip($0) }
             work.workCharacters.forEach { builder.registerCharacter($0) }
-            (work.workFreeforms + work.workTags).forEach { builder.registerTag($0) }
+            (work.workFreeforms + work.workTags + work.workWarnings).forEach { builder.registerTag($0) }
             if !work.stopTag.isEmpty { builder.registerTag(work.stopTag) }
         }
 
@@ -731,7 +733,7 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
             session.fandoms.forEach { builder.registerFandom($0) }
             session.relationships.forEach { builder.registerShip($0) }
             session.characters.forEach { builder.registerCharacter($0) }
-            session.freeformTags.forEach { builder.registerTag($0) }
+            (session.freeformTags + session.warnings).forEach { builder.registerTag($0) }
         }
     }
 }

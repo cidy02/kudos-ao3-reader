@@ -1155,9 +1155,11 @@ enum ReadingLogService {
             history: filtered.historySessions,
             aliases: resolvedAliases
         )
-        let periodFacts = allFacts.filter { req.period.contains($0.startedAt) }
+        let periodFacts = allFacts.filter {
+            ReadingInsights.isInPeriod($0, period: req.period, calendar: req.calendar)
+        }
         let previousFacts = req.previousPeriod.map { interval in
-            allFacts.filter { interval.contains($0.startedAt) }
+            allFacts.filter { ReadingInsights.isInPeriod($0, period: interval, calendar: req.calendar) }
         } ?? []
 
         let figures = ReadingInsights.make(
@@ -1182,10 +1184,13 @@ enum ReadingLogService {
             aliases: resolvedAliases
         )
         let chapterTiming = InsightsProvenance.chapterTiming(
-            sessions: filtered.sessions.filter { req.period.contains($0.startedAt) }
+            sessions: filtered.sessions.filter {
+                ReadingInsights.isInPeriod($0, period: req.period, calendar: req.calendar)
+            }
         )
         let library = ReadingLibraryInsights.make(
             works: libraryWorks,
+            readingWorks: filtered.works,
             facts: periodFacts,
             allFacts: allFacts,
             seriesSnapshots: SavedSeriesStore.snapshots(in: req.context),
@@ -1254,9 +1259,11 @@ enum ReadingLogService {
             history: filtered.historySessions,
             aliases: resolvedAliases
         )
-        let current = allFacts.filter { period.contains($0.startedAt) }
+        let current = allFacts.filter {
+            ReadingInsights.isInPeriod($0, period: period, calendar: calendar)
+        }
         let previous = previousPeriod.map { interval in
-            allFacts.filter { interval.contains($0.startedAt) }
+            allFacts.filter { ReadingInsights.isInPeriod($0, period: interval, calendar: calendar) }
         } ?? []
         return ReadingInsights.make(
             facts: current, previousPeriodFacts: previous,

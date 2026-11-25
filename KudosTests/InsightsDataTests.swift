@@ -135,25 +135,77 @@ struct InsightsDataTests {
         #expect(work.stoppedAt == nil)
     }
 
-    @Test func snapshotKeepsOnlyVerifiedRegisteredAccounts() {
+    @Test func snapshotUsesStoredBylineOrVerifiedDisplayNames() {
         let work = SavedWork(title: "A", author: "First, Second")
         work.datePublished = "2020-01-01"
         let session = ReadingSession(
             workID: work.id, startedAt: .now, endedAt: .now, durationSeconds: 1
         )
         session.snapshot(from: work)
-        #expect(session.authorAccounts.isEmpty)
+        #expect(session.authorAccounts == ["First", "Second"])
         #expect(session.publishedYear == 2020)
         work.verifiedAuthorIdentities = [
             AO3AuthorIdentity.nonNavigable("Anonymous", kind: .anonymous),
             AO3AuthorIdentity(route: AO3AuthorRoute(username: "orphan_account")!)
         ]
         session.snapshot(from: work)
-        #expect(session.authorAccounts.isEmpty)
-        work.verifiedAuthorIdentities.append(
-            AO3AuthorIdentity(route: AO3AuthorRoute(username: "actual_writer")!)
+        #expect(session.authorAccounts == ["Anonymous", "orphan_account"])
+    }
+
+    @Test func stoppedAndOnHoldStatusEditsRollBackContextOnSaveFailure() throws {
+        struct SaveFailure: Error {}
+        let container = try container()
+        let context = ModelContext(container)
+        let work = SavedWork(title: "A", author: "B")
+        work.chapters = "12/12"
+        work.lastSpineIndex = 6
+        work.legacyReaderProgress = 0.58
+        work.lastReadDate = Date(timeIntervalSince1970: 1_759_752_000)
+        context.insert(work)
+        try context.save()
+
+        #expect(throws: SaveFailure.self) {
+            try WorkLifecycle.recordStopped(
+                work,
+                reason: "tagDealbreaker",
+                tag: "Major Character Death",
+                note: "Too sad",
+                in: context,
+                save: { _ in throw SaveFailure() }
+            )
+        }
+        #expect(work.insightsReadingStatus != .stopped)
+        #expect(work.readingStatusRaw.isEmpty)
+        #expect(work.stoppedAt == nil)
+        #expect(work.stopReasonRaw.isEmpty)
+        #expect(work.stopTag.isEmpty)
+        #expect(work.stopNote.isEmpty)
+
+        #expect(throws: SaveFailure.self) {
+            try WorkLifecycle.setReadingStatus(
+                .onHold,
+                for: work,
+                in: context,
+                save: { _ in throw SaveFailure() }
+            )
+        }
+        #expect(work.readingStatusRaw.isEmpty)
+
+        try WorkLifecycle.recordStopped(
+            work,
+            reason: "tooLong",
+            tag: "Slow Burn",
+            note: "Paused",
+            in: context
         )
-        session.snapshot(from: work)
-        #expect(session.authorAccounts == ["actual_writer"])
+        #expect(work.insightsReadingStatus == .stopped)
+        #expect(work.stopReasonRaw == "tooLong")
+        #expect(work.stopTag == "Slow Burn")
+        #expect(work.stopNote == "Paused")
+
+        let summary = InsightsStoppedSheet.progressSummary(for: work)
+        #expect(summary.contains("Chapter 7 of 12"))
+        #expect(summary.contains("58%"))
+        #expect(summary.contains("last read"))
     }
 }

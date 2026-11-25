@@ -749,7 +749,7 @@ struct ReadingInsightsView: View {
             if lib.authors.isEmpty {
                 InsightsUnavailableCard(title: "Authors", explanation: "No read works have a recorded AO3 author account yet.")
             } else {
-                LibraryAuthorsCard(authors: lib.authors, discreetMode: discreetMode)
+                LibraryAuthorsCard(authors: lib.authors, discreetMode: discreetMode, discreetMasker: discreetMasker)
             }
 
             if lib.arrivalRows.isEmpty {
