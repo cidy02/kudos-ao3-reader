@@ -45,4 +45,26 @@ actor WritingRecoveryWriter {
         lastWrittenSequence = newest.sequence
         return true
     }
+
+    /// Saves both texts from a §7.11 switch-check mismatch as distinct recovery
+    /// copies under the same field key without overwriting the session's live
+    /// checkpoint file.
+    func writeSwitchCheckMismatch(
+        leavingText: String,
+        candidateText: String
+    ) throws -> (leaving: URL, candidate: URL) {
+        let digest = originalDigest ?? WritingTextRecovery.digest(original)
+        originalDigest = digest
+        let keyPrefix = String(url.lastPathComponent.split(separator: ".", maxSplits: 1).first ?? "mismatch")
+        let directory = url.deletingLastPathComponent()
+        let leavingURL = directory
+            .appendingPathComponent("\(keyPrefix).mismatch-\(UUID().uuidString)-leaving")
+            .appendingPathExtension("json")
+        let candidateURL = directory
+            .appendingPathComponent("\(keyPrefix).mismatch-\(UUID().uuidString)-candidate")
+            .appendingPathExtension("json")
+        try store.save(text: leavingText, originalDigest: digest, to: leavingURL)
+        try store.save(text: candidateText, originalDigest: digest, to: candidateURL)
+        return (leaving: leavingURL, candidate: candidateURL)
+    }
 }

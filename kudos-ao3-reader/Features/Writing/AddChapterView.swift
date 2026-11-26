@@ -123,6 +123,7 @@ struct AddChapterView: View {
             palette: accountPalette
         )
         .hidesFloatingTabBarInEditor()
+        .richEditorPrewarm(backgroundColor: theme.appTheme.backgroundColor)
         .alert("AO3 could not save the chapter", isPresented: Binding(
             get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
         )) {

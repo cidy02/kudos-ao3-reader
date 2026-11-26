@@ -22,10 +22,16 @@ final class WritingTextController: NSObject {
     /// Bumped by every change.
     @ObservationIgnored
     private(set) var revision = 0
+    /// When true, rejects edits while keeping first responder and the keyboard
+    /// up during a mode hand-off (docs/WRITING_EDITOR_ARCHITECTURE.md §7.3).
+    @ObservationIgnored
+    var isFrozen = false
     @ObservationIgnored
     private var checkpointedRevision = 0
     @ObservationIgnored
     private var checkpointedText: String
+    @ObservationIgnored
+    private var lastAppearance: (theme: ReaderTheme, fontSize: Double)?
 
     init(text: String) {
         checkpointedText = text
@@ -97,6 +103,7 @@ final class WritingTextController: NSObject {
     /// 1bv's body: serif at 15.5 with a 1.62 line height. The buffer is still
     /// the raw markup — this is its typeface, not a formatted view.
     func setAppearance(_ theme: ReaderTheme, fontSize: Double) {
+        lastAppearance = (theme, fontSize)
         let style = NSMutableParagraphStyle()
         // 1.62 of the point size over the serif's own ~1.2 natural line height.
         style.lineHeightMultiple = 1.35
@@ -125,7 +132,77 @@ final class WritingTextController: NSObject {
         storage.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: storage.length))
     }
 
+    /// Caret offset in UTF-16 code units, matching JS strings and `NSRange` (§7.5).
+    var caretOffsetUTF16: Int {
+        #if os(iOS)
+        textView.selectedRange.location
+        #else
+        textView.selectedRange().location
+        #endif
+    }
+
+    /// Moves the caret to a clamped UTF-16 offset without changing the buffer.
+    func setCaretOffsetUTF16(_ offset: Int) {
+        let clamped = min(max(offset, 0), (text as NSString).length)
+        let range = NSRange(location: clamped, length: 0)
+        #if os(iOS)
+        textView.selectedRange = range
+        textView.scrollRangeToVisible(range)
+        #else
+        textView.setSelectedRange(range)
+        textView.scrollRangeToVisible(range)
+        #endif
+    }
+
+    var canUndo: Bool {
+        textView.undoManager?.canUndo ?? false
+    }
+
+    var canRedo: Bool {
+        textView.undoManager?.canRedo ?? false
+    }
+
+    func undo() {
+        guard !isFrozen else { return }
+        command("undo")
+    }
+
+    func redo() {
+        guard !isFrozen else { return }
+        command("redo")
+    }
+
+    /// Moves first responder to the source text view (§7.7).
+    func focus() {
+        #if os(iOS)
+        textView.becomeFirstResponder()
+        #else
+        textView.window?.makeFirstResponder(textView)
+        #endif
+    }
+
+    /// Replaces the buffer on a Rich Text → HTML hand-off after rich edits (§7.4
+    /// step 4), clears the native undo stack (U2), restores styling, and places
+    /// the caret. Does not count as a user edit.
+    func replaceForModeHandoff(_ value: String, caretOffset: Int?) {
+        #if os(iOS)
+        textView.text = value
+        #else
+        textView.string = value
+        #endif
+        textView.undoManager?.removeAllActions()
+        if let lastAppearance {
+            setAppearance(lastAppearance.theme, fontSize: lastAppearance.fontSize)
+        }
+        checkpointedText = value
+        checkpointedRevision = revision
+        if let caretOffset {
+            setCaretOffsetUTF16(caretOffset)
+        }
+    }
+
     func command(_ tag: String, link: String = "") {
+        guard !isFrozen else { return }
         commitComposition()
         #if os(iOS)
         textView.becomeFirstResponder()
@@ -169,6 +246,7 @@ final class WritingTextController: NSObject {
 
     /// Replaces the selection, caret after, undoable like a paste.
     func insertPlainText(_ plain: String) {
+        guard !isFrozen else { return }
         commitComposition()
         #if os(iOS)
         let range = textView.selectedRange
@@ -188,6 +266,7 @@ final class WritingTextController: NSObject {
 
     /// Recovery is an ordinary undoable replacement, never an implicit load.
     func restore(_ value: String) {
+        guard !isFrozen else { return }
         commitComposition()
         replace(NSRange(location: 0, length: (text as NSString).length), with: value)
     }
@@ -237,6 +316,14 @@ final class WritingTextController: NSObject {
 
 #if os(iOS)
 extension WritingTextController: UITextViewDelegate {
+    func textView(
+        _: UITextView,
+        shouldChangeTextIn _: NSRange,
+        replacementText _: String
+    ) -> Bool {
+        !isFrozen
+    }
+
     func textViewDidChange(_: UITextView) { noteEdit() }
 }
 
@@ -247,6 +334,14 @@ struct WritingNativeTextView: UIViewRepresentable {
 }
 #else
 extension WritingTextController: NSTextViewDelegate {
+    func textView(
+        _: NSTextView,
+        shouldChangeTextIn _: NSRange,
+        replacementString _: String?
+    ) -> Bool {
+        !isFrozen
+    }
+
     func textDidChange(_: Notification) { noteEdit() }
 }
 
