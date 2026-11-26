@@ -2,7 +2,7 @@
 // source slices; edited blocks are serialized once per node object and cached, so a checkpoint after one keystroke
 // serializes one block and joins the rest. Output is byte-identical to serializeDoc (incremental.test.ts checks).
 import type { Node as PMNode } from 'prosemirror-model';
-import { schema, serializeBlock, serializeDoc } from '../index.ts';
+import { serializeBlock, serializeBlockAt } from '../index.ts';
 import type { BlockSource, SourceInfo } from '../index.ts';
 import { countNode } from './words.ts';
 
@@ -60,14 +60,15 @@ export class IncrementalSerializer {
       const holdsHead = head !== undefined && headOffset === null && head >= pos && head <= pos + child.nodeSize;
       if (bs) {
         if (holdsHead) {
-          const off = src!.docPosToOffset?.(head);
+          // the load's source map works in loaded-document positions: translate through the block's own start
+          const off = src!.docPosToOffset?.(src!.blockStart ? src!.blockStart(bs.index) + (head - pos) : head);
           headOffset = off !== null && off !== undefined ? start + Math.min(Math.max(off - bs.start, 0), bs.end - bs.start) : head === pos ? start : null;
         }
         push(src!.text.slice(bs.start, bs.end));
       } else if (holdsHead) {
-        const one = serializeDoc(schema.nodes.doc!.create(null, child), { head: head - pos });
+        const one = serializeBlockAt(child, head - pos);
         this.html.set(child, one.html);
-        headOffset = start + (one.headOffset ?? one.html.length);
+        headOffset = start + one.headOffset!;
         push(one.html);
       } else push(this.blockHtml(child));
       words += this.blockWords(child);

@@ -19,7 +19,7 @@ import { clipboardSerializer, DEFAULT_LABELS, domParser, markViews, nodeViews } 
 import type { Labels } from './render.ts';
 import { formatState } from './state.ts';
 import type { FormatState } from './state.ts';
-import { verifyLeavingRich, verifyLeavingSource } from './verify.ts';
+import { sameDocument, verifyLeavingRich, verifyLeavingSource } from './verify.ts';
 import type { VerifyDeps } from './verify.ts';
 
 export type EditorHooks = {
@@ -252,11 +252,14 @@ export class Editor {
   private applyRebase(): void {
     const doc = this.view.state.doc;
     if (!this.loaded || doc === this.loaded.doc) return;
+    // Verified by the switch check; without one the HTML-mode text is the last snapshot, and a reload costs one parse.
     let next = this.rebase?.revision === this.revision ? this.rebase.loaded : null;
-    // Without a switch check the HTML mode text is the last snapshot; a reload costs one parse.
-    if (!next && this.lastSnapshot?.revision === this.revision) next = load(this.lastSnapshot.html, this.variant);
+    if (!next && this.lastSnapshot?.revision === this.revision) {
+      const reloaded = load(this.lastSnapshot.html, this.variant);
+      if (sameDocument(reloaded.doc, doc)) next = reloaded;
+    }
     this.rebase = null;
-    if (!next || !next.doc.eq(doc)) return;
+    if (!next) return;
     this.loaded = next;
     this.loadRevision = this.revision;
     this.serializer = new IncrementalSerializer(next.sources);
