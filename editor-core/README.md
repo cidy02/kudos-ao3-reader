@@ -86,7 +86,7 @@ schema, SCHEMA_VERSION                                      // ProseMirror schem
 `sanitizeValue` (string in, string out, a port of `HtmlCleaner#sanitize_value`: strip, `fix_bad_characters`, ParagraphMaker,
 `Sanitize.clean` with the field's transformers, re-serialize with Nokogiri's HTML5 writer rules) then parse5 again with source
 locations, then `build.ts` makes the ProseMirror document. The port runs the same parse/serialize round trips AO3 does, because
-those round trips are observable (they are why the goldens match on 18,000 further fuzz cases, see below).
+those round trips are observable (a one-off run of 6,000 further fuzz inputs, seed 9001, also matched Ruby in all three variants; that run is not committed).
 
 Files: `html5.ts` (parse5 to a small DOM; Nokogiri-compatible serializer), `dom.ts` (libxml2-like sibling and text-merge
 rules), `paragraph-maker.ts`, `sanitize.ts` (Sanitize 6.1.0 and otwarchive's transformers), `addressable.ts` (the URI
