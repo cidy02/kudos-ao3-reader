@@ -15,7 +15,7 @@ editor-core: third-party notices
    lib/otw_sanitize/media_sanitizer.rb                                  src/sanitize.ts
 
    The golden harness (test/golden/generate/) vendors the upstream Ruby files unmodified, with otwarchive's licence
-   text, in test/golden/generate/vendor/otwarchive/ (see NOTICE.md and LICENSE there). They are test tooling only.
+   text, in test/golden/generate/upstream/otwarchive/ (see NOTICE.md and LICENSE there). They are test tooling only.
 
 2. Nokogiri (MIT) and Sanitize (MIT): behaviour of Sanitize.clean and Nokogiri's HTML5 serializer is reproduced
    from their published source (sanitize 6.1.0, nokogiri 1.19.4); no code is copied.

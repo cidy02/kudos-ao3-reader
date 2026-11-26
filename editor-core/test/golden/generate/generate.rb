@@ -1,5 +1,5 @@
 # Golden generator (spec 6.10). Loads otwarchive's own HtmlCleaner#sanitize_value, ParagraphMaker and the
-# sanitizer transformers (vendored unmodified under vendor/otwarchive, commit 452391b6) and runs every
+# sanitizer transformers (vendored unmodified under upstream/otwarchive, commit 452391b6) and runs every
 # field variant over test/golden/corpus.json. Writes test/golden/sanitize.golden.json.
 #
 #   cd editor-core/test/golden/generate && bundle install && bundle exec ruby generate.rb
@@ -18,7 +18,7 @@ require "active_support"
 require "active_support/core_ext/object/blank"
 require "active_support/core_ext/module/delegation"
 
-VENDOR = File.expand_path("vendor/otwarchive", __dir__)
+VENDOR = File.expand_path("upstream/otwarchive", __dir__)
 OUT_DIR = File.expand_path("..", __dir__)
 
 # Stand-in for otwarchive's ArchiveConfig: the real config/config.yml, read as is.
