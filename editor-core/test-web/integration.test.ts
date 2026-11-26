@@ -16,7 +16,7 @@ test('the page produces exactly the committed bridge fixtures (run node test-web
 });
 
 test('every fixture event is one of the event types the native side decodes', () => {
-  const known = new Set(['ready', 'edited', 'toolbarState', 'journal', 'caretRect', 'mirrorBlocks', 'paste', 'error']);
+  const known = new Set(['ready', 'edited', 'toolbarState', 'journal', 'caretRect', 'mirrorBlocks', 'paste', 'annotationTapped', 'tkTyped', 'wordAtCaret', 'error']);
   for (const e of fixtures.events) assert.ok(known.has(e.type), e.type);
   for (const type of ['toolbarState', 'caretRect', 'mirrorBlocks', 'paste', 'edited']) assert.ok(fixtures.events.some((e: any) => e.type === type), `${type} is in the fixtures`);
 });

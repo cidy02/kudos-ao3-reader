@@ -14,7 +14,7 @@ import type { Clock } from './events.ts';
 import { applyAppearance, applyTheme } from './theme.ts';
 
 export const BRIDGE_VERSION = 1;
-export const CALLS = ['configure', 'load', 'activate', 'freeze', 'snapshot', 'command', 'lint', 'setTheme', 'setAppearance', 'setMirror', 'dispose', 'verifySwitch'] as const;
+export const CALLS = ['configure', 'load', 'activate', 'freeze', 'snapshot', 'command', 'lint', 'setTheme', 'setAppearance', 'setMirror', 'setAnnotations', 'dispose', 'verifySwitch'] as const;
 export type CallName = (typeof CALLS)[number];
 
 export type BridgeEvent =
@@ -24,6 +24,9 @@ export type BridgeEvent =
   | ({ type: 'caretRect' } & CaretInfo)
   | ({ type: 'mirrorBlocks' } & MirrorEvent)
   | ({ type: 'paste' } & PasteInfo)
+  | { type: 'annotationTapped'; id: string }
+  | { type: 'tkTyped'; from: number; to: number }
+  | { type: 'wordAtCaret'; prefix: string | null }
   | { type: 'error'; code: string; message: string };
 
 export type BridgeError = { code: string; message: string };
@@ -81,6 +84,8 @@ export class Bridge {
   private readonly post: (event: BridgeEvent) => void;
   private readonly edited: Throttle<number>;
   private readonly toolbar: Throttle<FormatState>;
+  /** The word at the caret, for name suggestions: a few letters at most ten times a second, never the text. */
+  private readonly words: Throttle<string | null>;
   private lastToolbar = '';
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -96,12 +101,16 @@ export class Bridge {
       this.lastToolbar = key;
       this.post({ type: 'toolbarState', ...state });
     }, clock);
+    this.words = new Throttle(10, (prefix) => this.post({ type: 'wordAtCaret', prefix }), clock);
     this.editor = new Editor(o.mount, {
       hooks: {
         edited: (revision) => this.edited.push(() => revision),
         changed: () => this.toolbar.push(() => this.editor.formatState()),
         caret: (c) => this.post({ type: 'caretRect', ...c }),
         mirror: (m) => this.post({ type: 'mirrorBlocks', ...m }),
+        annotationTapped: (id) => this.post({ type: 'annotationTapped', id }),
+        tkTyped: (r) => this.post({ type: 'tkTyped', ...r }),
+        word: (prefix) => this.words.push(() => prefix),
         pasted: (p) => this.post({ type: 'paste', ...p }),
         error: (code, message) => this.post({ type: 'error', code, message }),
       },
@@ -155,12 +164,20 @@ export class Bridge {
         return ed.activate(caret, bool(a, 'focus', false));
       }
       case 'freeze': return ed.freeze();
-      case 'snapshot': return ed.snapshot(bool(a, 'caret', false));
+      case 'snapshot': return ed.snapshot(bool(a, 'caret', false), bool(a, 'selection', false));
       case 'command': return ed.command(str(a, 'name'), obj(a.attrs, 'attrs'));
       case 'lint': return ed.lint(str(a, 'html'));
       case 'setTheme': applyTheme(this.root, a); return {};
       case 'setAppearance': applyAppearance(this.root, a); ed.remeasure(); return {};
       case 'setMirror': ed.setMirror(bool(a, 'enabled', false)); return {};
+      case 'setAnnotations': {
+        const items = Array.isArray(a.items) ? a.items : fail('bad-args', 'items must be an array');
+        return ed.setAnnotations(items.map((raw) => {
+          const it = obj(raw, 'item');
+          const kind = it.kind === 'note' || it.kind === 'tk' ? it.kind : fail('bad-args', 'kind must be note or tk');
+          return { id: str(it, 'id'), kind, from: int(it, 'from'), to: int(it, 'to') };
+        }));
+      }
       case 'dispose': this.edited.cancel(); ed.dispose(); return {};
       case 'verifySwitch': case 'verify': {
         const direction = a.direction === 'richToSource' || a.direction === 'sourceToRich' ? a.direction : fail('bad-args', 'direction must be richToSource or sourceToRich');

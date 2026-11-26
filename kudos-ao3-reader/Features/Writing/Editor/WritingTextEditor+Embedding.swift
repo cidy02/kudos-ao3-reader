@@ -24,10 +24,17 @@ extension WritingTextEditor {
             #if os(iOS)
             if isRichMode {
                 if richHost?.usesFallbackAccessoryBar == true {
+                    let suggestions = embedOptions?.nameSuggestions ?? []
                     WritingKeysBar(
                         formatState: session?.formatState ?? FormatState(),
+                        showsLeadingContent: !suggestions.isEmpty,
                         onAction: { action in
                             handleHostCommand(RichEditorHostCommand.from(action))
+                        },
+                        leadingSlot: {
+                            WritingNameSuggestionChips(suggestions: suggestions) { selected in
+                                embedOptions?.onSelectNameSuggestion?(selected)
+                            }
                         }
                     )
                 }

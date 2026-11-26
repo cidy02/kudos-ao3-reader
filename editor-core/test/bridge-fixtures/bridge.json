@@ -180,10 +180,165 @@
       }
     },
     {
+      "name": "setAnnotations",
+      "args": {
+        "items": [
+          {
+            "id": "note-1",
+            "kind": "note",
+            "from": 34,
+            "to": 38
+          }
+        ]
+      },
+      "result": {
+        "placed": [
+          {
+            "id": "note-1",
+            "found": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "command",
+      "args": {
+        "name": "insertText",
+        "attrs": {
+          "text": " TK"
+        }
+      },
+      "result": {
+        "applied": true,
+        "state": {
+          "marks": [],
+          "block": "body",
+          "align": "left",
+          "dir": "leftToRight",
+          "canUndo": true,
+          "canRedo": false,
+          "inLink": false,
+          "linkURL": null,
+          "undoTitle": "Paste",
+          "redoTitle": null
+        }
+      }
+    },
+    {
+      "name": "command",
+      "args": {
+        "name": "insertText",
+        "attrs": {
+          "text": ","
+        }
+      },
+      "result": {
+        "applied": true,
+        "state": {
+          "marks": [],
+          "block": "body",
+          "align": "left",
+          "dir": "leftToRight",
+          "canUndo": true,
+          "canRedo": false,
+          "inLink": false,
+          "linkURL": null,
+          "undoTitle": "Paste",
+          "redoTitle": null
+        }
+      }
+    },
+    {
+      "name": "command",
+      "args": {
+        "name": "insertText",
+        "attrs": {
+          "text": " Ma "
+        }
+      },
+      "result": {
+        "applied": true,
+        "state": {
+          "marks": [],
+          "block": "body",
+          "align": "left",
+          "dir": "leftToRight",
+          "canUndo": true,
+          "canRedo": false,
+          "inLink": false,
+          "linkURL": null,
+          "undoTitle": "Paste",
+          "redoTitle": null
+        }
+      }
+    },
+    {
+      "name": "command",
+      "args": {
+        "name": "moveCaret",
+        "attrs": {
+          "by": -1
+        }
+      },
+      "result": {
+        "applied": true,
+        "state": {
+          "marks": [],
+          "block": "body",
+          "align": "left",
+          "dir": "leftToRight",
+          "canUndo": true,
+          "canRedo": false,
+          "inLink": false,
+          "linkURL": null,
+          "undoTitle": "Paste",
+          "redoTitle": null
+        }
+      }
+    },
+    {
+      "name": "command",
+      "args": {
+        "name": "completeWord",
+        "attrs": {
+          "text": "Marta"
+        }
+      },
+      "result": {
+        "applied": true,
+        "state": {
+          "marks": [],
+          "block": "body",
+          "align": "left",
+          "dir": "leftToRight",
+          "canUndo": true,
+          "canRedo": false,
+          "inLink": false,
+          "linkURL": null,
+          "undoTitle": "Paste",
+          "redoTitle": null
+        }
+      }
+    },
+    {
+      "name": "snapshot",
+      "args": {
+        "caret": false,
+        "selection": true
+      },
+      "result": {
+        "revision": 10,
+        "html": "<p>One <em>two</em> <strong>very </strong>Hi there TK, Marta three.</p>\n<p>Four</p>",
+        "caretOffset": null,
+        "words": 9,
+        "selection": null
+      }
+    },
+    {
       "name": "freeze",
       "args": {},
       "result": {
-        "revision": 6
+        "revision": 10
       }
     },
     {
@@ -192,21 +347,21 @@
         "caret": true
       },
       "result": {
-        "revision": 6,
-        "html": "<p>One <em>two</em> <strong>very </strong>Hi therethree.</p>\n<p>Four</p>",
-        "caretOffset": 50,
-        "words": 6
+        "revision": 10,
+        "html": "<p>One <em>two</em> <strong>very </strong>Hi there TK, Marta three.</p>\n<p>Four</p>",
+        "caretOffset": 60,
+        "words": 9
       }
     },
     {
       "name": "verifySwitch",
       "args": {
         "direction": "richToSource",
-        "html": "<p>One <em>two</em> <strong>very </strong>Hi therethree.</p>\n<p>Four</p>"
+        "html": "<p>One <em>two</em> <strong>very </strong>Hi there TK, Marta three.</p>\n<p>Four</p>"
       },
       "result": {
         "ok": true,
-        "candidateHtml": "<p>One <em>two</em> <strong>very </strong>Hi therethree.</p>\n<p>Four</p>"
+        "candidateHtml": "<p>One <em>two</em> <strong>very </strong>Hi there TK, Marta three.</p>\n<p>Four</p>"
       }
     },
     {
@@ -437,6 +592,46 @@
       "blocks": [
         {
           "html": "<p>One <em>two</em> <strong>very </strong>Hi therethree.</p>",
+          "separatorAfter": "\n"
+        }
+      ]
+    },
+    {
+      "type": "annotationTapped",
+      "id": "note-1"
+    },
+    {
+      "type": "edited",
+      "revision": 7
+    },
+    {
+      "type": "tkTyped",
+      "from": 51,
+      "to": 53
+    },
+    {
+      "type": "wordAtCaret",
+      "prefix": "Ma"
+    },
+    {
+      "type": "wordAtCaret",
+      "prefix": "Marta"
+    },
+    {
+      "type": "edited",
+      "revision": 10
+    },
+    {
+      "type": "mirrorBlocks",
+      "revision": 10,
+      "totalBlocks": 2,
+      "activeBlockIndex": 0,
+      "reset": false,
+      "from": 0,
+      "to": 1,
+      "blocks": [
+        {
+          "html": "<p>One <em>two</em> <strong>very </strong>Hi there TK, Marta three.</p>",
           "separatorAfter": "\n"
         }
       ]
@@ -701,6 +896,13 @@
       "id": "tag.lineBreak",
       "name": "insertLineBreak",
       "attrs": {}
+    },
+    {
+      "id": "session.completeWord",
+      "name": "completeWord",
+      "attrs": {
+        "text": "Marta"
+      }
     }
   ]
 }

@@ -262,6 +262,42 @@ nonisolated struct RichEditorFreezeResult: Codable, Equatable, Sendable {
 
 nonisolated struct RichEditorSnapshotArgs: Codable, Equatable, Sendable {
     var caret: Bool
+    /// Also return the selection as offsets into the returned HTML (anchoring a note, T-576d). Sent only when set.
+    var selection: Bool?
+
+    init(caret: Bool, selection: Bool? = nil) {
+        self.caret = caret
+        self.selection = selection
+    }
+}
+
+/// A UTF-16 range in the HTML a call returned or the HTML-mode text (`from` inclusive, `to` exclusive).
+nonisolated struct RichEditorTextRange: Codable, Equatable, Hashable, Sendable {
+    var from: Int
+    var to: Int
+}
+
+/// One note or TK to draw (T-576d), anchored by the native side in the text HTML mode holds.
+nonisolated struct RichEditorAnnotationItem: Codable, Equatable, Hashable, Sendable {
+    var id: String
+    /// `"note"` or `"tk"`.
+    var kind: String
+    var from: Int
+    var to: Int
+}
+
+nonisolated struct RichEditorAnnotationsArgs: Codable, Equatable, Sendable {
+    var items: [RichEditorAnnotationItem]
+}
+
+nonisolated struct RichEditorAnnotationsResult: Codable, Equatable, Sendable {
+    struct Placed: Codable, Equatable, Sendable {
+        var id: String
+        /// The range landed on text in the document.
+        var found: Bool
+    }
+
+    var placed: [Placed]
 }
 
 nonisolated struct RichEditorSnapshotResult: Codable, Equatable, Sendable {
@@ -269,6 +305,8 @@ nonisolated struct RichEditorSnapshotResult: Codable, Equatable, Sendable {
     var html: String
     var caretOffset: Int?
     var words: Int
+    /// The selection in `html`, when asked for and not empty.
+    var selection: RichEditorTextRange?
 }
 
 nonisolated struct RichEditorCommandArgs: Codable, Equatable, Sendable {
@@ -415,6 +453,12 @@ nonisolated enum RichEditorEvent: Equatable, Sendable {
     case caretRect(RichEditorCaretRect)
     case mirrorBlocks(RichEditorMirrorBlocksEvent)
     case paste(RichEditorPasteEvent)
+    /// A tap on a note or TK highlight (T-576d).
+    case annotationTapped(id: String)
+    /// The writer finished typing "TK": its range in the HTML a snapshot would now return.
+    case tkTyped(RichEditorTextRange)
+    /// The letters before the caret, for name suggestions (nil: not at the end of a word of two letters or more).
+    case wordAtCaret(prefix: String?)
     case error(code: String, message: String)
 
     private struct ReadyPayload: Decodable {
@@ -477,6 +521,14 @@ nonisolated enum RichEditorEvent: Equatable, Sendable {
         case "paste":
             let payload = try decoder.decode(RichEditorPasteEvent.self, from: data)
             return .paste(payload)
+        case "annotationTapped":
+            struct Tap: Decodable { var id: String }
+            return .annotationTapped(id: try decoder.decode(Tap.self, from: data).id)
+        case "tkTyped":
+            return .tkTyped(try decoder.decode(RichEditorTextRange.self, from: data))
+        case "wordAtCaret":
+            struct Word: Decodable { var prefix: String? }
+            return .wordAtCaret(prefix: try decoder.decode(Word.self, from: data).prefix)
         case "error":
             let payload = try decoder.decode(ErrorPayload.self, from: data)
             return .error(code: payload.code, message: payload.message)
@@ -537,6 +589,7 @@ nonisolated enum RichEditorBridgeCall: Equatable, Sendable {
     case setTheme(RichEditorTheme)
     case setAppearance(RichEditorAppearance)
     case setMirror(RichEditorMirrorArgs)
+    case setAnnotations(RichEditorAnnotationsArgs)
     case dispose
     case verifySwitch(RichEditorSwitchCheckArgs)
 
@@ -552,6 +605,7 @@ nonisolated enum RichEditorBridgeCall: Equatable, Sendable {
         case .setTheme: "setTheme"
         case .setAppearance: "setAppearance"
         case .setMirror: "setMirror"
+        case .setAnnotations: "setAnnotations"
         case .dispose: "dispose"
         case .verifySwitch: "verifySwitch"
         }
@@ -562,7 +616,7 @@ nonisolated enum RichEditorBridgeCall: Equatable, Sendable {
         switch self {
         case .configure, .load, .lint: .seconds(5)
         case .snapshot, .verifySwitch: .seconds(2)
-        case .activate, .freeze, .command, .setTheme, .setAppearance, .setMirror, .dispose: .seconds(1)
+        case .activate, .freeze, .command, .setTheme, .setAppearance, .setMirror, .setAnnotations, .dispose: .seconds(1)
         }
     }
 }
@@ -627,6 +681,7 @@ nonisolated enum RichEditorBridgeEncoder {
         case let .setTheme(theme): data = try encoder.encode(theme)
         case let .setAppearance(appearance): data = try encoder.encode(appearance)
         case let .setMirror(args): data = try encoder.encode(args)
+        case let .setAnnotations(args): data = try encoder.encode(args)
         case .dispose: data = try encoder.encode(RichEditorEmptyArgs())
         case let .verifySwitch(args): data = try encoder.encode(args)
         }
@@ -688,6 +743,7 @@ protocol RichEditorBridgeTransport: AnyObject {
     func setTheme(_ theme: RichEditorTheme) async throws
     func setAppearance(_ appearance: RichEditorAppearance) async throws
     func setMirror(_ args: RichEditorMirrorArgs) async throws
+    func setAnnotations(_ args: RichEditorAnnotationsArgs) async throws -> RichEditorAnnotationsResult
     func dispose() async throws
     func verifySwitch(_ args: RichEditorSwitchCheckArgs) async throws -> RichEditorSwitchCheckResult
     func focusWebView()
@@ -697,4 +753,9 @@ protocol RichEditorBridgeTransport: AnyObject {
 extension RichEditorBridgeTransport {
     /// Default for transports without a mirror (test fakes): nothing to show.
     func setMirror(_ args: RichEditorMirrorArgs) async throws {}
+
+    /// Default for transports without a page (test fakes): every range found.
+    func setAnnotations(_ args: RichEditorAnnotationsArgs) async throws -> RichEditorAnnotationsResult {
+        RichEditorAnnotationsResult(placed: args.items.map { .init(id: $0.id, found: $0.to > $0.from) })
+    }
 }

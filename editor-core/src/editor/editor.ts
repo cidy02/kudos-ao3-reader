@@ -14,6 +14,8 @@ import { IncrementalSerializer } from './incremental.ts';
 import { insertPaste, pasteContent, sliceHtml, sliceText } from './paste.ts';
 import type { PasteInfo } from './paste.ts';
 import { CaretTracker, invariants } from './plugins.ts';
+import { annotationsPlugin, setAnnotations, typedTK, wordAtCaret } from './annotations.ts';
+import type { AnnotationKind } from './annotations.ts';
 import type { CaretInfo } from './plugins.ts';
 import { clipboardSerializer, DEFAULT_LABELS, domParser, markViews, nodeViews } from './render.ts';
 import type { Labels } from './render.ts';
@@ -31,6 +33,12 @@ export type EditorHooks = {
   pasted(info: PasteInfo): void;
   /** Changed top-level blocks for the native HTML mirror (7.10); only while the mirror is shown. */
   mirror(event: MirrorEvent): void;
+  /** A tap on a note or TK highlight (T-576d). */
+  annotationTapped(id: string): void;
+  /** The writer finished typing "TK": its range in the HTML a snapshot would now return. */
+  tkTyped(range: { from: number; to: number }): void;
+  /** The letters before the caret, for name suggestions; null when not at the end of a word of two letters or more. */
+  word(prefix: string | null): void;
   error(code: string, message: string): void;
 };
 
@@ -96,6 +104,7 @@ export class Editor {
   /** Names of the steps on prosemirror-history's undo and redo stacks, kept in step with their depths (N6). */
   private undoLabels: string[] = [];
   private redoLabels: string[] = [];
+  private lastWord: string | null = null;
   private mirror: { enabled: boolean; sent: EditorState['doc'][]; reset: boolean; timer: unknown; active: number } =
     { enabled: false, sent: [], reset: true, timer: null, active: -1 };
 
@@ -143,7 +152,13 @@ export class Editor {
         copy: (_v: EditorView, e: ClipboardEvent) => this.onCopy(e, false),
         cut: (_v: EditorView, e: ClipboardEvent) => this.onCopy(e, true),
         // N12, 11: a link never navigates; the caret lands in it and the native side offers the link sheet.
-        click: (_v: EditorView, e: MouseEvent) => { if ((e.target as Element | null)?.closest?.('a')) e.preventDefault(); return false; },
+        click: (_v: EditorView, e: MouseEvent) => {
+          const target = e.target as Element | null;
+          if (target?.closest?.('a')) e.preventDefault();
+          const note = target?.closest?.('[data-annotation]')?.getAttribute('data-annotation');
+          if (note) this.hooks.annotationTapped(note);
+          return false;
+        },
       },
     };
   }
@@ -181,6 +196,7 @@ export class Editor {
           'Shift-Tab': liftListItem(schema.nodes.list_item!),
         }),
         keymap(baseKeymap),
+        annotationsPlugin,
         this.caret.plugin(),
       ],
     });
@@ -200,6 +216,12 @@ export class Editor {
     }
     const paste = tr.getMeta('kudosPaste') as PasteInfo | undefined;
     if (paste) this.hooks.pasted(paste);
+    if (state.doc !== before.doc && !paste) {
+      const tk = typedTK(state);
+      if (tk) this.hooks.tkTyped(this.rangeOffsets(tk.from, tk.to));
+    }
+    const word = this.frozen ? null : wordAtCaret(state);
+    if (word !== this.lastWord) { this.lastWord = word; this.hooks.word(word); }
     if (state.doc !== before.doc || !state.selection.eq(before.selection) || state.storedMarks !== before.storedMarks) this.hooks.changed();
   }
 
@@ -400,8 +422,60 @@ export class Editor {
     return { revision: this.revision };
   }
 
+  /**
+   * A document range as UTF-16 offsets in the text HTML mode holds: the loaded text while unedited, else the
+   * serialization. The end is the last character's start plus its length (a whole `&…;` reference), because a
+   * position between characters maps to the next aligned character and whitespace is skipped there (part 1, 7.5).
+   */
+  private rangeOffsets(from: number, to: number): { from: number; to: number } {
+    const doc = this.view.state.doc;
+    let html: string, start: number, last: number;
+    if (this.loaded && (doc === this.loaded.doc || (!this.lastSnapshot || this.lastSnapshot.original) && doc.eq(this.loaded.doc))) {
+      html = this.loaded.sources.original;
+      start = this.loaded.sources.offsetForPos(from) ?? 0;
+      last = this.loaded.sources.offsetForPos(Math.max(from, to - 1)) ?? start;
+    } else {
+      const a = this.serializer.serialize(doc, from);
+      html = a.html;
+      start = a.headOffset ?? 0;
+      last = this.serializer.serialize(doc, Math.max(from, to - 1)).headOffset ?? start;
+    }
+    if (to <= from) return { from: start, to: start };
+    let end: number;
+    if (html[last] === '&') { const semi = html.indexOf(';', last); end = semi > last && semi - last <= 12 ? semi + 1 : last + 1; }
+    else end = last + ((html.codePointAt(last) ?? 0) > 0xffff ? 2 : 1);
+    return { from: start, to: Math.max(end, start) };
+  }
+
+  /** The document position for an offset in the text HTML mode holds (the loaded text, or the last snapshot). */
+  private posForOffset(offset: number): number {
+    const doc = this.view.state.doc;
+    const snap = this.lastSnapshot;
+    if (this.loaded && !(snap && !snap.original && snap.revision === this.revision) && (doc === this.loaded.doc || doc.eq(this.loaded.doc))) {
+      return mapCaret(this.loaded, offset).pos;
+    }
+    return this.serializer.posForOffset(doc, offset).pos;
+  }
+
+  /**
+   * Draws the notes and TKs (T-576d). Ranges are UTF-16 offsets in the text HTML mode holds (the native side
+   * anchors them by quote in that text, 574a). They move with every edit after that; nothing is serialized.
+   */
+  setAnnotations(items: { id: string; kind: AnnotationKind; from: number; to: number }[]): { placed: { id: string; found: boolean }[] } {
+    if (!this.loaded) throw bridgeError('not-loaded', 'setAnnotations before load');
+    const size = this.view.state.doc.content.size;
+    const placed = items.map((a) => {
+      const from = Math.min(Math.max(this.posForOffset(a.from), 0), size);
+      // the end through its last character (see rangeOffsets)
+      const to = a.to > a.from ? Math.min(Math.max(this.posForOffset(a.to - 1) + 1, from), size) : from;
+      return { id: a.id, kind: a.kind, from, to };
+    });
+    this.view.dispatch(setAnnotations(this.view.state, placed));
+    return { placed: placed.map((a) => ({ id: a.id, found: a.to > a.from })) };
+  }
+
   /** R1 when the document is the loaded one (the original bytes), R2 otherwise (untouched blocks from source). */
-  snapshot(withCaret: boolean): { revision: number; html: string; caretOffset: number | null; words: number } {
+  snapshot(withCaret: boolean, withSelection = false): { revision: number; html: string; caretOffset: number | null; words: number; selection?: { from: number; to: number } | null } {
     if (!this.loaded) throw bridgeError('not-loaded', 'snapshot before load');
     const { doc, selection } = this.view.state;
     const head = withCaret ? selection.head : undefined;
@@ -417,7 +491,11 @@ export class Editor {
       ({ html, headOffset: caretOffset, words } = this.serializer.serialize(doc, head));
     }
     this.lastSnapshot = { revision: this.revision, html, original };
-    return { revision: this.revision, html, caretOffset: withCaret ? caretOffset : null, words };
+    const result = { revision: this.revision, html, caretOffset: withCaret ? caretOffset : null, words };
+    if (!withSelection) return result;
+    // the selection's ends in the same text (a note is anchored to it, T-576d)
+    const range = selection.empty ? null : this.rangeOffsets(selection.from, selection.to);
+    return { ...result, selection: range };
   }
 
   /** Runs one formatting or typing command. Nothing applies while frozen (I1). */
@@ -463,6 +541,7 @@ export class Editor {
       case 'insertQuotes': return cmd.insertQuotes(str('open') || '“', str('close') || '”');
       case 'moveCaret': return cmd.moveCaret(num('by') ?? 0);
       case 'insertLineBreak': return cmd.hardBreak;
+      case 'completeWord': return cmd.completeWord(str('text'));
       case 'openTableInHTML': return null; // the native side switches views; nothing changes here
       default: return null;
     }
@@ -489,6 +568,7 @@ export class Editor {
       case 'insertQuotes': return L.stepQuotes;
       case 'insertLineBreak': return L.stepLineBreak;
       case 'insertText': return L.stepTyping;
+      case 'completeWord': return L.stepTyping;
       default: return null;
     }
   }

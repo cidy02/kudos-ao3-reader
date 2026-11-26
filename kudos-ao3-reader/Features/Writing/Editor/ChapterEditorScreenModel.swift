@@ -15,6 +15,10 @@ struct WritingTextEditorEmbedOptions {
     /// Intercepts `RichEditorHostCommand`s before `WritingTextEditor`'s default handler.
     /// Return `true` if handled by the parent; return `false` to fall through to the session.
     var onHostCommand: ((RichEditorHostCommand) -> Bool)?
+    /// Live story-note name suggestions rendered in the iOS fallback keys bar when active.
+    var nameSuggestions: [String] = []
+    /// Called when the writer taps a name chip in the iOS fallback keys bar.
+    var onSelectNameSuggestion: ((String) -> Void)?
 }
 
 /// Which editor opens from `AddChapterView` and `WorkEditView` depending on
@@ -48,6 +52,7 @@ nonisolated struct ChapterEditorMenuCapabilities: Equatable, Hashable, Sendable 
     var canSaveAsAO3Draft: Bool = false
     var canPreview: Bool = false
     var canFind: Bool = false
+    var canAddNote: Bool = false
     var canFormat: Bool = true
     var canEditChapterMetadata: Bool = true
     var canOpenWorkDetails: Bool = false
@@ -70,6 +75,7 @@ nonisolated struct ChapterEditorMenuCapabilities: Equatable, Hashable, Sendable 
         if canOpenWorkDetails { actions.insert(.workDetails) }
         if canEditTags { actions.insert(.editTags) }
         if canCopyAsAO3HTML { actions.insert(.copyAsAO3HTML) }
+        if canAddNote { actions.insert(.addNote) }
         if canFormat { actions.insert(.format) }
         if canDeleteChapter { actions.insert(.deleteChapter) }
         for format in availableExportFormats {
@@ -101,6 +107,7 @@ struct ChapterEditorMoreMenuHandlers {
     var editTags: () -> Void = {}
     var exportFormat: (EditorExportFormat) -> Void = { _ in }
     var copyAsAO3HTML: () -> Void = {}
+    var addNote: () -> Void = {}
     var format: () -> Void = {}
     var deleteChapter: () -> Void = {}
 }
@@ -134,6 +141,7 @@ struct ChapterEditorMoreMenuWiring {
             }
         }
         if visible.contains(.copyAsAO3HTML) { actions.onCopyAsAO3HTML = handlers.copyAsAO3HTML }
+        if visible.contains(.addNote) { actions.onAddNote = handlers.addNote }
         if visible.contains(.format) { actions.onFormat = handlers.format }
         if visible.contains(.deleteChapter) { actions.onDeleteChapter = handlers.deleteChapter }
         return actions

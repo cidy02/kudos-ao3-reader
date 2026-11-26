@@ -205,6 +205,10 @@ final class RichEditorHost: NSObject, RichEditorBridgeTransport, RichEditorPrewa
         _ = try await performCall(.setMirror(args), as: RichEditorEmptyResult.self)
     }
 
+    func setAnnotations(_ args: RichEditorAnnotationsArgs) async throws -> RichEditorAnnotationsResult {
+        try await performCall(.setAnnotations(args), as: RichEditorAnnotationsResult.self)
+    }
+
     func dispose() async throws {
         _ = try await performCall(.dispose, as: RichEditorEmptyResult.self)
     }

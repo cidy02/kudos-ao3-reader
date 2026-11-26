@@ -140,3 +140,12 @@ img.ProseMirror-separator { display: inline !important; border: none !important;
 :root[data-increase-contrast] .kd-editor blockquote { border-left-color: var(--kd-text); }
 /* At the accessibility sizes the chips wrap rather than truncate */
 :root[data-accessibility-size] .kd-raw-preview { -webkit-line-clamp: 4; }
+
+/* Private notes and TKs (T-576d): highlights over the text, never part of it */
+:root { --kd-note: rgba(253, 241, 199, 0.85); --kd-note-ink: #7A5A00; --kd-tk: rgba(253, 235, 200, 0.95); }
+@media (prefers-color-scheme: dark) { :root { --kd-note: rgba(122, 90, 0, 0.45); --kd-tk: rgba(138, 90, 0, 0.5); } }
+:root[style*="color-scheme: dark"] { --kd-note: rgba(122, 90, 0, 0.45); --kd-tk: rgba(138, 90, 0, 0.5); }
+.kd-annotation { border-radius: 2px; }
+.kd-note { background: var(--kd-note); }
+.kd-tk { background: var(--kd-tk); box-shadow: inset 0 -2px 0 var(--kd-note-ink); }
+:root[data-increase-contrast] .kd-annotation { box-shadow: inset 0 -2px 0 var(--kd-text); }

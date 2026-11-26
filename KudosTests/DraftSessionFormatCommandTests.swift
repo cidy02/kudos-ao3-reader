@@ -109,3 +109,45 @@ struct DraftSessionFormatCommandTests {
         #expect(session.toolbarState.undoMenuTitle == "Undo Bold")
     }
 }
+
+/// Notes in the text, TKs and names (T-576d): the page's events land in the session, and the session's calls reach it.
+@MainActor
+struct DraftSessionAnnotationTests {
+    private func richSession() async -> (DraftSession, FakeRichTransport) {
+        let transport = FakeRichTransport()
+        let session = DraftSession(
+            initialText: "<p>Marta</p>",
+            fieldVariant: .content,
+            source: FakeSourceEditor(text: "<p>Marta</p>"),
+            clock: TestWritingClock(),
+            richTransport: transport
+        )
+        #expect(await session.switchToRich() == .switched)
+        return (session, transport)
+    }
+
+    @Test func tapsTKsAndTheWordAtTheCaretAreRecorded() async throws {
+        let (session, transport) = await richSession()
+        transport.emit(.annotationTapped(id: "n1"))
+        transport.emit(.annotationTapped(id: "n1"))
+        #expect(session.lastAnnotationTap == DraftAnnotationTap(sequence: 2, id: "n1"))
+        transport.emit(.tkTyped(RichEditorTextRange(from: 3, to: 5)))
+        #expect(session.lastTypedTK?.range == RichEditorTextRange(from: 3, to: 5))
+        transport.emit(.wordAtCaret(prefix: "Ma"))
+        #expect(session.wordAtCaret == "Ma")
+        transport.emit(.wordAtCaret(prefix: nil))
+        #expect(session.wordAtCaret == nil)
+        let decoded = try RichEditorEvent.decode(from: ["type": "wordAtCaret", "prefix": NSNull()])
+        #expect(decoded == .wordAtCaret(prefix: nil))
+    }
+
+    @Test func annotationsAndWordCompletionReachThePage() async {
+        let (session, transport) = await richSession()
+        let placed = await session.setAnnotations([RichEditorAnnotationItem(id: "n1", kind: "note", from: 3, to: 8)])
+        #expect(placed.map(\.found) == [true])
+        session.completeWord("Marta’s")
+        for _ in 0..<6 { await Task.yield() }
+        #expect(transport.commandCalls.last == RichEditorCommandArgs(name: "completeWord", attrs: ["text": .string("Marta’s")]))
+        #expect(await session.selectionForAnchoring() == nil, "the fake page has no selection")
+    }
+}

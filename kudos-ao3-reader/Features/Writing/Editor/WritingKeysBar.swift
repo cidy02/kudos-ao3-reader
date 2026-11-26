@@ -110,6 +110,7 @@ nonisolated enum WritingKeyID: String, CaseIterable, Identifiable, Hashable, Sen
 /// a leading slot reserved for story-note name suggestions (`Editor-Names.dc.html`).
 struct WritingKeysBar<LeadingSlot: View>: View {
     let formatState: FormatState
+    let showsLeadingContent: Bool
     let onAction: (WritingKeyAction) -> Void
     @ViewBuilder let leadingSlot: () -> LeadingSlot
 
@@ -123,10 +124,12 @@ struct WritingKeysBar<LeadingSlot: View>: View {
 
     init(
         formatState: FormatState = FormatState(),
+        showsLeadingContent: Bool = false,
         onAction: @escaping (WritingKeyAction) -> Void,
         @ViewBuilder leadingSlot: @escaping () -> LeadingSlot
     ) {
         self.formatState = formatState
+        self.showsLeadingContent = showsLeadingContent
         self.onAction = onAction
         self.leadingSlot = leadingSlot
     }
@@ -137,6 +140,9 @@ struct WritingKeysBar<LeadingSlot: View>: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 4) {
                         leadingSlot()
+                        if showsLeadingContent {
+                            leadingSeparator
+                        }
                         ForEach(WritingKeyID.allCases) { key in
                             keyControl(key, fillsWidth: false)
                         }
@@ -144,6 +150,18 @@ struct WritingKeysBar<LeadingSlot: View>: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 4)
                 }
+            } else if showsLeadingContent {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        leadingSlot()
+                        leadingSeparator
+                        ForEach(WritingKeyID.allCases) { key in
+                            keyControl(key, fillsWidth: false)
+                        }
+                    }
+                    .padding(.horizontal, 6)
+                }
+                .frame(height: 48)
             } else {
                 HStack(spacing: 2) {
                     leadingSlot()
@@ -164,6 +182,14 @@ struct WritingKeysBar<LeadingSlot: View>: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Writing keys")
+    }
+
+    private var leadingSeparator: some View {
+        Rectangle()
+            .fill(appTheme.appSeparator ?? appTheme.glassStroke(0.22))
+            .frame(width: 0.5, height: 22)
+            .padding(.horizontal, 2)
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder
@@ -308,22 +334,31 @@ final class WritingKeysInputAccessoryView: UIInputView, UIInputViewAudioFeedback
     fileprivate final class StateBox {
         var formatState: FormatState
         var onAction: (WritingKeyAction) -> Void
+        var leadingSlotView: AnyView
+        var hasLeadingContent: Bool
 
-        init(formatState: FormatState, onAction: @escaping (WritingKeyAction) -> Void) {
+        init(
+            formatState: FormatState,
+            onAction: @escaping (WritingKeyAction) -> Void,
+            leadingSlotView: AnyView,
+            hasLeadingContent: Bool
+        ) {
             self.formatState = formatState
             self.onAction = onAction
+            self.leadingSlotView = leadingSlotView
+            self.hasLeadingContent = hasLeadingContent
         }
     }
 
     private struct HostedBar: View {
         let stateBox: StateBox
-        let leadingSlot: AnyView
 
         var body: some View {
             WritingKeysBar(
                 formatState: stateBox.formatState,
+                showsLeadingContent: stateBox.hasLeadingContent,
                 onAction: { action in stateBox.onAction(action) },
-                leadingSlot: { leadingSlot }
+                leadingSlot: { stateBox.leadingSlotView }
             )
         }
     }
@@ -338,6 +373,10 @@ final class WritingKeysInputAccessoryView: UIInputView, UIInputViewAudioFeedback
         set { update(formatState: newValue) }
     }
 
+    var hasLeadingContent: Bool {
+        stateBox.hasLeadingContent
+    }
+
     convenience init<LeadingSlot: View>(
         formatState: FormatState = FormatState(),
         themeManager: ThemeManager? = nil,
@@ -348,7 +387,8 @@ final class WritingKeysInputAccessoryView: UIInputView, UIInputViewAudioFeedback
             formatState: formatState,
             themeManager: themeManager,
             onAction: onAction,
-            leadingSlotView: AnyView(leadingSlot())
+            leadingSlotView: AnyView(leadingSlot()),
+            hasLeadingContent: LeadingSlot.self != EmptyView.self
         )
     }
 
@@ -356,12 +396,18 @@ final class WritingKeysInputAccessoryView: UIInputView, UIInputViewAudioFeedback
         formatState: FormatState = FormatState(),
         themeManager: ThemeManager? = nil,
         onAction: @escaping (WritingKeyAction) -> Void,
-        leadingSlotView: AnyView = AnyView(EmptyView())
+        leadingSlotView: AnyView = AnyView(EmptyView()),
+        hasLeadingContent: Bool = false
     ) {
-        let box = StateBox(formatState: formatState, onAction: onAction)
+        let box = StateBox(
+            formatState: formatState,
+            onAction: onAction,
+            leadingSlotView: leadingSlotView,
+            hasLeadingContent: hasLeadingContent
+        )
         self.stateBox = box
 
-        let rootView = HostedBar(stateBox: box, leadingSlot: leadingSlotView)
+        let rootView = HostedBar(stateBox: box)
         let host: UIHostingController<AnyView>
         if let themeManager {
             host = UIHostingController(rootView: AnyView(rootView.environment(themeManager)))
@@ -394,6 +440,24 @@ final class WritingKeysInputAccessoryView: UIInputView, UIInputViewAudioFeedback
     /// Updates active marks and undo/redo availability in place without rebuilding the view.
     func update(formatState: FormatState) {
         stateBox.formatState = formatState
+        invalidateIntrinsicContentSize()
+    }
+
+    /// Updates the keys bar's leading slot (e.g. story-note name chips) in place.
+    func updateLeadingSlot<LeadingSlot: View>(
+        hasContent: Bool = true,
+        @ViewBuilder _ content: () -> LeadingSlot
+    ) {
+        stateBox.hasLeadingContent = hasContent
+        stateBox.leadingSlotView = AnyView(content())
+        invalidateIntrinsicContentSize()
+    }
+
+    /// Removes any leading slot content so the standard writing keys fill the bar again.
+    func clearLeadingSlot() {
+        guard stateBox.hasLeadingContent else { return }
+        stateBox.hasLeadingContent = false
+        stateBox.leadingSlotView = AnyView(EmptyView())
         invalidateIntrinsicContentSize()
     }
 }
