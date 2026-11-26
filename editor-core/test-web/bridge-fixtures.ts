@@ -34,6 +34,7 @@ export const COMMANDS: Fixtures['commands'] = [
   { id: 'host.insertEmDash', name: 'insertText', attrs: { text: '—' } },
   { id: 'host.insertQuotationMarks', name: 'insertQuotes', attrs: { open: '“', close: '”' } },
   { id: 'tag.lineBreak', name: 'insertLineBreak', attrs: {} },
+  { id: 'session.completeWord', name: 'completeWord', attrs: { text: 'Marta' } },
 ];
 
 /** Timings vary run to run; everything else is deterministic. */
@@ -65,6 +66,17 @@ export async function record(): Promise<Fixtures> {
   h.clock.advance(400);
   await call('command', { name: 'paste', attrs: { html: '<p><font color="red">Hi</font> there</p>' } });
   h.clock.advance(400);
+  // notes and TKs (T-576d): drawn by offsets in the text HTML mode holds, a tap, a typed TK, a name suggestion
+  await call('setAnnotations', { items: [{ id: 'note-1', kind: 'note', from: SOURCE.indexOf('Four'), to: SOURCE.indexOf('Four') + 4 }] });
+  h.bridge.editor.view.dom.querySelector('[data-annotation="note-1"]')?.dispatchEvent(new (globalThis as any).window.MouseEvent('click', { bubbles: true }));
+  await call('command', { name: 'insertText', attrs: { text: ' TK' } });
+  await call('command', { name: 'insertText', attrs: { text: ',' } });
+  await call('command', { name: 'insertText', attrs: { text: ' Ma ' } });
+  await call('command', { name: 'moveCaret', attrs: { by: -1 } });
+  h.clock.advance(200);
+  await call('command', { name: 'completeWord', attrs: { text: 'Marta' } });
+  h.clock.advance(400);
+  await call('snapshot', { caret: false, selection: true });
   await call('freeze', {});
   const snap = (await call('snapshot', { caret: true })) as { html: string } | null;
   await call('verifySwitch', { direction: 'richToSource', html: snap?.html ?? '' });

@@ -483,6 +483,17 @@ export const insertQuotes = (open: string, close: string): Command => (state, di
   return true;
 };
 
+/** Replaces the word before the caret with `text` (a name suggestion from the keys bar, T-576d). */
+export const completeWord = (text: string): Command => (state, dispatch) => {
+  const { $head, empty } = state.selection;
+  if (!empty || !text || !$head.parent.inlineContent) return false;
+  const before = $head.parent.textBetween(Math.max(0, $head.parentOffset - 40), $head.parentOffset, undefined, '\ufffc');
+  const m = /[\p{L}\p{M}'’-]{1,40}$/u.exec(before);
+  if (!m) return false;
+  if (dispatch) dispatch(state.tr.insertText(text, $head.pos - m[0].length, $head.pos).scrollIntoView());
+  return true;
+};
+
 export const moveCaret = (by: number): Command => (state, dispatch) => {
   const sel = state.selection;
   if (!Number.isInteger(by) || by === 0) return false;

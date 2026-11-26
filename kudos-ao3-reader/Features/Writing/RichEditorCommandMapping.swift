@@ -98,3 +98,48 @@ nonisolated struct DraftPasteReport: Equatable, Sendable {
     let sequence: Int
     let event: RichEditorPasteEvent
 }
+
+/// One tap on a note or TK highlight, numbered like `DraftPasteReport`.
+nonisolated struct DraftAnnotationTap: Equatable, Sendable {
+    let sequence: Int
+    let id: String
+}
+
+/// One typed "TK", numbered; `range` is in the HTML a snapshot would return at that moment.
+nonisolated struct DraftTypedTK: Equatable, Sendable {
+    let sequence: Int
+    let range: RichEditorTextRange
+}
+
+extension DraftSession {
+    /// Draws notes and TKs in Rich Text (T-576d). Ranges are UTF-16 offsets in the text HTML mode holds
+    /// (`text`, anchored with `WritingDocumentStore`'s quotes); the page moves them with every edit after that.
+    @discardableResult
+    func setAnnotations(_ items: [RichEditorAnnotationItem]) async -> [RichEditorAnnotationsResult.Placed] {
+        guard state == .richOwned, let transport = richTransport else { return [] }
+        do {
+            return try await transport.setAnnotations(RichEditorAnnotationsArgs(items: items)).placed
+        } catch {
+            logNonFatal("setAnnotations failed: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    /// The Rich Text selection, with the HTML it is a range of: what a new note is anchored to (T-576d).
+    func selectionForAnchoring() async -> (html: String, range: RichEditorTextRange)? {
+        guard state == .richOwned, let transport = richTransport else { return nil }
+        do {
+            let snapshot = try await transport.snapshot(RichEditorSnapshotArgs(caret: false, selection: true))
+            guard let range = snapshot.selection else { return nil }
+            return (snapshot.html, range)
+        } catch {
+            logNonFatal("selection snapshot failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Replaces the word before the caret with a suggestion (a name from the work's story notes, T-576d).
+    func completeWord(_ text: String) {
+        applyRichCommand(name: "completeWord", attrs: ["text": .string(text)])
+    }
+}

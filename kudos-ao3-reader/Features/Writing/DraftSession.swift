@@ -111,6 +111,12 @@ final class DraftSession {
     var lastMismatchRecoveryURLs: (leaving: URL, candidate: URL)?
     /// The last paste into Rich Text and what AO3's cleaning did to it (the paste report, §6.8, §6.9).
     var lastPaste: DraftPasteReport?
+    /// The last tap on a note or TK highlight (T-576d).
+    var lastAnnotationTap: DraftAnnotationTap?
+    /// The last "TK" the writer typed, with its range in the HTML a snapshot would return (T-576d).
+    var lastTypedTK: DraftTypedTK?
+    /// The letters before the caret in Rich Text, for name suggestions on the keys bar (T-576d).
+    var wordAtCaret: String?
     /// Whether the §7.10 HTML mirror is on screen; the page sends `mirrorBlocks` only while it is.
     private(set) var isMirrorVisible = false
     /// Incremental block mirror for §7.10 two-views mode (updated ONLY from `mirrorBlocks`).
@@ -350,6 +356,15 @@ final class DraftSession {
         case let .paste(event):
             guard state == .richOwned else { return }
             lastPaste = DraftPasteReport(sequence: (lastPaste?.sequence ?? 0) + 1, event: event)
+        case let .annotationTapped(id):
+            guard state == .richOwned else { return }
+            lastAnnotationTap = DraftAnnotationTap(sequence: (lastAnnotationTap?.sequence ?? 0) + 1, id: id)
+        case let .tkTyped(range):
+            guard state == .richOwned else { return }
+            lastTypedTK = DraftTypedTK(sequence: (lastTypedTK?.sequence ?? 0) + 1, range: range)
+        case let .wordAtCaret(prefix):
+            guard state == .richOwned else { return }
+            wordAtCaret = prefix
         case let .error(code, message):
             writingEditorLog.error(
                 "Rich editor JS error [\(code, privacy: .public)]: \(message, privacy: .public)"

@@ -62,7 +62,11 @@ struct RichEditorBridgeFixtureTests {
             case let .paste(paste):
                 #expect(paste.kind == "html")
                 #expect(paste.loss.hasDropped)
-            case .edited, .ready, .journal, .error:
+            case let .tkTyped(range):
+                #expect(range.to > range.from)
+            case let .annotationTapped(id):
+                #expect(!id.isEmpty)
+            case .edited, .ready, .journal, .error, .wordAtCaret:
                 break
             }
         }
@@ -101,6 +105,7 @@ struct RichEditorBridgeFixtureTests {
             case "command": try decode(RichEditorCommandResult.self)
             case "lint": try decode(RichEditorLintResult.self)
             case "verifySwitch": try decode(RichEditorSwitchCheckResult.self)
+            case "setAnnotations": try decode(RichEditorAnnotationsResult.self)
             default: try decode(RichEditorEmptyResult.self)
             }
         }
@@ -123,6 +128,7 @@ struct RichEditorBridgeFixtureTests {
             case "lint": encoded = try Self.roundTrip(RichEditorLintArgs.self, args)
             case "verifySwitch": encoded = try Self.roundTrip(RichEditorSwitchCheckArgs.self, args)
             case "setMirror": encoded = try Self.roundTrip(RichEditorMirrorArgs.self, args)
+            case "setAnnotations": encoded = try Self.roundTrip(RichEditorAnnotationsArgs.self, args)
             case "freeze", "dispose": encoded = try Self.jsonObject(RichEditorEmptyArgs())
             default: encoded = nil
             }
@@ -170,6 +176,7 @@ struct RichEditorBridgeFixtureTests {
             ("host.insertEmDash", RichEditorHostCommand.insertEmDash.bridgeCommand),
             ("host.insertQuotationMarks", RichEditorHostCommand.insertQuotationMarks.bridgeCommand),
             ("tag.lineBreak", AO3MarkupTag.lineBreak.richCommand),
+            ("session.completeWord", RichEditorCommandArgs(name: "completeWord", attrs: ["text": .string("Marta")])),
         ]
         #expect(Set(native.map { $0.0 }) == Set(expected.keys), "every fixture command has a native source, and back")
         for (id, args) in native {
