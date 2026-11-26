@@ -162,8 +162,9 @@ struct RichEditorPrewarmPoolTests {
         // Newer edit supersedes revision 1 before revision 1 finishes loading.
         source.simulateUserEdit("<p>Second</p>")
         await clock.advance(by: .milliseconds(1500))
-        for _ in 0..<4 { await Task.yield() }
+        for _ in 0..<10 { await Task.yield() } // load, then the §7.11 check, before it counts as warm
         #expect(transport.loadCalls.count == 2)
+        #expect(transport.verifySwitchCalls.last?.direction == .sourceToRich)
         #expect(session.preloadedRichRevision == 2)
 
         // Late revision 1 arrives — W3 must NOT overwrite revision 2.

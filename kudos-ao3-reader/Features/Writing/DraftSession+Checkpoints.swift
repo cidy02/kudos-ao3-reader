@@ -242,6 +242,16 @@ extension DraftSession {
                       self.revision == targetRevision,
                       result.revision == targetRevision
                 else { return }
+                // §7.11 for the warm path: the switch skips `load` and its check, so the preload runs the check
+                // now, off the switch path. One that fails isn't kept warm; the cold path then reports it.
+                let check = try await transport.verifySwitch(
+                    RichEditorSwitchCheckArgs(direction: .sourceToRich, html: html)
+                )
+                guard check.ok,
+                      self.state == .sourceOwned,
+                      self.latestPreloadRevision == targetRevision,
+                      self.revision == targetRevision
+                else { return }
                 self.preloadedRichRevision = result.revision
                 self.preloadedRichLoss = result.loss
             } catch {
