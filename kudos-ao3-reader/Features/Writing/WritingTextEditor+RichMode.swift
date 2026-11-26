@@ -263,6 +263,9 @@ extension WritingTextEditor {
     }
 
     func handleHostCommand(_ command: RichEditorHostCommand) {
+        // An embedding screen (ChapterEditorScreen) takes the native-UI commands (Format panel, Find, the table
+        // view) and anything else it wants first; what it leaves comes here.
+        if embedOptions?.onHostCommand?(command) == true { return }
         switch command {
         case .requestLink:
             showLink = true
