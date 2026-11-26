@@ -27,7 +27,7 @@ extension WritingTextEditor {
                     WritingKeysBar(
                         formatState: session?.formatState ?? FormatState(),
                         onAction: { action in
-                            dispatchEmbeddedHostCommand(RichEditorHostCommand.from(action))
+                            handleHostCommand(RichEditorHostCommand.from(action))
                         }
                     )
                 }
@@ -87,18 +87,10 @@ extension WritingTextEditor {
         }
     }
 
+    /// Hands the host to the embedding screen. Host commands need no rewiring: `handleHostCommand` asks the
+    /// embedding first.
     func attachEmbeddedHostCommandBridgeIfNeeded() {
         guard let embedOptions, let host = richHost else { return }
         embedOptions.onRichHostReady?(host)
-        if embedOptions.onHostCommand != nil {
-            host.onCommand = { command in
-                dispatchEmbeddedHostCommand(command)
-            }
-        }
-    }
-
-    func dispatchEmbeddedHostCommand(_ command: RichEditorHostCommand) {
-        if embedOptions?.onHostCommand?(command) == true { return }
-        handleHostCommand(command)
     }
 }

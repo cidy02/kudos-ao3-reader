@@ -47,6 +47,7 @@ struct AccountView: View {
     @AppStorage(AccountShortcutStore.key) private var shortcutsRaw = ""
     @State private var editingShortcuts = false
     @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage(RichEditorFeatureFlag.storageKey) private var richEditorEnabled = false
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Environment(PrivacyGate.self) private var gate
     @State private var postingPseudName: String?
@@ -71,6 +72,8 @@ struct AccountView: View {
         case inbox
         /// T-513: opens the new-work editor while the Writing tab is hidden.
         case startWriting
+        /// T-576: works written on this device, no AO3 account needed (Rich Text beta only).
+        case localDrafts
     }
 
     static func showsStartWritingRow(isSignedIn: Bool = true, showsWritingTab: Bool) -> Bool {
@@ -375,6 +378,8 @@ struct AccountView: View {
             WritingWorkDestination(workID: nil) {
                 router.noteDraftSaved(username: auth.username)
             }
+        case .localDrafts:
+            LocalDraftsView()
         case .inbox:
             AccountInboxScreen(
                 model: inboxModel,
@@ -735,6 +740,11 @@ struct AccountView: View {
     private var accountKudosSection: some View {
         Section {
             VStack(spacing: 0) {
+                if richEditorEnabled {
+                    // Account-free writing: the Rich Text beta saves works on this device (WritingDocumentStore).
+                    panelNavRow(title: "Drafts on This Device", systemImage: "doc.richtext", value: Route.localDrafts)
+                    SubjectRowSeparator()
+                }
                 panelNavRow(title: "Settings", systemImage: "gearshape", value: Route.settings)
                 SubjectRowSeparator()
                 panelNavRow(

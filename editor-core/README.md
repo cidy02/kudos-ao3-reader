@@ -206,10 +206,13 @@ recorded session both sides test against (regenerate with `node test-web/bridge-
 
 ### Open issues
 
-* **S15 on loaded fuzz input.** On part 1's corpus, the canonical serialization of 590 of the documents loaded from the
-  1,200 fuzz inputs (three variants) and of `li-bare` and `nested-400` does not reparse to the same document. Every
-  realistic input passes. The switch check refuses those switches (171 fuzz inputs, content variant), so nothing is lost,
-  but rich mode can't open them. A part 1 fix, or an S15 property test over loaded documents rather than generated ones.
+* **S15 on loaded input** (T-576g). AO3's cleaning is not idempotent on some preserved HTML (saving its own output
+  again wraps an orphan `<dd>` or `<li>` in `<p>`, for example), so a preserved source can come back from a reparse with
+  different bytes. Rich Text writes preserved HTML unchanged and AO3 then does to it what it does to the same text
+  saved from HTML mode, so the switch check compares preserved sources at AO3's fixed point (`verify.ts`). That took
+  S15 failures on the loaded corpus from 590 to 77 (26 inputs in three variants); `test-web/s15-loaded.test.ts` lists
+  them by name: all fuzz or synthetic, each a structural change (orphan `<li>`/`<dd>` content, nested anchors, the
+  parser's depth limit). The switch check refuses those, so Rich Text can't open them and nothing is lost.
 * **The slice layout** of some fuzz documents (foster parenting out of broken tables) does not reassemble; those fall
   back to a full reparse per switch.
 * Licences: dependencies must be permissive (MIT, BSD, ISC, Apache-2.0; the owner's reading of "MIT only",

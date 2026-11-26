@@ -10,7 +10,7 @@ import { load, schema, serializeBlock, serializeBlockAt, serializeDoc } from '..
 import type { Variant } from '../src/index.ts';
 import { IncrementalSerializer } from '../src/editor/incremental.ts';
 import { countNode } from '../src/words/index.ts';
-import { verifyLeavingRich, verifyLeavingSource } from '../src/editor/verify.ts';
+import { sameDocument, verifyLeavingRich, verifyLeavingSource } from '../src/editor/verify.ts';
 import { docArb } from '../test/arb.ts';
 import { makeFixture } from '../test/fixture.ts';
 
@@ -168,7 +168,7 @@ test('switch check, leaving HTML: realistic corpus inputs pass, and a pass is ne
         const out = serializeDoc(fresh, { sources: loaded.sources }).html;
         const sliced = serializeDoc(loaded.doc, { sources: loaded.sources }).html;
         let back = false;
-        try { back = load(sliced, 'content').doc.eq(loaded.doc); } catch { back = false; }
+        try { back = sameDocument(load(sliced, 'content').doc, loaded.doc, 'content'); } catch { back = false; }
         assert.ok(back, `${c.id}: passed, but its untouched text does not parse back`);
         void out;
       } else refused++;

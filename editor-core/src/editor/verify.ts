@@ -10,7 +10,7 @@
 // full reparse for that document.
 import { Fragment } from 'prosemirror-model';
 import type { Node as PMNode } from 'prosemirror-model';
-import { load, schema } from '../index.ts';
+import { load, sanitizeValue, schema } from '../index.ts';
 import type { LoadResult, Variant } from '../index.ts';
 import { IncrementalSerializer } from './incremental.ts';
 import type { BlockSerializer, Serialized } from './incremental.ts';
@@ -58,8 +58,54 @@ export function trimListEdges(node: PMNode): PMNode {
   return changed ? node.copy(Fragment.from(kids)) : node;
 }
 
-/** `parsed` is the editor's document `edited`, as AO3 will see it. */
-export const sameDocument = (parsed: PMNode, edited: PMNode): boolean => parsed.eq(edited) || parsed.eq(trimListEdges(edited));
+/**
+ * AO3's cleaning is not idempotent on some preserved HTML: saving its own output again changes it once more (an
+ * orphan <dd> or <li> gains <p> wrappers, for example), so a preserved source can come back from a reparse with
+ * different bytes. Rich Text shows preserved HTML as a locked chip and writes its bytes unchanged, so what AO3 then
+ * does to them is what it does to the same text saved from HTML mode. Two preserved sources are therefore the same
+ * when AO3's cleaning brings both to the same fixed point.
+ */
+const fixedPoints = new Map<string, string>();
+function fixedPoint(source: string, variant: Variant): string {
+  const key = `${variant}\u0000${source}`;
+  let out = fixedPoints.get(key);
+  if (out === undefined) {
+    out = source;
+    for (let i = 0; i < 4; i++) {
+      let next: string;
+      try { next = sanitizeValue(variant, out); } catch { break; }
+      if (next === out) break;
+      out = next;
+    }
+    if (fixedPoints.size > 2000) fixedPoints.clear();
+    fixedPoints.set(key, out);
+  }
+  return out;
+}
+
+function sameModuloPreserved(a: PMNode, b: PMNode, variant: Variant): boolean {
+  if (a === b) return true;
+  if (a.type !== b.type) return false;
+  if (a.type === schema.nodes.raw_block || a.type === schema.nodes.raw_inline) {
+    if (!a.sameMarkup(b)) {
+      const sa = String(a.attrs.source ?? ''), sb = String(b.attrs.source ?? '');
+      if (!(fixedPoint(sa, variant) === fixedPoint(sb, variant) && a.marks.length === b.marks.length && a.marks.every((m, i) => m.eq(b.marks[i]!)))) return false;
+    }
+    return true;
+  }
+  if (a.isText) return a.eq(b);
+  if (!a.sameMarkup(b) || a.childCount !== b.childCount) return false;
+  for (let i = 0; i < a.childCount; i++) if (!sameModuloPreserved(a.child(i), b.child(i), variant)) return false;
+  return true;
+}
+
+/** `parsed` is the editor's document `edited`, as AO3 will see it (modulo list-item edge spaces and preserved HTML AO3 re-cleans). */
+export function sameDocument(parsed: PMNode, edited: PMNode, variant?: Variant): boolean {
+  if (parsed.eq(edited)) return true;
+  const trimmed = trimListEdges(edited);
+  if (parsed.eq(trimmed)) return true;
+  return variant !== undefined && sameModuloPreserved(parsed, trimmed, variant);
+}
 
 /** Index and both versions of the first top-level block that differs, for the log that becomes a golden fixture. */
 function firstDifference(want: PMNode, got: PMNode, offset = 0): string {
@@ -78,14 +124,14 @@ const POSIX_EDGES = /^[ \t\n\v\f\r]+|[ \t\n\v\f\r]+$/g;
 export function layoutIsSound(loaded: LoadResult, variant: Variant, inc: IncrementalSerializer, deps: VerifyDeps = {}): boolean {
   const unedited = inc.serialize(loaded.doc).html;
   if (unedited === loaded.sources.text.replace(POSIX_EDGES, '')) return true;
-  try { return sameDocument((deps.parse ?? load)(unedited, variant).doc, loaded.doc); } catch { return false; }
+  try { return sameDocument((deps.parse ?? load)(unedited, variant).doc, loaded.doc, variant); } catch { return false; }
 }
 
 /** The whole output, reparsed: for documents whose slice layout is not sound. */
 function checkWhole(doc: PMNode, variant: Variant, out: Serialized, deps: VerifyDeps): string | null {
   let back: PMNode;
   try { back = (deps.parse ?? load)(out.html, variant).doc; } catch (e) { return `the reparse failed (${String(e)})`; }
-  return sameDocument(back, doc) ? null : firstDifference(trimListEdges(doc), back);
+  return sameDocument(back, doc, variant) ? null : firstDifference(trimListEdges(doc), back);
 }
 
 /** Reparses every block of `out` that rich mode wrote itself, with its neighbours. Null when all match. */
@@ -106,7 +152,7 @@ export function checkWrittenBlocks(doc: PMNode, variant: Variant, out: Serialize
     const expected = doc.type.create(doc.attrs, kids);
     let back: PMNode;
     try { back = parse(out.html.slice(segs[a]!.start, segs[z]!.end), variant).doc; } catch (e) { return `block ${i}: the reparse failed (${String(e)})`; }
-    if (!sameDocument(back, expected)) return firstDifference(trimListEdges(expected), back, a);
+    if (!sameDocument(back, expected, variant)) return firstDifference(trimListEdges(expected), back, a);
     proven.set(block, [before, after]);
   }
   return null;
