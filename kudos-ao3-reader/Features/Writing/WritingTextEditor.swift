@@ -15,6 +15,9 @@ struct WritingTextEditor: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(ThemeManager.self) var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+    #endif
     /// 1bv's serif at 15.5, scaled with Dynamic Type.
     @ScaledMetric(relativeTo: .body) var editorFontSize = 15.5
     @ScaledMetric(relativeTo: .caption) private var tagLabelFontSize = 13
@@ -32,12 +35,13 @@ struct WritingTextEditor: View {
     @State var session: DraftSession?
     @State var richHost: RichEditorHost?
     @State var showWhatChanged = false
+    @State var showsHTMLMirror = false
     @State private var original: String
     @State private var recoveries: [WritingTextRecovery.Copy] = []
     @State private var selectedRecovery: URL?
     @State private var recoveryID = UUID()
     @State var errorMessage: String?
-    @State private var showLink = false
+    @State var showLink = false
     @State private var link = "https://"
     @State private var showDeleteChapter = false
     #if os(iOS)
@@ -111,8 +115,14 @@ struct WritingTextEditor: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.horizontal)
             #if os(iOS)
-            // Above the keyboard: the screen avoids it, so the bar rides on top.
-            tagBar
+            if isRichMode {
+                if richHost?.usesFallbackAccessoryBar == true {
+                    richFallbackKeysBar
+                }
+            } else {
+                // Above the keyboard: the screen avoids it, so the bar rides on top.
+                tagBar
+            }
             #else
             formattingNotice
                 .font(.caption2).foregroundStyle(.secondaryInk)
@@ -165,20 +175,11 @@ struct WritingTextEditor: View {
             Text("This will delete all comments on the chapter as well and cannot be undone.")
         }
         .onAppear(perform: start)
-        .onChange(of: editorFontSize) { _, value in
-            controller?.setAppearance(theme.appTheme, fontSize: value)
-            session?.updateTheme(richEditorTheme)
-        }
-        .onChange(of: theme.appTheme) { _, value in
-            controller?.setAppearance(value, fontSize: editorFontSize)
-            richHost?.applyNativeBackgroundColor(value.backgroundColor)
-            session?.updateTheme(richEditorTheme)
-        }
+        .onChange(of: editorFontSize) { _, value in handleFontSizeChange(value) }
+        .onChange(of: theme.appTheme) { _, value in handleThemeChange(value) }
         // Going inactive or to the background checkpoints without touching an
         // IME composition (§7.6): the app may not come back.
-        .onChange(of: scenePhase) { _, phase in
-            if phase != .active { session?.handleSceneInactiveOrBackground() }
-        }
+        .onChange(of: scenePhase) { _, phase in handleScenePhaseChange(phase) }
         #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
             session?.handleMemoryWarning()
@@ -192,17 +193,7 @@ struct WritingTextEditor: View {
         } message: { Text(errorMessage ?? "") }
         .alert("Insert link", isPresented: $showLink) {
             TextField("https://example.com", text: $link)
-            Button("Insert") {
-                if WritingMarkup.safeLink(link) {
-                    if isRichMode {
-                        session?.applyRichCommand(name: "link", attrs: ["href": .string(link)])
-                    } else {
-                        controller?.command("a", link: link)
-                    }
-                } else {
-                    errorMessage = "Enter an HTTP, HTTPS, or mailto link."
-                }
-            }
+            Button("Insert") { handleLinkInsert(link) }
             Button("Cancel", role: .cancel) {}
         }
         .sheet(isPresented: Binding(

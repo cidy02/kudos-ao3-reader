@@ -338,7 +338,10 @@ struct RichEditorHostAndNavigationTests {
         let script = try handler.resolve(url: URL(string: "kudos-editor://editor/editor-stub.js")).get()
         let scriptString = String(decoding: script.data, as: UTF8.self)
         #expect(scriptString.contains("window.KudosEditor"))
-        #expect(!scriptString.contains("innerHTML"))
+        // Property access, not the word: the stub's own comment mentions it.
+        #expect(!scriptString.contains(".innerHTML"))
+        #expect(!scriptString.contains(".outerHTML"))
+        #expect(!scriptString.contains("insertAdjacentHTML"))
     }
 
     @Test func webViewHostConfiguresNonPersistentStoreNoLinkPreviewAndPrePaintBackground() {

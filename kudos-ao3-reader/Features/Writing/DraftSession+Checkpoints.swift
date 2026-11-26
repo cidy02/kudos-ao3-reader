@@ -45,15 +45,49 @@ extension DraftSession {
         }
     }
 
-    /// App going inactive or background (§8.1): checkpoints without committing composition.
-    func handleSceneInactiveOrBackground() {
-        scheduler?.fireNow()
+    /// Pure W2 preload gate (§9.3): preloads HTML into the hidden rich view after
+    /// an HTML checkpoint only when every W2 condition holds.
+    nonisolated static func shouldPreload(
+        isRichEnabled: Bool,
+        isRichAvailable: Bool,
+        isInForeground: Bool,
+        now: Duration,
+        lastMemoryWarningAt: Duration?,
+        revision: Int,
+        lastPreloadedRevision: Int?,
+        characterCount: Int,
+        maxCharacters: Int
+    ) -> Bool {
+        guard isRichEnabled, isRichAvailable, isInForeground else { return false }
+        if let warning = lastMemoryWarningAt, now < warning + processDeathCooldown {
+            return false
+        }
+        guard lastPreloadedRevision != revision else { return false }
+        return characterCount <= maxCharacters
     }
 
-    /// Memory warning (§8.1, §9.3 W4): checkpoints without committing composition and
-    /// drops any idle preload in the hidden WebView.
-    func handleMemoryWarning() {
+    /// App returned to foreground (§9.3 W2).
+    func handleSceneActive() {
+        isAppInForeground = true
+    }
+
+    /// App going inactive or background (§8.1, §9.3 W4): checkpoints without
+    /// committing composition and disposes any idle preload in the hidden WebView.
+    func handleSceneInactiveOrBackground() {
+        isAppInForeground = false
         scheduler?.fireNow()
+        disposeIdlePreloadIfNeeded()
+    }
+
+    /// Memory warning (§8.1, §9.3 W4): checkpoints without committing composition,
+    /// starts the 60 s preload cooldown, and drops any idle preload in the hidden WebView.
+    func handleMemoryWarning() {
+        lastMemoryWarningAt = clock.now
+        scheduler?.fireNow()
+        disposeIdlePreloadIfNeeded()
+    }
+
+    private func disposeIdlePreloadIfNeeded() {
         if state == .sourceOwned, preloadedRichRevision != nil, let transport = richTransport {
             preloadedRichRevision = nil
             preloadedRichLoss = nil
@@ -94,6 +128,7 @@ extension DraftSession {
             onCheckpointText?(value)
             queueRecoveryWrite(value, sequence: sequence)
             recountOffMain(value, checkpoint: sequence)
+            scheduleBackgroundPreloadIfEligible(html: value, revision: revision)
 
         case .richOwned:
             // Tracked like a source write, so rich and source checkpoints reach disk in order and
@@ -161,6 +196,57 @@ extension DraftSession {
 
     func logNonFatal(_ message: String) {
         writingEditorLog.notice("\(message, privacy: .public)")
+    }
+
+    /// §9.3 W2–W3 background preload into the hidden rich view after an HTML checkpoint.
+    /// A newer revision supersedes any in-flight preload; stale results are discarded.
+    func scheduleBackgroundPreloadIfEligible(html: String, revision targetRevision: Int) {
+        guard state == .sourceOwned else { return }
+        guard Self.shouldPreload(
+            isRichEnabled: isRichPreloadEnabled,
+            isRichAvailable: isRichAvailable,
+            isInForeground: isAppInForeground,
+            now: clock.now,
+            lastMemoryWarningAt: lastMemoryWarningAt,
+            revision: targetRevision,
+            lastPreloadedRevision: preloadedRichRevision,
+            characterCount: html.count,
+            maxCharacters: fieldVariant.maxCharacters
+        ) else {
+            return
+        }
+        guard let transport = resolveTransport() else { return }
+
+        latestPreloadRevision = targetRevision
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                if !self.isConfigured {
+                    let reply = try await transport.configure(RichEditorConfigureArgs(
+                        variant: self.fieldVariant,
+                        theme: self.themeProvider(),
+                        locale: self.localeIdentifier
+                    ))
+                    guard reply.bridgeVersion == RichEditorBridgeProtocol.bridgeVersion,
+                          reply.schemaVersion == RichEditorBridgeProtocol.schemaVersion
+                    else { return }
+                    self.isConfigured = true
+                }
+                let result = try await transport.load(
+                    RichEditorLoadArgs(html: html, revision: targetRevision)
+                )
+                // W3: discard superseded results or results arriving after a mode switch.
+                guard self.state == .sourceOwned,
+                      self.latestPreloadRevision == targetRevision,
+                      self.revision == targetRevision,
+                      result.revision == targetRevision
+                else { return }
+                self.preloadedRichRevision = result.revision
+                self.preloadedRichLoss = result.loss
+            } catch {
+                self.logNonFatal("Background preload skipped: \(error.localizedDescription)")
+            }
+        }
     }
 
     private func checkpointRich(commitComposition: Bool, sequence: Int) async {

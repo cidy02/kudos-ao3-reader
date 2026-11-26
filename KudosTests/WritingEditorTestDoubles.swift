@@ -150,6 +150,7 @@ final class FakeRichTransport: RichEditorBridgeTransport {
     private(set) var commandCalls: [RichEditorCommandArgs] = []
     private(set) var verifySwitchCalls: [RichEditorSwitchCheckArgs] = []
     private(set) var setThemeCalls: [RichEditorTheme] = []
+    private(set) var setAppearanceCalls: [RichEditorAppearance] = []
     private(set) var disposeCount = 0
     private(set) var focusCount = 0
     private(set) var resetCount = 0
@@ -226,6 +227,11 @@ final class FakeRichTransport: RichEditorBridgeTransport {
     func setTheme(_ theme: RichEditorTheme) async throws {
         recordedCalls.append("setTheme")
         setThemeCalls.append(theme)
+    }
+
+    func setAppearance(_ appearance: RichEditorAppearance) async throws {
+        recordedCalls.append("setAppearance")
+        setAppearanceCalls.append(appearance)
     }
 
     func dispose() async throws {

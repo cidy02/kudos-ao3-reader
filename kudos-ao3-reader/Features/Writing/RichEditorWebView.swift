@@ -248,12 +248,30 @@ final class RichEditorURLSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 }
 
-/// `WKWebView` subclass hosting the Rich Text editor (§10.1, §10.3 N2/N10).
-/// Sets `allowsLinkPreview = false` and paints the native background color before
-/// the first web paint so there is no white flash.
+/// `WKWebView` subclass hosting the Rich Text editor (§10.1, §10.3 N2–N8, N10).
+/// Configures pre-paint background, N2 edit menu, N3 keys accessory, N4 scroll
+/// behavior, N5 trait appearance forwarding, N6 system undo, N7 hardware
+/// keyboard shortcuts, and N8 system Find.
 @MainActor
 final class RichEditorWebView: WKWebView {
     private(set) var nativeBackgroundColor: Color
+    var onCommand: (@MainActor (RichEditorHostCommand) -> Void)?
+    var onAppearanceChange: (@MainActor (RichEditorAppearance) -> Void)?
+
+    var scrollMode: RichEditorScrollMode = .followCaret
+    var typewriterAnchorFraction: Double = RichEditorScrollCalculator.defaultTypewriterFraction
+    var typographyFontFamily: String = RichEditorTheme.defaultFontFamily
+    var typographyBaseFontSize: Double = 15.5
+    var typographyLineHeight: Double = RichEditorTheme.defaultLineHeight
+    var ownsRichUndo = false
+
+    let richUndoManager = RichEditorUndoManager()
+    var inputAccessoryStatus: RichEditorInputAccessoryStatus?
+
+    #if os(iOS)
+    var keysAccessoryView: WritingKeysInputAccessoryView?
+    var traitChangeRegistration: (any UITraitChangeRegistration)?
+    #endif
 
     init(
         frame: CGRect = .zero,
@@ -264,12 +282,14 @@ final class RichEditorWebView: WKWebView {
         super.init(frame: frame, configuration: configuration)
         allowsLinkPreview = false
         applyNativeBackgroundColor(backgroundColor)
+        configureNativeFeel()
     }
 
     required init?(coder: NSCoder) {
         nativeBackgroundColor = .clear
         super.init(coder: coder)
         allowsLinkPreview = false
+        configureNativeFeel()
     }
 
     /// Sets the native backing color before first paint and on theme changes (N10).
@@ -298,6 +318,44 @@ final class RichEditorWebView: WKWebView {
         window?.makeFirstResponder(self)
         #endif
     }
+
+    // MARK: Platform responder overrides (delegated to RichEditorWebView+NativeFeel.swift)
+
+    override var undoManager: UndoManager? {
+        ownsRichUndo ? richUndoManager : super.undoManager
+    }
+
+    #if os(iOS)
+    override var editingInteractionConfiguration: UIEditingInteractionConfiguration {
+        ownsRichUndo ? .default : super.editingInteractionConfiguration
+    }
+
+    override var keyCommands: [UIKeyCommand]? {
+        makeEditorKeyCommands()
+    }
+
+    override func buildMenu(with builder: any UIMenuBuilder) {
+        super.buildMenu(with: builder)
+        configureEditMenu(using: UIKitMenuBuilderAdapter(builder: builder))
+    }
+
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if let handled = canPerformEditorAction(action) {
+            return handled
+        }
+        return super.canPerformAction(action, withSender: sender)
+    }
+
+    override func validate(_ command: UICommand) {
+        super.validate(command)
+        validateEditorCommand(command)
+    }
+    #else
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        notifyAppearanceChanged()
+    }
+    #endif
 }
 
 #if os(iOS)

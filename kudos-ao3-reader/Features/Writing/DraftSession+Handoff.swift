@@ -116,8 +116,10 @@ extension DraftSession {
     }
 
     /// Switches ownership from Rich Text (`rich`) to HTML (`source`) per §7.4.
+    /// Pass `overrideCaretOffset` when switching from a §7.10 HTML mirror tap so
+    /// the HTML caret lands where the writer tapped.
     @discardableResult
-    func switchToSource() async -> DraftHandoffOutcome {
+    func switchToSource(overrideCaretOffset: Int? = nil) async -> DraftHandoffOutcome {
         guard state == .richOwned, let transport = richTransport else { return .ignored }
 
         handoffToken += 1
@@ -148,7 +150,10 @@ extension DraftSession {
         let wasEditedInRich = snapshot.revision != richEntryRevision
             || lastRichEditedRevision != richEntryRevision
         if !wasEditedInRich {
-            return restoreUneditedSourceAfterRich(snapshot: snapshot)
+            return restoreUneditedSourceAfterRich(
+                snapshot: snapshot,
+                overrideCaretOffset: overrideCaretOffset
+            )
         }
 
         // §7.11 switch check before committing edited Rich Text output.
@@ -164,16 +169,35 @@ extension DraftSession {
             sequence: sequence,
             knownWordCount: snapshot.words
         )
-        source.replaceForModeHandoff(snapshot.html, caretOffset: snapshot.caretOffset)
+        source.replaceForModeHandoff(
+            snapshot.html,
+            caretOffset: overrideCaretOffset ?? snapshot.caretOffset
+        )
 
         // Step 5 (§7.4, W5): unfreeze and focus source; keep rich loaded as warm preload.
         source.isFrozen = false
         source.focus()
         state = .sourceOwned
+        notifyRichOwnership(false)
         preloadedRichRevision = snapshot.revision
         preloadedRichLoss = .empty
         lastSwitchChanges = nil
         return .switched
+    }
+
+    /// §7.10 two-views tap into the read-only HTML mirror: switches ownership
+    /// to HTML and places the caret at the tapped UTF-16 offset.
+    @discardableResult
+    func switchToSourceFromMirrorTap(atUTF16Offset offset: Int) async -> DraftHandoffOutcome {
+        await switchToSource(overrideCaretOffset: max(0, offset))
+    }
+
+    func resolveTransport() -> (any RichEditorBridgeTransport)? {
+        if let richTransport { return richTransport }
+        guard let created = makeRichTransport?() else { return nil }
+        richTransport = created
+        attachTransportCallbacks(created)
+        return created
     }
 
     func sendRichCommand(name: String, attrs: [String: RichEditorJSONValue] = [:]) {
@@ -189,24 +213,18 @@ extension DraftSession {
 
     // MARK: Private hand-off helpers
 
-    private func resolveTransport() -> (any RichEditorBridgeTransport)? {
-        if let richTransport { return richTransport }
-        guard let created = makeRichTransport?() else { return nil }
-        richTransport = created
-        attachTransportCallbacks(created)
-        return created
-    }
-
     private func restoreUneditedSourceAfterRich(
-        snapshot: RichEditorSnapshotResult
+        snapshot: RichEditorSnapshotResult,
+        overrideCaretOffset: Int?
     ) -> DraftHandoffOutcome {
-        if let caretOffset = snapshot.caretOffset {
+        if let caretOffset = overrideCaretOffset ?? snapshot.caretOffset {
             source.setCaretOffsetUTF16(caretOffset)
         }
         text = richSourceTextAtEntry
         source.isFrozen = false
         source.focus()
         state = .sourceOwned
+        notifyRichOwnership(false)
         preloadedRichRevision = snapshot.revision
         preloadedRichLoss = preloadedRichLoss ?? .empty
         return .switched
@@ -365,8 +383,10 @@ extension DraftSession {
         preloadedRichRevision = currentRevision
         preloadedRichLoss = loss
         lastSwitchChanges = loss.hasNonBlockingChanges ? loss : nil
+        mirrorDocument = HTMLMirrorDocument.seed(from: sourceText, revision: currentRevision)
         toolbarState = .empty
         state = .richOwned
+        notifyRichOwnership(true)
         return .switched
     }
 

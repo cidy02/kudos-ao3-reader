@@ -1,9 +1,11 @@
 /*
- * TEMPORARY STUB — T-576b (Apple Rich Text host, part 1).
+ * TEMPORARY STUB — T-576b (Apple Rich Text host, parts 1 & 2).
  * Replaced by the built `editor-core` ProseMirror bundle (T-576a).
  *
- * Answers every §7.2 bridge call and §7.11 verifySwitch trivially without ever
- * parsing untrusted HTML into the page as markup (§11).
+ * Answers every §7.2 bridge call, §7.11 verifySwitch, and §10.3 setAppearance
+ * trivially without ever assigning untrusted HTML to `innerHTML` (§11).
+ * Emits `ready`, rate-limited `edited`, `toolbarState` (with undoTitle/redoTitle),
+ * `caretRect` (N4), and debounced `mirrorBlocks` (§7.10).
  */
 (function () {
   "use strict";
@@ -20,7 +22,9 @@
   let undoStack = [];
   let redoStack = [];
   let editTimer = null;
+  let mirrorTimer = null;
   let lastEditSentAt = 0;
+  let lastMirroredBlocks = [];
 
   function postEvent(event) {
     try {
@@ -53,13 +57,42 @@
     if (typeof theme.lineHeight === "number") style.setProperty("--line-height", String(theme.lineHeight));
   }
 
+  function applyAppearance(appearance) {
+    if (!appearance || typeof appearance !== "object") return;
+    const docEl = document.documentElement;
+    const style = docEl.style;
+    if (appearance.fontFamily) style.setProperty("--font", String(appearance.fontFamily));
+    if (typeof appearance.fontSizePx === "number") {
+      style.setProperty("--font-size", appearance.fontSizePx + "px");
+    }
+    if (typeof appearance.lineHeight === "number") {
+      style.setProperty("--line-height", String(appearance.lineHeight));
+    }
+    style.setProperty("--font-weight", appearance.boldText ? "600" : "400");
+    if (appearance.colorScheme) docEl.dataset.colorScheme = String(appearance.colorScheme);
+    docEl.dataset.contrast = appearance.increaseContrast ? "high" : "normal";
+    docEl.dataset.boldText = appearance.boldText ? "true" : "false";
+    if (appearance.contentSizeCategory) {
+      docEl.dataset.contentSizeCategory = String(appearance.contentSizeCategory);
+    }
+    docEl.dataset.accessibilitySize = appearance.isAccessibilityCategory ? "true" : "false";
+  }
+
   function countWords(text) {
     const plain = String(text || "").replace(/<[^>]*>/g, " ").trim();
     if (!plain) return 0;
     return plain.split(/\s+/).filter(Boolean).length;
   }
 
+  function splitBlocks(html) {
+    const text = String(html || "");
+    if (!text) return [""];
+    return text.split(/\n\n+/);
+  }
+
   function emitToolbarState() {
+    const undoEntry = undoStack.length > 0 ? undoStack[undoStack.length - 1] : null;
+    const redoEntry = redoStack.length > 0 ? redoStack[redoStack.length - 1] : null;
     postEvent({
       type: "toolbarState",
       marks: [],
@@ -67,7 +100,26 @@
       align: null,
       dir: null,
       canUndo: undoStack.length > 0,
-      canRedo: redoStack.length > 0
+      canRedo: redoStack.length > 0,
+      undoTitle: undoEntry ? undoEntry.label : null,
+      redoTitle: redoEntry ? redoEntry.label : null
+    });
+  }
+
+  function emitCaretRect() {
+    if (!root) return;
+    const selection = window.getSelection && window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0).cloneRange();
+    range.collapse(true);
+    const rect = range.getBoundingClientRect();
+    if (!rect || (rect.width === 0 && rect.height === 0 && rect.top === 0)) return;
+    postEvent({
+      type: "caretRect",
+      x: rect.left + window.scrollX,
+      y: rect.top + window.scrollY,
+      width: Math.max(rect.width, 2),
+      height: Math.max(rect.height, 18)
     });
   }
 
@@ -93,15 +145,51 @@
     }
   }
 
+  function scheduleMirrorUpdate() {
+    if (mirrorTimer !== null) clearTimeout(mirrorTimer);
+    mirrorTimer = setTimeout(function () {
+      mirrorTimer = null;
+      const nextBlocks = splitBlocks(currentHtml);
+      const changes = [];
+      let lastChanged = 0;
+      for (let i = 0; i < nextBlocks.length; i += 1) {
+        if (lastMirroredBlocks[i] !== nextBlocks[i]) {
+          changes.push({
+            index: i,
+            html: nextBlocks[i],
+            separatorAfter: i + 1 < nextBlocks.length ? "\n\n" : ""
+          });
+          lastChanged = i;
+        }
+      }
+      const previousLength = lastMirroredBlocks.length;
+      lastMirroredBlocks = nextBlocks;
+      if (changes.length > 0 || nextBlocks.length !== previousLength) {
+        postEvent({
+          type: "mirrorBlocks",
+          revision: currentRevision,
+          totalBlocks: nextBlocks.length,
+          activeBlockIndex: lastChanged,
+          changes: changes
+        });
+      }
+    }, 300);
+  }
+
   if (root) {
     root.addEventListener("input", function () {
-      undoStack.push(currentHtml);
+      undoStack.push({ html: currentHtml, label: "Typing" });
       redoStack = [];
       currentHtml = root.textContent || "";
       currentRevision += 1;
       dirtySinceLoad = true;
       scheduleEditedEvent();
+      scheduleMirrorUpdate();
       emitToolbarState();
+      emitCaretRect();
+    });
+    document.addEventListener("selectionchange", function () {
+      if (document.activeElement === root) emitCaretRect();
     });
   }
 
@@ -122,6 +210,7 @@
         dirtySinceLoad = false;
         undoStack = [];
         redoStack = [];
+        lastMirroredBlocks = splitBlocks(currentHtml);
         if (root) {
           root.contentEditable = "false";
           root.textContent = currentHtml;
@@ -158,22 +247,26 @@
       case "command": {
         const commandName = String(payload.name || "");
         if (commandName === "undo" && undoStack.length > 0) {
-          redoStack.push(currentHtml);
-          currentHtml = undoStack.pop();
+          const previous = undoStack.pop();
+          redoStack.push({ html: currentHtml, label: previous.label });
+          currentHtml = previous.html;
           currentRevision += 1;
           dirtySinceLoad = true;
           if (root) root.textContent = currentHtml;
           scheduleEditedEvent();
+          scheduleMirrorUpdate();
           emitToolbarState();
           return { applied: true };
         }
         if (commandName === "redo" && redoStack.length > 0) {
-          undoStack.push(currentHtml);
-          currentHtml = redoStack.pop();
+          const next = redoStack.pop();
+          undoStack.push({ html: currentHtml, label: next.label });
+          currentHtml = next.html;
           currentRevision += 1;
           dirtySinceLoad = true;
           if (root) root.textContent = currentHtml;
           scheduleEditedEvent();
+          scheduleMirrorUpdate();
           emitToolbarState();
           return { applied: true };
         }
@@ -187,11 +280,20 @@
         applyTheme(payload);
         return {};
 
+      case "setAppearance":
+        applyAppearance(payload);
+        return {};
+
       case "dispose":
         currentHtml = "";
         dirtySinceLoad = false;
         undoStack = [];
         redoStack = [];
+        lastMirroredBlocks = [];
+        if (mirrorTimer !== null) {
+          clearTimeout(mirrorTimer);
+          mirrorTimer = null;
+        }
         if (root) {
           root.contentEditable = "false";
           root.textContent = "";

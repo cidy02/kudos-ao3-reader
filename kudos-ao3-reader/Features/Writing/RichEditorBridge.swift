@@ -322,6 +322,31 @@ nonisolated struct RichEditorToolbarState: Codable, Equatable, Sendable {
     var dir: String?
     var canUndo: Bool
     var canRedo: Bool
+    /// Optional page-supplied step name for the system Undo menu item (§10.3 N6),
+    /// e.g. `"Typing"` or `"Bold"`.
+    var undoTitle: String?
+    /// Optional page-supplied step name for the system Redo menu item (§10.3 N6).
+    var redoTitle: String?
+
+    init(
+        marks: [String],
+        block: String,
+        align: String?,
+        dir: String?,
+        canUndo: Bool,
+        canRedo: Bool,
+        undoTitle: String? = nil,
+        redoTitle: String? = nil
+    ) {
+        self.marks = marks
+        self.block = block
+        self.align = align
+        self.dir = dir
+        self.canUndo = canUndo
+        self.canRedo = canRedo
+        self.undoTitle = undoTitle
+        self.redoTitle = redoTitle
+    }
 
     static let empty = RichEditorToolbarState(
         marks: [], block: "paragraph", align: nil, dir: nil, canUndo: false, canRedo: false
@@ -340,6 +365,8 @@ nonisolated enum RichEditorEvent: Equatable, Sendable {
     case edited(revision: Int)
     case toolbarState(RichEditorToolbarState)
     case journal(RichEditorJournalPayload)
+    case caretRect(RichEditorCaretRect)
+    case mirrorBlocks(RichEditorMirrorBlocksEvent)
     case error(code: String, message: String)
 
     private struct ReadyPayload: Decodable {
@@ -393,6 +420,12 @@ nonisolated enum RichEditorEvent: Equatable, Sendable {
         case "journal":
             let payload = try decoder.decode(RichEditorJournalPayload.self, from: data)
             return .journal(payload)
+        case "caretRect":
+            let payload = try decoder.decode(RichEditorCaretRect.self, from: data)
+            return .caretRect(payload)
+        case "mirrorBlocks":
+            let payload = try decoder.decode(RichEditorMirrorBlocksEvent.self, from: data)
+            return .mirrorBlocks(payload)
         case "error":
             let payload = try decoder.decode(ErrorPayload.self, from: data)
             return .error(code: payload.code, message: payload.message)
@@ -451,6 +484,7 @@ nonisolated enum RichEditorBridgeCall: Equatable, Sendable {
     case command(RichEditorCommandArgs)
     case lint(RichEditorLintArgs)
     case setTheme(RichEditorTheme)
+    case setAppearance(RichEditorAppearance)
     case dispose
     case verifySwitch(RichEditorSwitchCheckArgs)
 
@@ -464,6 +498,7 @@ nonisolated enum RichEditorBridgeCall: Equatable, Sendable {
         case .command: "command"
         case .lint: "lint"
         case .setTheme: "setTheme"
+        case .setAppearance: "setAppearance"
         case .dispose: "dispose"
         case .verifySwitch: "verifySwitch"
         }
@@ -474,7 +509,7 @@ nonisolated enum RichEditorBridgeCall: Equatable, Sendable {
         switch self {
         case .configure, .load, .lint: .seconds(5)
         case .snapshot, .verifySwitch: .seconds(2)
-        case .activate, .freeze, .command, .setTheme, .dispose: .seconds(1)
+        case .activate, .freeze, .command, .setTheme, .setAppearance, .dispose: .seconds(1)
         }
     }
 }
@@ -537,6 +572,7 @@ nonisolated enum RichEditorBridgeEncoder {
         case let .command(args): data = try encoder.encode(args)
         case let .lint(args): data = try encoder.encode(args)
         case let .setTheme(theme): data = try encoder.encode(theme)
+        case let .setAppearance(appearance): data = try encoder.encode(appearance)
         case .dispose: data = try encoder.encode(RichEditorEmptyArgs())
         case let .verifySwitch(args): data = try encoder.encode(args)
         }
@@ -596,6 +632,7 @@ protocol RichEditorBridgeTransport: AnyObject {
     func command(_ args: RichEditorCommandArgs) async throws -> RichEditorCommandResult
     func lint(_ args: RichEditorLintArgs) async throws -> RichEditorLintResult
     func setTheme(_ theme: RichEditorTheme) async throws
+    func setAppearance(_ appearance: RichEditorAppearance) async throws
     func dispose() async throws
     func verifySwitch(_ args: RichEditorSwitchCheckArgs) async throws -> RichEditorSwitchCheckResult
     func focusWebView()

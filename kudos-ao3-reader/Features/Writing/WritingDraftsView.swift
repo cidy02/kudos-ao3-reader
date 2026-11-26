@@ -120,6 +120,7 @@ struct WritingDraftsView: View {
             }
         }
         .subjectScreenWash(title: "Drafts", palette: theme.scopePalette)
+        .richEditorPrewarm(backgroundColor: theme.appTheme.backgroundColor)
         .task(id: "\(auth.sessionGeneration):\(page):\(reload)") { await load() }
         .refreshable { reload += 1 }
         .onChange(of: scenePhase) { _, phase in if phase == .active { now = Date() } }

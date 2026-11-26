@@ -4,19 +4,35 @@ import SwiftUI
 import WebKit
 
 /// Owns the `RichEditorWebView`, non-persistent data store, `kudos-editor://`
-/// scheme handler, navigation delegate, script message handler, and JSON-only
-/// `callAsyncJavaScript` bridge (§7.2, §10.1).
+/// scheme handler, navigation delegate, script message handler, native-feel
+/// wiring (N1–N8), and JSON-only `callAsyncJavaScript` bridge (§7.2, §10.1, §10.3).
 @MainActor @Observable
-final class RichEditorHost: NSObject, RichEditorBridgeTransport {
+final class RichEditorHost: NSObject, RichEditorBridgeTransport, RichEditorPrewarmableHost {
     private(set) var webView: RichEditorWebView
     /// Incremented whenever the WebView is rebuilt after process termination so
     /// SwiftUI swaps in the new instance cleanly.
     private(set) var webViewGeneration = 0
+    /// True when the N3 `inputAccessoryView` replacement check failed and the
+    /// host should render Kudos's keys bar natively above WebKit's bar (§7.7).
+    private(set) var usesFallbackAccessoryBar = false
+    /// Most recent native appearance computed from the web view's trait collection.
+    private(set) var latestAppearance: RichEditorAppearance?
 
     @ObservationIgnored
     var onEvent: (@MainActor (RichEditorEvent) -> Void)?
     @ObservationIgnored
     var onProcessTerminated: (@MainActor () -> Void)?
+    @ObservationIgnored
+    var onCommand: (@MainActor (RichEditorHostCommand) -> Void)?
+
+    @ObservationIgnored
+    var scrollMode: RichEditorScrollMode = .followCaret {
+        didSet { webView.scrollMode = scrollMode }
+    }
+    @ObservationIgnored
+    var typewriterAnchorFraction: Double = RichEditorScrollCalculator.defaultTypewriterFraction {
+        didSet { webView.typewriterAnchorFraction = typewriterAnchorFraction }
+    }
 
     @ObservationIgnored
     private let bundle: Bundle
@@ -33,6 +49,16 @@ final class RichEditorHost: NSObject, RichEditorBridgeTransport {
     @ObservationIgnored
     private let scriptProxy = RichEditorScriptMessageProxy()
     @ObservationIgnored
+    private weak var accessoryThemeManager: ThemeManager?
+    @ObservationIgnored
+    private var hasInstalledKeysAccessory = false
+    @ObservationIgnored
+    private var ownsRichUndo = false
+    @ObservationIgnored
+    private var isConfigured = false
+    @ObservationIgnored
+    private var lastSentAppearance: RichEditorAppearance?
+    @ObservationIgnored
     private var hasStartedLoad = false
     @ObservationIgnored
     private var isPageReady = false
@@ -40,6 +66,8 @@ final class RichEditorHost: NSObject, RichEditorBridgeTransport {
     private var readyWaiters: [UUID: CheckedContinuation<Void, Error>] = [:]
     @ObservationIgnored
     private var activeCallFailers: [UUID: (Error) -> Void] = [:]
+
+    var hasStartedLoading: Bool { hasStartedLoad }
 
     init(
         backgroundColor: Color,
@@ -65,13 +93,61 @@ final class RichEditorHost: NSObject, RichEditorBridgeTransport {
         )
         super.init()
         scriptProxy.host = self
-        webView.navigationDelegate = self
-        webView.uiDelegate = self
+        attachWebViewCallbacks(webView)
     }
 
     func applyNativeBackgroundColor(_ color: Color) {
         backgroundColor = color
         webView.applyNativeBackgroundColor(color)
+    }
+
+    /// Installs `WritingKeysInputAccessoryView` over WebKit's form bar (N3) and
+    /// sets `usesFallbackAccessoryBar` if the launch-time verification check fails.
+    @discardableResult
+    func installKeysAccessory(themeManager: ThemeManager? = nil) -> RichEditorInputAccessoryStatus {
+        accessoryThemeManager = themeManager
+        hasInstalledKeysAccessory = true
+        #if os(iOS)
+        let status = webView.installKeysAccessory(themeManager: themeManager)
+        usesFallbackAccessoryBar = status.usesFallbackBar
+        return status
+        #else
+        usesFallbackAccessoryBar = false
+        return .replaced
+        #endif
+    }
+
+    /// Updates typography defaults and pushes the merged N5 appearance message.
+    func updateTypography(fontFamily: String, baseFontSize: Double, lineHeight: Double) {
+        webView.updateTypography(
+            fontFamily: fontFamily,
+            baseFontSize: baseFontSize,
+            lineHeight: lineHeight
+        )
+    }
+
+    /// Enables or disables system-undo routing to ProseMirror (N6 / U1).
+    func setOwnsRichUndo(_ owns: Bool) {
+        ownsRichUndo = owns
+        webView.ownsRichUndo = owns
+    }
+
+    /// Syncs toolbar state (active marks, canUndo/canRedo, undo/redo step titles)
+    /// into the keys accessory bar and the system undo proxy (N3, N6).
+    func syncToolbarState(_ state: RichEditorToolbarState) {
+        webView.syncToolbarState(state)
+    }
+
+    /// Scrolls the web view's own scroll view to keep `caret` visible (or pinned
+    /// in typewriter mode, N4).
+    @discardableResult
+    func scrollCaretIntoView(_ caret: RichEditorCaretRect, animated: Bool = true) -> Bool {
+        webView.scrollCaretIntoView(caret, animated: animated)
+    }
+
+    /// Presents the system Find navigator (N8).
+    func presentFind(showingReplace: Bool = false) {
+        webView.presentFindNavigator(showingReplace: showingReplace)
     }
 
     /// Loads the bundled editor page if it has not been requested yet.
@@ -85,7 +161,12 @@ final class RichEditorHost: NSObject, RichEditorBridgeTransport {
 
     func configure(_ args: RichEditorConfigureArgs) async throws -> RichEditorConfigureResult {
         try await ensurePageReady(timeout: RichEditorBridgeCall.configure(args).timeout)
-        return try await performCall(.configure(args), as: RichEditorConfigureResult.self)
+        let result = try await performCall(.configure(args), as: RichEditorConfigureResult.self)
+        isConfigured = true
+        let appearance = webView.currentAppearance()
+        latestAppearance = appearance
+        pushAppearanceIfNeeded(appearance)
+        return result
     }
 
     func load(_ args: RichEditorLoadArgs) async throws -> RichEditorLoadResult {
@@ -116,6 +197,10 @@ final class RichEditorHost: NSObject, RichEditorBridgeTransport {
         _ = try await performCall(.setTheme(theme), as: RichEditorEmptyResult.self)
     }
 
+    func setAppearance(_ appearance: RichEditorAppearance) async throws {
+        _ = try await performCall(.setAppearance(appearance), as: RichEditorEmptyResult.self)
+    }
+
     func dispose() async throws {
         _ = try await performCall(.dispose, as: RichEditorEmptyResult.self)
     }
@@ -135,14 +220,18 @@ final class RichEditorHost: NSObject, RichEditorBridgeTransport {
         detach(webView)
         hasStartedLoad = false
         isPageReady = false
+        isConfigured = false
+        lastSentAppearance = nil
         let replacement = Self.buildWebView(
             schemeHandler: schemeHandler,
             scriptProxy: scriptProxy,
             backgroundColor: backgroundColor
         )
-        replacement.navigationDelegate = self
-        replacement.uiDelegate = self
         webView = replacement
+        attachWebViewCallbacks(replacement)
+        if hasInstalledKeysAccessory {
+            _ = installKeysAccessory(themeManager: accessoryThemeManager)
+        }
         webViewGeneration += 1
     }
 
@@ -150,10 +239,12 @@ final class RichEditorHost: NSObject, RichEditorBridgeTransport {
     func teardown() {
         onEvent = nil
         onProcessTerminated = nil
+        onCommand = nil
         failAllInFlight(with: CancellationError())
         detach(webView)
         hasStartedLoad = false
         isPageReady = false
+        isConfigured = false
     }
 
     // MARK: Internals
@@ -168,6 +259,8 @@ final class RichEditorHost: NSObject, RichEditorBridgeTransport {
         // from `ReaderWebIsolation.isolatedDataStore` so Readium's delegate hook
         // never wraps this editor with a `readium:` policy.
         configuration.websiteDataStore = WKWebsiteDataStore.nonPersistent()
+        // N1: keep native Apple Writing Tools active on the canvas.
+        configuration.writingToolsBehavior = .default
         configuration.setURLSchemeHandler(schemeHandler, forURLScheme: RichEditorBundleLocation.scheme)
         configuration.userContentController.add(scriptProxy, name: RichEditorBridgeProtocol.messageHandlerName)
         return RichEditorWebView(
@@ -177,10 +270,39 @@ final class RichEditorHost: NSObject, RichEditorBridgeTransport {
         )
     }
 
-    private func detach(_ view: WKWebView) {
+    private func attachWebViewCallbacks(_ view: RichEditorWebView) {
+        view.navigationDelegate = self
+        view.uiDelegate = self
+        view.scrollMode = scrollMode
+        view.typewriterAnchorFraction = typewriterAnchorFraction
+        view.ownsRichUndo = ownsRichUndo
+        view.onCommand = { [weak self] command in
+            self?.onCommand?(command)
+        }
+        view.onAppearanceChange = { [weak self] appearance in
+            self?.latestAppearance = appearance
+            self?.pushAppearanceIfNeeded(appearance)
+        }
+    }
+
+    private func pushAppearanceIfNeeded(_ appearance: RichEditorAppearance) {
+        guard isConfigured, appearance != lastSentAppearance else { return }
+        lastSentAppearance = appearance
+        Task { [weak self] in
+            do {
+                try await self?.setAppearance(appearance)
+            } catch {
+                writingEditorLog.notice("setAppearance failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    private func detach(_ view: RichEditorWebView) {
         view.stopLoading()
         view.navigationDelegate = nil
         view.uiDelegate = nil
+        view.onCommand = nil
+        view.onAppearanceChange = nil
         view.configuration.userContentController.removeScriptMessageHandler(
             forName: RichEditorBridgeProtocol.messageHandlerName
         )
@@ -243,8 +365,13 @@ final class RichEditorHost: NSObject, RichEditorBridgeTransport {
     fileprivate func handleScriptMessage(_ body: Any) {
         do {
             let event = try RichEditorEvent.decode(from: body)
-            if case .ready = event {
+            switch event {
+            case .ready:
                 markPageReady()
+            case let .caretRect(rect):
+                scrollCaretIntoView(rect, animated: true)
+            default:
+                break
             }
             onEvent?(event)
         } catch {
@@ -287,9 +414,6 @@ extension RichEditorHost: WKNavigationDelegate {
     }
 
     func webView(_: WKWebView, didFinish _: WKNavigation!) {
-        // The stub and editor-core both emit `ready`; if `didFinish` lands after
-        // the script already ran without a `ready` message, wake waiters so
-        // `configure` can probe `window.KudosEditor.call` directly.
         if !isPageReady {
             markPageReady()
         }
@@ -309,6 +433,7 @@ extension RichEditorHost: WKNavigationDelegate {
         writingEditorLog.notice("Rich Text WebView content process terminated")
         isPageReady = false
         hasStartedLoad = false
+        isConfigured = false
         failAllInFlight(with: RichEditorBridgeError.processTerminated)
         onProcessTerminated?()
     }

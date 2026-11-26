@@ -109,6 +109,8 @@ final class DraftSession {
     var isShowingSwitchTransition = false
     /// Last recovery copy URLs written on a §7.11 switch-check mismatch.
     var lastMismatchRecoveryURLs: (leaving: URL, candidate: URL)?
+    /// Incremental block mirror for §7.10 two-views mode (updated ONLY from `mirrorBlocks`).
+    var mirrorDocument = HTMLMirrorDocument()
     /// User-facing notice for switch failures, switch-check mismatches, or process death.
     var noticeMessage: String?
     /// User-facing error for recovery I/O failures.
@@ -175,7 +177,13 @@ final class DraftSession {
     @ObservationIgnored let localeIdentifier: String
     @ObservationIgnored var onCheckpointText: (@MainActor (String) -> Void)?
     @ObservationIgnored var onRecoveryError: (@MainActor (String) -> Void)?
+    @ObservationIgnored var onToolbarStateSync: (@MainActor (RichEditorToolbarState) -> Void)?
+    @ObservationIgnored var onRichOwnershipChanged: (@MainActor (Bool) -> Void)?
 
+    @ObservationIgnored var isRichPreloadEnabled: Bool
+    @ObservationIgnored var isAppInForeground = true
+    @ObservationIgnored var lastMemoryWarningAt: Duration?
+    @ObservationIgnored var latestPreloadRevision = -1
     @ObservationIgnored var isConfigured = false
     @ObservationIgnored var richEntryRevision = 0
     @ObservationIgnored var richSourceTextAtEntry = ""
@@ -218,6 +226,7 @@ final class DraftSession {
             )
         },
         localeIdentifier: String = Locale.current.identifier,
+        isRichPreloadEnabled: Bool = false,
         onCheckpointText: (@MainActor (String) -> Void)? = nil,
         onRecoveryError: (@MainActor (String) -> Void)? = nil
     ) {
@@ -232,6 +241,7 @@ final class DraftSession {
         self.makeRichTransport = makeRichTransport
         self.themeProvider = themeProvider
         self.localeIdentifier = localeIdentifier
+        self.isRichPreloadEnabled = isRichPreloadEnabled
         self.onCheckpointText = onCheckpointText
         self.onRecoveryError = onRecoveryError
 
@@ -315,13 +325,22 @@ final class DraftSession {
             guard state == .richOwned else { return }
             revision = max(revision, jsRevision)
             lastRichEditedRevision = max(lastRichEditedRevision, jsRevision)
+            // §7.10 / D8: never update `mirrorDocument` on the keystroke path.
             scheduler?.noteEdit()
         case let .toolbarState(newState):
             guard state == .richOwned else { return }
             toolbarState = newState
+            (richTransport as? RichEditorHost)?.syncToolbarState(newState)
+            onToolbarStateSync?(newState)
         case .journal:
             // E4 persists the edit journal; part 1 accepts the event without failing.
             break
+        case .caretRect:
+            // Handled directly by `RichEditorHost` for native scroll-view tracking (N4).
+            break
+        case let .mirrorBlocks(event):
+            guard state == .richOwned else { return }
+            _ = mirrorDocument.apply(event)
         case let .error(code, message):
             writingEditorLog.error(
                 "Rich editor JS error [\(code, privacy: .public)]: \(message, privacy: .public)"
@@ -364,6 +383,7 @@ final class DraftSession {
             source.focus()
             state = .sourceOwned
             toolbarState = .empty
+            notifyRichOwnership(false)
             richCooldownUntil = clock.now + Self.processDeathCooldown
             richTransport?.resetAfterTermination()
             noticeMessage = hadUncheckpointedEdits
@@ -388,6 +408,14 @@ final class DraftSession {
         richTransport?.onProcessTerminated = nil
         onCheckpointText = nil
         onRecoveryError = nil
+        onToolbarStateSync = nil
+        onRichOwnershipChanged = nil
+        (richTransport as? RichEditorHost)?.setOwnsRichUndo(false)
+    }
+
+    func notifyRichOwnership(_ ownsRich: Bool) {
+        (richTransport as? RichEditorHost)?.setOwnsRichUndo(ownsRich)
+        onRichOwnershipChanged?(ownsRich)
     }
 
     func attachTransportCallbacks(_ transport: any RichEditorBridgeTransport) {

@@ -145,6 +145,7 @@ struct WorkEditView: View {
         .navigationBarBackButtonHidden(true)
         #endif
         .hidesFloatingTabBarInEditor()
+        .richEditorPrewarm(backgroundColor: theme.appTheme.backgroundColor)
         .task(id: "\(needsPublicationRefresh):\(publicationRetry)") {
             guard needsPublicationRefresh, let workID = form.workID else { return }
             let generation = auth.sessionGeneration

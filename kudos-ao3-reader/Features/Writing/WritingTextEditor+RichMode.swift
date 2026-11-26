@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Rich Text mode toggle, loss confirmation & notice alerts, WebView host
-/// lifecycle, and markup-tag command mapping for `WritingTextEditor`.
+/// Rich Text mode toggle, §7.10 two-views HTML mirror, N3 fallback keys bar,
+/// loss confirmation & notice alerts, WebView host lifecycle, and command routing
+/// for `WritingTextEditor`.
 extension WritingTextEditor {
     var showsModeSwitch: Bool {
         RichEditorFeatureFlag.showsRichTextSwitch(field: field, enabled: richEditorFeatureEnabled)
@@ -12,6 +13,19 @@ extension WritingTextEditor {
     var isHandingOff: Bool { session?.isHandingOff ?? false }
     var showsSourceView: Bool { !isPreviewing && !isRichMode }
     var showsRichView: Bool { !isPreviewing && isRichMode }
+
+    var isRegularWidthForTwoViews: Bool {
+        #if os(iOS)
+        horizontalSizeClass == .regular
+        #else
+        true
+        #endif
+    }
+
+    var showsSideBySideToggle: Bool {
+        RichEditorTwoViewPolicy.supportsSideBySide(isRegularWidth: isRegularWidthForTwoViews)
+            && isRichMode
+    }
 
     var richEditorTheme: RichEditorTheme {
         RichEditorTheme(
@@ -29,29 +43,44 @@ extension WritingTextEditor {
     var modeSwitchBar: some View {
         if let session {
             VStack(alignment: .leading, spacing: 4) {
-                Picker(
-                    "Editor Mode",
-                    selection: Binding(
-                        get: { session.displayedMode },
-                        set: { next in
-                            Task {
-                                if next == .rich {
-                                    await session.switchToRich()
-                                } else {
-                                    await session.switchToSource()
+                HStack(spacing: 8) {
+                    Picker(
+                        "Editor Mode",
+                        selection: Binding(
+                            get: { session.displayedMode },
+                            set: { next in
+                                Task {
+                                    if next == .rich {
+                                        await session.switchToRich()
+                                    } else {
+                                        await session.switchToSource()
+                                    }
                                 }
                             }
+                        )
+                    ) {
+                        Text("Rich Text").tag(DraftEditorMode.rich)
+                        Text("HTML").tag(DraftEditorMode.source)
+                    }
+                    .pickerStyle(.segmented)
+                    .accentFill()
+                    .labelsHidden()
+                    .accessibilityLabel("Editor mode")
+                    .disabled(session.isHandingOff || (!session.isRichAvailable && session.owner == .source))
+
+                    if showsSideBySideToggle {
+                        Button {
+                            showsHTMLMirror.toggle()
+                        } label: {
+                            Label("HTML Mirror", systemImage: "sidebar.right")
+                                .labelStyle(.iconOnly)
+                                .padding(7)
                         }
-                    )
-                ) {
-                    Text("Rich Text").tag(DraftEditorMode.rich)
-                    Text("HTML").tag(DraftEditorMode.source)
+                        .buttonStyle(.bordered)
+                        .tint(showsHTMLMirror ? theme.effectiveTint : .secondary)
+                        .accessibilityLabel(showsHTMLMirror ? "Hide HTML mirror" : "Show HTML mirror")
+                    }
                 }
-                .pickerStyle(.segmented)
-                .accentFill()
-                .labelsHidden()
-                .accessibilityLabel("Editor mode")
-                .disabled(session.isHandingOff || (!session.isRichAvailable && session.owner == .source))
 
                 if !session.isRichAvailable, session.owner == .source {
                     Text(session.isRichPermanentlyDisabled
@@ -81,12 +110,28 @@ extension WritingTextEditor {
     @ViewBuilder
     var richEditorLayers: some View {
         if let richHost {
-            RichEditorWebViewContainer(webView: richHost.webView)
-                .id(richHost.webViewGeneration)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .opacity(showsRichView ? 1 : 0)
-                .accessibilityHidden(!showsRichView)
-                .allowsHitTesting(showsRichView)
+            HStack(spacing: 0) {
+                RichEditorWebViewContainer(webView: richHost.webView)
+                    .id(richHost.webViewGeneration)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if showsSideBySideToggle, showsHTMLMirror, let session {
+                    Rectangle()
+                        .fill(theme.appTheme.glassStroke(0.14))
+                        .frame(width: 0.5)
+                        .accessibilityHidden(true)
+                    RichEditorHTMLMirrorView(
+                        document: session.mirrorDocument,
+                        fontSize: editorFontSize,
+                        onTapOffset: { offset in
+                            Task { await session.switchToSourceFromMirrorTap(atUTF16Offset: offset) }
+                        }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .opacity(showsRichView ? 1 : 0)
+            .accessibilityHidden(!showsRichView)
+            .allowsHitTesting(showsRichView)
         }
         if session?.isShowingSwitchTransition == true {
             ProgressView("Switching to Rich Text…")
@@ -95,6 +140,19 @@ extension WritingTextEditor {
                 .accentFill()
         }
     }
+
+    #if os(iOS)
+    /// N3 / §7.7 fallback: rendered natively above WebKit's bar only if replacing
+    /// `WKContentView.inputAccessoryView` failed its launch-time check.
+    var richFallbackKeysBar: some View {
+        WritingKeysBar(
+            formatState: session?.toolbarState.toFormatState() ?? FormatState(),
+            onAction: { action in
+                handleHostCommand(RichEditorHostCommand.from(action))
+            }
+        )
+    }
+    #endif
 
     /// Hosted on separate empty views so SwiftUI never drops one alert for a sibling.
     var richEditorAlerts: some View {
@@ -130,21 +188,98 @@ extension WritingTextEditor {
         editor: WritingTextController,
         writer: WritingRecoveryWriter
     ) -> DraftSession {
-        DraftSession(
+        let preloadEnabled = RichEditorFeatureFlag.showsRichTextSwitch(
+            field: field,
+            enabled: richEditorFeatureEnabled
+        )
+        return DraftSession(
             initialText: text,
             fieldVariant: DraftFieldVariant.from(field: field),
             source: editor,
             recoveryWriter: writer,
             makeRichTransport: {
                 if let existing = richHost { return existing }
-                let host = RichEditorHost(backgroundColor: theme.appTheme.backgroundColor)
+                // §9.3: claim a pre-warmed host when available so opening costs no page load.
+                let host = RichEditorPrewarmPool.shared.takeOrCreateRichEditorHost(
+                    backgroundColor: theme.appTheme.backgroundColor
+                )
+                host.installKeysAccessory(themeManager: theme)
+                host.updateTypography(
+                    fontFamily: RichEditorTheme.defaultFontFamily,
+                    baseFontSize: Double(editorFontSize),
+                    lineHeight: RichEditorTheme.defaultLineHeight
+                )
+                host.onCommand = { command in
+                    handleHostCommand(command)
+                }
                 richHost = host
                 return host
             },
             themeProvider: { richEditorTheme },
+            isRichPreloadEnabled: preloadEnabled,
             onCheckpointText: { value in text = value },
             onRecoveryError: { message in errorMessage = message }
         )
+    }
+
+    func handleFontSizeChange(_ value: CGFloat) {
+        controller?.setAppearance(theme.appTheme, fontSize: value)
+        richHost?.updateTypography(
+            fontFamily: RichEditorTheme.defaultFontFamily,
+            baseFontSize: Double(value),
+            lineHeight: RichEditorTheme.defaultLineHeight
+        )
+        session?.updateTheme(richEditorTheme)
+    }
+
+    func handleThemeChange(_ value: ReaderTheme) {
+        controller?.setAppearance(value, fontSize: editorFontSize)
+        richHost?.applyNativeBackgroundColor(value.backgroundColor)
+        session?.updateTheme(richEditorTheme)
+    }
+
+    func handleScenePhaseChange(_ phase: ScenePhase) {
+        if phase == .active {
+            session?.handleSceneActive()
+        } else {
+            session?.handleSceneInactiveOrBackground()
+        }
+    }
+
+    func handleLinkInsert(_ rawLink: String) {
+        if WritingMarkup.safeLink(rawLink) {
+            if isRichMode {
+                session?.applyRichCommand(name: "link", attrs: ["href": .string(rawLink)])
+            } else {
+                controller?.command("a", link: rawLink)
+            }
+        } else {
+            errorMessage = "Enter an HTTP, HTTPS, or mailto link."
+        }
+    }
+
+    func handleHostCommand(_ command: RichEditorHostCommand) {
+        switch command {
+        case .format(.undo):
+            session?.undo()
+        case .format(.redo):
+            session?.redo()
+        case let .format(.toggleMark(mark)):
+            session?.applyRichCommand(name: mark.richCommandName)
+        case let .format(.setLink(url)):
+            session?.applyRichCommand(name: "link", attrs: ["href": .string(url)])
+        case .format(.unlink):
+            session?.applyRichCommand(name: "unlink")
+        case .format(.insertSceneBreak):
+            session?.applyRichCommand(name: "horizontal_rule")
+        case .format(.clearFormatting):
+            session?.applyRichCommand(name: "clear_formatting")
+        case .requestLink:
+            showLink = true
+        case .format, .moveCaret, .insertEmDash, .insertQuotationMarks, .openFormatPanel, .presentFind:
+            // Full page wiring arrives at integration with `editor-core`.
+            break
+        }
     }
 
     /// Done's checkpoint, then `action` — after it, the form holds this text.
@@ -179,6 +314,21 @@ extension WritingTextEditor {
             activeSession?.commitSynchronouslyIfSource()
             activeSession?.teardown()
             activeHost?.teardown()
+        }
+    }
+}
+
+private extension FormatMark {
+    var richCommandName: String {
+        switch self {
+        case .bold: "strong"
+        case .italic: "em"
+        case .underline: "underline"
+        case .strikethrough: "strike"
+        case .superscript: "sup"
+        case .`subscript`: "sub"
+        case .smaller: "small"
+        case .code: "code"
         }
     }
 }
