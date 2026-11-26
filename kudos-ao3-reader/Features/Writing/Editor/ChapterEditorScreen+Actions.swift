@@ -73,6 +73,9 @@ extension ChapterEditorScreen {
         case .format(.openTableInHTML):
             openTableInHTML()
             return true
+        case .requestNote:
+            beginAddingNote()
+            return true
         default:
             session?.apply(command)
             return true

@@ -264,6 +264,8 @@ final class RichEditorWebView: WKWebView {
     var typographyBaseFontSize: Double = 15.5
     var typographyLineHeight: Double = RichEditorTheme.defaultLineHeight
     var ownsRichUndo = false
+    /// The edit menu offers Note (T-576d) only when the screen around the editor stores notes.
+    var offersNoteCommand = false
 
     let richUndoManager = RichEditorUndoManager()
     var inputAccessoryStatus: RichEditorInputAccessoryStatus?

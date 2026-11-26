@@ -19,6 +19,8 @@ nonisolated enum RichEditorHostCommand: Equatable, Hashable, Sendable {
     case insertQuotationMarks
     case openFormatPanel
     case presentFind
+    /// Anchor a private note to the selection (T-576d); offered only where a screen stores notes.
+    case requestNote
 
     /// Underlying `FormatCommand` when this command maps directly to one.
     var formatCommand: FormatCommand? {

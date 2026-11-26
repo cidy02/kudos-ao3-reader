@@ -649,6 +649,7 @@ extension ChapterEditorScreen {
                 },
                 onRichHostReady: { host in
                     richHost = host
+                    host.webView.offersNoteCommand = true // this screen stores notes (T-576d)
                     syncKeysAccessorySuggestions()
                 },
                 onHostCommand: { command in
