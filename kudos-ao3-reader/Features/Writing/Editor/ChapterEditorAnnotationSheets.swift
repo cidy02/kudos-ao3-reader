@@ -363,7 +363,7 @@ struct ChapterEditorAnnotationDetailSheet: View {
                 : trimmed
             Text(display)
                 .font(.body)
-                .foregroundStyle(trimmed.isEmpty ? .secondaryInk : Color.primary)
+                .foregroundStyle(trimmed.isEmpty ? AnyShapeStyle(.secondaryInk) : AnyShapeStyle(.primary))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)
