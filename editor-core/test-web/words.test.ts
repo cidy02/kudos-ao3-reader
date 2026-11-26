@@ -8,7 +8,9 @@ import { load } from '../src/index.ts';
 import { makeFixture } from '../test/fixture.ts';
 
 const read = (f: string) => JSON.parse(readFileSync(new URL(`../test/golden/${f}`, import.meta.url), 'utf8'));
-const golden = read('words.golden.json').words as Record<string, number | string>;
+const goldens = read('words.golden.json');
+const golden = goldens.words as Record<string, number | string>;
+const stored = goldens.stored as Record<string, number | string>;
 const sets: { id: string; input: string }[][] = [read('words-cases.json').cases, read('corpus.json').cases];
 
 test('the hand-written cases and the cleaning corpus count as AO3 counts them', () => {
@@ -41,4 +43,19 @@ test('the editor document counts the same as the HTML it came from, for realisti
   }
   const doc = load('<p>One <b>two</b> three</p><table><tr><td>four five</td></tr></table>', 'content').doc;
   assert.equal(countNode(doc), 5, 'preserved blocks count too');
+});
+
+test('what AO3 shows: the count of each corpus case\'s cleaned, stored content', () => {
+  const cleaned = read('sanitize.golden.json').cases as { id: string; content: { html?: string } }[];
+  const wrong: string[] = [];
+  let checked = 0;
+  for (const c of cleaned) {
+    const want = stored[c.id];
+    if (c.content.html === undefined || typeof want !== 'number') continue;
+    const got = countWords(c.content.html);
+    if (got !== want) wrong.push(`${c.id}: AO3 ${want}, ours ${got}`);
+    checked++;
+  }
+  assert.deepEqual(wrong, []);
+  assert.ok(checked > 1900, `${checked}`);
 });

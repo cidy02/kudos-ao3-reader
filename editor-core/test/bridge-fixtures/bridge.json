@@ -166,7 +166,16 @@
             "preserved": 0
           },
           "words": 2,
-          "kind": "html"
+          "kind": "html",
+          "source": "web",
+          "kept": {
+            "paragraph": 1
+          },
+          "converted": {},
+          "styles": {},
+          "examples": [
+            "<font> ×1"
+          ]
         }
       }
     },
@@ -393,7 +402,16 @@
         "preserved": 0
       },
       "words": 2,
-      "kind": "html"
+      "kind": "html",
+      "source": "web",
+      "kept": {
+        "paragraph": 1
+      },
+      "converted": {},
+      "styles": {},
+      "examples": [
+        "<font> ×1"
+      ]
     },
     {
       "type": "toolbarState",

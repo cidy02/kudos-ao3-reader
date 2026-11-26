@@ -429,7 +429,8 @@ export class Editor {
       const result = pasteContent(html, text, this.variant);
       if (!result) return { applied: false, state: this.formatState() };
       insertPaste(this.view, result, undefined, this.labels.stepPaste);
-      return { applied: true, state: this.formatState(), paste: { loss: result.loss, words: result.words, kind: result.kind } };
+      const { slice: _slice, ...paste } = result;
+      return { applied: true, state: this.formatState(), paste };
     }
     const command = this.resolve(name, attrs);
     const label = this.stepLabel(name, attrs);

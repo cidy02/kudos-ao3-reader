@@ -45,6 +45,14 @@ sets.each do |path|
   end
 end
 
+# What AO3 shows: it sanitizes a field before saving it (ApplicationController#sanitize_params) and counts what it
+# stored. So also count each corpus case's cleaned content, from part 1's goldens (sanitize.golden.json).
+stored = {}
+JSON.parse(File.read(File.join(OUT_DIR, "sanitize.golden.json")))["cases"].each do |c|
+  html = c.dig("content", "html")
+  stored[c["id"]] = count(html) if html
+end
+
 golden = {
   "generator" => {
     "otwarchive" => "452391b648f2fb06b55c36133812449747634504",
@@ -53,6 +61,7 @@ golden = {
     "sets" => sets.map { |s| File.basename(s) },
   },
   "words" => words,
+  "stored" => stored,
 }
 File.write(File.join(OUT_DIR, "words.golden.json"), JSON.pretty_generate(golden) + "\n")
-puts "wrote words.golden.json (#{words.size} counts)"
+puts "wrote words.golden.json (#{words.size} counts, #{stored.size} of stored content)"
