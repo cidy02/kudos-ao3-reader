@@ -1,0 +1,380 @@
+{
+  "cases": [
+    {
+      "id": "w-swift-apostrophes",
+      "input": "<p>It's a well-known don’t ‘quote’</p>"
+    },
+    {
+      "id": "w-swift-spaced-hyphen",
+      "input": "left - right"
+    },
+    {
+      "id": "w-swift-double-hyphen",
+      "input": "Stop--now"
+    },
+    {
+      "id": "w-swift-triple-hyphen",
+      "input": "wait---no"
+    },
+    {
+      "id": "w-swift-han",
+      "input": "日本語"
+    },
+    {
+      "id": "w-swift-hiragana",
+      "input": "ひらがな"
+    },
+    {
+      "id": "w-swift-katakana",
+      "input": "カタカナ"
+    },
+    {
+      "id": "w-swift-thai",
+      "input": "สวัสดี"
+    },
+    {
+      "id": "w-swift-hangul",
+      "input": "한국어 문장"
+    },
+    {
+      "id": "w-swift-mixed",
+      "input": "Hello 世界 world"
+    },
+    {
+      "id": "w-swift-mixed-joined",
+      "input": "東京でcoffee"
+    },
+    {
+      "id": "w-swift-text-nodes-only",
+      "input": "<p class=\"lead\" title=\"three hidden words\">One <em>two</em></p><!-- a comment of five words --><p>three</p>"
+    },
+    {
+      "id": "w-swift-entities",
+      "input": "caf&eacute; &amp; tea"
+    },
+    {
+      "id": "w-swift-split-by-tag",
+      "input": "<b>foo</b>bar"
+    },
+    {
+      "id": "w-swift-symbol-letters",
+      "input": "Ⓐ Ⅷ ０"
+    },
+    {
+      "id": "w-swift-not-letters",
+      "input": "² ①"
+    },
+    {
+      "id": "w-swift-zwnj",
+      "input": "a‌b"
+    },
+    {
+      "id": "w-swift-zwnj-han",
+      "input": "日‌本"
+    },
+    {
+      "id": "w-swift-digits-underscore",
+      "input": "in 2024, snake_case"
+    },
+    {
+      "id": "w-swift-decimal",
+      "input": "3.5"
+    },
+    {
+      "id": "w-swift-empty",
+      "input": ""
+    },
+    {
+      "id": "w-swift-no-text",
+      "input": "<p></p><hr><br>"
+    },
+    {
+      "id": "w-swift-whitespace",
+      "input": "  \n\t "
+    },
+    {
+      "id": "w-swift-writing-rule",
+      "input": "<p>Stop--now 日本語</p>"
+    },
+    {
+      "id": "w-dash-quad",
+      "input": "a----b"
+    },
+    {
+      "id": "w-dash-spaced-double",
+      "input": "a -- b"
+    },
+    {
+      "id": "w-dash-em",
+      "input": "a—b"
+    },
+    {
+      "id": "w-dash-en",
+      "input": "a–b"
+    },
+    {
+      "id": "w-apostrophe-modifier",
+      "input": "donʼt"
+    },
+    {
+      "id": "w-apostrophe-prime",
+      "input": "don′t"
+    },
+    {
+      "id": "w-apostrophe-backtick",
+      "input": "don`t"
+    },
+    {
+      "id": "w-quote-double",
+      "input": "“quoted” words"
+    },
+    {
+      "id": "w-hyphen-nonbreaking",
+      "input": "well‑known"
+    },
+    {
+      "id": "w-hyphen-minus-sign",
+      "input": "a−b"
+    },
+    {
+      "id": "w-soft-hyphen",
+      "input": "hy­phen"
+    },
+    {
+      "id": "w-han-with-latin",
+      "input": "abc漢字def"
+    },
+    {
+      "id": "w-han-punctuation",
+      "input": "日本、東京。"
+    },
+    {
+      "id": "w-katakana-long-mark",
+      "input": "コーヒー"
+    },
+    {
+      "id": "w-halfwidth-katakana",
+      "input": "ｺｰﾋｰ"
+    },
+    {
+      "id": "w-thai-sentence",
+      "input": "ภาษาไทย ง่าย"
+    },
+    {
+      "id": "w-hangul-jamo",
+      "input": "ㄱㄴ ㅏ"
+    },
+    {
+      "id": "w-arabic",
+      "input": "مرحبا بالعالم"
+    },
+    {
+      "id": "w-hebrew-niqqud",
+      "input": "שָׁלוֹם עולם"
+    },
+    {
+      "id": "w-devanagari",
+      "input": "नमस्ते दुनिया"
+    },
+    {
+      "id": "w-cyrillic-greek",
+      "input": "Привет мир καλημέρα"
+    },
+    {
+      "id": "w-combining-accent",
+      "input": "café au lait"
+    },
+    {
+      "id": "w-emoji",
+      "input": "I 💖 you 👩‍👩‍👧"
+    },
+    {
+      "id": "w-emoji-joined",
+      "input": "word💖word"
+    },
+    {
+      "id": "w-digits-mixed",
+      "input": "1,000 people 3:00 pm"
+    },
+    {
+      "id": "w-fullwidth-latin",
+      "input": "ＡＢＣ ｄｅｆ"
+    },
+    {
+      "id": "w-superscripts",
+      "input": "x² H₂O"
+    },
+    {
+      "id": "w-roman-numerals",
+      "input": "Ⅻ ⅻ"
+    },
+    {
+      "id": "w-nbsp",
+      "input": "one two"
+    },
+    {
+      "id": "w-nbsp-entity",
+      "input": "one&nbsp;two"
+    },
+    {
+      "id": "w-narrow-nbsp",
+      "input": "one two"
+    },
+    {
+      "id": "w-zwj",
+      "input": "a‍b"
+    },
+    {
+      "id": "w-zwsp",
+      "input": "a​b"
+    },
+    {
+      "id": "w-ideographic-space",
+      "input": "日本　東京"
+    },
+    {
+      "id": "w-tab-newline",
+      "input": "one\ttwo\nthree\r\nfour"
+    },
+    {
+      "id": "w-numeric-entities",
+      "input": "&#x2014;dash&#8212;dash &#65;BC"
+    },
+    {
+      "id": "w-entity-apostrophe",
+      "input": "don&#39;t don&rsquo;t"
+    },
+    {
+      "id": "w-entity-hyphen",
+      "input": "well&#45;known"
+    },
+    {
+      "id": "w-br-between",
+      "input": "a<br>b"
+    },
+    {
+      "id": "w-adjacent-same-marks",
+      "input": "<b>a</b><b>b</b>"
+    },
+    {
+      "id": "w-comment-between",
+      "input": "foo<!-- -->bar"
+    },
+    {
+      "id": "w-nested-marks",
+      "input": "<p><strong><em>deep</em></strong> words</p>"
+    },
+    {
+      "id": "w-attributes-only",
+      "input": "<a href=\"https://example.com/some words\" title=\"more words\"></a>"
+    },
+    {
+      "id": "w-img-alt",
+      "input": "<img alt=\"three alt words\" src=\"x.png\">"
+    },
+    {
+      "id": "w-script-in-body",
+      "input": "<p>a</p><script>var two = words;</script>"
+    },
+    {
+      "id": "w-style-in-body",
+      "input": "<p>a</p><style>p { color: red }</style>"
+    },
+    {
+      "id": "w-title-first",
+      "input": "<title>Head words</title><p>body words</p>"
+    },
+    {
+      "id": "w-meta-first",
+      "input": "<meta charset=\"utf-8\"><p>after meta</p>"
+    },
+    {
+      "id": "w-style-first",
+      "input": "<style>.x{}</style>text"
+    },
+    {
+      "id": "w-noscript",
+      "input": "<noscript>hidden words</noscript>shown"
+    },
+    {
+      "id": "w-template",
+      "input": "<template>template words</template>outside"
+    },
+    {
+      "id": "w-textarea",
+      "input": "<textarea>raw <b>words</b></textarea>"
+    },
+    {
+      "id": "w-svg-text",
+      "input": "<svg><text>svg words</text></svg>"
+    },
+    {
+      "id": "w-math-text",
+      "input": "<math><mi>x</mi><mo>=</mo><mn>2</mn></math>"
+    },
+    {
+      "id": "w-table",
+      "input": "<table><tr><td>cell one</td><td>cell two</td></tr></table>"
+    },
+    {
+      "id": "w-nested-lists",
+      "input": "<ul><li>one<ul><li>two three</li></ul></li></ul>"
+    },
+    {
+      "id": "w-details",
+      "input": "<details><summary>Spoiler title</summary><p>inside text</p></details>"
+    },
+    {
+      "id": "w-ruby",
+      "input": "<ruby>漢<rt>kan</rt>字<rt>ji</rt></ruby>"
+    },
+    {
+      "id": "w-cdata",
+      "input": "<p>before</p><![CDATA[cdata words]]><p>after</p>"
+    },
+    {
+      "id": "w-doctype-html-body",
+      "input": "<!DOCTYPE html><html><head><title>T</title></head><body><p>real body</p></body></html>"
+    },
+    {
+      "id": "w-body-attrs",
+      "input": "<body class=\"x\"><p>in body</p></body>"
+    },
+    {
+      "id": "w-unclosed",
+      "input": "<p><b>bold <i>both</p> after"
+    },
+    {
+      "id": "w-lt-3",
+      "input": "I <3 you <3"
+    },
+    {
+      "id": "w-amp-alone",
+      "input": "Tom & Jerry"
+    },
+    {
+      "id": "w-angle-text",
+      "input": "a < b > c"
+    },
+    {
+      "id": "w-word-paste",
+      "input": "<p class=MsoNormal><span lang=EN-US style=\"mso-ansi-language:EN-US\">Word<o:p></o:p></span> text</p>"
+    },
+    {
+      "id": "w-google-docs",
+      "input": "<meta charset=\"utf-8\"><b id=\"docs-internal-guid-1234\" style=\"font-weight:normal;\"><p dir=\"ltr\"><span style=\"font-style:italic;\">Italic</span><span> plain</span></p></b>"
+    },
+    {
+      "id": "w-scene-break",
+      "input": "<p align=\"center\">⁂</p><p align=\"center\">* * *</p><hr>"
+    },
+    {
+      "id": "w-footnote-anchor",
+      "input": "Claim.<a href=\"#fn1\" name=\"fnref1\"><sup>1</sup></a>"
+    },
+    {
+      "id": "w-spacer",
+      "input": "a____spacer____b"
+    }
+  ]
+}

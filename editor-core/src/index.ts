@@ -13,6 +13,7 @@ export { serialize, serializeDoc, serializeBlock, serializeBlockAt } from './ser
 export type { SerializeOptions, SerializeResult, SourceInfo, BlockSource } from './serialize.ts';
 export { sanitizeValue, fixBadCharacters, paragraphStage } from './clean.ts';
 export { ParseLimitError } from './html5.ts';
+export { countWords, countText } from './words/index.ts';
 export { SanitizerFailure } from './sanitize.ts';
 export type { Variant } from './sanitize.ts';
 

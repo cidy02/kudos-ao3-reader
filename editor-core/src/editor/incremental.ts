@@ -6,7 +6,7 @@
 import type { Node as PMNode } from 'prosemirror-model';
 import { serializeBlock, serializeBlockAt } from '../index.ts';
 import type { BlockSource, SourceInfo } from '../index.ts';
-import { countNode } from './words.ts';
+import { countNode } from '../words/index.ts';
 
 /** Where each top-level block landed in the output; `source` when it was written from its source slice. */
 export type Segment = { start: number; end: number; pos: number; source: BlockSource | undefined };

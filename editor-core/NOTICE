@@ -13,6 +13,7 @@ editor-core: third-party notices
    lib/otw_sanitize/user_class_sanitizer.rb                             src/sanitize.ts
    lib/otw_sanitize/embed_sanitizer.rb                                  src/sanitize.ts
    lib/otw_sanitize/media_sanitizer.rb                                  src/sanitize.ts
+   lib/word_counter.rb (and CHARACTER_COUNT_SCRIPTS, config/config.yml) src/words/index.ts
 
    The golden harness (test/golden/generate/) vendors the upstream Ruby files unmodified, with otwarchive's licence
    text, in test/golden/generate/upstream/otwarchive/ (see NOTICE.md and LICENSE there). They are test tooling only.

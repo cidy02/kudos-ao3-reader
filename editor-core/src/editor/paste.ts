@@ -8,7 +8,7 @@ import { closeHistory } from 'prosemirror-history';
 import type { EditorView } from 'prosemirror-view';
 import { load, schema, serializeDoc } from '../index.ts';
 import type { LossReport, Variant } from '../index.ts';
-import { countNode } from './words.ts';
+import { countNode } from '../words/index.ts';
 
 export type PasteResult = { slice: Slice; loss: LossReport; words: number; kind: 'html' | 'text' };
 export type PasteInfo = { loss: LossReport; words: number; kind: 'html' | 'text' };
