@@ -288,6 +288,11 @@ extension AO3Client {
         )
         formDTO.chaptersPosted = parsePostedChapterCount(in: doc, form: form)
         formDTO.currentSeries = parseCurrentSeries(in: form)
+        // otwarchive 452391b6 `works/edit.html.erb:26-34`: "Remove Me As Co-Creator"
+        // renders only when other creators are listed; "Orphan Work" only when posted.
+        formDTO.canRemoveMe = (try? doc.select("form[action*=/remove_user_creatorship]").first()) != nil
+        formDTO.canOrphan = (try? doc.select("ul.actions a[href*=/orphans/new]").first()) != nil
+            || (try? doc.select("a[href*=/orphans/new?work_id=]").first()) != nil
         formDTO.collections = formDTO.collectionNames.map {
             AO3CollectionOffer(
                 name: $0,
@@ -694,7 +699,7 @@ extension AO3Client {
             ?? doc.select("form[action*=/works]").first()
     }
 
-    private static func parseSelect(
+    static func parseSelect(
         _ root: Element, name: String
     ) -> (selected: String, options: [AO3FormOption]) {
         guard let select = firstElement(root, tag: "select", name: name) else {
@@ -713,7 +718,7 @@ extension AO3Client {
         return (selected, options)
     }
 
-    private static func parseCheckboxes(
+    static func parseCheckboxes(
         _ root: Element, name: String
     ) -> (selected: [String], options: [AO3FormOption]) {
         var options: [AO3FormOption] = []
@@ -736,7 +741,7 @@ extension AO3Client {
         return (selected, options)
     }
 
-    private static func parseRadios(
+    static func parseRadios(
         _ root: Element, name: String
     ) -> (selected: String, options: [AO3FormOption]) {
         var options: [AO3FormOption] = []
@@ -1010,7 +1015,7 @@ extension AO3Client {
         return Int(parts[index + 1].split(separator: "?").first.map(String.init) ?? "")
     }
 
-    private static func chapterID(inPath path: String) -> Int? {
+    static func chapterID(inPath path: String) -> Int? {
         let parts = path.split(separator: "/").map(String.init)
         guard let index = parts.firstIndex(of: "chapters"), index + 1 < parts.count else {
             return nil
@@ -1020,7 +1025,7 @@ extension AO3Client {
         return Int(raw.split(separator: "?").first.map(String.init) ?? "")
     }
 
-    private static func seriesID(inPath path: String) -> Int? {
+    static func seriesID(inPath path: String) -> Int? {
         let parts = path.split(separator: "/").map(String.init)
         guard let index = parts.firstIndex(of: "series"), index + 1 < parts.count else {
             return nil

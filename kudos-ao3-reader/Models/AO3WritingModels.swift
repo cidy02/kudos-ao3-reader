@@ -477,6 +477,11 @@ nonisolated struct AO3WorkForm: Equatable, Sendable {
     var workSkinID: String = ""
     var workSkinOptions: [AO3FormOption] = []
     var hiddenFields: [AO3WorkHiddenField] = []
+    /// Present when another creator besides the signed-in user is listed on the
+    /// work (`works/edit.html.erb`, otwarchive 452391b6).
+    var canRemoveMe: Bool = false
+    /// Present only for posted works (`works/edit.html.erb`, otwarchive 452391b6).
+    var canOrphan: Bool = false
 
     var tagSet: AO3WorkTagSet {
         AO3WorkTagSet(
@@ -1065,6 +1070,15 @@ enum AO3WorkWriteError: LocalizedError, Equatable {
     case unconfirmed
     case previewUnavailable
     case seriesCreateUnavailable
+    /// A toggle's live state on AO3 no longer matches what the user saw, so no
+    /// write was sent.
+    case stateChanged
+    /// The signed-in user is the only listed creator, so AO3 cannot remove them
+    /// as a co-creator.
+    case onlyCreator
+    /// AO3 refused to orphan the requested work(s) or series because the user
+    /// does not own them.
+    case notOwned
 
     var errorDescription: String? {
         switch self {
@@ -1081,6 +1095,12 @@ enum AO3WorkWriteError: LocalizedError, Equatable {
             "AO3 didn't return a preview. Try opening the work on AO3."
         case .seriesCreateUnavailable:
             "Creating a series from scratch still happens on AO3."
+        case .stateChanged:
+            "This changed on AO3 before your request went through. Reload and try again."
+        case .onlyCreator:
+            "You're the only listed creator, so you can't remove yourself. Orphan or delete it instead."
+        case .notOwned:
+            "You don't have permission to orphan that."
         }
     }
 }

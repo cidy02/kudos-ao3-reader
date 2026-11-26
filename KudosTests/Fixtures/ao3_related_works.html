@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="csrf-param" content="authenticity_token">
+  <meta name="csrf-token" content="rw-index-csrf==">
+  <title>alice - Related Works | Archive of Our Own</title>
+</head>
+<body class="logged-in">
+<!-- Ground truth: otwarchive 452391b6 app/views/related_works/index.html.erb -->
+<div id="main" class="related_works-index region">
+  <h2 class="heading">alice's Related Works</h2>
+
+  <h3 class="heading">Translations of alice's works</h3>
+  <table summary="Translations of alice's works, including links to the translation and the original. The languages of both works are listed. Also includes management options." id="translationsofme">
+    <caption>Translations of alice's Works</caption>
+    <thead>
+      <tr>
+        <th scope="col">Translation</th>
+        <th scope="col">Original</th>
+        <th scope="col">Language</th>
+        <th scope="col">Modify Link</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td scope="row"><a href="/works/201">Le Poids de l'Eau</a> by <a rel="author" href="/users/translator/pseuds/translator">translator</a></td>
+        <td><a href="/works/101">The Weight of Water</a></td>
+        <td>From <a href="/languages/en/works">English</a> to <a href="/languages/fr/works">Français</a></td>
+        <td><a href="/related_works/301">Approve</a></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 class="heading">Works translated by alice</h3>
+  <table summary="Works alice has translated, including links to the original and the translation. The languages of both works are listed. Also includes management options." id="translationsbyme">
+    <caption>Works Translated by alice</caption>
+    <thead>
+      <tr>
+        <th scope="col">Original</th>
+        <th scope="col">Translation</th>
+        <th scope="col">Language</th>
+        <th scope="col">Modify Link</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td scope="row"><a href="/works/102">Nachtregen</a> by <a rel="author" href="/users/autor/pseuds/autor">autor</a></td>
+        <td><a href="/works/202">Night Rain</a></td>
+        <td>From <a href="/languages/de/works">Deutsch</a> to <a href="/languages/en/works">English</a></td>
+        <td>
+          <form class="button_to" method="post" action="/related_works/302">
+            <input type="hidden" name="_method" value="delete" autocomplete="off">
+            <input data-confirm="Are you sure?" type="submit" value="Remove">
+            <input type="hidden" name="authenticity_token" value="rw-delete-302-csrf==" autocomplete="off">
+          </form>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 class="heading">Works inspired by alice</h3>
+  <dl class="inspired index group">
+    <dt class="child">
+      <a href="/works/203">After the Tide</a> by <a rel="author" href="/users/fanwriter/pseuds/fanwriter">fanwriter</a>
+    </dt>
+    <dd class="parent">was inspired by <a href="/works/101">The Weight of Water</a>
+      <span class="submit actions">
+        <a href="/related_works/303">Remove</a>
+      </span>
+    </dd>
+  </dl>
+
+  <h3 class="heading">Works that inspired alice</h3>
+  <dl class="inspired index group">
+    <dt class="parent">
+      <a href="/works/104">First Light</a> by <a rel="author" href="/users/mentor/pseuds/mentor">mentor</a>
+    </dt>
+    <dd class="child">
+      inspired
+      <a href="/works/204">Second Dawn</a>
+      <span class="actions">
+        <form class="button_to" method="post" action="/related_works/304">
+          <input type="hidden" name="_method" value="delete" autocomplete="off">
+          <input data-confirm="Are you sure?" type="submit" value="Remove">
+          <input type="hidden" name="authenticity_token" value="rw-delete-304-csrf==" autocomplete="off">
+        </form>
+      </span>
+    </dd>
+  </dl>
+</div>
+</body>
+</html>

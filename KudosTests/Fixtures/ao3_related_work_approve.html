@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="csrf-param" content="authenticity_token">
+  <meta name="csrf-token" content="rw-approve-csrf==">
+  <title>Approve Link | Archive of Our Own</title>
+</head>
+<body class="logged-in">
+<!-- Ground truth: otwarchive 452391b6 app/views/related_works/show.html.erb & _approve.html.erb -->
+<div id="main" class="related_works-show region">
+  <h3 class="heading">Approve Link</h3>
+  <p>
+    Would you like to create a link from your work
+    <a href="/works/101">The Weight of Water</a>
+    to
+    <a href="/works/201">Le Poids de l'Eau</a>
+    by
+    <a rel="author" href="/users/translator/pseuds/translator">translator</a>?
+  </p>
+  <p>Nothing will be linked directly from your works without your express approval. You can come back to this page if you change your mind.</p>
+  <form class="edit_related_work" id="edit_related_work_301" action="/related_works/301" accept-charset="UTF-8" method="post">
+    <input type="hidden" name="_method" value="patch" autocomplete="off">
+    <input type="hidden" name="authenticity_token" value="rw-approve-csrf==" autocomplete="off">
+    <p class="submit actions">
+      <input type="submit" name="commit" value="Yes, link me!" data-disable-with="Yes, link me!">
+    </p>
+  </form>
+</div>
+</body>
+</html>
