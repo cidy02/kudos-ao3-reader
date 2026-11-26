@@ -249,7 +249,7 @@ extension WritingTextEditor {
     func handleLinkInsert(_ rawLink: String) {
         if WritingMarkup.safeLink(rawLink) {
             if isRichMode {
-                session?.applyRichCommand(name: "link", attrs: ["href": .string(rawLink)])
+                session?.apply(.setLink(url: rawLink))
             } else {
                 controller?.command("a", link: rawLink)
             }
@@ -260,25 +260,13 @@ extension WritingTextEditor {
 
     func handleHostCommand(_ command: RichEditorHostCommand) {
         switch command {
-        case .format(.undo):
-            session?.undo()
-        case .format(.redo):
-            session?.redo()
-        case let .format(.toggleMark(mark)):
-            session?.applyRichCommand(name: mark.richCommandName)
-        case let .format(.setLink(url)):
-            session?.applyRichCommand(name: "link", attrs: ["href": .string(url)])
-        case .format(.unlink):
-            session?.applyRichCommand(name: "unlink")
-        case .format(.insertSceneBreak):
-            session?.applyRichCommand(name: "horizontal_rule")
-        case .format(.clearFormatting):
-            session?.applyRichCommand(name: "clear_formatting")
         case .requestLink:
             showLink = true
-        case .format, .moveCaret, .insertEmDash, .insertQuotationMarks, .openFormatPanel, .presentFind:
-            // Full page wiring arrives at integration with `editor-core`.
+        case .openFormatPanel, .presentFind, .format(.openTableInHTML):
+            // Native UI: the chapter editor screen presents these; this field editor has no panel.
             break
+        default:
+            session?.apply(command)
         }
     }
 
@@ -318,45 +306,29 @@ extension WritingTextEditor {
     }
 }
 
-private extension FormatMark {
-    var richCommandName: String {
-        switch self {
-        case .bold: "strong"
-        case .italic: "em"
-        case .underline: "underline"
-        case .strikethrough: "strike"
-        case .superscript: "sup"
-        case .`subscript`: "sub"
-        case .smaller: "small"
-        case .code: "code"
-        }
-    }
-}
-
 extension AO3MarkupTag {
-    var richCommandName: String {
-        switch self {
-        case .bold: "strong"
-        case .italic: "em"
-        case .underline: "underline"
-        case .strike: "strike"
-        case .superscript: "sup"
-        case .`subscript`: "sub"
-        case .small: "small"
-        case .code: "code"
-        case .paragraph: "paragraph"
-        case .lineBreak: "hard_break"
-        case .quote: "blockquote"
-        case .bullets: "bullet_list"
-        case .numbers: "ordered_list"
-        case .heading: "heading"
-        case .divider: "horizontal_rule"
-        case .link: "link"
-        case .spoiler: "details"
+    /// The page command for this toolbar tag in Rich Text (the `FormatCommand` it stands for; §7.2 `command`).
+    /// Nil for the link, which opens the link sheet first.
+    var richCommand: RichEditorCommandArgs? {
+        let format: FormatCommand? = switch self {
+        case .bold: .toggleMark(.bold)
+        case .italic: .toggleMark(.italic)
+        case .underline: .toggleMark(.underline)
+        case .strike: .toggleMark(.strikethrough)
+        case .superscript: .toggleMark(.superscript)
+        case .`subscript`: .toggleMark(.`subscript`)
+        case .small: .toggleMark(.smaller)
+        case .code: .toggleMark(.code)
+        case .paragraph: .setBlock(.body)
+        case .quote: .setBlock(.quote)
+        case .bullets: .setBlock(.bulletedList)
+        case .numbers: .setBlock(.numberedList)
+        case .heading: .setBlock(.heading)
+        case .spoiler: .setBlock(.foldOut)
+        case .divider: .insertSceneBreak(.line)
+        case .lineBreak, .link: nil
         }
-    }
-
-    var richCommandAttrs: [String: RichEditorJSONValue] {
-        self == .heading ? ["level": .int(3)] : [:]
+        if let format { return format.bridgeCommand }
+        return self == .lineBreak ? RichEditorCommandArgs(name: "insertLineBreak") : nil
     }
 }

@@ -19,7 +19,7 @@ protocol RichEditorPrewarmableHost: AnyObject {
 /// is on the Writing screens (docs/WRITING_EDITOR_ARCHITECTURE.md §9.3, §10.3 N10).
 ///
 /// - **Pre-warm:** when a Writing screen appears and the Rich Text feature flag
-///   is on, creates one hidden host and loads `kudos-editor://editor/index.html`.
+///   is on, creates one hidden host and loads `kudos-editor://editor/editor.html`.
 /// - **Reuse:** when `WritingTextEditor` opens, claims the warm host so opening
 ///   a chapter pays no page-load cost.
 /// - **W4:** on a memory warning, immediately drops and tears down the hidden

@@ -107,8 +107,9 @@ test('activate maps the HTML-mode caret, resets history, and the caret event rep
   assert.deepEqual(r, { caretFound: true });
   const { selection, doc } = h.bridge.editor.view.state;
   assert.equal(doc.textBetween(selection.head - 2, selection.head), 'pa');
-  const caret = h.events.filter((e) => e.type === 'caret').at(-1) as Extract<BridgeEvent, { type: 'caret' }>;
+  const caret = h.events.filter((e) => e.type === 'caretRect').at(-1) as Extract<BridgeEvent, { type: 'caretRect' }>;
   assert.equal(caret.block, 1);
+  assert.ok(caret.width >= 1);
   assert.equal(typeof caret.y, 'number');
   assert.equal(typeof caret.height, 'number');
   assert.equal((await h.call('activate', { caret: null, focus: false })).caretFound, false);

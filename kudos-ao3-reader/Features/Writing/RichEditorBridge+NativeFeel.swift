@@ -107,52 +107,18 @@ extension RichEditorToolbarState {
         RichEditorUndoTitleFormatter.redoMenuTitle(for: redoTitle)
     }
 
-    /// Maps the JS `toolbarState` bridge payload onto the native `FormatState`
-    /// consumed by `WritingKeysBar` and the Format chrome.
+    /// Maps the page's `toolbarState` (576c's vocabulary: `FormatMark`, `FormatBlock`, `FormatAlignment` and
+    /// `FormatDirection` raw values, §7.2) onto the native `FormatState` the Format panel, keys bar and menus read.
     func toFormatState() -> FormatState {
-        var activeMarks: Set<FormatMark> = []
-        for raw in marks {
-            switch raw {
-            case "strong", "bold": activeMarks.insert(.bold)
-            case "em", "italic": activeMarks.insert(.italic)
-            case "underline", "u": activeMarks.insert(.underline)
-            case "strike", "s", "del": activeMarks.insert(.strikethrough)
-            case "sup", "superscript": activeMarks.insert(.superscript)
-            case "sub", "subscript": activeMarks.insert(.`subscript`)
-            case "small", "smaller": activeMarks.insert(.smaller)
-            case "code": activeMarks.insert(.code)
-            default: break
-            }
-        }
-
-        let mappedBlock: FormatBlock = switch block {
-        case "heading", "h2", "h3": .heading
-        case "subheading", "h4", "h5", "h6": .subheading
-        case "blockquote", "quote": .quote
-        case "bullet_list", "ul": .bulletedList
-        case "ordered_list", "ol": .numberedList
-        case "details", "foldOut": .foldOut
-        default: align == "center" ? .centred : .body
-        }
-
-        let mappedAlign: FormatAlignment = switch align {
-        case "center", "centre": .centre
-        case "right": .right
-        case "justify": .justify
-        default: .left
-        }
-
-        let mappedDir: FormatDirection = dir == "rtl" ? .rightToLeft : .leftToRight
-        let inLink = marks.contains("link") || marks.contains("a")
-
-        return FormatState(
-            activeMarks: activeMarks,
-            block: mappedBlock,
-            alignment: mappedAlign,
-            direction: mappedDir,
+        FormatState(
+            activeMarks: Set(marks.compactMap(FormatMark.init(rawValue:))),
+            block: FormatBlock(rawValue: block) ?? .body,
+            alignment: align.flatMap(FormatAlignment.init(rawValue:)) ?? .left,
+            direction: dir.flatMap(FormatDirection.init(rawValue:)) ?? .leftToRight,
             canUndo: canUndo,
             canRedo: canRedo,
-            isInLink: inLink
+            isInLink: inLink,
+            currentLinkURL: linkURL
         )
     }
 }

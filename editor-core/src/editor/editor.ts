@@ -2,7 +2,7 @@
 import { EditorState, Selection, TextSelection } from 'prosemirror-state';
 import type { Command, Transaction } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
-import { history } from 'prosemirror-history';
+import { history, isHistoryTransaction, redoDepth, undoDepth } from 'prosemirror-history';
 import { keymap } from 'prosemirror-keymap';
 import { baseKeymap } from 'prosemirror-commands';
 import { liftListItem, sinkListItem, splitListItem } from 'prosemirror-schema-list';
@@ -29,7 +29,24 @@ export type EditorHooks = {
   changed(): void;
   caret(info: CaretInfo): void;
   pasted(info: PasteInfo): void;
+  /** Changed top-level blocks for the native HTML mirror (7.10); only while the mirror is shown. */
+  mirror(event: MirrorEvent): void;
   error(code: string, message: string): void;
+};
+
+/**
+ * One update of the native HTML mirror (7.10): replace its blocks [from, to) with `blocks`, or all of them when
+ * `reset`. Every block carries the text that follows it up to the next block, so the blocks joined are the HTML a
+ * snapshot would return now. `activeBlockIndex` is the block holding the caret.
+ */
+export type MirrorEvent = {
+  revision: number;
+  totalBlocks: number;
+  activeBlockIndex: number;
+  reset: boolean;
+  from: number;
+  to: number;
+  blocks: { html: string; separatorAfter: string }[];
 };
 
 export type EditorOptions = {
@@ -38,7 +55,12 @@ export type EditorOptions = {
   frame?: (f: () => void) => void;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
+  /** Timers for the mirror's debounce (the bridge passes its clock). */
+  timer?: { set(f: () => void, ms: number): unknown; clear(t: unknown): void };
 };
+
+/** The mirror is refreshed this long after typing stops (7.10). */
+export const MIRROR_DEBOUNCE_MS = 300;
 
 export type BridgeErrorShape = { code: string; message: string };
 export const bridgeError = (code: string, message: string): BridgeErrorShape => ({ code, message });
@@ -70,9 +92,16 @@ export class Editor {
   private readonly caret: CaretTracker;
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
+  private readonly timer: NonNullable<EditorOptions['timer']>;
+  /** Names of the steps on prosemirror-history's undo and redo stacks, kept in step with their depths (N6). */
+  private undoLabels: string[] = [];
+  private redoLabels: string[] = [];
+  private mirror: { enabled: boolean; sent: EditorState['doc'][]; reset: boolean; timer: unknown; active: number } =
+    { enabled: false, sent: [], reset: true, timer: null, active: -1 };
 
   constructor(mount: HTMLElement, opts: EditorOptions) {
     this.hooks = opts.hooks;
+    this.timer = opts.timer ?? { set: (f, ms) => setTimeout(f, ms), clear: (t) => clearTimeout(t as ReturnType<typeof setTimeout>) };
     this.now = opts.now ?? (() => performance.now());
     this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
     this.caret = new CaretTracker((c) => this.hooks.caret(c), opts.frame ?? ((f) => requestAnimationFrame(() => f())));
@@ -121,8 +150,16 @@ export class Editor {
     this.view.setProps(this.props());
   }
 
+  /** A command whose transaction is named `label` on the undo stack. */
+  private labelled(label: string, command: Command): Command {
+    return (state, dispatch, view) => command(state, dispatch && ((tr) => dispatch(tr.setMeta('kudosLabel', label))), view);
+  }
+
   private newState(doc: EditorState['doc'], selection?: Selection): EditorState {
     const c = cmd;
+    const L = this.labels;
+    this.undoLabels = [];
+    this.redoLabels = [];
     return EditorState.create({
       doc,
       selection,
@@ -130,14 +167,14 @@ export class Editor {
         invariants,
         history(),
         keymap({
-          'Mod-b': c.toggleMark('bold'),
-          'Mod-i': c.toggleMark('italic'),
-          'Mod-u': c.toggleMark('underline'),
+          'Mod-b': this.labelled(L.stepBold, c.toggleMark('bold')),
+          'Mod-i': this.labelled(L.stepItalic, c.toggleMark('italic')),
+          'Mod-u': this.labelled(L.stepUnderline, c.toggleMark('underline')),
           'Mod-z': c.undo,
           'Shift-Mod-z': c.redo,
           'Mod-y': c.redo,
           Enter: splitListItem(schema.nodes.list_item!),
-          'Shift-Enter': c.hardBreak,
+          'Shift-Enter': this.labelled(L.stepLineBreak, c.hardBreak),
           Tab: sinkListItem(schema.nodes.list_item!),
           'Shift-Tab': liftListItem(schema.nodes.list_item!),
         }),
@@ -151,13 +188,91 @@ export class Editor {
     const before = this.view.state;
     const state = before.apply(tr);
     this.view.updateState(state);
+    this.trackUndoLabels(tr, before, state);
     if (state.doc !== before.doc) {
       this.revision++;
       this.hooks.edited(this.revision);
+      this.scheduleMirror(MIRROR_DEBOUNCE_MS);
+    } else if (this.mirror.enabled && state.doc.resolve(state.selection.head).index(0) !== this.mirror.active) {
+      this.scheduleMirror(100); // only the highlight moves
     }
     const paste = tr.getMeta('kudosPaste') as PasteInfo | undefined;
     if (paste) this.hooks.pasted(paste);
     if (state.doc !== before.doc || !state.selection.eq(before.selection) || state.storedMarks !== before.storedMarks) this.hooks.changed();
+  }
+
+  private trackUndoLabels(tr: Transaction, before: EditorState, after: EditorState): void {
+    const u0 = undoDepth(before), u1 = undoDepth(after), r0 = redoDepth(before), r1 = redoDepth(after);
+    if (isHistoryTransaction(tr)) {
+      if (u1 < u0) this.redoLabels.push(this.undoLabels.pop() ?? this.labels.stepTyping);
+      else if (r1 < r0) this.undoLabels.push(this.redoLabels.pop() ?? this.labels.stepTyping);
+    } else if (u1 > u0) {
+      const ui = tr.getMeta('uiEvent') as string | undefined;
+      this.undoLabels.push((tr.getMeta('kudosLabel') as string | undefined)
+        ?? (ui === 'paste' ? this.labels.stepPaste : ui === 'cut' ? this.labels.stepCut : ui === 'drop' ? this.labels.stepDrop : this.labels.stepTyping));
+    }
+    if (r1 === 0) this.redoLabels = [];
+    // history may merge or drop events on its own: the depths are the truth
+    while (this.undoLabels.length > u1) this.undoLabels.shift();
+    while (this.undoLabels.length < u1) this.undoLabels.unshift(this.labels.stepTyping);
+    while (this.redoLabels.length > r1) this.redoLabels.shift();
+    while (this.redoLabels.length < r1) this.redoLabels.unshift(this.labels.stepTyping);
+  }
+
+  // ---- the HTML mirror (7.10) -----------------------------------------------------------------------------------
+
+  /** Shows or hides the native HTML mirror; showing it sends every block once, then only what changes. */
+  setMirror(enabled: boolean): void {
+    this.mirror.enabled = enabled;
+    this.mirror.reset = true;
+    this.mirror.sent = [];
+    if (this.mirror.timer !== null) this.timer.clear(this.mirror.timer);
+    this.mirror.timer = null;
+    if (enabled) this.scheduleMirror(0);
+  }
+
+  private scheduleMirror(ms: number): void {
+    if (!this.mirror.enabled || !this.loaded) return;
+    if (this.mirror.timer !== null) {
+      if (ms > 0) this.timer.clear(this.mirror.timer); // debounce: wait for typing to stop
+      else return;
+    }
+    this.mirror.timer = this.timer.set(() => { this.mirror.timer = null; this.emitMirror(); }, ms);
+  }
+
+  private emitMirror(): void {
+    if (!this.mirror.enabled || !this.loaded) return;
+    const doc = this.view.state.doc;
+    const out = this.serializer.serialize(doc);
+    const cur: EditorState['doc'][] = [];
+    doc.forEach((b) => cur.push(b));
+    const prev = this.mirror.sent;
+    const reset = this.mirror.reset;
+    let from = 0, toOld = prev.length, toNew = cur.length;
+    if (!reset) {
+      let prefix = 0;
+      const max = Math.min(prev.length, cur.length);
+      while (prefix < max && prev[prefix] === cur[prefix]) prefix++;
+      let suffix = 0;
+      while (suffix < max - prefix && prev[prev.length - 1 - suffix] === cur[cur.length - 1 - suffix]) suffix++;
+      // one block either side too: whether a neighbour was written from source changes the text between them
+      from = Math.max(0, prefix - 1);
+      const keep = Math.max(0, suffix - 1);
+      toOld = prev.length - keep;
+      toNew = cur.length - keep;
+      if (prefix === prev.length && prefix === cur.length) { from = toOld = toNew = cur.length; }
+    }
+    const segs = out.segments;
+    const blocks: MirrorEvent['blocks'] = [];
+    for (let i = from; i < toNew; i++) {
+      blocks.push({ html: out.html.slice(segs[i]!.start, segs[i]!.end), separatorAfter: i + 1 < segs.length ? out.html.slice(segs[i]!.end, segs[i + 1]!.start) : '' });
+    }
+    const active = doc.resolve(this.view.state.selection.head).index(0);
+    if (!reset && blocks.length === 0 && from === toOld && active === this.mirror.active) return;
+    this.mirror.sent = cur;
+    this.mirror.reset = false;
+    this.mirror.active = active;
+    this.hooks.mirror({ revision: this.revision, totalBlocks: cur.length, activeBlockIndex: active, reset, from: reset ? 0 : from, to: reset ? 0 : toOld, blocks });
   }
 
   // ---- clipboard -----------------------------------------------------------------------------------------------
@@ -226,6 +341,9 @@ export class Editor {
     this.proven = new WeakMap();
     this.sourceVerdict = null;
     this.sound = null;
+    this.mirror.reset = true;
+    this.mirror.sent = [];
+    this.scheduleMirror(0);
     this.hooks.changed();
     return { revision, loss: loaded.loss, timing: { parseMs: loaded.timing.cleanMs, buildMs: loaded.timing.buildMs, renderMs } };
   }
@@ -246,8 +364,9 @@ export class Editor {
     }
     let state = this.view.state;
     const selection = pos === null ? state.selection : TextSelection.near(state.doc.resolve(Math.min(Math.max(pos, 0), state.doc.content.size)));
-    // U2: a hand-off into Rich Text starts with empty history.
-    state = this.frozen ? this.newState(state.doc, selection) : state.apply(state.tr.setSelection(selection));
+    // U2: a hand-off into Rich Text (it brings the HTML-mode caret) starts with empty history. Without a caret the
+    // native side is resuming Rich Text after a switch out that did not happen (a failed check), so history stays.
+    state = this.frozen && caret !== null ? this.newState(state.doc, selection) : state.apply(state.tr.setSelection(selection));
     this.frozen = false;
     this.view.updateState(state);
     this.refreshProps();
@@ -303,11 +422,12 @@ export class Editor {
       const text = typeof attrs.text === 'string' ? attrs.text : null;
       const result = pasteContent(html, text, this.variant);
       if (!result) return { applied: false, state: this.formatState() };
-      insertPaste(this.view, result);
+      insertPaste(this.view, result, undefined, this.labels.stepPaste);
       return { applied: true, state: this.formatState(), paste: { loss: result.loss, words: result.words, kind: result.kind } };
     }
     const command = this.resolve(name, attrs);
-    const applied = command ? command(this.view.state, (tr) => this.view.dispatch(tr), this.view) : false;
+    const label = this.stepLabel(name, attrs);
+    const applied = command ? command(this.view.state, (tr) => this.view.dispatch(label ? tr.setMeta('kudosLabel', label) : tr), this.view) : false;
     return { applied, state: this.formatState() };
   }
 
@@ -334,13 +454,41 @@ export class Editor {
       case 'insertText': return str('text').length <= 10_000 ? cmd.insertText(str('text')) : null;
       case 'insertQuotes': return cmd.insertQuotes(str('open') || '“', str('close') || '”');
       case 'moveCaret': return cmd.moveCaret(num('by') ?? 0);
+      case 'insertLineBreak': return cmd.hardBreak;
       case 'openTableInHTML': return null; // the native side switches views; nothing changes here
       default: return null;
     }
   }
 
+  /** The name of the undo step a command makes (N6). */
+  private stepLabel(name: string, a: Record<string, unknown>): string | null {
+    const L = this.labels;
+    const mark: Record<string, string> = {
+      bold: L.stepBold, italic: L.stepItalic, underline: L.stepUnderline, strikethrough: L.stepStrikethrough,
+      superscript: L.stepSuperscript, subscript: L.stepSubscript, smaller: L.stepSmaller, code: L.stepCode,
+    };
+    switch (name) {
+      case 'toggleMark': return mark[String(a.mark)] ?? null;
+      case 'setBlock': return L.stepStyle;
+      case 'setAlignment': return L.stepAlignment;
+      case 'setDirection': return L.stepDirection;
+      case 'setLink': return L.stepLink;
+      case 'unlink': return L.stepUnlink;
+      case 'insertImage': return L.stepImage;
+      case 'insertSceneBreak': return L.stepSceneBreak;
+      case 'insertFootnote': return L.stepFootnote;
+      case 'clearFormatting': return L.stepClearFormatting;
+      case 'insertQuotes': return L.stepQuotes;
+      case 'insertLineBreak': return L.stepLineBreak;
+      case 'insertText': return L.stepTyping;
+      default: return null;
+    }
+  }
+
   formatState(): FormatState {
-    return formatState(this.view.state);
+    const undoTitle = this.undoLabels.at(-1) ?? null;
+    const redoTitle = this.redoLabels.at(-1) ?? null;
+    return { ...formatState(this.view.state), undoTitle, redoTitle };
   }
 
   lint(html: string): { loss: LossReport } {
@@ -375,6 +523,8 @@ export class Editor {
     this.loaded = null;
     this.lastSnapshot = null;
     this.sourceVerdict = null;
+    this.mirror.sent = [];
+    this.mirror.reset = true;
     this.frozen = true;
     this.view.dom.blur();
     this.view.updateState(this.newState(schema.nodes.doc!.create(null, schema.nodes.paragraph!.create())));

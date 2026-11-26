@@ -3,6 +3,7 @@
 import { ParseLimitError, SanitizerFailure, SCHEMA_VERSION } from '../index.ts';
 import type { Variant } from '../index.ts';
 import { Editor } from '../editor/editor.ts';
+import type { MirrorEvent } from '../editor/editor.ts';
 import type { CaretInfo } from '../editor/plugins.ts';
 import type { PasteInfo } from '../editor/paste.ts';
 import { DEFAULT_LABELS } from '../editor/render.ts';
@@ -10,17 +11,18 @@ import type { Labels } from '../editor/render.ts';
 import type { FormatState } from '../editor/state.ts';
 import { realClock, Throttle } from './events.ts';
 import type { Clock } from './events.ts';
-import { applyTheme } from './theme.ts';
+import { applyAppearance, applyTheme } from './theme.ts';
 
 export const BRIDGE_VERSION = 1;
-export const CALLS = ['configure', 'load', 'activate', 'freeze', 'snapshot', 'command', 'lint', 'setTheme', 'dispose', 'verifySwitch'] as const;
+export const CALLS = ['configure', 'load', 'activate', 'freeze', 'snapshot', 'command', 'lint', 'setTheme', 'setAppearance', 'setMirror', 'dispose', 'verifySwitch'] as const;
 export type CallName = (typeof CALLS)[number];
 
 export type BridgeEvent =
   | { type: 'ready'; bundleVersion: string; schemaVersion: number; bridgeVersion: number }
   | { type: 'edited'; revision: number }
   | ({ type: 'toolbarState' } & FormatState)
-  | ({ type: 'caret' } & CaretInfo)
+  | ({ type: 'caretRect' } & CaretInfo)
+  | ({ type: 'mirrorBlocks' } & MirrorEvent)
   | ({ type: 'paste' } & PasteInfo)
   | { type: 'error'; code: string; message: string };
 
@@ -98,13 +100,15 @@ export class Bridge {
       hooks: {
         edited: (revision) => this.edited.push(() => revision),
         changed: () => this.toolbar.push(() => this.editor.formatState()),
-        caret: (c) => this.post({ type: 'caret', ...c }),
+        caret: (c) => this.post({ type: 'caretRect', ...c }),
+        mirror: (m) => this.post({ type: 'mirrorBlocks', ...m }),
         pasted: (p) => this.post({ type: 'paste', ...p }),
         error: (code, message) => this.post({ type: 'error', code, message }),
       },
       ...(o.frame ? { frame: o.frame } : {}),
       ...(o.sleep ? { sleep: o.sleep } : {}),
       now: () => clock.now(),
+      timer: { set: (f, ms) => clock.setTimeout(f, ms), clear: (t) => clock.clearTimeout(t) },
     });
   }
 
@@ -127,7 +131,9 @@ export class Bridge {
       case 'configure': {
         const variant = a.variant === undefined ? 'content' : (VARIANTS.includes(a.variant as Variant) ? (a.variant as Variant) : fail('bad-args', 'variant must be content, notes or summary'));
         if (a.theme !== undefined) applyTheme(this.root, obj(a.theme, 'theme'));
-        const locale = a.locale === undefined || a.locale === null ? null : typeof a.locale === 'string' && LOCALE.test(a.locale) ? a.locale : fail('bad-args', 'locale must be a BCP 47 tag');
+        // Apple's Locale.identifier ("en_GB", "sr_Latn_RS@calendar=…") or BCP 47; anything else is ignored, never fatal
+        const tag = typeof a.locale === 'string' ? a.locale.split('@')[0]!.replaceAll('_', '-') : '';
+        const locale = LOCALE.test(tag) ? tag : null;
         let labels: Partial<Labels> | undefined;
         if (a.labels !== undefined) {
           labels = {};
@@ -153,6 +159,8 @@ export class Bridge {
       case 'command': return ed.command(str(a, 'name'), obj(a.attrs, 'attrs'));
       case 'lint': return ed.lint(str(a, 'html'));
       case 'setTheme': applyTheme(this.root, a); return {};
+      case 'setAppearance': applyAppearance(this.root, a); ed.remeasure(); return {};
+      case 'setMirror': ed.setMirror(bool(a, 'enabled', false)); return {};
       case 'dispose': this.edited.cancel(); ed.dispose(); return {};
       case 'verifySwitch': case 'verify': {
         const direction = a.direction === 'richToSource' || a.direction === 'sourceToRich' ? a.direction : fail('bad-args', 'direction must be richToSource or sourceToRich');

@@ -59,3 +59,20 @@ export function applyTheme(root: HTMLElement, t: Record<string, unknown>): void 
     else root.style.setProperty(k, v);
   }
 }
+
+/**
+ * The native appearance (N5): `{fontFamily, fontSizePx, lineHeight, contentSizeCategory, isAccessibilityCategory,
+ * colorScheme, increaseContrast, boldText}`, pushed whenever Dynamic Type, Dark Mode, Increase Contrast or Bold Text
+ * changes. Type goes to the same variables as the theme; the rest become root attributes the stylesheet reads.
+ */
+export function applyAppearance(root: HTMLElement, a: Record<string, unknown>): void {
+  const { fontFamily, fontSizePx, lineHeight, boldText, colorScheme } = a;
+  applyTheme(root, { fontFamily, fontSizePx, lineHeight, boldText, colorScheme });
+  const flag = (k: string) => {
+    if (a[k] !== undefined && typeof a[k] !== 'boolean') throw { code: 'bad-args', message: `${k} must be true or false` };
+    return a[k] === true;
+  };
+  root.toggleAttribute('data-increase-contrast', flag('increaseContrast'));
+  root.toggleAttribute('data-accessibility-size', flag('isAccessibilityCategory'));
+  if (typeof a.contentSizeCategory === 'string' && /^[A-Za-z]{1,80}$/.test(a.contentSizeCategory)) root.dataset.contentSize = a.contentSizeCategory;
+}

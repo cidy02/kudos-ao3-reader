@@ -33,13 +33,13 @@ nonisolated enum RichEditorFeatureFlag {
 }
 
 /// Single source of truth for the bundled Rich Text page location.
-/// Replacing `EditorStub` with the built `editor-core` bundle changes only `bundleDirectory`.
+/// The page is `editor-core`'s bundle (`npm run bundle` copies it into `Resources/EditorCore/`).
 nonisolated enum RichEditorBundleLocation {
     static let scheme = "kudos-editor"
     static let host = "editor"
-    /// Replace with the real `editor-core` resource folder when it lands.
-    static let bundleDirectory = "EditorStub"
-    static let entryFile = "index.html"
+    /// The built `editor-core` page (`npm run bundle` in `editor-core/`).
+    static let bundleDirectory = "EditorCore"
+    static let entryFile = "editor.html"
 
     /// Normative §11 Content Security Policy (remote images off by default, no inline scripts).
     static let contentSecurityPolicy =

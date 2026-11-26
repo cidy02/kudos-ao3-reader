@@ -133,3 +133,10 @@ img.ProseMirror-separator { display: inline !important; border: none !important;
 @media (prefers-contrast: more) {
   .kd-raw, .kd-raw-inline, .kd-image, .kd-details { border-color: var(--kd-text); }
 }
+/* Increase Contrast from the native trait collection (setAppearance) */
+:root[data-increase-contrast] .kd-raw, :root[data-increase-contrast] .kd-raw-inline,
+:root[data-increase-contrast] .kd-image, :root[data-increase-contrast] .kd-details { border-color: var(--kd-text); border-style: solid; }
+:root[data-increase-contrast] .kd-raw, :root[data-increase-contrast] .kd-raw-inline, :root[data-increase-contrast] .kd-image { color: var(--kd-text); }
+:root[data-increase-contrast] .kd-editor blockquote { border-left-color: var(--kd-text); }
+/* At the accessibility sizes the chips wrap rather than truncate */
+:root[data-accessibility-size] .kd-raw-preview { -webkit-line-clamp: 4; }

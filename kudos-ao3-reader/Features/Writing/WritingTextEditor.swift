@@ -394,7 +394,7 @@ struct WritingTextEditor: View {
         if tag == .link {
             showLink = true
         } else if isRichMode {
-            session?.applyRichCommand(name: tag.richCommandName, attrs: tag.richCommandAttrs)
+            if let command = tag.richCommand { session?.applyRichCommand(name: command.name, attrs: command.attrs) }
         } else {
             controller?.command(tag.element)
         }

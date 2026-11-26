@@ -23,10 +23,11 @@ export function pasteContent(html: string | null | undefined, text: string | nul
 }
 
 /** Replaces the selection (or the drop point) with the cleaned content; one undo step. */
-export function insertPaste(view: EditorView, result: PasteResult, at?: number): void {
+export function insertPaste(view: EditorView, result: PasteResult, at?: number, label?: string): void {
   const tr = view.state.tr;
   if (at !== undefined) tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(Math.max(at, 0), tr.doc.content.size))));
-  tr.replaceSelection(result.slice).scrollIntoView().setMeta('uiEvent', 'paste').setMeta('kudosPaste', { loss: result.loss, words: result.words, kind: result.kind } satisfies PasteInfo);
+  if (label) tr.setMeta('kudosLabel', label);
+  tr.replaceSelection(result.slice).scrollIntoView().setMeta('uiEvent', at === undefined ? 'paste' : 'drop').setMeta('kudosPaste', { loss: result.loss, words: result.words, kind: result.kind } satisfies PasteInfo);
   view.dispatch(tr);
 }
 

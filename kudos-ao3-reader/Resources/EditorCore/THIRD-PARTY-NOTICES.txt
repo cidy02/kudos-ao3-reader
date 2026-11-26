@@ -1,4 +1,4 @@
-editor.js 0.1.0+74c6573aa30b bundles editor-core (AGPL-3.0-only, part of Kudos) and the packages below.
+editor.js 0.1.0+b6e953b70224 bundles editor-core (AGPL-3.0-only, part of Kudos) and the packages below.
 editor-core's port of otwarchive's cleaning code: see editor-core/NOTICE in the Kudos repository.
 
 ==============================================================================

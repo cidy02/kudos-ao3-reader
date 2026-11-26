@@ -13,6 +13,9 @@ export type FormatState = {
   canRedo: boolean;
   inLink: boolean;
   linkURL: string | null;
+  /** Names of the steps undo and redo would take back (the system edit menu's titles, N6); null when none. */
+  undoTitle?: string | null;
+  redoTitle?: string | null;
 };
 
 export function formatState(state: EditorState): FormatState {

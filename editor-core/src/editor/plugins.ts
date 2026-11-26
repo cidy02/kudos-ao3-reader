@@ -58,7 +58,7 @@ export const invariants = new Plugin({
   },
 });
 
-export type CaretInfo = { x: number; y: number; height: number; block: number };
+export type CaretInfo = { x: number; y: number; width: number; height: number; block: number };
 
 /**
  * Reports the caret rectangle (page coordinates, CSS px, which are points at zoom 1) and the top-level block index, at
@@ -99,12 +99,13 @@ export class CaretTracker {
       this.pending = false;
       if (!view.editable || view.isDestroyed) return;
       const head = view.state.selection.head;
-      let rect: { left: number; top: number; bottom: number };
+      let rect: { left: number; right: number; top: number; bottom: number };
       try { rect = view.coordsAtPos(head); } catch { return; }
       const win = view.dom.ownerDocument.defaultView;
       const info: CaretInfo = {
         x: Math.round(rect.left + (win?.scrollX ?? 0)),
         y: Math.round(rect.top + (win?.scrollY ?? 0)),
+        width: Math.max(1, Math.round(rect.right - rect.left)),
         height: Math.round(rect.bottom - rect.top),
         block: view.state.doc.resolve(head).index(0),
       };

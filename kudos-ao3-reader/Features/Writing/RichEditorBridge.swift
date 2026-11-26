@@ -327,6 +327,9 @@ nonisolated struct RichEditorToolbarState: Codable, Equatable, Sendable {
     var undoTitle: String?
     /// Optional page-supplied step name for the system Redo menu item (§10.3 N6).
     var redoTitle: String?
+    /// The selection is in a link (a caret just after one counts), and that link's address.
+    var inLink: Bool
+    var linkURL: String?
 
     init(
         marks: [String],
@@ -336,7 +339,9 @@ nonisolated struct RichEditorToolbarState: Codable, Equatable, Sendable {
         canUndo: Bool,
         canRedo: Bool,
         undoTitle: String? = nil,
-        redoTitle: String? = nil
+        redoTitle: String? = nil,
+        inLink: Bool = false,
+        linkURL: String? = nil
     ) {
         self.marks = marks
         self.block = block
@@ -346,11 +351,41 @@ nonisolated struct RichEditorToolbarState: Codable, Equatable, Sendable {
         self.canRedo = canRedo
         self.undoTitle = undoTitle
         self.redoTitle = redoTitle
+        self.inLink = inLink
+        self.linkURL = linkURL
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case marks, block, align, dir, canUndo, canRedo, undoTitle, redoTitle, inLink, linkURL
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        marks = try c.decode([String].self, forKey: .marks)
+        block = try c.decode(String.self, forKey: .block)
+        align = try c.decodeIfPresent(String.self, forKey: .align)
+        dir = try c.decodeIfPresent(String.self, forKey: .dir)
+        canUndo = try c.decode(Bool.self, forKey: .canUndo)
+        canRedo = try c.decode(Bool.self, forKey: .canRedo)
+        undoTitle = try c.decodeIfPresent(String.self, forKey: .undoTitle)
+        redoTitle = try c.decodeIfPresent(String.self, forKey: .redoTitle)
+        inLink = try c.decodeIfPresent(Bool.self, forKey: .inLink) ?? false
+        linkURL = try c.decodeIfPresent(String.self, forKey: .linkURL)
     }
 
     static let empty = RichEditorToolbarState(
-        marks: [], block: "paragraph", align: nil, dir: nil, canUndo: false, canRedo: false
+        marks: [], block: "body", align: "left", dir: "leftToRight", canUndo: false, canRedo: false
     )
+}
+
+/// What the page's paste hook inserted (§6.8, §6.9): sent after every paste or drop into Rich Text.
+nonisolated struct RichEditorPasteEvent: Codable, Equatable, Sendable {
+    /// What AO3's cleaning removed, unwrapped or normalized in the pasted HTML.
+    var loss: RichEditorLossReport
+    /// Words pasted, by AO3's count (§3.6).
+    var words: Int
+    /// `"html"` (the clipboard's rich text) or `"text"` (plain text, paragraphed as AO3 does).
+    var kind: String
 }
 
 nonisolated struct RichEditorJournalPayload: Codable, Equatable, Sendable {
@@ -367,6 +402,7 @@ nonisolated enum RichEditorEvent: Equatable, Sendable {
     case journal(RichEditorJournalPayload)
     case caretRect(RichEditorCaretRect)
     case mirrorBlocks(RichEditorMirrorBlocksEvent)
+    case paste(RichEditorPasteEvent)
     case error(code: String, message: String)
 
     private struct ReadyPayload: Decodable {
@@ -426,6 +462,9 @@ nonisolated enum RichEditorEvent: Equatable, Sendable {
         case "mirrorBlocks":
             let payload = try decoder.decode(RichEditorMirrorBlocksEvent.self, from: data)
             return .mirrorBlocks(payload)
+        case "paste":
+            let payload = try decoder.decode(RichEditorPasteEvent.self, from: data)
+            return .paste(payload)
         case "error":
             let payload = try decoder.decode(ErrorPayload.self, from: data)
             return .error(code: payload.code, message: payload.message)

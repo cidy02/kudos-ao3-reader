@@ -109,6 +109,8 @@ final class DraftSession {
     var isShowingSwitchTransition = false
     /// Last recovery copy URLs written on a §7.11 switch-check mismatch.
     var lastMismatchRecoveryURLs: (leaving: URL, candidate: URL)?
+    /// The last paste into Rich Text and what AO3's cleaning did to it (the paste report, §6.8, §6.9).
+    var lastPaste: DraftPasteReport?
     /// Incremental block mirror for §7.10 two-views mode (updated ONLY from `mirrorBlocks`).
     var mirrorDocument = HTMLMirrorDocument()
     /// User-facing notice for switch failures, switch-check mismatches, or process death.
@@ -341,6 +343,9 @@ final class DraftSession {
         case let .mirrorBlocks(event):
             guard state == .richOwned else { return }
             _ = mirrorDocument.apply(event)
+        case let .paste(event):
+            guard state == .richOwned else { return }
+            lastPaste = DraftPasteReport(sequence: (lastPaste?.sequence ?? 0) + 1, event: event)
         case let .error(code, message):
             writingEditorLog.error(
                 "Rich editor JS error [\(code, privacy: .public)]: \(message, privacy: .public)"
