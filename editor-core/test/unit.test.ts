@@ -161,7 +161,8 @@ test('caret after an edit: the serializer reports the output offset of the head,
     const esc = ch === '&' ? '&amp;' : ch === '<' ? '&lt;' : ch === '>' ? '&gt;' : ch === ' ' ? '&nbsp;' : ch;
     const rest = out.slice(headOffset!);
     // the head sits before the character, possibly just before a closing/opening tag boundary that shares the offset
-    assert.ok(rest.startsWith(esc) || /^(<\/?[a-z0-9]+[^>]*>)+/.test(rest), `head ${pos} in ${out}`);
+    // (or before the `&#95;` that keeps a literal ____spacer____ from being deleted by AO3, departure 1)
+    assert.ok(rest.startsWith(esc) || (ch === '_' && rest.startsWith('&#95;')) || /^(<\/?[a-z0-9]+[^>]*>)+/.test(rest), `head ${pos} in ${out}`);
   }), { seed: 576576, numRuns: 500 });
 });
 

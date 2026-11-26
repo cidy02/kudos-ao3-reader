@@ -9,7 +9,7 @@ import type { Variant } from './sanitize.ts';
 export { schema, SCHEMA_VERSION, GLOBAL_ATTRS, MARK_TAGS, TOOLBAR_TAG } from './schema.ts';
 export { load, parse, parseCleaned } from './load.ts';
 export type { LoadOptions, LoadResult, LossReport } from './load.ts';
-export { serialize, serializeDoc, serializeBlock } from './serialize.ts';
+export { serialize, serializeDoc, serializeBlock, serializeBlockAt } from './serialize.ts';
 export type { SerializeOptions, SerializeResult, SourceInfo, BlockSource } from './serialize.ts';
 export { sanitizeValue, fixBadCharacters, paragraphStage } from './clean.ts';
 export { ParseLimitError } from './html5.ts';

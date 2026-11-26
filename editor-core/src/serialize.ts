@@ -86,9 +86,13 @@ function inline(node: PMNode, pos: number, w: Writer, allowBreakRuns: boolean): 
       const t = child.text!;
       const head = w.head;
       if (head !== undefined && head > p && head < p + t.length) {
-        w.push(escText(t.slice(0, head - p)));
-        w.at(head);
-        w.push(escText(t.slice(head - p)));
+        // Escape the text whole: escaping the halves separately misses a ____spacer____ the head cuts. The only escape
+        // that isn't prefix-stable is that marker's `_` -> `&#95;` (4 longer), so a head past it moves on by 4.
+        const full = escText(t);
+        const before = escText(t.slice(0, head - p));
+        const start = w.len;
+        w.push(full);
+        w.headOffset ??= start + (full.startsWith(before) ? before.length : before.length + 4);
       } else w.push(escText(t));
       prevBreak = false;
     } else if (name === 'hard_break') {
@@ -211,6 +215,15 @@ export function serializeBlock(node: PMNode): string {
   const w = new Writer();
   block(node, 0, w);
   return w.parts.join('');
+}
+
+/** One top-level block with the output offset of a head position inside it (`head` is relative to the block's start). */
+export function serializeBlockAt(node: PMNode, head: number): SerializeResult {
+  const w = new Writer();
+  w.head = head;
+  block(node, 0, w);
+  w.at(node.nodeSize);
+  return { html: w.parts.join(''), headOffset: w.headOffset ?? w.len };
 }
 
 /** Serializes a document: S6 separators, source slices for untouched blocks (S16), and the head offset (spec 7.5). */

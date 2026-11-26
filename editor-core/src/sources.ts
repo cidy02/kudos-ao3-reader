@@ -12,9 +12,13 @@ import { REMOVE_CONTENTS } from './paragraph-maker.ts';
 import { POSIX_SPACE, lstrip, rstrip } from './ruby.ts';
 import type { Variant } from './sanitize.ts';
 import { serializeBlock } from './serialize.ts';
+import { schema } from './schema.ts';
 import type { BlockSource, SourceInfo } from './serialize.ts';
 
 const INLINE = new Set(['a', 'abbr', 'acronym', 'b', 'big', 'br', 'cite', 'code', 'del', 'dfn', 'em', 'i', 'img', 'ins', 'kbd', 'q', 'rp', 'rt', 'ruby', 's', 'samp', 'small', 'span', 'strike', 'strong', 'sub', 'sup', 'tt', 'u', 'var', 'button', 'input', 'label', 'map', 'select', 'textarea']);
+const SENTINEL = '\n<p>kudos</p>';
+let sentinel: PMNode | null = null;
+const sentinelBlock = () => (sentinel ??= schema.nodes.paragraph!.create(null, schema.text('kudos')));
 const SEPARATOR = new RegExp(`[${POSIX_SPACE}]*\\n[${POSIX_SPACE}]*`, 'g');
 const PRESERVED = new Set([...REMOVE_CONTENTS, 'table', 'pre', 'dl', 'figure', 'address', 'ruby', 'rt', 'rp', 'audio', 'video', 'source', 'track', 'embed', 'object', 'param', 'dd', 'dt', 'caption', 'colgroup', 'tbody', 'tfoot', 'thead', 'tr', 'td', 'th']);
 
@@ -145,7 +149,10 @@ export class Sources implements SourceInfo {
       const b = doc.child(j);
       if (text === serializeBlock(b)) { out.set(b, { start: c.start, end: c.end, index: j }); j++; continue; }
       let res: PMNode[];
-      try { res = load(text, this.variant, this.opts).doc.content.content.slice(); } catch { break; }
+      // The sentinel after the chunk catches a chunk that leaks into what follows it (an unclosed <b> is reopened by
+      // the parser in the next block), which reloading the chunk alone can't see.
+      try { res = load(text + SENTINEL, this.variant, this.opts).doc.content.content.slice(); } catch { break; }
+      if (!res.pop()?.eq(sentinelBlock())) break;
       let ok = j + res.length <= doc.childCount;
       for (let k = 0; ok && k < res.length; k++) ok = res[k]!.eq(doc.child(j + k));
       if (!ok) break; // positions no longer line up: stop rather than guess
