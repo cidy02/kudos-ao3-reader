@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Plan of record. E1 is in progress. E3 onward waits on owner decision **OD1** (§13). |
+| **Status** | Plan of record. E1 is in progress. **OD1 decided 2026-11-25:** the Rich Text canvas runs in a web editor, made as close to native as possible (§10.3). |
 | **Applies to** | Apple (`kudos-ao3-reader/`, SwiftUI on iOS, iPadOS and macOS) and Android (`android/` on `kudos-ao3-reader-android`, Compose). |
 | **Canonical copy** | This file. Keep it byte-identical on the Android branch. If the two copies ever differ, the one with the later entry in the revision log (§15) wins, and the other is brought up to date in the same change. |
 | **Tracking** | TASKS.md **T-262** (this document and E1). Later steps get their own rows when they are claimed (§12). |
@@ -18,7 +18,7 @@ illustrations, not API.
 
 | # | Decision | Status |
 |---|---|---|
-| D1 | The Rich Text canvas is **ProseMirror** with Kudos's own AO3 schema, running in a **WebView** (WKWebView on Apple, the system WebView on Android). Every control around it (toolbar, link sheet, menus, navigation) stays native. | Proposed; **OD1** |
+| D1 | The Rich Text canvas is **ProseMirror** with Kudos's own AO3 schema, running in a **WebView** (WKWebView on Apple, the system WebView on Android). Every control around it (toolbar, link sheet, menus, navigation) stays native. | **Decided** (owner, 2026-11-25; OD1). Native feel is normative: §10.3 |
 | D2 | **HTML mode stays native on Apple** (the existing `UITextView` / `NSTextView` controller). On Android, HTML mode is a native text field if it passes the typing gate in §9.2; otherwise it is CodeMirror 6 in the same WebView. | Decided (Apple); gate (Android) |
 | D3 | Modes **hand off** ownership of the text. They never sync live. Exactly one mode owns the text at any moment. | Decided |
 | D4 | The real text lives **natively**, in a per-field `DraftSession`, as an HTML string plus a revision number. The WebView's state is disposable. | Decided |
@@ -675,6 +675,36 @@ JavaScript strings all use them, so no conversion is needed.
 - **U3.** R1 means a switch without an edit is always reversible by switching back.
   This replaces the "Undo switch" button proposed during design.
 
+
+### 7.10 Two views at once
+
+Owner request (2026-11-25): Rich Text and HTML should feel like two views of one document, not two states.
+D3 stays: exactly one view owns the text at any moment. What changes is that both can be on screen.
+
+- **Where.** On the open Duo, iPad and Mac, the editor can show Rich Text and HTML side by side. On a phone it
+  stays one view at a time, and a switch keeps your place (§7.5).
+- **Focus decides the owner.** The view you type in owns the text. The other is a read-only mirror. Tapping into
+  the mirror is a switch (§7.3, §7.4), with the caret placed where you tapped (§7.5).
+- **The mirror follows without touching the keystroke path (D8).** With Rich Text as owner, the serializer writes
+  only the top-level blocks an edit touched (S16) and the mirror replaces those blocks, 300 ms after typing
+  stops. With HTML as owner, `editor-core` re-parses only the changed block range for the Rich Text mirror, on
+  the same delay. A large paste refreshes the whole mirror, off the main thread.
+- **The two views stay visibly in step.** The mirror highlights the block the caret is in and scrolls to keep it
+  in view.
+
+### 7.11 Switch check
+
+Every hand-off out of a view that was edited is verified before it commits:
+
+- **Leaving Rich Text:** `parse(serialize(doc))` must equal `doc` (S14 and S15, checked at run time on the real
+  document, not only in CI).
+- **Leaving HTML:** `serialize(parse(html))` must produce the document the loss report (§6.9) described.
+- **On a mismatch nothing commits.** The view being left keeps ownership, both texts are saved as a recovery copy
+  (§8), the failure counts toward the two-failure rule (§7.8), and the writer sees "Kudos couldn't switch views
+  without changing your text, so it stayed in Rich Text." (or HTML). The case is logged so it becomes a golden
+  fixture (§6.10).
+- The check is O(n) once per switch and must fit the switch budget (§9.2).
+
 ---
 
 ## 8. Checkpoints, auto-save and recovery (normative)
@@ -882,6 +912,53 @@ The decision and measurements are recorded in the E5 row.
 
 ---
 
+### 10.3 Native feel (owner goal, normative from E3)
+
+OD1's condition: the web editor must feel as close to native as possible while keeping what the web editor
+gives us. Each rule is an E3 acceptance item, checked on a device (and its Android twin in E5).
+
+What the web editor keeps for us: ProseMirror's schema, so only AO3-valid structure can exist; one converter
+(`editor-core`) shared by Apple, Android and CI; mature paste and input-method handling; and transactions, which
+§7.10 and later beta-reading suggestions build on.
+
+- **N1 Keyboard services.** Autocorrect (per the Typing setting), spell-check, predictive text, dictation, text
+  replacements, Smart Punctuation (per the setting), Apple Writing Tools, Scribble on iPad and hardware-keyboard
+  input methods all work in the canvas. The editable root carries `spellcheck`, `autocorrect` and
+  `autocapitalize="sentences"`, and `WKWebViewConfiguration.writingToolsBehavior` is set.
+- **N2 System selection and edit menu.** Native handles, loupe and edit menu; nothing drawn in JavaScript. Bold,
+  Italic, Underline and Link are added to the system edit menu through the web view's `buildMenu(with:)`. Link
+  previews (`allowsLinkPreview = false`) and WebKit's browser-style menu items (Open Link, Share) are off.
+- **N3 Kudos's bar above the keyboard.** WebKit's form bar (previous, next, Done) is replaced by Kudos's native
+  writing keys, using the approach Capacitor's keyboard plugin takes. A launch-time check confirms the
+  replacement took; if a future iOS breaks it, Kudos's bar sits above WebKit's instead (§7.7's fallback).
+- **N4 UIKit scrolling.** The document scrolls in WKWebView's own `UIScrollView`: momentum, rubber-banding,
+  tap-the-status-bar-to-top, interactive keyboard dismissal. No inner JavaScript scroll containers. Caret-follow
+  and typewriter scrolling set the native scroll offset from the caret rectangle sent over the bridge.
+- **N5 Text that matches the app.** System fonts through CSS (`ui-serif` for New York, `-apple-system`), sizes
+  that follow Dynamic Type up to AX5 (the native side sends the content size), Dark Mode, Increase Contrast and
+  Bold Text from the trait collection as CSS variables. No WebKit text-size adjustment, no pinch zoom, no tap
+  highlight.
+- **N6 System undo.** ⌘Z, ⇧⌘Z, shake and the three-finger swipe go to `prosemirror-history` while Rich Text owns
+  the text (U1), and the edit menu's undo title describes the step.
+- **N7 Hardware keyboard.** ⌘B, ⌘I, ⌘U, ⌘K (link), ⌘F (find), ⌘Z and ⇧⌘Z are native `UIKeyCommand`s, so they
+  appear in the iPad shortcut overlay, and are forwarded to the editor.
+- **N8 System Find.** `isFindInteractionEnabled` on the web view, so Find looks and works as it does elsewhere in
+  iOS. Find and Replace across a work is native UI driving editor commands.
+- **N9 Accessibility.** VoiceOver reads the canvas as one text area with the right traits; headings and links
+  are reachable with the rotor; marks are semantic (`em`, `strong`) so they are announced; Voice Control can
+  dictate and select; focus moves predictably between native controls and the canvas.
+- **N10 Instant open.** With pre-warm (§9.3), a chapter opens with the keyboard up within the HTML-mode budget
+  (§9.2). The bundle ships inside the app, the background colour is set natively before the first paint, and
+  there is never a white flash.
+- **N11 Paste keeps formatting.** Pasting from Google Docs, Word, Pages, Notes and web pages keeps bold, italics,
+  underline, strikethrough, paragraph breaks and centring through the paste cleaner (§6.8). Anything AO3 can't
+  keep is listed, never silently dropped.
+- **N12 Never a web page.** No navigation, no web error pages. If the web content process dies, HTML mode takes
+  over with the last checkpoint (§7.8) and the writer sees a native message.
+- **N13 Android twin.** The same list on the system WebView: Gboard features (suggestions, voice typing, glide
+  typing), native selection-toolbar items through `ActionMode.Callback`, Kudos's keys as a native view above the
+  keyboard, font scale and dark theme from the platform, TalkBack.
+
 ## 11. Security and privacy (normative from E3)
 
 - **Content Security Policy** in the bundle's HTML: `default-src 'none'; script-src
@@ -971,7 +1048,7 @@ The decision and measurements are recorded in the E5 row.
 
 | ID | Question | Proposal | Blocks |
 |---|---|---|---|
-| **OD1** | Run the Rich Text canvas in a WebView? This reverses the 2026-09-12 native-only rule (`docs/REDESIGN_PLAN.md:1927-1936`) for the rich canvas only. | Yes, with native chrome (§4, §7.7) | E3, and E5's rich mode |
+| **OD1** | Run the Rich Text canvas in a WebView? This reverses the 2026-09-12 native-only rule (`docs/REDESIGN_PLAN.md:1927-1936`) for the rich canvas only. | **Decided 2026-11-25: yes.** Owner: "web editor, with the goal of making the experience as close to native as possible while still keeping all the benefits of web editor". Rules in §10.3. | Unblocks E3, and E5's rich mode |
 | OD2 | Load remote images inside the editor? | Placeholders by default; load per chapter on request | E3 |
 | OD3 | Adopt AO3's word-count algorithm (§3.6) in both modes? It changes counts for Chinese, Japanese and Thai text and for hyphenated words. | Yes; the count then matches AO3's | E2 |
 | OD4 | Recovery copies in device backups (Apple iCloud backup of Application Support, Android Auto Backup)? | Keep as today (included); revisit if writers ask | — |
@@ -1013,3 +1090,4 @@ The decision and measurements are recorded in the E5 row.
 | Date | Rev | Change | By |
 |---|---|---|---|
 | 2026-09-25 | 1 | First version. Covers decisions D1–D8, AO3 ground truth, schema, hand-off, checkpoints, budgets, platform bindings and work plan. | Claude (cloud), T-262 |
+| 2026-11-25 | 2 | OD1 decided by the owner (web editor, as close to native as possible): D1 decided, §10.3 native-feel rules N1–N13, §7.10 two views at once, §7.11 switch check. | Claude (orchestrator) |
