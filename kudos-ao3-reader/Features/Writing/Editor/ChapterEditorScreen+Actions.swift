@@ -42,6 +42,9 @@ extension ChapterEditorScreen {
             copyAsAO3HTML: {
                 copyAsAO3HTML()
             },
+            addNote: {
+                beginAddingNote()
+            },
             format: {
                 showingFormatPanel = true
             },
@@ -179,6 +182,10 @@ extension ChapterEditorScreen {
            let active = documentBridge.activeChapter {
             fallbackWordCount = active.wordCount
             if initialWordCount == nil { initialWordCount = active.wordCount }
+            if session?.owner == .rich {
+                await syncAnnotationsToRichEditor(useCurrentHTML: false)
+                syncKeysAccessorySuggestions()
+            }
             return
         }
         let snapshot = await documentBridge.open(
@@ -189,6 +196,10 @@ extension ChapterEditorScreen {
             fallbackWordCount = snapshot.activeChapter.wordCount
             if initialWordCount == nil {
                 initialWordCount = snapshot.activeChapter.wordCount
+            }
+            if session?.owner == .rich {
+                await syncAnnotationsToRichEditor(useCurrentHTML: false)
+                syncKeysAccessorySuggestions()
             }
         }
     }

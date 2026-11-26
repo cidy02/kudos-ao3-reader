@@ -53,6 +53,7 @@ nonisolated enum EditorMoreMenuActionID: Hashable, Sendable {
     case print
     case versionHistory
     case writingTools
+    case addNote
     case format
     case deleteChapter
 }
@@ -157,6 +158,7 @@ nonisolated struct EditorMoreMenuModel: Equatable, Sendable {
         let allDocumentItems = buildDocumentItems(
             savedVersionCount: savedVersionCount,
             deviceName: deviceName,
+            includesAddNote: visibleActions?.contains(.addNote) == true,
             includesFormat: visibleActions?.contains(.format) == true
         )
         let deleteItem = Item(
@@ -239,12 +241,16 @@ nonisolated struct EditorMoreMenuModel: Equatable, Sendable {
     private static func buildDocumentItems(
         savedVersionCount: Int?,
         deviceName: String,
+        includesAddNote: Bool,
         includesFormat: Bool
     ) -> [Item] {
         let versionSubtitle = savedVersionCount.map { count in
             "\(count.formatted()) saved \(count == 1 ? "version" : "versions") on this \(deviceName)"
         }
         var items: [Item] = []
+        if includesAddNote {
+            items.append(Item(id: .addNote, title: "Add Note", systemImage: "note.text.badge.plus"))
+        }
         if includesFormat {
             items.append(Item(id: .format, title: "Format", systemImage: "textformat"))
         }
@@ -280,6 +286,7 @@ struct EditorMoreMenuActions {
     var onPrint: () -> Void = {}
     var onVersionHistory: () -> Void = {}
     var onWritingTools: () -> Void = {}
+    var onAddNote: () -> Void = {}
     var onFormat: () -> Void = {}
     var onDeleteChapter: () -> Void = {}
 
@@ -313,6 +320,7 @@ struct EditorMoreMenuActions {
         case .print: onPrint()
         case .versionHistory: onVersionHistory()
         case .writingTools: onWritingTools()
+        case .addNote: onAddNote()
         case .format: onFormat()
         case .deleteChapter: onDeleteChapter()
         default: break
