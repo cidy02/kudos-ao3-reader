@@ -529,32 +529,58 @@ a "What changed" disclosure.
 
 | Direction | Apple | Android |
 |---|---|---|
-| Native → JS call | `callAsyncJavaScript("return await window.KudosEditor.call(name, args)", arguments: ["name": …, "args": …], in: nil, contentWorld: .page)`. It resolves with the call's result. | `WebViewCompat.postWebMessage` with `{id, name, args}`. JS replies with `{id, ok, result \| error}`. |
-| JS → native events | `window.webkit.messageHandlers.kudos.postMessage(event)` | `kudosNative.postMessage(JSON.stringify({event}))`, via `WebViewCompat.addWebMessageListener(webView, "kudosNative", [bundle origin], …)` |
+| Native → JS call | `callAsyncJavaScript` with a constant body that awaits `window.KudosEditor.call(name, args)`, `arguments: ["name": …, "args": …]`, `contentWorld: .page`. The body returns `{ok: true, value}` or `{ok: false, error: {code, message}}`, so a rejection survives WebKit's bridging. | `WebViewCompat.postWebMessage` with `{id, name, args}`. JS replies with `{id, ok, result \| error}`. |
+| JS → native events | `window.webkit.messageHandlers.kudos.postMessage(event)` | `kudosNative.postMessage(JSON.stringify(event))`, via `WebViewCompat.addWebMessageListener(webView, "kudosNative", [bundle origin], …)` |
 
-**Calls.** Every call rejects with `{code, message}` on failure.
+Events are flat on both platforms: `{type, …payload}` (rev 3; rev 2 read as `{event}` on Android). Calls run
+one at a time, in arrival order.
+
+**Calls.** Every call rejects with `{code, message}`. Codes: `unknown-call`, `bad-args`, `not-loaded`,
+`too-large` (a parse limit AO3 also hits), `sanitizer` (input AO3's cleaner also rejects), `internal`.
 
 | Call | Args | Result | Timeout |
 |---|---|---|---|
-| `configure` | `{bridgeVersion, schemaVersion, variant: "content"\|"notes"\|"summary", theme: {background, text, accent, link, fontFamily, fontSizePx, lineHeight}, locale}` | `{bridgeVersion, schemaVersion, bundleVersion}` | 5 s |
+| `configure` | `{bridgeVersion, schemaVersion, variant: "content"\|"notes"\|"summary", theme, locale, labels?, autocorrect?}`. `locale` is BCP 47 or Apple's `Locale.identifier` (`en_GB`); one that is neither is ignored. `labels` replaces any of the page's words (chip labels, undo step names). | `{bridgeVersion, schemaVersion, bundleVersion}` | 5 s |
 | `load` | `{html, revision}` | `{revision, loss: LossReport, timing: {parseMs, buildMs, renderMs}}`. Replaces the document (read-only, not focused) and resets history. | 5 s |
-| `activate` | `{caret: number \| null, focus: boolean}` | `{caretFound: boolean}`. Makes the editor editable, sets the caret from the source offset (§7.5), optionally focuses. | 1 s |
+| `activate` | `{caret: number \| null, focus: boolean}` | `{caretFound: boolean}`. Makes the editor editable and optionally focuses. With a caret it is a hand-off in: the caret is an offset in the text HTML mode holds (the loaded text, or the last snapshot after an edited switch out, §7.5) and history starts empty (U2). Without one, Rich Text resumes as it was (after a switch out that did not happen). | 1 s |
 | `freeze` | `{}` | `{revision}`. Blurs, makes the editor read-only, and waits for IME composition to end (§7.6). | 1 s |
 | `snapshot` | `{caret: boolean}` | `{revision, html, caretOffset: number \| null, words: number}` | 2 s |
-| `command` | `{name, attrs}` | `{applied: boolean}` | 1 s |
+| `command` | `{name, attrs}`, below | `{applied: boolean, state: FormatState}` | 1 s |
 | `lint` (E3/E5) | `{html}` | `{loss: LossReport}`. Parse only. | 5 s |
-| `setTheme` | theme | `{}` | 1 s |
+| `setTheme` | `theme` | `{}` | 1 s |
+| `setAppearance` | `{fontFamily, fontSizePx, lineHeight, contentSizeCategory, isAccessibilityCategory, colorScheme: "light"\|"dark", increaseContrast, boldText}` (N5) | `{}` | 1 s |
+| `setMirror` | `{enabled}`: whether the §7.10 HTML mirror is on screen | `{}` | 1 s |
+| `verifySwitch` | `{direction: "richToSource"\|"sourceToRich", html}` (§7.11) | `{ok, candidateHtml, reason?}` | 2 s |
 | `dispose` | `{}` | `{}`. Drops the document. | 1 s |
+
+`theme` is `{background, text, accent, link, fontFamily, fontSizePx, lineHeight}` (colours as `#RRGGBB`,
+`rgb()`, `hsl()`, `color(display-p3 …)` or a name; anything else is refused).
+
+**Commands** are 576c's `FormatCommand` by case name: `toggleMark {mark: bold|italic|underline|strikethrough|
+superscript|subscript|smaller|code}`, `setBlock {block: body|heading|subheading|centred|quote|bulletedList|
+numberedList|foldOut, title?}` (choosing the current style again turns it off), `setAlignment {alignment: left|
+centre|right|justify}`, `setDirection {direction: leftToRight|rightToLeft}`, `setLink {url}` (http, https, mailto),
+`unlink`, `insertImage {address, description, width?, height?}`, `insertSceneBreak {style: asterism|asterisks|line}`,
+`insertFootnote`, `undo`, `redo`, `clearFormatting` (`openTableInHTML` is native only). For the keys bar and the
+toolbar: `insertText {text}`, `insertQuotes {open, close}`, `moveCaret {by}`, `insertLineBreak`, and `paste {html?,
+text?}` (result adds `paste: {loss, words, kind}`). The native mapping is `RichEditorCommandMapping.swift`.
 
 **Events.** These are informational. The session never waits on them.
 
 | Event | Payload | Rate limit |
 |---|---|---|
-| `ready` | `{bundleVersion, schemaVersion}` | once per page load |
+| `ready` | `{bundleVersion, schemaVersion, bridgeVersion}` | once per page load |
 | `edited` | `{revision}` | ≤ 4 per second, trailing edge guaranteed |
-| `toolbarState` | `{marks: string[], block: string, align, dir, canUndo, canRedo}` | ≤ 10 per second |
+| `toolbarState` | FormatState: `{marks: FormatMark[], block: FormatBlock, align: FormatAlignment, dir: FormatDirection, canUndo, canRedo, inLink, linkURL, undoTitle, redoTitle}` (576c's raw values; the titles name the steps for the edit menu, N6) | ≤ 10 per second, only when it changed |
+| `caretRect` | `{x, y, width, height, block}`: page CSS px (points at zoom 1) and the top-level block index | ≤ 1 per frame, only when the caret's line or block changes |
+| `mirrorBlocks` | `{revision, totalBlocks, activeBlockIndex, reset, from, to, blocks: [{html, separatorAfter}]}`: replace the mirror's blocks `[from, to)` with `blocks`, or all of them when `reset` | only while the mirror is shown: a reset when shown and at each hand-off in, then 300 ms after typing stops |
+| `paste` | `{loss: LossReport, words, kind: "html"\|"text"}` (§6.8) | after each paste or drop |
 | `journal` (E4) | `{schemaVersion, fromRevision, toRevision, steps: object[]}` | ≤ 2 per second while dirty |
 | `error` | `{code, message}` | as needed |
+
+**Fixtures.** `editor-core/test/bridge-fixtures/bridge.json` is a recorded session through the real page: every
+call's arguments and result, every event, and one example of every command. The page's tests fail if it stops
+producing exactly that file; the Swift tests (`RichEditorBridgeFixtureTests`) decode all of it.
 
 **Versioning.** A `configure` that returns an unexpected `bridgeVersion` or
 `schemaVersion` disables rich mode for the session (the bundle and app disagree). HTML
@@ -703,7 +729,10 @@ Every hand-off out of a view that was edited is verified before it commits:
   (§8), the failure counts toward the two-failure rule (§7.8), and the writer sees "Kudos couldn't switch views
   without changing your text, so it stayed in Rich Text." (or HTML). The case is logged so it becomes a golden
   fixture (§6.10).
-- The check is O(n) once per switch and must fit the switch budget (§9.2).
+- The check must fit the switch budget (§9.2). As built it is O(edited blocks): untouched blocks go out as their
+  source slices, whose layout is proven once per load (free when the unedited output is the source text; one parse
+  otherwise), and each block rich mode writes itself is reparsed with its neighbours (`editor-core/src/editor/
+  verify.ts`). Equality is modulo the edge-space trim the builder applies to list items.
 
 ---
 
@@ -1091,3 +1120,4 @@ What the web editor keeps for us: ProseMirror's schema, so only AO3-valid struct
 |---|---|---|---|
 | 2026-09-25 | 1 | First version. Covers decisions D1–D8, AO3 ground truth, schema, hand-off, checkpoints, budgets, platform bindings and work plan. | Claude (cloud), T-262 |
 | 2026-11-25 | 2 | OD1 decided by the owner (web editor, as close to native as possible): D1 decided, §10.3 native-feel rules N1–N13, §7.10 two views at once, §7.11 switch check. | Claude (orchestrator) |
+| 2026-11-26 | 3 | §7.2 as built and reconciled (T-576i): flat events on both platforms; calls `setAppearance`, `setMirror`, `verifySwitch`; events `caretRect`, `mirrorBlocks` (splices), `paste`; FormatState in 576c's vocabulary with undo step names; the command list; `activate` without a caret resumes; shared fixtures. | Claude (orchestrator) |

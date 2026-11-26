@@ -149,12 +149,14 @@ rejects with `{code, message}`: `unknown-call`, `bad-args`, `not-loaded`, `too-l
 |---|---|---|
 | `configure` | `{bridgeVersion, schemaVersion, variant, theme?, locale?, labels?, autocorrect?}` | `{bridgeVersion, schemaVersion, bundleVersion}` |
 | `load` | `{html, revision}` | `{revision, loss, timing: {parseMs, buildMs, renderMs}}`; read-only, history reset |
-| `activate` | `{caret: number \| null, focus}` | `{caretFound}`; the caret is an offset in the text HTML mode holds (the loaded text, or the last snapshot after an edited switch out) |
+| `activate` | `{caret: number \| null, focus}` | `{caretFound}`; with a caret, a hand-off in (an offset in the text HTML mode holds: the loaded text, or the last snapshot after an edited switch out; history starts empty); without one, Rich Text resumes with its history |
 | `freeze` | `{}` | `{revision}`; blur, read-only, waits for IME composition (cap 500 ms, then an `error` event `composition-timeout`) |
 | `snapshot` | `{caret}` | `{revision, html, caretOffset, words}`; the original bytes when the document is the loaded one (R1) |
 | `command` | `{name, attrs}` | `{applied, state: FormatState, paste?}` |
 | `lint` | `{html}` | `{loss}` |
 | `setTheme` | theme | `{}` |
+| `setAppearance` | `{fontFamily, fontSizePx, lineHeight, contentSizeCategory, isAccessibilityCategory, colorScheme, increaseContrast, boldText}` | `{}` |
+| `setMirror` | `{enabled}` | `{}`; the HTML mirror's `mirrorBlocks` flow only while enabled |
 | `dispose` | `{}` | `{}` |
 | `verifySwitch` (alias `verify`) | `{direction: 'richToSource' \| 'sourceToRich', html?}` | `{ok, candidateHtml, reason?}` |
 
@@ -164,13 +166,15 @@ title?}` (the current style again turns it off), `setAlignment {alignment: left|
 {direction: leftToRight|rightToLeft}`, `setLink {url}` (http, https, mailto), `unlink`, `insertImage {address,
 description, width, height}`, `insertSceneBreak {style: asterism|asterisks|line}`, `insertFootnote`, `openTableInHTML`
 (native; applies nothing here), `undo`, `redo`, `clearFormatting`. For the keys bar: `insertText {text}`, `insertQuotes
-{open?, close?}`, `moveCaret {by}`. And `paste {html?, text?}` for a native Paste button.
+{open?, close?}`, `moveCaret {by}`, `insertLineBreak`. And `paste {html?, text?}` for a native Paste button.
 
 Events: `ready {bundleVersion, schemaVersion, bridgeVersion}`; `edited {revision}` (no text; at most 4 a second, the last
-one always sent); `toolbarState` = FormatState `{marks, block, align, dir, canUndo, canRedo, inLink, linkURL}` (at most 10
-a second, only when it changed); `caret {x, y, height, block}` (page CSS px and the top-level block index, at most once a
-frame and only when the caret's line or block changes: for typewriter scrolling and the two-view highlight); `paste
-{loss, words, kind}`; `error {code, message}`.
+one always sent); `toolbarState` = FormatState `{marks, block, align, dir, canUndo, canRedo, inLink, linkURL, undoTitle,
+redoTitle}` (at most 10 a second, only when it changed); `caretRect {x, y, width, height, block}` (page CSS px and the
+top-level block index, at most once a frame and only when the caret's line or block changes); `mirrorBlocks` (splices of
+the HTML mirror, only while `setMirror {enabled: true}`); `paste {loss, words, kind}`; `error {code, message}`. The full
+contract, as reconciled with the native side in T-576i, is spec §7.2 rev 3; `test/bridge-fixtures/bridge.json` is a
+recorded session both sides test against (regenerate with `node test-web/bridge-fixtures.ts`).
 
 ### Choices worth knowing
 
@@ -208,6 +212,7 @@ frame and only when the caret's line or block changes: for typewriter scrolling 
   but rich mode can't open them. A part 1 fix, or an S15 property test over loaded documents rather than generated ones.
 * **The slice layout** of some fuzz documents (foster parenting out of broken tables) does not reassemble; those fall
   back to a full reparse per switch.
-* **`entities`** (parse5's dependency, BSD-2-Clause) is the one bundled package that is not MIT; its licence is in the
-  notices.
-* Android events are sent flat (`JSON.stringify(event)`); the spec's `{event}` may mean a wrapper. Not testable until E5.
+* Licences: dependencies must be permissive (MIT, BSD, ISC, Apache-2.0; the owner's reading of "MIT only",
+  2026-11-26). `entities` (parse5's dependency) is BSD-2-Clause, the one bundled package that is not MIT; its licence
+  text is in `THIRD-PARTY-NOTICES.txt` with the others.
+* Android events are flat (`JSON.stringify(event)`), the same protocol as Apple (spec §7.2 rev 3). Untested until E5.

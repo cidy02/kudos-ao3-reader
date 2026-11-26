@@ -16,7 +16,9 @@
     "golden": "cd test/golden/generate && bundle install && bundle exec ruby generate.rb",
     "build": "esbuild src/index.ts --bundle --format=esm --platform=neutral --outfile=dist/editor-core.js",
     "bundle": "node scripts/bundle.ts",
-    "test:web": "node --test test-web/*.test.ts"
+    "test:web": "node --test test-web/*.test.ts",
+    "smoke:webkit": "node scripts/bundle.ts --no-copy && swift scripts/webkit-smoke.swift dist",
+    "fixtures": "node test-web/bridge-fixtures.ts"
   },
   "dependencies": {
     "parse5": "8.1.1",

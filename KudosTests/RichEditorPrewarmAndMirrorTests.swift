@@ -193,17 +193,19 @@ struct RichEditorTwoViewsMirrorTests {
         let block = { (html: String, sep: String) in RichEditorMirrorBlock(html: html, separatorAfter: sep) }
 
         // The page's reset replaces the placeholder seed entirely.
-        #expect(mirror.apply(RichEditorMirrorBlocksEvent(
+        let applied1 = mirror.apply(RichEditorMirrorBlocksEvent(
             revision: 1, totalBlocks: 3, activeBlockIndex: 0, reset: true, from: 0, to: 0,
             blocks: [block("<p>First ✨</p>", "\n\n"), block("<p>Second</p>", "\n"), block("<p>Third</p>", "")]
-        )))
+        ))
+        #expect(applied1)
         #expect(mirror.fullHTML == "<p>First ✨</p>\n\n<p>Second</p>\n<p>Third</p>")
 
         // A splice replaces blocks [1, 2) with two blocks (Return pressed in the middle one).
-        #expect(mirror.apply(RichEditorMirrorBlocksEvent(
+        let applied2 = mirror.apply(RichEditorMirrorBlocksEvent(
             revision: 3, totalBlocks: 4, activeBlockIndex: 2, reset: false, from: 1, to: 2,
             blocks: [block("<p>Sec</p>", "\n"), block("<p>ond</p>", "\n")]
-        )))
+        ))
+        #expect(applied2)
         #expect(mirror.blocks.map(\.html) == ["<p>First ✨</p>", "<p>Sec</p>", "<p>ond</p>", "<p>Third</p>"])
         #expect(mirror.blocks.map(\.index) == [0, 1, 2, 3])
         #expect(mirror.lastPatchedIndices == [1, 2])
@@ -211,13 +213,15 @@ struct RichEditorTwoViewsMirrorTests {
         #expect(!mirror.needsReset)
 
         // Stale revisions are ignored; a splice that doesn't fit asks for a reset.
-        #expect(!mirror.apply(RichEditorMirrorBlocksEvent(
+        let applied3 = mirror.apply(RichEditorMirrorBlocksEvent(
             revision: 2, totalBlocks: 1, activeBlockIndex: 0, reset: true, from: 0, to: 0, blocks: [block("x", "")]
-        )))
+        ))
+        #expect(!applied3)
         #expect(mirror.blocks.count == 4)
-        #expect(!mirror.apply(RichEditorMirrorBlocksEvent(
+        let applied4 = mirror.apply(RichEditorMirrorBlocksEvent(
             revision: 4, totalBlocks: 4, activeBlockIndex: 0, reset: false, from: 3, to: 9, blocks: []
-        )))
+        ))
+        #expect(!applied4)
         #expect(mirror.needsReset)
 
         // UTF-16 offsets account for multi-byte characters and separators.

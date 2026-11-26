@@ -104,7 +104,9 @@ export class Editor {
     this.timer = opts.timer ?? { set: (f, ms) => setTimeout(f, ms), clear: (t) => clearTimeout(t as ReturnType<typeof setTimeout>) };
     this.now = opts.now ?? (() => performance.now());
     this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
-    this.caret = new CaretTracker((c) => this.hooks.caret(c), opts.frame ?? ((f) => requestAnimationFrame(() => f())));
+    // WebKit suspends animation frames for a hidden page; a timer keeps caret reports flowing there too.
+    const frame = (f: () => void) => (document.visibilityState === 'hidden' ? setTimeout(f, 16) : requestAnimationFrame(() => f()));
+    this.caret = new CaretTracker((c) => this.hooks.caret(c), opts.frame ?? frame);
     this.view = new EditorView(mount, {
       state: this.newState(schema.nodes.doc!.create(null, schema.nodes.paragraph!.create())),
       dispatchTransaction: (tr) => this.dispatch(tr),
