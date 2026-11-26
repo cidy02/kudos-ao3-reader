@@ -12,7 +12,7 @@ import SwiftUI
 /// run off the main thread.
 struct WritingTextEditor: View {
     @Environment(\.dismiss) var dismiss
-    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.scenePhase) var scenePhase
     @Environment(ThemeManager.self) var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     #if os(iOS)
@@ -29,6 +29,7 @@ struct WritingTextEditor: View {
     let target: String
     let field: String
     let chapterActions: WritingChapterEditorActions?
+    let embedOptions: WritingTextEditorEmbedOptions?
 
     @AppStorage(RichEditorFeatureFlag.storageKey) var richEditorFeatureEnabled = false
     @State var controller: WritingTextController?
@@ -37,12 +38,12 @@ struct WritingTextEditor: View {
     @State var showWhatChanged = false
     @State var showsHTMLMirror = false
     @State private var original: String
-    @State private var recoveries: [WritingTextRecovery.Copy] = []
+    @State var recoveries: [WritingTextRecovery.Copy] = []
     @State private var selectedRecovery: URL?
     @State private var recoveryID = UUID()
     @State var errorMessage: String?
     @State var showLink = false
-    @State private var link = "https://"
+    @State var link = "https://"
     @State private var showDeleteChapter = false
     #if os(iOS)
     @State private var showEditorHelp = false
@@ -60,7 +61,8 @@ struct WritingTextEditor: View {
     init(
         text: Binding<String>, title: String, ruleTitle: String? = nil,
         account: String, target: String, field: String,
-        chapterActions: WritingChapterEditorActions? = nil
+        chapterActions: WritingChapterEditorActions? = nil,
+        embedOptions: WritingTextEditorEmbedOptions? = nil
     ) {
         _text = text
         self.title = title
@@ -69,8 +71,11 @@ struct WritingTextEditor: View {
         self.target = target
         self.field = field
         self.chapterActions = chapterActions
+        self.embedOptions = embedOptions
         _original = State(initialValue: text.wrappedValue)
     }
+
+    private var isEmbedded: Bool { embedOptions != nil }
 
     private var recoveryKey: URL { store.fileURL(account: account, target: target, field: field) }
     private var recoveryURL: URL {
@@ -81,6 +86,14 @@ struct WritingTextEditor: View {
     }
 
     var body: some View {
+        if isEmbedded {
+            embeddedBody
+        } else {
+            standaloneBody
+        }
+    }
+
+    private var standaloneBody: some View {
         VStack(spacing: 0) {
             // 1bv's rule: the chapter's name, then the word count as of the last
             // checkpoint (E1 counts off the main thread, never per keystroke).
@@ -281,7 +294,7 @@ struct WritingTextEditor: View {
 
     #if os(iOS)
     /// The tag bar: every AO3-allowed tag, as 1bv draws it (the tag over what it does).
-    private var tagBar: some View {
+    var tagBar: some View {
         VStack(alignment: .leading, spacing: 9) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 7) {
@@ -402,7 +415,7 @@ struct WritingTextEditor: View {
 
     /// At the accessibility sizes the sheet scrolls and the copy keeps a fixed height, so
     /// the heading, the notes and the actions wrap whole instead of ending in "…".
-    private var recoverySheet: some View {
+    var recoverySheet: some View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
                 ScrollView { recoveryContent }
@@ -464,13 +477,15 @@ struct WritingTextEditor: View {
         .padding()
     }
 
-    private func start() {
+    func start() {
         guard controller == nil else { return }
         let editor = WritingTextController(text: text)
         controller = editor
         editor.setAppearance(theme.appTheme, fontSize: editorFontSize)
         let writer = WritingRecoveryWriter(store: store, url: recoveryURL, original: original)
-        session = makeDraftSession(editor: editor, writer: writer)
+        let createdSession = makeDraftSession(editor: editor, writer: writer)
+        session = createdSession
+        startEmbeddedIfNeeded(session: createdSession)
         loadRecoveries()
     }
 
@@ -496,7 +511,7 @@ struct WritingTextEditor: View {
     }
 
     /// Leaving the screen: commit any composition, checkpoint, then break cycles.
-    private func finish() {
+    func finish() {
         teardownEditor()
     }
 }
