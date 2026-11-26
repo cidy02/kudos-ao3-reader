@@ -328,20 +328,24 @@ struct RichEditorHostAndNavigationTests {
         }
     }
 
-    @Test func bundledStubPageResolvesAndEnforcesSecurityPolicy() throws {
+    @Test func bundledEditorPageResolvesAndEnforcesSecurityPolicy() throws {
         let handler = RichEditorURLSchemeHandler(bundle: .main)
         let html = try handler.resolve(url: RichEditorBundleLocation.entryURL).get()
         let htmlString = String(decoding: html.data, as: UTF8.self)
         #expect(htmlString.contains(RichEditorBundleLocation.contentSecurityPolicy))
-        #expect(htmlString.contains("editor-stub.js"))
+        #expect(htmlString.contains("src=\"editor.js\""))
+        #expect(htmlString.contains("href=\"editor.css\""))
 
-        let script = try handler.resolve(url: URL(string: "kudos-editor://editor/editor-stub.js")).get()
+        let script = try handler.resolve(url: URL(string: "kudos-editor://editor/editor.js")).get()
+        #expect(script.mimeType == "application/javascript; charset=utf-8")
         let scriptString = String(decoding: script.data, as: UTF8.self)
-        #expect(scriptString.contains("window.KudosEditor"))
-        // Property access, not the word: the stub's own comment mentions it.
-        #expect(!scriptString.contains(".innerHTML"))
-        #expect(!scriptString.contains(".outerHTML"))
-        #expect(!scriptString.contains("insertAdjacentHTML"))
+        #expect(scriptString.contains("KudosEditor"))
+        // No network or dynamic code in the bundle (editor-core's bundle test scans it in full; §11).
+        for forbidden in ["fetch(", "XMLHttpRequest", "eval(", "new Function", "WebSocket"] {
+            #expect(!scriptString.contains(forbidden), "\(forbidden)")
+        }
+        let css = try handler.resolve(url: URL(string: "kudos-editor://editor/editor.css")).get()
+        #expect(css.mimeType == "text/css; charset=utf-8")
     }
 
     @Test func webViewHostConfiguresNonPersistentStoreNoLinkPreviewAndPrePaintBackground() {

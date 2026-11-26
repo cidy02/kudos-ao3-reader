@@ -52,46 +52,55 @@ nonisolated struct RichEditorAppearance: Codable, Equatable, Hashable, Sendable 
     }
 }
 
-/// Caret bounding rectangle reported by the page in document CSS pixels (§10.3 N4).
+/// Caret bounding rectangle reported by the page in document CSS pixels (§10.3 N4), and the top-level block
+/// holding the caret (§7.10's highlight). Sent at most once a frame, only when the caret's line or block changes.
 ///
-/// Event JSON shape sent via `window.webkit.messageHandlers.kudos.postMessage(...)`:
 /// ```json
-/// { "type": "caretRect", "x": 16, "y": 420, "width": 2, "height": 24 }
+/// { "type": "caretRect", "x": 16, "y": 420, "width": 1, "height": 24, "block": 3 }
 /// ```
 nonisolated struct RichEditorCaretRect: Codable, Equatable, Hashable, Sendable {
     var x: Double
     var y: Double
     var width: Double
     var height: Double
+    var block: Int?
+
+    init(x: Double, y: Double, width: Double, height: Double, block: Int? = nil) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.block = block
+    }
 }
 
-/// One changed top-level block reported by the page for the §7.10 HTML mirror.
-nonisolated struct RichEditorMirrorBlockPatch: Codable, Equatable, Hashable, Sendable {
-    var index: Int
+/// One top-level block of the §7.10 HTML mirror, with the text between it and the next block.
+nonisolated struct RichEditorMirrorBlock: Codable, Equatable, Hashable, Sendable {
     var html: String
-    var separatorAfter: String?
+    var separatorAfter: String
 }
 
-/// Debounced (~300 ms after typing stops) top-level block diff reported by the
-/// page for the §7.10 read-only HTML mirror. Never emitted synchronously on keystrokes.
+/// An update of the §7.10 read-only HTML mirror, sent by the page only while the mirror is shown (`setMirror`):
+/// first a `reset` with every block, then, about 300 ms after typing stops, a splice replacing blocks
+/// `[from, to)` with `blocks`. The blocks joined are the HTML a snapshot would return at `revision`.
 ///
-/// Event JSON shape sent via `window.webkit.messageHandlers.kudos.postMessage(...)`:
 /// ```json
-/// {
-///   "type": "mirrorBlocks",
-///   "revision": 12,
-///   "totalBlocks": 4,
-///   "activeBlockIndex": 1,
-///   "changes": [
-///     { "index": 1, "html": "<p>Updated paragraph</p>", "separatorAfter": "\n\n" }
-///   ]
-/// }
+/// { "type": "mirrorBlocks", "revision": 12, "totalBlocks": 4, "activeBlockIndex": 1, "reset": false,
+///   "from": 0, "to": 3, "blocks": [ { "html": "<p>One</p>", "separatorAfter": "\n" }, ... ] }
 /// ```
 nonisolated struct RichEditorMirrorBlocksEvent: Codable, Equatable, Hashable, Sendable {
     var revision: Int
     var totalBlocks: Int
-    var changes: [RichEditorMirrorBlockPatch]
     var activeBlockIndex: Int?
+    var reset: Bool
+    var from: Int
+    var to: Int
+    var blocks: [RichEditorMirrorBlock]
+}
+
+/// `setMirror` arguments: whether the HTML mirror is on screen.
+nonisolated struct RichEditorMirrorArgs: Codable, Equatable, Sendable {
+    var enabled: Bool
 }
 
 extension RichEditorToolbarState {

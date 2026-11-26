@@ -524,6 +524,7 @@ nonisolated enum RichEditorBridgeCall: Equatable, Sendable {
     case lint(RichEditorLintArgs)
     case setTheme(RichEditorTheme)
     case setAppearance(RichEditorAppearance)
+    case setMirror(RichEditorMirrorArgs)
     case dispose
     case verifySwitch(RichEditorSwitchCheckArgs)
 
@@ -538,6 +539,7 @@ nonisolated enum RichEditorBridgeCall: Equatable, Sendable {
         case .lint: "lint"
         case .setTheme: "setTheme"
         case .setAppearance: "setAppearance"
+        case .setMirror: "setMirror"
         case .dispose: "dispose"
         case .verifySwitch: "verifySwitch"
         }
@@ -548,7 +550,7 @@ nonisolated enum RichEditorBridgeCall: Equatable, Sendable {
         switch self {
         case .configure, .load, .lint: .seconds(5)
         case .snapshot, .verifySwitch: .seconds(2)
-        case .activate, .freeze, .command, .setTheme, .setAppearance, .dispose: .seconds(1)
+        case .activate, .freeze, .command, .setTheme, .setAppearance, .setMirror, .dispose: .seconds(1)
         }
     }
 }
@@ -612,6 +614,7 @@ nonisolated enum RichEditorBridgeEncoder {
         case let .lint(args): data = try encoder.encode(args)
         case let .setTheme(theme): data = try encoder.encode(theme)
         case let .setAppearance(appearance): data = try encoder.encode(appearance)
+        case let .setMirror(args): data = try encoder.encode(args)
         case .dispose: data = try encoder.encode(RichEditorEmptyArgs())
         case let .verifySwitch(args): data = try encoder.encode(args)
         }
@@ -672,8 +675,14 @@ protocol RichEditorBridgeTransport: AnyObject {
     func lint(_ args: RichEditorLintArgs) async throws -> RichEditorLintResult
     func setTheme(_ theme: RichEditorTheme) async throws
     func setAppearance(_ appearance: RichEditorAppearance) async throws
+    func setMirror(_ args: RichEditorMirrorArgs) async throws
     func dispose() async throws
     func verifySwitch(_ args: RichEditorSwitchCheckArgs) async throws -> RichEditorSwitchCheckResult
     func focusWebView()
     func resetAfterTermination()
+}
+
+extension RichEditorBridgeTransport {
+    /// Default for transports without a mirror (test fakes): nothing to show.
+    func setMirror(_ args: RichEditorMirrorArgs) async throws {}
 }

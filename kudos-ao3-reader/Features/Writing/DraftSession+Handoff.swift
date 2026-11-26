@@ -288,6 +288,7 @@ extension DraftSession {
                 return .failed
             }
             isConfigured = true
+            pushMirrorVisibility()
             return .switched
         } catch {
             return failSwitchToRich(token: token, error: error)

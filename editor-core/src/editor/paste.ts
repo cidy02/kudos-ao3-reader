@@ -4,6 +4,7 @@
 import { Slice } from 'prosemirror-model';
 import type { Node as PMNode } from 'prosemirror-model';
 import { TextSelection } from 'prosemirror-state';
+import { closeHistory } from 'prosemirror-history';
 import type { EditorView } from 'prosemirror-view';
 import { load, schema, serializeDoc } from '../index.ts';
 import type { LossReport, Variant } from '../index.ts';
@@ -28,7 +29,7 @@ export function insertPaste(view: EditorView, result: PasteResult, at?: number, 
   if (at !== undefined) tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(Math.max(at, 0), tr.doc.content.size))));
   if (label) tr.setMeta('kudosLabel', label);
   tr.replaceSelection(result.slice).scrollIntoView().setMeta('uiEvent', at === undefined ? 'paste' : 'drop').setMeta('kudosPaste', { loss: result.loss, words: result.words, kind: result.kind } satisfies PasteInfo);
-  view.dispatch(tr);
+  view.dispatch(closeHistory(tr)); // a paste is its own undo step (the paste report's Undo Paste)
 }
 
 /** The HTML of a slice as rich mode would write it (copy keeps AO3-clean markup). */

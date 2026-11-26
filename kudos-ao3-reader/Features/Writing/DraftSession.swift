@@ -111,6 +111,8 @@ final class DraftSession {
     var lastMismatchRecoveryURLs: (leaving: URL, candidate: URL)?
     /// The last paste into Rich Text and what AO3's cleaning did to it (the paste report, §6.8, §6.9).
     var lastPaste: DraftPasteReport?
+    /// Whether the §7.10 HTML mirror is on screen; the page sends `mirrorBlocks` only while it is.
+    private(set) var isMirrorVisible = false
     /// Incremental block mirror for §7.10 two-views mode (updated ONLY from `mirrorBlocks`).
     var mirrorDocument = HTMLMirrorDocument()
     /// User-facing notice for switch failures, switch-check mismatches, or process death.
@@ -341,8 +343,10 @@ final class DraftSession {
             // Handled directly by `RichEditorHost` for native scroll-view tracking (N4).
             break
         case let .mirrorBlocks(event):
-            guard state == .richOwned else { return }
+            // The page's reset can land while the hand-off into Rich Text is completing.
+            guard state == .richOwned || state == .handingOffToRich else { return }
             _ = mirrorDocument.apply(event)
+            if mirrorDocument.needsReset { pushMirrorVisibility() }
         case let .paste(event):
             guard state == .richOwned else { return }
             lastPaste = DraftPasteReport(sequence: (lastPaste?.sequence ?? 0) + 1, event: event)
@@ -429,6 +433,28 @@ final class DraftSession {
         }
         transport.onProcessTerminated = { [weak self] in
             self?.handleWebContentProcessTerminated()
+        }
+    }
+}
+
+extension DraftSession {
+    /// Shows or hides the §7.10 HTML mirror. Showing it makes the page send every block once (a reset).
+    func setMirrorVisible(_ visible: Bool) {
+        guard visible != isMirrorVisible else { return }
+        isMirrorVisible = visible
+        pushMirrorVisibility()
+    }
+
+    /// Tells the page whether the mirror is shown (again after a reset was needed or the page was configured).
+    func pushMirrorVisibility() {
+        guard isConfigured, let transport = richTransport else { return }
+        let enabled = isMirrorVisible
+        Task { [weak self] in
+            do {
+                try await transport.setMirror(RichEditorMirrorArgs(enabled: enabled))
+            } catch {
+                self?.logNonFatal("setMirror failed: \(error.localizedDescription)")
+            }
         }
     }
 }

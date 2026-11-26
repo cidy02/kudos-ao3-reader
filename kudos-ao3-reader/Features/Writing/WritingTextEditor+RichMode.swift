@@ -132,6 +132,10 @@ extension WritingTextEditor {
             .opacity(showsRichView ? 1 : 0)
             .accessibilityHidden(!showsRichView)
             .allowsHitTesting(showsRichView)
+            // §7.10: the page sends mirror blocks only while the mirror is on screen.
+            .onChange(of: showsSideBySideToggle && showsHTMLMirror, initial: true) { _, visible in
+                session?.setMirrorVisible(visible)
+            }
         }
         if session?.isShowingSwitchTransition == true {
             ProgressView("Switching to Rich Text…")

@@ -2,7 +2,7 @@
 import { EditorState, Selection, TextSelection } from 'prosemirror-state';
 import type { Command, Transaction } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
-import { history, isHistoryTransaction, redoDepth, undoDepth } from 'prosemirror-history';
+import { closeHistory, history, isHistoryTransaction, redoDepth, undoDepth } from 'prosemirror-history';
 import { keymap } from 'prosemirror-keymap';
 import { baseKeymap } from 'prosemirror-commands';
 import { liftListItem, sinkListItem, splitListItem } from 'prosemirror-schema-list';
@@ -150,9 +150,9 @@ export class Editor {
     this.view.setProps(this.props());
   }
 
-  /** A command whose transaction is named `label` on the undo stack. */
+  /** A command whose transaction is its own undo step, named `label` (typing is the only thing that groups). */
   private labelled(label: string, command: Command): Command {
-    return (state, dispatch, view) => command(state, dispatch && ((tr) => dispatch(tr.setMeta('kudosLabel', label))), view);
+    return (state, dispatch, view) => command(state, dispatch && ((tr) => dispatch(closeHistory(tr.setMeta('kudosLabel', label)))), view);
   }
 
   private newState(doc: EditorState['doc'], selection?: Selection): EditorState {
@@ -255,11 +255,10 @@ export class Editor {
       while (prefix < max && prev[prefix] === cur[prefix]) prefix++;
       let suffix = 0;
       while (suffix < max - prefix && prev[prev.length - 1 - suffix] === cur[cur.length - 1 - suffix]) suffix++;
-      // one block either side too: whether a neighbour was written from source changes the text between them
+      // and the block before: its separatorAfter depends on whether the next block is written from source
       from = Math.max(0, prefix - 1);
-      const keep = Math.max(0, suffix - 1);
-      toOld = prev.length - keep;
-      toNew = cur.length - keep;
+      toOld = prev.length - suffix;
+      toNew = cur.length - suffix;
       if (prefix === prev.length && prefix === cur.length) { from = toOld = toNew = cur.length; }
     }
     const segs = out.segments;
@@ -303,7 +302,7 @@ export class Editor {
     e.clipboardData.setData('text/html', sliceHtml(slice));
     e.clipboardData.setData('text/plain', sliceText(slice));
     e.preventDefault();
-    if (cut && !this.frozen) this.view.dispatch(this.view.state.tr.deleteSelection().scrollIntoView().setMeta('uiEvent', 'cut'));
+    if (cut && !this.frozen) this.view.dispatch(closeHistory(this.view.state.tr.deleteSelection().scrollIntoView().setMeta('uiEvent', 'cut')));
     return true;
   }
 
@@ -370,6 +369,11 @@ export class Editor {
     this.frozen = false;
     this.view.updateState(state);
     this.refreshProps();
+    if (caret !== null) { // a hand-off in: the native mirror starts again from the text HTML mode had
+      this.mirror.reset = true;
+      this.mirror.sent = [];
+      this.scheduleMirror(0);
+    }
     if (focus) this.view.focus();
     this.caret.force(this.view);
     this.hooks.changed();
@@ -427,7 +431,8 @@ export class Editor {
     }
     const command = this.resolve(name, attrs);
     const label = this.stepLabel(name, attrs);
-    const applied = command ? command(this.view.state, (tr) => this.view.dispatch(label ? tr.setMeta('kudosLabel', label) : tr), this.view) : false;
+    const step = command && label && label !== this.labels.stepTyping ? this.labelled(label, command) : command;
+    const applied = step ? step(this.view.state, (tr) => this.view.dispatch(label ? tr.setMeta('kudosLabel', label) : tr), this.view) : false;
     return { applied, state: this.formatState() };
   }
 

@@ -201,6 +201,10 @@ final class RichEditorHost: NSObject, RichEditorBridgeTransport, RichEditorPrewa
         _ = try await performCall(.setAppearance(appearance), as: RichEditorEmptyResult.self)
     }
 
+    func setMirror(_ args: RichEditorMirrorArgs) async throws {
+        _ = try await performCall(.setMirror(args), as: RichEditorEmptyResult.self)
+    }
+
     func dispose() async throws {
         _ = try await performCall(.dispose, as: RichEditorEmptyResult.self)
     }

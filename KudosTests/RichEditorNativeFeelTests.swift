@@ -379,18 +379,22 @@ struct RichEditorScrollingAndAppearanceTests {
         #expect(clampedTop == 0)
     }
 
-    @Test func caretRectAndStubPageSupportNativeFeelMessages() throws {
+    @Test func caretRectAndBundledPageSupportNativeFeelMessages() throws {
         let decoded = try RichEditorEvent.decode(from: [
-            "type": "caretRect", "x": 16, "y": 420, "width": 2, "height": 24,
+            "type": "caretRect", "x": 16, "y": 420, "width": 1, "height": 24, "block": 3,
         ])
-        #expect(decoded == .caretRect(RichEditorCaretRect(x: 16, y: 420, width: 2, height: 24)))
+        #expect(decoded == .caretRect(RichEditorCaretRect(x: 16, y: 420, width: 1, height: 24, block: 3)))
 
         let handler = RichEditorURLSchemeHandler(bundle: .main)
-        let html = try handler.resolve(url: RichEditorBundleLocation.entryURL).get()
-        let htmlString = String(decoding: html.data, as: UTF8.self)
-        #expect(htmlString.contains("overflow-y: visible"))
+        let css = try handler.resolve(url: URL(string: "kudos-editor://editor/editor.css")).get()
+        let cssString = String(decoding: css.data, as: UTF8.self)
+        // N4/N5: no inner scroll container, sizes and colours from the native side's variables.
+        #expect(!cssString.contains("overflow: auto"))
+        #expect(!cssString.contains("overflow: scroll"))
+        #expect(cssString.contains("--kd-size"))
+        #expect(cssString.contains("-webkit-text-size-adjust: 100%"))
 
-        let script = try handler.resolve(url: URL(string: "kudos-editor://editor/editor-stub.js")).get()
+        let script = try handler.resolve(url: URL(string: "kudos-editor://editor/editor.js")).get()
         let scriptString = String(decoding: script.data, as: UTF8.self)
         #expect(scriptString.contains("setAppearance"))
         #expect(scriptString.contains("mirrorBlocks"))

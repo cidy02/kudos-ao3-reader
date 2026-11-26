@@ -15,5 +15,6 @@ const rect = { left: 10, right: 10, top: 20, bottom: 40, width: 0, height: 20, x
 (w.Range.prototype as unknown as Record<string, unknown>).getBoundingClientRect = () => rect;
 (w.Element.prototype as unknown as Record<string, unknown>).getClientRects = () => [rect];
 (w.document as unknown as Record<string, unknown>).elementFromPoint = () => null;
+(w as unknown as Record<string, unknown>).scrollBy = () => undefined; // ProseMirror scrolls the caret into view
 
 export const jsdomWindow = w;

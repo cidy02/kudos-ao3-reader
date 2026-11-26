@@ -47,46 +47,38 @@ nonisolated struct HTMLMirrorDocument: Equatable, Sendable {
         )
     }
 
-    /// Applies a `mirrorBlocks` diff event, updating ONLY the reported block
-    /// indices and resizing to `event.totalBlocks`. Rejects stale revisions.
+    /// Whether the last event left the mirror out of step with the page (the native side asks for a reset).
+    private(set) var needsReset = false
+
+    /// Applies a `mirrorBlocks` event: a reset replaces every block, a splice replaces blocks `[from, to)`. Rejects
+    /// stale revisions and splices that don't fit; a block count that disagrees with the page marks `needsReset`.
     @discardableResult
     mutating func apply(_ event: RichEditorMirrorBlocksEvent) -> Bool {
         guard event.revision >= revision else { return false }
-
-        let targetCount = max(0, event.totalBlocks)
-        let didShrink = targetCount < blocks.count
-        if blocks.count > targetCount {
-            blocks.removeLast(blocks.count - targetCount)
-        } else if blocks.count < targetCount {
-            for idx in blocks.count..<targetCount {
-                let separator = idx + 1 < targetCount ? "\n\n" : ""
-                blocks.append(HTMLMirrorBlock(index: idx, html: "", separatorAfter: separator))
+        let incoming = event.blocks.map { HTMLMirrorBlock(index: 0, html: $0.html, separatorAfter: $0.separatorAfter) }
+        var next = blocks
+        let start: Int
+        if event.reset {
+            next = incoming
+            start = 0
+        } else {
+            guard event.from >= 0, event.from <= event.to, event.to <= next.count else {
+                needsReset = true
+                return false
             }
+            next.replaceSubrange(event.from..<event.to, with: incoming)
+            start = event.from
         }
-
-        var patched: Set<Int> = []
-        for change in event.changes {
-            guard change.index >= 0, change.index < blocks.count else { continue }
-            blocks[change.index].html = change.html
-            if let separator = change.separatorAfter {
-                blocks[change.index].separatorAfter = separator
-            }
-            patched.insert(change.index)
-        }
-
-        if didShrink,
-           let lastIndex = blocks.indices.last,
-           !event.changes.contains(where: { $0.index == lastIndex }) {
-            blocks[lastIndex].separatorAfter = ""
-        }
-
+        for idx in next.indices { next[idx] = HTMLMirrorBlock(index: idx, html: next[idx].html, separatorAfter: next[idx].separatorAfter) }
+        needsReset = next.count != event.totalBlocks
+        blocks = next
         revision = event.revision
         if let active = event.activeBlockIndex, active >= 0, active < blocks.count {
             activeBlockIndex = active
         } else if blocks.isEmpty {
             activeBlockIndex = nil
         }
-        lastPatchedIndices = patched
+        lastPatchedIndices = Set(start..<(start + incoming.count))
         patchApplyCount += 1
         return true
     }

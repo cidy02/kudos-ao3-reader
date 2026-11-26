@@ -188,67 +188,46 @@ struct RichEditorTwoViewsMirrorTests {
         #expect(!RichEditorTwoViewPolicy.supportsSideBySide(isRegularWidth: false))
     }
 
-    @Test func htmlMirrorDocumentUpdatesOnlyReportedBlocksAndComputesUTF16Offsets() throws {
-        let initial = "<p>First ✨</p>\n\n<p>Second</p>\n\n<p>Third</p>"
-        var mirror = HTMLMirrorDocument.seed(from: initial, revision: 0)
-        #expect(mirror.blocks.count == 3)
-        #expect(mirror.fullHTML == initial)
+    @Test func htmlMirrorDocumentAppliesResetsAndSplicesAndComputesUTF16Offsets() throws {
+        var mirror = HTMLMirrorDocument.seed(from: "placeholder", revision: 0)
+        let block = { (html: String, sep: String) in RichEditorMirrorBlock(html: html, separatorAfter: sep) }
 
-        // Patch only block 1; blocks 0 and 2 remain untouched verbatim.
-        let event = RichEditorMirrorBlocksEvent(
-            revision: 3,
-            totalBlocks: 3,
-            changes: [
-                RichEditorMirrorBlockPatch(index: 1, html: "<p><em>Second edited</em></p>", separatorAfter: nil),
-            ],
-            activeBlockIndex: 1
-        )
-        let appliedEvent = mirror.apply(event)
-        #expect(appliedEvent)
-        #expect(mirror.lastPatchedIndices == [1])
-        #expect(mirror.patchApplyCount == 1)
-        #expect(mirror.activeBlockIndex == 1)
-        #expect(mirror.blocks[0].html == "<p>First ✨</p>")
-        #expect(mirror.blocks[1].html == "<p><em>Second edited</em></p>")
-        #expect(mirror.blocks[2].html == "<p>Third</p>")
-        #expect(mirror.fullHTML == "<p>First ✨</p>\n\n<p><em>Second edited</em></p>\n\n<p>Third</p>")
+        // The page's reset replaces the placeholder seed entirely.
+        #expect(mirror.apply(RichEditorMirrorBlocksEvent(
+            revision: 1, totalBlocks: 3, activeBlockIndex: 0, reset: true, from: 0, to: 0,
+            blocks: [block("<p>First ✨</p>", "\n\n"), block("<p>Second</p>", "\n"), block("<p>Third</p>", "")]
+        )))
+        #expect(mirror.fullHTML == "<p>First ✨</p>\n\n<p>Second</p>\n<p>Third</p>")
 
-        // Stale revision is ignored.
-        let stale = RichEditorMirrorBlocksEvent(
-            revision: 2,
-            totalBlocks: 1,
-            changes: [RichEditorMirrorBlockPatch(index: 0, html: "<p>Stale</p>", separatorAfter: "")],
-            activeBlockIndex: 0
-        )
-        let appliedStale = mirror.apply(stale)
-        #expect(!appliedStale)
-        #expect(mirror.blocks.count == 3)
+        // A splice replaces blocks [1, 2) with two blocks (Return pressed in the middle one).
+        #expect(mirror.apply(RichEditorMirrorBlocksEvent(
+            revision: 3, totalBlocks: 4, activeBlockIndex: 2, reset: false, from: 1, to: 2,
+            blocks: [block("<p>Sec</p>", "\n"), block("<p>ond</p>", "\n")]
+        )))
+        #expect(mirror.blocks.map(\.html) == ["<p>First ✨</p>", "<p>Sec</p>", "<p>ond</p>", "<p>Third</p>"])
+        #expect(mirror.blocks.map(\.index) == [0, 1, 2, 3])
+        #expect(mirror.lastPatchedIndices == [1, 2])
+        #expect(mirror.activeBlockIndex == 2)
+        #expect(!mirror.needsReset)
 
-        // UTF-16 offset accounts for multi-byte characters and separators.
+        // Stale revisions are ignored; a splice that doesn't fit asks for a reset.
+        #expect(!mirror.apply(RichEditorMirrorBlocksEvent(
+            revision: 2, totalBlocks: 1, activeBlockIndex: 0, reset: true, from: 0, to: 0, blocks: [block("x", "")]
+        )))
+        #expect(mirror.blocks.count == 4)
+        #expect(!mirror.apply(RichEditorMirrorBlocksEvent(
+            revision: 4, totalBlocks: 4, activeBlockIndex: 0, reset: false, from: 3, to: 9, blocks: []
+        )))
+        #expect(mirror.needsReset)
+
+        // UTF-16 offsets account for multi-byte characters and separators.
         let block0Len = ("<p>First ✨</p>\n\n" as NSString).length
         #expect(mirror.utf16Offset(blockIndex: 0) == 0)
         #expect(mirror.utf16Offset(blockIndex: 1) == block0Len)
-
-        // Event decoding matches documented JSON shape.
-        let decoded = try RichEditorEvent.decode(from: [
-            "type": "mirrorBlocks",
-            "revision": 4,
-            "totalBlocks": 2,
-            "activeBlockIndex": 0,
-            "changes": [
-                ["index": 0, "html": "<p>Changed</p>", "separatorAfter": "\n\n"],
-            ],
-        ])
-        #expect(decoded == .mirrorBlocks(RichEditorMirrorBlocksEvent(
-            revision: 4,
-            totalBlocks: 2,
-            changes: [RichEditorMirrorBlockPatch(index: 0, html: "<p>Changed</p>", separatorAfter: "\n\n")],
-            activeBlockIndex: 0
-        )))
     }
 
     @Test func draftSessionMirrorNeverUpdatesOnKeystrokesAndOnlyAppliesMirrorBlocks() async {
-        let initial = "<p>Untouched top</p>\n\n<p>Middle</p>\n\n<p>Untouched bottom</p>"
+        let initial = "<p>Untouched top</p>\n<p>Middle</p>\n<p>Untouched bottom</p>"
         let source = FakeSourceEditor(text: initial)
         let transport = FakeRichTransport()
         let session = DraftSession(
@@ -260,28 +239,27 @@ struct RichEditorTwoViewsMirrorTests {
         )
 
         #expect(await session.switchToRich() == .switched)
-        #expect(session.mirrorDocument.blocks.count == 3)
         #expect(session.mirrorDocument.patchApplyCount == 0)
+        let block = { (html: String, sep: String) in RichEditorMirrorBlock(html: html, separatorAfter: sep) }
+        transport.emit(.mirrorBlocks(RichEditorMirrorBlocksEvent(
+            revision: 0, totalBlocks: 3, activeBlockIndex: 0, reset: true, from: 0, to: 0,
+            blocks: [block("<p>Untouched top</p>", "\n"), block("<p>Middle</p>", "\n"), block("<p>Untouched bottom</p>", "")]
+        )))
+        #expect(session.mirrorDocument.fullHTML == initial)
 
         // Rapid keystroke `edited` events must NEVER mutate the mirror (D8 / §7.10).
         transport.emit(.edited(revision: 1))
         transport.emit(.edited(revision: 2))
         transport.emit(.edited(revision: 3))
-        #expect(session.mirrorDocument.patchApplyCount == 0)
-        #expect(session.mirrorDocument.fullHTML == initial)
-
-        // Debounced `mirrorBlocks` updates only block 1.
-        transport.emit(.mirrorBlocks(RichEditorMirrorBlocksEvent(
-            revision: 3,
-            totalBlocks: 3,
-            changes: [RichEditorMirrorBlockPatch(index: 1, html: "<p>Middle updated</p>", separatorAfter: nil)],
-            activeBlockIndex: 1
-        )))
         #expect(session.mirrorDocument.patchApplyCount == 1)
-        #expect(session.mirrorDocument.lastPatchedIndices == [1])
-        #expect(session.mirrorDocument.blocks[0].html == "<p>Untouched top</p>")
-        #expect(session.mirrorDocument.blocks[1].html == "<p>Middle updated</p>")
-        #expect(session.mirrorDocument.blocks[2].html == "<p>Untouched bottom</p>")
+
+        // Debounced `mirrorBlocks` splices only the block before the edit and the edited one.
+        transport.emit(.mirrorBlocks(RichEditorMirrorBlocksEvent(
+            revision: 3, totalBlocks: 3, activeBlockIndex: 1, reset: false, from: 0, to: 2,
+            blocks: [block("<p>Untouched top</p>", "\n"), block("<p>Middle updated</p>", "\n")]
+        )))
+        #expect(session.mirrorDocument.patchApplyCount == 2)
+        #expect(session.mirrorDocument.blocks.map(\.html) == ["<p>Untouched top</p>", "<p>Middle updated</p>", "<p>Untouched bottom</p>"])
     }
 
     @Test func tappingMirrorSwitchesToHTMLAndPlacesCaretAtTappedOffsetForUneditedAndEditedText() async {
@@ -317,13 +295,11 @@ struct RichEditorTwoViewsMirrorTests {
         transport.storedWords = 3
         transport.emit(.edited(revision: 1))
         transport.emit(.mirrorBlocks(RichEditorMirrorBlocksEvent(
-            revision: 1,
-            totalBlocks: 2,
-            changes: [
-                RichEditorMirrorBlockPatch(index: 0, html: "<p><b>First</b></p>", separatorAfter: "\n\n"),
-                RichEditorMirrorBlockPatch(index: 1, html: "<p>Second edited</p>", separatorAfter: ""),
-            ],
-            activeBlockIndex: 1
+            revision: 1, totalBlocks: 2, activeBlockIndex: 1, reset: true, from: 0, to: 0,
+            blocks: [
+                RichEditorMirrorBlock(html: "<p><b>First</b></p>", separatorAfter: "\n\n"),
+                RichEditorMirrorBlock(html: "<p>Second edited</p>", separatorAfter: ""),
+            ]
         )))
 
         let editedTapOffset = session.mirrorDocument.utf16Offset(blockIndex: 1)
