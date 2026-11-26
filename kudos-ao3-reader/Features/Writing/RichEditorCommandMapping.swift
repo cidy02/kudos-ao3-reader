@@ -138,6 +138,18 @@ extension DraftSession {
         }
     }
 
+    /// The HTML Rich Text would hand back now, without a checkpoint or any other side effect: what a TK's range
+    /// (`lastTypedTK`) indexes into (T-576d).
+    func currentHTML() async -> String? {
+        guard state == .richOwned, let transport = richTransport else { return nil }
+        do {
+            return try await transport.snapshot(RichEditorSnapshotArgs(caret: false)).html
+        } catch {
+            logNonFatal("snapshot failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     /// Replaces the word before the caret with a suggestion (a name from the work's story notes, T-576d).
     func completeWord(_ text: String) {
         applyRichCommand(name: "completeWord", attrs: ["text": .string(text)])
