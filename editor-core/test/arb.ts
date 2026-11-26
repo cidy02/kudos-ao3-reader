@@ -83,7 +83,12 @@ export function docArb(variant: Variant = 'content', opts: { maxBlocks?: number 
       items: fc.array(fc.record({ first: fc.tuple(fc.boolean(), inlineContent(0, 3)), rest: fc.array(tie('tree') as fc.Arbitrary<PMNode>, { maxLength: 1 }), g }), { minLength: 1, maxLength: 3 }),
     }).map(({ ordered, start, type, g: ga, items }) => {
       // an empty implicit paragraph in front of a paragraph is the same list item as one that starts with that paragraph
-      const trim = (ns: PMNode[]): PMNode[] => { const o = ns.slice(); const f = o[0]; if (f?.isText) { const t = f.text!.replace(/^ +/, ''); if (t) o[0] = schema.text(t, f.marks); else o.shift(); } const l = o[o.length - 1]; if (l?.isText) { const t = l.text!.replace(/ +$/, ''); if (t) o[o.length - 1] = schema.text(t, l.marks); else o.pop(); } return o; };
+      const trim = (ns: PMNode[]): PMNode[] => {
+        const o = ns.slice();
+        while (o[0]?.isText) { const t = o[0].text!.replace(/^ +/, ''); if (t === o[0].text) break; if (t) { o[0] = schema.text(t, o[0].marks); break; } o.shift(); }
+        for (let l = o[o.length - 1]; l?.isText; l = o[o.length - 1]) { const t = l.text!.replace(/ +$/, ''); if (t === l.text) break; if (t) { o[o.length - 1] = schema.text(t, l.marks); break; } o.pop(); }
+        return o;
+      };
       const lis = items.map(({ first: [implicit, c0], rest, g: lg }) => { const c = implicit ? trim(c0) : c0; return schema.nodes.list_item!.create(lg, [schema.nodes.paragraph!.create({ implicit: implicit && !(c.length === 0 && rest[0]?.type.name === 'paragraph') && !(c.length > 0 && c.every((x) => x.isText && /^[ ]*$/.test(x.text!))) }, c), ...rest]); });
       return ordered ? schema.nodes.ordered_list!.create({ start, type, ...ga }, lis) : schema.nodes.bullet_list!.create({ type, ...ga }, lis);
     }),

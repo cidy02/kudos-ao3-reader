@@ -92,6 +92,12 @@ export class Sources implements SourceInfo {
     this.lead = original.length - lstrip(original).length;
   }
 
+  private starts: number[] | null = null;
+  blockStart(index: number): number {
+    if (!this.starts) { this.starts = []; let p = 0; this.doc.forEach((c) => { this.starts!.push(p); p += c.nodeSize; }); }
+    return this.starts[index] ?? 0;
+  }
+
   get blocks(): WeakMap<PMNode, BlockSource> {
     if (!this._blocks) this._blocks = this.computeBlocks();
     return this._blocks;

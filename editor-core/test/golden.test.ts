@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fixBadCharacters, paragraphStage, sanitizeValue } from '../src/clean.ts';
-import { buildCorpus } from './golden/corpus.ts';
+import { buildCorpus, s15Documents } from './golden/corpus.ts';
+import { parseCleaned } from '../src/load.ts';
 import type { Variant } from '../src/sanitize.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -58,4 +59,14 @@ for (const variant of ['content', 'notes', 'summary'] as Variant[]) {
 
 test('fixBadCharacters drops lone surrogates (not representable in the JSON corpus)', () => {
   assert.equal(fixBadCharacters('a\ud800b\udc00c\u{1f600}'), 'abc\u{1f600}');
+});
+
+test('S15 against Ruby: the golden cleaning of every generated document parses back to that document', () => {
+  const docs = s15Documents();
+  const byId = new Map<string, any>(golden.cases.map((c: any) => [c.id, c]));
+  docs.forEach((d, i) => {
+    const g = byId.get(`s15-${i}`);
+    assert.ok(g && g.content.html !== undefined, `golden for s15-${i}`);
+    assert.ok(parseCleaned(g.content.html).eq(d), `s15-${i}: Ruby's cleaning of ${JSON.stringify(inputs.get(`s15-${i}`))} is ${JSON.stringify(g.content.html)}`);
+  });
 });

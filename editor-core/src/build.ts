@@ -108,7 +108,7 @@ class Walker {
   private pushParagraph(nodes: PMNode[], explicit?: Record<string, string | null>): void {
     const implicit = this.liMode && this.out.length === 0 && !explicit;
     if (this.liMode && this.out.length > 0 && !explicit) this.b.rep.normalized++;
-    const empty = nodes.length === 0 || (nodes.length === 1 && nodes[0]!.isText && nodes[0]!.text === '\u00a0');
+    const empty = nodes.length === 0 || (!implicit && nodes.length === 1 && nodes[0]!.isText && nodes[0]!.text === '\u00a0');
     if (implicit) nodes = this.trimEdges(nodes);
     this.out.push(schema.nodes.paragraph!.create({ implicit, ...explicit }, empty ? null : Fragment.from(nodes)));
   }
@@ -116,10 +116,22 @@ class Walker {
   /** Whitespace at the edges of a list item's own text is formatting, not content (it collapses in HTML). */
   private trimEdges(nodes: PMNode[]): PMNode[] {
     const out = nodes.slice();
-    const first = out[0], last = out[out.length - 1];
-    if (first?.isText) { const t = first.text!.replace(/^[ \t]+/, ''); if (t !== first.text) { this.b.rep.normalized++; if (t) out[0] = schema.text(t, first.marks); else out.shift(); } }
-    const l2 = out[out.length - 1];
-    if (l2?.isText && l2 === last) { const t = l2.text!.replace(/[ \t]+$/, ''); if (t !== l2.text) { this.b.rep.normalized++; if (t) out[out.length - 1] = schema.text(t, l2.marks); else out.pop(); } }
+    let changed = false;
+    while (out[0]?.isText) {
+      const t = out[0].text!.replace(/^[ \t]+/, '');
+      if (t === out[0].text) break;
+      changed = true;
+      if (t) { out[0] = schema.text(t, out[0].marks); break; }
+      out.shift();
+    }
+    for (let l = out[out.length - 1]; l?.isText; l = out[out.length - 1]) {
+      const t = l.text!.replace(/[ \t]+$/, '');
+      if (t === l.text) break;
+      changed = true;
+      if (t) { out[out.length - 1] = schema.text(t, l.marks); break; }
+      out.pop();
+    }
+    if (changed) this.b.rep.normalized++;
     return out;
   }
 

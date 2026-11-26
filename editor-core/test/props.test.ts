@@ -67,7 +67,7 @@ test('R2 on non-canonical text: edits rewrite only the blocks they touch', () =>
   let from = loaded.doc.child(0).nodeSize;
   const tr = state.tr.insertText('EDIT ', from + 1);
   const out = serializeDoc(state.apply(tr).doc, { sources: loaded.sources }).html;
-  assert.ok(out.startsWith('First plain paragraph with <b>bold</b>.\n\n<p>EDIT Second plain paragraph<br>with a soft break.</p>\n<p>&nbsp;</p>\n'), out);
+  assert.ok(out.startsWith('First plain paragraph with <b>bold</b>.\n<p>EDIT Second plain paragraph<br>with a soft break.</p>\n<p>&nbsp;</p>\n'), out);
   assert.ok(out.includes('<P ALIGN=center>Shouting   tag</P>\n<blockquote>Quoted\n\nstuff</blockquote>\n<table><tr><td>cell</td></tr></table>\nTail text'), out);
 });
 

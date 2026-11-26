@@ -11,6 +11,8 @@ export interface SourceInfo {
   blocks: WeakMap<PMNode, BlockSource>;
   /** UTF-16 offset in `text` of the caret for a document position, or null when unknown (caret.ts). */
   docPosToOffset?(pos: number): number | null;
+  /** Document position where top-level block `index` of the loaded document started. */
+  blockStart?(index: number): number;
 }
 
 export type SerializeOptions = {
@@ -27,7 +29,14 @@ const escText = (s: string) =>
     .replace(/\r\n|[\r\n]/g, ' '); // S8
 const escAttr = (s: string) => s.replace(/[&" ]/g, (c) => (c === '&' ? '&amp;' : c === '"' ? '&quot;' : '&nbsp;'));
 
-const VOID = new Set(['br', 'hr', 'img']);
+/**
+ * S6 says one newline between sibling blocks. AO3 keeps (and turns into a line break) the newline between two
+ * elements it does not strip whitespace around: address, iframe, embed, object (ParagraphMaker's
+ * TAG_NAMES_STRIP_WHITESPACE). Between two of those the separator is empty, which the S15 property test found.
+ */
+const NO_STRIP = /^<(?:address|iframe|embed|object)[\s>/]/i;
+const unstripped = (n: PMNode) => n.type.name === 'raw_block' && NO_STRIP.test(n.attrs.source as string);
+const sep = (a: PMNode, b: PMNode, nl = '\n') => (unstripped(a) && unstripped(b) ? '' : nl);
 
 class Writer {
   parts: string[] = [];
@@ -98,12 +107,12 @@ function inline(node: PMNode, pos: number, w: Writer, allowBreakRuns: boolean): 
   for (let i = open.length - 1; i >= 0; i--) w.push(`</${open[i]!.attrs.tag as string}>`);
 }
 
-function blocks(node: PMNode, pos: number, w: Writer, sep: string): void {
+function blocks(node: PMNode, pos: number, w: Writer): void {
   let p = pos;
-  let first = true;
+  let prev: PMNode | null = null;
   node.forEach((child) => {
-    if (!first) w.push(sep);
-    first = false;
+    if (prev) w.push(sep(prev, child));
+    prev = child;
     block(child, p, w);
     p += child.nodeSize;
     w.at(p);
@@ -130,14 +139,14 @@ function block(node: PMNode, pos: number, w: Writer): void {
     case 'blockquote':
       w.push(`<blockquote${attrString('blockquote', 'blockquote', a)}>`);
       w.at(pos + 1);
-      blocks(node, pos + 1, w, '\n');
+      blocks(node, pos + 1, w);
       w.push('</blockquote>');
       return;
     case 'container': {
       const t = a.tag as string;
       w.push(`<${t}${attrString(t, 'container', a)}>`);
       w.at(pos + 1);
-      blocks(node, pos + 1, w, '\n');
+      blocks(node, pos + 1, w);
       w.push(`</${t}>`);
       return;
     }
@@ -173,10 +182,10 @@ function block(node: PMNode, pos: number, w: Writer): void {
       w.push(`<details${attrString('details', 'details', a)}>`);
       w.at(pos + 1);
       let p = pos + 1;
-      let first = true;
+      let prev: PMNode | null = null;
       node.forEach((child) => {
-        if (!first) w.push('\n');
-        first = false;
+        if (prev) w.push(sep(prev, child));
+        prev = child;
         if (child.type.name === 'summary') {
           w.at(p);
           w.push(`<summary${attrString('summary', 'summary', child.attrs)}>`);
@@ -206,6 +215,9 @@ export function serializeBlock(node: PMNode): string {
 
 /** Serializes a document: S6 separators, source slices for untouched blocks (S16), and the head offset (spec 7.5). */
 export function serializeDoc(doc: PMNode, opts: SerializeOptions = {}): SerializeResult {
+  // an empty field: a document that is one empty plain paragraph
+  const only = doc.childCount === 1 ? doc.child(0) : null;
+  if (only && only.type.name === 'paragraph' && only.childCount === 0 && Object.values(only.attrs).every((v) => v === null || v === false)) return { html: '', headOffset: opts.head === undefined ? null : 0 };
   const w = new Writer();
   w.head = opts.head;
   const src = opts.sources;
@@ -223,13 +235,13 @@ export function serializeDoc(doc: PMNode, opts: SerializeOptions = {}): Serializ
     const bs = eff[i];
     if (i > 0) {
       if (prev && bs && prev.index + 1 === bs.index) w.push(src!.text.slice(prev.end, bs.start)); // S16: the text between untouched blocks
-      else w.push('\n');
+      else w.push(sep(doc.child(i - 1), child));
     }
     const startLen = w.len;
     if (bs) {
       if (w.head !== undefined && w.head >= pos && w.head <= pos + child.nodeSize && w.headOffset === null) {
         // the caret sits in an untouched block: the load's source map knows where it is in the slice
-        const off = src!.docPosToOffset?.(w.head);
+        const off = src!.docPosToOffset?.(src!.blockStart ? src!.blockStart(bs.index) + (w.head - pos) : w.head);
         w.headOffset = off !== null && off !== undefined ? startLen + Math.min(Math.max(off - bs.start, 0), bs.end - bs.start) : w.head === pos ? startLen : null;
       }
       w.push(src!.text.slice(bs.start, bs.end));
@@ -244,4 +256,3 @@ export function serializeDoc(doc: PMNode, opts: SerializeOptions = {}): Serializ
 
 /** Convenience: the HTML string only. */
 export const serialize = (doc: PMNode, opts?: SerializeOptions): string => serializeDoc(doc, opts).html;
-void VOID;
