@@ -1,0 +1,135 @@
+/* The Rich Text canvas (spec 10.3 N4, N5, N9). Colours, font, size and line height come from CSS variables the native
+   side sets (configure / setTheme): Dynamic Type, Dark Mode, Increase Contrast and Bold Text. No inner scroll
+   containers: the document scrolls in WKWebView's own UIScrollView. Blocks look as AO3 shows them. */
+
+:root {
+  --kd-bg: Canvas;
+  --kd-text: CanvasText;
+  --kd-secondary: GrayText;
+  --kd-accent: #821019;
+  --kd-link: LinkText;
+  --kd-font: 'New York', ui-serif, Georgia, serif;
+  --kd-size: 17px;
+  --kd-line: 1.62;
+  --kd-weight: 400;
+  --kd-gutter: 16px;
+  color-scheme: light dark;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: pan-x pan-y;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--kd-bg);
+  color: var(--kd-text);
+}
+
+body {
+  font-family: var(--kd-font);
+  font-size: var(--kd-size);
+  line-height: var(--kd-line);
+  font-weight: var(--kd-weight);
+  overflow-wrap: break-word;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+#editor {
+  display: block;
+  padding: var(--kd-gutter) max(var(--kd-gutter), env(safe-area-inset-right)) 40vh max(var(--kd-gutter), env(safe-area-inset-left));
+}
+
+/* ProseMirror's required rules (prosemirror-view/style/prosemirror.css) */
+.ProseMirror {
+  position: relative;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  white-space: break-spaces;
+  -webkit-font-variant-ligatures: none;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
+  outline: none;
+  min-height: 50vh;
+  caret-color: var(--kd-accent);
+}
+.ProseMirror pre { white-space: pre-wrap; }
+.ProseMirror li { position: relative; }
+.ProseMirror-hideselection *::selection { background: transparent; }
+.ProseMirror-hideselection { caret-color: transparent; }
+.ProseMirror [draggable][contenteditable=false] { user-select: text; }
+.ProseMirror-selectednode { outline: 2px solid var(--kd-accent); outline-offset: 2px; border-radius: 4px; }
+li.ProseMirror-selectednode { outline: none; }
+li.ProseMirror-selectednode::after { content: ""; position: absolute; inset: -2px -2px -2px -32px; border: 2px solid var(--kd-accent); pointer-events: none; }
+img.ProseMirror-separator { display: inline !important; border: none !important; margin: 0 !important; }
+
+::selection { background: color-mix(in srgb, var(--kd-accent) 28%, transparent); }
+
+/* Paragraphs as AO3 spaces them */
+.kd-editor p { margin: 0 0 1em; }
+.kd-editor h1, .kd-editor h2, .kd-editor h3, .kd-editor h4, .kd-editor h5, .kd-editor h6 { line-height: 1.25; margin: 1.2em 0 0.6em; font-weight: 700; }
+.kd-editor h1 { font-size: 1.6em; }
+.kd-editor h2 { font-size: 1.4em; }
+.kd-editor h3 { font-size: 1.2em; }
+.kd-editor h4 { font-size: 1.05em; font-weight: 600; }
+.kd-editor h5, .kd-editor h6 { font-size: 1em; font-weight: 600; }
+
+.kd-editor blockquote { margin: 0 0 1em; padding: 0 0 0 1em; border-left: 3px solid color-mix(in srgb, var(--kd-text) 25%, transparent); }
+.kd-editor ul, .kd-editor ol { margin: 0 0 1em; padding-inline-start: 1.6em; }
+.kd-editor li > p { margin: 0 0 0.4em; }
+.kd-editor li > p:last-child { margin-bottom: 0; }
+
+/* A scene break: AO3's <hr>, drawn here as a centred asterism */
+.kd-editor hr { border: none; height: auto; margin: 1em 0; text-align: center; overflow: visible; color: var(--kd-secondary); }
+.kd-editor hr::after { content: "⁂"; display: inline-block; font-size: 1.1em; line-height: 1; }
+
+/* Alignment and direction are attributes, never styles (spec 6.5) */
+.kd-editor [align="left"] { text-align: left; }
+.kd-editor [align="center"] { text-align: center; }
+.kd-editor [align="right"] { text-align: right; }
+.kd-editor [align="justify"] { text-align: justify; }
+.kd-editor .kd-center { text-align: center; }
+
+/* Fold-out (details/summary), shown open while editing */
+.kd-details { margin: 0 0 1em; padding: 0.4em 0.8em 0.1em; border: 1px solid color-mix(in srgb, var(--kd-text) 20%, transparent); border-radius: 8px; }
+.kd-summary { font-weight: 600; margin: 0 0 0.4em; }
+.kd-summary::before { content: "▸ "; color: var(--kd-secondary); }
+.kd-details[data-open="true"] > .kd-summary::before { content: "▾ "; }
+
+.kd-container { margin: 0; }
+
+/* Marks: semantic elements, so VoiceOver announces them (N9) */
+.kd-editor a { color: var(--kd-link); text-decoration: underline; -webkit-touch-callout: none; }
+.kd-editor code, .kd-editor kbd, .kd-editor samp, .kd-editor var { font-family: ui-monospace, Menlo, monospace; font-size: 0.9em; }
+.kd-editor small { font-size: 0.83em; }
+.kd-editor sup, .kd-editor sub { font-size: 0.75em; line-height: 0; }
+
+/* Preserved HTML (spec 6.2): locked, labelled, edited in HTML view */
+.kd-raw {
+  display: flex; flex-direction: column; gap: 0.15em;
+  margin: 0 0 1em; padding: 0.6em 0.8em;
+  border: 1px dashed color-mix(in srgb, var(--kd-text) 35%, transparent);
+  border-radius: 8px;
+  font-family: -apple-system, system-ui, sans-serif; font-size: 0.85em; line-height: 1.35;
+  color: var(--kd-secondary);
+  -webkit-user-select: none; user-select: none;
+}
+.kd-raw-label { font-weight: 600; color: var(--kd-text); }
+.kd-raw-preview { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.kd-raw-preview:empty { display: none; }
+.kd-raw-hint { font-size: 0.9em; }
+
+.kd-raw-inline, .kd-image {
+  display: inline-block; padding: 0 0.35em; margin: 0 0.1em;
+  border: 1px dashed color-mix(in srgb, var(--kd-text) 35%, transparent);
+  border-radius: 4px;
+  font-family: -apple-system, system-ui, sans-serif; font-size: 0.8em; line-height: 1.5;
+  color: var(--kd-secondary); vertical-align: baseline;
+  -webkit-user-select: none; user-select: none;
+}
+
+@media (prefers-contrast: more) {
+  .kd-raw, .kd-raw-inline, .kd-image, .kd-details { border-color: var(--kd-text); }
+}
