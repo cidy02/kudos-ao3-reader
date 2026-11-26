@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="csrf-param" content="authenticity_token">
+  <meta name="csrf-token" content="rw-remove-csrf==">
+  <title>Remove Link | Archive of Our Own</title>
+</head>
+<body class="logged-in">
+<!-- Ground truth: otwarchive 452391b6 app/views/related_works/show.html.erb & _remove.html.erb -->
+<div id="main" class="related_works-show region">
+  <h3 class="heading">Remove Link</h3>
+  <p>
+    Would you like to remove the link from your work
+    <a href="/works/101">The Weight of Water</a>
+    to
+    <a href="/works/203">After the Tide</a>
+    by
+    <a rel="author" href="/users/fanwriter/pseuds/fanwriter">fanwriter</a>?
+  </p>
+  <p>(You can come back to this page if you change your mind.)</p>
+  <form class="edit_related_work" id="edit_related_work_303" action="/related_works/303" accept-charset="UTF-8" method="post">
+    <input type="hidden" name="_method" value="patch" autocomplete="off">
+    <input type="hidden" name="authenticity_token" value="rw-remove-csrf==" autocomplete="off">
+    <p class="submit actions">
+      <input type="submit" name="commit" value="Remove link" data-disable-with="Remove link">
+    </p>
+  </form>
+</div>
+</body>
+</html>

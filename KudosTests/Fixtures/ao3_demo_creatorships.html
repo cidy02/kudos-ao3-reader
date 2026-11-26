@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="csrf-param" content="authenticity_token">
+  <meta name="csrf-token" content="demo-creatorships-csrf==">
+  <title>Co-Creator Requests | Archive of Our Own</title>
+</head>
+<body class="logged-in">
+<!-- Ground truth: otwarchive 452391b6 app/views/creatorships/show.html.erb (demo copy) -->
+<div id="main" class="creatorships-show region">
+  <h2 class="heading">Co-Creator Requests</h2>
+  <form action="/users/AO3_Reader/creatorships" accept-charset="UTF-8" method="post">
+    <input type="hidden" name="_method" value="put" autocomplete="off">
+    <input type="hidden" name="authenticity_token" value="demo-creatorships-csrf==" autocomplete="off">
+    <fieldset class="actions">
+      <legend>Mass Edit Options</legend>
+      <ul>
+        <li><a class="check_all">Select All</a></li>
+        <li><a class="check_none">Select None</a></li>
+        <li><input type="submit" name="accept" value="Accept" data-disable-with="Accept"></li>
+        <li><input type="submit" name="reject" value="Reject" data-disable-with="Reject"></li>
+      </ul>
+    </fieldset>
+    <fieldset class="creatorships">
+      <legend>List of Co-Creator Requests</legend>
+      <table>
+        <tr>
+          <th>Creation</th>
+          <th>Type</th>
+          <th>Invited Pseud</th>
+          <th>Date</th>
+          <th>Selected?</th>
+        </tr>
+        <input type="hidden" name="selected[]" value="" autocomplete="off">
+        <tr>
+          <td><a href="/works/424242">The Weight of Water</a></td>
+          <td>Work</td>
+          <td>AO3_Reader</td>
+          <td>15 Oct 2026</td>
+          <td><input type="checkbox" value="501" name="selected[]" id="_selected_501"></td>
+        </tr>
+        <tr>
+          <td><a href="/chapters/9001">Chapter 3 of Salt and Static</a></td>
+          <td>Chapter</td>
+          <td>LanternMaker</td>
+          <td>18 Oct 2026</td>
+          <td><input type="checkbox" value="502" name="selected[]" id="_selected_502"></td>
+        </tr>
+      </table>
+    </fieldset>
+  </form>
+</div>
+</body>
+</html>

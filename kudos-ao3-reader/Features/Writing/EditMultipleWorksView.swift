@@ -12,6 +12,9 @@ struct EditMultipleWorksView: View {
     @State private var form: AO3BulkEditForm
     @State private var changes: AO3BulkEditChanges
     @State private var isSaving = false
+    @State private var showingOrphan = false
+    @State private var didOrphan = false
+    @State private var showOrphanedNotice = false
     @State private var errorMessage: String?
     #if DEBUG
     @State private var debugPresented: DebugPresented?
@@ -151,12 +154,31 @@ struct EditMultipleWorksView: View {
                     .padding(.horizontal, 14)
                     .pageBodyRow(top: 8, gutter: gutter)
             }
+
+            groupHeader("Orphan")
+            Section { orphanSectionRows }
         }
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(title: headerTitle, palette: accountPalette)
         .hidesFloatingTabBarInEditor()
+        .sheet(isPresented: $showingOrphan, onDismiss: {
+            guard didOrphan else { return }
+            didOrphan = false
+            showOrphanedNotice = true
+        }) {
+            OrphanSheet(
+                target: .works(form.workIDs),
+                fallbackTitles: form.workTitles
+            ) { _ in
+                onSaved()
+                didOrphan = true
+            }
+        }
+        .alert("Orphaned.", isPresented: $showOrphanedNotice) {
+            Button("OK") { dismiss() }
+        }
         // The error was set and never shown, so a failed save only re-enabled
         // Save and looked like nothing had happened.
         .alert("AO3 could not save the change", isPresented: Binding(
@@ -405,5 +427,52 @@ struct EditMultipleWorksView: View {
                 isSaving = false
             }
         }
+    }
+}
+
+extension EditMultipleWorksView {
+    /// Caps bulk Orphan so `GET /orphans/new?work_ids[]=…` stays within safe URL length limits.
+    static let maxOrphanWorks = 100
+
+    static func canOrphan(workCount: Int) -> Bool {
+        workCount > 0 && workCount <= maxOrphanWorks
+    }
+
+    static func orphanFootnote(for workCount: Int) -> String {
+        if workCount > maxOrphanWorks {
+            return "Orphan up to \(maxOrphanWorks) works at a time."
+        }
+        return "Moves the selected works to AO3's orphan_account permanently. "
+            + "Orphan up to \(maxOrphanWorks) works at a time."
+    }
+}
+
+private extension EditMultipleWorksView {
+    @ViewBuilder
+    var orphanSectionRows: some View {
+        let canOrphanSelection = Self.canOrphan(workCount: form.workIDs.count)
+        let isOverOrphanCap = form.workIDs.count > Self.maxOrphanWorks
+        SubjectFormRow(
+            label: form.workIDs.count == 1
+                ? "Orphan 1 Work…"
+                : "Orphan \(form.workIDs.count) Works…",
+            value: "",
+            showsDisclosure: true,
+            isDisabled: !canOrphanSelection || isSaving,
+            isDestructive: true
+        ) {
+            guard canOrphanSelection else { return }
+            showingOrphan = true
+        }
+        .subjectPanel()
+        .pageBodyRow(top: 8, gutter: gutter)
+
+        Text(Self.orphanFootnote(for: form.workIDs.count))
+            .font(.system(size: footnoteSize))
+            .foregroundStyle(isOverOrphanCap ? theme.appTheme.errorColor : Color.secondary.opacity(0.7))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .pageBodyRow(top: 8, gutter: gutter)
     }
 }

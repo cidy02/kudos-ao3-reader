@@ -36,6 +36,11 @@ struct SeriesEditView: View {
 
     @State private var form: AO3SeriesForm
     @State private var isSaving = false
+    @State private var isRemovingCoCreator = false
+    @State private var showRemoveMeConfirmation = false
+    @State private var showingOrphan = false
+    @State private var didOrphan = false
+    @State private var showOrphanedNotice = false
     @State private var errorMessage: String?
     @State private var savedMessage: String?
     #if DEBUG
@@ -142,8 +147,39 @@ struct SeriesEditView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") { save() }
-                    .disabled(isSaving || form.title.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(
+                        isSaving || isRemovingCoCreator
+                            || form.title.trimmingCharacters(in: .whitespaces).isEmpty
+                    )
             }
+        }
+        .confirmationDialog(
+            "Remove yourself as co-creator?",
+            isPresented: $showRemoveMeConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Remove Me as Co-Creator", role: .destructive) {
+                removeMeAsCoCreator()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("AO3 removes you from this series and its works as well.")
+        }
+        .sheet(isPresented: $showingOrphan, onDismiss: {
+            guard didOrphan else { return }
+            didOrphan = false
+            showOrphanedNotice = true
+        }) {
+            OrphanSheet(
+                target: .series(form.seriesID ?? series.id),
+                fallbackTitles: [form.title.isEmpty ? series.title : form.title]
+            ) { notice in
+                savedMessage = notice
+                didOrphan = true
+            }
+        }
+        .alert("Orphaned.", isPresented: $showOrphanedNotice) {
+            Button("OK") { dismiss() }
         }
         #if DEBUG
         .task { if DebugLaunchRoute.takePush("seriesremove") { debugRemoveWorks = true } }
@@ -223,10 +259,55 @@ struct SeriesEditView: View {
     }
 
     private var deletePanel: some View {
-        SubjectFormRow(label: "Delete Series on AO3", value: "", showsDisclosure: true) {
-            openURL(series.url)
+        VStack(spacing: 0) {
+            if form.canRemoveMe {
+                SubjectFormRow(
+                    label: "Remove Me as Co-Creator",
+                    value: "",
+                    isDisabled: isSaving || isRemovingCoCreator,
+                    isDestructive: true
+                ) {
+                    showRemoveMeConfirmation = true
+                }
+                SubjectRowSeparator()
+            }
+            SubjectFormRow(
+                label: "Orphan Series…",
+                value: "",
+                showsDisclosure: true,
+                isDisabled: isSaving || isRemovingCoCreator,
+                isDestructive: true
+            ) {
+                showingOrphan = true
+            }
+            SubjectRowSeparator()
+            SubjectFormRow(label: "Delete Series on AO3", value: "", showsDisclosure: true) {
+                openURL(series.url)
+            }
         }
         .subjectPanel()
+    }
+
+    private func removeMeAsCoCreator() {
+        guard !isRemovingCoCreator else { return }
+        let seriesID = form.seriesID ?? series.id
+        isRemovingCoCreator = true
+        errorMessage = nil
+        savedMessage = nil
+        Task {
+            let outcome = await WorkCoCreatorRemovalFlow.run(
+                kind: .series,
+                remove: { try await auth.removeMeAsCoCreator(seriesID: seriesID) },
+                onRemoved: { dismiss() }
+            )
+            isRemovingCoCreator = false
+            switch outcome {
+            case .removed:
+                break
+            case let .onlyCreator(message), let .failed(message):
+                errorMessage = message
+            }
+        }
     }
 
     // MARK: Copy

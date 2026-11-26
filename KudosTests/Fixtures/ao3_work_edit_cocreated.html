@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="csrf-param" content="authenticity_token">
+  <meta name="csrf-token" content="cocreated-edit-csrf==">
+  <title>Edit Work | Archive of Our Own</title>
+</head>
+<body class="logged-in">
+<!-- Ground truth: otwarchive 452391b6 app/views/works/edit.html.erb -->
+<div id="main" class="works-edit region">
+  <h2 class="heading">Edit Work</h2>
+  <ul class="navigation actions">
+    <li><a href="/works/424242/chapters/new">Add Chapter</a></li>
+    <li>
+      <form class="button_to" method="post" action="/works/424242/remove_user_creatorship">
+        <input type="hidden" name="_method" value="patch" autocomplete="off">
+        <input data-confirm="This will remove you from all chapters as well. Are you sure?" type="submit" value="Remove Me As Co-Creator">
+        <input type="hidden" name="authenticity_token" value="remove-me-button-csrf==" autocomplete="off">
+      </form>
+    </li>
+    <li><a href="/orphans/new?work_id=424242">Orphan Work</a></li>
+    <li><a href="/works/424242/confirm_delete">Delete Work</a></li>
+  </ul>
+  <form action="/works/424242" accept-charset="UTF-8" method="post" id="work-form" class="verbose post work">
+    <input type="hidden" name="_method" value="patch" autocomplete="off">
+    <input type="hidden" name="authenticity_token" value="cocreated-edit-csrf==" autocomplete="off">
+    <select name="work[rating_string]" id="work_rating_string">
+      <option value="">Please select a rating</option>
+      <option value="Teen And Up Audiences" selected="selected">Teen And Up Audiences</option>
+    </select>
+    <input type="checkbox" name="work[archive_warning_strings][]" id="warn_none" value="No Archive Warnings Apply" checked="checked">
+    <label for="warn_none">No Archive Warnings Apply</label>
+    <input type="text" name="work[fandom_string]" id="work_fandom" value="Original Work">
+    <input type="text" name="work[title]" id="work_title" value="Shared Horizon">
+    <select id="work_language_id" name="work[language_id]">
+      <option value="">Please select a language</option>
+      <option value="1" selected="selected">English</option>
+    </select>
+    <textarea name="work[chapter_attributes][content]" id="content"><p>Co-written chapter.</p></textarea>
+    <ul class="actions">
+      <li><input type="submit" name="preview_button" value="Preview"></li>
+      <li><input type="submit" name="update_button" value="Post"></li>
+    </ul>
+  </form>
+</div>
+</body>
+</html>

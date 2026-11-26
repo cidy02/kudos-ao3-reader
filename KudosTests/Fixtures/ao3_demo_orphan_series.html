@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="csrf-param" content="authenticity_token">
+  <meta name="csrf-token" content="demo-orphan-series-csrf==">
+  <title>Orphan Series | Archive of Our Own</title>
+</head>
+<body class="logged-in">
+<!-- Ground truth: otwarchive 452391b6 app/views/orphans/new.html.erb, _orphan_series.html.erb, _choose_pseud.html.erb (demo copy) -->
+<div id="main" class="orphans-new region">
+  <h2 class="heading">Orphan Series</h2>
+  <p class="caution notice">
+    Are you sure you want to <strong>permanently</strong> remove all identifying data from your series "The Dawn Cycle", its works and chapters, and any feedback replies you may have left on them?
+  </p>
+  <form action="/orphans" accept-charset="UTF-8" method="post">
+    <input type="hidden" name="authenticity_token" value="demo-orphan-series-csrf==" autocomplete="off">
+    <p>
+      <input type="radio" name="use_default" id="use_default_true" value="true" checked="checked">
+      <label for="use_default_true">Take my pseud off as well</label>
+    </p>
+    <p>
+      <input type="radio" name="use_default" id="use_default_false" value="false">
+      <label for="use_default_false">Leave a copy of my pseud on</label>
+    </p>
+    <p>
+      <input type="hidden" name="series_id" id="series_id" value="321" autocomplete="off">
+    </p>
+    <p class="submit actions">
+      <input type="submit" name="commit" value="Yes, I'm sure" data-disable-with="Yes, I'm sure">
+    </p>
+  </form>
+  <ul class="actions" role="navigation">
+    <li><a href="/faq/orphaning">Read More About The Orphaning Process</a></li>
+    <li><a href="/series/321">Cancel</a></li>
+  </ul>
+</div>
+</body>
+</html>

@@ -1164,7 +1164,9 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         try await authenticatedHTML(for: request)
     }
 
-    private func authenticatedPageHTMLWithURL(
+    /// Authenticated GET returning both the HTML and the final response URL after
+    /// any redirects (still paced, coalesced, retried, and login-redirect checked).
+    func authenticatedPageHTMLWithURL(
         for request: URLRequest
     ) async throws -> (html: String, finalURL: URL?) {
         try await authenticatedHTMLWithURL(for: request)
@@ -1198,6 +1200,19 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         _ request: URLRequest,
         isCurrentWriteSession: @escaping @MainActor @Sendable (String) -> Bool
     ) async throws -> (status: Int, body: String) {
+        let result = try await submitWriteWithURL(
+            request,
+            isCurrentWriteSession: isCurrentWriteSession
+        )
+        return (result.status, result.body)
+    }
+
+    /// Single-shot authenticated POST returning the final URL (from the followed
+    /// response or an unfollowed 3xx `Location` header) alongside status and body.
+    func submitWriteWithURL(
+        _ request: URLRequest,
+        isCurrentWriteSession: @escaping @MainActor @Sendable (String) -> Bool
+    ) async throws -> (status: Int, body: String, finalURL: URL?) {
         var request = request
         request.httpShouldHandleCookies = false
         guard let prepared = Self.takePreparedWriteSession(from: &request) else {
@@ -1211,7 +1226,18 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         guard let http = response as? HTTPURLResponse else {
             throw AO3Error.network("No response from AO3.")
         }
-        if Self.isLoginRedirect(path: http.url?.path) {
+        let finalURL: URL? = if (300 ... 399).contains(http.statusCode),
+           let location = http.value(forHTTPHeaderField: "Location")?
+               .trimmingCharacters(in: .whitespacesAndNewlines),
+           !location.isEmpty,
+           let base = http.url ?? request.url,
+           let resolved = URL(string: location, relativeTo: base)?.absoluteURL,
+           AO3RequestDefaults.isTrustedURL(resolved) {
+            resolved
+        } else {
+            http.url
+        }
+        if Self.isLoginRedirect(path: finalURL?.path) {
             throw AO3Error.authenticationRequired
         }
         // The maintenance page answers at the edge: the write never reached AO3.
@@ -1228,7 +1254,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         if http.statusCode == 307 || http.statusCode == 308 {
             throw AO3WriteError.unconfirmed
         }
-        return (http.statusCode, Self.htmlString(from: data))
+        return (http.statusCode, Self.htmlString(from: data), finalURL)
     }
 
     /// Drops the POST when the session that built its Cookie is no longer current.

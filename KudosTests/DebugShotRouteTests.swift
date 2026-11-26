@@ -33,8 +33,10 @@ struct DebugShotRouteTests {
             "sortnew",
             // T-530 Queue Sources; not in A82's list.
             "queuesources", "addsource",
+            // T-575 Writing requests, orphan sheet, and import from URL; not in A82's list.
+            "writingrequests", "orphansheet", "importwork",
         ]
-        #expect(names.count == 91)
+        #expect(names.count == 94)
         for name in names {
             #expect(DebugShots.byName[name] != nil)
             #expect(!DebugShots.byName[name]!.route.isEmpty)

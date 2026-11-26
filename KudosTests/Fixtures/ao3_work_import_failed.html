@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="csrf-param" content="authenticity_token">
+  <meta name="csrf-token" content="import-failed-csrf==">
+  <title>Import New Work | Archive of Our Own</title>
+</head>
+<body class="logged-in">
+<!-- Ground truth: otwarchive 452391b6 WorksController#import_single StoryParser::Error -->
+<div id="main" class="works-import region">
+  <div class="flash error">We couldn't successfully import that work, sorry: Story could not be downloaded from https://example.com/missing.</div>
+  <h2 class="heading">Import New Work</h2>
+  <form class="import work verbose post" action="/works/import" accept-charset="UTF-8" method="post">
+    <input type="hidden" name="authenticity_token" value="import-failed-csrf==" autocomplete="off">
+    <textarea name="urls" id="urls">https://example.com/missing</textarea>
+    <p class="submit actions"><input type="submit" name="commit" value="Import"></p>
+  </form>
+</div>
+</body>
+</html>
