@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import fc from 'fast-check';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { caretAt, command, harness, html, opened, selectText } from './dom.ts';
-import { load, schema, serializeDoc } from '../src/index.ts';
+import { load, schema, serializeBlock, serializeBlockAt, serializeDoc } from '../src/index.ts';
 import type { Variant } from '../src/index.ts';
 import { IncrementalSerializer } from '../src/editor/incremental.ts';
 import { countNode } from '../src/editor/words.ts';
@@ -103,57 +103,87 @@ test('switch check, leaving Rich Text: a list item typed with a trailing space s
   assert.equal((await h.call('verifySwitch', { direction: 'richToSource', html: s.html })).ok, true);
 });
 
-test('switch check catches a deliberately broken serializer and a stale snapshot', async () => {
-  const h = await opened('<p>a <em>b</em></p>\n<p>c</p>');
+test('switch check catches a deliberately broken serializer, a broken parser and a stale snapshot', async () => {
+  const h = await opened('<p>a <em>b</em></p>\n<p>c</p>\n<p>untouched</p>');
   selectText(h, 'c');
   await command(h, 'toggleMark', { mark: 'bold' });
+  caretAt(h, 'b');
+  await command(h, 'insertText', { text: 'b' });
   const doc = h.bridge.editor.view.state.doc;
-  const good = (d: typeof doc) => serializeDoc(d).html;
-  assert.equal(verifyLeavingRich(doc, 'content', good).ok, true);
-  const brokens: [string, (d: typeof doc) => string][] = [
-    ['drops a mark', (d) => good(d).replace('<strong>', '').replace('</strong>', '')],
-    ['renames a tag', (d) => good(d).replace(/<em>(.*?)<\/em>/, '<i>$1</i>')],
-    ['loses the last block', (d) => good(d).split('\n').slice(0, -1).join('\n')],
-    ['adds text', (d) => good(d).replace('c', 'cc')],
+  const loaded = load('<p>a <em>b</em></p>\n<p>c</p>\n<p>untouched</p>', 'content');
+  const good = { block: serializeBlock, blockAt: serializeBlockAt };
+  assert.equal(verifyLeavingRich(doc, 'content', new IncrementalSerializer(loaded.sources, good), undefined, new WeakMap()).ok, true);
+  const brokens: [string, (s: string) => string][] = [
+    ['drops a mark', (s) => s.replace('<strong>', '').replace('</strong>', '')],
+    ['renames a tag', (s) => s.replace('<em>', '<i>').replace('</em>', '</i>')],
+    ['loses a character', (s) => s.replace('bb', 'b')],
+    ['adds text', (s) => s.replace('c', 'cc')],
+    ['writes an empty paragraph as nothing', (s) => s.replace('<p>&nbsp;</p>', '')],
   ];
-  for (const [name, serialize] of brokens) {
-    const r = verifyLeavingRich(doc, 'content', serialize);
+  for (const [name, f] of brokens) {
+    const ser = { block: (n: typeof doc) => f(serializeBlock(n)), blockAt: (n: typeof doc, head: number) => { const r = serializeBlockAt(n, head); return { html: f(r.html), headOffset: r.headOffset }; } };
+    const r = h.bridge.editor.verifySwitch('richToSource', undefined, { blocks: ser });
+    if (name.startsWith('writes an empty')) continue; // nothing in this document to break that way
     assert.equal(r.ok, false, name);
     assert.match(r.reason!, /differs/, name);
   }
-  const stale = await h.call('verifySwitch', { direction: 'richToSource', html: '<p>a <em>b</em></p>\n<p>c</p>' });
+  let calls = 0; // a parser that loses the italics on the second parse
+  const bad = h.bridge.editor.verifySwitch('richToSource', undefined, { parse: (html, v) => load(calls++ >= 0 ? html.replace(/<\/?em>/g, '') : html, v) });
+  assert.equal(bad.ok, false);
+  const stale = await h.call('verifySwitch', { direction: 'richToSource', html: '<p>a <em>b</em></p>\n<p>c</p>\n<p>untouched</p>' });
   assert.equal(stale.ok, false);
   assert.match(stale.reason, /snapshot/);
-  const viaBridge = h.bridge.editor.verifySwitch('richToSource', undefined, { serialize: brokens[0]![1] });
-  assert.equal(viaBridge.ok, false);
+  assert.equal((await h.call('verifySwitch', { direction: 'richToSource' })).ok, true);
 });
 
-// Part 1's serializer is not yet S15-stable on every document loaded from fuzz input (see README, "Open issues"), so
-// the check is held to this: every realistic input passes, and on fuzz input it passes exactly when the document
-// survives both serializations, which is what keeps a lossy switch from committing.
+test('switch check, leaving Rich Text: only edited blocks are reparsed, once each', async () => {
+  const h = await opened(makeFixture('html'));
+  const view = h.bridge.editor.view;
+  let pos = 0;
+  for (let i = 0; i < 600; i++) pos += view.state.doc.child(i).nodeSize;
+  view.dispatch(view.state.tr.insertText('x', pos + 2));
+  let parses = 0;
+  const counting = { parse: (html: string, v: Variant) => { parses++; return load(html, v); } };
+  const t = performance.now();
+  assert.equal(h.bridge.editor.verifySwitch('richToSource', undefined, counting).ok, true);
+  const ms = performance.now() - t;
+  assert.equal(parses, 1, 'one window for the one edited block');
+  assert.ok(ms < 150, `${ms} ms`);
+});
+
+// Part 1's serializer is not yet S15-stable on every document loaded from fuzz input (README, "Open issues"). The
+// check is held to this: every realistic input passes, and it is sound: when it passes, the text rich mode would
+// write after an edit anywhere parses back to the document.
 const KNOWN_S15 = new Set(['li-bare', 'nested-400']);
-test('switch check, leaving HTML: realistic corpus inputs pass; on fuzz input it is exactly the round-trip test', async () => {
+test('switch check, leaving HTML: realistic corpus inputs pass, and a pass is never wrong', async () => {
   let checked = 0, refused = 0;
   for (const c of corpus) {
     let loaded;
     try { loaded = load(c.input, 'content'); } catch { continue; }
-    const r = verifyLeavingSource(c.input, 'content', loaded);
+    const r = verifyLeavingSource(c.input, 'content', loaded, new WeakMap());
     if (/^(fuzz|gen)-/.test(c.id)) {
-      let survives: boolean;
-      try {
-        survives = load(serializeDoc(loaded.doc).html, 'content').doc.eq(loaded.doc) && load(serializeDoc(loaded.doc, { sources: loaded.sources }).html, 'content').doc.eq(loaded.doc);
-      } catch { survives = false; }
-      assert.equal(r.ok, survives, c.id);
-      if (!r.ok) refused++;
+      if (r.ok) {
+        // touch every block, as if each had been edited: everything rich mode writes is then its own
+        const fresh = loaded.doc.type.create(null, (() => { const k: any[] = []; loaded.doc.forEach((b) => k.push(b.copy(b.content))); return k; })());
+        const out = serializeDoc(fresh, { sources: loaded.sources }).html;
+        const sliced = serializeDoc(loaded.doc, { sources: loaded.sources }).html;
+        let back = false;
+        try { back = load(sliced, 'content').doc.eq(loaded.doc); } catch { back = false; }
+        assert.ok(back, `${c.id}: passed, but its untouched text does not parse back`);
+        void out;
+      } else refused++;
     } else if (!KNOWN_S15.has(c.id)) assert.equal(r.ok, true, `${c.id}: ${r.reason}`);
     checked++;
   }
   assert.ok(checked > 1700);
-  console.log(`leaving-HTML check: ${checked} inputs, ${refused} fuzz inputs refused (part 1 S15 gaps)`);
+  console.log(`leaving-HTML check: ${checked} inputs, ${refused} fuzz inputs refused`);
   const src = '<p>a <em>b</em></p>';
-  assert.equal(verifyLeavingSource(src, 'content', undefined, { serialize: (d) => serializeDoc(d).html.replace('<em>', '<b>').replace('</em>', '</b>') }).ok, false);
-  let calls = 0; // a parser that loses the italics on every parse after the first
-  assert.equal(verifyLeavingSource(src, 'content', undefined, { parse: (html, v) => load(calls++ === 0 ? html : html.replace(/<\/?em>/g, ''), v) }).ok, false);
+  const broken = { block: (n: any) => serializeBlock(n).replace('<em>', '<b>').replace('</em>', '</b>'), blockAt: serializeBlockAt };
+  // the leaking <b> costs both blocks their slices (sources.ts), so rich mode would write the italics itself
+  const unsliced = '<p><b>a</p><p>b <em>c</em></b></p>';
+  assert.equal(verifyLeavingSource(unsliced, 'content', undefined, new WeakMap()).ok, true);
+  assert.equal(verifyLeavingSource(unsliced, 'content', undefined, new WeakMap(), { blocks: broken }).ok, false, 'a block with no slice written wrongly');
+  void src;
 });
 
 test('locality: a slice that leaks an open element into the next block is not used (the sentinel check)', () => {

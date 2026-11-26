@@ -23,3 +23,23 @@ Run `npm run perf`. Recorded on Node v26.13.1, darwin/arm64 (Apple silicon lapto
 
 Top-level blocks: 1,190 (html), 1,179 (plain). Locality (slices) and the caret map are computed on first use and cached
 per load, so they are off the load path and off the keystroke path.
+
+## The editor page (part 2b)
+
+`npm run bundle`: `editor.js` 462 KB minified, 140 KB gzip (parse5 140 KB, prosemirror-view 99 KB, prosemirror-model 45 KB,
+entities 33 KB, prosemirror-transform 32 KB, editor-core 85 KB); `editor.css` 5.8 KB; `editor.html` 0.7 KB. It ships inside
+the app and is never downloaded.
+
+`node test-web/perf.ts`, Node v26.13.1, darwin/arm64, html fixture (510,000 characters, 1,190 blocks), one run:
+
+| Step | Time |
+|---|---:|
+| word count, first (every block once) / again (cached per block) | 8 ms / 0.1 ms |
+| snapshot after one edit, first (part 1's locality computed) | 31 ms |
+| snapshot after the next keystroke (one block re-serialized) | 0.4 ms |
+| switch check leaving Rich Text, one edited block | 0.6 ms |
+| switch check leaving HTML, fresh preload (computes locality) | 33 ms |
+| caret through the serializer after a switch back (first use builds part 1's caret map) | 45 ms |
+
+`test-web/roundtrip.test.ts` fails if a checkpoint after a keystroke exceeds 16 ms (B4) at p95 or the switch check after
+one edit exceeds 150 ms (B11). These are Node numbers, not device budgets.

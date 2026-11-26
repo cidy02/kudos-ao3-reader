@@ -4,6 +4,7 @@ The shared JavaScript package behind Kudos's Rich Text mode (`docs/WRITING_EDITO
 It turns an AO3 field's HTML into a ProseMirror document and back, with AO3's own cleaning rules ported exactly.
 Parsing uses parse5 only, never a platform `DOMParser`, so Apple, Android and Node CI parse identically.
 
+**Part 2b (T-576a2) is the editor page and the JavaScript side of the bridge; see "The editor page" below.**
 **This is part 1 (T-576a).** Done: loading pipeline, AO3 cleaning port, tiers, schema, serializer (S1 to S16), loss report,
 caret maps, golden harness, property tests, the 510,000-character fixture. Part 2 (T-576b): the paste cleaner (6.8), the
 AO3 word counter (3.6), the editor page and the JS side of the bridge (7.2), and the bundle for the apps. `npm run build`
@@ -17,6 +18,9 @@ npm ci
 npm test            # tsc --noEmit, then every test file with node:test (Node 24 or newer; developed on 26)
 npm run test:props  # property tests only; FC_SEED=<n> FC_RUNS=<n> to replay or lengthen (seed is printed)
 npm run perf        # timings for the 510,000-character fixture (see PERF.md)
+npm run test:web    # the editor page and bridge tests only (jsdom)
+npm run bundle      # build dist/ and copy it to kudos-ao3-reader/Resources/EditorCore/
+node test-web/perf.ts  # editor-side timings on the fixture
 ```
 
 Tests are TypeScript run directly by Node's type stripping; sources avoid enums and parameter properties for that reason.
@@ -114,3 +118,96 @@ See the "Departures" list in the part 1 report and the commit messages; the ones
 * `normalized` is a change count, not a character count.
 * A document whose cleaned form still has an `<a>` nested in an `<a>` (an anchor `raw_inline` inside a link mark) cannot round-trip; the editor's commands must not create it (the generators exclude it).
 * Whitespace-only text next to a mark boundary in list items is treated as formatting and trimmed at the item's edges.
+
+## The editor page (part 2b)
+
+The Rich Text canvas the apps load: ProseMirror in a WebView on part 1's schema, the JavaScript side of every bridge call
+and event in spec 7.2 (`bridgeVersion = 1`), and the bundle.
+
+```
+src/editor/   editor.ts (the EditorView and the bridge operations), render.ts (node and mark views: the schema has no
+              toDOM), commands.ts (every FormatCommand and the keys-bar commands), state.ts (FormatState),
+              incremental.ts (9.4), verify.ts (7.11), paste.ts (paste, drop, copy, cut), plugins.ts (invariants, caret
+              tracking), words.ts (AO3's count, 3.6)
+src/bridge/   protocol.ts (calls, argument checks, events, rate limits), transport.ts (Apple and Android), theme.ts
+              (CSS variables), events.ts (throttle), main.ts (the page's entry point)
+page/         editor.html (the 11 CSP), editor.css
+scripts/      bundle.ts: esbuild, deterministic; dist/ = editor.html, editor.css, editor.js, THIRD-PARTY-NOTICES.txt
+test-web/     node:test on jsdom (MIT; chosen over happy-dom and linkedom because ProseMirror's view needs a faithful
+              Selection, Range and MutationObserver; it has no layout, so tests stub rectangles)
+```
+
+### The bridge as implemented
+
+Native calls `window.KudosEditor.call(name, args)` (Apple, `callAsyncJavaScript`) or posts `{id, name, args}` (Android,
+answered with `{id, ok, result | error}` through `kudosNative`). Calls run one at a time in arrival order. Every failure
+rejects with `{code, message}`: `unknown-call`, `bad-args`, `not-loaded`, `too-large` (part 1's ParseLimitError),
+`sanitizer`, `internal`. Events go to `window.webkit.messageHandlers.kudos` (Apple) or `kudosNative.postMessage(JSON)`
+(Android), flat: `{type, ...payload}`.
+
+| Call | Args | Result |
+|---|---|---|
+| `configure` | `{bridgeVersion, schemaVersion, variant, theme?, locale?, labels?, autocorrect?}` | `{bridgeVersion, schemaVersion, bundleVersion}` |
+| `load` | `{html, revision}` | `{revision, loss, timing: {parseMs, buildMs, renderMs}}`; read-only, history reset |
+| `activate` | `{caret: number \| null, focus}` | `{caretFound}`; the caret is an offset in the text HTML mode holds (the loaded text, or the last snapshot after an edited switch out) |
+| `freeze` | `{}` | `{revision}`; blur, read-only, waits for IME composition (cap 500 ms, then an `error` event `composition-timeout`) |
+| `snapshot` | `{caret}` | `{revision, html, caretOffset, words}`; the original bytes when the document is the loaded one (R1) |
+| `command` | `{name, attrs}` | `{applied, state: FormatState, paste?}` |
+| `lint` | `{html}` | `{loss}` |
+| `setTheme` | theme | `{}` |
+| `dispose` | `{}` | `{}` |
+| `verifySwitch` (alias `verify`) | `{direction: 'richToSource' \| 'sourceToRich', html?}` | `{ok, candidateHtml, reason?}` |
+
+Commands (576c's `FormatCommand`, by case name): `toggleMark {mark: bold|italic|underline|strikethrough|superscript|
+subscript|smaller|code}`, `setBlock {block: body|heading|subheading|centred|quote|bulletedList|numberedList|foldOut,
+title?}` (the current style again turns it off), `setAlignment {alignment: left|centre|right|justify}`, `setDirection
+{direction: leftToRight|rightToLeft}`, `setLink {url}` (http, https, mailto), `unlink`, `insertImage {address,
+description, width, height}`, `insertSceneBreak {style: asterism|asterisks|line}`, `insertFootnote`, `openTableInHTML`
+(native; applies nothing here), `undo`, `redo`, `clearFormatting`. For the keys bar: `insertText {text}`, `insertQuotes
+{open?, close?}`, `moveCaret {by}`. And `paste {html?, text?}` for a native Paste button.
+
+Events: `ready {bundleVersion, schemaVersion, bridgeVersion}`; `edited {revision}` (no text; at most 4 a second, the last
+one always sent); `toolbarState` = FormatState `{marks, block, align, dir, canUndo, canRedo, inLink, linkURL}` (at most 10
+a second, only when it changed); `caret {x, y, height, block}` (page CSS px and the top-level block index, at most once a
+frame and only when the caret's line or block changes: for typewriter scrolling and the two-view highlight); `paste
+{loss, words, kind}`; `error {code, message}`.
+
+### Choices worth knowing
+
+* **Rendering.** Semantic elements (`strong`, `em`, real `h1`-`h6`, `a href`) for VoiceOver; `class` is never rendered;
+  alignment and direction are the `align` and `dir` attributes; `hr` is drawn as a centred ⁂; fold-outs show open while
+  editing (`data-open` keeps AO3's state); preserved HTML is a locked chip with its tag and a text preview; remote
+  images are placeholders naming the host (OD2; the CSP would block them anyway). Atoms carry `contenteditable=false`.
+* **No HTML string reaches the page.** Paste and drop run through part 1's `load` (parse5 and the AO3 cleaning port) and
+  insert the document it builds; copy and cut write our own serializer's HTML. A test counts `innerHTML` writes.
+* **Invariants kept O(edit).** An implicit list paragraph that moves out of a list becomes `<p>`; two adjacent breaks split
+  the paragraph (merge_br_tags), or collapse in a heading or fold-out title.
+* **The switch check is O(edited blocks)** (verify.ts): the slice layout is proven once per load, then each block rich
+  mode writes itself is reparsed with its neighbours, cached per block. Leaving Rich Text it costs under a millisecond for
+  a typical edit of the 510,000-character fixture. Equality is modulo the edge-space trim the builder applies to list
+  items (a typed trailing space in `<li>` collapses in HTML).
+* **The way back without a reparse.** After an edited switch out, HTML mode holds the snapshot; `activate` maps its caret
+  through the incremental serializer (binary search inside one block).
+* **Footnotes** are an anchor pair AO3 keeps: `<a href="#fnN" name="fnrefN"><sup>N</sup></a>` at the caret and
+  `<p><a href="#fnrefN" name="fnN">N.</a> </p>` at the end, with the caret in the note. Numbers follow insertion order.
+
+### Changes made to part 1's files (part 1's owner released them)
+
+* `sources.ts`: each chunk is reloaded with a sentinel paragraph after it, so a slice that leaks an open element into the
+  next block (`<p><b>a</p><p>b</b></p>`) is refused.
+* `serialize.ts`: with the head inside a text node the halves were escaped separately, so a `____spacer____` the head cut
+  was written raw (AO3 would delete it on save); now escaped whole. New `serializeBlockAt(node, head)`.
+* `unit.test.ts`: accepts the `&#95;` a head may now sit before. `package.json`: new dependencies, `bundle`, `test:web`,
+  and `npm test` runs `test-web/` too. `tsconfig.json`: includes `test-web` and `scripts`.
+
+### Open issues
+
+* **S15 on loaded fuzz input.** On part 1's corpus, the canonical serialization of 590 of the documents loaded from the
+  1,200 fuzz inputs (three variants) and of `li-bare` and `nested-400` does not reparse to the same document. Every
+  realistic input passes. The switch check refuses those switches (171 fuzz inputs, content variant), so nothing is lost,
+  but rich mode can't open them. A part 1 fix, or an S15 property test over loaded documents rather than generated ones.
+* **The slice layout** of some fuzz documents (foster parenting out of broken tables) does not reassemble; those fall
+  back to a full reparse per switch.
+* **`entities`** (parse5's dependency, BSD-2-Clause) is the one bundled package that is not MIT; its licence is in the
+  notices.
+* Android events are sent flat (`JSON.stringify(event)`); the spec's `{event}` may mean a wrapper. Not testable until E5.

@@ -19,8 +19,8 @@ import { clipboardSerializer, DEFAULT_LABELS, domParser, markViews, nodeViews } 
 import type { Labels } from './render.ts';
 import { formatState } from './state.ts';
 import type { FormatState } from './state.ts';
-import { sameDocument, verifyLeavingRich, verifyLeavingSource } from './verify.ts';
-import type { VerifyDeps } from './verify.ts';
+import { layoutIsSound, verifyLeavingRich, verifyLeavingSource } from './verify.ts';
+import type { Proven, VerifyDeps } from './verify.ts';
 
 export type EditorHooks = {
   /** A doc-changing transaction raised the revision. No text: the native side fetches text at checkpoints (I3). */
@@ -59,9 +59,13 @@ export class Editor {
   private loadRevision = 0;
   private serializer = new IncrementalSerializer();
   private frozen = true;
-  /** After a verified Rich Text -> HTML switch: the parse of the text HTML mode now holds (see `verifySwitch`). */
-  private rebase: { revision: number; loaded: LoadResult } | null = null;
-  private lastSnapshot: { revision: number; html: string } | null = null;
+  /** The last text handed to HTML mode; `original` when it was the loaded text itself (R1). */
+  private lastSnapshot: { revision: number; html: string; original: boolean } | null = null;
+  /** Blocks the switch check has proven, per load (verify.ts). */
+  private proven: Proven = new WeakMap();
+  private sourceVerdict: { loaded: LoadResult; html: string; result: { ok: boolean; candidateHtml: string; reason?: string } } | null = null;
+  /** Whether this load's slice layout reassembles in place (verify.ts); computed once, on the first check. */
+  private sound: boolean | null = null;
   private readonly hooks: EditorHooks;
   private readonly caret: CaretTracker;
   private readonly now: () => number;
@@ -218,22 +222,27 @@ export class Editor {
     this.loaded = loaded;
     this.revision = this.loadRevision = revision;
     this.serializer = new IncrementalSerializer(loaded.sources);
-    this.rebase = null;
     this.lastSnapshot = null;
+    this.proven = new WeakMap();
+    this.sourceVerdict = null;
+    this.sound = null;
     this.hooks.changed();
     return { revision, loss: loaded.loss, timing: { parseMs: loaded.timing.cleanMs, buildMs: loaded.timing.buildMs, renderMs } };
   }
 
-  /** Makes the editor editable, puts the caret at the HTML-mode offset (7.5), optionally focuses. */
+  /**
+   * Makes the editor editable, puts the caret at the HTML-mode offset (7.5), optionally focuses. The offset is in the
+   * text HTML mode holds: the loaded text, or, after a switch out of an edited Rich Text, the snapshot it was given.
+   */
   activate(caret: number | null, focus: boolean): { caretFound: boolean } {
     if (!this.loaded) throw bridgeError('not-loaded', 'activate before load');
-    this.applyRebase();
+    const doc = this.view.state.doc;
     let pos: number | null = null;
     let caretFound = false;
-    if (caret !== null && this.view.state.doc === this.loaded.doc) {
-      const r = mapCaret(this.loaded, caret);
-      pos = r.pos;
-      caretFound = r.caretFound;
+    if (caret !== null) {
+      const snap = this.lastSnapshot;
+      if (snap && !snap.original && snap.revision === this.revision) ({ pos, found: caretFound } = this.serializer.posForOffset(doc, caret));
+      else if (doc === this.loaded.doc || doc.eq(this.loaded.doc)) ({ pos, caretFound } = mapCaret(this.loaded, caret));
     }
     let state = this.view.state;
     const selection = pos === null ? state.selection : TextSelection.near(state.doc.resolve(Math.min(Math.max(pos, 0), state.doc.content.size)));
@@ -246,24 +255,6 @@ export class Editor {
     this.caret.force(this.view);
     this.hooks.changed();
     return { caretFound };
-  }
-
-  /** The text HTML mode holds after a switch out of Rich Text, if it is not the text this document was loaded from. */
-  private applyRebase(): void {
-    const doc = this.view.state.doc;
-    if (!this.loaded || doc === this.loaded.doc) return;
-    // Verified by the switch check; without one the HTML-mode text is the last snapshot, and a reload costs one parse.
-    let next = this.rebase?.revision === this.revision ? this.rebase.loaded : null;
-    if (!next && this.lastSnapshot?.revision === this.revision) {
-      const reloaded = load(this.lastSnapshot.html, this.variant);
-      if (sameDocument(reloaded.doc, doc)) next = reloaded;
-    }
-    this.rebase = null;
-    if (!next) return;
-    this.loaded = next;
-    this.loadRevision = this.revision;
-    this.serializer = new IncrementalSerializer(next.sources);
-    this.view.updateState(this.newState(next.doc, Selection.fromJSON(next.doc, this.view.state.selection.toJSON())));
   }
 
   /** Blur, read-only, and wait for IME composition to end (7.6). */
@@ -292,14 +283,15 @@ export class Editor {
     let html: string;
     let caretOffset: number | null;
     let words: number;
-    if (doc === this.loaded.doc || doc.eq(this.loaded.doc)) {
+    const original = doc === this.loaded.doc || doc.eq(this.loaded.doc);
+    if (original) {
       html = this.loaded.sources.original;
       caretOffset = head === undefined ? null : this.loaded.sources.offsetForPos(head);
       words = this.serializer.wordCount(doc);
     } else {
       ({ html, headOffset: caretOffset, words } = this.serializer.serialize(doc, head));
     }
-    this.lastSnapshot = { revision: this.revision, html };
+    this.lastSnapshot = { revision: this.revision, html, original };
     return { revision: this.revision, html, caretOffset: withCaret ? caretOffset : null, words };
   }
 
@@ -355,7 +347,7 @@ export class Editor {
     return { loss: lint(html, this.variant) };
   }
 
-  /** The switch check (7.11). A passing Rich Text -> HTML check also remembers the parse for the way back. */
+  /** The switch check (7.11), O(edited blocks). Leaving HTML, the verdict for a preload is kept for the switch. */
   verifySwitch(direction: 'richToSource' | 'sourceToRich', html: string | undefined, deps?: VerifyDeps): { ok: boolean; candidateHtml: string; reason?: string } {
     if (direction === 'richToSource') {
       if (!this.loaded) throw bridgeError('not-loaded', 'verifySwitch before load');
@@ -364,19 +356,25 @@ export class Editor {
         const original = this.loaded.sources.original;
         return html === undefined || html === original ? { ok: true, candidateHtml: original } : { ok: false, candidateHtml: original, reason: 'unedited document, but the snapshot is not the loaded text' };
       }
-      const r = verifyLeavingRich(doc, this.variant, (d) => this.serializer.serialize(d).html, html, deps);
-      if (r.ok && r.loaded) this.rebase = { revision: this.revision, loaded: r.loaded };
-      return { ok: r.ok, candidateHtml: r.candidateHtml, ...(r.reason ? { reason: r.reason } : {}) };
+      const inc = deps?.blocks ? new IncrementalSerializer(this.loaded.sources, deps.blocks) : this.serializer;
+      this.sound ??= layoutIsSound(this.loaded, this.variant, new IncrementalSerializer(this.loaded.sources));
+      return verifyLeavingRich(doc, this.variant, inc, html, deps ? new WeakMap() : this.proven, deps, this.sound);
     }
     if (html === undefined) throw bridgeError('bad-args', 'verifySwitch sourceToRich needs html');
-    const r = verifyLeavingSource(html, this.variant, this.loaded ?? undefined, deps);
-    return { ok: r.ok, candidateHtml: r.candidateHtml, ...(r.reason ? { reason: r.reason } : {}) };
+    const v = this.sourceVerdict;
+    if (!deps && v && v.loaded === this.loaded && v.html === html) return v.result;
+    const { sound, ...result } = verifyLeavingSource(html, this.variant, this.loaded ?? undefined, deps ? new WeakMap() : this.proven, deps, this.serializer);
+    if (!deps && this.loaded && this.loaded.sources.original === html) {
+      this.sourceVerdict = { loaded: this.loaded, html, result };
+      this.sound = sound;
+    }
+    return result;
   }
 
   dispose(): void {
     this.loaded = null;
-    this.rebase = null;
     this.lastSnapshot = null;
+    this.sourceVerdict = null;
     this.frozen = true;
     this.view.dom.blur();
     this.view.updateState(this.newState(schema.nodes.doc!.create(null, schema.nodes.paragraph!.create())));

@@ -1,14 +1,29 @@
 // The switch check (spec 7.11): before a hand-off out of an edited view commits, prove the text survives the trip.
+//
+// Untouched blocks go out as their source slices. Once per load the slice layout itself is proven: the unedited
+// serialization is the source text (free, and true for every realistic chapter), or else it reparses to the
+// document (one parse, for malformed input). With a sound layout only the blocks rich mode writes itself can change
+// the text, and each of those is reparsed together with its neighbours (where the parser and ParagraphMaker can
+// carry anything across a block boundary). That is O(edited blocks) per switch instead of a full reparse, which a
+// 510,000-character chapter can't afford within B11 (150 ms). Results are cached per block and neighbours. A layout
+// that is not sound (the parser moved content, as foster parenting out of a broken table does) falls back to the
+// full reparse for that document.
 import { Fragment } from 'prosemirror-model';
 import type { Node as PMNode } from 'prosemirror-model';
-import { load, schema, serializeDoc } from '../index.ts';
+import { load, schema } from '../index.ts';
 import type { LoadResult, Variant } from '../index.ts';
+import { IncrementalSerializer } from './incremental.ts';
+import type { BlockSerializer, Serialized } from './incremental.ts';
 
-export type VerifyResult = { ok: boolean; candidateHtml: string; reason?: string; loaded?: LoadResult };
+export type VerifyResult = { ok: boolean; candidateHtml: string; reason?: string };
 export type VerifyDeps = {
-  serialize?: (doc: PMNode) => string;
+  /** A stand-in parser (tests: a broken one must be caught). */
   parse?: (html: string, variant: Variant) => LoadResult;
+  /** A stand-in block serializer (tests: a broken one must be caught). */
+  blocks?: BlockSerializer;
 };
+/** Blocks already proven, with the neighbours they were proven next to. */
+export type Proven = WeakMap<PMNode, [PMNode | null, PMNode | null]>;
 
 /**
  * The builder trims spaces and tabs at the edges of a list item's own text (`<li> x </li>` is `x`: the space collapses
@@ -43,53 +58,82 @@ export function trimListEdges(node: PMNode): PMNode {
   return changed ? node.copy(Fragment.from(kids)) : node;
 }
 
-/** `a` (a parse) is the document `b` (the editor's), as AO3 will see it. */
+/** `parsed` is the editor's document `edited`, as AO3 will see it. */
 export const sameDocument = (parsed: PMNode, edited: PMNode): boolean => parsed.eq(edited) || parsed.eq(trimListEdges(edited));
 
 /** Index and both versions of the first top-level block that differs, for the log that becomes a golden fixture. */
-function firstDifference(want: PMNode, got: PMNode): string {
+function firstDifference(want: PMNode, got: PMNode, offset = 0): string {
   const n = Math.max(want.childCount, got.childCount);
   for (let i = 0; i < n; i++) {
     const a = i < want.childCount ? want.child(i) : null;
     const b = i < got.childCount ? got.child(i) : null;
-    if (!a || !b || !a.eq(b)) return `block ${i}: expected ${a ? a.toString() : 'nothing'}, got ${b ? b.toString() : 'nothing'}`;
+    if (!a || !b || !a.eq(b)) return `block ${offset + i}: expected ${a ? a.toString() : 'nothing'}, got ${b ? b.toString() : 'nothing'}`;
   }
   return 'documents differ';
 }
 
-/**
- * Leaving Rich Text: parse(serialize(doc)) must equal doc (S15, and with it S14).
- * `html`, when given, is what the native side received from `snapshot`; it must be that serialization.
- * On success `loaded` is the parse of the new HTML-mode text, so a later switch back maps carets through it.
- */
-export function verifyLeavingRich(doc: PMNode, variant: Variant, serialize: (doc: PMNode) => string, html?: string, deps: VerifyDeps = {}): VerifyResult {
-  const candidateHtml = (deps.serialize ?? serialize)(doc);
-  if (html !== undefined && html !== candidateHtml) return { ok: false, candidateHtml, reason: 'the snapshot the native side holds is not the current serialization' };
-  let loaded: LoadResult;
-  try { loaded = (deps.parse ?? load)(candidateHtml, variant); } catch (e) { return { ok: false, candidateHtml, reason: `parse(serialize(doc)) failed: ${String(e)}` }; }
-  // S14 follows: the serializer is a function of the document, and the two documents are equal.
-  if (!sameDocument(loaded.doc, doc)) return { ok: false, candidateHtml, reason: `parse(serialize(doc)) differs from doc: ${firstDifference(trimListEdges(doc), loaded.doc)}` };
-  return { ok: true, candidateHtml, loaded };
+const POSIX_EDGES = /^[ \t\n\v\f\r]+|[ \t\n\v\f\r]+$/g;
+
+/** Whether the untouched-block slices of `loaded` reassemble into its document in place (see the top of the file). */
+export function layoutIsSound(loaded: LoadResult, variant: Variant, inc: IncrementalSerializer, deps: VerifyDeps = {}): boolean {
+  const unedited = inc.serialize(loaded.doc).html;
+  if (unedited === loaded.sources.text.replace(POSIX_EDGES, '')) return true;
+  try { return sameDocument((deps.parse ?? load)(unedited, variant).doc, loaded.doc); } catch { return false; }
+}
+
+/** The whole output, reparsed: for documents whose slice layout is not sound. */
+function checkWhole(doc: PMNode, variant: Variant, out: Serialized, deps: VerifyDeps): string | null {
+  let back: PMNode;
+  try { back = (deps.parse ?? load)(out.html, variant).doc; } catch (e) { return `the reparse failed (${String(e)})`; }
+  return sameDocument(back, doc) ? null : firstDifference(trimListEdges(doc), back);
+}
+
+/** Reparses every block of `out` that rich mode wrote itself, with its neighbours. Null when all match. */
+export function checkWrittenBlocks(doc: PMNode, variant: Variant, out: Serialized, proven: Proven, deps: VerifyDeps = {}): string | null {
+  const parse = deps.parse ?? load;
+  const segs = out.segments;
+  const n = doc.childCount;
+  for (let i = 0; i < n; i++) {
+    if (segs[i]!.source) continue;
+    const block = doc.child(i);
+    const before = i > 0 ? doc.child(i - 1) : null;
+    const after = i + 1 < n ? doc.child(i + 1) : null;
+    const seen = proven.get(block);
+    if (seen && seen[0] === before && seen[1] === after) continue;
+    const a = Math.max(0, i - 1), z = Math.min(n - 1, i + 1);
+    const kids: PMNode[] = [];
+    for (let k = a; k <= z; k++) kids.push(doc.child(k));
+    const expected = doc.type.create(doc.attrs, kids);
+    let back: PMNode;
+    try { back = parse(out.html.slice(segs[a]!.start, segs[z]!.end), variant).doc; } catch (e) { return `block ${i}: the reparse failed (${String(e)})`; }
+    if (!sameDocument(back, expected)) return firstDifference(trimListEdges(expected), back, a);
+    proven.set(block, [before, after]);
+  }
+  return null;
 }
 
 /**
- * Leaving HTML: the document that load built (the one its loss report described) must survive serialize then parse,
- * both canonically and as rich mode will write it (untouched blocks from their source slices).
+ * Leaving Rich Text: what rich mode writes must parse back to its document (S15, and with it S14). `html`, when
+ * given, is what the native side holds from `snapshot`; it must be the current serialization.
  */
-export function verifyLeavingSource(html: string, variant: Variant, loaded?: LoadResult, deps: VerifyDeps = {}): VerifyResult {
-  const parse = deps.parse ?? load;
-  const from = loaded && loaded.sources.original === html ? loaded : parse(html, variant);
-  const canonical = deps.serialize ? deps.serialize(from.doc) : serializeDoc(from.doc).html;
-  const survives = (out: string): string | null => {
-    try {
-      const back = parse(out, variant).doc;
-      return back.eq(from.doc) ? null : firstDifference(from.doc, back);
-    } catch (e) { return `reparse failed: ${String(e)}`; }
-  };
-  const lost = survives(canonical);
-  if (lost) return { ok: false, candidateHtml: canonical, reason: `parse(serialize(parse(html))) differs: ${lost}` };
-  const local = serializeDoc(from.doc, { sources: from.sources }).html;
-  const lostLocal = local === canonical ? null : survives(local);
-  if (lostLocal) return { ok: false, candidateHtml: local, reason: `the source-slice serialization does not parse back: ${lostLocal}` };
-  return { ok: true, candidateHtml: canonical, loaded: from };
+export function verifyLeavingRich(doc: PMNode, variant: Variant, inc: IncrementalSerializer, html: string | undefined, proven: Proven, deps: VerifyDeps = {}, soundLayout = true): VerifyResult {
+  const out = inc.serialize(doc);
+  if (html !== undefined && html !== out.html) return { ok: false, candidateHtml: out.html, reason: 'the snapshot the native side holds is not the current serialization' };
+  const lost = soundLayout ? checkWrittenBlocks(doc, variant, out, proven, deps) : checkWhole(doc, variant, out, deps);
+  return lost ? { ok: false, candidateHtml: out.html, reason: `parse(serialize(doc)) differs from doc at ${lost}` } : { ok: true, candidateHtml: out.html };
+}
+
+/**
+ * Leaving HTML: the document load built (the one its loss report described) must be one rich mode can write back.
+ * Unedited, it hands back the original bytes (R1); edited, untouched blocks go out as their slices, so what has to
+ * hold is that the slice layout is sound and every block with no slice (written canonically) reparses in place.
+ * `sound` reports the layout verdict, which the way out of Rich Text reuses.
+ */
+export function verifyLeavingSource(html: string, variant: Variant, loaded: LoadResult | undefined, proven: Proven, deps: VerifyDeps = {}, inc?: IncrementalSerializer): VerifyResult & { sound: boolean } {
+  const from = loaded && loaded.sources.original === html ? loaded : (deps.parse ?? load)(html, variant);
+  const ser = inc && from === loaded && !deps.blocks ? inc : new IncrementalSerializer(from.sources, deps.blocks);
+  const out = ser.serialize(from.doc);
+  const sound = layoutIsSound(from, variant, ser, deps);
+  const lost = sound ? checkWrittenBlocks(from.doc, variant, out, proven, deps) : 'the untouched blocks do not reassemble into the document';
+  return lost ? { ok: false, candidateHtml: out.html, reason: `rich mode could not write this text back unchanged: ${lost}`, sound } : { ok: true, candidateHtml: out.html, sound };
 }
