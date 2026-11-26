@@ -2,6 +2,7 @@
 // HtmlCleaner#sanitize_value (452391b6) for the AO3 fields that allow HTML: content, notes/endnotes, summary.
 import { childrenToHtml, parseIn } from './html5.ts';
 import { addParagraphsToText } from './paragraph-maker.ts';
+import type { PmStats } from './paragraph-maker.ts';
 import { dropInvalidUtf16, isBlank, strip } from './ruby.ts';
 import { DEFAULT_APP_URL, newReport, sanitizeClean } from './sanitize.ts';
 import type { CleanOptions, Variant } from './sanitize.ts';
@@ -24,7 +25,9 @@ export function sanitizeValue(variant: Variant, value: string, opts: CleanOption
   if (isBlank(value)) return '';
   const v = strip(value);
   const ctx = { appUrl: opts.appUrl ?? DEFAULT_APP_URL, report: opts.report };
-  const cleaned = sanitizeClean(addParagraphsToText(fixBadCharacters(v)), variant, ctx);
+  const pm: PmStats[] = [];
+  const cleaned = sanitizeClean(addParagraphsToText(fixBadCharacters(v), pm), variant, ctx);
+  if (opts.report && pm[0]) opts.report.normalized += pm[0].stripped + pm[0].splits + pm[0].wraps + pm[0].emptyDeleted;
   // doc.fragment(cleaned).to_html, then "&nbsp;" back to U+00A0 (otwarchive's temporary hack)
   return childrenToHtml(parseIn('body', cleaned)).replaceAll('&nbsp;', '\u00a0');
 }
