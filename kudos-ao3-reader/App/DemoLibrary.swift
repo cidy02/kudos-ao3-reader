@@ -794,6 +794,9 @@ enum DebugShots {
         )),
         ("challenge", DebugShot(route: winter, manageRow: "Challenge Settings")),
         ("writingpreview", DebugShot(route: "acct:workedit:1002", sheets: ["writingpreview"])),
+        ("writingrequests", DebugShot(route: "writing", pushes: ["writingrequests"])),
+        ("orphansheet", DebugShot(route: posted, sheets: ["orphansheet"])),
+        ("importwork", DebugShot(route: "writing", sheets: ["importwork"])),
         ("chapters", DebugShot(route: posted, pushes: ["chapters"])),
         ("chapterform", DebugShot(route: posted, pushes: ["chapterform"])),
         ("edittags", DebugShot(route: posted, pushes: ["edittags"])),
@@ -1330,6 +1333,12 @@ final class DemoNetworkBlock: URLProtocol {
         // "Your items" (the reader's own works in collections) said "Couldn't load collection
         // items": the demo had no page for it. The same page Android's demo answers with.
         ("^/users/[^/]+/collection_items", "ao3_demo_user_collection_items"),
+        // T-575 writing requests, gifts, related works, and orphan confirmation forms.
+        ("^/users/[^/]+/creatorships", "ao3_demo_creatorships"),
+        ("^/users/[^/]+/gifts", "ao3_demo_gifts_accepted"),
+        ("^/users/[^/]+/related_works", "ao3_demo_related_works"),
+        ("^/related_works/\\d+", "ao3_demo_related_work_approve"),
+        ("^/orphans/new", "ao3_demo_orphan_work"),
         ("^/tag_sets/\\d+", "ao3_tag_set"),
         ("^/media/[^/]+/fandoms", "ao3_media_fandoms"),
         ("^/media/?$", "ao3_media"),
@@ -1356,11 +1365,22 @@ final class DemoNetworkBlock: URLProtocol {
     ]
 
     static func fixture(for url: URL) -> String? {
+        let query = url.query ?? ""
         // A work's comments are its own page with `show_comments=true`, so the path alone gave the
         // work page and the real Comments screen could never be opened in the demo: it said
         // "Couldn't Load Comments".
-        if url.query?.contains("show_comments=true") == true { return "ao3_comments_page" }
+        if query.contains("show_comments=true") { return "ao3_comments_page" }
         let path = url.path
+        if path == "/works/new", query.contains("import=true") {
+            return "ao3_demo_work_import_form"
+        }
+        if path.range(of: "^/users/[^/]+/gifts/?$", options: .regularExpression) != nil,
+           query.contains("refused=true") {
+            return "ao3_demo_gifts_refused"
+        }
+        if path == "/orphans/new", query.contains("series_id=") {
+            return "ao3_demo_orphan_series"
+        }
         return routes.first { path.range(of: $0.pattern, options: .regularExpression) != nil }?.fixture
     }
 

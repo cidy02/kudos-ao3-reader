@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="csrf-param" content="authenticity_token">
+  <meta name="csrf-token" content="demo-import-form-csrf==">
+  <title>Import New Work | Archive of Our Own</title>
+</head>
+<body class="logged-in">
+<!-- Ground truth: otwarchive 452391b6 app/views/works/new_import.html.erb (demo copy) -->
+<div id="main" class="works-new_import region">
+  <h2 class="heading">Import New Work</h2>
+  <div class="notice">
+    <p class="important">Please note! Fanfiction.net, Wattpad.com, and Quotev.com do not allow imports from their sites.</p>
+  </div>
+  <ul class="navigation actions">
+    <li id="form-link"><a href="/works/new">Post New Work Instead?</a></li>
+  </ul>
+  <form class="import work verbose post" action="/works/import" accept-charset="UTF-8" method="post">
+    <input type="hidden" name="authenticity_token" value="demo-import-form-csrf==" autocomplete="off">
+    <fieldset>
+      <legend>Works URLs</legend>
+      <dl>
+        <dt class="required"><label for="urls">URLs*</label></dt>
+        <dd class="required">
+          <textarea name="urls" id="urls" rows="20" cols="90" aria-describedby="url-field-description"></textarea>
+        </dd>
+        <dt class="required"><label for="language_id">Choose a language*</label></dt>
+        <dd class="required">
+          <select id="language_id" name="language_id">
+            <option value="">Please select a language</option>
+            <option value="1">English</option>
+            <option value="2">Español</option>
+            <option value="3">Français</option>
+          </select>
+        </dd>
+        <dt><label for="pseuds_to_apply">Pseud(s)</label></dt>
+        <dd>
+          <select name="pseuds_to_apply" id="pseuds_to_apply">
+            <option value="AO3_Reader" selected="selected">AO3_Reader</option>
+            <option value="LanternMaker">LanternMaker</option>
+          </select>
+        </dd>
+        <dt><label for="encoding">Set custom encoding</label></dt>
+        <dd>
+          <select name="encoding" id="encoding">
+            <option value=""></option>
+            <option value="ISO-8859-1">ISO-8859-1</option>
+            <option value="UTF-8">UTF-8</option>
+            <option value="Windows-1252">Windows-1252</option>
+          </select>
+        </dd>
+        <dt>Import as</dt>
+        <dd>
+          <ul>
+            <li>
+              <input type="radio" name="import_multiple" id="import_multiple_works" value="works" checked="checked">
+              <label for="import_multiple_works">Works (limit of 25)</label>
+            </li>
+            <li>
+              <input type="radio" name="import_multiple" id="import_multiple_chapters" value="chapters">
+              <label for="import_multiple_chapters">Chapters in a single work (limit of 200)</label>
+            </li>
+          </ul>
+        </dd>
+        <dt>Preferences</dt>
+        <dd>
+          <ul>
+            <li>
+              <input type="checkbox" name="post_without_preview" id="post_without_preview" value="1">
+              <label for="post_without_preview">Post without previewing.</label>
+            </li>
+          </ul>
+        </dd>
+        <dt>Override tags and notes</dt>
+        <dd>
+          <ul>
+            <li>
+              <input type="checkbox" name="override_tags" id="override_tags-options-show" value="1" class="toggle_formfield">
+              <label for="override_tags-options-show">Set the following tags and/or notes on all works, overriding whatever the importer finds in the content.</label>
+              <ul id="override_tags-options" class="dependent">
+                <li>
+                  <input type="radio" name="detect_tags" id="detect_tags_true" value="true" checked="checked">
+                  <label for="detect_tags_true">Use values extracted from the content for blank fields if possible</label>
+                </li>
+                <li>
+                  <input type="radio" name="detect_tags" id="detect_tags_false" value="false">
+                  <label for="detect_tags_false">Do not use values extracted from the content at all; use Archive defaults for blank fields</label>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </dd>
+      </dl>
+    </fieldset>
+    <fieldset>
+      <legend>Privacy</legend>
+      <h3 class="landmark heading">Privacy</h3>
+      <dl>
+        <dt class="restricted"><input type="checkbox" name="restricted" id="restricted" value="1"></dt>
+        <dd class="restricted"><label for="restricted">Only show your imported works to registered users</label></dd>
+        <dt class="moderated comments"><input type="checkbox" name="moderated_commenting_enabled" id="moderated_commenting_enabled" value="1"></dt>
+        <dd class="moderated comments"><label for="moderated_commenting_enabled">Enable comment moderation</label></dd>
+        <dt class="permissions comments">Who can comment on these works</dt>
+        <dd class="permissions comments">
+          <fieldset>
+            <ul>
+              <li>
+                <input type="radio" name="comment_permissions" id="comment_permissions_enable_all" value="enable_all">
+                <label for="comment_permissions_enable_all">Registered users and guests can comment</label>
+              </li>
+              <li>
+                <input type="radio" name="comment_permissions" id="comment_permissions_disable_anon" value="disable_anon" checked="checked">
+                <label for="comment_permissions_disable_anon">Only registered users can comment</label>
+              </li>
+              <li>
+                <input type="radio" name="comment_permissions" id="comment_permissions_disable_all" value="disable_all">
+                <label for="comment_permissions_disable_all">No one can comment</label>
+              </li>
+            </ul>
+          </fieldset>
+        </dd>
+      </dl>
+    </fieldset>
+    <fieldset class="work meta">
+      <legend>Tags</legend>
+      <dl>
+        <dt class="rating"><label for="work_rating_string">Rating</label></dt>
+        <dd class="rating">
+          <select name="work[rating_string]" id="work_rating_string">
+            <option value=""></option>
+            <option value="Not Rated">Not Rated</option>
+            <option value="General Audiences">General Audiences</option>
+            <option value="Teen And Up Audiences">Teen And Up Audiences</option>
+            <option value="Mature">Mature</option>
+            <option value="Explicit">Explicit</option>
+          </select>
+        </dd>
+        <dt class="warning"><label>Archive Warnings</label></dt>
+        <dd class="warning">
+          <ul>
+            <li>
+              <input type="checkbox" name="work[archive_warning_strings][]" id="work_archive_warning_strings_choose" value="Choose Not To Use Archive Warnings">
+              <label for="work_archive_warning_strings_choose">Choose Not To Use Archive Warnings</label>
+            </li>
+            <li>
+              <input type="checkbox" name="work[archive_warning_strings][]" id="work_archive_warning_strings_none" value="No Archive Warnings Apply">
+              <label for="work_archive_warning_strings_none">No Archive Warnings Apply</label>
+            </li>
+          </ul>
+        </dd>
+        <dt class="fandom"><label for="work_fandom">Fandoms</label></dt>
+        <dd class="fandom"><input type="text" name="work[fandom_string]" id="work_fandom" value=""></dd>
+        <dt class="category"><label>Categories</label></dt>
+        <dd class="category">
+          <ul>
+            <li>
+              <input type="checkbox" name="work[category_strings][]" id="work_category_strings_ff" value="F/F">
+              <label for="work_category_strings_ff">F/F</label>
+            </li>
+            <li>
+              <input type="checkbox" name="work[category_strings][]" id="work_category_strings_gen" value="Gen">
+              <label for="work_category_strings_gen">Gen</label>
+            </li>
+            <li>
+              <input type="checkbox" name="work[category_strings][]" id="work_category_strings_mm" value="M/M">
+              <label for="work_category_strings_mm">M/M</label>
+            </li>
+          </ul>
+        </dd>
+        <dt class="relationship"><label for="work_relationship">Relationships</label></dt>
+        <dd class="relationship"><input type="text" name="work[relationship_string]" id="work_relationship" value=""></dd>
+        <dt class="character"><label for="work_character">Characters</label></dt>
+        <dd class="character"><input type="text" name="work[character_string]" id="work_character" value=""></dd>
+        <dt class="freeform"><label for="work_freeform">Additional Tags</label></dt>
+        <dd class="freeform"><input type="text" name="work[freeform_string]" id="work_freeform" value=""></dd>
+      </dl>
+    </fieldset>
+    <fieldset>
+      <legend><label for="notes">Notes</label></legend>
+      <dl>
+        <dt><label for="notes">Notes at the beginning</label></dt>
+        <dd><textarea name="notes" id="notes" class="observe_textlength"></textarea></dd>
+      </dl>
+    </fieldset>
+    <fieldset>
+      <legend>Submit</legend>
+      <p class="submit actions"><input type="submit" name="commit" value="Import" data-disable-with="Import"></p>
+    </fieldset>
+  </form>
+</div>
+</body>
+</html>

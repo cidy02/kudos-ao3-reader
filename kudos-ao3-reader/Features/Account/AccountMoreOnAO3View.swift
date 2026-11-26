@@ -67,8 +67,14 @@ enum AO3MoreOnAO3Route {
 /// creator and challenge destinations, and adding the site-wide "The archive"
 /// section for general AO3 pages.
 struct AccountMoreOnAO3View: View {
+    @Environment(AO3AuthService.self) private var auth
+    @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
     @ScaledMetric(relativeTo: .footnote) private var footnoteSize: CGFloat = 12.5
+
+    @State private var showingRequests = false
+    @State private var showingImport = false
+    @State private var importedDraftWorkID: Int?
 
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
     private var selfGuttered: CGFloat { 0 }
@@ -107,6 +113,20 @@ struct AccountMoreOnAO3View: View {
         }
         .cardList()
         .subjectScreenWash(title: "More on AO3", palette: accountPalette)
+        .navigationDestination(isPresented: $showingRequests) {
+            WritingRequestsView()
+        }
+        .navigationDestination(item: $importedDraftWorkID) { workID in
+            WritingWorkDestination(workID: workID)
+        }
+        .sheet(isPresented: $showingImport) {
+            ImportWorkView(
+                onOpenDraft: { workID in importedDraftWorkID = workID },
+                onOpenWork: { workID in
+                    router.openAO3Link(AO3Client.workURL(workID: workID))
+                }
+            )
+        }
     }
 
     // MARK: - Panels
@@ -135,12 +155,12 @@ struct AccountMoreOnAO3View: View {
                 isFormRow: true
             )
             SubjectRowSeparator()
-            AccountExternalNavCard(
+            nativeUserRow(
                 title: "Import work",
-                systemImage: "square.and.arrow.down",
-                sitePath: AO3MoreOnAO3Route.importWork,
-                isFormRow: true
-            )
+                systemImage: "square.and.arrow.down"
+            ) {
+                showingImport = true
+            }
             SubjectRowSeparator()
             AccountExternalNavCard(
                 title: "Edit works in bulk",
@@ -156,12 +176,12 @@ struct AccountMoreOnAO3View: View {
                 isFormRow: true
             )
             SubjectRowSeparator()
-            AccountExternalNavCard(
+            nativeUserRow(
                 title: "Related works",
-                systemImage: "arrow.triangle.branch",
-                pathSuffix: "related_works",
-                isFormRow: true
-            )
+                systemImage: "arrow.triangle.branch"
+            ) {
+                showingRequests = true
+            }
             SubjectRowSeparator()
             AccountExternalNavCard(
                 title: "Drafts",
@@ -212,12 +232,12 @@ struct AccountMoreOnAO3View: View {
                 isFormRow: true
             )
             SubjectRowSeparator()
-            AccountExternalNavCard(
+            nativeUserRow(
                 title: "Co-Creator Requests",
-                systemImage: "person.badge.plus",
-                pathSuffix: "creatorships",
-                isFormRow: true
-            )
+                systemImage: "person.badge.plus"
+            ) {
+                showingRequests = true
+            }
             SubjectRowSeparator()
             AccountExternalNavCard(
                 title: "Statistics",
@@ -298,5 +318,24 @@ struct AccountMoreOnAO3View: View {
             .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func nativeUserRow(
+        title: String,
+        systemImage: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        let isDisabled = !auth.isLoggedIn
+        return Button(action: action) {
+            AccountNavCardLabel(
+                title: title,
+                systemImage: systemImage,
+                opensExternally: false
+            )
+            .padding(.horizontal, 14)
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.45 : 1)
     }
 }

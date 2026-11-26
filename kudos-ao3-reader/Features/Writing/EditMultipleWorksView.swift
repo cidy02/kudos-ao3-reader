@@ -12,6 +12,9 @@ struct EditMultipleWorksView: View {
     @State private var form: AO3BulkEditForm
     @State private var changes: AO3BulkEditChanges
     @State private var isSaving = false
+    @State private var showingOrphan = false
+    @State private var didOrphan = false
+    @State private var showOrphanedNotice = false
     @State private var errorMessage: String?
     #if DEBUG
     @State private var debugPresented: DebugPresented?
@@ -151,12 +154,31 @@ struct EditMultipleWorksView: View {
                     .padding(.horizontal, 14)
                     .pageBodyRow(top: 8, gutter: gutter)
             }
+
+            groupHeader("Orphan")
+            Section { orphanSectionRows }
         }
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(title: headerTitle, palette: accountPalette)
         .hidesFloatingTabBarInEditor()
+        .sheet(isPresented: $showingOrphan, onDismiss: {
+            guard didOrphan else { return }
+            didOrphan = false
+            showOrphanedNotice = true
+        }) {
+            OrphanSheet(
+                target: .works(form.workIDs),
+                fallbackTitles: form.workTitles
+            ) { _ in
+                onSaved()
+                didOrphan = true
+            }
+        }
+        .alert("Orphaned.", isPresented: $showOrphanedNotice) {
+            Button("OK") { dismiss() }
+        }
         // The error was set and never shown, so a failed save only re-enabled
         // Save and looked like nothing had happened.
         .alert("AO3 could not save the change", isPresented: Binding(
@@ -405,5 +427,32 @@ struct EditMultipleWorksView: View {
                 isSaving = false
             }
         }
+    }
+}
+
+private extension EditMultipleWorksView {
+    @ViewBuilder
+    var orphanSectionRows: some View {
+        SubjectFormRow(
+            label: form.workIDs.count == 1
+                ? "Orphan 1 Work…"
+                : "Orphan \(form.workIDs.count) Works…",
+            value: "",
+            showsDisclosure: true,
+            isDisabled: form.workIDs.isEmpty || isSaving,
+            isDestructive: true
+        ) {
+            showingOrphan = true
+        }
+        .subjectPanel()
+        .pageBodyRow(top: 8, gutter: gutter)
+
+        Text("Moves the selected works to AO3's orphan_account permanently.")
+            .font(.system(size: footnoteSize))
+            .foregroundStyle(.secondary.opacity(0.7))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .pageBodyRow(top: 8, gutter: gutter)
     }
 }

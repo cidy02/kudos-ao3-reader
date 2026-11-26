@@ -17,6 +17,11 @@ struct WorkEditView: View {
     @State private var isPosting = false
     @State private var errorMessage: String?
     @State private var showDeleteConfirmation = false
+    @State private var showRemoveMeConfirmation = false
+    @State private var showingOrphan = false
+    @State private var didOrphan = false
+    @State private var showOrphanedNotice = false
+    @State private var isRemovingCoCreator = false
     @State private var showPostConfirmation = false
     @State private var deleteImplications: AO3DeleteImplications?
     @State private var isCheckingDelete = false
@@ -132,7 +137,7 @@ struct WorkEditView: View {
         // height was holding each at ~52pt (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .environment(\.writingEditedWorkID, form.workID)
-        .disabled(isSaving || isPosting)
+        .disabled(isSaving || isPosting || isRemovingCoCreator)
         .onAppear { if editingGeneration == nil { editingGeneration = auth.sessionGeneration } }
         .subjectScreenWash(title: screenTitle, palette: accountPalette)
         .wrappingInlineTitle(screenTitle, isActive: dynamicTypeSize.isAccessibilitySize)
@@ -211,10 +216,41 @@ struct WorkEditView: View {
                 Text(imp.cautionText)
             }
         }
+        .confirmationDialog(
+            "Remove yourself as co-creator?",
+            isPresented: $showRemoveMeConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Remove Me as Co-Creator", role: .destructive) {
+                removeMeAsCoCreator()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("AO3 removes you from every chapter of this work as well.")
+        }
+        .sheet(isPresented: $showingOrphan, onDismiss: {
+            guard didOrphan else { return }
+            didOrphan = false
+            showOrphanedNotice = true
+        }) {
+            if let workID = form.workID {
+                OrphanSheet(
+                    target: .work(workID),
+                    fallbackTitles: [form.title]
+                ) { _ in
+                    onChanged()
+                    didOrphan = true
+                }
+            }
+        }
+        .alert("Orphaned.", isPresented: $showOrphanedNotice) {
+            Button("OK") { dismiss() }
+        }
         #if DEBUG
         .task {
             if editingGeneration == nil { editingGeneration = auth.sessionGeneration }
             if DebugLaunchRoute.takeSheet("writingpreview") { openPreview() }
+            if DebugLaunchRoute.takeSheet("orphansheet") { showingOrphan = true }
             if let id = DebugLaunchRoute.takeFirstPush([
                 "chapters", "chapterform", "edittags", "texteditor", "recovery",
                 "seriespicker", "collectionsgifts", "creatorspicker", "parentpicker"
@@ -739,9 +775,56 @@ struct WorkEditView: View {
 
     private var deletePanel: some View {
         VStack(spacing: 0) {
+            if form.canRemoveMe {
+                SubjectFormRow(
+                    label: "Remove Me as Co-Creator",
+                    value: "",
+                    isDestructive: true
+                ) {
+                    showRemoveMeConfirmation = true
+                }
+                SubjectRowSeparator()
+            }
+            if form.canOrphan {
+                SubjectFormRow(
+                    label: "Orphan Work…",
+                    value: "",
+                    showsDisclosure: true,
+                    isDestructive: true
+                ) {
+                    showingOrphan = true
+                }
+                SubjectRowSeparator()
+            }
             SubjectFormRow(label: "Delete Work on AO3", value: "", isDestructive: true) { confirmDelete() }
         }
         .subjectPanel()
+    }
+
+    private func removeMeAsCoCreator() {
+        guard let workID = form.workID, !isRemovingCoCreator else { return }
+        guard editingGeneration == auth.sessionGeneration else {
+            errorMessage = AO3WorkWriteError.notSignedIn.localizedDescription
+            return
+        }
+        isRemovingCoCreator = true
+        Task {
+            let outcome = await WorkCoCreatorRemovalFlow.run(
+                kind: .work,
+                remove: { try await auth.removeMeAsCoCreator(workID: workID) },
+                onRemoved: {
+                    onChanged()
+                    dismiss()
+                }
+            )
+            isRemovingCoCreator = false
+            switch outcome {
+            case .removed:
+                break
+            case let .onlyCreator(message), let .failed(message):
+                errorMessage = message
+            }
+        }
     }
 
     private func save(submit: AO3WorkSubmitAction) {
@@ -994,6 +1077,12 @@ extension WorkEditView {
             }
             SubjectRowSeparator()
             postPanelRow("Preview on AO3", icon: "eye", color: theme.accentInk) { openPreview() }
+            if form.workID != nil, form.canRemoveMe {
+                SubjectRowSeparator()
+                postPanelRow("Remove Me as Co-Creator", icon: "person.badge.minus", color: .red) {
+                    showRemoveMeConfirmation = true
+                }
+            }
             if form.workID != nil {
                 SubjectRowSeparator()
                 postPanelRow("Delete Draft", icon: "trash.fill", color: .red) { confirmDelete() }

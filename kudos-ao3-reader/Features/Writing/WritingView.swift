@@ -26,10 +26,12 @@ struct WritingView: View {
     @State private var editingWorkID: Int?
     @State private var postingPseudName: String?
     @State private var showingLogin = false
+    @State private var showingImport = false
 
     private enum Destination: Hashable {
         case inbox
         case stats
+        case requests
     }
 
     var body: some View {
@@ -65,6 +67,7 @@ struct WritingView: View {
                 switch destination {
                 case .inbox: inboxDestination
                 case .stats: WritingStatsView()
+                case .requests: WritingRequestsView()
                 }
             }
             .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
@@ -109,6 +112,16 @@ struct WritingView: View {
                         }
                         Menu {
                             Button {
+                                path.append(Destination.requests)
+                            } label: {
+                                Label("Requests", systemImage: "tray.and.arrow.down")
+                            }
+                            Button {
+                                showingImport = true
+                            } label: {
+                                Label("Import from a URL", systemImage: "square.and.arrow.down")
+                            }
+                            Button {
                                 path.append(Destination.stats)
                             } label: {
                                 Label("Stats", systemImage: "chart.bar")
@@ -140,11 +153,28 @@ struct WritingView: View {
                 }
             }
             .sheet(isPresented: $showingLogin) { AO3LoginView() }
+            .sheet(isPresented: $showingImport) {
+                ImportWorkView(
+                    onOpenDraft: { workID in
+                        draftsReload += 1
+                        editingWorkID = workID
+                    },
+                    onOpenWork: { workID in
+                        router.openAO3Link(AO3Client.workURL(workID: workID))
+                    }
+                )
+            }
             #if DEBUG
             .task {
                 try? await Task.sleep(for: .seconds(1.5))
                 DebugLaunchRoute.applyWriting(to: &path)
                 editingWorkID = DebugLaunchRoute.accountEditWorkID
+                if DebugLaunchRoute.takePush("writingrequests") {
+                    path.append(Destination.requests)
+                }
+                if DebugLaunchRoute.takeSheet("importwork") {
+                    showingImport = true
+                }
             }
             #endif
             .task(id: activationKey) { await activate() }
@@ -288,6 +318,12 @@ struct WritingView: View {
     private var writingLinksSection: some View {
         Section {
             VStack(spacing: 0) {
+                Button { path.append(Destination.requests) } label: {
+                    AccountNavCardLabel(title: "Requests", systemImage: "tray.and.arrow.down")
+                        .padding(.horizontal, 14)
+                }
+                .buttonStyle(.plain)
+                SubjectRowSeparator()
                 writingLink(.drafts, title: "Drafts", symbol: "doc.badge.clock", count: draftCount)
                 SubjectRowSeparator()
                 writingLink(.series, title: "Series", symbol: "square.stack.3d.up", count: cachedCount(.series))
