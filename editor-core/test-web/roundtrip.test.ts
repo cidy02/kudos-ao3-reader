@@ -9,7 +9,7 @@ import { caretAt, command, harness, html, opened, selectText } from './dom.ts';
 import { load, schema, serializeBlock, serializeBlockAt, serializeDoc } from '../src/index.ts';
 import type { Variant } from '../src/index.ts';
 import { IncrementalSerializer } from '../src/editor/incremental.ts';
-import { countNode } from '../src/editor/words.ts';
+import { countNode } from '../src/words/index.ts';
 import { verifyLeavingRich, verifyLeavingSource } from '../src/editor/verify.ts';
 import { docArb } from '../test/arb.ts';
 import { makeFixture } from '../test/fixture.ts';

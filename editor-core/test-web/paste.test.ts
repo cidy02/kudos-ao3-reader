@@ -49,9 +49,12 @@ test('pasted HTML is cleaned by the AO3 pipeline, never parsed by the page, and 
   assert.equal(ev.kind, 'html');
   assert.equal(ev.words, 2);
   assert.equal(ev.loss.dropped.elements.font, 1);
-  assert.equal(ev.loss.dropped.elements.script, 1);
-  assert.equal(ev.loss.dropped.attributes.style, 1);
   assert.equal(ev.loss.dropped.attributes.onerror, 1);
+  // the paste cleaner runs first: a colour is a style AO3 can't show; a <script> was never visible, so it goes quietly
+  assert.equal(ev.styles.color, 1);
+  assert.equal(ev.loss.dropped.elements.script, undefined);
+  assert.equal(ev.source, 'web');
+  assert.deepEqual(ev.kept, { paragraph: 1, bold: 1, image: 1 });
   assert.equal(h.bridge.editor.view.dom.querySelector('script, font, [onerror], [style]'), null);
 });
 

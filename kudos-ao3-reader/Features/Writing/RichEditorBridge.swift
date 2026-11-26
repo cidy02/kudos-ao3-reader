@@ -386,6 +386,18 @@ nonisolated struct RichEditorPasteEvent: Codable, Equatable, Sendable {
     var words: Int
     /// `"html"` (the clipboard's rich text) or `"text"` (plain text, paragraphed as AO3 does).
     var kind: String
+    /// Where it came from when that can be told: `google-docs`, `word`, `apple` (Pages, Notes, TextEdit), `ao3`
+    /// (a copied work page), `web`, or `text`.
+    var source: String?
+    /// What was kept: FormatMark names for marks (counted as runs of text) and block kinds (`paragraph`, `heading`,
+    /// `quote`, `list`, `sceneBreak`, `centred`, `link`, `image`, `preserved`, ...).
+    var kept: [String: Int]?
+    /// Styles turned into structure before AO3's cleaning, by what they became (`strong`, `em`, `align`, `li`, ...).
+    var converted: [String: Int]?
+    /// Style properties AO3 can't show (`color`, `font-family`, `font-size`, ...).
+    var styles: [String: Int]?
+    /// A few removed things, most frequent first, as the writer reads them (`"<font> ×3"`, `"color ×4"`).
+    var examples: [String]?
 }
 
 nonisolated struct RichEditorJournalPayload: Codable, Equatable, Sendable {

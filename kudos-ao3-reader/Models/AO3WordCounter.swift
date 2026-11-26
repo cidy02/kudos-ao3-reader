@@ -13,7 +13,11 @@ import SwiftSoup
 /// 5. each other run of word characters is one word. Ruby's Unicode
 ///    `[[:word:]]` is Alphabetic + marks + decimal digits + connector
 ///    punctuation — checked against Ruby itself: Ⓐ and Ⅷ are word characters,
-///    ² and ① are not, and ZWNJ/ZWJ are not (Persian "نمی‌دانم" is two words there).
+///    ² and ① are not. The joiners ZWNJ and ZWJ are word characters too (Unicode's \w
+///    includes Join_Control): Ruby 3.4 scans "a\u{200C}b" with `[[:word:]]+` as one
+///    word, so Persian "نمی‌دانم" is one word on AO3. (`\w` without `(?u)` splits it,
+///    which is what an earlier check here measured.) Goldens from otwarchive's own
+///    WordCounter: `editor-core/test/golden/words.golden.json`.
 ///
 /// Counted per text node, as AO3 does: `<b>foo</b>bar` is two words there too.
 /// O(n) in the HTML; callers with a whole chapter run it off the main thread.
@@ -74,6 +78,6 @@ nonisolated enum AO3WordCounter {
     /// AO3's `[scripts]|((?!scripts)[[:word:]])+`. A constant pattern, so it
     /// either always compiles or never does; the fixtures would catch never.
     private static let wordPattern = try? NSRegularExpression(
-        pattern: "[\(scripts)]|(?:(?![\(scripts)])[\\p{Alphabetic}\\p{M}\\p{Nd}\\p{Pc}])+"
+        pattern: "[\(scripts)]|(?:(?![\(scripts)])[\\p{Alphabetic}\\p{M}\\p{Nd}\\p{Pc}\\p{Join_Control}])+"
     )
 }
