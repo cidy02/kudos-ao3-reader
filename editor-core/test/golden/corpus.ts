@@ -5,6 +5,10 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { parseFragment } from 'parse5';
+import fc from 'fast-check';
+import type { Node as PMNode } from 'prosemirror-model';
+import { serialize } from '../../src/serialize.ts';
+import { docArb } from '../arb.ts';
 
 export type Case = { id: string; input: string };
 
@@ -158,8 +162,8 @@ function fromFixtures(root: string): Case[] {
   return out;
 }
 
-import { serialize } from 'parse5';
-function serializeInner(e: any): string { return serialize(e); }
+import { serialize as p5serialize } from 'parse5';
+function serializeInner(e: any): string { return p5serialize(e); }
 
 /** Seeded fuzz: random mixtures of the pieces that exercise ParagraphMaker and the sanitizer. */
 export function fuzz(seed: number, count: number): Case[] {
@@ -187,8 +191,14 @@ export function fuzz(seed: number, count: number): Case[] {
   return Array.from({ length: count }, (_, i) => S(`fuzz-${seed}-${i}`, gen(0)));
 }
 
+/** Serializations of generated documents: Ruby's verdict on S15 (the golden must parse back to the document). */
+export const S15_SEED = 1576;
+export const S15_COUNT = 300;
+export function s15Documents(): PMNode[] { return fc.sample(docArb('content', { maxBlocks: 5 }), { seed: S15_SEED, numRuns: S15_COUNT }); }
+const s15Cases = (): Case[] => s15Documents().map((d, i) => S(`s15-${i}`, serialize(d)));
+
 export function buildCorpus(root: string): { cases: Case[] } {
-  const cases = [...synthetic, ...realistic(), ...fromFixtures(root), ...fuzz(576, 1200)];
+  const cases = [...synthetic, ...realistic(), ...fromFixtures(root), ...fuzz(576, 1200), ...s15Cases()];
   const seen = new Set<string>();
   for (const c of cases) { if (seen.has(c.id)) throw new Error(`duplicate corpus id ${c.id}`); seen.add(c.id); }
   return { cases };
