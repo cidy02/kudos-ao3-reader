@@ -53,6 +53,7 @@ nonisolated enum EditorMoreMenuActionID: Hashable, Sendable {
     case print
     case versionHistory
     case writingTools
+    case format
     case deleteChapter
 }
 
@@ -93,6 +94,20 @@ nonisolated struct EditorMoreMenuModel: Equatable, Sendable {
     let exportItems: [Item]
     let documentItems: [Item]
     let deleteItem: Item
+    let showsDeleteItem: Bool
+
+    var allVisibleActionIDs: Set<EditorMoreMenuActionID> {
+        var ids = Set(
+            (topRow + ao3Items + exportItems + documentItems).map(\.id)
+        )
+        for format in exportFormats {
+            ids.insert(.exportFormat(format))
+        }
+        if showsDeleteItem {
+            ids.insert(deleteItem.id)
+        }
+        return ids
+    }
 
     var showsUnpostedDot: Bool {
         Self.showsUnpostedDot(isPosted: isPosted, hasUnpostedChanges: hasUnpostedChanges)
@@ -118,19 +133,71 @@ nonisolated struct EditorMoreMenuModel: Equatable, Sendable {
         isPosted: Bool,
         hasUnpostedChanges: Bool,
         savedVersionCount: Int? = nil,
-        deviceName: String = "iPhone"
+        deviceName: String = "iPhone",
+        visibleActions: Set<EditorMoreMenuActionID>? = nil,
+        availableExportFormats: [EditorExportFormat]? = nil
     ) -> EditorMoreMenuModel {
         let primaryTitle = isPosted ? "Update on AO3" : "Post"
-        let topRow: [Item] = [
+        let allTopRow: [Item] = [
             Item(id: .postOrUpdate, title: primaryTitle, systemImage: "arrow.up.circle"),
             Item(id: .preview, title: "Preview", systemImage: "eye"),
             Item(id: .share, title: "Share", systemImage: "square.and.arrow.up"),
             Item(id: .find, title: "Find", systemImage: "magnifyingglass")
         ]
+        let allAO3Items = buildAO3Items(isPosted: isPosted, hasUnpostedChanges: hasUnpostedChanges)
+        let allExportItems: [Item] = [
+            Item(
+                id: .copyAsAO3HTML,
+                title: "Copy as AO3 HTML",
+                systemImage: "chevron.left.forwardslash.chevron.right"
+            ),
+            Item(id: .sendToBeta, title: "Send to a Beta", systemImage: "person"),
+            Item(id: .print, title: "Print", systemImage: "printer")
+        ]
+        let allDocumentItems = buildDocumentItems(
+            savedVersionCount: savedVersionCount,
+            deviceName: deviceName,
+            includesFormat: visibleActions?.contains(.format) == true
+        )
+        let deleteItem = Item(
+            id: .deleteChapter,
+            title: "Delete Chapter",
+            systemImage: "trash",
+            isDestructive: true
+        )
 
-        var ao3Items: [Item] = []
+        let filter: ([Item]) -> [Item] = { items in
+            guard let visibleActions else { return items }
+            return items.filter { visibleActions.contains($0.id) }
+        }
+        let resolvedExportFormats: [EditorExportFormat]
+        if let availableExportFormats {
+            resolvedExportFormats = availableExportFormats
+        } else if let visibleActions {
+            resolvedExportFormats = EditorExportFormat.allCases.filter {
+                visibleActions.contains(.exportFormat($0))
+            }
+        } else {
+            resolvedExportFormats = EditorExportFormat.allCases
+        }
+
+        return EditorMoreMenuModel(
+            isPosted: isPosted,
+            hasUnpostedChanges: hasUnpostedChanges,
+            topRow: filter(allTopRow),
+            ao3Items: filter(allAO3Items),
+            exportFormats: resolvedExportFormats,
+            exportItems: filter(allExportItems),
+            documentItems: filter(allDocumentItems),
+            deleteItem: deleteItem,
+            showsDeleteItem: visibleActions?.contains(.deleteChapter) ?? true
+        )
+    }
+
+    private static func buildAO3Items(isPosted: Bool, hasUnpostedChanges: Bool) -> [Item] {
+        var items: [Item] = []
         if isPosted {
-            ao3Items.append(
+            items.append(
                 Item(
                     id: .compareWithPosted,
                     title: "Compare with Posted",
@@ -138,7 +205,7 @@ nonisolated struct EditorMoreMenuModel: Equatable, Sendable {
                     isEnabled: hasUnpostedChanges
                 )
             )
-            ao3Items.append(
+            items.append(
                 Item(
                     id: .discardChanges,
                     title: "Discard Changes",
@@ -148,7 +215,7 @@ nonisolated struct EditorMoreMenuModel: Equatable, Sendable {
                 )
             )
         } else {
-            ao3Items.append(
+            items.append(
                 Item(
                     id: .saveAsAO3Draft,
                     title: "Save as AO3 Draft",
@@ -157,7 +224,7 @@ nonisolated struct EditorMoreMenuModel: Equatable, Sendable {
                 )
             )
         }
-        ao3Items.append(contentsOf: [
+        items.append(contentsOf: [
             Item(
                 id: .chapterMetadata,
                 title: "Chapter Title, Summary and Notes",
@@ -166,21 +233,22 @@ nonisolated struct EditorMoreMenuModel: Equatable, Sendable {
             Item(id: .workDetails, title: "Work Details", systemImage: "info.circle"),
             Item(id: .editTags, title: "Edit Tags", systemImage: "tag")
         ])
+        return items
+    }
 
-        let exportItems: [Item] = [
-            Item(
-                id: .copyAsAO3HTML,
-                title: "Copy as AO3 HTML",
-                systemImage: "chevron.left.forwardslash.chevron.right"
-            ),
-            Item(id: .sendToBeta, title: "Send to a Beta", systemImage: "person"),
-            Item(id: .print, title: "Print", systemImage: "printer")
-        ]
-
+    private static func buildDocumentItems(
+        savedVersionCount: Int?,
+        deviceName: String,
+        includesFormat: Bool
+    ) -> [Item] {
         let versionSubtitle = savedVersionCount.map { count in
             "\(count.formatted()) saved \(count == 1 ? "version" : "versions") on this \(deviceName)"
         }
-        let documentItems: [Item] = [
+        var items: [Item] = []
+        if includesFormat {
+            items.append(Item(id: .format, title: "Format", systemImage: "textformat"))
+        }
+        items.append(contentsOf: [
             Item(
                 id: .versionHistory,
                 title: "Version History",
@@ -188,25 +256,8 @@ nonisolated struct EditorMoreMenuModel: Equatable, Sendable {
                 systemImage: "clock.arrow.circlepath"
             ),
             Item(id: .writingTools, title: "Writing Tools", systemImage: "textformat.abc")
-        ]
-
-        let deleteItem = Item(
-            id: .deleteChapter,
-            title: "Delete Chapter",
-            systemImage: "trash",
-            isDestructive: true
-        )
-
-        return EditorMoreMenuModel(
-            isPosted: isPosted,
-            hasUnpostedChanges: hasUnpostedChanges,
-            topRow: topRow,
-            ao3Items: ao3Items,
-            exportFormats: EditorExportFormat.allCases,
-            exportItems: exportItems,
-            documentItems: documentItems,
-            deleteItem: deleteItem
-        )
+        ])
+        return items
     }
 }
 
@@ -229,6 +280,7 @@ struct EditorMoreMenuActions {
     var onPrint: () -> Void = {}
     var onVersionHistory: () -> Void = {}
     var onWritingTools: () -> Void = {}
+    var onFormat: () -> Void = {}
     var onDeleteChapter: () -> Void = {}
 
     func dispatch(_ actionID: EditorMoreMenuActionID) {
@@ -261,6 +313,7 @@ struct EditorMoreMenuActions {
         case .print: onPrint()
         case .versionHistory: onVersionHistory()
         case .writingTools: onWritingTools()
+        case .format: onFormat()
         case .deleteChapter: onDeleteChapter()
         default: break
         }
@@ -273,6 +326,8 @@ struct EditorMoreMenu<LabelContent: View>: View {
     let isPosted: Bool
     let hasUnpostedChanges: Bool
     let savedVersionCount: Int?
+    let visibleActions: Set<EditorMoreMenuActionID>?
+    let availableExportFormats: [EditorExportFormat]?
     let actions: EditorMoreMenuActions
     @ViewBuilder let label: (Bool) -> LabelContent
 
@@ -280,12 +335,16 @@ struct EditorMoreMenu<LabelContent: View>: View {
         isPosted: Bool = false,
         hasUnpostedChanges: Bool = false,
         savedVersionCount: Int? = nil,
+        visibleActions: Set<EditorMoreMenuActionID>? = nil,
+        availableExportFormats: [EditorExportFormat]? = nil,
         actions: EditorMoreMenuActions = EditorMoreMenuActions(),
         @ViewBuilder label: @escaping (_ showsUnpostedDot: Bool) -> LabelContent
     ) {
         self.isPosted = isPosted
         self.hasUnpostedChanges = hasUnpostedChanges
         self.savedVersionCount = savedVersionCount
+        self.visibleActions = visibleActions
+        self.availableExportFormats = availableExportFormats
         self.actions = actions
         self.label = label
     }
@@ -295,58 +354,72 @@ struct EditorMoreMenu<LabelContent: View>: View {
             isPosted: isPosted,
             hasUnpostedChanges: hasUnpostedChanges,
             savedVersionCount: savedVersionCount,
-            deviceName: ThisDevice.name
+            deviceName: ThisDevice.name,
+            visibleActions: visibleActions,
+            availableExportFormats: availableExportFormats
         )
     }
 
     var body: some View {
         let current = model
         Menu {
-            MenuTopRow {
-                ForEach(current.topRow) { item in
-                    Button {
-                        actions.dispatch(item.id)
-                    } label: {
-                        Label(item.title, systemImage: item.systemImage)
-                    }
-                    .disabled(!item.isEnabled)
-                }
-            }
-
-            Section("AO3") {
-                ForEach(current.ao3Items) { item in
-                    menuButton(for: item)
-                }
-            }
-
-            Section("Export") {
-                Menu {
-                    ForEach(current.exportFormats) { format in
+            if !current.topRow.isEmpty {
+                MenuTopRow {
+                    ForEach(current.topRow) { item in
                         Button {
-                            actions.onExport(format)
+                            actions.dispatch(item.id)
                         } label: {
-                            Label(format.title, systemImage: format.systemImage)
+                            Label(item.title, systemImage: item.systemImage)
+                        }
+                        .disabled(!item.isEnabled)
+                    }
+                }
+            }
+
+            if !current.ao3Items.isEmpty {
+                Section("AO3") {
+                    ForEach(current.ao3Items) { item in
+                        menuButton(for: item)
+                    }
+                }
+            }
+
+            if !current.exportFormats.isEmpty || !current.exportItems.isEmpty {
+                Section("Export") {
+                    if !current.exportFormats.isEmpty {
+                        Menu {
+                            ForEach(current.exportFormats) { format in
+                                Button {
+                                    actions.onExport(format)
+                                } label: {
+                                    Label(format.title, systemImage: format.systemImage)
+                                }
+                            }
+                        } label: {
+                            Text("Export As")
+                            Text(current.exportFormats.map(\.title).joined(separator: ", "))
+                            Image(systemName: "arrow.down.doc")
                         }
                     }
-                } label: {
-                    Text("Export As")
-                    Text("EPUB, PDF, Word, HTML, Markdown, Plain Text")
-                    Image(systemName: "arrow.down.doc")
-                }
 
-                ForEach(current.exportItems) { item in
-                    menuButton(for: item)
+                    ForEach(current.exportItems) { item in
+                        menuButton(for: item)
+                    }
                 }
             }
 
-            Section("This document") {
-                ForEach(current.documentItems) { item in
-                    menuButton(for: item)
+            if !current.documentItems.isEmpty {
+                Section("This document") {
+                    ForEach(current.documentItems) { item in
+                        menuButton(for: item)
+                    }
                 }
             }
 
-            Section {
-                menuButton(for: current.deleteItem)
+            if current.showsDeleteItem {
+                Section {
+                    menuButton(for: current.deleteItem)
+                }
             }
         } label: {
             label(current.showsUnpostedDot)
@@ -378,12 +451,16 @@ extension EditorMoreMenu where LabelContent == EditorMoreTriggerLabel {
         isPosted: Bool = false,
         hasUnpostedChanges: Bool = false,
         savedVersionCount: Int? = nil,
+        visibleActions: Set<EditorMoreMenuActionID>? = nil,
+        availableExportFormats: [EditorExportFormat]? = nil,
         actions: EditorMoreMenuActions = EditorMoreMenuActions()
     ) {
         self.init(
             isPosted: isPosted,
             hasUnpostedChanges: hasUnpostedChanges,
             savedVersionCount: savedVersionCount,
+            visibleActions: visibleActions,
+            availableExportFormats: availableExportFormats,
             actions: actions,
             label: { showsDot in
                 EditorMoreTriggerLabel(showsUnpostedDot: showsDot)

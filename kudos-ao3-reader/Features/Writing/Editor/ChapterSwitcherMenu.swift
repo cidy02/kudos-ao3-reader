@@ -90,17 +90,26 @@ struct ChapterSwitcherActions {
 struct ChapterSwitcherMenu<LabelContent: View>: View {
     let chapters: [EditorChapterSummary]
     let currentChapterID: String
+    let showsNewChapter: Bool
+    let showsReorderChapters: Bool
+    let showsWorkDetails: Bool
     let actions: ChapterSwitcherActions
     @ViewBuilder let label: (EditorChapterSummary?) -> LabelContent
 
     init(
         chapters: [EditorChapterSummary],
         currentChapterID: String,
+        showsNewChapter: Bool = true,
+        showsReorderChapters: Bool = true,
+        showsWorkDetails: Bool = true,
         actions: ChapterSwitcherActions = ChapterSwitcherActions(),
         @ViewBuilder label: @escaping (EditorChapterSummary?) -> LabelContent
     ) {
         self.chapters = chapters
         self.currentChapterID = currentChapterID
+        self.showsNewChapter = showsNewChapter
+        self.showsReorderChapters = showsReorderChapters
+        self.showsWorkDetails = showsWorkDetails
         self.actions = actions
         self.label = label
     }
@@ -132,23 +141,31 @@ struct ChapterSwitcherMenu<LabelContent: View>: View {
                 }
             }
 
-            Section {
-                Button {
-                    actions.onNewChapter()
-                } label: {
-                    Label("New Chapter", systemImage: "plus")
-                }
+            if showsNewChapter || showsReorderChapters || showsWorkDetails {
+                Section {
+                    if showsNewChapter {
+                        Button {
+                            actions.onNewChapter()
+                        } label: {
+                            Label("New Chapter", systemImage: "plus")
+                        }
+                    }
 
-                Button {
-                    actions.onReorderChapters()
-                } label: {
-                    Label("Reorder Chapters", systemImage: "arrow.up.arrow.down")
-                }
+                    if showsReorderChapters {
+                        Button {
+                            actions.onReorderChapters()
+                        } label: {
+                            Label("Reorder Chapters", systemImage: "arrow.up.arrow.down")
+                        }
+                    }
 
-                Button {
-                    actions.onWorkDetails()
-                } label: {
-                    Label("Work Details", systemImage: "info.circle")
+                    if showsWorkDetails {
+                        Button {
+                            actions.onWorkDetails()
+                        } label: {
+                            Label("Work Details", systemImage: "info.circle")
+                        }
+                    }
                 }
             }
         } label: {
@@ -187,11 +204,17 @@ extension ChapterSwitcherMenu where LabelContent == ChapterSwitcherTriggerLabel 
         chapters: [EditorChapterSummary],
         currentChapterID: String,
         fallbackTitle: String = "Chapters",
+        showsNewChapter: Bool = true,
+        showsReorderChapters: Bool = true,
+        showsWorkDetails: Bool = true,
         actions: ChapterSwitcherActions = ChapterSwitcherActions()
     ) {
         self.init(
             chapters: chapters,
             currentChapterID: currentChapterID,
+            showsNewChapter: showsNewChapter,
+            showsReorderChapters: showsReorderChapters,
+            showsWorkDetails: showsWorkDetails,
             actions: actions,
             label: { current in
                 ChapterSwitcherTriggerLabel(title: current?.headerTitle ?? fallbackTitle)
