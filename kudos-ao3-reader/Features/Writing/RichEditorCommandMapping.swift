@@ -61,7 +61,7 @@ extension RichEditorHostCommand {
             RichEditorCommandArgs(name: "insertText", attrs: ["text": .string("—")])
         case .insertQuotationMarks:
             RichEditorCommandArgs(name: "insertQuotes", attrs: ["open": .string("“"), "close": .string("”")])
-        case .requestLink, .openFormatPanel, .presentFind:
+        case .requestLink, .openFormatPanel, .presentFind, .requestNote:
             nil
         }
     }

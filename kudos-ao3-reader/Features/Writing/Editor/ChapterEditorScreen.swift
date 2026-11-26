@@ -55,8 +55,14 @@ struct ChapterEditorScreen: View {
     @State var initialWordCount: Int?
     @State var fallbackWordCount: Int?
     @State var showingFormatPanel = false
+    @State var pendingAddNoteAfterFormatDismiss = false
     @State var showingLinkSheet = false
     @State var notesSheetTab: ChapterEditorNotesTab?
+    @State var activeAnnotationSheet: ChapterEditorAnnotationSheet?
+    @State var tkTracker = ChapterEditorTKTracker()
+    @State var annotationTapTracker = ChapterEditorAnnotationTapTracker()
+    @State var tkDescriptionText = ""
+    @State var latestAnnotationHTML = ""
     @State var showingDeleteConfirmation = false
     @State var showingWhatChanged = false
     @State var showingWorkDetailsDestination = false
@@ -64,6 +70,8 @@ struct ChapterEditorScreen: View {
     @State var transientStatusMessage: String?
     @State var metadataSaveTask: Task<Void, Never>?
     @State var statusClearTask: Task<Void, Never>?
+    @State var annotationSyncTask: Task<Void, Never>?
+    @State var annotationSyncGeneration = 0
     @State var isClosing = false
 
     struct InitialSnapshot: Equatable {
@@ -127,6 +135,7 @@ struct ChapterEditorScreen: View {
             headerView
             noticeBanner
             chapterPageBody
+            tkPromptBanner
             bottomFooter
         }
         .background(appTheme.contentBackdrop.ignoresSafeArea())
@@ -149,6 +158,34 @@ struct ChapterEditorScreen: View {
             if initialWordCount == nil { initialWordCount = newCount }
             fallbackWordCount = newCount
         }
+        .onChange(of: session?.owner) { _, newOwner in
+            if newOwner == .rich {
+                scheduleAnnotationSync(useCurrentHTML: false)
+                syncKeysAccessorySuggestions()
+            } else {
+                cancelPendingTK()
+                clearKeysAccessorySuggestions()
+            }
+        }
+        .onChange(of: session?.lastAnnotationTap) { _, newTap in
+            handleAnnotationTap(newTap)
+        }
+        .onChange(of: session?.lastTypedTK) { _, newTK in
+            handleTypedTK(newTK)
+        }
+        .onChange(of: nameSuggestions) { _, _ in
+            syncKeysAccessorySuggestions()
+        }
+        #if os(iOS)
+        .onChange(of: richHost?.webViewGeneration) { _, _ in
+            syncKeysAccessorySuggestions()
+        }
+        #endif
+        .onChange(of: notesSheetTab) { _, newTab in
+            if newTab == .chapterNotes {
+                refreshChapterAnnotationsForNotesSheet()
+            }
+        }
         .onChange(of: content) { _, _ in scheduleLocalSave() }
         .onChange(of: chapterTitle) { _, _ in scheduleLocalSave() }
         .onChange(of: summary) { _, _ in scheduleLocalSave() }
@@ -157,11 +194,25 @@ struct ChapterEditorScreen: View {
         .onDisappear {
             metadataSaveTask?.cancel()
             statusClearTask?.cancel()
+            annotationSyncTask?.cancel()
+            clearKeysAccessorySuggestions()
         }
-        .sheet(isPresented: $showingFormatPanel) {
+        .sheet(
+            isPresented: $showingFormatPanel,
+            onDismiss: {
+                if pendingAddNoteAfterFormatDismiss {
+                    pendingAddNoteAfterFormatDismiss = false
+                    beginAddingNote()
+                }
+            }
+        ) {
             FormatPanel(
                 state: session?.formatState ?? FormatState(),
                 onCommand: { command in handleFormatCommand(command) },
+                onAddNote: isRichMode ? {
+                    pendingAddNoteAfterFormatDismiss = true
+                    showingFormatPanel = false
+                } : nil,
                 onDismiss: { showingFormatPanel = false }
             )
             .presentationDetents([.medium, .large])
@@ -185,10 +236,17 @@ struct ChapterEditorScreen: View {
                 notesBefore: $notesBefore,
                 notesAfter: $notesAfter,
                 documentBridge: documentBridge,
-                initialTab: tab
+                chapterHTML: currentAnnotationHTML,
+                initialTab: tab,
+                onAnnotationsChanged: {
+                    scheduleAnnotationSync(useCurrentHTML: true)
+                }
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $activeAnnotationSheet) { sheet in
+            annotationSheetView(for: sheet)
         }
         .navigationDestination(isPresented: $showingWorkDetailsDestination) {
             if let workID = ao3Actions?.ao3WorkID {
@@ -293,6 +351,7 @@ extension ChapterEditorScreen {
             canSaveAsAO3Draft: ao3Actions?.saveAsAO3Draft != nil && !isPosted,
             canPreview: ao3Actions?.preview != nil,
             canFind: supportsHostFind,
+            canAddNote: isRichMode,
             canFormat: isRichMode,
             canEditChapterMetadata: true,
             canOpenWorkDetails: canOpenWorkDetails,
@@ -584,12 +643,21 @@ extension ChapterEditorScreen {
                     if initialWordCount == nil, let count = createdSession.wordCount {
                         initialWordCount = count
                     }
+                    if createdSession.owner == .rich {
+                        scheduleAnnotationSync(useCurrentHTML: false)
+                    }
                 },
                 onRichHostReady: { host in
                     richHost = host
+                    host.webView.offersNoteCommand = true // this screen stores notes (T-576d)
+                    syncKeysAccessorySuggestions()
                 },
                 onHostCommand: { command in
                     handleHostCommand(command)
+                },
+                nameSuggestions: nameSuggestions,
+                onSelectNameSuggestion: { selected in
+                    applyNameSuggestion(selected)
                 }
             )
         )
@@ -620,43 +688,6 @@ extension ChapterEditorScreen {
             .padding(.horizontal, 12)
             .padding(.bottom, 10)
             .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-    }
-
-    var bottomFooter: some View {
-        VStack(spacing: 0) {
-            #if os(macOS)
-            if isRichMode {
-                WritingKeysBar(
-                    formatState: session?.formatState ?? FormatState(),
-                    onAction: { action in
-                        _ = handleHostCommand(RichEditorHostCommand.from(action))
-                    }
-                )
-            }
-            #endif
-            EditorStatusLine(
-                summary: statusSummary,
-                onTapNotes: { notesSheetTab = .storyNotes }
-            )
-            .padding(.horizontal, SubjectMetrics.gutter)
-            .padding(.vertical, 8)
-            .background(footerBackground)
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(appTheme.appSeparator ?? appTheme.glassStroke(0.14))
-                    .frame(height: 0.5)
-                    .accessibilityHidden(true)
-            }
-        }
-    }
-
-    @ViewBuilder
-    var footerBackground: some View {
-        if let base = appTheme.appBaseBackground {
-            base.opacity(0.96)
-        } else {
-            Rectangle().fill(.bar)
         }
     }
 }

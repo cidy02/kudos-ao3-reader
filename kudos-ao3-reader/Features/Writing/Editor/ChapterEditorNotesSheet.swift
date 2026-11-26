@@ -1,8 +1,10 @@
 import SwiftUI
 
-/// Which tab is active inside `ChapterEditorNotesSheet` (`Editor-Notes.dc.html`).
+/// Which tab is active inside `ChapterEditorNotesSheet` (`Editor-Notes.dc.html`,
+/// `Editor-Annotations.dc.html`).
 nonisolated enum ChapterEditorNotesTab: String, CaseIterable, Identifiable, Hashable, Sendable {
     case forAO3
+    case chapterNotes
     case storyNotes
 
     var id: String { rawValue }
@@ -10,32 +12,50 @@ nonisolated enum ChapterEditorNotesTab: String, CaseIterable, Identifiable, Hash
     var title: String {
         switch self {
         case .forAO3: "For AO3"
+        case .chapterNotes: "In Chapter"
         case .storyNotes: "Story Notes"
         }
     }
 }
 
-/// Native sheet opened from the editor header's Notes button and from `••• › Chapter Title,
-/// Summary and Notes` (`Editor-Notes.dc.html`). `"For AO3"` edits the chapter's title,
-/// summary, and beginning/end notes with AO3's live character limits; `"Story Notes"`
-/// manages work-level notes stored strictly on this device via `WritingDocumentStore`.
+/// Native sheet opened from the editor header's Notes button, the status line's note/TK count,
+/// and `••• › Chapter Title, Summary and Notes` (`Editor-Notes.dc.html`,
+/// `Editor-Annotations.dc.html`). `"For AO3"` edits the chapter's title, summary, and
+/// beginning/end notes with AO3's live character limits; `"In Chapter"` lists this chapter's
+/// private anchored notes and TK markers; `"Story Notes"` manages work-level notes stored
+/// strictly on this device via `WritingDocumentStore`.
 struct ChapterEditorNotesSheet: View {
     @Binding var chapterTitle: String
     @Binding var summary: String
     @Binding var notesBefore: String
     @Binding var notesAfter: String
     let documentBridge: ChapterEditorDocumentBridge
+    let chapterHTML: String
+    let onAnnotationsChanged: (() -> Void)?
     @State private var selectedTab: ChapterEditorNotesTab
 
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager: ThemeManager?
     @Environment(\.accentFill) private var envAccentFill
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    @State private var showingNewNote = false
+    @State private var activeSubSheet: ActiveSubSheet?
     @State private var newNoteKind: WritingStoryNoteKind = .character
     @State private var newNoteName = ""
     @State private var newNoteDetail = ""
     @State private var newNotePinned = false
+
+    private enum ActiveSubSheet: Identifiable {
+        case newStoryNote
+        case annotation(WritingAnnotation, paragraphNumber: Int?)
+
+        var id: String {
+            switch self {
+            case .newStoryNote: "new-story-note"
+            case let .annotation(annotation, _): "annotation-\(annotation.id.uuidString)"
+            }
+        }
+    }
 
     private var appTheme: ReaderTheme { themeManager?.appTheme ?? .light }
     private var effectiveTint: Color { themeManager?.effectiveTint ?? envAccentFill }
@@ -47,34 +67,33 @@ struct ChapterEditorNotesSheet: View {
         notesBefore: Binding<String>,
         notesAfter: Binding<String>,
         documentBridge: ChapterEditorDocumentBridge,
-        initialTab: ChapterEditorNotesTab = .storyNotes
+        chapterHTML: String = "",
+        initialTab: ChapterEditorNotesTab = .storyNotes,
+        onAnnotationsChanged: (() -> Void)? = nil
     ) {
         _chapterTitle = chapterTitle
         _summary = summary
         _notesBefore = notesBefore
         _notesAfter = notesAfter
         self.documentBridge = documentBridge
+        self.chapterHTML = chapterHTML
+        self.onAnnotationsChanged = onAnnotationsChanged
         _selectedTab = State(initialValue: initialTab)
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                Picker("Which notes", selection: $selectedTab) {
-                    ForEach(ChapterEditorNotesTab.allCases) { tab in
-                        Text(tab.title).tag(tab)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .accentFill()
-                .padding(.horizontal, SubjectMetrics.gutter)
-                .padding(.vertical, 10)
-                .accessibilityLabel("Which notes")
+                tabSelector
+                    .padding(.horizontal, SubjectMetrics.gutter)
+                    .padding(.vertical, 10)
 
                 Group {
                     switch selectedTab {
                     case .forAO3:
                         forAO3Content
+                    case .chapterNotes:
+                        chapterNotesContent
                     case .storyNotes:
                         storyNotesContent
                     }
@@ -91,11 +110,86 @@ struct ChapterEditorNotesSheet: View {
                         .accessibilityLabel("Done")
                 }
             }
-            .sheet(isPresented: $showingNewNote) {
-                newStoryNoteSheet
+            .sheet(item: $activeSubSheet) { sheet in
+                switch sheet {
+                case .newStoryNote:
+                    newStoryNoteSheet
+                        .presentationDetents([.medium, .large])
+                        .presentationDragIndicator(.visible)
+                case let .annotation(annotation, paragraphNumber):
+                    ChapterEditorAnnotationDetailSheet(
+                        annotation: annotation,
+                        paragraphNumber: paragraphNumber,
+                        onToggleResolved: { target, resolved in
+                            let updated = await documentBridge.setAnnotationResolved(
+                                target,
+                                resolved: resolved
+                            )
+                            onAnnotationsChanged?()
+                            return updated
+                        },
+                        onSaveText: { target, text in
+                            var edited = target
+                            edited.text = text
+                            let updated = await documentBridge.updateAnnotation(edited)
+                            onAnnotationsChanged?()
+                            return updated
+                        },
+                        onDelete: { target in
+                            _ = await documentBridge.deleteAnnotation(target.id)
+                            onAnnotationsChanged?()
+                        }
+                    )
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
+                }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var tabSelector: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            // At AX5 a 3-segment Picker truncates tab titles on compact widths; wrap full labels.
+            FlowLayout(spacing: 8, rowSpacing: 8) {
+                ForEach(ChapterEditorNotesTab.allCases) { tab in
+                    let isSelected = selectedTab == tab
+                    let shape = SubjectMetrics.controlShape(dynamicTypeSize)
+                    Button {
+                        selectedTab = tab
+                    } label: {
+                        Text(tab.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(
+                                isSelected ? ThemeManager.label(on: effectiveTint) : Color.primary
+                            )
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .frame(minHeight: 40)
+                            .background(isSelected ? effectiveTint : appTheme.cardSurface, in: shape)
+                            .overlay(
+                                shape.strokeBorder(
+                                    isSelected ? Color.clear : appTheme.cardBorder,
+                                    lineWidth: 0.5
+                                )
+                            )
+                            .contentShape(shape)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(tab.title)
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Picker("Which notes", selection: $selectedTab) {
+                ForEach(ChapterEditorNotesTab.allCases) { tab in
+                    Text(tab.title).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accentFill()
+            .accessibilityLabel("Which notes")
         }
     }
 
@@ -171,7 +265,7 @@ struct ChapterEditorNotesSheet: View {
             Section {
                 Button {
                     resetNewNoteForm()
-                    showingNewNote = true
+                    activeSubSheet = .newStoryNote
                 } label: {
                     Label("New Note", systemImage: "plus")
                         .font(.body.weight(.semibold))
@@ -260,7 +354,7 @@ struct ChapterEditorNotesSheet: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", role: .cancel) { showingNewNote = false }
+                    Button("Cancel", role: .cancel) { activeSubSheet = nil }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
@@ -268,7 +362,7 @@ struct ChapterEditorNotesSheet: View {
                         let name = newNoteName
                         let detail = newNoteDetail
                         let pinned = newNotePinned
-                        showingNewNote = false
+                        activeSubSheet = nil
                         Task {
                             await documentBridge.addStoryNote(
                                 kind: kind,
@@ -310,6 +404,156 @@ struct ChapterEditorNotesSheet: View {
         case .canon: "Canon"
         case .timeline: "Timeline"
         case .other: "Other"
+        }
+    }
+}
+
+// MARK: - In Chapter annotations & TKs (`Editor-Annotations.dc.html`)
+
+extension ChapterEditorNotesSheet {
+    var chapterNotesContent: some View {
+        let groups = ChapterEditorAnnotationListBuilder.groups(
+            from: documentBridge.annotations,
+            in: chapterHTML,
+            lostIDs: documentBridge.lostAnnotationIDs
+        )
+        return List {
+            if groups.isEmpty {
+                Section {
+                    ContentUnavailableView(
+                        "No Notes in This Chapter",
+                        systemImage: "note.text",
+                        description: Text(
+                            "Select text in Rich Text and choose Add Note, or type TK followed by a "
+                                + "space. Notes stay on this \(ThisDevice.name) and never go to AO3."
+                        )
+                    )
+                    .listRowBackground(Color.clear)
+                }
+            } else {
+                ForEach(groups) { group in
+                    Section(group.kind.sectionTitle) {
+                        ForEach(group.rows) { row in
+                            chapterAnnotationRow(row)
+                        }
+                    }
+                    .listRowBackground(appTheme.appElevatedBackground)
+                }
+
+                Section {} footer: {
+                    Text(
+                        "Notes and TK markers stay on this \(ThisDevice.name) and never go to AO3."
+                    )
+                }
+            }
+        }
+        .scrollContentBackground(appTheme.appBaseBackground == nil ? .automatic : .hidden)
+    }
+
+    private func chapterAnnotationRow(_ row: ChapterEditorAnnotationRow) -> some View {
+        let isResolved = row.annotation.resolvedAt != nil
+        return Button {
+            activeSubSheet = .annotation(row.annotation, paragraphNumber: row.paragraphNumber)
+        } label: {
+            annotationRowLabel(row)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(row.accessibilityLabel)
+        .accessibilityHint("Opens note options")
+        .accessibilityAction(named: isResolved ? "Reopen" : "Resolve") {
+            toggleResolve(row.annotation, resolved: !isResolved)
+        }
+        .accessibilityAction(named: "Delete") {
+            deleteAnnotation(row.annotation)
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button {
+                toggleResolve(row.annotation, resolved: !isResolved)
+            } label: {
+                Label(
+                    isResolved ? "Reopen" : "Resolve",
+                    systemImage: isResolved ? "arrow.uturn.backward" : "checkmark"
+                )
+            }
+            .tint(isResolved ? effectiveTint : appTheme.statusSuccessColor)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                deleteAnnotation(row.annotation)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .contextMenu {
+            Button {
+                toggleResolve(row.annotation, resolved: !isResolved)
+            } label: {
+                Label(
+                    isResolved ? "Reopen" : "Resolve",
+                    systemImage: isResolved ? "arrow.uturn.backward" : "checkmark.circle"
+                )
+            }
+            Button {
+                activeSubSheet = .annotation(row.annotation, paragraphNumber: row.paragraphNumber)
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                deleteAnnotation(row.annotation)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func annotationRowLabel(_ row: ChapterEditorAnnotationRow) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 6) {
+                ChapterEditorAnnotationBadge(kind: row.group)
+                Text(row.displayText)
+                    .font(.body)
+                    .foregroundStyle(Color.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(row.locationText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        } else {
+            HStack(alignment: .center, spacing: 12) {
+                ChapterEditorAnnotationBadge(kind: row.group)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.displayText)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(2)
+                    Text(row.locationText)
+                        .font(.caption)
+                        .foregroundStyle(.secondaryInk)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+        }
+    }
+
+    private func toggleResolve(_ annotation: WritingAnnotation, resolved: Bool) {
+        Task {
+            _ = await documentBridge.setAnnotationResolved(annotation, resolved: resolved)
+            onAnnotationsChanged?()
+        }
+    }
+
+    private func deleteAnnotation(_ annotation: WritingAnnotation) {
+        Task {
+            _ = await documentBridge.deleteAnnotation(annotation.id)
+            onAnnotationsChanged?()
         }
     }
 }

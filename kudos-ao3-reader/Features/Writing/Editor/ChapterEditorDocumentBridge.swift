@@ -29,6 +29,8 @@ nonisolated struct ChapterEditorDocumentSnapshot: Equatable, Sendable {
     var activeBodyHTML: String
     var chapters: [WritingChapter]
     var storyNotes: [WritingStoryNote]
+    var storyNoteNames: [String] = []
+    var annotations: [WritingAnnotation] = []
     var annotationCount: Int
     var tkCount: Int
     var versionCount: Int
@@ -46,6 +48,9 @@ final class ChapterEditorDocumentBridge {
     private(set) var activeChapter: WritingChapter?
     private(set) var chapters: [WritingChapter] = []
     private(set) var storyNotes: [WritingStoryNote] = []
+    private(set) var storyNoteNames: [String] = []
+    private(set) var annotations: [WritingAnnotation] = []
+    private(set) var lostAnnotationIDs: Set<UUID> = []
     private(set) var annotationCount = 0
     private(set) var tkCount = 0
     private(set) var versionCount = 0
@@ -180,56 +185,6 @@ final class ChapterEditorDocumentBridge {
         } catch {
             lastError = UserFacingError.message(for: error)
             return nil
-        }
-    }
-
-    // MARK: - Story Notes (device-local, never sent to AO3)
-
-    func addStoryNote(
-        kind: WritingStoryNoteKind,
-        name: String,
-        detail: String,
-        pinned: Bool
-    ) async {
-        guard let workID else { return }
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return }
-        lastError = nil
-        do {
-            _ = try await store.addStoryNote(
-                workID: workID,
-                kind: kind,
-                name: trimmedName,
-                detail: detail.trimmingCharacters(in: .whitespacesAndNewlines),
-                pinned: pinned
-            )
-            storyNotes = try await store.listStoryNotes(workID: workID)
-        } catch {
-            lastError = UserFacingError.message(for: error)
-        }
-    }
-
-    func togglePinStoryNote(_ note: WritingStoryNote) async {
-        guard let workID else { return }
-        lastError = nil
-        do {
-            var updated = note
-            updated.pinned.toggle()
-            _ = try await store.updateStoryNote(workID: workID, note: updated)
-            storyNotes = try await store.listStoryNotes(workID: workID)
-        } catch {
-            lastError = UserFacingError.message(for: error)
-        }
-    }
-
-    func deleteStoryNote(_ noteID: UUID) async {
-        guard let workID else { return }
-        lastError = nil
-        do {
-            try await store.deleteStoryNote(workID: workID, noteID: noteID)
-            storyNotes = try await store.listStoryNotes(workID: workID)
-        } catch {
-            lastError = UserFacingError.message(for: error)
         }
     }
 
@@ -369,13 +324,22 @@ final class ChapterEditorDocumentBridge {
         }
     }
 
+    private func refreshAnnotations(workID: UUID, chapterID: UUID) async throws {
+        let loaded = try await store.listAnnotations(workID: workID, chapterID: chapterID)
+        let counts = ChapterEditorAnnotationCounts.count(loaded)
+        annotations = loaded
+        annotationCount = counts.openNoteCount
+        tkCount = counts.openTKCount
+    }
+
     private func refreshSnapshot(
         work: WritingWork,
         activeDocument: WritingChapterDocument
     ) async throws -> ChapterEditorDocumentSnapshot {
         let listedChapters = try await store.listChapters(workID: work.id)
         let notes = try await store.listStoryNotes(workID: work.id)
-        let annotations = try await store.listAnnotations(
+        let names = try await store.storyNoteNames(workID: work.id)
+        let loadedAnnotations = try await store.listAnnotations(
             workID: work.id,
             chapterID: activeDocument.chapter.id
         )
@@ -383,14 +347,15 @@ final class ChapterEditorDocumentBridge {
             workID: work.id,
             chapterID: activeDocument.chapter.id
         )
-        let unresolved = annotations.filter { $0.resolvedAt == nil }
-        let noteTotal = unresolved.filter { $0.kind == .note }.count
-        let tkTotal = unresolved.filter { $0.kind == .tk }.count
+        let counts = ChapterEditorAnnotationCounts.count(loadedAnnotations)
 
         chapters = listedChapters
         storyNotes = notes
-        annotationCount = noteTotal
-        tkCount = tkTotal
+        storyNoteNames = names
+        annotations = loadedAnnotations
+        lostAnnotationIDs = []
+        annotationCount = counts.openNoteCount
+        tkCount = counts.openTKCount
         versionCount = versions.count
 
         return ChapterEditorDocumentSnapshot(
@@ -399,9 +364,149 @@ final class ChapterEditorDocumentBridge {
             activeBodyHTML: activeDocument.bodyHTML,
             chapters: listedChapters,
             storyNotes: notes,
-            annotationCount: noteTotal,
-            tkCount: tkTotal,
+            storyNoteNames: names,
+            annotations: loadedAnnotations,
+            annotationCount: counts.openNoteCount,
+            tkCount: counts.openTKCount,
             versionCount: versions.count
         )
+    }
+}
+
+// MARK: - Story Notes & Chapter Annotations (device-local, never sent to AO3)
+
+extension ChapterEditorDocumentBridge {
+    func addStoryNote(
+        kind: WritingStoryNoteKind,
+        name: String,
+        detail: String,
+        pinned: Bool
+    ) async {
+        guard let workID else { return }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        lastError = nil
+        do {
+            _ = try await store.addStoryNote(
+                workID: workID,
+                kind: kind,
+                name: trimmedName,
+                detail: detail.trimmingCharacters(in: .whitespacesAndNewlines),
+                pinned: pinned
+            )
+            storyNotes = try await store.listStoryNotes(workID: workID)
+            storyNoteNames = try await store.storyNoteNames(workID: workID)
+        } catch {
+            lastError = UserFacingError.message(for: error)
+        }
+    }
+
+    func togglePinStoryNote(_ note: WritingStoryNote) async {
+        guard let workID else { return }
+        lastError = nil
+        do {
+            var updated = note
+            updated.pinned.toggle()
+            _ = try await store.updateStoryNote(workID: workID, note: updated)
+            storyNotes = try await store.listStoryNotes(workID: workID)
+            storyNoteNames = try await store.storyNoteNames(workID: workID)
+        } catch {
+            lastError = UserFacingError.message(for: error)
+        }
+    }
+
+    func deleteStoryNote(_ noteID: UUID) async {
+        guard let workID else { return }
+        lastError = nil
+        do {
+            try await store.deleteStoryNote(workID: workID, noteID: noteID)
+            storyNotes = try await store.listStoryNotes(workID: workID)
+            storyNoteNames = try await store.storyNoteNames(workID: workID)
+        } catch {
+            lastError = UserFacingError.message(for: error)
+        }
+    }
+
+    @discardableResult
+    func addAnnotation(
+        anchor: WritingAnnotationAnchor,
+        text: String,
+        kind: WritingAnnotationKind
+    ) async -> WritingAnnotation? {
+        guard let workID, let chapterID else { return nil }
+        lastError = nil
+        do {
+            let created = try await store.addAnnotation(
+                workID: workID,
+                chapterID: chapterID,
+                anchor: anchor,
+                text: text,
+                kind: kind
+            )
+            lostAnnotationIDs.remove(created.id)
+            try await refreshAnnotations(workID: workID, chapterID: chapterID)
+            return created
+        } catch {
+            lastError = UserFacingError.message(for: error)
+            return nil
+        }
+    }
+
+    @discardableResult
+    func updateAnnotation(_ annotation: WritingAnnotation) async -> WritingAnnotation? {
+        guard let workID, let chapterID else { return nil }
+        lastError = nil
+        do {
+            let saved = try await store.updateAnnotation(workID: workID, annotation: annotation)
+            try await refreshAnnotations(workID: workID, chapterID: chapterID)
+            return saved
+        } catch {
+            lastError = UserFacingError.message(for: error)
+            return nil
+        }
+    }
+
+    @discardableResult
+    func setAnnotationResolved(
+        _ annotation: WritingAnnotation,
+        resolved: Bool
+    ) async -> WritingAnnotation? {
+        var updated = annotation
+        updated.resolvedAt = resolved ? Date() : nil
+        return await updateAnnotation(updated)
+    }
+
+    @discardableResult
+    func deleteAnnotation(_ annotationID: UUID) async -> Bool {
+        guard let workID, let chapterID else { return false }
+        lastError = nil
+        do {
+            try await store.deleteAnnotation(workID: workID, annotationID: annotationID)
+            lostAnnotationIDs.remove(annotationID)
+            try await refreshAnnotations(workID: workID, chapterID: chapterID)
+            return true
+        } catch {
+            lastError = UserFacingError.message(for: error)
+            return false
+        }
+    }
+
+    @discardableResult
+    func reanchorAnnotations(in bodyHTML: String) async -> WritingAnnotationReanchorReport? {
+        guard let workID, let chapterID else { return nil }
+        lastError = nil
+        do {
+            let report = try await store.reanchorAnnotations(
+                workID: workID,
+                chapterID: chapterID,
+                bodyHTML: bodyHTML
+            )
+            lostAnnotationIDs = Set(report.lost.map(\.id))
+            try await refreshAnnotations(workID: workID, chapterID: chapterID)
+            return report
+        } catch {
+            lastError = UserFacingError.message(for: error)
+            return nil
+        }
     }
 }

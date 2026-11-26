@@ -48,6 +48,7 @@ nonisolated enum FormatPanelControl: Hashable, Sendable {
 struct FormatPanel: View {
     let state: FormatState
     let onCommand: (FormatCommand) -> Void
+    let onAddNote: (() -> Void)?
     let onDismiss: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
@@ -65,10 +66,12 @@ struct FormatPanel: View {
     init(
         state: FormatState,
         onCommand: @escaping (FormatCommand) -> Void,
+        onAddNote: (() -> Void)? = nil,
         onDismiss: (() -> Void)? = nil
     ) {
         self.state = state
         self.onCommand = onCommand
+        self.onAddNote = onAddNote
         self.onDismiss = onDismiss
     }
 
@@ -339,6 +342,15 @@ extension FormatPanel {
                     systemImage: "note.text"
                 ) {
                     emit(.footnote)
+                }
+                if let onAddNote {
+                    rowDivider
+                    insertButtonRow(
+                        title: "Note",
+                        subtitle: "Private note anchored to the selected text; never posted to AO3",
+                        systemImage: "note.text.badge.plus",
+                        action: onAddNote
+                    )
                 }
                 rowDivider
                 insertButtonRow(

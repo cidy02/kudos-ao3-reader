@@ -171,6 +171,10 @@ extension RichEditorWebView {
         emitCommand(.requestLink)
     }
 
+    @objc func editorAddNote(_: Any?) {
+        emitCommand(.requestNote)
+    }
+
     @objc func editorPresentFind(_: Any?) {
         presentFindNavigator(showingReplace: false)
     }
@@ -287,7 +291,7 @@ extension RichEditorWebView {
             builder.remove(menu: identifier)
         }
 
-        let formattingItems: [UIMenuElement] = [
+        var formattingItems: [UIMenuElement] = [
             UICommand(
                 title: "Bold",
                 image: UIImage(systemName: "bold"),
@@ -309,6 +313,13 @@ extension RichEditorWebView {
                 action: #selector(editorInsertLink(_:))
             ),
         ]
+        if offersNoteCommand {
+            formattingItems.append(UICommand(
+                title: "Note",
+                image: UIImage(systemName: "note.text.badge.plus"),
+                action: #selector(editorAddNote(_:))
+            ))
+        }
         let formattingMenu = UIMenu(
             title: "",
             image: nil,
@@ -354,6 +365,8 @@ extension RichEditorWebView {
              #selector(editorInsertLink(_:)),
              #selector(editorPresentFind(_:)):
             return true
+        case #selector(editorAddNote(_:)):
+            return offersNoteCommand
         case #selector(editorUndo(_:)):
             return ownsRichUndo && richUndoManager.canUndo
         case #selector(editorRedo(_:)):
