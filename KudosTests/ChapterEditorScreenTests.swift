@@ -272,7 +272,8 @@ struct ChapterEditorScreenTests {
     @Test func pasteReportAppearsForNewSequenceAndStaysHiddenForSameSequence() throws {
         var tracker = ChapterEditorPasteTracker()
         #expect(tracker.activeReport == nil)
-        #expect(!tracker.receive(nil))
+        let received1 = tracker.receive(nil)
+        #expect(!received1)
 
         let firstEvent = RichEditorPasteEvent(
             loss: RichEditorLossReport(
@@ -287,7 +288,8 @@ struct ChapterEditorScreenTests {
         let firstPaste = DraftPasteReport(sequence: 1, event: firstEvent)
 
         // Sequence 1 appears and maps all loss fields without inventing a source app name.
-        #expect(tracker.receive(firstPaste))
+        let received2 = tracker.receive(firstPaste)
+        #expect(received2)
         let report = try #require(tracker.activeReport)
         #expect(tracker.activeSequence == 1)
         #expect(report.wordCount == 420)
@@ -300,12 +302,14 @@ struct ChapterEditorScreenTests {
         #expect(report.kept.map(\.label) == ["preserved HTML block"])
 
         // Re-delivering sequence 1 while visible is a no-op.
-        #expect(!tracker.receive(firstPaste))
+        let received3 = tracker.receive(firstPaste)
+        #expect(!received3)
 
         // Dismissing hides the card; re-delivering sequence 1 does NOT re-show it.
         tracker.dismiss()
         #expect(tracker.activeReport == nil)
-        #expect(!tracker.receive(firstPaste))
+        let received4 = tracker.receive(firstPaste)
+        #expect(!received4)
         #expect(tracker.activeReport == nil)
 
         // A new paste with sequence 2 appears immediately.
@@ -313,7 +317,8 @@ struct ChapterEditorScreenTests {
             sequence: 2,
             event: RichEditorPasteEvent(loss: .empty, words: 12, kind: "text")
         )
-        #expect(tracker.receive(secondPaste))
+        let received5 = tracker.receive(secondPaste)
+        #expect(received5)
         #expect(tracker.activeSequence == 2)
         #expect(tracker.activeReport?.headline == "Pasted 12 words")
         #expect(tracker.activeReport?.summaryText == "Ready for AO3.")
@@ -341,7 +346,8 @@ struct ChapterEditorScreenTests {
             kind: "html"
         )))
         #expect(session.lastPaste?.sequence == 1)
-        #expect(tracker.receive(session.lastPaste))
+        let received6 = tracker.receive(session.lastPaste)
+        #expect(received6)
         #expect(tracker.activeReport?.wordCount == 85)
 
         // Undo Paste calls `session.apply(.undo)` and dismisses the card.
@@ -351,12 +357,14 @@ struct ChapterEditorScreenTests {
         await Task.yield()
 
         #expect(transport.commandCalls.contains { $0.name == "undo" })
-        #expect(!tracker.receive(session.lastPaste))
+        let received7 = tracker.receive(session.lastPaste)
+        #expect(!received7)
 
         // A subsequent paste bumps `lastPaste.sequence` to 2 and shows a fresh card.
         transport.emit(.paste(RichEditorPasteEvent(loss: .empty, words: 10, kind: "text")))
         #expect(session.lastPaste?.sequence == 2)
-        #expect(tracker.receive(session.lastPaste))
+        let received8 = tracker.receive(session.lastPaste)
+        #expect(received8)
         #expect(tracker.activeReport?.wordCount == 10)
 
         session.teardown()
