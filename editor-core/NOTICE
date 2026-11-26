@@ -1,0 +1,23 @@
+editor-core: third-party notices
+
+1. otwarchive (Organization for Transformative Works), GPL-2.0-or-later
+   https://github.com/otwcode/otwarchive, commit 452391b648f2fb06b55c36133812449747634504 (2026-11-01).
+   Kudos is AGPL-3.0; porting these rules is allowed with attribution. Every source file below carries the header
+   "Derived from otwarchive (Organization for Transformative Works), GPL-2.0-or-later; see editor-core/NOTICE".
+
+   Upstream file                                                        Ported to
+   lib/html_cleaner.rb (sanitize_value, fix_bad_characters,             src/clean.ts
+                        add_paragraphs_to_text)
+   lib/paragraph_maker.rb                                               src/paragraph-maker.ts
+   config/initializers/gem-plugin_config/sanitizer_config.rb            src/sanitize.ts (allow-list, transformers)
+   lib/otw_sanitize/user_class_sanitizer.rb                             src/sanitize.ts
+   lib/otw_sanitize/embed_sanitizer.rb                                  src/sanitize.ts
+   lib/otw_sanitize/media_sanitizer.rb                                  src/sanitize.ts
+
+   The golden harness (test/golden/generate/) vendors the upstream Ruby files unmodified, with otwarchive's licence
+   text, in test/golden/generate/vendor/otwarchive/ (see NOTICE.md and LICENSE there). They are test tooling only.
+
+2. Nokogiri (MIT) and Sanitize (MIT): behaviour of Sanitize.clean and Nokogiri's HTML5 serializer is reproduced
+   from their published source (sanitize 6.1.0, nokogiri 1.19.4); no code is copied.
+
+3. Runtime dependencies: parse5 (MIT), prosemirror-model, prosemirror-transform, prosemirror-state (MIT).

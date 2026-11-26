@@ -1,0 +1,31 @@
+{
+  "name": "editor-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Kudos shared Rich Text / HTML converter for AO3 fields (parse5, ProseMirror schema, AO3 cleaning port, serializer).",
+  "license": "AGPL-3.0-only",
+  "engines": { "node": ">=24" },
+  "main": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck && node --test test/*.test.ts",
+    "test:unit": "node --test test/*.test.ts",
+    "test:props": "node --test test/props.test.ts",
+    "perf": "node test/perf.ts",
+    "golden": "cd test/golden/generate && bundle install && bundle exec ruby generate.rb",
+    "build": "esbuild src/index.ts --bundle --format=esm --platform=neutral --outfile=dist/editor-core.js"
+  },
+  "dependencies": {
+    "parse5": "8.1.1",
+    "prosemirror-model": "1.25.13",
+    "prosemirror-state": "1.4.4",
+    "prosemirror-transform": "1.12.7"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.11",
+    "esbuild": "0.28.2",
+    "fast-check": "4.11.0",
+    "typescript": "7.0.2"
+  }
+}
