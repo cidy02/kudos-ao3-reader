@@ -11,12 +11,12 @@ import SwiftUI
 /// restoring a copy, a scene change or a memory warning. Disk work and counting
 /// run off the main thread.
 struct WritingTextEditor: View {
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dismiss) var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(ThemeManager.self) private var theme
+    @Environment(ThemeManager.self) var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// 1bv's serif at 15.5, scaled with Dynamic Type.
-    @ScaledMetric(relativeTo: .body) private var editorFontSize = 15.5
+    @ScaledMetric(relativeTo: .body) var editorFontSize = 15.5
     @ScaledMetric(relativeTo: .caption) private var tagLabelFontSize = 13
     @ScaledMetric(relativeTo: .caption2) private var tagNameFontSize = 8.5
     @Binding var text: String
@@ -27,19 +27,16 @@ struct WritingTextEditor: View {
     let field: String
     let chapterActions: WritingChapterEditorActions?
 
-    @State private var controller: WritingTextController?
-    @State private var checkpoints: WritingCheckpointScheduler?
-    @State private var recoveryWriter: WritingRecoveryWriter?
-    /// Nil until the first count, made off the main thread, lands.
-    @State private var wordCount: Int?
-    /// Which checkpoint the shown count belongs to. A count that finishes after
-    /// a newer one started is dropped.
-    @State private var countedCheckpoint = 0
+    @AppStorage(RichEditorFeatureFlag.storageKey) var richEditorFeatureEnabled = false
+    @State var controller: WritingTextController?
+    @State var session: DraftSession?
+    @State var richHost: RichEditorHost?
+    @State var showWhatChanged = false
     @State private var original: String
     @State private var recoveries: [WritingTextRecovery.Copy] = []
     @State private var selectedRecovery: URL?
     @State private var recoveryID = UUID()
-    @State private var errorMessage: String?
+    @State var errorMessage: String?
     @State private var showLink = false
     @State private var link = "https://"
     @State private var showDeleteChapter = false
@@ -48,7 +45,7 @@ struct WritingTextEditor: View {
     #endif
     /// OD1's read-only preview. The text view stays mounted under it, so the
     /// selection and the undo stack survive a round trip.
-    @State private var isPreviewing = false
+    @State var isPreviewing = false
     /// What the preview shows: nil while the parse for this preview is running.
     @State private var previewState: WritingBufferPreview.State?
     /// Bumped on every entry and exit, so only the parse for the preview on
@@ -85,21 +82,24 @@ struct WritingTextEditor: View {
             // checkpoint (E1 counts off the main thread, never per keystroke).
             SectionRuleHeader(
                 title: ruleTitle ?? title,
-                countText: wordCount.map { "\($0.formatted()) \($0 == 1 ? "word" : "words")" }
+                countText: session?.wordCount.map { "\($0.formatted()) \($0 == 1 ? "word" : "words")" }
             )
             .padding(.horizontal, 16)
             .padding(.top, 8)
+            if showsModeSwitch { modeSwitchBar }
             ZStack {
                 if let controller {
                     WritingNativeTextView(controller: controller)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .opacity(isPreviewing ? 0 : 1)
-                        .accessibilityHidden(isPreviewing)
-                        // Nothing may edit the buffer behind the preview.
-                        .allowsHitTesting(!isPreviewing)
+                        .opacity(showsSourceView ? 1 : 0)
+                        .accessibilityHidden(!showsSourceView)
+                        // Nothing may edit the buffer behind Preview or Rich Text (I1).
+                        .allowsHitTesting(showsSourceView)
                 } else { ProgressView().accentFill() }
+                richEditorLayers
                 if isPreviewing { preview }
             }
+            .background { richEditorAlerts }
             recoveryNotice
                 .font(.caption).foregroundStyle(.secondaryInk)
                 #if os(iOS)
@@ -132,12 +132,13 @@ struct WritingTextEditor: View {
                     isPreviewing ? "Edit" : "Preview",
                     systemImage: isPreviewing ? "chevron.left.forwardslash.chevron.right" : "eye"
                 ) { togglePreview() }
-                // Disabled in preview: an undo there would change the buffer
-                // under a preview that still shows the old text.
-                Button("Undo", systemImage: "arrow.uturn.backward") { controller?.command("undo") }
-                    .disabled(isPreviewing)
-                Button("Redo", systemImage: "arrow.uturn.forward") { controller?.command("redo") }
-                    .disabled(isPreviewing)
+                    .disabled(isRichMode || isHandingOff)
+                // Disabled in preview and during hand-off; in Rich Text routes
+                // to prosemirror-history (U1).
+                Button("Undo", systemImage: "arrow.uturn.backward") { session?.undo() }
+                    .disabled(isPreviewing || isHandingOff)
+                Button("Redo", systemImage: "arrow.uturn.forward") { session?.redo() }
+                    .disabled(isPreviewing || isHandingOff)
                 moreMenu
             }
             ToolbarItem(placement: .confirmationAction) {
@@ -164,16 +165,23 @@ struct WritingTextEditor: View {
             Text("This will delete all comments on the chapter as well and cannot be undone.")
         }
         .onAppear(perform: start)
-        .onChange(of: editorFontSize) { _, value in controller?.setAppearance(theme.appTheme, fontSize: value) }
-        .onChange(of: theme.appTheme) { _, value in controller?.setAppearance(value, fontSize: editorFontSize) }
+        .onChange(of: editorFontSize) { _, value in
+            controller?.setAppearance(theme.appTheme, fontSize: value)
+            session?.updateTheme(richEditorTheme)
+        }
+        .onChange(of: theme.appTheme) { _, value in
+            controller?.setAppearance(value, fontSize: editorFontSize)
+            richHost?.applyNativeBackgroundColor(value.backgroundColor)
+            session?.updateTheme(richEditorTheme)
+        }
         // Going inactive or to the background checkpoints without touching an
         // IME composition (§7.6): the app may not come back.
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active { checkpoints?.fireNow() }
+            if phase != .active { session?.handleSceneInactiveOrBackground() }
         }
         #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
-            checkpoints?.fireNow()
+            session?.handleMemoryWarning()
         }
         #endif
         .onDisappear(perform: finish)
@@ -185,7 +193,15 @@ struct WritingTextEditor: View {
         .alert("Insert link", isPresented: $showLink) {
             TextField("https://example.com", text: $link)
             Button("Insert") {
-                if WritingMarkup.safeLink(link) { controller?.command("a", link: link) } else { errorMessage = "Enter an HTTP, HTTPS, or mailto link." }
+                if WritingMarkup.safeLink(link) {
+                    if isRichMode {
+                        session?.applyRichCommand(name: "link", attrs: ["href": .string(link)])
+                    } else {
+                        controller?.command("a", link: link)
+                    }
+                } else {
+                    errorMessage = "Enter an HTTP, HTTPS, or mailto link."
+                }
             }
             Button("Cancel", role: .cancel) {}
         }
@@ -213,6 +229,7 @@ struct WritingTextEditor: View {
             // the text view's paste.
             Button("Paste as Plain Text", systemImage: "doc.on.clipboard") { controller?.pastePlainText() }
                 .keyboardShortcut("v", modifiers: [.command, .option, .shift])
+                .disabled(isPreviewing || isRichMode || isHandingOff)
             if let chapterActions {
                 Button("Preview on AO3", systemImage: "arrow.up.forward.square") {
                     close(then: chapterActions.preview)
@@ -282,7 +299,7 @@ struct WritingTextEditor: View {
                     }
                 }
             }
-            .horizontalScrollViewport().disabled(isPreviewing)
+            .horizontalScrollViewport().disabled(isPreviewing || isHandingOff)
             if dynamicTypeSize.isAccessibilitySize {
                 Button("Editor Help", systemImage: "info.circle") { showEditorHelp = true }
                 .font(.caption2)
@@ -335,16 +352,13 @@ struct WritingTextEditor: View {
                 }
             }
         }
-        .disabled(isPreviewing)
+        .disabled(isPreviewing || isHandingOff)
     }
     #endif
 
     /// Done's checkpoint, then `action` — after it, the form holds this text.
     private func close(then action: (() -> Void)? = nil) {
-        controller?.commitComposition()
-        checkpoints?.fireNow()
-        dismiss()
-        action?()
+        closeEditor(then: action)
     }
 
     /// Labelled with the tag it writes, as the comment tray prints the tag under
@@ -386,7 +400,13 @@ struct WritingTextEditor: View {
     }
 
     private func apply(_ tag: AO3MarkupTag) {
-        if tag == .link { showLink = true } else { controller?.command(tag.element) }
+        if tag == .link {
+            showLink = true
+        } else if isRichMode {
+            session?.applyRichCommand(name: tag.richCommandName, attrs: tag.richCommandAttrs)
+        } else {
+            controller?.command(tag.element)
+        }
     }
 
     /// At the accessibility sizes the sheet scrolls and the copy keeps a fixed height, so
@@ -436,10 +456,7 @@ struct WritingTextEditor: View {
                     #endif
                 }
                 Button("Restore local copy") {
-                    controller?.restore(recovery.text)
-                    // Straight into the form and a fresh recovery copy, rather
-                    // than waiting for the idle timer.
-                    checkpoints?.fireNow()
+                    session?.restoreRecoveryCopy(recovery.text)
                     self.recoveries = []
                 }
                 Button("Keep form text", role: .cancel) { self.recoveries = [] }
@@ -461,60 +478,9 @@ struct WritingTextEditor: View {
         let editor = WritingTextController(text: text)
         controller = editor
         editor.setAppearance(theme.appTheme, fontSize: editorFontSize)
-        recoveryWriter = WritingRecoveryWriter(store: store, url: recoveryURL, original: original)
-        let scheduler = WritingCheckpointScheduler { checkpoint() }
-        checkpoints = scheduler
-        editor.onEdit = { [weak scheduler] in scheduler?.noteEdit() }
-        recount(text, checkpoint: 0)
+        let writer = WritingRecoveryWriter(store: store, url: recoveryURL, original: original)
+        session = makeDraftSession(editor: editor, writer: writer)
         loadRecoveries()
-    }
-
-    /// One checkpoint (docs/WRITING_EDITOR_ARCHITECTURE.md §8.2): the text,
-    /// read once, goes to the form binding, then to the recovery copy and the
-    /// word count off the main thread. Nothing happens if it didn't change.
-    private func checkpoint() {
-        guard let controller, let scheduler = checkpoints,
-              let value = controller.takeCheckpoint() else { return }
-        text = value
-        let sequence = scheduler.checkpointCount
-        if let recoveryWriter {
-            // The write is queued, and the app can be suspended before it runs
-            // (a scene change, or an idle or Done write still in flight when the
-            // app backgrounds). The assertion buys the documented finish window;
-            // the expiration handler ends it rather than overrunning.
-            #if os(iOS)
-            var assertion = UIBackgroundTaskIdentifier.invalid
-            assertion = UIApplication.shared.beginBackgroundTask(withName: "Writing recovery") {
-                UIApplication.shared.endBackgroundTask(assertion)
-                assertion = .invalid
-            }
-            #endif
-            Task {
-                #if os(iOS)
-                defer {
-                    if assertion != .invalid { UIApplication.shared.endBackgroundTask(assertion) }
-                    assertion = .invalid
-                }
-                #endif
-                do {
-                    try await recoveryWriter.write(value, sequence: sequence)
-                } catch {
-                    errorMessage = "Local recovery could not be saved: \(UserFacingError.message(for: error))"
-                }
-            }
-        }
-        recount(value, checkpoint: sequence)
-    }
-
-    private func recount(_ value: String, checkpoint: Int) {
-        countedCheckpoint = checkpoint
-        Task {
-            let count = await Task.detached(priority: .userInitiated) {
-                WritingWordCount.count(value)
-            }.value
-            guard countedCheckpoint == checkpoint else { return }
-            wordCount = count
-        }
     }
 
     /// Earlier sessions' copies, read and decoded off the main thread (§8.5).
@@ -538,15 +504,9 @@ struct WritingTextEditor: View {
         }
     }
 
-    /// Leaving the screen: commit any composition, checkpoint, then break the
-    /// editor ↔ controller ↔ scheduler cycle.
+    /// Leaving the screen: commit any composition, checkpoint, then break cycles.
     private func finish() {
-        controller?.commitComposition()
-        checkpoints?.fireNow()
-        checkpoints?.cancel()
-        checkpoints = nil
-        controller?.onEdit = nil
-        controller = nil
+        teardownEditor()
     }
 }
 
