@@ -1,0 +1,42 @@
+{
+  "name": "editor-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Kudos shared Rich Text / HTML converter for AO3 fields (parse5, ProseMirror schema, AO3 cleaning port, serializer).",
+  "license": "AGPL-3.0-only",
+  "engines": { "node": ">=24" },
+  "main": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck && node --test test/*.test.ts test-web/*.test.ts",
+    "test:unit": "node --test test/*.test.ts",
+    "test:props": "node --test test/props.test.ts",
+    "perf": "node test/perf.ts",
+    "golden": "cd test/golden/generate && bundle install && bundle exec ruby generate.rb",
+    "build": "esbuild src/index.ts --bundle --format=esm --platform=neutral --outfile=dist/editor-core.js",
+    "bundle": "node scripts/bundle.ts",
+    "test:web": "node --test test-web/*.test.ts",
+    "smoke:webkit": "node scripts/bundle.ts --no-copy && swift scripts/webkit-smoke.swift dist",
+    "fixtures": "node test-web/bridge-fixtures.ts"
+  },
+  "dependencies": {
+    "parse5": "8.1.1",
+    "prosemirror-commands": "1.7.2",
+    "prosemirror-history": "1.5.1",
+    "prosemirror-keymap": "1.2.3",
+    "prosemirror-model": "1.25.13",
+    "prosemirror-schema-list": "1.6.0",
+    "prosemirror-state": "1.4.4",
+    "prosemirror-transform": "1.12.7",
+    "prosemirror-view": "1.42.9"
+  },
+  "devDependencies": {
+    "@types/jsdom": "30.0.0",
+    "@types/node": "26.6.11",
+    "esbuild": "0.28.2",
+    "fast-check": "4.11.0",
+    "jsdom": "30.1.3",
+    "typescript": "7.0.2"
+  }
+}

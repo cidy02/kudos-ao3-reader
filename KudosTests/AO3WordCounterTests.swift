@@ -42,14 +42,15 @@ struct AO3WordCounterTests {
         #expect(AO3WordCounter.count("<b>foo</b>bar") == 2)
     }
 
-    /// Ruby's `[[:word:]]`, as `ruby -e` answers it: Alphabetic (so the circled
-    /// Ⓐ and the letter-number Ⅷ), marks, decimal digits and `_` — not the
-    /// superscript ², not ①, and not the joiners ZWNJ/ZWJ, which split a word.
+    /// Ruby's `[[:word:]]`, as otwarchive's WordCounter answers it (Ruby 3.4.13): Alphabetic
+    /// (so the circled Ⓐ and the letter-number Ⅷ), marks, decimal digits, `_` and the
+    /// joiners ZWNJ/ZWJ — not the superscript ², not ①. A joiner between Han characters is
+    /// a word of its own, since it is not in a counted script.
     @Test func wordCharactersAreRubysWordClass() {
         #expect(AO3WordCounter.count("Ⓐ Ⅷ ０") == 3)
         #expect(AO3WordCounter.count("² ①") == 0)
-        #expect(AO3WordCounter.count("a\u{200C}b") == 2)
-        #expect(AO3WordCounter.count("日\u{200C}本") == 2)
+        #expect(AO3WordCounter.count("a\u{200C}b") == 1)
+        #expect(AO3WordCounter.count("日\u{200C}本") == 3)
     }
 
     @Test func digitsAndUnderscoresAreWordCharacters() {

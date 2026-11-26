@@ -7,6 +7,7 @@ struct WorkEditView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AO3AuthService.self) private var auth
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @AppStorage(RichEditorFeatureFlag.storageKey) private var richEditorFeatureEnabled = false
 
     @ScaledMetric(relativeTo: .subheadline) private var actionRowTitleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
@@ -145,6 +146,7 @@ struct WorkEditView: View {
         .navigationBarBackButtonHidden(true)
         #endif
         .hidesFloatingTabBarInEditor()
+        .richEditorPrewarm(backgroundColor: theme.appTheme.backgroundColor)
         .task(id: "\(needsPublicationRefresh):\(publicationRetry)") {
             guard needsPublicationRefresh, let workID = form.workID else { return }
             let generation = auth.sessionGeneration
@@ -654,6 +656,62 @@ struct WorkEditView: View {
         )
     }
 
+    private var chapter1RichEditorRow: some View {
+        let isEmpty = (form.chapter?.content ?? "").isEmpty
+        return SubjectFormRow(
+            label: "Chapter 1 text",
+            value: isEmpty ? "Empty" : "Set",
+            showsDisclosure: true
+        )
+        .subjectRowNavigation(accessibilityLabel: "Chapter 1 text") {
+            ChapterEditorScreen(
+                workTitle: form.title,
+                chapterNumber: 1,
+                chapterTitle: Binding(
+                    get: { form.chapter?.title ?? "" },
+                    set: { value in
+                        if form.chapter == nil { form.chapter = AO3WorkChapterDraft() }
+                        form.chapter?.title = value
+                    }
+                ),
+                summary: $form.summary,
+                notesBefore: $form.notes,
+                notesAfter: $form.endnotes,
+                content: Binding(
+                    get: { form.chapter?.content ?? "" },
+                    set: { value in
+                        if form.chapter == nil { form.chapter = AO3WorkChapterDraft() }
+                        form.chapter?.content = value
+                    }
+                ),
+                account: auth.username ?? "",
+                recoveryTarget: recoveryTarget,
+                ao3Actions: ChapterEditorAO3Actions(
+                    ao3WorkID: form.workID,
+                    ao3ChapterID: nil,
+                    isPosted: form.isPosted,
+                    isAO3Draft: form.isDraft,
+                    isChapterOne: true,
+                    ao3DraftDaysLeft: nil,
+                    postOrUpdate: {
+                        if form.isPosted {
+                            save(submit: .update)
+                        } else {
+                            showPostConfirmation = true
+                        }
+                    },
+                    saveAsAO3Draft: form.isPosted ? nil : { save(submit: .saveDraft) },
+                    preview: { openPreview() },
+                    openWorkDetails: {},
+                    pushesWorkDetailsDestination: false,
+                    canEditTags: false,
+                    deleteChapterName: nil,
+                    deleteChapter: nil
+                )
+            )
+        }
+    }
+
     private var recoveryTarget: String { form.workID.map { "work:\($0)" } ?? "work:new" }
 
     /// 1bo's "The Weight of Water · 12 chapters · posted 4 Mar 2024", less the
@@ -668,6 +726,13 @@ struct WorkEditView: View {
         return parts.joined(separator: " · ")
     }
 
+    static func usesRichChapter1Editor(flagEnabled: Bool, contentServed: Bool) -> Bool {
+        ChapterEditorEntryPolicy.workEditChapter1Destination(
+            flagEnabled: flagEnabled,
+            contentServed: contentServed
+        ) == .richChapterEditor
+    }
+
     /// One `List` row per editor — see `associationRows`. The rows are
     /// conditional (Work text only before posting; Add chapter and Edit tags
     /// only after), so the segment positions are counted, not fixed.
@@ -680,14 +745,22 @@ struct WorkEditView: View {
         let count = (showsWorkText ? 1 : 0) + (postedWorkID == nil ? 0 : 3)
         let afterText = showsWorkText ? 1 : 0
         if showsWorkText {
-            WritingTextEditorRow(title: "Chapter 1 text", text: Binding(
-                get: { form.chapter?.content ?? "" },
-                set: { value in
-                    if form.chapter == nil { form.chapter = AO3WorkChapterDraft() }
-                    form.chapter?.content = value
-                }
-            ), target: recoveryTarget, field: "content")
-            .panelSegment(0, of: count, gutter: gutter)
+            if Self.usesRichChapter1Editor(
+                flagEnabled: richEditorFeatureEnabled,
+                contentServed: form.chapter?.contentServed != false
+            ) {
+                chapter1RichEditorRow
+                    .panelSegment(0, of: count, gutter: gutter)
+            } else {
+                WritingTextEditorRow(title: "Chapter 1 text", text: Binding(
+                    get: { form.chapter?.content ?? "" },
+                    set: { value in
+                        if form.chapter == nil { form.chapter = AO3WorkChapterDraft() }
+                        form.chapter?.content = value
+                    }
+                ), target: recoveryTarget, field: "content")
+                .panelSegment(0, of: count, gutter: gutter)
+            }
         }
         if let workID = postedWorkID {
             // 1bo's Chapters row. Posted works only, like the two below: a

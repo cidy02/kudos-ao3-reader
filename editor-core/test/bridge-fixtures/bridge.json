@@ -1,0 +1,706 @@
+{
+  "bridgeVersion": 1,
+  "calls": [
+    {
+      "name": "configure",
+      "args": {
+        "bridgeVersion": 1,
+        "schemaVersion": 1,
+        "variant": "content",
+        "theme": {
+          "background": "#1C1C1E",
+          "text": "#F2F2F7",
+          "accent": "#E0565F",
+          "link": "#64A8FF",
+          "fontFamily": "'New York', ui-serif, Georgia, serif",
+          "fontSizePx": 17,
+          "lineHeight": 1.62
+        },
+        "locale": "en_GB"
+      },
+      "result": {
+        "bridgeVersion": 1,
+        "schemaVersion": 1,
+        "bundleVersion": "test"
+      }
+    },
+    {
+      "name": "setAppearance",
+      "args": {
+        "fontFamily": "'New York', ui-serif, Georgia, serif",
+        "fontSizePx": 19,
+        "lineHeight": 1.62,
+        "contentSizeCategory": "UICTContentSizeCategoryXL",
+        "isAccessibilityCategory": false,
+        "colorScheme": "dark",
+        "increaseContrast": true,
+        "boldText": false
+      },
+      "result": {}
+    },
+    {
+      "name": "load",
+      "args": {
+        "html": "<p>One <em>two</em> three.</p>\n<p>Four</p>",
+        "revision": 4
+      },
+      "result": {
+        "revision": 4,
+        "loss": {
+          "dropped": {
+            "elements": {},
+            "attributes": {}
+          },
+          "unwrapped": {},
+          "normalized": 1,
+          "preserved": 0
+        },
+        "timing": {
+          "parseMs": 0,
+          "buildMs": 0,
+          "renderMs": 0
+        }
+      }
+    },
+    {
+      "name": "setMirror",
+      "args": {
+        "enabled": true
+      },
+      "result": {}
+    },
+    {
+      "name": "activate",
+      "args": {
+        "caret": 20,
+        "focus": true
+      },
+      "result": {
+        "caretFound": true
+      }
+    },
+    {
+      "name": "command",
+      "args": {
+        "name": "toggleMark",
+        "attrs": {
+          "mark": "bold"
+        }
+      },
+      "result": {
+        "applied": true,
+        "state": {
+          "marks": [
+            "bold"
+          ],
+          "block": "body",
+          "align": "left",
+          "dir": "leftToRight",
+          "canUndo": false,
+          "canRedo": false,
+          "inLink": false,
+          "linkURL": null,
+          "undoTitle": null,
+          "redoTitle": null
+        }
+      }
+    },
+    {
+      "name": "command",
+      "args": {
+        "name": "insertText",
+        "attrs": {
+          "text": "very "
+        }
+      },
+      "result": {
+        "applied": true,
+        "state": {
+          "marks": [
+            "bold"
+          ],
+          "block": "body",
+          "align": "left",
+          "dir": "leftToRight",
+          "canUndo": true,
+          "canRedo": false,
+          "inLink": false,
+          "linkURL": null,
+          "undoTitle": "Typing",
+          "redoTitle": null
+        }
+      }
+    },
+    {
+      "name": "command",
+      "args": {
+        "name": "paste",
+        "attrs": {
+          "html": "<p><font color=\"red\">Hi</font> there</p>"
+        }
+      },
+      "result": {
+        "applied": true,
+        "state": {
+          "marks": [],
+          "block": "body",
+          "align": "left",
+          "dir": "leftToRight",
+          "canUndo": true,
+          "canRedo": false,
+          "inLink": false,
+          "linkURL": null,
+          "undoTitle": "Paste",
+          "redoTitle": null
+        },
+        "paste": {
+          "loss": {
+            "dropped": {
+              "elements": {
+                "font": 1
+              },
+              "attributes": {}
+            },
+            "unwrapped": {},
+            "normalized": 0,
+            "preserved": 0
+          },
+          "words": 2,
+          "kind": "html",
+          "source": "web",
+          "kept": {
+            "paragraph": 1
+          },
+          "converted": {},
+          "styles": {},
+          "examples": [
+            "<font> ×1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "freeze",
+      "args": {},
+      "result": {
+        "revision": 6
+      }
+    },
+    {
+      "name": "snapshot",
+      "args": {
+        "caret": true
+      },
+      "result": {
+        "revision": 6,
+        "html": "<p>One <em>two</em> <strong>very </strong>Hi therethree.</p>\n<p>Four</p>",
+        "caretOffset": 50,
+        "words": 6
+      }
+    },
+    {
+      "name": "verifySwitch",
+      "args": {
+        "direction": "richToSource",
+        "html": "<p>One <em>two</em> <strong>very </strong>Hi therethree.</p>\n<p>Four</p>"
+      },
+      "result": {
+        "ok": true,
+        "candidateHtml": "<p>One <em>two</em> <strong>very </strong>Hi therethree.</p>\n<p>Four</p>"
+      }
+    },
+    {
+      "name": "lint",
+      "args": {
+        "html": "<p style=\"color:red\"><font>x</font></p>"
+      },
+      "result": {
+        "loss": {
+          "dropped": {
+            "elements": {
+              "font": 1
+            },
+            "attributes": {
+              "style": 1
+            }
+          },
+          "unwrapped": {},
+          "normalized": 0,
+          "preserved": 0
+        }
+      }
+    },
+    {
+      "name": "setTheme",
+      "args": {
+        "background": "#1C1C1E",
+        "text": "#F2F2F7",
+        "accent": "#E0565F",
+        "link": "#64A8FF",
+        "fontFamily": "'New York', ui-serif, Georgia, serif",
+        "fontSizePx": 17,
+        "lineHeight": 1.62
+      },
+      "result": {}
+    },
+    {
+      "name": "setMirror",
+      "args": {
+        "enabled": false
+      },
+      "result": {}
+    },
+    {
+      "name": "nope",
+      "args": {},
+      "error": {
+        "code": "unknown-call",
+        "message": "no call named nope"
+      }
+    },
+    {
+      "name": "load",
+      "args": {
+        "html": 42,
+        "revision": 1
+      },
+      "error": {
+        "code": "bad-args",
+        "message": "html must be a string"
+      }
+    },
+    {
+      "name": "dispose",
+      "args": {},
+      "result": {}
+    }
+  ],
+  "events": [
+    {
+      "type": "toolbarState",
+      "marks": [],
+      "block": "body",
+      "align": "left",
+      "dir": "leftToRight",
+      "canUndo": false,
+      "canRedo": false,
+      "inLink": false,
+      "linkURL": null,
+      "undoTitle": null,
+      "redoTitle": null
+    },
+    {
+      "type": "mirrorBlocks",
+      "revision": 4,
+      "totalBlocks": 2,
+      "activeBlockIndex": 0,
+      "reset": true,
+      "from": 0,
+      "to": 0,
+      "blocks": [
+        {
+          "html": "<p>One <em>two</em> three.</p>",
+          "separatorAfter": "\n"
+        },
+        {
+          "html": "<p>Four</p>",
+          "separatorAfter": ""
+        }
+      ]
+    },
+    {
+      "type": "caretRect",
+      "x": 10,
+      "y": 20,
+      "width": 1,
+      "height": 20,
+      "block": 0
+    },
+    {
+      "type": "mirrorBlocks",
+      "revision": 4,
+      "totalBlocks": 2,
+      "activeBlockIndex": 0,
+      "reset": true,
+      "from": 0,
+      "to": 0,
+      "blocks": [
+        {
+          "html": "<p>One <em>two</em> three.</p>",
+          "separatorAfter": "\n"
+        },
+        {
+          "html": "<p>Four</p>",
+          "separatorAfter": ""
+        }
+      ]
+    },
+    {
+      "type": "toolbarState",
+      "marks": [
+        "bold"
+      ],
+      "block": "body",
+      "align": "left",
+      "dir": "leftToRight",
+      "canUndo": false,
+      "canRedo": false,
+      "inLink": false,
+      "linkURL": null,
+      "undoTitle": null,
+      "redoTitle": null
+    },
+    {
+      "type": "edited",
+      "revision": 5
+    },
+    {
+      "type": "toolbarState",
+      "marks": [
+        "bold"
+      ],
+      "block": "body",
+      "align": "left",
+      "dir": "leftToRight",
+      "canUndo": true,
+      "canRedo": false,
+      "inLink": false,
+      "linkURL": null,
+      "undoTitle": "Typing",
+      "redoTitle": null
+    },
+    {
+      "type": "mirrorBlocks",
+      "revision": 5,
+      "totalBlocks": 2,
+      "activeBlockIndex": 0,
+      "reset": false,
+      "from": 0,
+      "to": 1,
+      "blocks": [
+        {
+          "html": "<p>One <em>two</em> <strong>very </strong>three.</p>",
+          "separatorAfter": "\n"
+        }
+      ]
+    },
+    {
+      "type": "edited",
+      "revision": 6
+    },
+    {
+      "type": "paste",
+      "loss": {
+        "dropped": {
+          "elements": {
+            "font": 1
+          },
+          "attributes": {}
+        },
+        "unwrapped": {},
+        "normalized": 0,
+        "preserved": 0
+      },
+      "words": 2,
+      "kind": "html",
+      "source": "web",
+      "kept": {
+        "paragraph": 1
+      },
+      "converted": {},
+      "styles": {},
+      "examples": [
+        "<font> ×1"
+      ]
+    },
+    {
+      "type": "toolbarState",
+      "marks": [],
+      "block": "body",
+      "align": "left",
+      "dir": "leftToRight",
+      "canUndo": true,
+      "canRedo": false,
+      "inLink": false,
+      "linkURL": null,
+      "undoTitle": "Paste",
+      "redoTitle": null
+    },
+    {
+      "type": "mirrorBlocks",
+      "revision": 6,
+      "totalBlocks": 2,
+      "activeBlockIndex": 0,
+      "reset": false,
+      "from": 0,
+      "to": 1,
+      "blocks": [
+        {
+          "html": "<p>One <em>two</em> <strong>very </strong>Hi therethree.</p>",
+          "separatorAfter": "\n"
+        }
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "id": "toggleMark.bold",
+      "name": "toggleMark",
+      "attrs": {
+        "mark": "bold"
+      }
+    },
+    {
+      "id": "toggleMark.italic",
+      "name": "toggleMark",
+      "attrs": {
+        "mark": "italic"
+      }
+    },
+    {
+      "id": "toggleMark.underline",
+      "name": "toggleMark",
+      "attrs": {
+        "mark": "underline"
+      }
+    },
+    {
+      "id": "toggleMark.strikethrough",
+      "name": "toggleMark",
+      "attrs": {
+        "mark": "strikethrough"
+      }
+    },
+    {
+      "id": "toggleMark.superscript",
+      "name": "toggleMark",
+      "attrs": {
+        "mark": "superscript"
+      }
+    },
+    {
+      "id": "toggleMark.subscript",
+      "name": "toggleMark",
+      "attrs": {
+        "mark": "subscript"
+      }
+    },
+    {
+      "id": "toggleMark.smaller",
+      "name": "toggleMark",
+      "attrs": {
+        "mark": "smaller"
+      }
+    },
+    {
+      "id": "toggleMark.code",
+      "name": "toggleMark",
+      "attrs": {
+        "mark": "code"
+      }
+    },
+    {
+      "id": "setBlock.body",
+      "name": "setBlock",
+      "attrs": {
+        "block": "body"
+      }
+    },
+    {
+      "id": "setBlock.heading",
+      "name": "setBlock",
+      "attrs": {
+        "block": "heading"
+      }
+    },
+    {
+      "id": "setBlock.subheading",
+      "name": "setBlock",
+      "attrs": {
+        "block": "subheading"
+      }
+    },
+    {
+      "id": "setBlock.centred",
+      "name": "setBlock",
+      "attrs": {
+        "block": "centred"
+      }
+    },
+    {
+      "id": "setBlock.quote",
+      "name": "setBlock",
+      "attrs": {
+        "block": "quote"
+      }
+    },
+    {
+      "id": "setBlock.bulletedList",
+      "name": "setBlock",
+      "attrs": {
+        "block": "bulletedList"
+      }
+    },
+    {
+      "id": "setBlock.numberedList",
+      "name": "setBlock",
+      "attrs": {
+        "block": "numberedList"
+      }
+    },
+    {
+      "id": "setBlock.foldOut",
+      "name": "setBlock",
+      "attrs": {
+        "block": "foldOut"
+      }
+    },
+    {
+      "id": "setAlignment.left",
+      "name": "setAlignment",
+      "attrs": {
+        "alignment": "left"
+      }
+    },
+    {
+      "id": "setAlignment.centre",
+      "name": "setAlignment",
+      "attrs": {
+        "alignment": "centre"
+      }
+    },
+    {
+      "id": "setAlignment.right",
+      "name": "setAlignment",
+      "attrs": {
+        "alignment": "right"
+      }
+    },
+    {
+      "id": "setAlignment.justify",
+      "name": "setAlignment",
+      "attrs": {
+        "alignment": "justify"
+      }
+    },
+    {
+      "id": "setDirection.leftToRight",
+      "name": "setDirection",
+      "attrs": {
+        "direction": "leftToRight"
+      }
+    },
+    {
+      "id": "setDirection.rightToLeft",
+      "name": "setDirection",
+      "attrs": {
+        "direction": "rightToLeft"
+      }
+    },
+    {
+      "id": "setLink",
+      "name": "setLink",
+      "attrs": {
+        "url": "https://example.com/"
+      }
+    },
+    {
+      "id": "unlink",
+      "name": "unlink",
+      "attrs": {}
+    },
+    {
+      "id": "insertImage",
+      "name": "insertImage",
+      "attrs": {
+        "address": "https://example.com/a.png",
+        "description": "A cat",
+        "width": 200,
+        "height": 100
+      }
+    },
+    {
+      "id": "insertImage.noSize",
+      "name": "insertImage",
+      "attrs": {
+        "address": "https://example.com/a.png",
+        "description": ""
+      }
+    },
+    {
+      "id": "insertSceneBreak.asterism",
+      "name": "insertSceneBreak",
+      "attrs": {
+        "style": "asterism"
+      }
+    },
+    {
+      "id": "insertSceneBreak.asterisks",
+      "name": "insertSceneBreak",
+      "attrs": {
+        "style": "asterisks"
+      }
+    },
+    {
+      "id": "insertSceneBreak.line",
+      "name": "insertSceneBreak",
+      "attrs": {
+        "style": "line"
+      }
+    },
+    {
+      "id": "insertFootnote",
+      "name": "insertFootnote",
+      "attrs": {}
+    },
+    {
+      "id": "undo",
+      "name": "undo",
+      "attrs": {}
+    },
+    {
+      "id": "redo",
+      "name": "redo",
+      "attrs": {}
+    },
+    {
+      "id": "clearFormatting",
+      "name": "clearFormatting",
+      "attrs": {}
+    },
+    {
+      "id": "host.moveCaret.left",
+      "name": "moveCaret",
+      "attrs": {
+        "by": -1
+      }
+    },
+    {
+      "id": "host.moveCaret.right",
+      "name": "moveCaret",
+      "attrs": {
+        "by": 1
+      }
+    },
+    {
+      "id": "host.insertEmDash",
+      "name": "insertText",
+      "attrs": {
+        "text": "—"
+      }
+    },
+    {
+      "id": "host.insertQuotationMarks",
+      "name": "insertQuotes",
+      "attrs": {
+        "open": "“",
+        "close": "”"
+      }
+    },
+    {
+      "id": "tag.lineBreak",
+      "name": "insertLineBreak",
+      "attrs": {}
+    }
+  ]
+}

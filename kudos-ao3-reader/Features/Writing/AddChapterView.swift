@@ -6,6 +6,7 @@ struct AddChapterView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AO3AuthService.self) private var auth
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @AppStorage(RichEditorFeatureFlag.storageKey) private var richEditorFeatureEnabled = false
 
     @State private var form: AO3ChapterForm
     @State private var editingGeneration: Int?
@@ -123,6 +124,7 @@ struct AddChapterView: View {
             palette: accountPalette
         )
         .hidesFloatingTabBarInEditor()
+        .richEditorPrewarm(backgroundColor: theme.appTheme.backgroundColor)
         .alert("AO3 could not save the chapter", isPresented: Binding(
             get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
         )) {
@@ -222,26 +224,99 @@ struct AddChapterView: View {
 
     private var recoveryTarget: String { "work:\(form.workID):chapter:\(form.chapterID.map(String.init) ?? "new")" }
 
+    static func usesRichChapterEditor(flagEnabled: Bool) -> Bool {
+        ChapterEditorEntryPolicy.addChapterDestination(flagEnabled: flagEnabled) == .richChapterEditor
+    }
+
     @ViewBuilder
     private var textRows: some View {
-        WritingTextEditorRow(
-            title: "Chapter Text", text: $form.content, target: recoveryTarget, field: "content",
-            emptyHint: "opens the editor with plain text, AO3’s HTML tags, or a paste from elsewhere.",
-            ruleTitle: Self.chapterNumber(form.position).map { "Chapter \($0)" },
-            chapterActions: WritingChapterEditorActions(
-                preview: { openPreview() },
-                deleteName: Self.offersDelete(chapterID: form.chapterID, chapterCount: chapterCount)
-                    ? Self.chapterName(position: form.position, title: form.title) : nil,
-                delete: { deleteChapter() }
+        if Self.usesRichChapterEditor(flagEnabled: richEditorFeatureEnabled) {
+            chapterRichEditorRow
+                .panelSegment(0, of: 4, gutter: gutter)
+        } else {
+            WritingTextEditorRow(
+                title: "Chapter Text", text: $form.content, target: recoveryTarget, field: "content",
+                emptyHint: "opens the editor with plain text, AO3’s HTML tags, or a paste from elsewhere.",
+                ruleTitle: Self.chapterNumber(form.position).map { "Chapter \($0)" },
+                chapterActions: WritingChapterEditorActions(
+                    preview: { openPreview() },
+                    deleteName: Self.offersDelete(chapterID: form.chapterID, chapterCount: chapterCount)
+                        ? Self.chapterName(position: form.position, title: form.title) : nil,
+                    delete: { deleteChapter() }
+                )
             )
-        )
-        .panelSegment(0, of: 4, gutter: gutter)
+            .panelSegment(0, of: 4, gutter: gutter)
+        }
         WritingTextEditorRow(title: "Summary", text: $form.summary, target: recoveryTarget, field: "summary")
             .panelSegment(1, of: 4, gutter: gutter)
         WritingTextEditorRow(title: "Beginning Notes", text: $form.notes, target: recoveryTarget, field: "notes")
             .panelSegment(2, of: 4, gutter: gutter)
         WritingTextEditorRow(title: "End Notes", text: $form.endnotes, target: recoveryTarget, field: "endnotes")
             .panelSegment(3, of: 4, gutter: gutter)
+    }
+
+    private var chapterRichEditorRow: some View {
+        let emptyHint = "opens the Rich Text editor with formatting controls, chapter notes, and a local copy."
+        let detail = WritingTextEditorRow.detail(text: form.content, previewsText: false, emptyHint: emptyHint)
+        let offersDelete = Self.offersDelete(chapterID: form.chapterID, chapterCount: chapterCount)
+        return Group {
+            if let detail {
+                VStack(alignment: .leading, spacing: 0) {
+                    SubjectFormRow(label: "Chapter Text", showsDisclosure: true) { EmptyView() }
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.top, -8)
+                        .padding(.bottom, 11)
+                }
+            } else {
+                SubjectFormRow(
+                    label: "Chapter Text",
+                    value: form.content.isEmpty ? "Empty" : "Set",
+                    showsDisclosure: true
+                )
+            }
+        }
+        .subjectRowNavigation(accessibilityLabel: "Chapter Text") {
+            ChapterEditorScreen(
+                workTitle: workTitle,
+                chapterNumber: Self.chapterNumber(form.position),
+                chapterTitle: $form.title,
+                summary: $form.summary,
+                notesBefore: $form.notes,
+                notesAfter: $form.endnotes,
+                content: $form.content,
+                account: auth.username ?? "",
+                recoveryTarget: recoveryTarget,
+                ao3Actions: ChapterEditorAO3Actions(
+                    ao3WorkID: form.workID,
+                    ao3ChapterID: form.chapterID,
+                    isPosted: form.chapterID != nil && !form.isDraft,
+                    isAO3Draft: form.isDraft,
+                    isChapterOne: Self.chapterNumber(form.position) == 1,
+                    ao3DraftDaysLeft: nil,
+                    postOrUpdate: {
+                        if posts && !postWithoutPreview {
+                            openPreview()
+                        } else {
+                            save(submit: posts ? .postWithoutPreview : .update)
+                        }
+                    },
+                    saveAsAO3Draft: posts ? { save(submit: .saveDraft) } : nil,
+                    preview: { openPreview() },
+                    openWorkDetails: nil,
+                    pushesWorkDetailsDestination: true,
+                    canEditTags: true,
+                    deleteChapterName: offersDelete
+                        ? Self.chapterName(position: form.position, title: form.title)
+                        : nil,
+                    deleteChapter: offersDelete ? { deleteChapter() } : nil
+                )
+            )
+        }
     }
 
     private var publicationDate: Binding<Date> {

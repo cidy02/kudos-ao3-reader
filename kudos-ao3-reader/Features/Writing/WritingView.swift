@@ -187,6 +187,7 @@ struct WritingView: View {
                 router.pendingWritingRoute = nil
             }
             .refreshable { await refresh() }
+            .richEditorPrewarm(backgroundColor: theme.appTheme.backgroundColor)
             .onDisappear { profileModel?.cancel() }
         }
     }

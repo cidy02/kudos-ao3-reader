@@ -1,0 +1,230 @@
+{
+  "ao3-work.html": {
+    "html": "<p>“Hello,” she said. <em>Finally.</em></p>\n<hr>\n<blockquote><p>A letter, folded twice.</p></blockquote>\n<p align=\"center\"><strong>The end.</strong> <a href=\"https://archiveofourown.org/works/1/chapters/2\">Next chapter</a></p>",
+    "source": "ao3",
+    "words": 12,
+    "kept": {
+      "paragraph": 3,
+      "italic": 1,
+      "sceneBreak": 1,
+      "quote": 1,
+      "centred": 1,
+      "bold": 1,
+      "link": 1
+    },
+    "converted": {
+      "align": 1
+    },
+    "styles": {
+      "color": 1
+    },
+    "examples": [
+      "color ×1"
+    ],
+    "dropped": {
+      "elements": {},
+      "attributes": {}
+    }
+  },
+  "google-docs.html": {
+    "html": "<p>She didn’t look back. <em>Not once.</em></p>\n<p><br></p>\n<p align=\"center\"><strong>Chapter Two</strong></p>\n<p><br></p>\n<p>The harbour was <u>quiet</u>, the <strike>boats</strike> ships asleep<sup>1</sup><em>, </em><strong><em>and so did she</em></strong>.</p>",
+    "source": "google-docs",
+    "words": 21,
+    "kept": {
+      "paragraph": 5,
+      "italic": 3,
+      "centred": 1,
+      "bold": 2,
+      "underline": 1,
+      "strikethrough": 1,
+      "superscript": 1
+    },
+    "converted": {
+      "em": 3,
+      "strong": 2,
+      "align": 1,
+      "u": 1,
+      "strike": 1,
+      "sup": 1
+    },
+    "styles": {
+      "font-size": 12,
+      "font-family": 12
+    },
+    "examples": [
+      "font-family ×12",
+      "font-size ×12"
+    ],
+    "dropped": {
+      "elements": {},
+      "attributes": {}
+    }
+  },
+  "notes.html": {
+    "html": "<p><strong>Ideas for chapter 4</strong></p>\n<ul><li>the storm</li>\n<li>she finds the <strong>letter</strong></li></ul>",
+    "source": "apple",
+    "words": 10,
+    "kept": {
+      "paragraph": 1,
+      "bold": 2,
+      "list": 1
+    },
+    "converted": {
+      "strong": 2
+    },
+    "styles": {
+      "font-family": 5,
+      "font-size": 2
+    },
+    "examples": [
+      "font-family ×5",
+      "font-size ×2"
+    ],
+    "dropped": {
+      "elements": {},
+      "attributes": {}
+    }
+  },
+  "pages.html": {
+    "html": "<p>The tide came in <em>slowly</em>, then <strong>all at once</strong>.</p>\n<p><br></p>\n<p align=\"center\">⁂</p>\n<p>Ines&nbsp; waited. <u>Then she ran.</u></p>",
+    "source": "apple",
+    "words": 14,
+    "kept": {
+      "paragraph": 4,
+      "italic": 1,
+      "bold": 1,
+      "centred": 1,
+      "underline": 1
+    },
+    "converted": {
+      "em": 1,
+      "strong": 1,
+      "align": 1,
+      "u": 1
+    },
+    "styles": {
+      "font-family": 6,
+      "font-size": 2
+    },
+    "examples": [
+      "font-family ×6",
+      "font-size ×2"
+    ],
+    "dropped": {
+      "elements": {},
+      "attributes": {}
+    }
+  },
+  "scrivener.html": {
+    "html": "<p>It was the <em>third</em> winter.</p>\n<p align=\"center\">#</p>\n<p>He kept the <strong>letter</strong> in his coat, where it creased.</p>",
+    "source": "web",
+    "words": 15,
+    "kept": {
+      "paragraph": 3,
+      "italic": 1,
+      "centred": 1,
+      "bold": 1
+    },
+    "converted": {
+      "em": 1,
+      "align": 1,
+      "strong": 1
+    },
+    "styles": {},
+    "examples": [],
+    "dropped": {
+      "elements": {},
+      "attributes": {}
+    }
+  },
+  "web-page.html": {
+    "html": "<h2>A short history of lighthouses</h2>\n<p>The first <a href=\"https://en.wikipedia.org/wiki/Lighthouse_of_Alexandria\" title=\"Pharos\">Pharos</a> stood for <strong>1,500 years</strong>.<img alt=\"Pharos\" src=\"https://example.com/pharos.jpg\" width=\"300\"></p>\n<table><tbody><tr><td>Built</td><td>280 BC</td></tr></tbody></table>",
+    "source": "web",
+    "words": 16,
+    "kept": {
+      "heading": 1,
+      "paragraph": 1,
+      "link": 1,
+      "bold": 1,
+      "image": 1,
+      "preserved": 1
+    },
+    "converted": {
+      "strong": 1
+    },
+    "styles": {
+      "font-family": 2,
+      "color": 3
+    },
+    "examples": [
+      "color ×3",
+      "font-family ×2"
+    ],
+    "dropped": {
+      "elements": {},
+      "attributes": {}
+    }
+  },
+  "word-mac.html": {
+    "html": "<h1>Chapter Three</h1>\n<p><b>Warning:</b> canon-typical violence.</p>\n<ol><li>Run</li>\n<li>Hide</li></ol>\n<p align=\"right\" dir=\"rtl\"><span dir=\"RTL\" lang=\"HE\">שלום</span></p>\n<p>  <s>gone</s> and <sup>2</sup></p>",
+    "source": "word",
+    "words": 11,
+    "kept": {
+      "heading": 1,
+      "paragraph": 3,
+      "bold": 1,
+      "list": 1,
+      "aligned": 1,
+      "strikethrough": 1,
+      "superscript": 1
+    },
+    "converted": {
+      "align": 1,
+      "dir": 1,
+      "li": 2
+    },
+    "styles": {
+      "font-family": 7,
+      "font-size": 3
+    },
+    "examples": [
+      "font-family ×7",
+      "font-size ×3"
+    ],
+    "dropped": {
+      "elements": {},
+      "attributes": {}
+    }
+  },
+  "word-windows.html": {
+    "html": "<p>The <b>first</b> line, with <i>italics</i> and <u>underline</u>.</p>\n<p align=\"center\">* * *</p>\n<ul><li>Milk<ul><li>Oat milk</li></ul></li>\n<li>Eggs</li></ul>\n<p>Red words</p>",
+    "source": "word",
+    "words": 13,
+    "kept": {
+      "paragraph": 3,
+      "bold": 1,
+      "italic": 1,
+      "underline": 1,
+      "centred": 1,
+      "list": 2
+    },
+    "converted": {
+      "align": 1,
+      "li": 3
+    },
+    "styles": {
+      "font-size": 4,
+      "font-family": 9,
+      "color": 1
+    },
+    "examples": [
+      "font-family ×9",
+      "font-size ×4",
+      "color ×1"
+    ],
+    "dropped": {
+      "elements": {},
+      "attributes": {}
+    }
+  }
+}

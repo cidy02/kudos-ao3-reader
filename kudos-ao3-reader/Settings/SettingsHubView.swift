@@ -23,6 +23,7 @@ struct SettingsHubView: View {
     @AppStorage(ReaderSpeechPreferences.engineKey) private var speechEngineID = ""
     @AppStorage(ReaderSpeechPreferences.voiceIDKey) private var speechVoiceID = ""
     @AppStorage(ReaderSpeechPreferences.voiceNameKey) private var speechVoiceName = ""
+    @AppStorage(RichEditorFeatureFlag.storageKey) private var richEditorEnabled = false
 
     @State private var folderSyncStatus = FolderSyncService.snapshot()
     @State private var searchText = ""
@@ -42,6 +43,20 @@ struct SettingsHubView: View {
             }
             return matching.isEmpty ? nil : SettingsHubGroup(title: group.title, routes: matching)
         }
+    }
+
+    private var showsWritingSection: Bool {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+        let terms = [
+            "Writing",
+            "Rich Text editor (beta)",
+            "rich text",
+            "editor",
+            "beta",
+            "experimental"
+        ]
+        return terms.contains { $0.localizedCaseInsensitiveContains(query) }
     }
 
     var body: some View {
@@ -66,6 +81,30 @@ struct SettingsHubView: View {
                 }
             }
             .appThemedRows()
+
+            if showsWritingSection {
+                Section {
+                    Toggle(isOn: $richEditorEnabled) {
+                        HStack(spacing: 12) {
+                            SettingsIconTile(
+                                color: themeManager.effectiveTint,
+                                systemImage: "square.and.pencil"
+                            )
+                            Text("Rich Text editor (beta)")
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .accentFill()
+                } header: {
+                    Text("Writing")
+                } footer: {
+                    Text(
+                        "Opens chapters in the new Rich Text editor with formatting controls "
+                            + "and a local copy on this \(ThisDevice.name). Stored on this device only."
+                    )
+                }
+                .appThemedRows()
+            }
         }
         #if os(iOS)
         .listStyle(.insetGrouped)
@@ -78,7 +117,7 @@ struct SettingsHubView: View {
         .appThemedScroll()
         .overlay {
             let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if filteredGroups.isEmpty && !query.isEmpty {
+            if filteredGroups.isEmpty && !showsWritingSection && !query.isEmpty {
                 ContentUnavailableView.search(text: query)
             }
         }
