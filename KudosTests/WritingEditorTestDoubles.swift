@@ -234,6 +234,13 @@ final class FakeRichTransport: RichEditorBridgeTransport {
         setAppearanceCalls.append(appearance)
     }
 
+    private(set) var setMirrorCalls: [Bool] = []
+
+    func setMirror(_ args: RichEditorMirrorArgs) async throws {
+        recordedCalls.append("setMirror")
+        setMirrorCalls.append(args.enabled)
+    }
+
     func dispose() async throws {
         recordedCalls.append("dispose")
         disposeCount += 1

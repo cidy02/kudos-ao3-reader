@@ -231,7 +231,7 @@ extension DraftSession {
                           reply.schemaVersion == RichEditorBridgeProtocol.schemaVersion
                     else { return }
                     self.isConfigured = true
-                    self.pushMirrorVisibility()
+                    if self.isMirrorVisible { self.pushMirrorVisibility() }
                 }
                 let result = try await transport.load(
                     RichEditorLoadArgs(html: html, revision: targetRevision)
