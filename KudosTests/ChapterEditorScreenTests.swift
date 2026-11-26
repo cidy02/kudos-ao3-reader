@@ -548,3 +548,31 @@ struct ChapterEditorScreenTests {
         )
     }
 }
+
+@MainActor
+struct ChapterEditorPasteSourceTests {
+    @Test func thePageReportedSourceKeptAndStylesReachTheCard() {
+        let event = RichEditorPasteEvent(
+            loss: RichEditorLossReport(dropped: .init(elements: ["font": 2])),
+            words: 21,
+            kind: "html",
+            source: "google-docs",
+            kept: ["italic": 3, "bold": 2, "paragraph": 5],
+            converted: ["em": 3, "strong": 2],
+            styles: ["font-family": 12, "color": 1],
+            examples: ["font-family ×12"]
+        )
+        let report = ChapterEditorPasteTracker.makeLossReport(from: event)
+        #expect(report.sourceName == "Google Docs")
+        #expect(report.kept.map(\.label) == ["italics", "bold", "paragraphs"])
+        #expect(report.kept.map(\.count) == [3, 2, 5])
+        #expect(report.removed.map(\.id) == ["elem:font", "style:color", "style:font-family"])
+        #expect(report.removed.first { $0.id == "style:font-family" }?.label == "fonts")
+    }
+
+    @Test func plainTextAndUnknownSourcesNameNoApp() {
+        #expect(ChapterEditorPasteTracker.sourceName("text") == nil)
+        #expect(ChapterEditorPasteTracker.sourceName(nil) == nil)
+        #expect(ChapterEditorPasteTracker.sourceName("word") == "Word")
+    }
+}

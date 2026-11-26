@@ -195,8 +195,19 @@ nonisolated struct ChapterEditorPasteTracker: Equatable, Sendable {
             normalized.append(PasteChangeItem(id: "normalized", label: label, count: count))
         }
 
+        // Styles the source app used that AO3 can't show (the page's paste cleaner counts them, §6.8).
+        for property in (event.styles ?? [:]).keys.sorted() {
+            guard let count = event.styles?[property], count > 0 else { continue }
+            removed.append(PasteChangeItem(id: "style:\(property)", label: Self.styleLabel(property), count: count))
+        }
+
         var kept: [PasteChangeItem] = []
-        if event.loss.preserved > 0 {
+        if let pasteKept = event.kept {
+            for kind in Self.keptOrder where (pasteKept[kind] ?? 0) > 0 {
+                let count = pasteKept[kind] ?? 0
+                kept.append(PasteChangeItem(id: "kept:\(kind)", label: Self.keptLabel(kind, count: count), count: count))
+            }
+        } else if event.loss.preserved > 0 {
             let count = event.loss.preserved
             let label = count == 1 ? "preserved HTML block" : "preserved HTML blocks"
             kept.append(PasteChangeItem(id: "preserved", label: label, count: count))
@@ -204,10 +215,67 @@ nonisolated struct ChapterEditorPasteTracker: Equatable, Sendable {
 
         return PasteLossReport(
             wordCount: event.words,
-            sourceName: nil,
+            sourceName: Self.sourceName(event.source),
             kept: kept,
             removed: removed,
             normalized: normalized
         )
+    }
+
+    /// The app a paste came from, as the page told it apart (`editor-core/src/paste/`); nil when it can't be told.
+    static func sourceName(_ source: String?) -> String? {
+        switch source {
+        case "google-docs": "Google Docs"
+        case "word": "Word"
+        case "apple": "Pages or Notes"
+        case "ao3": "an AO3 work"
+        case "web": "a web page"
+        default: nil
+        }
+    }
+
+    /// Formatting first, in the Format panel's order, then structure.
+    static let keptOrder = [
+        "italic", "bold", "underline", "strikethrough", "superscript", "subscript", "smaller", "code", "link",
+        "paragraph", "heading", "quote", "list", "sceneBreak", "centred", "aligned", "foldOut", "image", "preserved",
+    ]
+
+    static func keptLabel(_ kind: String, count: Int) -> String {
+        let one = count == 1
+        return switch kind {
+        case "italic": "italics"
+        case "bold": "bold"
+        case "underline": "underline"
+        case "strikethrough": "strikethrough"
+        case "superscript": "superscript"
+        case "subscript": "subscript"
+        case "smaller": "smaller text"
+        case "code": "code"
+        case "link": one ? "link" : "links"
+        case "paragraph": one ? "paragraph" : "paragraphs"
+        case "heading": one ? "heading" : "headings"
+        case "quote": one ? "quote" : "quotes"
+        case "list": one ? "list" : "lists"
+        case "sceneBreak": one ? "scene break" : "scene breaks"
+        case "centred": one ? "centred line" : "centred lines"
+        case "aligned": one ? "aligned paragraph" : "aligned paragraphs"
+        case "foldOut": one ? "fold-out section" : "fold-out sections"
+        case "image": one ? "image" : "images"
+        case "preserved": one ? "preserved HTML block" : "preserved HTML blocks"
+        default: kind
+        }
+    }
+
+    static func styleLabel(_ property: String) -> String {
+        switch property {
+        case "color": "text colours"
+        case "background", "background-color": "highlight colours"
+        case "font-family": "fonts"
+        case "font-size": "text sizes"
+        case "font-variant", "text-transform": "small caps and capitals"
+        case "letter-spacing": "letter spacing"
+        case "text-shadow": "text shadows"
+        default: property
+        }
     }
 }
