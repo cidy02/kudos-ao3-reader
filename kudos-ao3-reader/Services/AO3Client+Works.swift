@@ -386,6 +386,9 @@ extension AO3Client {
 
         let titleField = firstInput(form, name: AO3WorkFormField.seriesFormTitle)
         let isCreate = actionURL.path == "/series" || heading.contains("new series")
+        // otwarchive 452391b6 `series/edit.html.erb:6` renders `series/_series_navigation.html.erb:7-12`,
+        // which omits "Remove Me As Co-Creator" when the signed-in user is the sole creator.
+        let canRemoveMe = (try? doc.select("form[action*=/remove_user_creatorship]").first()) != nil
         return AO3SeriesForm(
             seriesID: seriesID(inPath: actionURL.path),
             actionURL: actionURL,
@@ -399,7 +402,8 @@ extension AO3Client {
             isComplete: checkboxOn(form, name: AO3WorkFormField.seriesComplete),
             creators: parseCreators(in: form, prefix: "series"),
             works: [],
-            openOnAO3ForCreate: isCreate && titleField == nil
+            openOnAO3ForCreate: isCreate && titleField == nil,
+            canRemoveMe: canRemoveMe
         )
     }
 

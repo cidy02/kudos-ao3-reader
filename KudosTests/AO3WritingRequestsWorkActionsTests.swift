@@ -351,7 +351,6 @@ struct AO3WritingRequestsWorkActionsTests {
         #expect(form.csrfToken == "import-form-csrf==")
         #expect(form.languageOptions.map(\.value) == ["", "1", "2", "3"])
         #expect(form.encodingOptions.map(\.value) == ["", "ISO-8859-1", "UTF-8", "Windows-1252"])
-        #expect(form.pseudOptions.isEmpty)
         #expect(form.ratingOptions.map(\.value).contains("Teen And Up Audiences"))
         #expect(form.warningOptions.map(\.value) == [
             "Choose Not To Use Archive Warnings", "No Archive Warnings Apply"
@@ -360,14 +359,17 @@ struct AO3WritingRequestsWorkActionsTests {
         #expect(form.defaultCommentPermissions == "disable_anon")
     }
 
-    @Test func importBodyAlwaysSendsWorkTagKeysAndNeverArchivistFields() throws {
+    @Test func importBodySendsSingleWorkKeysOmitsEmptyArraysAndNeverArchivistFields() throws {
         let archivistKeys = [
             "importing_for_others", "external_author_name", "external_author_email",
             "external_coauthor_name", "external_coauthor_email"
         ]
-        let requiredWorkKeys = [
-            "work[rating_string]", "work[archive_warning_strings][]", "work[category_strings][]",
-            "work[fandom_string]", "work[relationship_string]", "work[character_string]", "work[freeform_string]"
+        // Single-value `work[...]` keys ensure `params[:work]` exists; warning and
+        // category checkboxes (`include_hidden: !include_blank`, `include_blank: true`
+        // in `_work_form_tags.html.erb:39,74`) are omitted by browsers when unchecked.
+        let requiredSingleWorkKeys = [
+            "work[rating_string]", "work[fandom_string]",
+            "work[relationship_string]", "work[character_string]", "work[freeform_string]"
         ]
 
         let basic = AO3ImportRequest(
@@ -377,12 +379,15 @@ struct AO3WritingRequestsWorkActionsTests {
         let basicFields = formFields(String(decoding: AO3AuthService.formEncoded(
             basic.parameters(csrfToken: "tok")
         ), as: UTF8.self))
-        for key in requiredWorkKeys { #expect(basicFields[key] == [""], "Expected blank key \(key)") }
+        for key in requiredSingleWorkKeys { #expect(basicFields[key] == [""], "Expected blank key \(key)") }
+        #expect(basicFields["work[archive_warning_strings][]"] == nil)
+        #expect(basicFields["work[category_strings][]"] == nil)
         for key in archivistKeys { #expect(basicFields[key] == nil, "Must never send archivist key \(key)") }
         #expect(basicFields["urls"] == ["https://example.com/story-1\nhttps://example.com/story-2"])
         #expect(basicFields["import_multiple"] == ["works"])
         #expect(basicFields["language_id"] == ["1"])
         #expect(basicFields["encoding"] == [""])
+        #expect(basicFields["pseuds_to_apply"] == nil)
         #expect(basicFields["detect_tags"] == ["true"])
         #expect(basicFields["override_tags"] == nil)
         #expect(basicFields["post_without_preview"] == nil)
@@ -390,12 +395,29 @@ struct AO3WritingRequestsWorkActionsTests {
         #expect(basicFields["moderated_commenting_enabled"] == nil)
         #expect(basicFields["comment_permissions"] == ["disable_anon"])
 
-        var override = AO3ImportRequest(
+        // Override mode with no warnings/categories chosen still omits both array keys
+        // and keeps AO3's default `detect_tags=true` (`new_import.html.erb:109`).
+        let overrideEmptyArrays = AO3ImportRequest(
+            urls: ["https://example.com/story-1"],
+            languageID: "1",
+            overrideTags: true,
+            tags: AO3WorkTagSet(rating: "General Audiences", fandoms: ["Original Work"])
+        )
+        let overrideEmptyFields = formFields(String(decoding: AO3AuthService.formEncoded(
+            overrideEmptyArrays.parameters(csrfToken: "tok")
+        ), as: UTF8.self))
+        #expect(overrideEmptyFields["work[archive_warning_strings][]"] == nil)
+        #expect(overrideEmptyFields["work[category_strings][]"] == nil)
+        #expect(overrideEmptyFields["detect_tags"] == ["true"])
+        #expect(overrideEmptyFields["pseuds_to_apply"] == nil)
+        #expect(overrideEmptyFields["work[rating_string]"] == ["General Audiences"])
+        #expect(overrideEmptyFields["work[fandom_string]"] == ["Original Work"])
+
+        let override = AO3ImportRequest(
             urls: ["https://example.com/ch1", "https://example.com/ch2"],
             importMultiple: .chapters,
             languageID: "1",
             encoding: "UTF-8",
-            pseudToApply: "alice_alt",
             postWithoutPreview: true,
             restricted: true,
             commentPermissions: "enable_all",
@@ -416,15 +438,15 @@ struct AO3WritingRequestsWorkActionsTests {
             override.parameters(csrfToken: "tok")
         ), as: UTF8.self))
         for key in archivistKeys { #expect(overrideFields[key] == nil) }
+        #expect(overrideFields["pseuds_to_apply"] == nil)
         #expect(overrideFields["import_multiple"] == ["chapters"])
         #expect(overrideFields["encoding"] == ["UTF-8"])
-        #expect(overrideFields["pseuds_to_apply"] == ["alice_alt"])
         #expect(overrideFields["post_without_preview"] == ["1"])
         #expect(overrideFields["restricted"] == ["1"])
         #expect(overrideFields["moderated_commenting_enabled"] == ["1"])
         #expect(overrideFields["comment_permissions"] == ["enable_all"])
         #expect(overrideFields["override_tags"] == ["1"])
-        #expect(overrideFields["detect_tags"] == ["false"])
+        #expect(overrideFields["detect_tags"] == ["true"])
         #expect(overrideFields["work[rating_string]"] == ["Mature"])
         #expect(overrideFields["work[archive_warning_strings][]"] == ["No Archive Warnings Apply"])
         #expect(overrideFields["work[category_strings][]"] == ["F/F", "Gen"])
@@ -433,12 +455,6 @@ struct AO3WritingRequestsWorkActionsTests {
         #expect(overrideFields["work[character_string]"] == ["A, B"])
         #expect(overrideFields["work[freeform_string]"] == ["Fluff"])
         #expect(overrideFields["notes"] == ["Imported from blog."])
-
-        override.detectTags = true
-        let hybridFields = formFields(String(decoding: AO3AuthService.formEncoded(
-            override.parameters(csrfToken: "tok")
-        ), as: UTF8.self))
-        #expect(hybridFields["detect_tags"] == ["true"])
     }
 
     @Test func importWorksClassifiesDraftPostedSeveralAndFailedResults() async throws {
@@ -487,7 +503,10 @@ struct AO3WritingRequestsWorkActionsTests {
                 finalURL: URL(string: "https://archiveofourown.org/works/import")
             )
         }
-        #expect(try await auth.importWorks(request, form: form, using: stubClient()) == .several([7001, 7002]))
+        #expect(
+            try await auth.importWorks(request, form: form, using: stubClient())
+                == .several([7001, 7002], failures: nil)
+        )
 
         // Failure -> re-renders form with error flash.
         WritingWorkRequestsStub.reset { _ in

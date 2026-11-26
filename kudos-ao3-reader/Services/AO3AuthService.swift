@@ -371,7 +371,7 @@ final class AO3AuthService {
     /// value after `pace()` and will not send a Cookie built for an older value.
     private(set) var sessionGeneration = 0
     /// The last series write AO3 was sent, for the screens that show that series: they read it
-    /// again. Set by `AO3WorkActions`; nothing else writes it.
+    /// again. Set by `AO3WorkActions` and `AO3WritingRequestActions`; nothing else writes it.
     var lastSeriesWrite: AO3SeriesWrite?
 
     /// Distinguishes two auth services that happen to be at the same generation.

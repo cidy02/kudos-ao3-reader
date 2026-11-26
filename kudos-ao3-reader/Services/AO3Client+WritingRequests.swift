@@ -124,9 +124,11 @@ extension AO3Client {
     private static func parseCoCreatorRow(_ row: Element) throws -> AO3CoCreatorRequest? {
         let cells = try row.select("td").array()
         guard cells.count >= 5 else { return nil }
-        // `collection_check_boxes "", :selected` also emits a trailing hidden
-        // `name="selected[]"` input with empty value; match checkboxes only.
-        guard let box = try cells[4].select("input[type=checkbox][name='selected[]']").first(),
+        // `collection_check_boxes "", :selected` emits `name="selected[]"` on
+        // current Rails and `name="[selected][]"` (or `<prefix>[selected][]`)
+        // on older Rails, plus a hidden input with empty value; match checkboxes only.
+        let selector = "input[type=checkbox][name='selected[]'], input[type=checkbox][name$='[selected][]']"
+        guard let box = try cells[4].select(selector).first(),
               let id = Int((try box.attr("value")).trimmingCharacters(in: .whitespacesAndNewlines))
         else { return nil }
         let link = try cells[0].select("a[href]").first()
@@ -290,147 +292,6 @@ extension AO3Client {
             return token
         }
         return parseCSRFToken(from: html)
-    }
-
-    // MARK: - 4. Orphan (`orphans/new`, `_orphan_work`, `_orphan_series`, `_choose_pseud`)
-
-    /// Parses `GET /orphans/new?…` (otwarchive `452391b6` `orphans_controller.rb`
-    /// and `app/views/orphans/`). Throws `.notOwned` when AO3 redirects with its
-    /// permission error flash.
-    static func parseOrphanForm(
-        from html: String,
-        target: AO3OrphanTarget
-    ) throws -> AO3OrphanForm {
-        if let error = writingRequestError(in: html, includeCaution: false) {
-            throw isNotOwnedOrphanError(error) ? AO3WorkWriteError.notOwned : AO3WorkWriteError.rejected(error)
-        }
-        let doc = try SwiftSoup.parse(html)
-        guard let form = try doc.select("form[action=/orphans], form[action$=/orphans]").first(),
-              let actionURL = AO3URLResolver.resolve(try form.attr("action"))
-        else { throw AO3Error.parse }
-        guard let csrf = formToken(in: form, fallbackHTML: html) else {
-            throw AO3WorkWriteError.noCSRFToken
-        }
-
-        let radios = parseRadios(form, name: "use_default")
-        let values = Set(radios.options.map(\.value))
-        guard values.contains("true"), values.contains("false") else { throw AO3Error.parse }
-
-        let cautions = ((try? doc.select("p.caution.notice, p.caution").array()) ?? [])
-            .compactMap { try? $0.text().trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        let titles = try verifyAndExtractOrphanTitles(in: doc, form: form, target: target, cautions: cautions)
-        let submit = ((try? form.select("input[type=submit]").first()?.attr("value")) ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return AO3OrphanForm(
-            target: target,
-            actionURL: actionURL,
-            csrfToken: csrf,
-            titles: titles,
-            pseudOptions: radios.options,
-            cautionTexts: cautions,
-            submitLabel: submit.isEmpty ? "Yes, I'm sure" : submit
-        )
-    }
-
-    static func isNotOwnedOrphanError(_ text: String) -> Bool {
-        text.localizedCaseInsensitiveContains("don't have permission to orphan")
-            || text.localizedCaseInsensitiveContains("do not have permission to orphan")
-    }
-
-    // MARK: - 5. Remove me as co-creator
-
-    /// Detects AO3's redirect to `/orphans/new?work_id=…` or `?series_id=…`
-    /// when `remove_user_creatorship` is invoked by the sole listed creator
-    /// (`works_controller.rb:339-340`, `series_controller.rb:74-75`).
-    static func isOrphanRedirect(finalURL: URL?, body: String) -> Bool {
-        if let path = finalURL?.path.lowercased(), path == "/orphans/new" || path.hasSuffix("/orphans/new") {
-            return true
-        }
-        guard let doc = try? SwiftSoup.parse(body),
-              let form = try? doc.select("form[action=/orphans], form[action$=/orphans]").first()
-        else { return false }
-        return (try? form.select("input[name=use_default]").first()) != nil
-    }
-
-    /// Reads the `Remove Me As Co-Creator` `button_to` form token on a work edit
-    /// or series show page.
-    static func removeMeButtonState(
-        in html: String,
-        actionPath: String,
-        isRecognizedOwnerPage: (Document) -> Bool
-    ) throws -> (present: Bool, token: String?) {
-        let doc = try SwiftSoup.parse(html)
-        let forms = try doc.select("form[action*=/remove_user_creatorship]").array()
-        if let match = forms.first(where: {
-            AO3URLResolver.resolve((try? $0.attr("action")) ?? "")?.path == actionPath
-        }) {
-            return (true, formToken(in: match, fallbackHTML: html))
-        }
-        if isRecognizedOwnerPage(doc) { return (false, nil) }
-        return (true, parseCSRFToken(from: html))
-    }
-
-    // MARK: - 6. Import from URL (`works/new_import.html.erb`, `works#import`)
-
-    /// Parses `GET /works/new?import=true` (otwarchive `452391b6`
-    /// `app/views/works/new_import.html.erb`), reusing `parseSelect`,
-    /// `parseCheckboxes`, and `parseRadios` from `AO3Client+Works`.
-    static func parseImportForm(from html: String) throws -> AO3ImportForm {
-        let doc = try SwiftSoup.parse(html)
-        guard let form = try doc.select("form.import.work, form[action*=/works/import]").first(),
-              let actionURL = AO3URLResolver.resolve(try form.attr("action"))
-        else { throw AO3Error.parse }
-        guard let csrf = formToken(in: form, fallbackHTML: html) else {
-            throw AO3WorkWriteError.noCSRFToken
-        }
-
-        let language = parseSelect(form, name: "language_id")
-        let encoding = parseSelect(form, name: "encoding")
-        let pseuds = parseSelect(form, name: "pseuds_to_apply")
-        let rating = parseSelect(form, name: AO3WorkFormField.rating)
-        let warnings = parseCheckboxes(form, name: AO3WorkFormField.warnings)
-        let categories = parseCheckboxes(form, name: AO3WorkFormField.categories)
-        let comments = parseRadios(form, name: "comment_permissions")
-        return AO3ImportForm(
-            actionURL: actionURL,
-            csrfToken: csrf,
-            languageOptions: language.options,
-            selectedLanguageID: language.selected,
-            encodingOptions: encoding.options,
-            pseudOptions: pseuds.options,
-            selectedPseud: pseuds.selected,
-            ratingOptions: rating.options,
-            warningOptions: warnings.options,
-            categoryOptions: categories.options,
-            commentPermissionOptions: comments.options,
-            defaultCommentPermissions: comments.selected.isEmpty ? "disable_anon" : comments.selected
-        )
-    }
-
-    /// Classifies the response to `POST /works/import` (otwarchive `452391b6`
-    /// `app/controllers/works_controller.rb:452-558`).
-    static func parseImportResult(
-        status: Int,
-        body: String,
-        finalURL: URL?
-    ) throws -> AO3ImportResult {
-        if let path = finalURL?.path, let workID = workIDFromPath(path) {
-            return path.hasSuffix("/preview") ? .draft(workID) : .posted(workID)
-        }
-        // Fallback when a stub returns preview markup without updating finalURL.
-        if let preview = try? parsePreviewHTML(from: body), let workID = preview.workID {
-            return .draft(workID)
-        }
-        if writingRequestNotice(in: body) != nil {
-            let ids = importedWorkIDs(in: body)
-            if !ids.isEmpty { return .several(ids) }
-        }
-        if let error = writingRequestError(in: body, includeCaution: true) {
-            return .failed(error)
-        }
-        if (200 ... 299).contains(status) { throw AO3WorkWriteError.unconfirmed }
-        throw AO3WorkWriteError.rejected("AO3 couldn't import from those URLs.")
     }
 
     // MARK: - Shared flash & token helpers
@@ -639,70 +500,6 @@ extension AO3Client {
         return (source.isEmpty ? nil : source, dest.isEmpty ? nil : dest)
     }
 
-    private static func verifyAndExtractOrphanTitles(
-        in doc: Document,
-        form: Element,
-        target: AO3OrphanTarget,
-        cautions: [String]
-    ) throws -> [String] {
-        switch target {
-        case let .work(id):
-            let hiddenIDs = try form.select("input[type=hidden][name='work_ids[]']").array()
-                .compactMap { Int((try? $0.attr("value")) ?? "") }
-            let titles = abbreviatedWorkTitles(in: doc)
-            guard hiddenIDs == [id], !titles.isEmpty else { throw AO3Error.parse }
-            return titles
-        case let .works(ids):
-            guard !ids.isEmpty else { throw AO3Error.parse }
-            let hiddenIDs = try form.select("input[type=hidden][name='work_ids[]']").array()
-                .compactMap { Int((try? $0.attr("value")) ?? "") }
-            let titles = abbreviatedWorkTitles(in: doc)
-            guard Set(hiddenIDs) == Set(ids), titles.count >= ids.count else { throw AO3Error.parse }
-            return titles
-        case let .series(id):
-            let hidden = (try? form.select("input[type=hidden][name=series_id]").first()?.attr("value")) ?? ""
-            guard Int(hidden) == id, let title = cautions.compactMap(quotedOrphanTitle).first else {
-                throw AO3Error.parse
-            }
-            return [title]
-        }
-    }
-
-    private static func abbreviatedWorkTitles(in doc: Document) -> [String] {
-        ((try? doc.select("dl.work.index > dt > a:first-of-type").array()) ?? [])
-            .compactMap { try? $0.text().trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-    }
-
-    private static func quotedOrphanTitle(in text: String) -> String? {
-        guard let first = text.firstIndex(of: "\""),
-              let last = text.lastIndex(of: "\""),
-              first < last
-        else { return nil }
-        let inner = text[text.index(after: first) ..< last].trimmingCharacters(in: .whitespacesAndNewlines)
-        return inner.isEmpty ? nil : String(inner)
-    }
-
-    private static func importedWorkIDs(in html: String) -> [Int] {
-        guard let doc = try? SwiftSoup.parse(html),
-              let root = (try? doc.select("#main").first()) ?? doc.body()
-        else { return [] }
-        var seen = Set<Int>()
-        var ids: [Int] = []
-        for link in (try? root.select("a[href*=/works/]").array()) ?? [] {
-            let skip = link.parents().array().contains {
-                $0.hasClass("flash") || $0.hasClass("navigation") || $0.tagName() == "form"
-            }
-            guard !skip,
-                  let href = try? link.attr("href"),
-                  let id = workIDFromPath(href),
-                  seen.insert(id).inserted
-            else { continue }
-            ids.append(id)
-        }
-        return ids
-    }
-
     private static func pathID(in href: String, after segment: String) -> Int? {
         let parts = href.split(separator: "/").map(String.init)
         guard let index = parts.firstIndex(of: segment), index + 1 < parts.count else { return nil }
@@ -710,7 +507,7 @@ extension AO3Client {
         return Int(raw)
     }
 
-    private static func isInsideUserContent(_ element: Element) -> Bool {
+    static func isInsideUserContent(_ element: Element) -> Bool {
         element.parents().array().contains {
             $0.id() == "workskin" || $0.id() == "previewpane" || $0.hasClass("userstuff")
         }

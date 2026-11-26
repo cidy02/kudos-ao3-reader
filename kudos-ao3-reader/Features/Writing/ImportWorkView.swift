@@ -19,11 +19,12 @@ nonisolated enum AO3ImportValidation {
         }
     }
 
+    /// Splits links on any whitespace, matching AO3's `params[:urls].split`
+    /// (`otwarchive 452391b6` `WorksController#import:454`).
     static func parsedURLs(from rawText: String) -> [String] {
         rawText
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
     }
 
     static func limit(for mode: AO3ImportMode) -> Int {
@@ -81,7 +82,6 @@ struct ImportWorkView: View {
     @State private var urlsText = ""
     @State private var importMode: AO3ImportMode = .works
     @State private var languageID = ""
-    @State private var pseudToApply = ""
     @State private var encoding = ""
     @State private var tagMode: TagSourceMode = .fromPages
     @State private var tags = AO3WorkTagSet()
@@ -92,7 +92,9 @@ struct ImportWorkView: View {
 
     @State private var isSubmitting = false
     @State private var submitError: String?
+    @State private var ambiguousOutcomeMessage: String?
     @State private var importedWorkIDs: [Int]?
+    @State private var importedFailures: String?
 
     @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
 
@@ -123,7 +125,7 @@ struct ImportWorkView: View {
         NavigationStack {
             List {
                 if let importedWorkIDs {
-                    severalResultsSection(importedWorkIDs)
+                    severalResultsSection(importedWorkIDs, failures: importedFailures)
                 } else if isLoading {
                     Section {
                         HStack(spacing: 10) {
@@ -170,7 +172,11 @@ struct ImportWorkView: View {
                             Task { await submit() }
                         }
                         .sheetConfirmStyle()
-                        .disabled(!validation.canImport || isSubmitting)
+                        .disabled(!AO3ImportSubmissionFlow.canSubmit(
+                            verdict: validation,
+                            isSubmitting: isSubmitting,
+                            ambiguousOutcomeMessage: ambiguousOutcomeMessage
+                        ))
                     }
                 }
             }
@@ -178,6 +184,7 @@ struct ImportWorkView: View {
                 await loadForm()
             }
         }
+        .interactiveDismissDisabled(isSubmitting)
         .presentationDragIndicator(.visible)
         #if os(macOS)
         .frame(minWidth: 500, minHeight: 580)
@@ -188,6 +195,25 @@ struct ImportWorkView: View {
 
     @ViewBuilder
     private func importFormSections(_ form: AO3ImportForm) -> some View {
+        if let ambiguousOutcomeMessage {
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(ambiguousOutcomeMessage)
+                        .font(.footnote)
+                        .foregroundStyle(theme.appTheme.errorColor)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Dismiss") {
+                        self.ambiguousOutcomeMessage = nil
+                    }
+                    .buttonStyle(.kudosSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .subjectPanel()
+                .pageBodyRow(top: 12, gutter: gutter)
+            }
+        }
+
         if let submitError {
             Section {
                 Text(submitError)
@@ -364,25 +390,13 @@ private extension ImportWorkView {
 
     @ViewBuilder
     func detailsRows(_ form: AO3ImportForm) -> some View {
-        let hasPseuds = !form.pseudOptions.isEmpty
-        let count = hasPseuds ? 3 : 2
         WritingChoiceRow(
             title: "Language",
             value: $languageID,
             options: form.languageOptions
         )
         .disabled(isSubmitting)
-        .panelSegment(0, of: count, gutter: gutter)
-
-        if hasPseuds {
-            WritingChoiceRow(
-                title: "Post as",
-                value: $pseudToApply,
-                options: form.pseudOptions
-            )
-            .disabled(isSubmitting)
-            .panelSegment(1, of: count, gutter: gutter)
-        }
+        .panelSegment(0, of: 2, gutter: gutter)
 
         WritingChoiceRow(
             title: "Text encoding",
@@ -390,7 +404,7 @@ private extension ImportWorkView {
             options: encodingOptions(from: form)
         )
         .disabled(isSubmitting)
-        .panelSegment(hasPseuds ? 2 : 1, of: count, gutter: gutter)
+        .panelSegment(1, of: 2, gutter: gutter)
 
         if validation.isLanguageMissing {
             footnote("Language is required before importing.")
@@ -478,9 +492,29 @@ private extension ImportWorkView {
     }
 
     @ViewBuilder
-    func severalResultsSection(_ ids: [Int]) -> some View {
+    func severalResultsSection(_ ids: [Int], failures: String?) -> some View {
+        if let failures, !failures.isEmpty {
+            Section {
+                Text(failures)
+                    .font(.footnote)
+                    .foregroundStyle(theme.appTheme.errorColor)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .subjectPanel()
+                    .pageBodyRow(top: 8, gutter: gutter)
+            } header: {
+                SectionRuleHeader(title: "Failed imports")
+                    .pageBodyRow(top: 14, gutter: 0)
+            }
+        }
+
         Section {
-            Text("AO3 imported \(ids.count) works. Tap a work to open it.")
+            Text(
+                ids.count == 1
+                    ? "AO3 imported 1 work. Tap it to open."
+                    : "AO3 imported \(ids.count) works. Tap a work to open it."
+            )
                 .font(.subheadline)
                 .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
@@ -556,7 +590,6 @@ private extension ImportWorkView {
             guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
             form = loaded
             languageID = loaded.selectedLanguageID
-            pseudToApply = loaded.selectedPseud
             commentPermissions = loaded.defaultCommentPermissions
         } catch is CancellationError {
             return
@@ -568,43 +601,52 @@ private extension ImportWorkView {
     }
 
     func submit() async {
-        guard !isSubmitting, let form, validation.canImport else { return }
+        guard let form, AO3ImportSubmissionFlow.canSubmit(
+            verdict: validation,
+            isSubmitting: isSubmitting,
+            ambiguousOutcomeMessage: ambiguousOutcomeMessage
+        ) else { return }
         isSubmitting = true
         submitError = nil
+        ambiguousOutcomeMessage = nil
+        importedFailures = nil
         let overrideTags = tagMode == .setHere
         let request = AO3ImportRequest(
             urls: validation.urls,
             importMultiple: importMode,
             languageID: languageID,
             encoding: encoding,
-            pseudToApply: pseudToApply,
             postWithoutPreview: !previewBeforePosting,
             restricted: restricted,
             commentPermissions: commentPermissions,
             moderatedCommenting: moderatedCommenting,
             overrideTags: overrideTags,
-            detectTags: !overrideTags,
             tags: tags,
             notes: ""
         )
-        do {
-            let result = try await auth.importWorks(request, form: form)
-            isSubmitting = false
-            switch result {
-            case let .draft(workID):
-                dismiss()
-                onOpenDraft(workID)
-            case let .posted(workID):
-                dismiss()
-                onOpenWork(workID)
-            case let .several(ids):
-                importedWorkIDs = ids
-            case let .failed(message):
-                submitError = message
+        let authService = auth
+        let outcome = await AO3ImportSubmissionFlow.run(
+            request: request,
+            form: form,
+            submit: { req, importForm in
+                try await authService.importWorks(req, form: importForm)
             }
-        } catch {
-            isSubmitting = false
-            submitError = UserFacingError.message(for: error)
+        )
+        isSubmitting = false
+        switch outcome {
+        case let .draft(workID):
+            dismiss()
+            onOpenDraft(workID)
+        case let .posted(workID):
+            dismiss()
+            onOpenWork(workID)
+        case let .several(ids, failures):
+            importedWorkIDs = ids
+            importedFailures = failures
+        case let .mayHaveGoneThrough(message):
+            ambiguousOutcomeMessage = message
+        case let .failed(message):
+            submitError = message
         }
     }
 }

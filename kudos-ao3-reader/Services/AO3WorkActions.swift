@@ -46,10 +46,13 @@ extension AO3AuthService {
         return form
     }
 
-    func loadSeriesManagePage(seriesID: Int) async throws -> [AO3SeriesWorkRow] {
+    func loadSeriesManagePage(
+        seriesID: Int,
+        using client: AO3Client = .shared
+    ) async throws -> [AO3SeriesWorkRow] {
         try requireWorkSession()
         return try AO3Client.parseSeriesManagePage(
-            from: try await workFormHTML(at: AO3Client.seriesManageURL(seriesID: seriesID))
+            from: try await workFormHTML(at: AO3Client.seriesManageURL(seriesID: seriesID), using: client)
         )
     }
 
@@ -256,7 +259,7 @@ extension AO3AuthService {
     /// what AO3 has, whatever it answered, and the screens showing the series read it again. The
     /// series page went on showing the old title, order and works after a save, and the cache
     /// answered with them for five minutes (T-378; Android `WritingSeriesState.seriesChanged`).
-    private func seriesWasWritten(_ seriesID: Int?, title: String?) async {
+    func seriesWasWritten(_ seriesID: Int?, title: String?) async {
         guard let seriesID else { return }
         await AO3AuthorPageCache.shared.removeSeries(id: seriesID, creator: username)
         lastSeriesWrite = AO3SeriesWrite(

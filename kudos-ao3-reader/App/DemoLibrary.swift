@@ -1305,7 +1305,7 @@ final class DemoNetworkBlock: URLProtocol {
         // One work whose form is a draft's: every work opened the posted work's form, so the
         // draft's own sections (Post, Preview, Delete draft) could not be looked at.
         ("^/works/1002/edit", "ao3_demo_work_draft_edit"),
-        ("^/works/\\d+/edit", "ao3_work_edit"),
+        ("^/works/\\d+/edit", "ao3_demo_work_edit"),
         ("comments", "ao3_comments_page"),
         ("^/works/\\d+", "ao3_work_bookmarked_subscribed"),
         ("edit_multiple", "ao3_edit_multiple"),
@@ -1337,6 +1337,7 @@ final class DemoNetworkBlock: URLProtocol {
         ("^/users/[^/]+/creatorships", "ao3_demo_creatorships"),
         ("^/users/[^/]+/gifts", "ao3_demo_gifts_accepted"),
         ("^/users/[^/]+/related_works", "ao3_demo_related_works"),
+        ("^/related_works/303/?$", "ao3_demo_related_work_remove"),
         ("^/related_works/\\d+", "ao3_demo_related_work_approve"),
         ("^/orphans/new", "ao3_demo_orphan_work"),
         ("^/tag_sets/\\d+", "ao3_tag_set"),
@@ -1384,13 +1385,94 @@ final class DemoNetworkBlock: URLProtocol {
         return routes.first { path.range(of: $0.pattern, options: .regularExpression) != nil }?.fixture
     }
 
+    /// Adapts demo fixture HTML when a parser requires hidden IDs in the page to
+    /// match the requested URL (orphan forms for one work, several works, or a series).
+    static func responseHTML(for url: URL, from fixtureHTML: String) -> String {
+        guard url.path == "/orphans/new",
+              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
+              !items.isEmpty
+        else { return fixtureHTML }
+        if let seriesID = items.first(where: { $0.name == "series_id" })?.value.flatMap({ Int($0) }) {
+            return adaptDemoOrphanSeriesHTML(fixtureHTML, seriesID: seriesID)
+        }
+        let multiIDs = items
+            .filter { $0.name == "work_ids[]" }
+            .compactMap { $0.value.flatMap { Int($0) } }
+        if !multiIDs.isEmpty {
+            return adaptDemoOrphanWorksHTML(fixtureHTML, workIDs: multiIDs)
+        }
+        if let workID = items.first(where: { $0.name == "work_id" })?.value.flatMap({ Int($0) }) {
+            return adaptDemoOrphanWorksHTML(fixtureHTML, workIDs: [workID])
+        }
+        return fixtureHTML
+    }
+
+    private static func adaptDemoOrphanSeriesHTML(_ html: String, seriesID: Int) -> String {
+        var adapted = html.replacingOccurrences(
+            of: #"name="series_id" id="series_id" value="\d+""#,
+            with: "name=\"series_id\" id=\"series_id\" value=\"\(seriesID)\"",
+            options: .regularExpression
+        )
+        adapted = adapted.replacingOccurrences(
+            of: #"href="/series/\d+""#,
+            with: "href=\"/series/\(seriesID)\"",
+            options: .regularExpression
+        )
+        return adapted
+    }
+
+    private static func adaptDemoOrphanWorksHTML(_ html: String, workIDs: [Int]) -> String {
+        guard let firstID = workIDs.first else { return html }
+        let demoTitles: [Int: String] = [
+            11: "The Weight of Water",
+            22: "Salt and Static",
+            33: "Long Way from Home",
+            1001: "The Weight of Water",
+            424242: "The Weight of Water"
+        ]
+        let listRows = workIDs.map { id in
+            let title = demoTitles[id] ?? "Demo Work #\(id)"
+            return """
+                <dt>
+                  <a href="/works/\(id)">\(title)</a>
+                  (<a class="tag" href="/tags/Original%20Work/works">Original Work</a>)
+                </dt>
+                <dd><ul class="tags commas"></ul></dd>
+            """
+        }.joined(separator: "\n")
+        let hiddenInputs = workIDs.enumerated().map { index, id in
+            "<input type=\"hidden\" name=\"work_ids[]\" id=\"work_ids_\(index)\" "
+                + "value=\"\(id)\" autocomplete=\"off\">"
+        }.joined(separator: "\n")
+        var adapted = html.replacingOccurrences(
+            of: #"<dl class="work index group">[\s\S]*?</dl>"#,
+            with: "<dl class=\"work index group\">\n\(listRows)\n  </dl>",
+            options: .regularExpression
+        )
+        adapted = adapted.replacingOccurrences(
+            of: #"<input type="hidden" name="work_ids\[\]"[^>]*>"#,
+            with: hiddenInputs,
+            options: .regularExpression
+        )
+        adapted = adapted.replacingOccurrences(
+            of: #"href="/works/\d+/edit""#,
+            with: "href=\"/works/\(firstID)/edit\"",
+            options: .regularExpression
+        )
+        return adapted
+    }
+
     override func startLoading() {
         guard let url = request.url, let directory = Self.fixtureDirectory else {
             client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
             return
         }
         let name = Self.isPreview(request) ? "ao3_demo_work_preview" : Self.fixture(for: url)
-        let data = name.flatMap { try? Data(contentsOf: directory.appendingPathComponent("\($0).html")) }
+        let data: Data? = name.flatMap { fixtureName in
+            let fileURL = directory.appendingPathComponent("\(fixtureName).html")
+            guard let html = try? String(contentsOf: fileURL, encoding: .utf8) else { return nil }
+            return Data(Self.responseHTML(for: url, from: html).utf8)
+        }
         let response = HTTPURLResponse(
             url: url, statusCode: data == nil ? 404 : 200, httpVersion: "HTTP/1.1",
             headerFields: ["Content-Type": "text/html; charset=utf-8"]

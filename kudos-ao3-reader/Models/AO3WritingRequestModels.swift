@@ -149,10 +149,87 @@ nonisolated struct AO3OrphanForm: Equatable, Sendable {
     /// Work titles listed in `dl.work.index`, or the series title from the
     /// caution notice on `_orphan_series`.
     var titles: [String]
+    /// Paired `(workID, title)` entries scraped from `dl.work.index > dt > a`
+    /// hrefs on `_orphan_work` forms so work IDs stay paired with their own
+    /// titles regardless of AO3's DB order (`Work.where(id:)`).
+    var workItems: [AO3OrphanCopyWork] = []
     /// `use_default` radio options (`"true"` = take pseud off, `"false"` = keep pseud copy).
     var pseudOptions: [AO3FormOption]
     var cautionTexts: [String]
     var submitLabel: String
+}
+
+/// One work resolved for Orphan's "Keep a copy" step before sending `POST /orphans`.
+nonisolated struct AO3OrphanCopyWork: Equatable, Sendable {
+    let workID: Int
+    let title: String
+}
+
+/// Failures enumerating every work in a series before orphaning with "Keep a copy" on.
+nonisolated enum AO3OrphanCopyError: LocalizedError, Equatable, Sendable {
+    /// AO3's `DownloadsController#check_download_posted_status` refuses drafts
+    /// (`otwarchive 452391b6`), so a series containing a draft cannot be copied as EPUBs.
+    case draftWorkCannotBeDownloaded(title: String)
+    /// `/series/:id/manage` listed a work whose downloadable work ID was absent from
+    /// signed-in `/series/:id`, so we fail closed instead of silently skipping it.
+    case unenumerableWork(title: String)
+
+    var workTitle: String {
+        switch self {
+        case let .draftWorkCannotBeDownloaded(title), let .unenumerableWork(title):
+            title
+        }
+    }
+
+    var errorDescription: String? {
+        switch self {
+        case .draftWorkCannotBeDownloaded:
+            "AO3 doesn't allow downloading EPUB copies of drafts. "
+                + "Post it or save its text first, or turn off Keep a copy."
+        case .unenumerableWork:
+            "Couldn't find this work's download link on AO3. "
+                + "Save a copy yourself first, or turn off Keep a copy."
+        }
+    }
+}
+
+/// Classifies whether an error thrown after a single-shot write POST was dispatched
+/// means AO3 may still have processed the write (timeout, dropped connection,
+/// gateway 5xx, unconfirmed 2xx/307/308) rather than definitely failing beforehand.
+enum AO3WriteOutcomeClassifier {
+    static func mayHaveGoneThrough(_ error: Error) -> Bool {
+        switch error {
+        case AO3WriteError.unconfirmed, AO3WorkWriteError.unconfirmed:
+            return true
+        case AO3Error.network, AO3Error.server:
+            return true
+        case let urlError as URLError:
+            return isAmbiguousPostSendURLError(urlError.code)
+        default:
+            let nsError = error as NSError
+            if nsError.domain == NSURLErrorDomain {
+                return isAmbiguousPostSendURLError(URLError.Code(rawValue: nsError.code))
+            }
+            return false
+        }
+    }
+
+    private static func isAmbiguousPostSendURLError(_ code: URLError.Code) -> Bool {
+        // Failures that happen before HTTP bytes leave the device (offline, DNS,
+        // refused TCP/TLS handshake, bad URL, or explicit cancel) did not reach AO3.
+        switch code {
+        case .badURL, .unsupportedURL,
+             .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff,
+             .cannotFindHost, .dnsLookupFailed, .cannotConnectToHost,
+             .secureConnectionFailed, .serverCertificateUntrusted,
+             .serverCertificateHasBadDate, .serverCertificateNotYetValid,
+             .serverCertificateHasUnknownRoot, .clientCertificateRejected,
+             .clientCertificateRequired, .cancelled:
+            return false
+        default:
+            return true
+        }
+    }
 }
 
 // MARK: - Import from URL (otwarchive 452391b6 `works/new_import`, `works#import`)
@@ -170,8 +247,6 @@ nonisolated struct AO3ImportForm: Equatable, Sendable {
     var languageOptions: [AO3FormOption]
     var selectedLanguageID: String
     var encodingOptions: [AO3FormOption]
-    var pseudOptions: [AO3FormOption]
-    var selectedPseud: String
     var ratingOptions: [AO3FormOption]
     var warningOptions: [AO3FormOption]
     var categoryOptions: [AO3FormOption]
@@ -180,28 +255,31 @@ nonisolated struct AO3ImportForm: Equatable, Sendable {
 }
 
 /// Input to `POST /works/import`. Never emits archivist-only parameters
-/// (`importing_for_others`, `external_author_*`, `external_coauthor_*`).
+/// (`importing_for_others`, `external_author_*`, `external_coauthor_*`) or
+/// `pseuds_to_apply` (absent from `new_import.html.erb`, and `build_options`
+/// looks pseud names up globally across all users).
 nonisolated struct AO3ImportRequest: Equatable, Sendable {
     var urls: [String]
     var importMultiple: AO3ImportMode = .works
     var languageID: String
     var encoding: String = ""
-    var pseudToApply: String = ""
     var postWithoutPreview: Bool = false
     var restricted: Bool = false
     var commentPermissions: String = "disable_anon"
     var moderatedCommenting: Bool = false
     var overrideTags: Bool = false
-    /// Controls `detect_tags`. When nil, sends `"true"` unless `overrideTags` is
-    /// true (when it sends `"false"`).
-    var detectTags: Bool?
     var tags: AO3WorkTagSet = AO3WorkTagSet()
     var notes: String = ""
 
     /// Form body for `POST /works/import` matching `WorksController#build_options`
-    /// (otwarchive master `452391b6` `app/controllers/works_controller.rb:881-909`).
-    /// Always sends every `work[…]` key (blank when not overriding) because
-    /// `build_options` indexes `params[:work][:fandom_string]` unconditionally.
+    /// (otwarchive master `452391b6` `app/controllers/works_controller.rb:881-909`),
+    /// `app/views/works/new_import.html.erb:109` (`detect_tags` always `"true"`),
+    /// and `app/views/works/_work_form_tags.html.erb:39,74`.
+    /// Always sends the single-valued `work[…]` keys (blank when not overriding)
+    /// so `params[:work]` exists, and omits `work[archive_warning_strings][]` and
+    /// `work[category_strings][]` when unchecked (`include_hidden: !include_blank`
+    /// with `include_blank: true` on `new_import`, so a browser sends neither key
+    /// and `[""]` would survive `compact_blank!`).
     func parameters(csrfToken: String) -> [(String, String)] {
         let joinedURLs = urls
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -214,10 +292,6 @@ nonisolated struct AO3ImportRequest: Equatable, Sendable {
             ("language_id", languageID),
             ("encoding", encoding)
         ]
-        let trimmedPseud = pseudToApply.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedPseud.isEmpty {
-            pairs.append(("pseuds_to_apply", trimmedPseud))
-        }
         // `works/new_import.html.erb` uses `check_box_tag` (no hidden "0"):
         // in Ruby `"0"` is truthy and passes `.compact_blank!`, so unchecked
         // boxes must be omitted rather than sent as `"0"`.
@@ -233,27 +307,27 @@ nonisolated struct AO3ImportRequest: Equatable, Sendable {
         if moderatedCommenting {
             pairs.append(("moderated_commenting_enabled", "1"))
         }
-        let shouldDetect = detectTags ?? !overrideTags
-        pairs.append(("detect_tags", shouldDetect ? "true" : "false"))
+        // AO3's form defaults `detect_tags` to true (`new_import.html.erb:109`,
+        // `radio_button_tag "detect_tags", true, true`) in both modes so blank
+        // override fields fall back to values extracted from the source pages.
+        pairs.append(("detect_tags", "true"))
         if overrideTags {
             pairs.append(("override_tags", "1"))
         }
 
-        // Unconditionally required by `WorksController#build_options` lines 894-900.
+        // Single-value `work[…]` keys ensure `params[:work]` exists for
+        // `WorksController#build_options` lines 894-900; checkbox array keys
+        // (`warnings`, `categories`) are omitted when empty to match browsers.
         pairs.append((AO3WorkFormField.rating, overrideTags ? tags.rating : ""))
         if overrideTags, !tags.warnings.isEmpty {
             for warning in tags.warnings {
                 pairs.append((AO3WorkFormField.warnings, warning))
             }
-        } else {
-            pairs.append((AO3WorkFormField.warnings, ""))
         }
         if overrideTags, !tags.categories.isEmpty {
             for category in tags.categories {
                 pairs.append((AO3WorkFormField.categories, category))
             }
-        } else {
-            pairs.append((AO3WorkFormField.categories, ""))
         }
         pairs.append((AO3WorkFormField.fandoms, overrideTags ? AO3TagListDiff.joined(tags.fandoms) : ""))
         pairs.append((
@@ -277,8 +351,9 @@ nonisolated enum AO3ImportResult: Equatable, Sendable {
     case draft(Int)
     /// Single work imported and posted (`/works/:id`).
     case posted(Int)
-    /// Several works imported (`works/import` template listing their links).
-    case several([Int])
+    /// Several works imported (`works/import` template listing their links),
+    /// with any failed-URLs error flash AO3 returned alongside the successes.
+    case several([Int], failures: String?)
     /// AO3 re-rendered the form with an error flash.
     case failed(String)
 }

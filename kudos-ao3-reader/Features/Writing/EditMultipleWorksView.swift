@@ -430,26 +430,46 @@ struct EditMultipleWorksView: View {
     }
 }
 
+extension EditMultipleWorksView {
+    /// Caps bulk Orphan so `GET /orphans/new?work_ids[]=…` stays within safe URL length limits.
+    static let maxOrphanWorks = 100
+
+    static func canOrphan(workCount: Int) -> Bool {
+        workCount > 0 && workCount <= maxOrphanWorks
+    }
+
+    static func orphanFootnote(for workCount: Int) -> String {
+        if workCount > maxOrphanWorks {
+            return "Orphan up to \(maxOrphanWorks) works at a time."
+        }
+        return "Moves the selected works to AO3's orphan_account permanently. "
+            + "Orphan up to \(maxOrphanWorks) works at a time."
+    }
+}
+
 private extension EditMultipleWorksView {
     @ViewBuilder
     var orphanSectionRows: some View {
+        let canOrphanSelection = Self.canOrphan(workCount: form.workIDs.count)
+        let isOverOrphanCap = form.workIDs.count > Self.maxOrphanWorks
         SubjectFormRow(
             label: form.workIDs.count == 1
                 ? "Orphan 1 Work…"
                 : "Orphan \(form.workIDs.count) Works…",
             value: "",
             showsDisclosure: true,
-            isDisabled: form.workIDs.isEmpty || isSaving,
+            isDisabled: !canOrphanSelection || isSaving,
             isDestructive: true
         ) {
+            guard canOrphanSelection else { return }
             showingOrphan = true
         }
         .subjectPanel()
         .pageBodyRow(top: 8, gutter: gutter)
 
-        Text("Moves the selected works to AO3's orphan_account permanently.")
+        Text(Self.orphanFootnote(for: form.workIDs.count))
             .font(.system(size: footnoteSize))
-            .foregroundStyle(.secondary.opacity(0.7))
+            .foregroundStyle(isOverOrphanCap ? theme.appTheme.errorColor : Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)

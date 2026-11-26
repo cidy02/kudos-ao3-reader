@@ -239,6 +239,75 @@ struct AO3WritingRequestsTests {
         }
     }
 
+    /// Ground truth (`otwarchive 452391b6` `CreatorshipsController#show`/`#update`):
+    /// requesting a `page` past the last page renders HTTP 200 with `<p>No co-creator
+    /// requests found.</p>` and no `<form>` (carrying only `<meta name="csrf-token">`
+    /// and optional pagination for pages `1..total_pages`). `update` loads all of the
+    /// user's unapproved creatorships regardless of page, so `answerCoCreatorRequests`
+    /// falls back to the meta CSRF token and `pageURL`, succeeds if AO3 flashes a
+    /// notice, and rejects if AO3 flashes caution (already answered/gone).
+    @Test func answerCoCreatorRequestsHandlesPagePastLastPage() async throws {
+        let auth = await makeSignedInAuth()
+        let pastLastPageHTML = """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta name="csrf-token" content="past-last-page-csrf==">
+          <title>Co-Creator Requests | Archive of Our Own</title>
+        </head>
+        <body class="logged-in">
+        <div id="main" class="creatorships-show region">
+          <h2 class="heading">Co-Creator Requests</h2>
+          <ol class="pagination actions" role="navigation">
+            <li class="previous"><a rel="prev" href="/users/alice/creatorships?page=4">Previous</a></li>
+            <li><a href="/users/alice/creatorships?page=1">1</a></li>
+            <li><a href="/users/alice/creatorships?page=2">2</a></li>
+          </ol>
+          <p>No co-creator requests found.</p>
+        </div>
+        </body>
+        </html>
+        """
+
+        let parsed = try AO3Client.parseCoCreatorRequests(from: pastLastPageHTML, page: 5)
+        #expect(parsed.requests.isEmpty)
+        #expect(parsed.actionURL == nil)
+        #expect(parsed.csrfToken == "past-last-page-csrf==")
+        #expect(parsed.currentPage == 5)
+
+        // When AO3 still finds the selected id (e.g. shifted to an earlier page),
+        // the PUT falls back to the meta CSRF token and `?page=5` URL.
+        WritingRequestsStub.reset { request in
+            if request.httpMethod == "GET" { return StubReply(body: pastLastPageHTML) }
+            return StubReply(body: writingRequestFlash("notice", "Requests rejected."))
+        }
+        let notice = try await auth.answerCoCreatorRequests(
+            ids: [501], accept: false, page: 5, using: stubClient()
+        )
+        #expect(notice == "Requests rejected.")
+        let hits = WritingRequestsStub.recorded()
+        #expect(hits.map(\.method) == ["GET", "POST"])
+        #expect(hits[0].url.absoluteString == "https://archiveofourown.org/users/alice/creatorships?page=5")
+        #expect(hits[1].url.absoluteString == "https://archiveofourown.org/users/alice/creatorships?page=5")
+        #expect(formFields(hits[1].body) == [
+            "_method": ["put"],
+            "authenticity_token": ["past-last-page-csrf=="],
+            "selected[]": ["501"],
+            "reject": ["Reject"]
+        ])
+
+        // When the id is no longer pending on AO3, the caution flash is surfaced.
+        WritingRequestsStub.reset { request in
+            if request.httpMethod == "GET" { return StubReply(body: pastLastPageHTML) }
+            return StubReply(
+                body: writingRequestFlash("caution", "Please select at least one co-creator request first.")
+            )
+        }
+        await #expect(throws: AO3WorkWriteError.rejected("Please select at least one co-creator request first.")) {
+            _ = try await auth.answerCoCreatorRequests(ids: [501], accept: true, page: 5, using: stubClient())
+        }
+    }
+
     // MARK: - 2. Gifts to you
 
     @Test func parsesAcceptedAndRefusedGiftsFixtures() throws {

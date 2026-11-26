@@ -16,7 +16,7 @@ struct AO3WritingRequestsScreensTests {
             target: .works([101, 102]),
             keepPseudCopy: false,
             keepLocalCopy: true,
-            confirmedFinalAlert: true,
+            finalAlertDecision: .confirmed,
             form: form,
             resolveWorks: {
                 [
@@ -46,17 +46,17 @@ struct AO3WritingRequestsScreensTests {
         }
     }
 
-    @Test func orphanFlowSendsNothingWhenFinalAlertIsCancelled() async {
+    @Test func orphanFlowHandlesBothFinalAlertDecisions() async {
         let form = makeOrphanForm(target: .work(424242), titles: ["The Weight of Water"])
         var resolveCalls = 0
         var copyCalls = 0
         var orphanCalls = 0
 
-        let outcome = await OrphanSubmissionFlow.run(
+        let cancelled = await OrphanSubmissionFlow.run(
             target: .work(424242),
             keepPseudCopy: false,
             keepLocalCopy: true,
-            confirmedFinalAlert: false,
+            finalAlertDecision: .cancelled,
             form: form,
             resolveWorks: {
                 resolveCalls += 1
@@ -69,10 +69,32 @@ struct AO3WritingRequestsScreensTests {
             }
         )
 
-        #expect(outcome == .cancelled)
+        #expect(cancelled == .cancelled)
         #expect(resolveCalls == 0)
         #expect(copyCalls == 0)
         #expect(orphanCalls == 0)
+
+        let confirmed = await OrphanSubmissionFlow.run(
+            target: .work(424242),
+            keepPseudCopy: false,
+            keepLocalCopy: true,
+            finalAlertDecision: .confirmed,
+            form: form,
+            resolveWorks: {
+                resolveCalls += 1
+                return [OrphanSubmissionFlow.WorkCopyItem(workID: 424242, title: "The Weight of Water")]
+            },
+            copyWork: { _ in copyCalls += 1 },
+            submitOrphan: { _, _, _ in
+                orphanCalls += 1
+                return "Orphaning was successful."
+            }
+        )
+
+        #expect(confirmed == .orphaned("Orphaning was successful."))
+        #expect(resolveCalls == 1)
+        #expect(copyCalls == 1)
+        #expect(orphanCalls == 1)
     }
 
     @Test func orphanFlowSubmitsOnceAfterCopiesSucceed() async {
@@ -85,7 +107,7 @@ struct AO3WritingRequestsScreensTests {
             target: .work(424242),
             keepPseudCopy: true,
             keepLocalCopy: true,
-            confirmedFinalAlert: true,
+            finalAlertDecision: .confirmed,
             form: form,
             resolveWorks: {
                 [OrphanSubmissionFlow.WorkCopyItem(workID: 424242, title: "The Weight of Water")]
@@ -316,58 +338,6 @@ struct AO3WritingRequestsScreensTests {
         )
     }
 
-    // MARK: - Demo route mapping
-
-    #if DEBUG
-    @Test func demoNetworkBlockMapsNewWritingRequestRoutes() {
-        #expect(
-            DemoNetworkBlock.fixture(
-                for: URL(string: "https://archiveofourown.org/users/AO3_Reader/creatorships")!
-            ) == "ao3_demo_creatorships"
-        )
-        #expect(
-            DemoNetworkBlock.fixture(
-                for: URL(string: "https://archiveofourown.org/users/AO3_Reader/gifts")!
-            ) == "ao3_demo_gifts_accepted"
-        )
-        #expect(
-            DemoNetworkBlock.fixture(
-                for: URL(string: "https://archiveofourown.org/users/AO3_Reader/gifts?refused=true")!
-            ) == "ao3_demo_gifts_refused"
-        )
-        #expect(
-            DemoNetworkBlock.fixture(
-                for: URL(string: "https://archiveofourown.org/users/AO3_Reader/related_works")!
-            ) == "ao3_demo_related_works"
-        )
-        #expect(
-            DemoNetworkBlock.fixture(
-                for: URL(string: "https://archiveofourown.org/related_works/301")!
-            ) == "ao3_demo_related_work_approve"
-        )
-        #expect(
-            DemoNetworkBlock.fixture(
-                for: URL(string: "https://archiveofourown.org/orphans/new?work_id=424242")!
-            ) == "ao3_demo_orphan_work"
-        )
-        #expect(
-            DemoNetworkBlock.fixture(
-                for: URL(string: "https://archiveofourown.org/orphans/new?series_id=42")!
-            ) == "ao3_demo_orphan_series"
-        )
-        #expect(
-            DemoNetworkBlock.fixture(
-                for: URL(string: "https://archiveofourown.org/works/new?import=true")!
-            ) == "ao3_demo_work_import_form"
-        )
-        #expect(
-            DemoNetworkBlock.fixture(
-                for: URL(string: "https://archiveofourown.org/works/new")!
-            ) == "ao3_work_new_draft"
-        )
-    }
-    #endif
-
     // MARK: - Helpers
 
     private func makeOrphanForm(target: AO3OrphanTarget, titles: [String]) -> AO3OrphanForm {
@@ -418,3 +388,154 @@ struct AO3WritingRequestsScreensTests {
         )
     }
 }
+
+#if DEBUG
+@MainActor
+struct AO3WritingRequestsDemoTests {
+    private final class DemoFixtureAnchor {}
+
+    private func demoHTML(for url: URL) throws -> String {
+        let name = try #require(DemoNetworkBlock.fixture(for: url))
+        let fileURL = try #require(
+            Bundle(for: DemoFixtureAnchor.self).url(forResource: name, withExtension: "html")
+        )
+        let raw = try String(contentsOf: fileURL, encoding: .utf8)
+        return DemoNetworkBlock.responseHTML(for: url, from: raw)
+    }
+
+    @Test func demoNetworkBlockMapsNewWritingRequestRoutes() {
+        #expect(
+            DemoNetworkBlock.fixture(
+                for: URL(string: "https://archiveofourown.org/works/1001/edit")!
+            ) == "ao3_demo_work_edit"
+        )
+        #expect(
+            DemoNetworkBlock.fixture(
+                for: URL(string: "https://archiveofourown.org/users/AO3_Reader/creatorships")!
+            ) == "ao3_demo_creatorships"
+        )
+        #expect(
+            DemoNetworkBlock.fixture(
+                for: URL(string: "https://archiveofourown.org/users/AO3_Reader/gifts")!
+            ) == "ao3_demo_gifts_accepted"
+        )
+        #expect(
+            DemoNetworkBlock.fixture(
+                for: URL(string: "https://archiveofourown.org/users/AO3_Reader/gifts?refused=true")!
+            ) == "ao3_demo_gifts_refused"
+        )
+        #expect(
+            DemoNetworkBlock.fixture(
+                for: URL(string: "https://archiveofourown.org/users/AO3_Reader/related_works")!
+            ) == "ao3_demo_related_works"
+        )
+        #expect(
+            DemoNetworkBlock.fixture(
+                for: URL(string: "https://archiveofourown.org/related_works/301")!
+            ) == "ao3_demo_related_work_approve"
+        )
+        #expect(
+            DemoNetworkBlock.fixture(
+                for: URL(string: "https://archiveofourown.org/related_works/303")!
+            ) == "ao3_demo_related_work_remove"
+        )
+        #expect(
+            DemoNetworkBlock.fixture(
+                for: URL(string: "https://archiveofourown.org/orphans/new?work_id=1001")!
+            ) == "ao3_demo_orphan_work"
+        )
+        #expect(
+            DemoNetworkBlock.fixture(
+                for: URL(string: "https://archiveofourown.org/orphans/new?series_id=321")!
+            ) == "ao3_demo_orphan_series"
+        )
+        #expect(
+            DemoNetworkBlock.fixture(
+                for: URL(string: "https://archiveofourown.org/works/new?import=true")!
+            ) == "ao3_demo_work_import_form"
+        )
+        #expect(
+            DemoNetworkBlock.fixture(
+                for: URL(string: "https://archiveofourown.org/works/new")!
+            ) == "ao3_work_new_draft"
+        )
+    }
+
+    @Test func demoFixturesParseWithExactDebugShotAndDemoLibraryIDs() throws {
+        // 1. Posted demo work edit (`shot:orphansheet` opens `acct:workedit:1001`):
+        // must expose both Remove Me and Orphan actions, and its orphan form must parse.
+        let editShot = try #require(DebugShots.byName["orphansheet"])
+        let shotWorkID = try #require(Int(editShot.route.replacingOccurrences(of: "acct:workedit:", with: "")))
+        let editForm = try AO3Client.parseWorkForm(from: try demoHTML(for: AO3Client.workEditURL(workID: shotWorkID)))
+        #expect(editForm.isPosted)
+        #expect(editForm.canRemoveMe)
+        #expect(editForm.canOrphan)
+
+        let shotOrphanURL = try #require(AO3Client.orphanNewURL(for: .work(shotWorkID)))
+        let shotOrphan = try AO3Client.parseOrphanForm(
+            from: try demoHTML(for: shotOrphanURL), target: .work(shotWorkID)
+        )
+        #expect(shotOrphan.titles == ["The Weight of Water"])
+
+        if let formWorkID = editForm.workID {
+            let formOrphanURL = try #require(AO3Client.orphanNewURL(for: .work(formWorkID)))
+            let formOrphan = try AO3Client.parseOrphanForm(
+                from: try demoHTML(for: formOrphanURL), target: .work(formWorkID)
+            )
+            #expect(formOrphan.titles == ["The Weight of Water"])
+        }
+
+        // 2. Several-works orphan path (exact IDs from `ao3_edit_multiple.html`).
+        let bulkForm = try AO3Client.parseBulkEditForm(
+            from: try demoHTML(for: try #require(AO3Client.editMultipleWorksURL(username: "AO3_Reader")))
+        )
+        let multiURL = try #require(AO3Client.orphanNewURL(for: .works(bulkForm.workIDs)))
+        let multiOrphan = try AO3Client.parseOrphanForm(
+            from: try demoHTML(for: multiURL), target: .works(bulkForm.workIDs)
+        )
+        #expect(multiOrphan.titles.count == bulkForm.workIDs.count)
+
+        // 3. Series orphan path (series 321 "The Dawn Cycle" in `ao3_demo_author_series.html`).
+        let seriesURL = try #require(AO3Client.orphanNewURL(for: .series(321)))
+        let seriesOrphan = try AO3Client.parseOrphanForm(
+            from: try demoHTML(for: seriesURL), target: .series(321)
+        )
+        #expect(seriesOrphan.titles == ["The Dawn Cycle"])
+
+        // 4. Requests screen demo pages (`shot:writingrequests`): co-creators, gifts, related works.
+        let coCreators = try AO3Client.parseCoCreatorRequests(
+            from: try demoHTML(for: try #require(AO3Client.coCreatorRequestsURL(username: "AO3_Reader"))), page: 1
+        )
+        #expect(coCreators.requests.count == 2)
+
+        let acceptedGifts = try AO3Client.parseGiftsPage(
+            from: try demoHTML(for: try #require(AO3Client.giftsURL(username: "AO3_Reader", refused: false))),
+            refused: false, page: 1
+        )
+        #expect(acceptedGifts.gifts.count == 2)
+
+        let refusedGifts = try AO3Client.parseGiftsPage(
+            from: try demoHTML(for: try #require(AO3Client.giftsURL(username: "AO3_Reader", refused: true))),
+            refused: true, page: 1
+        )
+        #expect(refusedGifts.gifts.count == 1)
+
+        let related = try AO3Client.parseRelatedWorks(
+            from: try demoHTML(for: try #require(AO3Client.relatedWorksURL(username: "AO3_Reader")))
+        )
+        for row in related.translationsOfMe + related.inspiredByMe {
+            guard case let .toggleReciprocal(isApproved) = row.action else { continue }
+            let show = try AO3Client.parseRelatedWorkShow(
+                from: try demoHTML(for: AO3Client.relatedWorkURL(id: row.id))
+            )
+            let expected: AO3RelatedWorkShowMode = isApproved ? .remove : .approve
+            #expect(show.mode == expected, "Demo /related_works/\(row.id) mode must match index row state")
+            #expect(show.id == row.id)
+        }
+
+        // 5. Import form (`shot:importwork`).
+        let importForm = try AO3Client.parseImportForm(from: try demoHTML(for: AO3Client.importWorkFormURL()))
+        #expect(!importForm.languageOptions.isEmpty)
+    }
+}
+#endif

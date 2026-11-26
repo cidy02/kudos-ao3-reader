@@ -280,6 +280,100 @@ extension AO3AuthService {
         return try AO3Client.parseOrphanForm(from: html, target: target)
     }
 
+    /// Enumerates every work in `seriesID` for Orphan's "Keep a copy" step.
+    ///
+    /// Ground truth (`otwarchive 452391b6`):
+    /// - `GET /series/:id/manage` (`SeriesController#manage`, owner-only, unpaginated)
+    ///   lists every work in the series (including restricted works and drafts), but
+    ///   `series/_series_order.html.erb` renders only `li#serial_<id>` + bare title
+    ///   with no `work_id`.
+    /// - Signed-in `GET /series/:id` (`SeriesController#show`, paginated) lists every
+    ///   posted work visible to the owner (including registered-users-only works that
+    ///   anonymous `GET /series/:id` omits) with its `work_id`, but omits drafts
+    ///   (`.posted`).
+    ///
+    /// Reads `/series/:id/manage` as the authoritative manifest and signed-in
+    /// `/series/:id` for work IDs, then reconciles the two. Throws
+    /// `AO3OrphanCopyError` if any work is a draft (AO3's `DownloadsController`
+    /// refuses drafts) or cannot be resolved to a downloadable work ID.
+    func loadSeriesWorksForOrphanCopy(
+        seriesID: Int,
+        using client: AO3Client = .shared
+    ) async throws -> [AO3OrphanCopyWork] {
+        _ = try requireWritingRequestUser()
+        let generation = sessionGeneration
+        try Task.checkCancellation()
+        let manageHTML = try await writingRequestHTML(
+            at: AO3Client.seriesManageURL(seriesID: seriesID),
+            using: client
+        )
+        try requireSessionGeneration(generation)
+        let manageRows = try AO3Client.parseSeriesManagePage(from: manageHTML)
+            .sorted { $0.position < $1.position }
+        if let draft = manageRows.first(where: \.isDraft) {
+            throw AO3OrphanCopyError.draftWorkCannotBeDownloaded(title: draft.title)
+        }
+        let needsShowIDs = manageRows.contains { $0.workID == nil }
+        var postedWorks: [AO3WorkSummary] = []
+        if needsShowIDs {
+            var page = 1
+            let baseURL = AO3Client.seriesURL(seriesID: seriesID)
+            while let pageURL = AO3Client.seriesPageURL(baseURL, page: page) {
+                try Task.checkCancellation()
+                let html = try await writingRequestHTML(at: pageURL, using: client)
+                try requireSessionGeneration(generation)
+                let parsed = try AO3Client.parseSearchPage(html, page: page)
+                postedWorks.append(contentsOf: parsed.works)
+                if parsed.works.isEmpty || page >= parsed.totalPages { break }
+                page += 1
+            }
+        }
+        return try Self.reconcileSeriesOrphanWorks(manageRows: manageRows, postedWorks: postedWorks)
+    }
+
+    static func reconcileSeriesOrphanWorks(
+        manageRows: [AO3SeriesWorkRow],
+        postedWorks: [AO3WorkSummary]
+    ) throws -> [AO3OrphanCopyWork] {
+        var remaining = postedWorks
+        var items: [AO3OrphanCopyWork] = []
+        var seenIDs = Set<Int>()
+        for row in manageRows {
+            if row.isDraft {
+                throw AO3OrphanCopyError.draftWorkCannotBeDownloaded(title: row.title)
+            }
+            if let directID = row.workID {
+                if let idx = remaining.firstIndex(where: { $0.id == directID }) {
+                    remaining.remove(at: idx)
+                }
+                if seenIDs.insert(directID).inserted {
+                    items.append(AO3OrphanCopyWork(workID: directID, title: row.title))
+                }
+                continue
+            }
+            let targetTitle = normalizedSeriesTitle(row.title)
+            let matchIndex = remaining.firstIndex {
+                $0.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    == row.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            } ?? remaining.firstIndex { normalizedSeriesTitle($0.title) == targetTitle }
+            guard let matchIndex else {
+                throw AO3OrphanCopyError.unenumerableWork(title: row.title)
+            }
+            let work = remaining.remove(at: matchIndex)
+            if seenIDs.insert(work.id).inserted {
+                items.append(AO3OrphanCopyWork(workID: work.id, title: work.title))
+            }
+        }
+        for extra in remaining where seenIDs.insert(extra.id).inserted {
+            items.append(AO3OrphanCopyWork(workID: extra.id, title: extra.title))
+        }
+        return items
+    }
+
+    private static func normalizedSeriesTitle(_ raw: String) -> String {
+        raw.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
+    }
+
     /// Permanently orphans `target` via `POST /orphans` (`OrphansController#create`,
     /// otwarchive `452391b6`). `keepPseudCopy == false` sends `use_default=true`
     /// ("Take my pseud off as well"); `true` sends `use_default=false` ("Leave a
@@ -328,9 +422,6 @@ extension AO3AuthService {
         )
         let (status, body) = try await submitWrite(request, using: client)
         await AO3AuthorPageCache.shared.removeAuthorPages(username: username)
-        if case let .series(seriesID) = target {
-            await AO3AuthorPageCache.shared.removeSeries(id: seriesID, creator: username)
-        }
         if let error = AO3Client.writingRequestError(in: body, includeCaution: true) {
             if AO3Client.isNotOwnedOrphanError(error) {
                 throw AO3WorkWriteError.notOwned
@@ -338,12 +429,15 @@ extension AO3AuthService {
             throw AO3WorkWriteError.rejected(error)
         }
         if let notice = AO3Client.writingRequestNotice(in: body) {
+            if case let .series(seriesID) = target { await seriesWasWritten(seriesID, title: nil) }
             return notice
         }
         if (300 ... 399).contains(status) {
+            if case let .series(seriesID) = target { await seriesWasWritten(seriesID, title: nil) }
             return "Orphaning was successful."
         }
-        if (200 ... 299).contains(status) {
+        if (200 ... 299).contains(status) || (500 ... 599).contains(status) {
+            if case let .series(seriesID) = target { await seriesWasWritten(seriesID, title: nil) }
             throw AO3WorkWriteError.unconfirmed
         }
         throw AO3WorkWriteError.rejected("AO3 couldn't orphan that.")
@@ -442,15 +536,21 @@ extension AO3AuthService {
         if AO3Client.isOrphanRedirect(finalURL: finalURL, body: body) {
             throw AO3WorkWriteError.onlyCreator
         }
-        await AO3AuthorPageCache.shared.removeSeries(id: seriesID, creator: username)
         await AO3AuthorPageCache.shared.removeAuthorPages(username: username)
-        return try writingRequestVerdict(
-            status: status,
-            body: body,
-            includeCaution: true,
-            redirectFallback: "You have been removed as a creator from the series and its works.",
-            rejectedFallback: "AO3 couldn't remove you as a co-creator."
-        )
+        do {
+            let notice = try writingRequestVerdict(
+                status: status,
+                body: body,
+                includeCaution: true,
+                redirectFallback: "You have been removed as a creator from the series and its works.",
+                rejectedFallback: "AO3 couldn't remove you as a co-creator."
+            )
+            await seriesWasWritten(seriesID, title: nil)
+            return notice
+        } catch AO3WorkWriteError.unconfirmed {
+            await seriesWasWritten(seriesID, title: nil)
+            throw AO3WorkWriteError.unconfirmed
+        }
     }
 
     // MARK: - 6. Import from a URL

@@ -258,19 +258,9 @@ struct SeriesEditView: View {
         .subjectPanel()
     }
 
-    private var canRemoveMeAsCoCreator: Bool {
-        let username = auth.username?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if !series.creatorIdentities.isEmpty {
-            return series.creatorIdentities.contains { identity in
-                identity.kind != .registered || identity.username?.lowercased() != username
-            }
-        }
-        return series.creatorNames.count > 1
-    }
-
     private var deletePanel: some View {
         VStack(spacing: 0) {
-            if canRemoveMeAsCoCreator {
+            if form.canRemoveMe {
                 SubjectFormRow(
                     label: "Remove Me as Co-Creator",
                     value: "",

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="csrf-param" content="authenticity_token">
+  <meta name="csrf-token" content="series-manage-restricted-csrf==">
+  <title>Manage Series: Water Cycle | Archive of Our Own</title>
+</head>
+<body class="logged-in">
+<!-- Ground truth: otwarchive 452391b6 app/views/series/manage.html.erb & _series_order.html.erb -->
+<div id="main" class="series-manage region">
+  <h2 class="heading">Manage Series: Water Cycle</h2>
+  <div id="manage-series">
+    <form action="/series/77/update_positions" accept-charset="UTF-8" method="post">
+      <input type="hidden" name="authenticity_token" value="series-manage-restricted-csrf==" autocomplete="off">
+      <ul id="sortable_series_list">
+        <li id="serial_7701" class="serial-position-list">
+          <input type="text" name="serial_works[]" size="3" maxlength="3" class="number serial-position-field" id="serial_0">
+          <span id="position-for-7701">1</span>.
+          <h3 class="heading">Open Skies</h3>
+        </li>
+        <li id="serial_7702" class="serial-position-list">
+          <input type="text" name="serial_works[]" size="3" maxlength="3" class="number serial-position-field" id="serial_1">
+          <span id="position-for-7702">2</span>.
+          <h3 class="heading">Locked Vault</h3>
+        </li>
+      </ul>
+      <p class="submit actions">
+        <input type="submit" name="commit" value="Update Positions">
+      </p>
+    </form>
+  </div>
+</div>
+</body>
+</html>

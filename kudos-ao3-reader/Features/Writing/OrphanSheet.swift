@@ -2,151 +2,6 @@ import Foundation
 import SwiftData
 import SwiftUI
 
-/// Pure submission coordinator for `OrphanSheet`, separated so tests can verify
-/// that nothing is sent to AO3 when a local copy fails or the final system alert
-/// is cancelled.
-@MainActor
-enum OrphanSubmissionFlow {
-    struct WorkCopyItem: Equatable, Sendable {
-        let workID: Int
-        let title: String
-    }
-
-    enum Outcome: Equatable, Sendable {
-        case cancelled
-        case copyFailed(workTitle: String, reason: String)
-        case orphaned(String)
-        case failed(String)
-    }
-
-    static func run(
-        target: AO3OrphanTarget,
-        keepPseudCopy: Bool,
-        keepLocalCopy: Bool,
-        confirmedFinalAlert: Bool,
-        form: AO3OrphanForm,
-        resolveWorks: @MainActor () async throws -> [WorkCopyItem],
-        copyWork: @MainActor (Int) async throws -> Void,
-        submitOrphan: @MainActor (AO3OrphanTarget, Bool, AO3OrphanForm) async throws -> String
-    ) async -> Outcome {
-        guard confirmedFinalAlert else { return .cancelled }
-
-        if keepLocalCopy {
-            let items: [WorkCopyItem]
-            do {
-                items = try await resolveWorks()
-            } catch {
-                let fallback = form.titles.first ?? "this series"
-                return .copyFailed(
-                    workTitle: fallback,
-                    reason: UserFacingError.message(for: error)
-                )
-            }
-            for item in items {
-                do {
-                    try await copyWork(item.workID)
-                } catch {
-                    return .copyFailed(
-                        workTitle: item.title,
-                        reason: UserFacingError.message(for: error)
-                    )
-                }
-            }
-        }
-
-        do {
-            let notice = try await submitOrphan(target, keepPseudCopy, form)
-            return .orphaned(notice)
-        } catch {
-            return .failed(UserFacingError.message(for: error))
-        }
-    }
-
-    /// Saves a single AO3 work into the local SwiftData library the same way
-    /// Work Detail's Download action does, awaiting completion before returning.
-    static func saveLocalCopy(workID: Int, in context: ModelContext) async throws {
-        let sourceURL = AO3Client.workURL(workID: workID)
-        if let existing = existingWork(forSource: sourceURL, in: context) {
-            if existing.isPendingDeletion {
-                PreservedWorkService.restore(existing, in: context)
-            }
-            if !WorkReaderPreparation.hasReadableEPUB(for: existing) {
-                try await WorkReaderPreparation.restoreReadableEPUB(for: existing, in: context)
-            }
-            WorkLifecycle.setSaved(existing, true, in: context)
-            return
-        }
-        let tempURL = try await AO3Client.shared.downloadEPUB(workID: workID)
-        let saved = try await importEPUB(
-            tempURL,
-            source: sourceURL,
-            verifyAvailability: false,
-            into: context
-        )
-        WorkLifecycle.setSaved(saved, true, in: context)
-    }
-
-    static func resolveCopyItems(
-        for target: AO3OrphanTarget,
-        form: AO3OrphanForm
-    ) async throws -> [WorkCopyItem] {
-        switch target {
-        case let .work(id):
-            return [WorkCopyItem(workID: id, title: form.titles.first ?? "Work \(id)")]
-        case let .works(ids):
-            return ids.enumerated().map { index, id in
-                let title = index < form.titles.count ? form.titles[index] : "Work \(id)"
-                return WorkCopyItem(workID: id, title: title)
-            }
-        case let .series(seriesID):
-            let seriesURL = AO3Client.seriesURL(seriesID: seriesID)
-            let works = try await AO3Client.shared.seriesWorks(seriesURL: seriesURL)
-            return works.map { WorkCopyItem(workID: $0.id, title: $0.title) }
-        }
-    }
-}
-
-/// Pure outcome handler for "Remove Me as Co-Creator" on both works and series,
-/// guaranteeing `.onlyCreator` surfaces the exact message and mutates nothing.
-@MainActor
-enum WorkCoCreatorRemovalFlow {
-    enum TargetKind: Equatable, Sendable {
-        case work
-        case series
-
-        var onlyCreatorMessage: String {
-            switch self {
-            case .work:
-                "You're the only creator of this work. You can orphan it or delete it instead."
-            case .series:
-                "You're the only creator of this series. You can orphan it or delete it instead."
-            }
-        }
-    }
-
-    enum Outcome: Equatable, Sendable {
-        case removed(String)
-        case onlyCreator(String)
-        case failed(String)
-    }
-
-    static func run(
-        kind: TargetKind,
-        remove: @MainActor () async throws -> String,
-        onRemoved: @MainActor () -> Void
-    ) async -> Outcome {
-        do {
-            let notice = try await remove()
-            onRemoved()
-            return .removed(notice)
-        } catch AO3WorkWriteError.onlyCreator {
-            return .onlyCreator(kind.onlyCreatorMessage)
-        } catch {
-            return .failed(UserFacingError.message(for: error))
-        }
-    }
-}
-
 /// Confirmation sheet for permanently orphaning a work, several works, or a
 /// series on AO3 (`GET /orphans/new?…` → `POST /orphans`).
 struct OrphanSheet: View {
@@ -168,8 +23,10 @@ struct OrphanSheet: View {
     @State private var keepLocalCopy = true
     @State private var showFinalAlert = false
     @State private var isSubmitting = false
+    @State private var submissionTask: Task<Void, Never>?
     @State private var submissionStatus: String?
     @State private var submissionError: String?
+    @State private var ambiguousOutcomeMessage: String?
 
     @ScaledMetric(relativeTo: .body) private var titleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 13.5
@@ -274,9 +131,11 @@ struct OrphanSheet: View {
             }
             .alert(finalAlertTitle, isPresented: $showFinalAlert) {
                 Button("Orphan", role: .destructive) {
-                    Task { await submitOrphan(confirmed: true) }
+                    handleFinalAlertDecision(.confirmed)
                 }
-                Button("Cancel", role: .cancel) {}
+                Button("Cancel", role: .cancel) {
+                    handleFinalAlertDecision(.cancelled)
+                }
             } message: {
                 Text(
                     keepLocalCopy
@@ -286,6 +145,11 @@ struct OrphanSheet: View {
                             + (isPlural ? "them back." : "it back.")
                 )
             }
+        }
+        .interactiveDismissDisabled(isSubmitting)
+        .onDisappear {
+            submissionTask?.cancel()
+            submissionTask = nil
         }
         .presentationDragIndicator(.visible)
         #if os(macOS)
@@ -368,6 +232,25 @@ struct OrphanSheet: View {
             }
         }
 
+        if let ambiguousOutcomeMessage {
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(ambiguousOutcomeMessage)
+                        .font(.footnote)
+                        .foregroundStyle(theme.appTheme.errorColor)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Dismiss") {
+                        self.ambiguousOutcomeMessage = nil
+                    }
+                    .buttonStyle(.kudosSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .subjectPanel()
+                .pageBodyRow(top: 12, gutter: gutter)
+            }
+        }
+
         if let submissionError {
             Section {
                 Text(submissionError)
@@ -399,8 +282,8 @@ struct OrphanSheet: View {
                     )
             }
             .buttonStyle(.plain)
-            .disabled(isSubmitting)
-            .opacity(isSubmitting ? 0.5 : 1)
+            .disabled(isSubmitting || ambiguousOutcomeMessage != nil)
+            .opacity(isSubmitting || ambiguousOutcomeMessage != nil ? 0.5 : 1)
             .accessibilityLabel(primaryActionLabel)
             .pageBodyRow(top: 16, gutter: gutter)
         }
@@ -550,21 +433,43 @@ private extension OrphanSheet {
         isLoading = false
     }
 
-    func submitOrphan(confirmed: Bool) async {
-        guard !isSubmitting, let form else { return }
-        isSubmitting = true
-        submissionError = nil
-        submissionStatus = keepLocalCopy ? "Saving a local copy first…" : "Orphaning on AO3…"
+    func handleFinalAlertDecision(_ decision: OrphanSubmissionFlow.FinalAlertDecision) {
+        guard !isSubmitting, ambiguousOutcomeMessage == nil, let form else { return }
+        submissionTask?.cancel()
+        submissionTask = Task {
+            await submitOrphan(decision: decision, form: form)
+        }
+    }
+
+    func submitOrphan(
+        decision: OrphanSubmissionFlow.FinalAlertDecision,
+        form: AO3OrphanForm
+    ) async {
+        defer {
+            isSubmitting = false
+            submissionStatus = nil
+            submissionTask = nil
+        }
+        if decision == .confirmed {
+            isSubmitting = true
+            submissionError = nil
+            ambiguousOutcomeMessage = nil
+            submissionStatus = keepLocalCopy ? "Saving a local copy first…" : "Orphaning on AO3…"
+        }
         let context = modelContext
         let authService = auth
         let outcome = await OrphanSubmissionFlow.run(
             target: target,
             keepPseudCopy: keepPseudCopy,
             keepLocalCopy: keepLocalCopy,
-            confirmedFinalAlert: confirmed,
+            finalAlertDecision: decision,
             form: form,
             resolveWorks: {
-                try await OrphanSubmissionFlow.resolveCopyItems(for: target, form: form)
+                try await OrphanSubmissionFlow.resolveCopyItems(
+                    for: target,
+                    form: form,
+                    auth: authService
+                )
             },
             copyWork: { workID in
                 try await OrphanSubmissionFlow.saveLocalCopy(workID: workID, in: context)
@@ -576,8 +481,6 @@ private extension OrphanSheet {
                 )
             }
         )
-        isSubmitting = false
-        submissionStatus = nil
         switch outcome {
         case .cancelled:
             break
@@ -587,6 +490,8 @@ private extension OrphanSheet {
         case .orphaned:
             onOrphaned("Orphaned.")
             dismiss()
+        case let .mayHaveGoneThrough(message):
+            ambiguousOutcomeMessage = message
         case let .failed(message):
             submissionError = message
         }

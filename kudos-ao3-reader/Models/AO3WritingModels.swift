@@ -739,6 +739,10 @@ nonisolated struct AO3SeriesForm: Equatable, Sendable {
     var works: [AO3SeriesWorkRow] = []
     /// When true, the new-series form is too sparse to POST from the app.
     var openOnAO3ForCreate: Bool = false
+    /// Present when another creator besides the signed-in user is listed on the
+    /// series (`series/edit.html.erb` renders `series/_series_navigation.html.erb:7-12`,
+    /// otwarchive `452391b6`).
+    var canRemoveMe: Bool = false
 
     func parameters() -> [(String, String)] {
         var pairs: [(String, String)] = [
