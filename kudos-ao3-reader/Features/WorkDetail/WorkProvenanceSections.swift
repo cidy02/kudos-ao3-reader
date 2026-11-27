@@ -1,3 +1,4 @@
+import QuickLook
 import SwiftData
 import SwiftUI
 
