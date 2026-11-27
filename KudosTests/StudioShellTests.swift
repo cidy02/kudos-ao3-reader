@@ -151,6 +151,23 @@ struct StudioShellTests {
         #expect(secondChapterTyped == 15)
     }
 
+    @Test func dayLogTrackerDoesNotCreditThePreviousChapterAcrossASessionChange() {
+        var tracker = StudioWritingDayLogTracker()
+        let opened = tracker.receive(words: 100, isReady: true, sessionKey: "chapter-a")
+        #expect(opened == 0)
+        let typed = tracker.receive(words: 110, isReady: true, sessionKey: "chapter-a")
+        #expect(typed == 10)
+
+        // The host reports the session change as not-ready: the count in that callback can
+        // still be chapter A's. Marking it ready would seed 110, then record chapter B's 500 as +390.
+        let switched = tracker.receive(words: 110, isReady: false, sessionKey: "chapter-b")
+        #expect(switched == 0)
+        let seeded = tracker.receive(words: 500, isReady: true, sessionKey: "chapter-b")
+        #expect(seeded == 0)
+        let typedNext = tracker.receive(words: 515, isReady: true, sessionKey: "chapter-b")
+        #expect(typedNext == 15)
+    }
+
     // MARK: - Daily goal preference (default 1,000, off allowed)
 
     @Test func dailyGoalDefaultsToOneThousandAndSupportsOff() throws {
@@ -250,6 +267,102 @@ struct StudioShellTests {
         #expect(afterDeleteShows == false)
         #expect(afterDeleteRouter.hasLocalDrafts == false)
         #expect(afterDeleteRouter.showsWritingTab == false)
+    }
+
+    @Test func startWritingDoubleTapCreatesOneDocument() async throws {
+        let root = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WritingDocumentStore(root: root)
+
+        async let first = StudioStartWritingAction.createFirstDocument(in: store, router: nil)
+        async let second = StudioStartWritingAction.createFirstDocument(in: store, router: nil)
+        let firstTarget = try await first
+        let secondTarget = try await second
+        #expect(firstTarget == secondTarget)
+
+        let works = try await store.listWorks()
+        #expect(works.count == 1)
+    }
+
+    @Test func ao3LoadSkipsAFreshSnapshotUntilRefreshSignInOrTheWindow() {
+        let window = StudioAO3Load.freshnessWindow
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let fresh = StudioAO3Load.Stamp(
+            loadedAt: start,
+            sessionGeneration: 3,
+            username: "writer",
+            reloadToken: 1
+        )
+
+        let insideWindow = StudioAO3Load.shouldLoad(
+            stamp: fresh,
+            now: start.addingTimeInterval(window - 1),
+            sessionGeneration: 3,
+            username: "writer",
+            reloadToken: 1,
+            force: false
+        )
+        #expect(insideWindow == false)
+
+        let atWindow = StudioAO3Load.shouldLoad(
+            stamp: fresh,
+            now: start.addingTimeInterval(window),
+            sessionGeneration: 3,
+            username: "writer",
+            reloadToken: 1,
+            force: false
+        )
+        #expect(atWindow == true)
+
+        let neverLoaded = StudioAO3Load.shouldLoad(
+            stamp: StudioAO3Load.Stamp(),
+            now: start,
+            sessionGeneration: 3,
+            username: "writer",
+            reloadToken: 0,
+            force: false
+        )
+        #expect(neverLoaded == true)
+
+        let sessionChanged = StudioAO3Load.shouldLoad(
+            stamp: fresh,
+            now: start.addingTimeInterval(10),
+            sessionGeneration: 4,
+            username: "writer",
+            reloadToken: 1,
+            force: false
+        )
+        #expect(sessionChanged == true)
+
+        let usernameChanged = StudioAO3Load.shouldLoad(
+            stamp: fresh,
+            now: start.addingTimeInterval(10),
+            sessionGeneration: 3,
+            username: "other",
+            reloadToken: 1,
+            force: false
+        )
+        #expect(usernameChanged == true)
+
+        let retryOrWrite = StudioAO3Load.shouldLoad(
+            stamp: fresh,
+            now: start.addingTimeInterval(10),
+            sessionGeneration: 3,
+            username: "writer",
+            reloadToken: 2,
+            force: false
+        )
+        #expect(retryOrWrite == true)
+
+        let pullToRefresh = StudioAO3Load.shouldLoad(
+            stamp: fresh,
+            now: start.addingTimeInterval(10),
+            sessionGeneration: 3,
+            username: "writer",
+            reloadToken: 1,
+            force: true
+        )
+        #expect(pullToRefresh == true)
     }
 
     @Test func htmlExcerptStripsMarkupAndDecodesEntities() {

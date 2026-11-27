@@ -295,7 +295,8 @@ private struct StudioWritingDayLogHost: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onChange(of: sessionKey, initial: true) { _, newKey in
-                handleUpdate(words: words, isReady: isReady, sessionKey: newKey)
+                // shortcut: count may still be the previous chapter; a same-count switch seeds on the next edit, upgrade if that edit must count
+                handleUpdate(words: words, isReady: false, sessionKey: newKey)
             }
             .onChange(of: isReady, initial: true) { _, ready in
                 handleUpdate(words: words, isReady: ready, sessionKey: sessionKey)

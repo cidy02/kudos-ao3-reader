@@ -2,6 +2,33 @@ import Combine
 import SwiftData
 import SwiftUI
 
+/// When Writing Studio may read AO3 again. Showing the tab, a section, or a card is not a reason.
+enum StudioAO3Load {
+    /// Same window `WritingView.isStale` uses once that lands (wave 52). This branch predates it.
+    static let freshnessWindow: TimeInterval = 15 * 60
+
+    struct Stamp: Equatable {
+        var loadedAt: Date?
+        var sessionGeneration: Int?
+        var username: String?
+        var reloadToken: Int = 0
+    }
+
+    static func shouldLoad(
+        stamp: Stamp,
+        now: Date,
+        sessionGeneration: Int,
+        username: String?,
+        reloadToken: Int,
+        force: Bool
+    ) -> Bool {
+        if force { return true }
+        if stamp.sessionGeneration != sessionGeneration || stamp.username != username { return true }
+        guard let loadedAt = stamp.loadedAt, stamp.reloadToken == reloadToken else { return true }
+        return now.timeIntervalSince(loadedAt) >= freshnessWindow
+    }
+}
+
 /// The Writing Studio tab root (T-574): "Writing" title, pseud / offline subtitle, pinned
 /// four-part section bar (Overview · Documents · Comments · Stats), and the active section.
 ///
@@ -30,18 +57,23 @@ struct WritingStudioView: View {
     @State private var draftsError: String?
     @State private var isLoadingDrafts = false
     @State private var draftsReload = 0
+    @State private var draftsStamp = StudioAO3Load.Stamp()
 
     @State private var stats: AO3UserStats?
     @State private var statsError: String?
     @State private var isLoadingStats = false
     @State private var statsReload = 0
+    @State private var statsStamp = StudioAO3Load.Stamp()
     @State private var activeStatsRequestID: UUID?
+    /// Session already handed to `AO3AuthorProfileModel.activate`. A second launch cancels the first.
+    @State private var profileActivationToken: String?
 
     @State private var editingWorkID: Int?
     @State private var showingLogin = false
     @State private var showingImport = false
     @State private var showingGoalSheet = false
     @State private var startWritingError: String?
+    @State private var isCreatingDocument = false
     @State private var now = Date()
 
     /// Private navigation routes owned solely by the S1 shell.
@@ -169,8 +201,10 @@ struct WritingStudioView: View {
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
-                    now = Date()
+                    let currentDate = Date()
+                    now = currentDate
                     localReload += 1
+                    reloadStaleAO3IfNeeded(now: currentDate)
                 }
             }
             .onReceive(
@@ -289,6 +323,7 @@ struct WritingStudioView: View {
             Button(action: startNewLocalDocument) {
                 Label("New Document", systemImage: "square.and.pencil")
             }
+            .disabled(isCreatingDocument)
             .accessibilityLabel("New Document")
 
             Menu {
@@ -481,12 +516,32 @@ private extension WritingStudioView {
         guard router.selection == .writing else { return }
         syncProfileModel()
         guard auth.isLoggedIn else {
-            drafts = nil
-            draftsError = nil
-            isLoadingDrafts = false
+            await loadDrafts()
             return
         }
-        inboxModel.activate(auth: auth)
+        let now = Date()
+        let shouldFetch = StudioAO3Load.shouldLoad(
+            stamp: draftsStamp,
+            now: now,
+            sessionGeneration: auth.sessionGeneration,
+            username: auth.username,
+            reloadToken: draftsReload,
+            force: false
+        )
+        if shouldFetch {
+            let loadedAt = draftsStamp.loadedAt
+            let sameAccount = loadedAt != nil
+                && draftsStamp.sessionGeneration == auth.sessionGeneration
+                && draftsStamp.username == auth.username
+            if sameAccount, let loadedAt, now.timeIntervalSince(loadedAt) >= StudioAO3Load.freshnessWindow {
+                // Window elapsed. `refresh` keeps the rows already on screen; `activate` would no-op.
+                await inboxModel.refresh(auth: auth)
+                guard !Task.isCancelled else { return }
+            } else {
+                // First load, sign-in, or a draft reload. `activate` fetches only while the inbox is idle.
+                inboxModel.activate(auth: auth)
+            }
+        }
         await loadDrafts()
     }
 
@@ -495,51 +550,136 @@ private extension WritingStudioView {
         guard auth.isLoggedIn else { return }
         if let profileModel { await profileModel.refresh(auth: auth) }
         await inboxModel.refresh(auth: auth)
-        await loadDrafts()
-        await loadStats()
+        await loadDrafts(force: true)
+        await loadStats(force: true)
+    }
+
+    /// Foregrounding past the freshness window reloads drafts and stats. A fresh stamp does nothing,
+    /// so becoming active is not itself a fetch.
+    func reloadStaleAO3IfNeeded(now: Date) {
+        guard auth.isLoggedIn else { return }
+        if draftsStamp.loadedAt != nil, StudioAO3Load.shouldLoad(
+            stamp: draftsStamp,
+            now: now,
+            sessionGeneration: auth.sessionGeneration,
+            username: auth.username,
+            reloadToken: draftsReload,
+            force: false
+        ) {
+            draftsReload += 1
+        }
+        if statsStamp.loadedAt != nil, StudioAO3Load.shouldLoad(
+            stamp: statsStamp,
+            now: now,
+            sessionGeneration: auth.sessionGeneration,
+            username: auth.username,
+            reloadToken: statsReload,
+            force: false
+        ) {
+            statsReload += 1
+        }
     }
 
     func syncProfileModel() {
         guard let username = auth.username, let route = AO3AuthorRoute(username: username) else {
             profileModel = nil
+            profileActivationToken = nil
             drafts = nil
+            draftsError = nil
+            isLoadingDrafts = false
+            draftsStamp = StudioAO3Load.Stamp()
+            stats = nil
+            statsError = nil
+            isLoadingStats = false
+            activeStatsRequestID = nil
+            statsStamp = StudioAO3Load.Stamp()
             postingPseudName = nil
             return
         }
         if profileModel?.route.username.localizedCaseInsensitiveCompare(username) != .orderedSame {
             profileModel = AO3AuthorProfileModel(route: route)
+            profileActivationToken = nil
         }
         postingPseudName = auth.preferredPostingPseudName
+        let token = "\(auth.sessionGeneration)|\(username)"
+        guard profileActivationToken != token else { return }
+        profileActivationToken = token
         profileModel?.activate(auth: auth)
     }
 
-    func loadDrafts() async {
+    func loadDrafts(force: Bool = false) async {
         guard auth.isLoggedIn else {
             drafts = nil
             draftsError = nil
             isLoadingDrafts = false
+            draftsStamp = StudioAO3Load.Stamp()
             return
         }
         let generation = auth.sessionGeneration
+        let username = auth.username
+        let token = draftsReload
+        guard StudioAO3Load.shouldLoad(
+            stamp: draftsStamp,
+            now: Date(),
+            sessionGeneration: generation,
+            username: username,
+            reloadToken: token,
+            force: force
+        ) else {
+            isLoadingDrafts = false
+            return
+        }
+        if draftsStamp.sessionGeneration != generation || draftsStamp.username != username {
+            drafts = nil
+            draftsError = nil
+        }
         isLoadingDrafts = true
         draftsError = nil
+        defer { isLoadingDrafts = false }
         do {
             let loaded = try await auth.loadDrafts(page: 1)
-            guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
+            guard !Task.isCancelled, generation == auth.sessionGeneration, auth.username == username else { return }
             drafts = loaded
+            draftsStamp = finishedAO3Stamp(generation: generation, username: username, reloadToken: token)
+        } catch is CancellationError {
+            return
+        } catch let error as URLError where error.code == .cancelled {
+            return
         } catch {
-            guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
+            guard !Task.isCancelled, generation == auth.sessionGeneration, auth.username == username else { return }
             draftsError = UserFacingError.message(for: error)
+            draftsStamp = finishedAO3Stamp(generation: generation, username: username, reloadToken: token)
         }
-        isLoadingDrafts = false
     }
 
-    func loadStats() async {
-        guard router.selection == .writing, auth.isLoggedIn else {
+    func loadStats(force: Bool = false) async {
+        guard auth.isLoggedIn else {
             stats = nil
             statsError = nil
             isLoadingStats = false
+            activeStatsRequestID = nil
+            statsStamp = StudioAO3Load.Stamp()
             return
+        }
+        // Leaving Writing restarts this task. Keep the numbers already on screen.
+        guard router.selection == .writing else { return }
+        let generation = auth.sessionGeneration
+        let username = auth.username
+        let token = statsReload
+        guard StudioAO3Load.shouldLoad(
+            stamp: statsStamp,
+            now: Date(),
+            sessionGeneration: generation,
+            username: username,
+            reloadToken: token,
+            force: force
+        ) else {
+            isLoadingStats = false
+            return
+        }
+        if statsStamp.sessionGeneration != generation || statsStamp.username != username {
+            stats = nil
+            statsError = nil
         }
         let requestID = UUID()
         activeStatsRequestID = requestID
@@ -550,18 +690,36 @@ private extension WritingStudioView {
         }
         do {
             let loaded = try await auth.loadUserStats()
-            guard activeStatsRequestID == requestID, !Task.isCancelled else { return }
+            guard activeStatsRequestID == requestID, !Task.isCancelled,
+                  generation == auth.sessionGeneration, auth.username == username else { return }
             stats = loaded
+            statsStamp = finishedAO3Stamp(generation: generation, username: username, reloadToken: token)
         } catch is CancellationError {
             return
+        } catch let error as URLError where error.code == .cancelled {
+            return
         } catch {
-            guard activeStatsRequestID == requestID, !Task.isCancelled else { return }
+            guard activeStatsRequestID == requestID, !Task.isCancelled,
+                  generation == auth.sessionGeneration, auth.username == username else { return }
             statsError = UserFacingError.message(for: error)
+            statsStamp = finishedAO3Stamp(generation: generation, username: username, reloadToken: token)
         }
     }
 
+    func finishedAO3Stamp(generation: Int, username: String?, reloadToken: Int) -> StudioAO3Load.Stamp {
+        StudioAO3Load.Stamp(
+            loadedAt: Date(),
+            sessionGeneration: generation,
+            username: username,
+            reloadToken: reloadToken
+        )
+    }
+
     func startNewLocalDocument() {
+        guard !isCreatingDocument else { return }
+        isCreatingDocument = true
         Task {
+            defer { isCreatingDocument = false }
             do {
                 let target = try await StudioStartWritingAction.createFirstDocument(router: router)
                 localReload += 1

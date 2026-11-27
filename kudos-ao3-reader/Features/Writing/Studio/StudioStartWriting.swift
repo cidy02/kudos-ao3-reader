@@ -13,11 +13,33 @@ nonisolated struct StudioLocalDocumentTarget: Identifiable, Hashable, Sendable {
 /// Start Writing action (`Studio-Start-Writing.dc.html`): creates a local manuscript and first
 /// chapter in `WritingDocumentStore` and reveals the Writing tab immediately, signed in or not.
 enum StudioStartWritingAction {
+    /// One create per store root, so a double tap cannot write two first manuscripts.
+    @MainActor
+    private static var inFlight: [String: Task<StudioLocalDocumentTarget, Error>] = [:]
+
     @MainActor
     static func createFirstDocument(
         in store: WritingDocumentStore = WritingDocumentStore(root: WritingDocumentStore.defaultRoot),
         router: AppRouter?,
         title: String = ""
+    ) async throws -> StudioLocalDocumentTarget {
+        let key = store.root.standardizedFileURL.path
+        if let existing = inFlight[key] {
+            return try await existing.value
+        }
+        let task = Task { @MainActor in
+            defer { inFlight[key] = nil }
+            return try await makeFirstDocument(in: store, router: router, title: title)
+        }
+        inFlight[key] = task
+        return try await task.value
+    }
+
+    @MainActor
+    private static func makeFirstDocument(
+        in store: WritingDocumentStore,
+        router: AppRouter?,
+        title: String
     ) async throws -> StudioLocalDocumentTarget {
         let work = try await store.createWork(title: title)
         let chapter = try await store.addChapter(workID: work.id, title: "")
