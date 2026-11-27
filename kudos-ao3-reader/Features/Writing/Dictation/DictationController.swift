@@ -23,7 +23,7 @@ final class DictationController {
 
     private(set) var phase: Phase = .idle
     private(set) var pendingText = ""
-    private(set) var levels: [CGFloat] = Array(repeating: 0.08, count: Self.meterBars)
+    private(set) var levels: [CGFloat] = Array(repeating: 0.08, count: DictationController.meterBars)
 
     var isPresented: Bool { phase != .idle }
 
@@ -169,7 +169,7 @@ final class DictationController {
         request.requiresOnDeviceRecognition = true
         request.addsPunctuation = true
         request.taskHint = .dictation
-        request.contextualStrings = DictationCommand.all.map(\.spoken)
+        request.contextualStrings = DictationCommand.allCases.map(\.spoken)
         requestBox.set(request)
 
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in

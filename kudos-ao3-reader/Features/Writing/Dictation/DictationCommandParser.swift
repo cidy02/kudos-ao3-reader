@@ -115,7 +115,7 @@ nonisolated enum DictationCommandParser {
 
     private static func command(at index: Int, keys: [String]) -> DictationCommand? {
         guard index + 1 < keys.count else { return nil }
-        switch (keys[index], keys[index + 1]) {
+        return switch (keys[index], keys[index + 1]) {
         case ("new", "paragraph"): .newParagraph
         case ("scene", "break"): .sceneBreak
         case ("italics", "on"): .italicsOn
