@@ -90,13 +90,34 @@ enum ReaderChapterEndFacts {
     /// Largest chapter source the optional note preview will parse.
     nonisolated static let maxNoteSourceBytes = 2_000_000
 
+    /// The extracted author's end note plus which markup produced it, so the in-chapter
+    /// card hides only the matching block instead of an opening author note.
+    nonisolated struct EndNoteMatch: Equatable, Sendable {
+        let text: String
+        let isConvertedAside: Bool
+    }
+
     /// The author's end note from one chapter's XHTML, or nil when the chapter has none (the
     /// card then leaves the note out). Same AO3 markers the word counter strips as apparatus.
     nonisolated static func endNote(fromChapterXHTML xhtml: String) -> String? {
+        endNoteMatch(fromChapterXHTML: xhtml)?.text
+    }
+
+    /// Extracts the author's end note and whether it came from a converted work's trailing
+    /// `<aside class="author-note">` rather than an AO3 end-notes block.
+    nonisolated static func endNoteMatch(fromChapterXHTML xhtml: String) -> EndNoteMatch? {
         guard !xhtml.isEmpty, xhtml.utf8.count <= maxNoteSourceBytes,
               let doc = try? SwiftSoup.parse(xhtml) else { return nil }
         let selector = "[id^=endnotes], div.end.notes, div.endnotes"
-        guard let container = (try? doc.select(selector).first()) ?? convertedTrailingNote(in: doc) else {
+        let container: Element
+        let isConvertedAside: Bool
+        if let ao3 = try? doc.select(selector).first() {
+            container = ao3
+            isConvertedAside = false
+        } else if let converted = convertedTrailingNote(in: doc) {
+            container = converted
+            isConvertedAside = true
+        } else {
             return nil
         }
         let quote = (try? container.select("blockquote.userstuff, blockquote").first()) ?? nil
@@ -105,7 +126,10 @@ enum ReaderChapterEndFacts {
         let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
         // A bare "End Notes:" heading with no body is not a note.
         let heading = cleaned.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ": "))
-        return cleaned.isEmpty || ["notes", "end notes", "endnotes"].contains(heading) ? nil : cleaned
+        guard !cleaned.isEmpty, !["notes", "end notes", "endnotes"].contains(heading) else {
+            return nil
+        }
+        return EndNoteMatch(text: cleaned, isConvertedAside: isConvertedAside)
     }
 
     /// A converted (imported) work's author note sits in `<aside class="author-note">`. Only one

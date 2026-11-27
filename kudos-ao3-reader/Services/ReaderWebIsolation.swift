@@ -53,6 +53,13 @@ nonisolated enum ReaderWebNavigationPolicy {
         return scheme == "http" || scheme == "https"
     }
 
+    /// True for Kudos-only chapter-end card action links (`kudos-chapter-end://...`).
+    /// Never allowed to navigate the web view (`allowsInReaderNavigation` stays false);
+    /// user taps are forwarded to Readium so `EPUBNavigatorDelegate` intercepts them.
+    static func isKudosActionURL(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == ReaderChapterEndAction.urlScheme
+    }
+
     private static func normalizedDirectoryPath(_ url: URL) -> String {
         let path = url.standardizedFileURL.resolvingSymlinksInPath().path
         if path.hasSuffix("/") { return String(path.dropLast()) }
@@ -199,6 +206,20 @@ final class ReaderWebNavigationGuard: NSObject, WKNavigationDelegate {
     ) {
         if let url = navigationAction.request.url,
            !ReaderWebNavigationPolicy.allowsInReaderNavigation(to: url, origin: origin) {
+            if navigationAction.navigationType == .linkActivated,
+               ReaderWebNavigationPolicy.isKudosActionURL(url),
+               let original,
+               original.responds(
+                   to: #selector(ReaderWebNavigationGuard.webView(_:decidePolicyFor:decisionHandler:))
+               ) {
+                // Forward user-tapped Kudos card links to Readium so they reach
+                // `EPUBNavigatorDelegate.navigator(_:presentExternalURL:)`, while
+                // always cancelling navigation so the web view never leaves the book.
+                original.webView?(webView, decidePolicyFor: navigationAction) { _ in
+                    decisionHandler(.cancel)
+                }
+                return
+            }
             decisionHandler(.cancel)
             if navigationAction.navigationType == .linkActivated,
                ReaderWebNavigationPolicy.isWebURL(url) {

@@ -683,7 +683,9 @@ final class ReaderSpeechController {
         }
         guard let index, publication.readingOrder.indices.contains(index) else { return nil }
         let link = publication.readingOrder[index]
-        guard let resource = publication.get(link) else { return nil }
+        guard let resource = publication.findService(RawEPUBContainerService.self)?
+            .resource(for: link) ?? publication.get(link)
+        else { return nil }
 
         let locator: Locator?
         if let startLoc {
