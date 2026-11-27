@@ -51,7 +51,7 @@ struct StudioCommentsThreadView: View {
                 if model.statusCommentID == item.id, let message = model.statusMessage {
                     Text(message)
                         .font(.subheadline)
-                        .foregroundStyle(model.statusIsError ? theme.appTheme.errorColor : .secondaryInk)
+                        .foregroundStyle(model.statusIsError ? AnyShapeStyle(theme.appTheme.errorColor) : AnyShapeStyle(.secondaryInk))
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

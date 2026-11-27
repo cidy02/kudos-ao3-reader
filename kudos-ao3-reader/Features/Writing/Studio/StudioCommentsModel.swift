@@ -47,8 +47,8 @@ final class StudioCommentsModel {
     private var overrides: [Int: Override] = [:]
     private var replyDrafts: [Int: String] = [:]
 
-    init(submission: CommentSubmissionGuard = CommentSubmissionGuard()) {
-        self.submission = submission
+    init(submission: CommentSubmissionGuard? = nil) {
+        self.submission = submission ?? CommentSubmissionGuard() // made here, on the main actor, not in a default argument
     }
 
     var submissionPhase: CommentSubmissionPhase { submission.phase }
@@ -151,7 +151,7 @@ final class StudioCommentsModel {
     func reverify(
         commentID: Int,
         generation: Int,
-        verifier: ReplyVerifier
+        verifier: @escaping ReplyVerifier
     ) async -> Bool {
         guard pendingCommentID == commentID, case .ambiguous = submission.phase else {
             return false
