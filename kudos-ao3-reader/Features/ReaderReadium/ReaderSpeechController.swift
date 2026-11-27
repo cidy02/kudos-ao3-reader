@@ -683,9 +683,16 @@ final class ReaderSpeechController {
         }
         guard let index, publication.readingOrder.indices.contains(index) else { return nil }
         let link = publication.readingOrder[index]
-        guard let resource = publication.findService(RawEPUBContainerService.self)?
-            .resource(for: link) ?? publication.get(link)
-        else { return nil }
+        // A present raw container that misses this href must not fall through to
+        // publication.get. That resource includes the end-of-chapter card, so
+        // Read Aloud would speak it. A nil here lets chapterUnits use the raw
+        // content iterator instead.
+        let resource = if let raw = publication.findService(RawEPUBContainerService.self) {
+            raw.resource(for: link)
+        } else {
+            publication.get(link)
+        }
+        guard let resource else { return nil }
 
         let locator: Locator?
         if let startLoc {

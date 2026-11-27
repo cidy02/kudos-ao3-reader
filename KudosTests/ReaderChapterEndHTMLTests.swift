@@ -268,6 +268,10 @@ struct ReaderChapterEndHTMLTests {
         #expect(css.contains("readium-sepia-on"))
         #expect(css.contains("prefers-reduced-motion: reduce"))
         #expect(css.contains("rem"))
+        #expect(css.contains("flex-wrap: wrap"))
+        #expect(css.contains("calc(50% - 0.625rem)"))
+        #expect(css.contains("min(100%, 7rem)"))
+        #expect(!css.contains("auto-fit"))
         #expect(!css.contains("<"))
         #expect(!css.contains(">"))
         #expect(!css.contains("&"))
@@ -495,7 +499,11 @@ struct ReaderChapterEndHTMLTests {
         #expect(abs(midTotal - 0.2) < 1e-9)
         #expect(normalizedMid.locations.position == 5)
 
-        // Swiping onto the card page (5/6) clamps cleanly to the end of the chapter (1.0).
+        // Swiping onto the card page (5/6) clamps to the logical end of the chapter.
+        // The stored progression stays a hair under 1: exactly 1 seeks the bottom of
+        // the card in scroll mode and never runs the in-page scale. Position and
+        // totalProgression still land on the chapter boundary. A mid-chapter value
+        // is stored unchanged.
         let rawOnCard = Locator(
             href: ch1Href,
             mediaType: .xhtml,
@@ -511,9 +519,12 @@ struct ReaderChapterEndHTMLTests {
             readingOrder: readingOrder,
             positionsByReadingOrder: positions
         )
-        #expect(normalizedEnd.locations.progression == 1.0)
+        let endProg = try #require(normalizedEnd.locations.progression)
+        #expect(endProg == ReaderChapterEndProgress.progressionForRestore(1))
+        #expect(endProg < 1)
         #expect(normalizedEnd.locations.position == 10)
         #expect(abs((normalizedEnd.locations.totalProgression ?? 0) - 0.5) < 1e-9)
+        #expect(ReaderChapterEndProgress.progressionForRestore(0.4) == 0.4)
 
         // With no extra card length (ratio == 1.0), the locator passes through unchanged.
         let unchanged = ReaderChapterEndProgress.normalizeLocator(
@@ -523,6 +534,53 @@ struct ReaderChapterEndHTMLTests {
             positionsByReadingOrder: positions
         )
         #expect(unchanged == rawMid)
+    }
+
+    @Test func contentRatioLookupMatchesAServedURLToThePublicationHref() throws {
+        let served = "readium://UUID/OEBPS/Ch%201.xhtml"
+        let publication = "OEBPS/ch 1.xhtml"
+        let withFragment = "/OEBPS/Ch%201.xhtml#top"
+        #expect(
+            ReaderChapterEndProgress.normalizedHrefKey(served)
+                == ReaderChapterEndProgress.normalizedHrefKey(publication)
+        )
+        #expect(
+            ReaderChapterEndProgress.normalizedHrefKey(served)
+                == ReaderChapterEndProgress.normalizedHrefKey(withFragment)
+        )
+
+        // Keys are the form recordChapterContentRatio stores.
+        let sharedName = [
+            "oebps/part1/ch1.xhtml": 0.8,
+            "oebps/part2/ch1.xhtml": 0.5,
+        ]
+        let part1 = try #require(ReaderChapterEndProgress.contentRatio(
+            forHref: "readium://UUID/OEBPS/part1/ch1.xhtml",
+            in: sharedName
+        ))
+        let part2 = try #require(ReaderChapterEndProgress.contentRatio(
+            forHref: "readium://UUID/OEBPS/part2/ch1.xhtml",
+            in: sharedName
+        ))
+        #expect(part1 == 0.8)
+        #expect(part2 == 0.5)
+        // A basename is used only when one stored chapter has that filename.
+        #expect(
+            ReaderChapterEndProgress.contentRatio(forHref: "ch1.xhtml", in: sharedName) == nil
+        )
+        let only = try #require(ReaderChapterEndProgress.contentRatio(
+            forHref: "only.xhtml",
+            in: ["oebps/part1/only.xhtml": 0.75]
+        ))
+        #expect(only == 0.75)
+    }
+
+    @Test func contentRatioScriptScalesASavedEndAndPostsTheReadiumHref() {
+        let script = ReaderChapterEndProgress.contentRatioUserScript(handlerName: "kudosVisualPage")
+        #expect(script.contains("pos > 0 && pos <= 1"))
+        #expect(!script.contains("pos > 0 && pos < 1"))
+        #expect(script.contains("readium.link.href"))
+        #expect(script.contains("function chapterHref()"))
     }
 
     private func readResourceString(_ resource: Resource?) async throws -> String {

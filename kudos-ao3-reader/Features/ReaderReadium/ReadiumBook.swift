@@ -887,6 +887,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         // First post-open settle: the spread has painted enough for Readium to
         // report a location — lift the skeleton that was covering its spinner.
         markFirstPagePresentedIfNeeded()
+        // The content-ratio message often arrives after this settle. Keeping the
+        // pre-normalization locator lets that message rewrite the saved place
+        // once, from the original coordinates, instead of scaling twice.
+        chapterEndState.lastRawLocator = rawLocator
         let locator = normalizedLocatorForChapterEnd(rawLocator)
         let rawProgression = rawLocator.locations.progression
         let previousHref = currentLocator.map { ReaderSectionBuilder.hrefKey($0.href.string) }
