@@ -183,6 +183,19 @@ extension WritingDocumentStore {
         )
     }
 
+    /// Snapshots the chapter right now as a `.destructive` version, even when the body
+    /// matches what is already on disk (used before accepting beta edits).
+    @discardableResult
+    func snapshotChapterVersion(
+        workID: UUID,
+        chapterID: UUID,
+        bodyHTML: String? = nil
+    ) throws -> WritingChapterVersion {
+        let folder = try chapterDirectory(workID: workID, chapterID: chapterID)
+        let body = try bodyHTML ?? readBody(at: folder)
+        return try writeSnapshot(body, cause: .destructive, in: folder, at: now(), by: try deviceID())
+    }
+
     func readChapter(at directory: URL) throws -> WritingChapter {
         try WritingDocumentIO.readJSON(WritingChapter.self, from: WritingDocumentPaths.chapterFile(directory))
     }
@@ -257,13 +270,14 @@ extension WritingDocumentStore {
 
     /// HTML first, then the JSON record. The JSON is the commit: a body without it
     /// is an interrupted snapshot and is not listed.
+    @discardableResult
     private func writeSnapshot(
         _ body: String,
         cause: WritingVersionCause,
         in chapterDirectory: URL,
         at stamp: Date,
         by author: String
-    ) throws {
+    ) throws -> WritingChapterVersion {
         let version = WritingChapterVersion(id: UUID(), cause: cause, updatedAt: stamp, updatedBy: author)
         try WritingDocumentIO.writeText(
             body,
@@ -274,6 +288,7 @@ extension WritingDocumentStore {
             to: WritingDocumentPaths.versionFile(chapterDirectory, id: version.id, pathExtension: "json")
         )
         try pruneVersions(in: chapterDirectory, now: stamp)
+        return version
     }
 
     func pruneLiveVersions(now: Date) throws {

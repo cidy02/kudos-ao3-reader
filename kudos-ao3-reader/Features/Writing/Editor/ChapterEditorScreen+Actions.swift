@@ -42,6 +42,9 @@ extension ChapterEditorScreen {
             copyAsAO3HTML: {
                 copyAsAO3HTML()
             },
+            sendToBeta: {
+                showingBetaReadingSheet = true
+            },
             addNote: {
                 beginAddingNote()
             },
