@@ -30,6 +30,18 @@ struct NewIdeaHandOffTests {
         #expect(NewIdeaRequest.shared.isPresenting == true)
         NewIdeaRequest.shared.isPresenting = false
     }
+
+    @Test func repeatedRequestAdvancesRequestID() {
+        let request = NewIdeaRequest()
+        let initial = request.requestID
+        request.request()
+        let first = request.requestID
+        request.request()
+        let second = request.requestID
+        #expect(request.isPresenting == true)
+        #expect(first != initial)
+        #expect(second != first)
+    }
 }
 
 struct NewIdeaNoteNameTests {
@@ -39,6 +51,12 @@ struct NewIdeaNoteNameTests {
 
     @Test func leadingBlankLinesAreSkipped() {
         #expect(NewIdeaNote.name(for: "\n  \n  What if the tide never turns?\nmore") == "What if the tide never turns?")
+    }
+
+    @Test func trailingWhitespaceOnTheFirstLineIsTrimmed() {
+        #expect(NewIdeaNote.name(for: "First line   \t \nSecond line") == "First line")
+        let padded = String(repeating: "a", count: 55) + "          extra"
+        #expect(NewIdeaNote.name(for: padded) == String(repeating: "a", count: 55))
     }
 
     @Test func nameIsCutToSixtyCharacters() {
@@ -141,5 +159,66 @@ struct NewIdeaSavingTests {
             let remaining = try await inbox.list()
             #expect(remaining.map(\.text) == ["two"])
         }
+    }
+
+    @Test func missingInboxListsEmptyAndRemoveDoesNotCreateAFile() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("new-idea-missing-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("Ideas").appendingPathComponent("ideas.json")
+        let inbox = IdeaInbox(url: url)
+
+        let initial = try await inbox.list()
+        #expect(initial.isEmpty)
+        try await inbox.remove(id: UUID())
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @Test func corruptInboxThrowsAndPreservesOriginalFile() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("new-idea-corrupt-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Ideas", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("ideas.json")
+        let corrupt = Data("{not valid json".utf8)
+        try corrupt.write(to: url)
+        let inbox = IdeaInbox(url: url)
+
+        await #expect(throws: WritingDocumentError.corrupt("ideas.json")) {
+            _ = try await inbox.list()
+        }
+        await #expect(throws: WritingDocumentError.corrupt("ideas.json")) {
+            _ = try await inbox.add("new idea")
+        }
+        await #expect(throws: WritingDocumentError.corrupt("ideas.json")) {
+            try await inbox.remove(id: UUID())
+        }
+        let preserved = try Data(contentsOf: url)
+        #expect(preserved == corrupt)
+    }
+
+    @Test func concurrentAddsAcrossSeparateInstancesKeepEveryIdea() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("new-idea-concurrent-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("Ideas").appendingPathComponent("ideas.json")
+        let first = IdeaInbox(url: url)
+        let second = IdeaInbox(url: url)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for index in 0..<20 {
+                let target = index.isMultiple(of: 2) ? first : second
+                let text = "idea-\(index)"
+                group.addTask {
+                    _ = try await target.add(text)
+                }
+            }
+            try await group.waitForAll()
+        }
+
+        let stored = try await IdeaInbox(url: url).list()
+        #expect(stored.count == 20)
+        #expect(Set(stored.map(\.text)) == Set((0..<20).map { "idea-\($0)" }))
     }
 }

@@ -10,7 +10,7 @@ struct SprintStatusRow: View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 6) {
                 timeLeft
-                Text("·").foregroundStyle(.secondaryInk)
+                Text("·").foregroundStyle(.secondaryInk).accessibilityHidden(true)
                 words
             }
             VStack(alignment: .leading, spacing: 2) {
@@ -25,11 +25,12 @@ struct SprintStatusRow: View {
     }
 
     private var timeLeft: some View {
-        HStack(spacing: 4) {
+        let interval = info.startedAt...max(info.startedAt, info.endsAt)
+        return HStack(spacing: 4) {
             Image(systemName: "timer")
                 .foregroundStyle(.accentInk)
                 .accessibilityHidden(true)
-            Text("Sprint \(Text(timerInterval: info.startedAt...info.endsAt, pauseTime: nil, countsDown: true, showsHours: false)) left")
+            Text("Sprint \(Text(timerInterval: interval, pauseTime: nil, countsDown: true, showsHours: false)) left")
         }
     }
 

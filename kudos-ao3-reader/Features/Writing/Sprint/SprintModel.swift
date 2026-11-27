@@ -60,12 +60,14 @@ nonisolated enum SprintMath {
         elapsed: TimeInterval,
         slice: TimeInterval = sliceSeconds
     ) -> [Int] {
-        let count = max(1, Int((elapsed / slice).rounded(.up)))
+        guard slice > 0 else { return [max(0, samples.last?.words ?? 0)] }
+        let count = max(1, Int((max(0, elapsed) / slice).rounded(.up)))
         func total(at time: TimeInterval) -> Int {
             samples.last { $0.offset <= time }?.words ?? 0
         }
         return (0..<count).map { index in
-            max(0, total(at: Double(index + 1) * slice) - total(at: Double(index) * slice))
+            let startTotal = index == 0 ? 0 : total(at: Double(index) * slice)
+            return max(0, total(at: Double(index + 1) * slice) - startTotal)
         }
     }
 
@@ -78,7 +80,7 @@ nonisolated enum SprintMath {
         calendar: Calendar
     ) -> Bool {
         guard words > 0, let week = calendar.dateInterval(of: .weekOfYear, for: date) else { return false }
-        let sameWeek = earlier.filter { $0.date >= week.start && $0.date < week.end }
+        let sameWeek = earlier.filter { $0.words > 0 && $0.date >= week.start && $0.date < week.end }
         return !sameWeek.isEmpty && sameWeek.allSatisfy { $0.words < words }
     }
 }
@@ -98,7 +100,7 @@ nonisolated struct SprintState: Equatable, Sendable, Identifiable {
     init(id: UUID = UUID(), startedAt: Date, plannedMinutes: Int, startWords: Int, workID: UUID? = nil) {
         self.id = id
         self.startedAt = startedAt
-        self.plannedMinutes = plannedMinutes
+        self.plannedMinutes = max(1, plannedMinutes)
         self.startWords = startWords
         self.workID = workID
     }
@@ -129,7 +131,7 @@ nonisolated struct SprintState: Equatable, Sendable, Identifiable {
         let minutes = elapsed >= plannedSeconds ? plannedMinutes : max(1, Int((elapsed / 60).rounded(.up)))
         return SprintResult(
             id: id,
-            endedAt: min(now, endsAt),
+            endedAt: min(max(now, startedAt), endsAt),
             minutes: minutes,
             plannedMinutes: plannedMinutes,
             words: words,
@@ -147,7 +149,9 @@ private nonisolated struct SprintHistoryFile: Codable {
 /// The sprint history: date, minutes, words and work id, in one JSON file in Application Support
 /// (`Sprints/sprints.json`). Device-only. A file that can't be read throws and is left alone.
 actor SprintHistory {
+    nonisolated static let shared = SprintHistory()
     nonisolated static let retained = 500
+    nonisolated private static let ioLock = NSLock()
 
     nonisolated static var defaultURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -162,12 +166,28 @@ actor SprintHistory {
     }
 
     func list() throws -> [SprintRecord] {
+        try withLock { try readUnlocked() }
+    }
+
+    func append(_ record: SprintRecord) throws {
+        try withLock {
+            let all = try readUnlocked() + [record]
+            try writeUnlocked(Array(all.suffix(Self.retained)))
+        }
+    }
+
+    private func readUnlocked() throws -> [SprintRecord] {
         guard FileManager.default.fileExists(atPath: url.path) else { return [] }
         return try WritingDocumentIO.readJSON(SprintHistoryFile.self, from: url).sprints
     }
 
-    func append(_ record: SprintRecord) throws {
-        let all = try list() + [record]
-        try WritingDocumentIO.writeJSON(SprintHistoryFile(sprints: Array(all.suffix(Self.retained))), to: url)
+    private func writeUnlocked(_ sprints: [SprintRecord]) throws {
+        try WritingDocumentIO.writeJSON(SprintHistoryFile(sprints: sprints), to: url)
+    }
+
+    private func withLock<T>(_ body: () throws -> T) rethrows -> T {
+        Self.ioLock.lock()
+        defer { Self.ioLock.unlock() }
+        return try body()
     }
 }

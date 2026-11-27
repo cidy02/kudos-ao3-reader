@@ -279,11 +279,7 @@ struct ContentView: View {
                     .accentTint(theme.effectiveTint, on: theme.appTheme)
                 #endif
             }
-            .sheet(isPresented: $newIdeaRequest.isPresenting) {
-                NewIdeaSheet()
-                    .environment(theme)
-                    .accentTint(theme.effectiveTint, on: theme.appTheme)
-            }
+            .newIdeaSheetPresenter(request: newIdeaRequest, theme: theme)
             .onAppear {
                 #if DEBUG
                 if DebugLaunchRoute.pageRoute == "welcome" || DebugLaunchRoute.pageRoute == "protectlibrary" {

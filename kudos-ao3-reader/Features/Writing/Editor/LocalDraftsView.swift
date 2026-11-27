@@ -11,13 +11,15 @@ struct LocalDraftsView: View {
     @State private var works: [WritingWork] = []
     @State private var ideas: [CapturedIdea] = []
     @State private var ideaToMove: CapturedIdea?
+    @State private var busyIdeaIDs: Set<UUID> = []
+    @State private var ideasLoadError: String?
     @State private var actionError: String?
     @State private var loadError: String?
     @State private var hasLoaded = false
 
     init(
         store: WritingDocumentStore = WritingDocumentStore(root: WritingDocumentStore.defaultRoot),
-        inbox: IdeaInbox = IdeaInbox()
+        inbox: IdeaInbox = .shared
     ) {
         self.store = store
         self.inbox = inbox
@@ -35,7 +37,12 @@ struct LocalDraftsView: View {
                 Text("Drafts here are saved on this device. Post them to AO3 when you're ready.")
             }
 
-            if !ideas.isEmpty {
+            if let ideasLoadError {
+                Section("Ideas") {
+                    Text(ideasLoadError)
+                        .foregroundStyle(.secondary)
+                }
+            } else if !ideas.isEmpty {
                 Section("Ideas") {
                     ForEach(ideas) { idea in
                         VStack(alignment: .leading, spacing: 2) {
@@ -134,7 +141,10 @@ struct LocalDraftsView: View {
     }
 
     private func delete(_ idea: CapturedIdea) {
+        guard !busyIdeaIDs.contains(idea.id) else { return }
+        busyIdeaIDs.insert(idea.id)
         Task {
+            defer { busyIdeaIDs.remove(idea.id) }
             do {
                 try await inbox.remove(id: idea.id)
                 await reload()
@@ -145,7 +155,10 @@ struct LocalDraftsView: View {
     }
 
     private func move(_ idea: CapturedIdea, to work: WritingWork) {
+        guard !busyIdeaIDs.contains(idea.id) else { return }
+        busyIdeaIDs.insert(idea.id)
         Task {
+            defer { busyIdeaIDs.remove(idea.id) }
             do {
                 try await NewIdeaSaver(store: store, inbox: inbox).move(idea, toWork: work.id)
                 await reload()
@@ -162,7 +175,12 @@ struct LocalDraftsView: View {
         } catch {
             loadError = "Couldn't read the drafts on this device."
         }
-        ideas = (try? await inbox.list()) ?? []
+        do {
+            ideas = try await inbox.list()
+            ideasLoadError = nil
+        } catch {
+            ideasLoadError = "Couldn't read the Ideas inbox."
+        }
         hasLoaded = true
     }
 }

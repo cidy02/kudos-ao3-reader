@@ -10,11 +10,13 @@ final class NewIdeaRequest {
     static let shared = NewIdeaRequest()
 
     var isPresenting = false
+    private(set) var requestID = 0
 
     init() {}
 
     func request() {
         isPresenting = true
+        requestID &+= 1
     }
 }
 

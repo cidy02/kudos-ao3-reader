@@ -12,6 +12,7 @@ private struct SprintHost: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .task { await controller.loadHistory() }
             .onChange(of: words) { _, new in controller.noteWords(new) }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { controller.tick() }
@@ -19,6 +20,7 @@ private struct SprintHost: ViewModifier {
             .onChange(of: isClosing) { _, closing in
                 if closing { controller.finish(showsResult: false) }
             }
+            .onDisappear { controller.finish(showsResult: false) }
             .task(id: controller.active?.id) { await controller.runUntilEnd() }
             .confirmationDialog(
                 "Start a Sprint",

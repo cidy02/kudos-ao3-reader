@@ -62,7 +62,18 @@ struct SprintMathTests {
         #expect(SprintMath.buckets(samples: samples, elapsed: 301).count == 2)
     }
 
-    @Test func bestThisWeekStopsAtTheWeekBoundary() {
+    @Test func bucketsKeepWordsSampledAtOffsetZero() {
+        let instant = [SprintSample(offset: 0, words: 25)]
+        #expect(SprintMath.buckets(samples: instant, elapsed: 60) == [25])
+        let paired = [
+            SprintSample(offset: 0, words: 20),
+            SprintSample(offset: 120, words: 50),
+            SprintSample(offset: 360, words: 80),
+        ]
+        #expect(SprintMath.buckets(samples: paired, elapsed: 600) == [50, 30])
+    }
+
+    @Test func bestThisWeekStopsAtTheWeekBoundary() throws {
         let calendar = weekCalendar()
         let sunday = day(calendar, 2023, 11, 26)
         let monday = day(calendar, 2023, 11, 27)
@@ -81,6 +92,26 @@ struct SprintMathTests {
         #expect(!SprintMath.isBestThisWeek(words: 900, at: nextMonday, among: history, calendar: calendar))
         #expect(!SprintMath.isBestThisWeek(words: 0, at: tuesday, among: history, calendar: calendar))
         #expect(!SprintMath.isBestThisWeek(words: 50, at: tuesday, among: [], calendar: calendar))
+
+        // Earlier zero-word sprints don't make the first real sprint of the week a best.
+        let zeroOnly = [record(monday, words: 0)]
+        #expect(!SprintMath.isBestThisWeek(words: 50, at: tuesday, among: zeroOnly, calendar: calendar))
+
+        // Exact midnight boundary between Sunday 23:59:59 and Monday 00:00:00.
+        let sundayEnd = try #require(
+            calendar.date(from: DateComponents(year: 2023, month: 11, day: 26, hour: 23, minute: 59, second: 59))
+        )
+        let mondayStart = try #require(
+            calendar.date(from: DateComponents(year: 2023, month: 11, day: 27, hour: 0, minute: 0, second: 0))
+        )
+        let sundayRecord = [record(sundayEnd, words: 100)]
+        #expect(!SprintMath.isBestThisWeek(words: 600, at: mondayStart, among: sundayRecord, calendar: calendar))
+
+        // Calendar week straddling a year boundary (Mon Dec 30, 2024 to Wed Jan 1, 2025).
+        let dec30 = day(calendar, 2024, 12, 30)
+        let jan1 = day(calendar, 2025, 1, 1)
+        let dec30Record = [record(dec30, words: 200)]
+        #expect(SprintMath.isBestThisWeek(words: 300, at: jan1, among: dec30Record, calendar: calendar))
     }
 }
 
@@ -104,6 +135,15 @@ struct SprintStateTests {
         #expect(result.plannedMinutes == 25)
         #expect(result.buckets.count == 2)
         #expect(result.words == 40)
+    }
+
+    @Test func nonPositiveMinutesAndBackwardClockAreClamped() {
+        let state = SprintState(startedAt: sprintStart, plannedMinutes: 0, startWords: 0)
+        #expect(state.plannedMinutes == 1)
+        #expect(state.endsAt == sprintStart.addingTimeInterval(60))
+        let result = state.finish(now: sprintStart.addingTimeInterval(-30))
+        #expect(result.endedAt == sprintStart)
+        #expect(result.minutes == 1)
     }
 }
 
@@ -186,6 +226,36 @@ struct SprintControllerTests {
             #expect(controller.isChoosingDuration == true)
         }
     }
+
+    @Test func wordsAfterTheDeadlineFinishWithoutCountingOrTapping() async throws {
+        try await makeController { controller, _ in
+            var taps = 0
+            controller.tap = { taps += 1 }
+            controller.start(minutes: 10, currentWords: 0, workID: nil, now: sprintStart)
+            controller.noteWords(100, now: sprintStart.addingTimeInterval(60))
+            #expect(taps == 1)
+
+            controller.noteWords(250, now: sprintStart.addingTimeInterval(600))
+            #expect(controller.active == nil)
+            #expect(controller.result?.words == 100)
+            #expect(taps == 1)
+        }
+    }
+
+    @Test func preloadedHistoryMarksEarlyFinishAsBestThisWeek() async throws {
+        try await makeController { controller, history in
+            let calendar = weekCalendar()
+            let monday = day(calendar, 2023, 11, 27)
+            let tuesday = day(calendar, 2023, 11, 28)
+            try await history.append(record(monday, words: 120))
+            await controller.loadHistory()
+
+            controller.start(minutes: 25, currentWords: 0, workID: nil, now: tuesday)
+            controller.noteWords(180, now: tuesday.addingTimeInterval(30))
+            let finished = controller.finish(now: tuesday.addingTimeInterval(60))
+            #expect(finished?.isBestThisWeek == true)
+        }
+    }
 }
 
 struct SprintHistoryTests {
@@ -198,6 +268,57 @@ struct SprintHistoryTests {
         try await SprintHistory(url: url).append(saved)
         let loaded = try await SprintHistory(url: url).list()
         #expect(loaded == [saved])
+    }
+
+    @Test func missingHistoryListsEmptyAndCorruptHistoryIsPreserved() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sprints-corrupt-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("sprints.json")
+        let history = SprintHistory(url: url)
+
+        let empty = try await history.list()
+        #expect(empty.isEmpty)
+
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let corrupt = Data("{bad".utf8)
+        try corrupt.write(to: url)
+
+        await #expect(throws: WritingDocumentError.corrupt("sprints.json")) {
+            _ = try await history.list()
+        }
+        let sample = record(sprintStart, words: 50)
+        await #expect(throws: WritingDocumentError.corrupt("sprints.json")) {
+            try await history.append(sample)
+        }
+        let preserved = try Data(contentsOf: url)
+        #expect(preserved == corrupt)
+    }
+
+    @Test func concurrentAppendsAcrossSeparateInstancesKeepEveryRecord() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sprints-concurrent-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("sprints.json")
+        let first = SprintHistory(url: url)
+        let second = SprintHistory(url: url)
+        let entries = (0..<20).map { index in
+            record(sprintStart.addingTimeInterval(Double(index)), words: index + 1)
+        }
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for (index, entry) in entries.enumerated() {
+                let target = index.isMultiple(of: 2) ? first : second
+                group.addTask {
+                    try await target.append(entry)
+                }
+            }
+            try await group.waitForAll()
+        }
+
+        let stored = try await SprintHistory(url: url).list()
+        #expect(stored.count == 20)
+        #expect(Set(stored.map(\.id)) == Set(entries.map(\.id)))
     }
 }
 

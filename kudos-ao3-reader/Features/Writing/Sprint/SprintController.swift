@@ -28,9 +28,10 @@ final class SprintController {
     @ObservationIgnored private let history: SprintHistory
     @ObservationIgnored private let calendar: Calendar
     @ObservationIgnored private var records: [SprintRecord] = []
+    @ObservationIgnored private var pendingSaveTask: Task<Void, Never>?
     @ObservationIgnored var tap: () -> Void = { SprintHaptics.lightTap() }
 
-    init(history: SprintHistory = SprintHistory(), calendar: Calendar = .current) {
+    init(history: SprintHistory = .shared, calendar: Calendar = .current) {
         self.history = history
         self.calendar = calendar
     }
@@ -39,8 +40,9 @@ final class SprintController {
         active.map { SprintStatusInfo(startedAt: $0.startedAt, endsAt: $0.endsAt, words: $0.words) }
     }
 
-    /// Loaded when a sprint starts (it runs at least ten minutes), so the end needs no disk read.
+    /// Loaded when the editor opens and when a sprint starts, so ending early still sees prior runs.
     func loadHistory() async {
+        await pendingSaveTask?.value
         let stored = (try? await history.list()) ?? []
         let known = Set(stored.map(\.id))
         records = stored + records.filter { !known.contains($0.id) }
@@ -63,6 +65,10 @@ final class SprintController {
 
     func noteWords(_ current: Int, now: Date = Date()) {
         guard var state = active else { return }
+        if now >= state.endsAt {
+            finish(now: now)
+            return
+        }
         let crossed = state.update(currentWords: current, now: now)
         active = state
         if !crossed.isEmpty { tap() }
@@ -104,8 +110,12 @@ final class SprintController {
             workID: finished.workID
         )
         records.append(record)
+        let previous = pendingSaveTask
         let history = history
-        Task { try? await history.append(record) }
+        pendingSaveTask = Task {
+            await previous?.value
+            try? await history.append(record)
+        }
         active = nil
         if showsResult { result = finished }
         return finished

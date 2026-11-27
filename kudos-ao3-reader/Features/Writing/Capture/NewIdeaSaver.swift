@@ -28,8 +28,10 @@ nonisolated enum NewIdeaNote {
     /// The first line of the idea, cut to 60 characters: the name of the story note it becomes.
     static func name(for text: String) -> String {
         let firstLine = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(whereSeparator: \.isNewline).first.map { String($0) } ?? ""
+            .split(whereSeparator: \.isNewline).first
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
         return String(firstLine.prefix(nameLimit))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

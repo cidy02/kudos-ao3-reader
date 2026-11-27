@@ -20,6 +20,8 @@ struct SprintShareCard: View {
             Text(words.formatted())
                 .font(.system(size: 72, weight: .heavy))
                 .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
             Text(words == 1 ? "word" : "words")
                 .font(.system(size: 22, weight: .semibold))
             Text("in \(minutes) \(minutes == 1 ? "minute" : "minutes")")
@@ -28,6 +30,7 @@ struct SprintShareCard: View {
                 .font(.system(size: 16))
                 .opacity(0.8)
         }
+        .padding(.horizontal, 16)
         .foregroundStyle(.white)
         .frame(width: 360, height: 240)
         .background(Self.gradient)
@@ -67,6 +70,7 @@ struct SprintDoneSheet: View {
                         onAnother(result.plannedMinutes)
                     } label: {
                         Text("Another \(result.plannedMinutes) Minutes")
+                            .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -75,6 +79,7 @@ struct SprintDoneSheet: View {
 
                     Button { dismiss() } label: {
                         Text("Back to Writing")
+                            .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
                     }
                     .controlSize(.large)
@@ -88,7 +93,10 @@ struct SprintDoneSheet: View {
         .scrollBounceBehavior(.basedOnSize)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .task { shareImage = SprintShareCard.image(for: result) }
+        #if os(macOS)
+        .frame(minWidth: 380, minHeight: 420)
+        #endif
+        .task(id: result.id) { shareImage = SprintShareCard.image(for: result) }
     }
 
     private var header: some View {
@@ -116,6 +124,7 @@ struct SprintDoneSheet: View {
     @ViewBuilder
     private var shareRow: some View {
         if let shareImage {
+            let thumb = min(thumbnailSize, 72)
             ShareLink(item: shareImage, preview: SharePreview("Writing sprint", image: shareImage)) {
                 HStack(spacing: 12) {
                     Text(result.words.formatted())
@@ -124,7 +133,7 @@ struct SprintDoneSheet: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.5)
                         .padding(4)
-                        .frame(width: thumbnailSize, height: thumbnailSize)
+                        .frame(width: thumb, height: thumb)
                         .background(SprintShareCard.gradient, in: RoundedRectangle(cornerRadius: 12))
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Share Result").font(.headline)
@@ -149,24 +158,18 @@ struct SprintDoneSheet: View {
 /// One bar per five minutes; the busiest slice is full strength.
 private struct SprintBars: View {
     let buckets: [Int]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .caption) private var tallest: CGFloat = 44
 
     var body: some View {
-        let peak = max(buckets.max() ?? 0, 1)
-        HStack(alignment: .bottom, spacing: 10) {
-            ForEach(Array(buckets.enumerated()), id: \.offset) { index, words in
-                VStack(spacing: 4) {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(.tint)
-                        .opacity(words == buckets.max() ? 1 : 0.35)
-                        .frame(height: 12 + CGFloat(words) / CGFloat(peak) * tallest)
-                    Text("\((index + 1) * 5)′")
-                        .font(.caption2)
-                        .foregroundStyle(.secondaryInk)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // At AX5 a 45-minute sprint's nine columns crush their minute labels on compact widths.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    barsRow(minBarWidth: 44)
                 }
-                .frame(maxWidth: .infinity)
+            } else {
+                barsRow(minBarWidth: nil)
             }
         }
         .padding(14)
@@ -174,5 +177,26 @@ private struct SprintBars: View {
         .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Words per five minutes: " + buckets.map(String.init).joined(separator: ", "))
+    }
+
+    private func barsRow(minBarWidth: CGFloat?) -> some View {
+        let maxWords = buckets.max() ?? 0
+        let peak = max(maxWords, 1)
+        return HStack(alignment: .bottom, spacing: buckets.count > 5 ? 6 : 10) {
+            ForEach(Array(buckets.enumerated()), id: \.offset) { index, words in
+                VStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(.tint)
+                        .opacity(maxWords > 0 && words == maxWords ? 1 : 0.35)
+                        .frame(height: 12 + CGFloat(words) / CGFloat(peak) * tallest)
+                    Text("\((index + 1) * 5)′")
+                        .font(.caption2)
+                        .foregroundStyle(.secondaryInk)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
+                .frame(minWidth: minBarWidth, maxWidth: .infinity)
+            }
+        }
     }
 }

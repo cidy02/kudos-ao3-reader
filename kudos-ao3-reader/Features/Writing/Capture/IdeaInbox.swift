@@ -15,6 +15,9 @@ private nonisolated struct IdeaInboxFile: Codable {
 /// Device-only, never sent anywhere, and not part of the library backup. A file that exists but
 /// can't be read throws instead of being overwritten, so a bad write never costs the writer ideas.
 actor IdeaInbox {
+    nonisolated static let shared = IdeaInbox()
+    nonisolated private static let ioLock = NSLock()
+
     nonisolated static var defaultURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Ideas", isDirectory: true)
@@ -30,24 +33,38 @@ actor IdeaInbox {
     }
 
     func list() throws -> [CapturedIdea] {
-        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
-        return try WritingDocumentIO.readJSON(IdeaInboxFile.self, from: url).ideas
+        try withLock { try readUnlocked() }
     }
 
     @discardableResult
     func add(_ text: String) throws -> CapturedIdea {
-        let idea = CapturedIdea(id: UUID(), text: text, createdAt: now())
-        try write([idea] + list())
-        return idea
+        try withLock {
+            let idea = CapturedIdea(id: UUID(), text: text, createdAt: now())
+            try writeUnlocked([idea] + readUnlocked())
+            return idea
+        }
     }
 
     func remove(id: UUID) throws {
-        let ideas = try list()
-        guard ideas.contains(where: { $0.id == id }) else { return }
-        try write(ideas.filter { $0.id != id })
+        try withLock {
+            let ideas = try readUnlocked()
+            guard ideas.contains(where: { $0.id == id }) else { return }
+            try writeUnlocked(ideas.filter { $0.id != id })
+        }
     }
 
-    private func write(_ ideas: [CapturedIdea]) throws {
+    private func readUnlocked() throws -> [CapturedIdea] {
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        return try WritingDocumentIO.readJSON(IdeaInboxFile.self, from: url).ideas
+    }
+
+    private func writeUnlocked(_ ideas: [CapturedIdea]) throws {
         try WritingDocumentIO.writeJSON(IdeaInboxFile(ideas: ideas), to: url)
+    }
+
+    private func withLock<T>(_ body: () throws -> T) rethrows -> T {
+        Self.ioLock.lock()
+        defer { Self.ioLock.unlock() }
+        return try body()
     }
 }
