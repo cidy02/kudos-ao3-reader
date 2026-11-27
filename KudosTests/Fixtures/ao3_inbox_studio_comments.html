@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="csrf-param" content="authenticity_token">
+  <meta name="csrf-token" content="csrf-studio-comments==">
+  <title>My Inbox</title>
+</head>
+<body class="logged-in">
+  <div id="main" class="inbox">
+    <h2 class="heading">My Inbox (5 comments, 3 unread)</h2>
+
+    <form id="inbox-form" class="inbox manage" action="/users/tester/inbox" method="post">
+      <input type="hidden" name="_method" value="put">
+      <input type="hidden" name="authenticity_token" value="csrf-studio-comments==">
+      <input type="hidden" name="source" value="inbox">
+
+      <ul class="actions">
+        <li><input type="submit" name="read" value="Mark Read"></li>
+        <li><input type="submit" name="unread" value="Mark Unread"></li>
+        <li><input type="submit" name="delete" value="Delete From Inbox"></li>
+      </ul>
+
+      <ol class="comment index group">
+        <li class="unread comment group even" role="article" id="feedback_comment_9101">
+          <h4 class="heading byline">
+            <a href="/users/ines/pseuds/Ines">Ines</a> on
+            <a href="/works/111001/comments/9101">Chapter 3 of What the Tide Keeps</a>
+            <span class="posted datetime">3 days ago</span>
+          </h4>
+          <div class="icon">
+            <a href="/users/ines/pseuds/Ines"><img alt="" class="icon"
+              src="https://example.com/icons/ines.png"></a>
+          </div>
+          <blockquote class="userstuff"><p>The tide took the last line.</p></blockquote>
+          <ul class="actions" role="menu">
+            <li><span class="unread">Unread</span></li>
+            <li><a href="/comments/9101/reply">Reply</a></li>
+            <li><label for="inbox_comments_601"><input type="checkbox" name="inbox_comments[]" value="601" id="inbox_comments_601">Select</label></li>
+          </ul>
+        </li>
+        <li class="read comment group odd" role="article" id="feedback_comment_9102">
+          <h4 class="heading byline">
+            <span>Driveby Guest</span><span class="role"> (Guest)</span> on
+            <a href="/works/111001/comments/9102">What the Tide Keeps</a>
+            <span class="posted datetime">5 days ago</span>
+          </h4>
+          <div class="icon"><span class="visitor icon"></span></div>
+          <blockquote class="userstuff"><p>Nice one.</p></blockquote>
+          <ul class="actions" role="menu">
+            <li><span class="replied" title="replied to">&#10004;</span></li>
+            <li><label for="inbox_comments_602"><input type="checkbox" name="inbox_comments[]" value="602" id="inbox_comments_602">Select</label></li>
+          </ul>
+        </li>
+        <li class="unread comment group even" role="article" id="feedback_comment_9103">
+          <h4 class="heading byline">
+            <a href="/users/rowan/pseuds/Rowan">Rowan</a> on
+            <a href="/works/111002/comments/9103">Lantern Season</a>
+            <span class="posted datetime">1 day ago</span>
+          </h4>
+          <div class="icon"></div>
+          <blockquote class="userstuff"><p>Light the second one.</p></blockquote>
+          <ul class="actions" role="menu">
+            <li><span class="unread">Unread</span></li>
+            <li><a href="/comments/9103/reply">Reply</a></li>
+            <li><label for="inbox_comments_603"><input type="checkbox" name="inbox_comments[]" value="603" id="inbox_comments_603">Select</label></li>
+          </ul>
+        </li>
+        <li class="unread comment group odd" role="article" id="feedback_comment_9104">
+          <h4 class="heading byline">
+            <a href="/users/keeper/pseuds/KeeperFan">KeeperFan</a> on
+            <a href="/works/111003/comments/9104">Keeper of the Northern Light</a>
+            <span class="posted datetime">4 days ago</span>
+          </h4>
+          <div class="icon"></div>
+          <blockquote class="userstuff"><p>Still waiting, with no reply offered.</p></blockquote>
+          <ul class="actions" role="menu">
+            <li><span class="unread">Unread</span></li>
+            <li><label for="inbox_comments_604"><input type="checkbox" name="inbox_comments[]" value="604" id="inbox_comments_604">Select</label></li>
+          </ul>
+        </li>
+        <li class="read comment group even" role="article" id="feedback_comment_9105">
+          <h4 class="heading byline">
+            <a href="/users/tagfan/pseuds/tagfan">tagfan</a> on
+            <a href="/tags/Some%20Tag/comments/9105">Some Tag</a>
+            <span class="posted datetime">2 weeks ago</span>
+          </h4>
+          <div class="icon"></div>
+          <blockquote class="userstuff"><p>Tag comment body</p></blockquote>
+          <ul class="actions" role="menu">
+            <li><label for="inbox_comments_605"><input type="checkbox" name="inbox_comments[]" value="605" id="inbox_comments_605">Select</label></li>
+          </ul>
+        </li>
+      </ol>
+    </form>
+  </div>
+</body>
+</html>
