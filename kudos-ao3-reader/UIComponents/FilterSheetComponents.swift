@@ -422,7 +422,7 @@ struct FilterLengthSection: View {
     }
 
     private var unselectedPresetFill: Color {
-        theme.appTheme.cardSurface
+        theme.appTheme.cardBackdrop
     }
 
     var body: some View {
@@ -434,12 +434,12 @@ struct FilterLengthSection: View {
                         preset.apply(to: &wordsFrom, to: &wordsTo)
                     } label: {
                         Text(preset.rawValue)
-                            .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
+                            .font(.subheadline.weight(.semibold))
                             .frame(maxWidth: .infinity)
                             .frame(minHeight: 32)
                             .padding(.vertical, 4)
                             .background(isSelected ? effectiveAccent : unselectedPresetFill)
-                            .foregroundStyle(isSelected ? Color.white : Color.primary)
+                            .foregroundStyle(isSelected ? ThemeManager.label(on: effectiveAccent) : Color.primary)
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)

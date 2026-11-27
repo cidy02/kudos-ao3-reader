@@ -32,16 +32,19 @@ struct HomeCollectionShelf: View {
     let onSeeAll: () -> Void
 
     var body: some View {
+        let limit = HomeBoardCopy.pinnedCollectionCardLimit
         WorkCarouselSection(
             title: collection.name,
             hasItems: !works.isEmpty,
             itemCount: works.isEmpty ? nil : works.count,
-            visibleCount: min(works.count, 12),
+            headerSymbol: "pin.fill",
+            headerSymbolLabel: "Pinned to Home",
+            visibleCount: min(works.count, limit),
             onSeeAll: onSeeAll
         ) {
-            ForEach(works.prefix(12)) { work in
+            ForEach(works.prefix(limit)) { work in
                 NavigationLink(value: LocalWorkDestination.reader(work)) {
-                    SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
+                    SensitiveWorkCoverCard(work: work, progress: work.isFinished ? nil : work.readingProgress)
                 }
                 .buttonStyle(.plain)
                 .localWorkContextMenu(work: work)

@@ -647,6 +647,9 @@ struct SectionRuleHeader: View {
     var countText: String?
     /// A quiet phrase after the count — 1i's "All queues 5 · Drag to reorder".
     var note: String?
+    /// Optional subtle symbol after the count (e.g. `pin.fill` on Home's pinned collections).
+    var trailingSymbol: String? = nil
+    var trailingSymbolLabel: String? = nil
     /// Custom link title when everything fits or a specific action is provided, e.g. "Organise", "Edit".
     /// When nil and `onSeeAll` is non-nil, defaults to "See All".
     var actionTitle: String?
@@ -704,6 +707,14 @@ struct SectionRuleHeader: View {
                     .font(.subheadline)
                     .foregroundStyle(Color.secondary)
                     .lineLimit(1)
+            }
+
+            if let trailingSymbol {
+                Image(systemName: trailingSymbol)
+                    .font(.footnote)
+                    .foregroundStyle(Color.secondary)
+                    .accessibilityLabel(trailingSymbolLabel ?? "")
+                    .accessibilityHidden(trailingSymbolLabel == nil)
             }
 
             if let note {
