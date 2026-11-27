@@ -12,7 +12,7 @@ struct StudioCommentsView: View {
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var localWorks: [SavedWork]
 
     @State private var model = StudioCommentsModel()
-    @State private var observedGeneration: Int?
+    @State private var observedActivationKey: String?
 
     init() {}
 
@@ -32,15 +32,24 @@ struct StudioCommentsView: View {
                 StudioCommentsInboxPage(workContext: workContext(for:))
             }
         }
-        .task(id: auth.sessionGeneration) {
-            if observedGeneration != auth.sessionGeneration {
-                if observedGeneration != nil {
+        .task(id: activationKey) {
+            if observedActivationKey != activationKey {
+                if observedActivationKey != nil {
                     model.resetForAccountChange()
                 }
-                observedGeneration = auth.sessionGeneration
+                observedActivationKey = activationKey
             }
             inbox.activate(auth: auth)
         }
+        .onChange(of: inbox.metadataRevision) { _, _ in
+            if !inbox.isShowingStaleCache {
+                model.reconcile(with: inbox.items)
+            }
+        }
+    }
+
+    private var activationKey: String {
+        "\(auth.sessionGeneration)|\(auth.isLoggedIn)|\(auth.username ?? "")"
     }
 
     private var signedOut: some View {
@@ -56,11 +65,27 @@ struct StudioCommentsView: View {
         let count = model.needsReplyCount(in: inbox.items)
         return ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                chipRow(count: count)
+                VStack(alignment: .leading, spacing: 8) {
+                    chipRow(count: count)
+                    if let pageNote = StudioCommentsBoard.pageNote(
+                        currentPage: inbox.currentPage, totalPages: inbox.totalPages
+                    ) {
+                        Text(pageNote)
+                            .font(.footnote)
+                            .foregroundStyle(.secondaryInk)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let filterNotice = StudioCommentsBoard.activeInboxFilterNotice(
+                        in: inbox.currentFilterValues
+                    ) {
+                        inboxFilterBanner(filterNotice)
+                    }
+                }
                 if inbox.isShowingStaleCache {
-                    Label("Showing saved comments from this iPhone", systemImage: "wifi.slash")
+                    Label("Showing saved comments from this \(ThisDevice.name)", systemImage: "wifi.slash")
                         .font(.subheadline)
                         .foregroundStyle(.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 feed()
                 if let failure, !inbox.items.isEmpty {
@@ -78,6 +103,7 @@ struct StudioCommentsView: View {
                     ) { page in
                         inbox.goToPage(page, auth: auth)
                     }
+                    .disabled(isWriteInFlight)
                 }
                 inboxLink
             }
@@ -86,6 +112,41 @@ struct StudioCommentsView: View {
         }
         .refreshable { await inbox.refresh(auth: auth) }
         .subjectScreenSurface(.content, palette: theme.scopePalette)
+    }
+
+    private func inboxFilterBanner(_ notice: String) -> some View {
+        let canReset = AO3InboxPill.available(in: inbox.filterForm).contains(.all)
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                Text(notice)
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                if canReset {
+                    showAllInboxButton
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(notice)
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                if canReset {
+                    showAllInboxButton
+                }
+            }
+        }
+    }
+
+    private var showAllInboxButton: some View {
+        Button("Show All") {
+            inbox.applyFilters(AO3InboxPill.all.values, auth: auth)
+        }
+        .buttonStyle(.plain)
+        .font(.footnote.weight(.semibold))
+        .foregroundStyle(theme.accentInk)
+        .disabled(isWriteInFlight)
+        .accessibilityLabel("Show all AO3 Inbox comments")
     }
 
     /// The row stacks once the chips no longer fit. A horizontal scroller would
@@ -151,6 +212,7 @@ struct StudioCommentsView: View {
             Text(emptyMessage)
                 .font(.body)
                 .foregroundStyle(.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
         } else {
             VStack(alignment: .leading, spacing: 18) {
                 ForEach(groups) { group in
@@ -192,6 +254,7 @@ struct StudioCommentsView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(StudioCommentCard.summary(item))
         .accessibilityHint("Shows the thread and a reply box")
+        .accessibilityAddTraits(.isButton)
     }
 
     private var inboxLink: some View {
@@ -199,23 +262,32 @@ struct StudioCommentsView: View {
             HStack(spacing: 6) {
                 Text("Everything else in your AO3 Inbox")
                     .font(.body.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
                     .accessibilityHidden(true)
             }
             .foregroundStyle(theme.accentInk)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Everything else in your AO3 Inbox")
         .accessibilityHint("Opens your AO3 Inbox")
     }
 
     /// Needs Reply's empty list is the only one that means "nothing to answer".
     /// All and By Work share the broader empty line.
     private var emptyMessage: String {
-        model.chip == .needsReply
-            ? "No comments waiting for a reply."
-            : "No comments on your works on this page."
+        StudioCommentsBoard.emptyMessage(chip: model.chip, totalPages: inbox.totalPages)
+    }
+
+    private var isWriteInFlight: Bool {
+        inbox.isPerformingBulkAction
+            || model.postingID != nil
+            || model.markingReadID != nil
+            || model.submissionPhase.isBusy
     }
 
     private var showsLoading: Bool {
@@ -257,22 +329,33 @@ private struct StudioCommentsChipButton: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        Button(action: action) {
+        let shape = SubjectMetrics.controlShape(dynamicTypeSize)
+        return Button(action: action) {
             HStack(spacing: 5) {
                 Text(chip.title)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
                 if let count {
                     Text(count.formatted())
+                        .monospacedDigit()
                         .accessibilityHidden(true)
                 }
             }
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(isOn ? ThemeManager.label(on: theme.effectiveTint) : Color.primary)
             .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             .frame(minHeight: 44)
-            .background(
-                isOn ? theme.effectiveTint : Color(.tertiarySystemFill),
-                in: SubjectMetrics.controlShape(dynamicTypeSize)
-            )
+            .background {
+                if isOn {
+                    shape.fill(theme.effectiveTint)
+                } else {
+                    shape
+                        .fill(theme.appTheme.glassFill(0.09))
+                        .overlay(shape.strokeBorder(theme.appTheme.glassStroke(0.13), lineWidth: 0.5))
+                }
+            }
+            .contentShape(shape)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
@@ -342,6 +425,8 @@ struct StudioCommentCard: View {
         let letter = item.commenterName.first.map { String($0).uppercased() } ?? "?"
         return Text(letter)
             .font(.subheadline.weight(.semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.45)
             .foregroundStyle(ThemeManager.label(on: theme.effectiveTint))
             .frame(width: 32, height: 32)
             .background(theme.effectiveTint, in: Circle())

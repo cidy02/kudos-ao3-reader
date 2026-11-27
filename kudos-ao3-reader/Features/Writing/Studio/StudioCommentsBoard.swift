@@ -87,6 +87,35 @@ enum StudioCommentsBoard {
             )
         }
     }
+
+    static func emptyMessage(chip: StudioCommentsChip, totalPages: Int) -> String {
+        switch (chip, totalPages > 1) {
+        case (.needsReply, true): "No comments waiting for a reply on this page."
+        case (.needsReply, false): "No comments waiting for a reply."
+        case (_, true): "No comments on your works on this page."
+        case (_, false): "No comments on your works."
+        }
+    }
+
+    static func pageNote(currentPage: Int, totalPages: Int) -> String? {
+        guard totalPages > 1 else { return nil }
+        return "Page \(currentPage.formatted()) of \(totalPages.formatted()) · counts are for this page"
+    }
+
+    /// Surfaces a non-default read/replied filter left on the shared AO3 Inbox
+    /// model, so Needs Reply does not quietly report 0 while the server page is
+    /// filtered to Replied or Unread. Never triggers a fetch on its own.
+    static func activeInboxFilterNotice(in values: [String: String]) -> String? {
+        let read = values[AO3InboxPill.readField]
+        let replied = values[AO3InboxPill.repliedField]
+        let readFiltered = read != nil && read != "all"
+        let repliedFiltered = replied != nil && replied != "all"
+        guard readFiltered || repliedFiltered else { return nil }
+        if let pill = AO3InboxPill.selected(in: values), pill != .all {
+            return "AO3 Inbox is filtered to \(pill.title)."
+        }
+        return "AO3 Inbox filters are active."
+    }
 }
 
 /// Pushes inside the Writing tab's stack. Owned here so Comments never adds a

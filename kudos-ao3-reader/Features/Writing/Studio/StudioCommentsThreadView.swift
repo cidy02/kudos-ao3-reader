@@ -29,6 +29,23 @@ struct StudioCommentsThreadView: View {
         .navigationDestination(for: StudioCommentsFullThread.self) { route in
             StudioCommentsFullThreadScreen(route: route)
         }
+        .task(id: adoptKey) {
+            if let item = model.item(commentID, in: inbox.items) {
+                model.adoptSubmission(for: item, identity: submissionIdentity)
+            }
+        }
+    }
+
+    private var adoptKey: String {
+        "\(commentID)|\(auth.sessionGeneration)|\(auth.username ?? "")"
+    }
+
+    private var submissionIdentity: String {
+        StudioCommentsModel.submissionIdentity(
+            username: auth.username,
+            isLoggedIn: auth.isLoggedIn,
+            generation: auth.sessionGeneration
+        )
     }
 
     private var title: String {
@@ -49,9 +66,12 @@ struct StudioCommentsThreadView: View {
                     actions(item)
                 }
                 if model.statusCommentID == item.id, let message = model.statusMessage {
+                    let style = model.statusIsError
+                        ? AnyShapeStyle(theme.appTheme.errorColor)
+                        : AnyShapeStyle(.secondaryInk)
                     Text(message)
                         .font(.subheadline)
-                        .foregroundStyle(model.statusIsError ? AnyShapeStyle(theme.appTheme.errorColor) : AnyShapeStyle(.secondaryInk))
+                        .foregroundStyle(style)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -61,25 +81,35 @@ struct StudioCommentsThreadView: View {
     }
 
     private func replyBox(_ item: AO3InboxItem) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let trimmed = model.replyText(for: item.id).trimmingCharacters(in: .whitespacesAndNewlines)
+        let remaining = StudioCommentsModel.remainingCharacters(for: trimmed)
+        let fieldShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        return VStack(alignment: .leading, spacing: 8) {
             Text("Your reply to \(item.commenterName)")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityHidden(true)
             TextField(
                 "Your reply to \(item.commenterName)",
-                text: replyBinding(item.id),
+                text: replyBinding(item),
                 axis: .vertical
             )
+            .textFieldStyle(.plain)
             .lineLimit(3...8)
             .font(.body)
             .padding(10)
-            .background(
-                theme.appTheme.cardSurface,
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-            )
+            .background(theme.appTheme.cardSurface, in: fieldShape)
+            .overlay(fieldShape.strokeBorder(theme.appTheme.glassStroke(0.13), lineWidth: 0.5))
             .accessibilityLabel("Your reply to \(item.commenterName)")
             .disabled(isBusy(item))
+            if remaining < 0 {
+                let over = (-remaining).formatted()
+                Text("\(over) characters over AO3's 10,000-character limit.")
+                    .font(.caption)
+                    .foregroundStyle(theme.appTheme.errorColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if !postingName.isEmpty {
                 Text("Posts on AO3 as \(postingName)")
                     .font(.caption)
@@ -87,11 +117,8 @@ struct StudioCommentsThreadView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(10)
-        .background(
-            theme.appTheme.cardBackdrop,
-            in: RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-        )
+        .padding(14)
+        .subjectPanel()
     }
 
     /// One row when both labels fit. The stack is the fallback so large text
@@ -109,7 +136,7 @@ struct StudioCommentsThreadView: View {
                 }
             }
             if model.pendingCommentID == item.id, case .ambiguous = model.submissionPhase {
-                Button("Check Again") { Task { await checkAgain(item) } }
+                Button("Check Again") { startCheckAgain(item) }
                     .buttonStyle(.kudosSecondary)
                     .disabled(isBusy(item))
                     .accessibilityLabel("Check Again")
@@ -120,7 +147,10 @@ struct StudioCommentsThreadView: View {
                         .font(.headline)
                         .foregroundStyle(theme.accentInk)
                         .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Thread")
                 .accessibilityHint("Opens the whole comment thread")
             }
         }
@@ -129,7 +159,7 @@ struct StudioCommentsThreadView: View {
     @ViewBuilder
     private func markReadButton(_ item: AO3InboxItem) -> some View {
         if showsMarkRead(item) {
-            Button("Mark Read") { Task { await markRead(item) } }
+            Button("Mark Read") { startMarkRead(item) }
                 .buttonStyle(.kudosSecondary)
                 .disabled(isBusy(item))
                 .accessibilityLabel("Mark Read")
@@ -139,7 +169,7 @@ struct StudioCommentsThreadView: View {
     @ViewBuilder
     private func postButton(_ item: AO3InboxItem) -> some View {
         if item.canReply {
-            Button("Post Reply") { Task { await post(item) } }
+            Button("Post Reply") { startPost(item) }
                 .buttonStyle(.kudosPrimary)
                 .disabled(cannotPost(item))
                 .accessibilityLabel("Post Reply")
@@ -155,18 +185,24 @@ struct StudioCommentsThreadView: View {
         model.postingID == item.id
             || model.markingReadID == item.id
             || model.submissionPhase.isBusy
+            || inbox.isPerformingBulkAction
     }
 
     private func cannotPost(_ item: AO3InboxItem) -> Bool {
-        let draft = model.replyText(for: item.id)
-        let blank = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return isBusy(item) || blank
+        let trimmed = model.replyText(for: item.id).trimmingCharacters(in: .whitespacesAndNewlines)
+        let overLimit = StudioCommentsModel.remainingCharacters(for: trimmed) < 0
+        return !auth.isLoggedIn || isBusy(item) || trimmed.isEmpty || overLimit
     }
 
-    private func replyBinding(_ id: Int) -> Binding<String> {
-        Binding(
-            get: { model.replyText(for: id) },
-            set: { model.setReply($0, for: id) }
+    private func replyBinding(_ item: AO3InboxItem) -> Binding<String> {
+        let model = model
+        let identity = submissionIdentity
+        return Binding(
+            get: { model.replyText(for: item.id) },
+            set: { text in
+                model.setReply(text, for: item.id)
+                model.syncSubmissionForDraftEdit(item: item, identity: identity)
+            }
         )
     }
 
@@ -174,53 +210,197 @@ struct StudioCommentsThreadView: View {
         let preferred = auth.preferredPostingPseudName?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if let preferred, !preferred.isEmpty { return preferred }
-        return auth.username ?? ""
+        guard let username = auth.username?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !username.isEmpty,
+              username.caseInsensitiveCompare("AO3 Account") != .orderedSame
+        else { return "" }
+        return username
     }
 
-    private func post(_ item: AO3InboxItem) async {
-        guard auth.isLoggedIn, let username = auth.username else { return }
+    private func startPost(_ item: AO3InboxItem) {
+        guard auth.isLoggedIn else { return }
+        let auth = auth
+        let inbox = inbox
+        let model = model
         let generation = auth.sessionGeneration
+        let username = auth.username
+        let identity = submissionIdentity
+        let cacheScope = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+        Task {
+            await Self.performPost(
+                item: item,
+                identity: identity,
+                username: username,
+                cacheScope: cacheScope,
+                generation: generation,
+                auth: auth,
+                inbox: inbox,
+                model: model
+            )
+        }
+    }
+
+    private func startCheckAgain(_ item: AO3InboxItem) {
+        guard auth.isLoggedIn else { return }
+        let auth = auth
+        let inbox = inbox
+        let model = model
+        let generation = auth.sessionGeneration
+        let username = auth.username
+        let cacheScope = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+        Task {
+            await Self.performCheckAgain(
+                item: item,
+                username: username,
+                cacheScope: cacheScope,
+                generation: generation,
+                auth: auth,
+                inbox: inbox,
+                model: model
+            )
+        }
+    }
+
+    private func startMarkRead(_ item: AO3InboxItem) {
+        guard auth.isLoggedIn, !inbox.isPerformingBulkAction, let form = inbox.bulkForm else { return }
+        let auth = auth
+        let inbox = inbox
+        let model = model
+        let generation = auth.sessionGeneration
+        let username = auth.username
+        let cacheScope = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+        Task {
+            await Self.performMarkRead(
+                item: item,
+                form: form,
+                username: username,
+                cacheScope: cacheScope,
+                generation: generation,
+                auth: auth,
+                inbox: inbox,
+                model: model
+            )
+        }
+    }
+
+    private static func performPost(
+        item: AO3InboxItem,
+        identity: String,
+        username: String?,
+        cacheScope: String,
+        generation: Int,
+        auth: AO3AuthService,
+        inbox: AO3InboxModel,
+        model: StudioCommentsModel
+    ) async {
+        guard auth.isLoggedIn, auth.sessionGeneration == generation else { return }
         let posted = await model.postReply(
             to: item,
-            identity: username,
+            identity: identity,
             generation: generation,
-            verifier: verifier(generation: generation),
-            poster: { parentID, body, generation, onFormPrepared in
+            verifier: makeVerifier(auth: auth, generation: generation),
+            poster: { parentID, body, expectedGeneration, onFormPrepared in
                 _ = try await auth.postCommentReply(
                     parentCommentID: parentID,
                     content: body,
-                    expectedGeneration: generation,
+                    expectedGeneration: expectedGeneration,
                     onFormPrepared: onFormPrepared
                 )
             }
         )
-        if posted { await inbox.refresh(auth: auth) }
+        if posted {
+            await refreshInboxAfterWrite(
+                auth: auth,
+                inbox: inbox,
+                username: username,
+                cacheScope: cacheScope,
+                generation: generation
+            )
+        }
     }
 
-    private func checkAgain(_ item: AO3InboxItem) async {
-        guard auth.isLoggedIn else { return }
-        let generation = auth.sessionGeneration
+    private static func performCheckAgain(
+        item: AO3InboxItem,
+        username: String?,
+        cacheScope: String,
+        generation: Int,
+        auth: AO3AuthService,
+        inbox: AO3InboxModel,
+        model: StudioCommentsModel
+    ) async {
+        guard auth.isLoggedIn, auth.sessionGeneration == generation else { return }
         let posted = await model.reverify(
             commentID: item.id,
             generation: generation,
-            verifier: verifier(generation: generation)
+            verifier: makeVerifier(auth: auth, generation: generation)
         )
-        if posted { await inbox.refresh(auth: auth) }
+        if posted {
+            await refreshInboxAfterWrite(
+                auth: auth,
+                inbox: inbox,
+                username: username,
+                cacheScope: cacheScope,
+                generation: generation
+            )
+        }
     }
 
-    private func markRead(_ item: AO3InboxItem) async {
-        guard let form = inbox.bulkForm else { return }
+    private static func performMarkRead(
+        item: AO3InboxItem,
+        form: AO3InboxBulkForm,
+        username: String?,
+        cacheScope: String,
+        generation: Int,
+        auth: AO3AuthService,
+        inbox: AO3InboxModel,
+        model: StudioCommentsModel
+    ) async {
+        guard auth.isLoggedIn,
+              auth.sessionGeneration == generation,
+              !inbox.isPerformingBulkAction
+        else { return }
         let changed = await model.markRead(
             item, form: form, referer: form.actionURL
         ) { action, form, items, referer in
-            try await auth.performInboxBulkAction(
+            try auth.requireSessionGeneration(generation)
+            return try await auth.performInboxBulkAction(
                 action, form: form, items: items, referer: referer
             )
         }
-        if changed { await inbox.refresh(auth: auth) }
+        if changed {
+            await refreshInboxAfterWrite(
+                auth: auth,
+                inbox: inbox,
+                username: username,
+                cacheScope: cacheScope,
+                generation: generation
+            )
+        }
     }
 
-    private func verifier(generation: Int) -> StudioCommentsModel.ReplyVerifier {
+    private static func refreshInboxAfterWrite(
+        auth: AO3AuthService,
+        inbox: AO3InboxModel,
+        username: String?,
+        cacheScope: String,
+        generation: Int
+    ) async {
+        guard auth.isLoggedIn, auth.sessionGeneration == generation else { return }
+        if let username, !username.isEmpty {
+            await AO3AuthorProfileFetcher.invalidateInbox(
+                username: username,
+                cacheScope: cacheScope,
+                isCurrent: { auth.isLoggedIn && auth.sessionGeneration == generation }
+            )
+        }
+        guard auth.isLoggedIn, auth.sessionGeneration == generation else { return }
+        await inbox.refresh(auth: auth)
+    }
+
+    private static func makeVerifier(
+        auth: AO3AuthService,
+        generation: Int
+    ) -> StudioCommentsModel.ReplyVerifier {
         { context, body, submittedAt, hidden, _ in
             try await auth.verifyCommentPosted(
                 context: context,
@@ -236,9 +416,11 @@ struct StudioCommentsThreadView: View {
         _ item: AO3InboxItem, opensReply: Bool, focusChapter: Bool
     ) -> StudioCommentsFullThread? {
         guard let workID = item.workID else { return nil }
+        let context = inbox.workContext(for: workID)
+            ?? AO3CommentsWorkContext(title: item.workTitle, authors: [])
         return StudioCommentsFullThread(
             workID: workID,
-            context: AO3CommentsWorkContext(title: item.workTitle, authors: []),
+            context: context,
             commentID: item.id,
             chapterPosition: item.chapterPosition,
             focusChapter: focusChapter,

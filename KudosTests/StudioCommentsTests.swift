@@ -40,9 +40,15 @@ struct StudioCommentsTests {
         try #require(page.items.first(where: { $0.id == id }))
     }
 
+    private func makeModel(
+        store: UnresolvedCommentSubmissionStore = UnresolvedCommentSubmissionStore()
+    ) -> StudioCommentsModel {
+        StudioCommentsModel(submission: CommentSubmissionGuard(store: store))
+    }
+
     @Test func needsReplyOnTheManageFixture() throws {
         let page = try Self.page("ao3_inbox_manage")
-        let model = StudioCommentsModel()
+        let model = makeModel()
 
         let waiting = model.needsReplyCount(in: page.items)
         #expect(waiting == 1)
@@ -64,13 +70,13 @@ struct StudioCommentsTests {
 
     @Test func needsReplyAndByWorkAcrossWorks() throws {
         let page = try Self.page("ao3_inbox_studio_comments")
-        #expect(page.items.map(\.id) == [9101, 9102, 9103, 9104, 9105])
+        #expect(page.items.map(\.id) == [9101, 9102, 9103, 9104, 9105, 9106, 9107, 9108])
 
-        let model = StudioCommentsModel()
+        let model = makeModel()
         let waiting = model.needsReplyCount(in: page.items)
-        #expect(waiting == 2)
+        #expect(waiting == 3)
         let needsIDs = model.visibleComments(in: page.items).map(\.id)
-        #expect(needsIDs == [9101, 9103])
+        #expect(needsIDs == [9101, 9103, 9108])
 
         let tide = try item(9101, on: page)
         #expect(tide.commenterName == "Ines")
@@ -82,13 +88,16 @@ struct StudioCommentsTests {
         let tideReplied = tide.isReplied
         #expect(tideReplied == false)
 
+        // Real AO3 renders both `span.replied` and a Reply link on an answered
+        // comment; `isReplied` alone must take it out of Needs Reply.
         let answered = try item(9102, on: page)
+        #expect(answered.canReply)
         #expect(answered.isReplied)
         let answeredNeeds = StudioCommentsBoard.needsReply(answered)
         #expect(answeredNeeds == false)
 
         // Unread, but the template omitted Reply because `can_reply_to_comment?`
-        // is false. That is not the same flag as `replied_to?`.
+        // is false (e.g. frozen/locked). That is not the same flag as `replied_to?`.
         let keeper = try item(9104, on: page)
         #expect(keeper.isUnread)
         let keeperCanReply = keeper.canReply
@@ -100,6 +109,32 @@ struct StudioCommentsTests {
 
         let tag = try item(9105, on: page)
         #expect(tag.workID == nil)
+        let tagIsWork = StudioCommentsBoard.isOnYourWork(tag)
+        #expect(tagIsWork == false)
+
+        // AO3 News (AdminPost) replies carry a Reply link but no work id.
+        let news = try item(9106, on: page)
+        #expect(news.canReply)
+        #expect(news.workID == nil)
+        let newsIsWork = StudioCommentsBoard.isOnYourWork(news)
+        let newsNeeds = StudioCommentsBoard.needsReply(news)
+        #expect(newsIsWork == false)
+        #expect(newsNeeds == false)
+
+        // Admin-hidden/deleted tombstones stay out of works and Needs Reply.
+        let hidden = try item(9107, on: page)
+        #expect(hidden.isUnavailable)
+        let hiddenIsWork = StudioCommentsBoard.isOnYourWork(hidden)
+        #expect(hiddenIsWork == false)
+
+        // Read does not imply replied: a read, replyable comment still needs a reply.
+        let readWaiting = try item(9108, on: page)
+        let readWaitingUnread = readWaiting.isUnread
+        #expect(readWaitingUnread == false)
+        #expect(readWaiting.canReply)
+        let readWaitingReplied = readWaiting.isReplied
+        #expect(readWaitingReplied == false)
+        #expect(StudioCommentsBoard.needsReply(readWaiting))
 
         let groups = model.workGroups(in: page.items)
         #expect(groups.map(\.title) == [
@@ -107,14 +142,14 @@ struct StudioCommentsTests {
             "Lantern Season",
             "Keeper of the Northern Light"
         ])
-        #expect(groups.map(\.comments.count) == [2, 1, 1])
-        #expect(groups.map { $0.comments.map(\.id) } == [[9101, 9102], [9103], [9104]])
+        #expect(groups.map(\.comments.count) == [2, 2, 1])
+        #expect(groups.map { $0.comments.map(\.id) } == [[9101, 9102], [9103, 9108], [9104]])
     }
 
     @Test func postedReplyLeavesNeedsReplyAndBlocksADuplicate() async throws {
         let page = try Self.page("ao3_inbox_manage")
         let item = try item(9001, on: page)
-        let model = StudioCommentsModel()
+        let model = makeModel()
         let log = CallLog()
         model.setReply("Thank you.", for: item.id)
 
@@ -159,7 +194,7 @@ struct StudioCommentsTests {
     @Test func rejectedReplyStaysAndCanBeRetried() async throws {
         let page = try Self.page("ao3_inbox_manage")
         let item = try item(9001, on: page)
-        let model = StudioCommentsModel()
+        let model = makeModel()
         let log = CallLog()
         model.setReply("Thank you.", for: item.id)
 
@@ -172,6 +207,8 @@ struct StudioCommentsTests {
 
         #expect(posted == false)
         #expect(log.calls == 1)
+        let kept = model.replyText(for: 9001)
+        #expect(kept == "Thank you.")
         let waiting = model.needsReplyCount(in: page.items)
         #expect(waiting == 1)
         #expect(model.statusMessage == "AO3 declined the reply.")
@@ -191,7 +228,7 @@ struct StudioCommentsTests {
     @Test func blankReplyDoesNotPost() async throws {
         let page = try Self.page("ao3_inbox_manage")
         let item = try item(9001, on: page)
-        let model = StudioCommentsModel()
+        let model = makeModel()
         let log = CallLog()
         model.setReply("   ", for: item.id)
 
@@ -211,7 +248,7 @@ struct StudioCommentsTests {
     @Test func timedOutReplyStaysAndBlocksASecondPost() async throws {
         let page = try Self.page("ao3_inbox_manage")
         let item = try item(9001, on: page)
-        let model = StudioCommentsModel()
+        let model = makeModel()
         let log = CallLog()
         model.setReply("Thank you.", for: item.id)
 
@@ -224,6 +261,8 @@ struct StudioCommentsTests {
 
         #expect(posted == false)
         #expect(log.calls == 1)
+        let kept = model.replyText(for: 9001)
+        #expect(kept == "Thank you.")
         let waiting = model.needsReplyCount(in: page.items)
         #expect(waiting == 1)
         let ambiguous = Self.isAmbiguous(model.submissionPhase)
@@ -244,7 +283,7 @@ struct StudioCommentsTests {
     @Test func foundReplyLeavesNeedsReply() async throws {
         let page = try Self.page("ao3_inbox_manage")
         let item = try item(9001, on: page)
-        let model = StudioCommentsModel()
+        let model = makeModel()
         let log = CallLog()
         model.setReply("Thank you.", for: item.id)
 
@@ -276,7 +315,7 @@ struct StudioCommentsTests {
     @Test func unknownVerificationStaysInNeedsReply() async throws {
         let page = try Self.page("ao3_inbox_manage")
         let item = try item(9001, on: page)
-        let model = StudioCommentsModel()
+        let model = makeModel()
         let log = CallLog()
         model.setReply("Thank you.", for: item.id)
 
@@ -296,6 +335,8 @@ struct StudioCommentsTests {
         #expect(posted == false)
         #expect(log.calls == 1)
         #expect(log.verifyCalls == 1)
+        let kept = model.replyText(for: 9001)
+        #expect(kept == "Thank you.")
         let waiting = model.needsReplyCount(in: page.items)
         #expect(waiting == 1)
         let ambiguous = Self.isAmbiguous(model.submissionPhase)
@@ -308,7 +349,7 @@ struct StudioCommentsTests {
     @Test func absentVerificationCanBeRetried() async throws {
         let page = try Self.page("ao3_inbox_manage")
         let item = try item(9001, on: page)
-        let model = StudioCommentsModel()
+        let model = makeModel()
         let log = CallLog()
         model.setReply("Thank you.", for: item.id)
 
@@ -324,6 +365,8 @@ struct StudioCommentsTests {
 
         #expect(posted == false)
         #expect(log.calls == 1)
+        let kept = model.replyText(for: 9001)
+        #expect(kept == "Thank you.")
         let waiting = model.needsReplyCount(in: page.items)
         #expect(waiting == 1)
         let failed = Self.isFailed(model.submissionPhase)
@@ -342,7 +385,7 @@ struct StudioCommentsTests {
         let page = try Self.page("ao3_inbox_manage")
         let item = try item(9001, on: page)
         let form = try #require(page.bulkForm)
-        let model = StudioCommentsModel()
+        let model = makeModel()
         let log = CallLog()
 
         let changed = await model.markRead(
@@ -376,7 +419,7 @@ struct StudioCommentsTests {
         let page = try Self.page("ao3_inbox_manage")
         let item = try item(9001, on: page)
         let form = try #require(page.bulkForm)
-        let model = StudioCommentsModel()
+        let model = makeModel()
         let log = CallLog()
 
         let changed = await model.markRead(

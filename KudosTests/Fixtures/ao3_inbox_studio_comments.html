@@ -7,7 +7,7 @@
 </head>
 <body class="logged-in">
   <div id="main" class="inbox">
-    <h2 class="heading">My Inbox (5 comments, 3 unread)</h2>
+    <h2 class="heading">My Inbox (8 comments, 4 unread)</h2>
 
     <form id="inbox-form" class="inbox manage" action="/users/tester/inbox" method="post">
       <input type="hidden" name="_method" value="put">
@@ -48,6 +48,7 @@
           <blockquote class="userstuff"><p>Nice one.</p></blockquote>
           <ul class="actions" role="menu">
             <li><span class="replied" title="replied to">&#10004;</span></li>
+            <li><a href="/comments/9102/reply">Reply</a></li>
             <li><label for="inbox_comments_602"><input type="checkbox" name="inbox_comments[]" value="602" id="inbox_comments_602">Select</label></li>
           </ul>
         </li>
@@ -88,6 +89,39 @@
           <blockquote class="userstuff"><p>Tag comment body</p></blockquote>
           <ul class="actions" role="menu">
             <li><label for="inbox_comments_605"><input type="checkbox" name="inbox_comments[]" value="605" id="inbox_comments_605">Select</label></li>
+          </ul>
+        </li>
+        <li class="unread comment group odd" role="article" id="feedback_comment_9106">
+          <h4 class="heading byline">
+            <a href="/users/newsreader/pseuds/NewsReader">NewsReader</a> on
+            <a href="/admin_posts/4455/comments/9106">AO3 Release Notes</a>
+            <span class="posted datetime">6 days ago</span>
+          </h4>
+          <div class="icon"></div>
+          <blockquote class="userstuff"><p>News post reply.</p></blockquote>
+          <ul class="actions" role="menu">
+            <li><span class="unread">Unread</span></li>
+            <li><a href="/comments/9106/reply">Reply</a></li>
+            <li><label for="inbox_comments_606"><input type="checkbox" name="inbox_comments[]" value="606" id="inbox_comments_606">Select</label></li>
+          </ul>
+        </li>
+        <li class="read comment group even" role="article" id="feedback_comment_9107">
+          <p>This comment has been hidden by an admin.</p>
+          <ul class="actions" role="menu">
+            <li><label for="inbox_comments_607"><input type="checkbox" name="inbox_comments[]" value="607" id="inbox_comments_607">Select</label></li>
+          </ul>
+        </li>
+        <li class="read comment group odd" role="article" id="feedback_comment_9108">
+          <h4 class="heading byline">
+            <a href="/users/mara/pseuds/Mara">Mara</a> on
+            <a href="/works/111002/comments/9108">Lantern Season</a>
+            <span class="posted datetime">2 days ago</span>
+          </h4>
+          <div class="icon"></div>
+          <blockquote class="userstuff"><p>Read already, still waiting for an answer.</p></blockquote>
+          <ul class="actions" role="menu">
+            <li><a href="/comments/9108/reply">Reply</a></li>
+            <li><label for="inbox_comments_608"><input type="checkbox" name="inbox_comments[]" value="608" id="inbox_comments_608">Select</label></li>
           </ul>
         </li>
       </ol>
