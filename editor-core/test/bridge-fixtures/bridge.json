@@ -80,6 +80,27 @@
       }
     },
     {
+      "name": "setAnnotations",
+      "args": {
+        "items": [
+          {
+            "id": "note-1",
+            "kind": "note",
+            "from": 34,
+            "to": 38
+          }
+        ]
+      },
+      "result": {
+        "placed": [
+          {
+            "id": "note-1",
+            "found": true
+          }
+        ]
+      }
+    },
+    {
       "name": "command",
       "args": {
         "name": "toggleMark",
@@ -177,27 +198,6 @@
             "<font> ×1"
           ]
         }
-      }
-    },
-    {
-      "name": "setAnnotations",
-      "args": {
-        "items": [
-          {
-            "id": "note-1",
-            "kind": "note",
-            "from": 34,
-            "to": 38
-          }
-        ]
-      },
-      "result": {
-        "placed": [
-          {
-            "id": "note-1",
-            "found": true
-          }
-        ]
       }
     },
     {
@@ -902,6 +902,35 @@
       "name": "completeWord",
       "attrs": {
         "text": "Marta"
+      }
+    },
+    {
+      "id": "session.moveWord",
+      "name": "moveWord",
+      "attrs": {
+        "by": -2,
+        "extend": true
+      }
+    },
+    {
+      "id": "session.insertPhrase",
+      "name": "insertPhrase",
+      "attrs": {
+        "text": "as if listening"
+      }
+    },
+    {
+      "id": "session.newParagraph",
+      "name": "newParagraph",
+      "attrs": {}
+    },
+    {
+      "id": "session.replaceText",
+      "name": "replaceText",
+      "attrs": {
+        "from": 3,
+        "to": 8,
+        "text": "three times"
       }
     }
   ]

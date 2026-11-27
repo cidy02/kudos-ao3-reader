@@ -177,6 +177,10 @@ struct RichEditorBridgeFixtureTests {
             ("host.insertQuotationMarks", RichEditorHostCommand.insertQuotationMarks.bridgeCommand),
             ("tag.lineBreak", AO3MarkupTag.lineBreak.richCommand),
             ("session.completeWord", RichEditorCommandArgs(name: "completeWord", attrs: ["text": .string("Marta")])),
+            ("session.moveWord", .moveWord(-2, extend: true)),
+            ("session.insertPhrase", .insertPhrase("as if listening")),
+            ("session.newParagraph", .newParagraph),
+            ("session.replaceText", .replaceText(RichEditorTextRange(from: 3, to: 8), with: "three times")),
         ]
         #expect(Set(native.map { $0.0 }) == Set(expected.keys), "every fixture command has a native source, and back")
         for (id, args) in native {

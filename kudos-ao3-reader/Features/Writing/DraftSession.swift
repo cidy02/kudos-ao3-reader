@@ -56,6 +56,10 @@ protocol DraftSourceBridge: AnyObject {
     func setCaretOffsetUTF16(_ offset: Int)
     func replaceForModeHandoff(_ value: String, caretOffset: Int?)
     func restore(_ value: String)
+    /// Replaces a UTF-16 range of the text, undoably, caret after it (a beta's suggestion, T-576f). False when it
+    /// didn't (frozen, out of range, or the text view refused the change).
+    @discardableResult
+    func replaceText(in range: NSRange, with value: String) -> Bool
     func focus()
     func undo()
     func redo()
@@ -438,6 +442,7 @@ final class DraftSession {
     }
 
     func notifyRichOwnership(_ ownsRich: Bool) {
+        if !ownsRich { wordAtCaret = nil } // the page's word belongs to Rich Text's caret
         (richTransport as? RichEditorHost)?.setOwnsRichUndo(ownsRich)
         onRichOwnershipChanged?(ownsRich)
     }

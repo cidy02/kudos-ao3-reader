@@ -116,8 +116,8 @@ nonisolated enum ChapterEditorAnnotationAnchoring {
     /// Builds a `WritingAnnotationAnchor` for a typed `"TK"` at `range` in `html`.
     ///
     /// Uses `html[range]` directly when it is still `"TK"`. If the writer edited or typed on
-    /// before saving, falls back to the nearest `"TK"` outside HTML tags at or after
-    /// `range.from` (preferring a word-bounded `"TK"`).
+    /// before saving, falls back to the nearest `"TK"` outside HTML tags on either side of `range.from`, within
+    /// `tkSearchReach` (preferring a word-bounded `"TK"`).
     static func anchorForTK(
         html: String,
         range: RichEditorTextRange
@@ -195,6 +195,13 @@ nonisolated enum ChapterEditorAnnotationAnchoring {
             .replacingOccurrences(of: "&apos;", with: "'")
             .replacingOccurrences(of: "&lt;", with: "<")
             .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&ldquo;", with: "\u{201C}")
+            .replacingOccurrences(of: "&rdquo;", with: "\u{201D}")
+            .replacingOccurrences(of: "&lsquo;", with: "\u{2018}")
+            .replacingOccurrences(of: "&rsquo;", with: "\u{2019}")
+            .replacingOccurrences(of: "&mdash;", with: "\u{2014}")
+            .replacingOccurrences(of: "&ndash;", with: "\u{2013}")
+            .replacingOccurrences(of: "&hellip;", with: "\u{2026}")
             .replacingOccurrences(of: "&amp;", with: "&")
 
         return decoded
@@ -222,35 +229,43 @@ nonisolated enum ChapterEditorAnnotationAnchoring {
 
     // MARK: TK search helpers
 
+    static let tkSearchReach = 400
+
     private static func nearestTKUTF16Range(in html: String, fromUTF16Offset startOffset: Int) -> Range<Int>? {
         let units = Array(html.utf16)
         let count = units.count
         guard count >= 2 else { return nil }
 
+        // The nearest "TK" on either side of the stale offset: text deleted before it since it was typed moves it
+        // back, text added moves it on (wave 48 review). A word-bounded one wins over a loose one; on a tie, the later.
         var index = 0
-        var firstLooseMatch: Range<Int>?
-
+        var nearestBounded: Range<Int>?
+        var nearestLoose: Range<Int>?
+        func closer(_ candidate: Range<Int>, than current: Range<Int>?) -> Bool {
+            // a TK further away than a few lines of typing is some other TK, not this one moved
+            guard abs(candidate.lowerBound - startOffset) <= tkSearchReach else { return false }
+            guard let current else { return true }
+            return abs(candidate.lowerBound - startOffset) <= abs(current.lowerBound - startOffset)
+        }
         while index < count {
             if units[index] == 0x3C { // '<'
                 index = skipTagOrComment(in: units, from: index)
                 continue
             }
-            if index >= startOffset,
-               units[index] == 0x54, // 'T'
+            if units[index] == 0x54, // 'T'
                index + 1 < count,
                units[index + 1] == 0x4B { // 'K'
                 let candidate = index..<(index + 2)
                 if isWordBoundedTK(at: index, in: html) {
-                    return candidate
-                }
-                if firstLooseMatch == nil {
-                    firstLooseMatch = candidate
+                    if closer(candidate, than: nearestBounded) { nearestBounded = candidate }
+                } else if closer(candidate, than: nearestLoose) {
+                    nearestLoose = candidate
                 }
             }
             index += 1
         }
 
-        return firstLooseMatch
+        return nearestBounded ?? nearestLoose
     }
 
     private static func skipTagOrComment(in units: [UInt16], from start: Int) -> Int {

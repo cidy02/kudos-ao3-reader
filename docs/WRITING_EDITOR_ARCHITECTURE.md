@@ -563,7 +563,13 @@ centre|right|justify}`, `setDirection {direction: leftToRight|rightToLeft}`, `se
 `unlink`, `insertImage {address, description, width?, height?}`, `insertSceneBreak {style: asterism|asterisks|line}`,
 `insertFootnote`, `undo`, `redo`, `clearFormatting` (`openTableInHTML` is native only). For the keys bar and the
 toolbar: `insertText {text}`, `insertQuotes {open, close}`, `moveCaret {by}`, `insertLineBreak`, and `paste {html?,
-text?}` (result adds `paste: {loss, words, kind}`). The native mapping is `RichEditorCommandMapping.swift`.
+text?}` (result adds `paste: {loss, words, kind}`). Names (T-576d): `completeWord {text}`. The phone extras (T-576e):
+`moveWord {by, extend}` (a word at a time across paragraphs; `extend` keeps the anchor), `insertPhrase {text}` (one
+dictated phrase, its own undo step, with a space before it only where one is needed), `newParagraph` (Return). Beta
+reading (T-576f): `replaceText {from, to, text}`, UTF-16 offsets into the text HTML mode holds, applied only when the
+range lies in one run of text (no tag in it, no split reference); each end is placed from the nearest character,
+because the source map aligns neither spaces nor the inside of a reference. The native mapping is
+`RichEditorCommandMapping.swift`.
 
 **Events.** These are informational. The session never waits on them.
 

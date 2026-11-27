@@ -274,6 +274,12 @@ extension ChapterEditorScreen {
         generation: Int? = nil
     ) async {
         guard let session, session.owner == .rich, documentBridge.chapterID != nil else { return }
+        // Every sync has a generation, the direct ones (a saved note, the detail sheet) too, so an older one that is
+        // still re-anchoring never paints over a newer one (wave 48 review).
+        let generation: Int = generation ?? {
+            annotationSyncGeneration += 1
+            return annotationSyncGeneration
+        }()
         let bodyHTML: String
         if let htmlOverride {
             bodyHTML = htmlOverride
@@ -282,13 +288,11 @@ extension ChapterEditorScreen {
         } else {
             bodyHTML = session.text
         }
-        guard !Task.isCancelled else { return }
-        if let generation, generation != annotationSyncGeneration { return }
+        guard !Task.isCancelled, generation == annotationSyncGeneration else { return }
 
         latestAnnotationHTML = bodyHTML
         guard let report = await documentBridge.reanchorAnnotations(in: bodyHTML) else { return }
-        guard !Task.isCancelled, session.owner == .rich else { return }
-        if let generation, generation != annotationSyncGeneration { return }
+        guard !Task.isCancelled, session.owner == .rich, generation == annotationSyncGeneration else { return }
 
         let items = ChapterEditorAnnotationAnchoring.bridgeItems(from: report.placed)
         _ = await session.setAnnotations(items)
