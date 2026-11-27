@@ -16,6 +16,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var themeManager
     #if os(iOS)
+    @State private var savedSearchesEditMode: EditMode = .inactive
     #endif
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -333,7 +334,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                             // Neutral like every system back button in the app,
                             // not the accent (LOOP-v3 B4).
                             .tint(Color.primary)
-                            .accessibilityLabel("Back")
+                            .accessibilityLabel(phase != .idle && filterHistory.isEmpty ? "Back to Search" : "Back")
                         }
                         #endif
                         if !isFiltersDocked {
@@ -452,6 +453,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                             SaveSearchSheet(
                                 filters: panelFiltersForSave,
                                 name: $saveName,
+                                totalWorks: panelFiltersForSave == loadedFilters ? resultSummary?.total : nil,
                                 onSave: { commitSavedSearch(panelFiltersForSave) }
                             )
                             // 1ax: a part-height sheet with its grabber.
@@ -463,6 +465,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     SaveSearchSheet(
                         filters: filters,
                         name: $saveName,
+                        totalWorks: filters == loadedFilters ? resultSummary?.total : nil,
                         onSave: { commitSavedSearch(filters) }
                     )
                         .presentationDetents([.medium, .large])
@@ -706,7 +709,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         if savedSearches.isEmpty {
             searchPrompt
         } else {
-            List {
+            let list = List {
                 Section {
                     ForEach(savedSearches) { saved in
                         savedSearchRow(saved)
@@ -714,7 +717,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     .onDelete(perform: deleteSavedSearches)
                     .cardRow()
                 } header: {
-                    Text("Saved Searches")
+                    savedSearchesHeader
                 }
                 // A row, not the section's footer: a plain list paints a footer on a white
                 // band, which stood out under Sepia (and Dark's would be the system's).
@@ -725,7 +728,42 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     .bareListRow()
             }
             .cardList()
+            #if os(iOS)
+            list
+                .environment(\.editMode, $savedSearchesEditMode)
+                .onDisappear { savedSearchesEditMode = .inactive }
+                .onChange(of: savedSearches.isEmpty) { _, isEmpty in
+                    if isEmpty { savedSearchesEditMode = .inactive }
+                }
+            #else
+            list
+            #endif
         }
+    }
+
+    private var savedSearchesHeader: some View {
+        #if os(iOS)
+        let isEditing = savedSearchesEditMode == .active
+        return SectionRuleHeader(
+            title: "Saved Searches",
+            countText: SavedSearchRowPresentation.countSubtitle(savedSearches.count),
+            actionTitle: isEditing ? "Done" : "Edit",
+            onSeeAll: {
+                withAnimationUnlessReduced(reduceMotion: reduceMotion) {
+                    savedSearchesEditMode = isEditing ? .inactive : .active
+                }
+            }
+        )
+        .textCase(nil)
+        .listRowInsets(EdgeInsets())
+        #else
+        return SectionRuleHeader(
+            title: "Saved Searches",
+            countText: SavedSearchRowPresentation.countSubtitle(savedSearches.count)
+        )
+        .textCase(nil)
+        .listRowInsets(EdgeInsets())
+        #endif
     }
 
     @ViewBuilder
@@ -735,31 +773,51 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             filters: saved.filters
         )
         let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: 4))
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 8))
         Button { runSaved(saved) } label: {
-            layout {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(saved.name).foregroundStyle(.primary)
-                    if let subtitle = savedSearchSubtitle(saved.filters) {
-                        Text(subtitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondaryInk)
-                            .lineLimit(1)
+            HStack(alignment: .center, spacing: 12) {
+                SettingsIconTile(
+                    color: themeManager.effectiveTint,
+                    systemImage: SavedSearchRowPresentation.symbol(for: saved.filters)
+                )
+                layout {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(saved.name)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let subtitle = SavedSearchRowPresentation.subtitle(for: saved.filters) {
+                            Text(subtitle)
+                                .font(.footnote)
+                                .foregroundStyle(.secondaryInk)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 4) }
+                    if let count {
+                        Text(QueueSourceChecks.badge(count))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(themeManager.accentInk)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(themeManager.effectiveTint.opacity(0.12), in: Capsule())
                     }
                 }
-                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 4) }
-                if let count {
-                    Text(QueueSourceChecks.badge(count))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tint)
-                }
+                // Stacked at AX sizes there is no Spacer: the whole row stays tappable (third review).
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            // Stacked at AX sizes there is no Spacer: the whole row stays tappable (third review).
-            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        #if os(macOS)
+        .contextMenu {
+            Button("Delete", role: .destructive) {
+                deleteSavedSearch(saved)
+            }
+        }
+        #endif
         .accessibilityLabel(QueueSourceChecks.savedSearchAccessibilityLabel(
             name: saved.name,
             count: saved.queueLinks.compactMap(\.newResultCount).max(),
@@ -781,20 +839,6 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         // system's black under Dark.
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(themeManager.appTheme.cardBackdrop.ignoresSafeArea())
-    }
-
-    /// A one-line description of a saved search's filters (the query, then the most
-    /// salient facets) so the row is recognizable beyond its name.
-    private func savedSearchSubtitle(_ savedFilters: AO3SearchFilters) -> String? {
-        var parts: [String] = []
-        let query = savedFilters.query.trimmingCharacters(in: .whitespaces)
-        if !query.isEmpty { parts.append("“\(query)”") }
-        let fandom = savedFilters.fandom.trimmingCharacters(in: .whitespaces)
-        if !fandom.isEmpty { parts.append(fandom) }
-        if savedFilters.rating != .any { parts.append(savedFilters.rating.title) }
-        if savedFilters.completion != .any { parts.append(savedFilters.completion.title) }
-        if savedFilters.sort != .relevance { parts.append(savedFilters.sort.title) }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var localQuery: String {
@@ -867,6 +911,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             query: localQuery,
             matches: localMatches,
             works: localWorks,
+            chips: localChips,
             isSelecting: $isSelectingLocal,
             selection: $localSelection,
             onSearchAO3: { runSearch() },
@@ -968,7 +1013,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     onTagTap: { name in router.filterLibrary(.userTag, name) },
                     onFandomTap: { name in router.filterLibrary(.fandom, name) }
                 )
-                .bareListRow()
+                .pageBodyRow(top: 6, gutter: SubjectMetrics.gutter)
             } header: {
                 combinedHeader(SearchCombinedResultsLogic.chipsSectionTitle)
             }
@@ -976,11 +1021,15 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
         if !localMatches.ao3Fandoms.isEmpty {
             Section {
-                ForEach(localMatches.ao3Fandoms, id: \.id) { fandom in
-                    SearchAO3FandomRow(fandom: fandom, onSearchFandom: { name in
-                        setIncludedFandom(name)
-                        runSearch()
-                    })
+                ForEach(Array(localMatches.ao3Fandoms.enumerated()), id: \.element.id) { index, fandom in
+                    SearchAO3FandomRow(
+                        fandom: fandom,
+                        showsTopSeparator: index > 0,
+                        onSearchFandom: { name in
+                            setIncludedFandom(name)
+                            runSearch()
+                        }
+                    )
                     .cardRow(chrome: .plain)
                 }
             } header: {
@@ -1114,7 +1163,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             ranking: $ranking.settings,
             totalWorks: resultSummary?.total ?? (results.isEmpty ? nil : results.count),
             appliedFilters: loadedFilters,
-            revealRootTrigger: dockedFiltersRevealToken
+            revealRootTrigger: dockedFiltersRevealToken,
+            loadedWorks: results,
+            previousKudos: ranking.previousKudos
         )
     }
 
@@ -1438,6 +1489,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         }
         try? context.save()
     }
+
+    #if os(macOS)
+    private func deleteSavedSearch(_ search: SavedSearch) {
+        SyncTombstones.recordDeletion(of: search, in: context)
+        context.delete(search)
+        try? context.save()
+    }
+    #endif
 
     private func retryFailedPage() {
         let page = failedPage ?? (currentPage + 1)

@@ -67,6 +67,7 @@ struct SearchLocalChipsView: View {
     let onFandomTap: (String) -> Void
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         FlowLayout(spacing: 8, rowSpacing: 8) {
@@ -80,19 +81,23 @@ struct SearchLocalChipsView: View {
     private func chipView(for chip: SearchLocalChip) -> some View {
         let chipLabel = HStack(spacing: 6) {
             Text(chip.kind.rawValue)
-                .font(.caption)
+                .font(.footnote)
                 .foregroundStyle(.secondaryInk)
             Text(chip.label)
-                .font(.subheadline.weight(.medium))
+                .font(.subheadline)
                 .foregroundStyle(Color.primary)
-            Text("\(chip.count)")
-                .font(.caption)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .fixedSize(horizontal: false, vertical: dynamicTypeSize.isAccessibilitySize)
+            Text(chip.count.formatted())
+                .font(.footnote)
                 .foregroundStyle(.secondaryInk)
+                .monospacedDigit()
         }
         .padding(.horizontal, 12)
+        .padding(.vertical, 5)
         .frame(minHeight: 32)
         .background(themeManager.appTheme.glassFill(0.12))
-        .clipShape(Capsule())
+        .clipShape(SubjectMetrics.controlShape(dynamicTypeSize))
 
         switch chip.target {
         case .tag(let name):

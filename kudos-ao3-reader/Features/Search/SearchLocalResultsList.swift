@@ -11,6 +11,7 @@ struct SearchLocalResultsList: View {
     let matches: SearchView.LocalMatches
     /// The matched works, already stripped of invalidated models.
     let works: [SavedWork]
+    var chips: [SearchLocalChip] = []
     @Binding var isSelecting: Bool
     @Binding var selection: Set<UUID>
     let onSearchAO3: () -> Void
@@ -24,7 +25,6 @@ struct SearchLocalResultsList: View {
         // A deletion re-keys the compute task via the record counts, but a render
         // can land in the gap before the debounce fires — drop invalidated models
         // rather than touching them (SwiftData asserts on invalidated access).
-        let tags = matches.tags.filter { $0.modelContext != nil }
         let matchedCollections = matches.collections.filter { $0.modelContext != nil }
         List {
             Section {
@@ -33,10 +33,13 @@ struct SearchLocalResultsList: View {
                 }
             } header: {
                 Text("Archive of Our Own")
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .textCase(nil)
             }
 
             if !works.isEmpty {
-                Section("In Your Library") {
+                Section {
                     // `SensitiveWorkRow`, as Library's lists: the privacy gate, the
                     // shared long-press menu, and selection (T-339).
                     ForEach(works) { work in
@@ -59,50 +62,47 @@ struct SearchLocalResultsList: View {
                             pendingRemoval: $pendingRemoval
                         )
                     }
+                } header: {
+                    sectionHeader("In your library", count: works.count)
                 }
             }
-            if !matches.libraryFandoms.isEmpty {
-                Section("Fandoms in Your Library") {
-                    ForEach(matches.libraryFandoms, id: \.self) { fandom in
-                        Button { router.filterLibrary(.fandom, fandom) } label: {
-                            Label(fandom, systemImage: "books.vertical")
-                        }
-                        .buttonStyle(.plain)
-                    }
+            if !chips.isEmpty {
+                Section {
+                    SearchLocalChipsView(
+                        chips: chips,
+                        collections: matchedCollections,
+                        onTagTap: { router.filterLibrary(.userTag, $0) },
+                        onFandomTap: { router.filterLibrary(.fandom, $0) }
+                    )
+                    .pageBodyRow(top: 6, gutter: SubjectMetrics.gutter)
+                } header: {
+                    sectionHeader(SearchCombinedResultsLogic.chipsSectionTitle)
                 }
             }
             if !matches.ao3Fandoms.isEmpty {
-                Section("Fandoms on AO3") {
-                    ForEach(matches.ao3Fandoms, id: \.id) { fandom in
-                        SearchAO3FandomRow(fandom: fandom, onSearchFandom: onSearchFandom)
+                Section {
+                    ForEach(Array(matches.ao3Fandoms.enumerated()), id: \.element.id) { index, fandom in
+                        SearchAO3FandomRow(
+                            fandom: fandom,
+                            showsTopSeparator: index > 0,
+                            onSearchFandom: onSearchFandom
+                        )
+                        .cardRow(chrome: .plain)
                     }
-                }
-            }
-            if !tags.isEmpty {
-                Section("Your Tags") {
-                    ForEach(tags) { tag in
-                        Button { router.filterLibrary(.userTag, tag.name) } label: {
-                            Label(tag.name, systemImage: "tag")
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            if !matchedCollections.isEmpty {
-                Section("Collections") {
-                    ForEach(matchedCollections) { collection in
-                        NavigationLink(value: collection) {
-                            Label(collection.name, systemImage: "square.stack")
-                        }
-                        // Library's collection cards have this menu (T-339).
-                        .collectionCardMenu(collection)
-                    }
+                } header: {
+                    sectionHeader(SearchCombinedResultsLogic.ao3FandomsSectionTitle)
                 }
             }
         }
         .cardList()
         .appScreenSurface(.content)
         .libraryWorkRemovalConfirmations(pendingDelete: $pendingDelete, pendingRemoval: $pendingRemoval)
+    }
+
+    private func sectionHeader(_ title: String, count: Int? = nil) -> some View {
+        SectionRuleHeader(title: title, count: count)
+            .textCase(nil)
+            .listRowInsets(EdgeInsets())
     }
 
     private func toggle(_ work: SavedWork) {
@@ -118,28 +118,73 @@ struct SearchLocalResultsList: View {
 /// Shared between `SearchLocalResultsList` (live typing) and `SearchView` (combined results).
 struct SearchAO3FandomRow: View {
     let fandom: AO3Fandom
+    var showsTopSeparator = false
     let onSearchFandom: (String) -> Void
+
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    static func countText(for count: Int?) -> String? {
+        count?.compactCount
+    }
+
+    static func accessibilityLabel(for fandom: AO3Fandom) -> String {
+        guard let count = fandom.workCount else { return fandom.name }
+        return "\(fandom.name), \(count.formatted()) \(count == 1 ? "work" : "works")"
+    }
 
     var body: some View {
         Button {
             onSearchFandom(fandom.name)
         } label: {
-            HStack {
-                Label(fandom.name, systemImage: "books.vertical")
-                    .lineLimit(1)
-                    .foregroundStyle(Color.primary)
-                Spacer()
-                if let count = fandom.workCount {
-                    Text(count.formatted(.number.notation(.compactName)))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondaryInk)
+            HStack(spacing: 8) {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(fandom.name)
+                            .font(.body)
+                            .foregroundStyle(Color.primary)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let count = Self.countText(for: fandom.workCount) {
+                            Text(count)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondaryInk)
+                                .monospacedDigit()
+                        }
+                    }
+                    Spacer(minLength: 8)
+                } else {
+                    Text(fandom.name)
+                        .font(.body)
+                        .lineLimit(1)
+                        .foregroundStyle(Color.primary)
+                    Spacer(minLength: 8)
+                    if let count = Self.countText(for: fandom.workCount) {
+                        Text(count)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondaryInk)
+                            .monospacedDigit()
+                    }
                 }
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
+            .padding(.horizontal, SubjectMetrics.gutter)
+            .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 10 : 0)
+            .frame(minHeight: 48)
             .contentShape(Rectangle())
+            .overlay(alignment: .top) {
+                if showsTopSeparator {
+                    Rectangle()
+                        .fill(themeManager.appTheme.glassStroke(0.14))
+                        .frame(height: 0.5)
+                        .accessibilityHidden(true)
+                }
+            }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Self.accessibilityLabel(for: fandom))
     }
 }

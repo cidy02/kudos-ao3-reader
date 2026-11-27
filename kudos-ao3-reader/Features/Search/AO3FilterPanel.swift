@@ -56,6 +56,10 @@ struct AO3FilterPanel: View {
     var appliedFilters: AO3SearchFilters?
     /// Incrementing this pops a docked subpage (Sort By / Language) back to the root Filters pane.
     var revealRootTrigger = 0
+    /// Works currently loaded on screen, passed to Sort By for the top-ranked preview line.
+    var loadedWorks: [AO3WorkSummary] = []
+    /// Momentum sightings from the current search session, passed to Sort By.
+    var previousKudos: [Int: Int] = [:]
     /// The filters the loaded results were fetched with; the count only describes those.
     @State private var openedFilters: AO3SearchFilters
 
@@ -89,7 +93,9 @@ struct AO3FilterPanel: View {
         ranking: Binding<LoadedWorksRanking>? = nil,
         totalWorks: Int? = nil,
         appliedFilters: AO3SearchFilters? = nil,
-        revealRootTrigger: Int = 0
+        revealRootTrigger: Int = 0,
+        loadedWorks: [AO3WorkSummary] = [],
+        previousKudos: [Int: Int] = [:]
     ) {
         _filters = filters
         self.mode = mode
@@ -108,6 +114,8 @@ struct AO3FilterPanel: View {
         self.totalWorks = totalWorks
         self.appliedFilters = appliedFilters
         self.revealRootTrigger = revealRootTrigger
+        self.loadedWorks = loadedWorks
+        self.previousKudos = previousKudos
         _openedFilters = State(initialValue: filters.wrappedValue)
         _sortPresentation = State(initialValue: WorksSortPresentation(applied: worksSort))
     }
@@ -168,7 +176,9 @@ struct AO3FilterPanel: View {
                             SearchSortByView(
                                 filters: $filters,
                                 ranking: ranking,
-                                allowsRelevanceSort: allowsRelevanceSort
+                                allowsRelevanceSort: allowsRelevanceSort,
+                                loadedWorks: loadedWorks,
+                                previousKudos: previousKudos
                             )
                         }
                     #endif
@@ -197,7 +207,9 @@ struct AO3FilterPanel: View {
                         filters: $filters,
                         ranking: ranking,
                         allowsRelevanceSort: allowsRelevanceSort,
-                        showsNavigationTitle: false
+                        showsNavigationTitle: false,
+                        loadedWorks: loadedWorks,
+                        previousKudos: previousKudos
                     )
                 case .language:
                     FilterLanguagePicker(selection: $filters.language, isInlinePane: true)
@@ -288,7 +300,10 @@ struct AO3FilterPanel: View {
     }
 
     func groupLabel(_ text: String) -> some View {
-        SubjectFieldLabel(text: text, style: .formGroup)
+        Text(text)
+            .font(.footnote)
+            .foregroundStyle(.secondaryInk)
+            .textCase(nil)
     }
 
     private var form: some View {
@@ -317,18 +332,32 @@ struct AO3FilterPanel: View {
                 warningsSection
 
                 // MARK: 3. Tags and text
-                tagAndTextSection
+                tagFieldsSection
+                if mode == .search {
+                    textAndCrossoversSection
+                }
 
                 // MARK: 4. Length and status
                 lengthAndStatusSection
+            }
+            .appThemedRows()
 
+            Section {
+                FilterLengthSection(wordsFrom: $filters.wordsFrom, wordsTo: $filters.wordsTo)
+            }
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+
+            Group {
                 // MARK: 5. Popularity
                 if mode == .search {
                     popularitySection
                 }
 
                 // MARK: Reset form row
-                resetSection
+                if canReset {
+                    resetSection
+                }
             }
             .appThemedRows()
         }
@@ -373,7 +402,7 @@ extension AO3FilterPanel {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 12) {
                     tile
-                    Text("Sort By")
+                    Text("Sort by")
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                 }
@@ -386,7 +415,7 @@ extension AO3FilterPanel {
         } else {
             HStack(spacing: 12) {
                 tile
-                Text("Sort By")
+                Text("Sort by")
                 Spacer()
                 Text(value)
                     .foregroundStyle(.secondaryInk)
@@ -414,7 +443,9 @@ extension AO3FilterPanel {
                     SearchSortByView(
                         filters: $filters,
                         ranking: ranking,
-                        allowsRelevanceSort: allowsRelevanceSort
+                        allowsRelevanceSort: allowsRelevanceSort,
+                        loadedWorks: loadedWorks,
+                        previousKudos: previousKudos
                     )
                 } label: {
                     sortByLabel
@@ -474,26 +505,38 @@ extension AO3FilterPanel {
 
     private var categoriesSection: some View {
         Section {
-            LazyVGrid(columns: cardColumns, spacing: 8) {
-                ForEach(AO3SearchFilters.Category.allCases) { category in
-                    FilterSymbolChipCard(
-                        title: category.title,
-                        symbol: WorkSymbolTile.category([category.title], dark: isDark),
-                        state: categoryState(category)
-                    ) {
-                        cycle(category)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Categories")
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 4)
+                    .accessibilityAddTraits(.isHeader)
+
+                LazyVGrid(columns: cardColumns, spacing: 8) {
+                    ForEach(AO3SearchFilters.Category.allCases) { category in
+                        FilterSymbolChipCard(
+                            title: category.title,
+                            symbol: WorkSymbolTile.category([category.title], dark: isDark),
+                            state: categoryState(category)
+                        ) {
+                            cycle(category)
+                        }
                     }
                 }
             }
             .padding(.vertical, 4)
-        } header: {
-            groupLabel("Categories")
         }
     }
 
     private var warningsSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Warnings")
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 4)
+                    .accessibilityAddTraits(.isHeader)
+
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Overall")
                         .font(.caption.weight(.semibold))
@@ -502,8 +545,8 @@ extension AO3FilterPanel {
                         .padding(.horizontal, 4)
 
                     LazyVGrid(columns: cardColumns, spacing: 8) {
-                        warningCard(.noWarnings, title: "No Warnings Apply")
-                        warningCard(.chooseNotTo, title: "Creator Chose Not To Use")
+                        warningCard(.noWarnings)
+                        warningCard(.chooseNotTo)
                     }
                 }
 
@@ -515,20 +558,18 @@ extension AO3FilterPanel {
                         .padding(.horizontal, 4)
 
                     LazyVGrid(columns: cardColumns, spacing: 8) {
-                        warningCard(.violence, title: "Graphic Violence")
-                        warningCard(.death, title: "Major Character Death")
-                        warningCard(.nonCon, title: "Rape/Non-Con")
-                        warningCard(.underage, title: "Underage Sex")
+                        warningCard(.violence)
+                        warningCard(.death)
+                        warningCard(.nonCon)
+                        warningCard(.underage)
                     }
                 }
             }
             .padding(.vertical, 4)
-        } header: {
-            groupLabel("Warnings")
         }
     }
 
-    private var tagAndTextSection: some View {
+    private var tagFieldsSection: some View {
         Section {
             if showFandomPicker {
                 TagSelectField(title: "Fandoms", kind: .fandom,
@@ -543,55 +584,49 @@ extension AO3FilterPanel {
             TagSelectField(title: "Additional Tags", kind: .freeform,
                            included: $filters.additionalTags, excluded: $filters.excludedAdditionalTags,
                            fandomContext: selectedFandoms)
+        } header: {
+            groupLabel("Tags and text")
+        }
+    }
 
-            if mode == .search {
-                HStack(spacing: 12) {
-                    SettingsIconTile(
-                        color: Color(red: 0x2C / 255.0, green: 0x6D / 255.0, blue: 0xB0 / 255.0),
-                        systemImage: "person.2"
-                    )
-                    Picker("Crossovers", selection: $filters.crossover) {
-                        ForEach(AO3SearchFilters.Crossover.allCases) { Text($0.title).tag($0) }
-                    }
-                }
-
-                DisclosureGroup {
-                    TextField("Title", text: $filters.title)
-                    TextField("Creator", text: $filters.creators)
-                    #if !os(macOS)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    #endif
-                } label: {
-                    HStack(spacing: 12) {
-                        SettingsIconTile(
-                            color: Color(red: 0x6C / 255.0, green: 0x6C / 255.0, blue: 0x70 / 255.0),
-                            systemImage: "text.quote"
-                        )
-                        Text("Title & Creator")
-                        Spacer()
-                        Text(titleAndCreatorSummary)
-                            .foregroundStyle(.secondaryInk)
-                    }
+    private var textAndCrossoversSection: some View {
+        Section {
+            HStack(spacing: 12) {
+                SettingsIconTile(
+                    color: Color(red: 0x2C / 255.0, green: 0x6D / 255.0, blue: 0xB0 / 255.0),
+                    systemImage: "person.2"
+                )
+                Picker("Crossovers", selection: $filters.crossover) {
+                    ForEach(AO3SearchFilters.Crossover.allCases) { Text($0.title).tag($0) }
                 }
             }
-        } header: {
-            groupLabel("Tags and Text")
+
+            DisclosureGroup {
+                TextField("Title", text: $filters.title)
+                TextField("Creator", text: $filters.creators)
+                #if !os(macOS)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                #endif
+            } label: {
+                HStack(spacing: 12) {
+                    SettingsIconTile(
+                        color: Color(red: 0x6C / 255.0, green: 0x6C / 255.0, blue: 0x70 / 255.0),
+                        systemImage: "text.quote"
+                    )
+                    Text("Title & creator")
+                    Spacer()
+                    Text(titleAndCreatorSummary)
+                        .foregroundStyle(.secondaryInk)
+                }
+            }
         }
     }
 
     private var lengthAndStatusSection: some View {
         Section {
             if Self.showsPageCompletionFacet(worksSort: worksSort) {
-                HStack(spacing: 12) {
-                    SettingsIconTile(
-                        color: Color(red: 0x2F / 255.0, green: 0x8F / 255.0, blue: 0x3A / 255.0),
-                        systemImage: "checkmark.circle"
-                    )
-                    Picker("Completion", selection: $filters.completion) {
-                        ForEach(AO3SearchFilters.Completion.allCases) { Text($0.title).tag($0) }
-                    }
-                }
+                completionRow
             }
 
             HStack(spacing: 12) {
@@ -637,10 +672,42 @@ extension AO3FilterPanel {
                     languageRowLabel
                 }
             }
-
-            FilterLengthSection(wordsFrom: $filters.wordsFrom, wordsTo: $filters.wordsTo)
         } header: {
-            groupLabel("Length and Status")
+            groupLabel("Length and status")
+        }
+    }
+
+    @ViewBuilder
+    private var completionRow: some View {
+        let tile = SettingsIconTile(
+            color: Color(red: 0x2F / 255.0, green: 0x8F / 255.0, blue: 0x3A / 255.0),
+            systemImage: "checkmark.circle"
+        )
+        if dynamicTypeSize.isAccessibilitySize {
+            HStack(spacing: 12) {
+                tile
+                Picker("Completion", selection: $filters.completion) {
+                    ForEach(AO3SearchFilters.Completion.allCases) { option in
+                        Text(Self.completionSegmentTitle(option)).tag(option)
+                    }
+                }
+            }
+        } else {
+            HStack(spacing: 12) {
+                tile
+                Text("Completion")
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                Picker("Completion", selection: $filters.completion) {
+                    ForEach(AO3SearchFilters.Completion.allCases) { option in
+                        Text(Self.completionSegmentTitle(option)).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .accentFill()
+                .fixedSize()
+            }
         }
     }
 
@@ -772,15 +839,88 @@ extension AO3FilterPanel {
         }
     }
 
-    private func rangeSummary(from: String, to: String) -> String {
+    static func warningChipTitle(_ warning: AO3SearchFilters.Warning) -> String {
+        switch warning {
+        case .noWarnings: "No Warnings Apply"
+        case .chooseNotTo: "Creator Chose Not To Use"
+        case .violence: "Graphic Violence"
+        case .death: "Major Character Death"
+        case .nonCon: "Rape/Non-Con"
+        case .underage: "Underage Sex"
+        }
+    }
+
+    static func completionSegmentTitle(_ completion: AO3SearchFilters.Completion) -> String {
+        switch completion {
+        case .any: "Any"
+        case .complete: "Complete"
+        case .inProgress: "WIP"
+        }
+    }
+
+    static func ratingActiveLabel(
+        rating: AO3SearchFilters.Rating,
+        match: AO3SearchFilters.RatingMatch
+    ) -> String {
+        switch match {
+        case .exact: rating.title
+        case .orHigher: "\(rating.title)+"
+        case .orLower: "\(rating.title)−"
+        }
+    }
+
+    static func compactFilterNumber(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        guard let value = Int(trimmed) else { return trimmed }
+        if value >= 1_000, value.isMultiple(of: 1_000) {
+            return "\(value / 1_000)k"
+        }
+        return value.formatted()
+    }
+
+    static func wordsActiveLabel(from: String, to: String) -> String? {
+        let lower = from.trimmingCharacters(in: .whitespaces)
+        let upper = to.trimmingCharacters(in: .whitespaces)
+        switch (!lower.isEmpty, !upper.isEmpty) {
+        case (true, true):
+            return "\(compactFilterNumber(lower))–\(compactFilterNumber(upper)) words"
+        case (true, false):
+            return "\(compactFilterNumber(lower))+ words"
+        case (false, true):
+            return "Under \(compactFilterNumber(upper)) words"
+        case (false, false):
+            return nil
+        }
+    }
+
+    static func popularityActiveLabel(name: String, from: String, to: String) -> String? {
+        let lower = from.trimmingCharacters(in: .whitespaces)
+        let upper = to.trimmingCharacters(in: .whitespaces)
+        let formattedLower = Int(lower)?.formatted() ?? lower
+        let formattedUpper = Int(upper)?.formatted() ?? upper
+        switch (!lower.isEmpty, !upper.isEmpty) {
+        case (true, true): return "\(formattedLower)–\(formattedUpper) \(name)"
+        case (true, false): return "\(formattedLower)+ \(name)"
+        case (false, true): return "Up to \(formattedUpper) \(name)"
+        case (false, false): return nil
+        }
+    }
+
+    static func rangeRowSummary(from: String, to: String) -> String {
         let fromVal = from.trimmingCharacters(in: .whitespaces)
         let toVal = to.trimmingCharacters(in: .whitespaces)
+        let formattedFrom = Int(fromVal)?.formatted() ?? fromVal
+        let formattedTo = Int(toVal)?.formatted() ?? toVal
         switch (!fromVal.isEmpty, !toVal.isEmpty) {
         case (false, false): return "Any"
-        case (true, false): return "\(fromVal) or more"
-        case (false, true): return "Up to \(toVal)"
-        case (true, true): return "\(fromVal)–\(toVal)"
+        case (true, false): return "\(formattedFrom) or more"
+        case (false, true): return "Up to \(formattedTo)"
+        case (true, true): return "\(formattedFrom)–\(formattedTo)"
         }
+    }
+
+    private func rangeSummary(from: String, to: String) -> String {
+        Self.rangeRowSummary(from: from, to: to)
     }
 
     private static func commaSeparatedValues(_ field: String) -> [String] {
@@ -793,7 +933,7 @@ extension AO3FilterPanel {
         Self.commaSeparatedValues(filters.fandom)
     }
 
-    private func warningCard(_ warning: AO3SearchFilters.Warning, title: String) -> some View {
+    private func warningCard(_ warning: AO3SearchFilters.Warning) -> some View {
         let symbol: WorkSymbolTile = switch warning {
         case .noWarnings:
             WorkSymbolTile.warnings(.none, dark: isDark)
@@ -803,7 +943,7 @@ extension AO3FilterPanel {
             WorkSymbolTile.warnings(.present(count: 1), dark: isDark)
         }
         return FilterSymbolChipCard(
-            title: title,
+            title: Self.warningChipTitle(warning),
             fullTitle: warning.title,
             symbol: symbol,
             state: warningState(warning)
@@ -874,22 +1014,23 @@ extension AO3FilterPanel {
 extension AO3FilterPanel {
     private var activeFilterItems: [ActiveFilterItem] {
         var items: [ActiveFilterItem] = []
+        appendContentActiveItems(to: &items)
+        appendTagActiveItems(to: &items)
+        appendStatusActiveItems(to: &items)
+        appendPopularityActiveItems(to: &items)
+        return items
+    }
 
-        if mode == .search && filters.sort != .relevance {
-            items.append(ActiveFilterItem(
-                id: "sort",
-                label: "Sort: \(filters.sort.title)",
-                kind: .facetValue,
-                onRemove: { filters.sort = .relevance }
-            ))
-        }
-
+    private func appendContentActiveItems(to items: inout [ActiveFilterItem]) {
         if filters.rating != .any {
             items.append(ActiveFilterItem(
                 id: "rating",
-                label: filters.rating.title,
-                kind: .facetValue,
-                onRemove: { filters.rating = .any }
+                label: Self.ratingActiveLabel(rating: filters.rating, match: filters.ratingMatch),
+                kind: .included,
+                onRemove: {
+                    filters.rating = .any
+                    filters.ratingMatch = .exact
+                }
             ))
         }
 
@@ -921,23 +1062,26 @@ extension AO3FilterPanel {
         }
 
         for warning in AO3SearchFilters.Warning.allCases {
+            let label = Self.warningChipTitle(warning)
             if filters.warnings.contains(warning) {
                 items.append(ActiveFilterItem(
                     id: "warn-\(warning.rawValue)",
-                    label: warning.title,
+                    label: label,
                     kind: .included,
                     onRemove: { filters.warnings.remove(warning) }
                 ))
             } else if filters.excludedWarnings.contains(warning) {
                 items.append(ActiveFilterItem(
                     id: "warn-ex-\(warning.rawValue)",
-                    label: warning.title,
+                    label: label,
                     kind: .excluded,
                     onRemove: { filters.excludedWarnings.remove(warning) }
                 ))
             }
         }
+    }
 
+    private func appendTagActiveItems(to items: inout [ActiveFilterItem]) {
         for fandom in Self.commaSeparatedValues(filters.fandom) {
             items.append(ActiveFilterItem(
                 id: "fandom-\(fandom)",
@@ -1005,7 +1149,9 @@ extension AO3FilterPanel {
                 onRemove: { removeTag(tag, from: &filters.excludedAdditionalTags) }
             ))
         }
+    }
 
+    private func appendStatusActiveItems(to items: inout [ActiveFilterItem]) {
         if !filters.title.trimmingCharacters(in: .whitespaces).isEmpty {
             items.append(ActiveFilterItem(
                 id: "title",
@@ -1035,7 +1181,7 @@ extension AO3FilterPanel {
         if filters.completion != .any {
             items.append(ActiveFilterItem(
                 id: "completion",
-                label: filters.completion.title,
+                label: Self.completionSegmentTitle(filters.completion),
                 kind: .facetValue,
                 onRemove: { filters.completion = .any }
             ))
@@ -1050,20 +1196,10 @@ extension AO3FilterPanel {
             ))
         }
 
-        let wf = filters.wordsFrom.trimmingCharacters(in: .whitespaces)
-        let wt = filters.wordsTo.trimmingCharacters(in: .whitespaces)
-        if !wf.isEmpty || !wt.isEmpty {
-            let label: String
-            if !wf.isEmpty && !wt.isEmpty {
-                label = "\(wf)–\(wt) words"
-            } else if !wf.isEmpty {
-                label = "≥ \(wf) words"
-            } else {
-                label = "≤ \(wt) words"
-            }
+        if let wordsLabel = Self.wordsActiveLabel(from: filters.wordsFrom, to: filters.wordsTo) {
             items.append(ActiveFilterItem(
                 id: "words",
-                label: label,
+                label: wordsLabel,
                 kind: .facetValue,
                 onRemove: {
                     filters.wordsFrom = ""
@@ -1105,10 +1241,6 @@ extension AO3FilterPanel {
                 onRemove: { filters.language = .any }
             ))
         }
-
-        appendPopularityActiveItems(to: &items)
-
-        return items
     }
 
     private func appendPopularityActiveItems(to items: inout [ActiveFilterItem]) {
@@ -1116,19 +1248,9 @@ extension AO3FilterPanel {
             ("kudos", "kudos", filters.kudosFrom, filters.kudosTo),
             ("hits", "hits", filters.hitsFrom, filters.hitsTo),
             ("comments", "comments", filters.commentsFrom, filters.commentsTo),
-            ("bookmarks", "bookmarks", filters.bookmarksFrom, filters.bookmarksTo)
+            ("bookmarks", "bookmarks", filters.bookmarksFrom, filters.bookmarksTo),
         ] {
-            let fromVal = from.trimmingCharacters(in: .whitespaces)
-            let toVal = to.trimmingCharacters(in: .whitespaces)
-            if !fromVal.isEmpty || !toVal.isEmpty {
-                let label: String
-                if !fromVal.isEmpty && !toVal.isEmpty {
-                    label = "\(fromVal)–\(toVal) \(name)"
-                } else if !fromVal.isEmpty {
-                    label = "\(fromVal)+ \(name)"
-                } else {
-                    label = "≤ \(toVal) \(name)"
-                }
+            if let label = Self.popularityActiveLabel(name: name, from: from, to: to) {
                 items.append(ActiveFilterItem(
                     id: key,
                     label: label,
@@ -1173,7 +1295,7 @@ extension AO3FilterPanel {
                             color: Color(red: 0x1E / 255.0, green: 0x63 / 255.0, blue: 0xC8 / 255.0),
                             systemImage: "arrow.up.arrow.down"
                         )
-                        Text("Sort By")
+                        Text("Sort by")
                         Spacer()
                         VStack(alignment: .trailing, spacing: 2) {
                             Text(sortPresentation.draft.column.title)

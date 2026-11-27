@@ -14,6 +14,13 @@ struct SearchSortByView: View {
     /// False when embedded inside the docked Duo Filters pane so it does not overwrite
     /// Search's outer navigation bar title.
     var showsNavigationTitle = true
+    /// Works already loaded on screen, used to preview the top ranked figure on the active rank.
+    var loadedWorks: [AO3WorkSummary] = []
+    /// Momentum's baseline sightings from the current search session.
+    var previousKudos: [Int: Int] = [:]
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(ThemeManager.self) private var themeManager
 
     var body: some View {
         let content = Form {
@@ -46,6 +53,13 @@ struct SearchSortByView: View {
 
     // MARK: - Sections
 
+    private func sectionHeader(_ text: String) -> some View {
+        Text(text)
+            .font(.footnote)
+            .foregroundStyle(.secondaryInk)
+            .textCase(nil)
+    }
+
     private var waysToFindSection: some View {
         Section {
             ForEach(SearchWaysToFind.allCases) { preset in
@@ -59,7 +73,7 @@ struct SearchSortByView: View {
                 }
             }
         } header: {
-            SubjectFieldLabel(text: "Ways to Find", style: .formGroup)
+            sectionHeader("Ways to Find")
         }
     }
 
@@ -79,7 +93,7 @@ struct SearchSortByView: View {
                 }
             }
         } header: {
-            SubjectFieldLabel(text: "Load from AO3 By", style: .formGroup)
+            sectionHeader("Load from AO3 by")
         } footer: {
             if let preset = SearchWaysToFind.applied(in: filters) {
                 Text("\(preset.title) adds “\(preset.queryNote)” to the search AO3 runs.")
@@ -90,22 +104,29 @@ struct SearchSortByView: View {
     private func rankSection(_ ranking: Binding<LoadedWorksRanking>) -> some View {
         Section {
             ForEach(LoadedWorksRank.allCases) { rank in
+                let isSelected = ranking.wrappedValue.rank == rank
+                let topMeta = isSelected
+                    ? Self.topLoadedResultLine(
+                        for: rank,
+                        works: loadedWorks,
+                        settings: ranking.wrappedValue,
+                        previousKudos: previousKudos
+                    )
+                    : nil
                 checkRow(
                     icon: iconTile(for: rank),
                     rank.title,
                     subtitle: rank.subtitle,
-                    isOn: ranking.wrappedValue.rank == rank
+                    meta: topMeta,
+                    isOn: isSelected
                 ) {
                     ranking.wrappedValue.select(rank, filters: &filters)
                 }
             }
         } header: {
-            SubjectFieldLabel(text: "Then Rank Loaded Works By", style: .formGroup)
+            sectionHeader("Then Rank Loaded Works by")
         } footer: {
-            // Not yet the spec's "or up to 100 at once with Rank Top 100": the owner
-            // has approved it in principle (2026-10-29), but how to load several
-            // pages respectfully (docs/AO3_NETWORKING_POLICY.md) is its own task.
-            Text("Ranks only the works already loaded from AO3. Kudos never loads extra pages to rank.")
+            Text(Self.rankingFooter())
         }
     }
 
@@ -113,12 +134,12 @@ struct SearchSortByView: View {
         let isRanked = ranking.wrappedValue.isActive
         return Section {
             Toggle(isOn: ranking.ranksCautiously) {
-                titled("Rank Cautiously", "Works with few readers need more kudos to rank high")
+                titled("Rank cautiously", "Works with few readers need more kudos to rank high")
             }
             .accentFill()
             .disabled(!isRanked)
             Toggle(isOn: ranking.setsAsideUnusual) {
-                titled("Set Aside Unusual Stats", ReaderResponseCopy.unusualStatsSubtitle)
+                titled("Set aside unusual stats", ReaderResponseCopy.unusualStatsSubtitle)
             }
             .accentFill()
             .disabled(!isRanked)
@@ -127,7 +148,7 @@ struct SearchSortByView: View {
                 .accentFill()
                 .disabled(!isRanked)
         } header: {
-            SubjectFieldLabel(text: "Ranking", style: .formGroup)
+            sectionHeader("Ranking")
         }
     }
 
@@ -138,7 +159,7 @@ struct SearchSortByView: View {
                 Text(SearchWaysToFind.minimumHitsTitle(value)).tag(value)
             }
         } label: {
-            titled("Leave Out Works Under", "Sent to AO3 with the search, so pages stay full")
+            titled("Leave out works under", "Sent to AO3 with the search, so pages stay full")
         }
     }
 
@@ -148,21 +169,46 @@ struct SearchSortByView: View {
     private var orderSection: some View {
         if let ranking, ranking.wrappedValue.isActive {
             Section {
-                Picker("Order", selection: ranking.order) {
-                    ForEach(LoadedWorksRankOrder.allCases) { Text($0.title).tag($0) }
+                orderRow {
+                    Picker("Order", selection: ranking.order) {
+                        ForEach(LoadedWorksRankOrder.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .accentFill()
                 }
-                .pickerStyle(.segmented)
-                .accentFill()
             }
         } else if filters.sort != .relevance {
             Section {
-                Picker("Order", selection: $filters.sortDirection) {
-                    ForEach(Self.directions(for: filters.sort)) { direction in
-                        Text(Self.directionTitle(direction, for: filters.sort)).tag(direction)
+                orderRow {
+                    Picker("Order", selection: $filters.sortDirection) {
+                        ForEach(Self.directions(for: filters.sort)) { direction in
+                            Text(Self.directionTitle(direction, for: filters.sort)).tag(direction)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .accentFill()
                 }
-                .pickerStyle(.segmented)
-                .accentFill()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func orderRow<Control: View>(@ViewBuilder control: () -> Control) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Order")
+                    .foregroundStyle(.primary)
+                control()
+            }
+        } else {
+            HStack(spacing: 12) {
+                Text("Order")
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                control()
+                    .fixedSize()
             }
         }
     }
@@ -173,13 +219,14 @@ struct SearchSortByView: View {
         icon: SettingsIconTile,
         _ title: String,
         subtitle: String? = nil,
+        meta: String? = nil,
         isOn: Bool,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
                 icon
-                titled(title, subtitle)
+                titled(title, subtitle, meta: meta)
                 Spacer(minLength: 0)
                 if isOn {
                     Image(systemName: "checkmark")
@@ -194,7 +241,7 @@ struct SearchSortByView: View {
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
-    private func titled(_ title: String, _ subtitle: String?) -> some View {
+    private func titled(_ title: String, _ subtitle: String?, meta: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .foregroundStyle(.primary)
@@ -202,6 +249,11 @@ struct SearchSortByView: View {
                 Text(subtitle)
                     .font(.footnote)
                     .foregroundStyle(.secondaryInk)
+            }
+            if let meta {
+                Text(meta)
+                    .font(.footnote)
+                    .foregroundStyle(themeManager.accentInk)
             }
         }
     }
@@ -265,10 +317,79 @@ struct SearchSortByView: View {
 
     // MARK: - Columns
 
+    /// Search-Sort board column order: Best Match, Date Updated, Date Posted,
+    /// Title, Creator, Word Count, Hits, Kudos, Comments, Bookmarks.
+    static let boardColumnOrder: [AO3SearchFilters.Sort] = [
+        .relevance, .dateUpdated, .datePosted, .workTitle, .creator,
+        .words, .hits, .kudos, .comments, .bookmarks,
+    ]
+
+    static func displayedColumns(allowsRelevanceSort: Bool) -> [AO3SearchFilters.Sort] {
+        allowsRelevanceSort ? boardColumnOrder : boardColumnOrder.filter { $0 != .relevance }
+    }
+
     private var columns: [AO3SearchFilters.Sort] {
-        allowsRelevanceSort
-            ? AO3SearchFilters.Sort.allCases
-            : AO3SearchFilters.Sort.allCases.filter { $0 != .relevance }
+        Self.displayedColumns(allowsRelevanceSort: allowsRelevanceSort)
+    }
+
+    static func rankingFooter(rankTop100Enabled: Bool? = nil) -> String {
+        if rankTop100Enabled ?? RankTop100Feature.isEnabled {
+            return "Ranks the works already loaded, or up to 100 at once with Rank Top 100."
+        }
+        return "Ranks only the works already loaded from AO3. Kudos never loads extra pages to rank."
+    }
+
+    /// Accent meta line on the selected computed rank when results are already loaded.
+    static func topLoadedResultLine(
+        for rank: LoadedWorksRank,
+        works: [AO3WorkSummary],
+        settings: LoadedWorksRanking,
+        previousKudos: [Int: Int] = [:],
+        now: Date = Date()
+    ) -> String? {
+        guard rank != .ao3Order, !works.isEmpty else { return nil }
+        var evaluation = settings
+        evaluation.rank = rank
+        let partition = LoadedWorksRanker.partition(
+            works, by: evaluation, previousKudos: previousKudos, now: now
+        )
+        guard let top = partition.ranked.first else { return nil }
+        let figures = LoadedWorksRanker.Figures(top.work, now: now)
+        guard let detail = topLoadedResultDetail(
+            for: rank, top: top, figures: figures, previousKudos: previousKudos
+        ) else { return nil }
+        return "Top loaded result: \(detail)"
+    }
+
+    private static func topLoadedResultDetail(
+        for rank: LoadedWorksRank,
+        top: RankedWork,
+        figures: LoadedWorksRanker.Figures,
+        previousKudos: [Int: Int]
+    ) -> String? {
+        switch rank {
+        case .ao3Order:
+            return nil
+        case .kudosPerHitAdjusted:
+            guard let raw = LoadedWorksRanker.rawFigure(.kudosPerHitAdjusted, figures),
+                  let prior = top.prior, prior > 0 else { return nil }
+            return "\(QualitySignalTones.decimal(raw / prior))× typical"
+        case .savesPerKudos:
+            guard let raw = LoadedWorksRanker.rawFigure(.savesPerKudos, figures) else { return nil }
+            return "\(QualitySignalTones.decimal(raw * 100))% saved"
+        case .commentsPerKudos:
+            guard let raw = LoadedWorksRanker.rawFigure(.commentsPerKudos, figures) else { return nil }
+            return "\(QualitySignalTones.decimal(raw * 100))% comments"
+        case .momentum:
+            guard let gain = LoadedWorksRanker.momentumGain(
+                kudos: figures.kudos, previous: previousKudos[top.work.id]
+            ), gain > 0 else { return nil }
+            let gainText = gain.formatted(.number.precision(.fractionLength(0)))
+            return "+\(gainText) kudos"
+        case .kudosPerThousandWords:
+            guard let raw = LoadedWorksRanker.rawFigure(.kudosPerThousandWords, figures) else { return nil }
+            return "\(QualitySignalTones.decimal(raw)) kudos per 1,000 words"
+        }
     }
 
     private var defaultSort: AO3SearchFilters.Sort {
