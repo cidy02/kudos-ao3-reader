@@ -833,7 +833,6 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 000000000000000000000900 /* Shared.xcconfig */;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = Config/KudosWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -860,7 +859,6 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 000000000000000000000900 /* Shared.xcconfig */;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = Config/KudosWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
