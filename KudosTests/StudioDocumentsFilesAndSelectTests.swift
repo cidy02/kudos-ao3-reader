@@ -169,7 +169,6 @@ struct StudioDocumentsImportTests {
             let rtfMagic = Data("{\\rtf1\\ansi Hello}".utf8)
 
             let rejectedCases: [(String, Data)] = [
-                ("chapter.docx", zipMagic),
                 ("book.epub", zipMagic),
                 ("archive.zip", zipMagic),
                 ("story.pdf", pdfMagic),
@@ -208,7 +207,7 @@ struct StudioDocumentsImportTests {
             #expect(allowed.contains(.html))
             #expect(!allowed.contains(.pdf))
             if let docx = UTType("org.openxmlformats.wordprocessingml.document") {
-                #expect(!allowed.contains(docx))
+                #expect(allowed.contains(docx))
             }
         }
     }

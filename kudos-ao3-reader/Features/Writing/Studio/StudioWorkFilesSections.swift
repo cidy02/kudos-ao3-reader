@@ -343,7 +343,11 @@ extension StudioWorkFilesView {
             VStack(spacing: 0) {
                 if let ao3WorkID = currentWork.ao3WorkID, auth.isLoggedIn {
                     NavigationLink {
-                        WritingWorkDestination(workID: ao3WorkID) {
+                        StudioWorkDetailsDestination(
+                            workID: ao3WorkID,
+                            workTitle: currentWork.title,
+                            subtitleText: currentWork.manuscriptStateLine(deviceName: ThisDevice.name)
+                        ) {
                             onAO3Write()
                             Task { await loadAO3Chapters(force: true) }
                         }

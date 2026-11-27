@@ -27,7 +27,7 @@ import SwiftData
     var activeSeconds: Double? = nil
     var deviceID: String = ""
     var rulesVersion: Int = 0
-    enum Mode: String, Equatable { case read, listen }
+    nonisolated enum Mode: String, Equatable, Sendable { case read, listen }
     var mode: Mode { Mode(rawValue: modeRaw) ?? .read }
     var lastSpineIndex: Int = 0
     /// Publication label from the stored Readium locator (`WorkReadingPosition`).

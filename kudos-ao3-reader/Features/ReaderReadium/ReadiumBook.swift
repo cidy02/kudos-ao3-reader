@@ -62,6 +62,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// section list use it, since the count alone cannot tell two copies apart.
     private(set) var sectionsGeneration = 0
     private(set) var currentLocator: Locator?
+
+    /// The end-of-chapter card's late ratio correction (T-578) rewrites the last settle into prose coordinates;
+    /// the setter stays private to this type.
+    func adoptChapterEndCorrectedLocator(_ locator: Locator) {
+        currentLocator = locator
+    }
     /// Bumped on every navigator-resolved `locationDidChange` that passes the
     /// ingestion gate; 0 until the first real settle after open (the seeded
     /// persisted locator does not count).
@@ -72,10 +78,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// so scroll-driven viewport updates don't thrash `@Observable` dependents
     /// on every settle.
     private(set) var isAtPublicationEnd = false
-    /// The story chapter whose trailing edge is on screen, when another chapter follows
-    /// (Reader-ChapterEnd). Derived from the same viewport as `isAtPublicationEnd`; it only
-    /// drives a chrome card and never touches the saved position.
-    private(set) var chapterEnd: ReaderChapterEndFacts.ChapterEnd?
     private(set) var navigator: EPUBNavigatorViewController?
     /// Edge taps, keyboard turns, and whether those turns animate.
     let pageTurns = ReadiumPageTurnController()
@@ -274,6 +276,11 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     var onReachedPublicationEnd: (() -> Void)?
     /// Hands web links in EPUB content to the app's in-app Browse tab.
     var onOpenExternalURL: ((URL) -> Void)?
+    /// Routes Kudos-only action links (`kudos-chapter-end://...`) from the
+    /// in-chapter end-of-chapter card to the reader's native Comment / Kudos flows.
+    var onChapterEndAction: ((ReaderChapterEndAction) -> Void)?
+    /// Shared kudos/accent/content-ratio state for the in-chapter end-of-chapter card.
+    @ObservationIgnored var chapterEndState = ReaderChapterEndBookState()
 
     /// Fraction through the whole publication (0...1), when known.
     var totalProgression: Double? {
@@ -578,7 +585,8 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// `Locator`, resume at the start of that reading-order item (the work's last
     /// chapter from the old WKWebView reader). Intra-chapter offset isn't recovered.
     func open(fileURL: URL, initialLocator: Locator?, fallbackSpineIndex: Int? = nil,
-              config: EPUBNavigatorViewController.Configuration) async {
+              config: EPUBNavigatorViewController.Configuration,
+              chapterEnd: ReaderChapterEndWorkContext? = nil) async {
         cancelPageBoxRemeasure()
         ReaderWebIsolation.installReadiumStoreIsolation()
         ReaderWebIsolation.onReadiumOpenExternalURL = { [weak self] url in
@@ -589,6 +597,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         resetTurnAutoHideForOpen()
         navigator = nil
         lastSubmittedPreferences = nil
+        chapterEndState.reset(for: chapterEnd)
         hasPresentedFirstPage = false
         firstPagePresentationGeneration += 1
         let presentationGeneration = firstPagePresentationGeneration
@@ -599,7 +608,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         isDismissInteractionActive = false
         isDismissExitLatched = false
         do {
-            let publication = try await ReadiumPublicationLoader.openEPUB(at: fileURL)
+            let publication = try await ReadiumPublicationLoader.openEPUB(
+                at: fileURL, chapterEnd: chapterEnd
+            )
             var initial = initialLocator
             if initial == nil, let index = fallbackSpineIndex,
                publication.readingOrder.indices.contains(index) {
@@ -738,20 +749,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         }
     }
 
-    /// The author's end note of one spine item, read from the EPUB (no network). Nil when the
-    /// chapter has none or cannot be read.
-    func endNote(forSpineIndex index: Int) async -> String? {
-        guard readingOrder.indices.contains(index),
-              let resource = publication?.get(readingOrder[index]),
-              let xhtml = try? await resource.readAsString().get(),
-              xhtml.utf8.count <= ReaderChapterEndFacts.maxNoteSourceBytes
-        else { return nil }
-        // The optional preview never parses on the main actor.
-        return await Task.detached(priority: .utility) {
-            ReaderChapterEndFacts.endNote(fromChapterXHTML: xhtml)
-        }.value
-    }
-
     /// Navigates to a spine position directly — needed for `ReaderSection`s (like
     /// AO3's synthesized Summary) that have no TOC `Link` of their own to pass to
     /// `go(to:)`.
@@ -778,20 +775,22 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
 
     private var pendingDebugGoToEnd = false
 
-    /// `shot:readerchapterend`: the last page of the first story chapter, so the end-of-chapter
-    /// card shows. Navigates for real; the card appears only if the viewport reports the end.
+    /// `shot:readerchapterend`: the last page of the first story chapter, where the
+    /// in-chapter end-of-chapter card sits with chrome hidden.
     func goToFirstChapterEndForDebug() {
-        chromeHidden = false
+        chromeHidden = true
         markFirstPagePresentedIfNeeded()
-        guard let first = readingOrder.first else { return }
+        let chapterSpine = sections.first { $0.kind == .chapter }?.spineIndex ?? 0
+        guard readingOrder.indices.contains(chapterSpine) else { return }
+        let firstChapter = readingOrder[chapterSpine]
         Task { @MainActor in
-            if let base = await publication?.locate(first) {
+            if let base = await publication?.locate(firstChapter) {
                 let target = base.copy(locations: {
                     $0.progression = 1.0
                     $0.position = nil
                 })
                 await navigator?.go(to: target, options: NavigatorGoOptions())
-                chromeHidden = false
+                chromeHidden = true
             }
         }
     }
@@ -871,7 +870,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
 
     // MARK: EPUBNavigatorDelegate
 
-    func navigator(_ nav: Navigator, locationDidChange locator: Locator) {
+    func navigator(_ nav: Navigator, locationDidChange rawLocator: Locator) {
         // Belt-and-braces sweep after a page settles. Creation-time wrap
         // is the setter hook in ReaderWebIsolation.
         if let view = navigator?.view {
@@ -894,13 +893,21 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         // First post-open settle: the spread has painted enough for Readium to
         // report a location — lift the skeleton that was covering its spinner.
         markFirstPagePresentedIfNeeded()
+        // The content-ratio message often arrives after this settle. Keeping the
+        // pre-normalization locator lets that message rewrite the saved place
+        // once, from the original coordinates, instead of scaling twice.
+        chapterEndState.lastRawLocator = rawLocator
+        let locator = normalizedLocatorForChapterEnd(rawLocator)
+        let rawProgression = rawLocator.locations.progression
         let previousHref = currentLocator.map { ReaderSectionBuilder.hrefKey($0.href.string) }
         let newHref = ReaderSectionBuilder.hrefKey(locator.href.string)
         if previousHref != newHref {
             // Chapter / resource turn: hide page line until the new resource is
             // measured twice. Do not rewrite digits from intermediate locators.
+            chapterEndState.lastRawLocatorProgression = rawProgression
             clearVisualPageMetrics()
             schedulePageBarRemeasure()
+            syncChapterEndDOMStateIfNeeded()
         } else if pageBarReady, !isScrubbing {
             // Update the page digit right away from leading-edge progression on
             // settled paged turns (e.g. edge tap / key where Readium's transitioning
@@ -909,16 +916,20 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             // because `scrollHeight / viewportHeight` is not an integer.
             if isPaged, !scrollInteracting,
                let vCount = visualPageCount, vCount > 0,
-               let prog = locator.locations.progression, prog.isFinite,
-               prog != currentLocator?.locations.progression {
+               let prog = rawProgression, prog.isFinite,
+               prog != chapterEndState.lastRawLocatorProgression {
                 let derivedPage = ReaderPageMetrics.pageFromLeadingProgression(prog, pageCount: vCount)
                 publishPageBar(page: derivedPage, pageCount: vCount, allowShrink: false)
             }
+            chapterEndState.lastRawLocatorProgression = rawProgression
             scheduleSettledPageDigitRefresh()
         } else if !pageBarReady, !isScrubbing, pageBoxRemeasureTask == nil {
             // A late first layout can outlive the bounded opening samples. A
             // real same-chapter settle must recover the bar, not leave it dead.
+            chapterEndState.lastRawLocatorProgression = rawProgression
             schedulePageBarRemeasure()
+        } else {
+            chapterEndState.lastRawLocatorProgression = rawProgression
         }
         currentLocator = locator
         settledLocationCount += 1
@@ -1227,7 +1238,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         publishPageBar(page: page, pageCount: pageCount, allowShrink: allowShrink)
     }
 
-    private static func allWKWebViews(in view: UIView) -> [WKWebView] {
+    static func allWKWebViews(in view: UIView) -> [WKWebView] {
         var result: [WKWebView] = []
         if let web = view as? WKWebView { result.append(web) }
         for sub in view.subviews {
@@ -1247,15 +1258,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         let wasAtEnd = isAtPublicationEnd
         if atEnd != wasAtEnd {
             isAtPublicationEnd = atEnd
-        }
-        let chapterEnd = atEnd ? nil : ReaderChapterEndFacts.chapterEnd(
-            endingSpineIndex: ReadiumReaderCompletion.endingSpineIndex(
-                viewport: viewport, readingOrder: readingOrder
-            ),
-            sections: sections
-        )
-        if chapterEnd != self.chapterEnd {
-            self.chapterEnd = chapterEnd
         }
         if atEnd, !wasAtEnd {
             onReachedPublicationEnd?()
@@ -1279,9 +1281,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     }
 
     /// Readium's default implementation opens every external URL in the system
-    /// browser. Keep HTTP(S) links inside Kudos, matching the legacy reader, while
-    /// preserving the system behavior for schemes such as `mailto:`.
+    /// browser. Intercept Kudos-only chapter-end action URLs first, keep HTTP(S)
+    /// links inside Kudos, and preserve system behavior for schemes like `mailto:`.
     func navigator(_: Navigator, presentExternalURL url: URL) {
+        if routeChapterEndActionURL(url) {
+            return
+        }
         if !routeWebURLToBrowse(url) {
             UIApplication.shared.open(url)
         }
@@ -1426,6 +1431,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         """
         controller.addUserScript(WKUserScript(
             source: visualPageSource, injectionTime: .atDocumentEnd, forMainFrameOnly: false
+        ))
+        let ratioSource = ReaderChapterEndProgress.contentRatioUserScript(
+            handlerName: VisualPageMessageBridge.handlerName
+        )
+        controller.addUserScript(WKUserScript(
+            source: ratioSource, injectionTime: .atDocumentEnd, forMainFrameOnly: false
         ))
     }
 
@@ -1744,6 +1755,13 @@ private final class VisualPageMessageBridge: NSObject, WKScriptMessageHandler {
         guard message.name == Self.handlerName,
               let body = message.body as? [String: Any]
         else { return }
+        if let ratio = (body["contentRatio"] as? Double)
+            ?? (body["contentRatio"] as? NSNumber)?.doubleValue,
+           let href = body["href"] as? String {
+            Task { @MainActor [weak book] in
+                book?.recordChapterContentRatio(ratio, forHref: href)
+            }
+        }
         let page = (body["page"] as? Int)
             ?? (body["page"] as? NSNumber)?.intValue
         let pageCount = (body["pageCount"] as? Int)

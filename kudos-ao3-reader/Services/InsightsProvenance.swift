@@ -11,7 +11,7 @@ import SwiftData
 enum InsightsProvenance {
     // MARK: D7 time on each chapter
 
-    struct ChapterTimingFigure: Equatable {
+    nonisolated struct ChapterTimingFigure: Equatable, Sendable {
         /// Chapters judged skimmed when their sitting was saved, and their words, which
         /// leave the words-read totals.
         var skimmedChapters = 0
@@ -44,7 +44,7 @@ enum InsightsProvenance {
     /// sittings up through the period's end so the 20-chapter pace-history gate
     /// matches `ReadingLogService.applyChapterTiming` instead of resetting every
     /// new or quiet month.
-    static func chapterTiming(
+    nonisolated static func chapterTiming(
         sessions: [ReadingSession],
         paceHistorySessions: [ReadingSession]? = nil
     ) -> ChapterTimingFigure {

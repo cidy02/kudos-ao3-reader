@@ -54,8 +54,9 @@ struct ReadingInsightsView: View {
     @State private var showingOptionsSheet: Bool = false
     @State private var showingHowCountedSheet: Bool = false
     @State private var stoppedWork: SavedWork?
-    @State private var finishedWorksInPeriod: [SavedWork] = []
+    @State private var finishedWorkIDs: [UUID] = []
     @State private var discreetMasker: InsightsDiscreetMasker = .empty
+    @State private var gatherRunner = InsightsGatherRunner<InsightsGatherOutput>()
     @State private var optionsRevision: Int = 0
     @State private var exportedShareItem: InsightsShareItem?
     @State private var exportFailure: String?
@@ -236,10 +237,17 @@ struct ReadingInsightsView: View {
         .onDisappear {
             isOnScreen = false
             reloadCoordinator.cancel()
+            if gatherRunner.isRunning && !hasLoadedOnce {
+                lastReloadKey = ""
+            }
+            gatherRunner.cancel()
         }
         .onChange(of: gate.revealAll) { _, revealed in
             // Synchronously clear hidden state and recompute main figures on re-lock so
             // stale combined mature titles/figures are never painted while waiting for `.task`.
+            if !revealed {
+                gatherRunner.cancel()
+            }
             if scopeState.handleRevealChange(revealed: revealed, hideMature: hideMature) {
                 if !revealed { clearMainDisplayState() }
                 reload()
@@ -261,16 +269,21 @@ struct ReadingInsightsView: View {
                 .receive(on: DispatchQueue.main)
         ) { notification in
             guard isOnScreen else { return }
+            let container = context.container
             reloadCoordinator.noteSave(
                 notification,
                 works: { [libraryMirror] in libraryMirror.works },
                 context: context,
                 isOnScreen: { isOnScreen },
-                reload: { snapshot in reload(baseline: snapshot) }
+                reload: { snapshot in reload(baseline: snapshot) },
+                digest: {
+                    try? await InsightsGatherActor(modelContainer: container).digest()
+                }
             )
         }
         .refreshable {
             reload()
+            await gatherRunner.waitForCurrent()
         }
         .sheet(isPresented: $showingOptionsSheet) {
             InsightsOptionsSheet(
@@ -717,17 +730,19 @@ struct ReadingInsightsView: View {
 
             LibraryWhereEverythingStandsCard(partition: lib.statuses)
 
-            if let candidate = lib.stillReadingCandidate {
+            if let candidate = lib.stillReadingCandidate,
+               let candidateWork = libraryWorks.first(where: { $0.id == candidate.id }) {
                 LibraryStillReadingCard(
                     candidate: candidate,
+                    work: candidateWork,
                     discreetMode: discreetMode,
                     discreetMasker: discreetMasker,
                     onStillReading: {
-                        WorkLifecycle.keepInProgress(candidate.work, in: context)
+                        WorkLifecycle.keepInProgress(candidateWork, in: context)
                         reload()
                     },
                     onStoppedReading: {
-                        stoppedWork = candidate.work
+                        stoppedWork = candidateWork
                     }
                 )
             }
@@ -875,6 +890,12 @@ struct ReadingInsightsView: View {
 
     // MARK: - Reload Data
 
+    private var finishedWorksInPeriod: [SavedWork] {
+        guard !finishedWorkIDs.isEmpty else { return [] }
+        let byID = Dictionary(libraryWorks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return finishedWorkIDs.compactMap { byID[$0] }
+    }
+
     private func clearMainDisplayState() {
         insights = ReadingInsights()
         tasteInsights = nil
@@ -882,17 +903,16 @@ struct ReadingInsightsView: View {
         chapterTiming = InsightsProvenance.ChapterTimingFigure()
         libraryInsights = nil
         libraryStats = nil
-        finishedWorksInPeriod = []
+        finishedWorkIDs = []
         discreetMasker = .empty
     }
 
     /// - Parameter baseline: the digest snapshot a coalesced save refresh already took;
     ///   adopted as-is so that refresh walks the library once.
     private func reload(baseline: InsightsReloadDigest.Snapshot? = nil) {
-        // Taken first, so `reloadKey` already holds it when `lastReloadKey` is
-        // written below and a save this reload follows triggers no second one.
-        libraryDigest = baseline.map { reloadCoordinator.tracker.adopt($0) }
-            ?? reloadCoordinator.tracker.recordBaseline(works: libraryMirror.works, context: context)
+        if let digest = baseline.map({ reloadCoordinator.tracker.adopt($0) }) {
+            libraryDigest = digest
+        }
         let component = range.component
         guard let currentInterval = calendar.dateInterval(of: component, for: referenceDate),
               let earlierDate = calendar.date(byAdding: component, value: -1, to: referenceDate),
@@ -902,47 +922,62 @@ struct ReadingInsightsView: View {
         let periodMonths: Double = range == .year ? 12 : 1
         let options = InsightsOptions.load()
         let activeScope = screenScope
-        let gathered = ReadingLogService.gatherInsights(
-            for: currentInterval,
+        let hideMatureAtStart = hideMature
+        let revealedAtStart = gate.revealAll
+        let request = InsightsGatherRequest(
+            period: currentInterval,
             previousPeriod: previousInterval,
-            scope: selection(activeScope),
             periodMonths: periodMonths,
             calendar: calendar,
-            context: context,
-            options: options
+            options: options,
+            scope: activeScope,
+            hideMature: hideMatureAtStart,
+            revealed: revealedAtStart,
+            includesHiddenSection: hideMatureAtStart && revealedAtStart,
+            computesDigest: baseline == nil,
+            now: Date()
         )
-        if hideMature && gate.revealAll {
-            let hidden = ReadingLogService.gatherInsights(
-                for: currentInterval,
-                previousPeriod: previousInterval,
-                scope: selection(.hidden),
-                periodMonths: periodMonths,
-                calendar: calendar,
-                context: context,
-                options: options
-            )
-            scopeState.recordGather(
-                scope: activeScope,
-                hiddenInsights: hidden.insights,
-                hiddenMasker: hidden.discreetMasker
-            )
-        } else {
-            scopeState.recordGather(
-                scope: activeScope,
-                hiddenInsights: nil,
-                hiddenMasker: .empty
-            )
-        }
-        insights = gathered.insights
-        tasteInsights = gathered.taste
-        habitsInsights = gathered.habits
-        chapterTiming = gathered.chapterTiming
-        libraryInsights = gathered.library
-        libraryStats = gathered.libraryStats
-        finishedWorksInPeriod = gathered.finishedWorksInPeriod
-        discreetMasker = gathered.discreetMasker
+        let container = context.container
         lastReloadKey = reloadKey
-        hasLoadedOnce = true
+        gatherRunner.start(
+            gather: {
+                try await InsightsGatherActor(modelContainer: container).gather(request)
+            },
+            apply: { output in
+                // Drop stale scope results if Hide Mature or PrivacyGate changed while gathering.
+                guard request.scope == screenScope,
+                      request.hideMature == hideMature,
+                      request.revealed == gate.revealAll
+                else { return }
+
+                if let digestSnapshot = output.digest {
+                    libraryDigest = reloadCoordinator.tracker.adopt(digestSnapshot)
+                }
+                if hideMature && gate.revealAll, let hidden = output.hidden {
+                    scopeState.recordGather(
+                        scope: activeScope,
+                        hiddenInsights: hidden.insights,
+                        hiddenMasker: hidden.discreetMasker
+                    )
+                } else {
+                    scopeState.recordGather(
+                        scope: activeScope,
+                        hiddenInsights: nil,
+                        hiddenMasker: .empty
+                    )
+                }
+                insights = output.main.insights
+                tasteInsights = output.main.taste
+                habitsInsights = output.main.habits
+                chapterTiming = output.main.chapterTiming
+                libraryInsights = output.main.library
+                libraryStats = output.main.libraryStats
+                finishedWorkIDs = output.main.finishedWorkIDs
+                discreetMasker = output.main.discreetMasker
+                lastReloadKey = reloadKey
+                hasLoadedOnce = true
+            }
+        )
     }
 
     // MARK: - Actions
