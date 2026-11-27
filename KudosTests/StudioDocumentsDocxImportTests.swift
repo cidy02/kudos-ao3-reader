@@ -98,15 +98,24 @@ struct StudioDocumentsDocxImportTests {
         let body = """
         <w:p><w:hyperlink r:id="rId1"><w:r><w:t>click</w:t></w:r></w:hyperlink></w:p>
         <w:p><w:hyperlink w:anchor="top"><w:r><w:t>jump</w:t></w:r></w:hyperlink></w:p>
+        <w:p><w:hyperlink r:id="rId2"><w:r><w:t>split</w:t></w:r></w:hyperlink></w:p>
+        <w:p><w:hyperlink r:id="rId3"><w:r><w:t>quoted</w:t></w:r></w:hyperlink></w:p>
         """
         let relationships = """
-        <Relationship Id="rId1" Type="x/hyperlink" Target="javascript:alert(1)" TargetMode="External"/>
+        <Relationship Id="rId1" Type="x/hyperlink" Target="javascript:alert(1)" TargetMode="External"/>\
+        <Relationship Id="rId2" Type="x/hyperlink" Target="https://example.com/a&#10;b" TargetMode="External"/>\
+        <Relationship Id="rId3" Type="x/hyperlink" \
+        Target="https://example.com/a&quot;onclick=&quot;alert(1)" TargetMode="External"/>
         """
         let html = try Self.html(body: body, relationships: relationships)
-        #expect(html.contains("click"))
-        #expect(html.contains("jump"))
-        #expect(!html.contains("<a"))
+        #expect(html.contains("<p>click</p>"))
+        #expect(html.contains("<p>jump</p>"))
+        #expect(html.contains("<p>split</p>"))
+        #expect(html.contains(
+            "<p><a href=\"https://example.com/a&quot;onclick=&quot;alert(1)\">quoted</a></p>"
+        ))
         #expect(!html.contains("javascript:"))
+        #expect(!html.contains("onclick=\""))
     }
 
     @Test func titleFallsBackToTheFileNameWithoutALeadingHeading() throws {
@@ -148,6 +157,182 @@ struct StudioDocumentsDocxImportTests {
         """
         let html = try Self.html(body: body)
         #expect(html == "<p><strong>now bold</strong></p>")
+    }
+
+    @Test func oneRunCanCarryEveryMarkAndRepeatedRunsMerge() throws {
+        let both = """
+        <w:p><w:r><w:rPr><w:b/><w:i/><w:u w:val="single"/><w:strike/></w:rPr><w:t>x</w:t></w:r></w:p>
+        """
+        #expect(try Self.html(body: both) == "<p><strong><em><u><s>x</s></u></em></strong></p>")
+
+        let runs = String(repeating: "<w:r><w:rPr><w:b/></w:rPr><w:t>a</w:t></w:r>", count: 400)
+        let merged = try Self.html(body: "<w:p>\(runs)</w:p>")
+        #expect(merged == "<p><strong>\(String(repeating: "a", count: 400))</strong></p>")
+    }
+
+    @Test func smartQuotesSurviveAndStraightQuotesAreEscaped() throws {
+        let body = """
+        <w:p><w:r><w:t>\u{2018}Hi\u{2019} and \u{201C}there\u{201D}</w:t></w:r></w:p>
+        <w:p><w:r><w:t>say "hi"</w:t></w:r></w:p>
+        """
+        let html = try Self.html(body: body)
+        #expect(html.contains("\u{2018}Hi\u{2019} and \u{201C}there\u{201D}"))
+        #expect(html.contains("say &quot;hi&quot;"))
+        #expect(!html.contains("say \"hi\""))
+    }
+
+    @Test func tabsBreaksAndOutlineLevel() throws {
+        let body = """
+        <w:p><w:r><w:t>A</w:t><w:tab/><w:t>B</w:t><w:br/><w:t>C</w:t></w:r></w:p>
+        <w:p><w:r><w:t>Hello</w:t></w:r><w:r><w:br w:type="page"/></w:r><w:r><w:t>world</w:t></w:r></w:p>
+        <w:p><w:r><w:t>Next</w:t></w:r><w:r><w:br w:type="column"/></w:r></w:p>
+        <w:p><w:pPr><w:outlineLvl w:val="1"/></w:pPr><w:r><w:t>Section</w:t></w:r></w:p>
+        <w:p><w:pPr><w:outlineLvl w:val="9"/></w:pPr><w:r><w:t>Body</w:t></w:r></w:p>
+        <w:p><w:pPr><w:pStyle w:val="Heading3"/><w:outlineLvl w:val="0"/></w:pPr><w:r><w:t>Kept</w:t></w:r></w:p>
+        <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Slack</w:t><w:br/><w:t>Water</w:t></w:r></w:p>
+        """
+        let result = try StudioDocxImport.convertToHTML(
+            docxData: Self.docx(body: body),
+            fallbackTitle: "   "
+        )
+        #expect(result.bodyHTML == """
+        <p>A B<br>C</p>
+        <p>Hello world</p>
+        <p>Next</p>
+        <h2>Section</h2>
+        <p>Body</p>
+        <h3>Kept</h3>
+        <h1>Slack<br>Water</h1>
+        """)
+        // The first block is not a heading, and the file name was blank.
+        #expect(result.title == "Untitled")
+
+        let brokenHeading = """
+        <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>\
+        <w:r><w:t>Slack</w:t><w:br/><w:t>Water</w:t></w:r></w:p>
+        """
+        let titled = try StudioDocxImport.convertToHTML(
+            docxData: Self.docx(body: brokenHeading),
+            fallbackTitle: "File"
+        )
+        #expect(titled.title == "Slack Water")
+        #expect(titled.bodyHTML == "<h1>Slack<br>Water</h1>")
+    }
+
+    @Test func hyperlinkFieldsKeepTheVisibleTextAndTheURL() throws {
+        let body = """
+        <w:p><w:r><w:t xml:space="preserve">See </w:t></w:r>\
+        <w:fldSimple w:instr=" HYPERLINK &quot;https://example.com/chart&quot; \\o &quot;tip&quot; ">\
+        <w:r><w:t>the chart</w:t></w:r></w:fldSimple><w:r><w:t xml:space="preserve"> and </w:t></w:r>\
+        <w:r><w:fldChar w:fldCharType="begin"/></w:r>\
+        <w:r><w:instrText xml:space="preserve"> HYPERLINK "https://example.org/log" </w:instrText></w:r>\
+        <w:r><w:fldChar w:fldCharType="separate"/></w:r>\
+        <w:r><w:t>the log</w:t></w:r>\
+        <w:r><w:fldChar w:fldCharType="end"/></w:r><w:r><w:t>.</w:t></w:r></w:p>
+        <w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r>\
+        <w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>\
+        <w:r><w:fldChar w:fldCharType="separate"/></w:r>\
+        <w:r><w:t>12</w:t></w:r>\
+        <w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>
+        <w:p><w:fldSimple w:instr=" HYPERLINK &quot;javascript:alert(1)&quot; ">\
+        <w:r><w:t>nope</w:t></w:r></w:fldSimple></w:p>
+        <w:p><w:r><w:t xml:space="preserve">Keep </w:t></w:r>\
+        <w:del w:id="1" w:author="Lark"><w:r><w:fldChar w:fldCharType="begin"/></w:r>\
+        <w:r><w:delInstrText> HYPERLINK "https://evil.example/secret" </w:delInstrText></w:r>\
+        <w:r><w:delText>gone</w:delText></w:r></w:del><w:r><w:t>end</w:t></w:r></w:p>
+        """
+        let html = try Self.html(body: body)
+        #expect(html.contains(
+            "<p>See <a href=\"https://example.com/chart\">the chart</a> and <a href=\"https://example.org/log\">the log</a>.</p>"
+        ))
+        #expect(html.contains("<p>12</p>"))
+        #expect(!html.contains("PAGE"))
+        #expect(!html.contains("tip"))
+        #expect(html.contains("<p>nope</p>"))
+        #expect(!html.contains("javascript:"))
+        #expect(!html.contains("evil.example"))
+        #expect(!html.contains("gone"))
+        #expect(html.contains("<p>Keep end</p>"))
+    }
+
+    @Test func deletedParagraphMarksJoinAndMovesDoNotDuplicate() throws {
+        let body = """
+        <w:p><w:pPr><w:pStyle w:val="Heading1"/>\
+        <w:rPr><w:del w:id="1" w:author="Lark"/></w:rPr></w:pPr>\
+        <w:r><w:t xml:space="preserve">Slack </w:t></w:r></w:p>
+        <w:p><w:r><w:t>Water</w:t></w:r></w:p>
+        <w:p><w:r><w:t xml:space="preserve">The </w:t></w:r>\
+        <w:moveFrom w:id="11" w:author="Lark"><w:r><w:t xml:space="preserve">cold </w:t></w:r></w:moveFrom>\
+        <w:r><w:t>wind</w:t></w:r></w:p>
+        <w:p><w:r><w:t xml:space="preserve">The </w:t></w:r>\
+        <w:moveTo w:id="13" w:author="Lark"><w:r><w:t xml:space="preserve">cold </w:t></w:r></w:moveTo>\
+        <w:r><w:t>water</w:t></w:r></w:p>
+        <w:tbl><w:tr>\
+        <w:tc><w:p><w:pPr><w:rPr><w:del w:id="2" w:author="Lark"/></w:rPr></w:pPr>\
+        <w:r><w:t>One</w:t></w:r></w:p></w:tc>\
+        <w:tc><w:p><w:r><w:t>Two</w:t></w:r></w:p></w:tc>\
+        </w:tr></w:tbl>
+        <w:p><w:pPr><w:rPr><w:del w:id="4" w:author="Lark"/></w:rPr></w:pPr>\
+        <w:r><w:t xml:space="preserve">Keep </w:t></w:r></w:p>
+        <w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>style</w:t></w:r></w:p>
+        <w:p><w:pPr><w:rPr><w:del w:id="9" w:author="Lark"/></w:rPr></w:pPr>\
+        <w:r><w:t>Last</w:t></w:r></w:p>
+        """
+        let result = try StudioDocxImport.convertToHTML(
+            docxData: Self.docx(body: body),
+            fallbackTitle: "File"
+        )
+        #expect(result.title == "Slack Water")
+        #expect(result.bodyHTML == """
+        <h1>Slack Water</h1>
+        <p>The wind</p>
+        <p>The cold water</p>
+        <p>One</p>
+        <p>Two</p>
+        <p>Keep style</p>
+        <p>Last</p>
+        """)
+    }
+
+    @Test func scriptsDrawingsAndExternalEntitiesStayOutOfTheChapter() throws {
+        let secret = "EXTERNAL_ENTITY_SECRET_9f3c"
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("studio-docx-xxe-\(UUID().uuidString).txt")
+        try Data(secret.utf8).write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        let drawing = """
+        <w:p><w:r><w:drawing><w:t>hidden caption</w:t></w:drawing><w:t>Caption</w:t></w:r></w:p>
+        <w:p><w:r><w:t>&lt;script&gt;alert(1)&lt;/script&gt;</w:t></w:r></w:p>
+        """
+        let drawn = try Self.html(body: drawing, relationships: """
+        <Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" \
+        Target="https://evil.example/pixel.png" TargetMode="External"/>
+        """)
+        #expect(drawn.contains("<p>Caption</p>"))
+        #expect(drawn.contains("&lt;script&gt;alert(1)&lt;/script&gt;"))
+        #expect(!drawn.contains("<script"))
+        #expect(!drawn.contains("<img"))
+        #expect(!drawn.contains("evil.example"))
+        #expect(!drawn.contains("hidden caption"))
+
+        let system = fileURL.absoluteString
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+        let xml = """
+        <?xml version="1.0"?>\
+        <!DOCTYPE document [<!ENTITY xxe SYSTEM "\(system)">]>\
+        <document><p><r><t>before &xxe; after</t></r></p></document>
+        """
+        let data = try MiniZip.archiveData([("word/document.xml", Data(xml.utf8))])
+        do {
+            let html = try StudioDocxImport.convertToHTML(docxData: data, fallbackTitle: "T").bodyHTML
+            #expect(html.contains("before"))
+            #expect(html.contains("after"))
+            #expect(!html.contains(secret))
+        } catch {
+            #expect(!String(describing: error).contains(secret))
+        }
     }
 
     // MARK: - Beta lane round trip
@@ -210,8 +395,9 @@ struct StudioDocumentsDocxImportTests {
             let entityBomb = try write(
                 "entities.docx",
                 MiniZip.archiveData([("word/document.xml", Data("""
-                <?xml version="1.0"?><!DOCTYPE d [<!ENTITY a "aaaa">]><w:document \(Self.namespaces)>\
-                <w:body><w:p><w:r><w:t>&a;</w:t></w:r></w:p></w:body></w:document>
+                <?xml version="1.0"?>\
+                <!DOCTYPE document [<!ENTITY a "ENTITY_PAYLOAD_SHOULD_NOT_APPEAR">]>\
+                <document><p><r><t>&a;</t></r></p></document>
                 """.utf8))])
             )
             let oversized = try write("huge.docx", Data(count: BetaDOCXReader.maxFileBytes + 1))
@@ -221,7 +407,12 @@ struct StudioDocumentsDocxImportTests {
                     _ = try await StudioDocumentImporter.importFile(at: url, into: store)
                     Issue.record("\(url.lastPathComponent) should have been refused")
                 } catch let error as BetaReadingError {
-                    #expect(error.errorDescription?.isEmpty == false)
+                    let message = error.errorDescription ?? ""
+                    #expect(!message.isEmpty)
+                    if url.lastPathComponent == "entities.docx" {
+                        #expect(message.localizedCaseInsensitiveContains("entity"))
+                        #expect(!message.contains("ENTITY_PAYLOAD_SHOULD_NOT_APPEAR"))
+                    }
                 } catch {
                     Issue.record("\(url.lastPathComponent): unexpected \(error)")
                 }

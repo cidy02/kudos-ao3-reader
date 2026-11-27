@@ -44,10 +44,11 @@ nonisolated enum StudioDocxImport {
         let headingTitle = first.headingLevel == 1
             ? first.plainText.trimmingCharacters(in: .whitespacesAndNewlines)
             : ""
-        return (
-            headingTitle.isEmpty ? fallbackTitle : headingTitle,
-            body.blocks.map(\.html).joined(separator: "\n")
-        )
+        let trimmedFallback = fallbackTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = headingTitle.isEmpty
+            ? (trimmedFallback.isEmpty ? "Untitled" : trimmedFallback)
+            : headingTitle
+        return (title, body.blocks.map(\.html).joined(separator: "\n"))
     }
 
     private static func entryData(named target: String, in zip: MiniZip) -> Data? {
@@ -86,12 +87,40 @@ private nonisolated class StudioDocxXMLDelegate: NSObject, XMLParserDelegate {
     }
 
     func parser(_ parser: XMLParser, foundInternalEntityDeclarationWithName name: String, value: String?) {
-        failure = BetaReadingError.xmlParseFailed("XML entity declarations are not supported.")
-        parser.abortParsing()
+        rejectEntities(parser)
+    }
+
+    func parser(
+        _ parser: XMLParser,
+        foundExternalEntityDeclarationWithName name: String,
+        publicID: String?,
+        systemID: String?
+    ) {
+        rejectEntities(parser)
+    }
+
+    func parser(
+        _ parser: XMLParser,
+        foundUnparsedEntityDeclarationWithName name: String,
+        publicID: String?,
+        systemID: String?,
+        notationName: String?
+    ) {
+        rejectEntities(parser)
+    }
+
+    func parser(_ parser: XMLParser, resolveExternalEntityName name: String, systemID: String?) -> Data? {
+        rejectEntities(parser)
+        return nil
     }
 
     func parser(_ parser: XMLParser, parseErrorOccurred parseError: Error) {
         if failure == nil { failure = parseError }
+    }
+
+    private func rejectEntities(_ parser: XMLParser) {
+        failure = BetaReadingError.xmlParseFailed("XML entity declarations are not supported.")
+        parser.abortParsing()
     }
 }
 
@@ -131,13 +160,25 @@ private nonisolated final class StudioDocxBodyDelegate: StudioDocxXMLDelegate {
     private enum Piece {
         case text(String, Format)
         case lineBreak
+
+        /// Grows this text piece when `format` matches. Drop the stored buffer first:
+        /// appending while this case still holds it copies the whole paragraph.
+        mutating func absorb(_ text: String, format: Format) -> Bool {
+            guard case .text(var existing, let current) = self, current == format else { return false }
+            self = .lineBreak
+            existing.append(text)
+            self = .text(existing, current)
+            return true
+        }
     }
 
     /// Revision and drawing subtrees that never reach the page: tracked deletions
-    /// (`w:del`, `w:moveFrom`), field code, pictures and text boxes, and the *previous*
-    /// properties kept inside `w:rPrChange` / `w:pPrChange`.
+    /// (`w:del`, `w:moveFrom`), deleted field code, pictures and text boxes, and the
+    /// *previous* properties kept inside `w:rPrChange` / `w:pPrChange`. Live field
+    /// instructions (`w:instrText`) are read, not skipped, so a HYPERLINK field can
+    /// become a link; they are never copied into the chapter.
     private static let skipped: Set<String> = [
-        "del", "moveFrom", "instrText", "delInstrText", "drawing", "pict", "Fallback",
+        "del", "moveFrom", "delInstrText", "drawing", "pict", "Fallback",
         "rPrChange", "pPrChange",
     ]
 
@@ -153,6 +194,18 @@ private nonisolated final class StudioDocxBodyDelegate: StudioDocxXMLDelegate {
     private var pieces: [Piece] = []
     private var runFormat = Format()
     private var linkHref: String?
+    /// Href from a `HYPERLINK` field (`w:fldSimple` or a complex field). `w:hyperlink` wins.
+    private var fieldHref: String?
+    private var savedFieldHref: String?
+    private var simpleField = false
+    private var complexFieldDepth = 0
+    /// Non-nil between `fldCharType="begin"` and `"separate"`: instruction text only.
+    private var fieldInstruction: String?
+    private var instructionBuffer: String?
+    /// Set when `w:pPr` holds an empty `w:del` / `w:moveFrom`: the paragraph mark is gone.
+    private var paragraphMarkDeleted = false
+    /// Pieces of a paragraph whose mark was deleted, waiting to join the next one.
+    private var carried: (pieces: [Piece], heading: Int?)?
     private var textBuffer: String?
 
     init(linkTargets: [String: String]) {
@@ -172,6 +225,12 @@ private nonisolated final class StudioDocxBodyDelegate: StudioDocxXMLDelegate {
             return
         }
         if Self.skipped.contains(elementName) {
+            // Content deletions are skipped whole. An empty `w:del` / `w:moveFrom`
+            // inside `w:pPr` is the paragraph mark itself: the next paragraph joins this one.
+            if inParagraphProperties, !inRun,
+               (elementName == "del" || elementName == "moveFrom") {
+                paragraphMarkDeleted = true
+            }
             skipDepth = 1
             return
         }
@@ -179,21 +238,61 @@ private nonisolated final class StudioDocxBodyDelegate: StudioDocxXMLDelegate {
         case "p":
             inParagraph = true
             headingLevel = nil
+            paragraphMarkDeleted = false
             pieces = []
         case "pPr": inParagraphProperties = inParagraph
         case "pStyle":
-            if inParagraphProperties, let style = attribute("val", in: attributeDict) {
-                headingLevel = Self.headingLevel(forStyle: style)
+            if inParagraphProperties, let style = attribute("val", in: attributeDict),
+               let level = Self.headingLevel(forStyle: style) {
+                headingLevel = level
             }
+        case "outlineLvl":
+            // 0 is heading 1. 9 is body text. A real heading style already won.
+            if inParagraphProperties, headingLevel == nil,
+               let raw = attribute("val", in: attributeDict),
+               let level = Int(raw), (0...8).contains(level) {
+                headingLevel = min(level + 1, 6)
+            }
+        case "tbl":
+            flushCarried()
         case "hyperlink":
             linkHref = attribute("id", in: attributeDict)
                 .flatMap { linkTargets[$0] }
                 .flatMap(Self.safeURL)
+        case "fldSimple":
+            if !simpleField {
+                savedFieldHref = fieldHref
+                simpleField = true
+                fieldHref = Self.hyperlinkURL(in: attribute("instr", in: attributeDict) ?? "")
+            }
+        case "fldChar":
+            switch attribute("fldCharType", in: attributeDict) {
+            case "begin":
+                complexFieldDepth += 1
+                if complexFieldDepth == 1 {
+                    fieldInstruction = ""
+                    fieldHref = nil
+                }
+            case "separate":
+                if complexFieldDepth == 1 {
+                    fieldHref = fieldInstruction.flatMap(Self.hyperlinkURL(in:))
+                    fieldInstruction = nil
+                    if inRun { runFormat.href = linkHref ?? fieldHref }
+                }
+            case "end":
+                if complexFieldDepth == 1 {
+                    fieldInstruction = nil
+                    fieldHref = nil
+                }
+                complexFieldDepth = max(0, complexFieldDepth - 1)
+            default:
+                break
+            }
         case "r":
             if inParagraph {
                 inRun = true
                 runFormat = Format()
-                runFormat.href = linkHref
+                runFormat.href = linkHref ?? fieldHref
             }
         case "rPr": inRunProperties = inRun
         case "b": if inRunProperties { runFormat.bold = isOn(attributeDict) }
@@ -201,10 +300,18 @@ private nonisolated final class StudioDocxBodyDelegate: StudioDocxXMLDelegate {
         case "u": if inRunProperties { runFormat.underline = isOn(attributeDict) }
         case "strike", "dstrike": if inRunProperties { runFormat.strike = isOn(attributeDict) }
         case "t": if inRun { textBuffer = "" }
+        case "instrText":
+            if fieldInstruction != nil { instructionBuffer = "" }
         case "br", "cr":
-            // A page or column break is layout, not a line break.
-            let breakType = attribute("type", in: attributeDict)
-            if inRun, breakType != "page", breakType != "column" { pieces.append(.lineBreak) }
+            guard inRun else { break }
+            let breakType = attribute("type", in: attributeDict)?.lowercased()
+            if breakType == "page" || breakType == "column" {
+                // Not a chapter line break. A space stops the two sides gluing;
+                // trim still drops a break parked at the paragraph's edge.
+                appendText(" ")
+            } else {
+                pieces.append(.lineBreak)
+            }
         case "tab": if inRun { appendText(" ") }
         case "noBreakHyphen": if inRun { appendText("-") }
         default: break
@@ -212,7 +319,9 @@ private nonisolated final class StudioDocxBodyDelegate: StudioDocxXMLDelegate {
     }
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {
-        if skipDepth == 0 { textBuffer?.append(string) }
+        guard skipDepth == 0 else { return }
+        textBuffer?.append(string)
+        instructionBuffer?.append(string)
     }
 
     func parser(
@@ -229,15 +338,32 @@ private nonisolated final class StudioDocxBodyDelegate: StudioDocxXMLDelegate {
         case "t":
             if let text = textBuffer { appendText(text) }
             textBuffer = nil
+        case "instrText":
+            if let chunk = instructionBuffer {
+                fieldInstruction?.append(chunk)
+                instructionBuffer = nil
+            }
         case "rPr": inRunProperties = false
         case "r":
             inRun = false
             inRunProperties = false
         case "pPr": inParagraphProperties = false
         case "hyperlink": linkHref = nil
+        case "fldSimple":
+            if simpleField {
+                simpleField = false
+                fieldHref = savedFieldHref
+                savedFieldHref = nil
+            }
+        case "tc", "tr", "tbl":
+            flushCarried()
         case "p": finishParagraph()
         default: break
         }
+    }
+
+    func parserDidEndDocument(_ parser: XMLParser) {
+        flushCarried()
     }
 
     // MARK: - Paragraphs
@@ -245,24 +371,52 @@ private nonisolated final class StudioDocxBodyDelegate: StudioDocxXMLDelegate {
     private func appendText(_ text: String) {
         guard inParagraph, !text.isEmpty else { return }
         // Word splits one styled phrase into many runs; merge them back into one element.
-        if case let .text(existing, format)? = pieces.last, format == runFormat {
-            pieces[pieces.count - 1] = .text(existing + text, format)
-        } else {
-            pieces.append(.text(text, runFormat))
+        if let last = pieces.indices.last, pieces[last].absorb(text, format: runFormat) {
+            return
         }
+        pieces.append(.text(text, runFormat))
     }
 
     private func finishParagraph() {
+        let markDeleted = paragraphMarkDeleted
+        let currentPieces = pieces
+        let currentHeading = headingLevel
         defer {
             inParagraph = false
             inParagraphProperties = false
             inRun = false
             inRunProperties = false
+            paragraphMarkDeleted = false
             textBuffer = nil
             pieces = []
         }
         guard inParagraph else { return }
 
+        let previous = carried
+        carried = nil
+        var combined = currentPieces
+        var heading = currentHeading
+        if let previous {
+            combined = previous.pieces + currentPieces
+            // The deleted mark belonged to the first paragraph, so its style wins.
+            heading = previous.heading
+        }
+        if markDeleted {
+            carried = (combined, heading)
+            return
+        }
+        emit(combined, heading: heading)
+    }
+
+    /// A table, cell, or row is a hard boundary: a deleted paragraph mark must not
+    /// pull the next cell's text into this one.
+    private func flushCarried() {
+        guard let carried else { return }
+        self.carried = nil
+        emit(carried.pieces, heading: carried.heading)
+    }
+
+    private func emit(_ pieces: [Piece], heading: Int?) {
         var trimmed = pieces
         if case let .text(text, format)? = trimmed.first {
             trimmed[0] = .text(String(text.drop(while: \.isWhitespace)), format)
@@ -276,9 +430,11 @@ private nonisolated final class StudioDocxBodyDelegate: StudioDocxXMLDelegate {
             if case let .text(text, _) = $0 { return !text.isEmpty }
             return true
         }
-        let plainText = trimmed.compactMap { piece -> String? in
-            if case let .text(text, _) = piece { return text }
-            return nil
+        let plainText = trimmed.map { piece -> String in
+            switch piece {
+            case let .text(text, _): text
+            case .lineBreak: " "
+            }
         }.joined()
         // Word's empty paragraphs are spacing, not content.
         guard !plainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
@@ -289,8 +445,8 @@ private nonisolated final class StudioDocxBodyDelegate: StudioDocxXMLDelegate {
             case let .text(text, format): Self.markup(text, format)
             }
         }.joined()
-        let tag = headingLevel.map { "h\($0)" } ?? "p"
-        blocks.append(Block(html: "<\(tag)>\(inner)</\(tag)>", headingLevel: headingLevel, plainText: plainText))
+        let tag = heading.map { "h\($0)" } ?? "p"
+        blocks.append(Block(html: "<\(tag)>\(inner)</\(tag)>", headingLevel: heading, plainText: plainText))
     }
 
     // MARK: - Helpers
@@ -322,10 +478,59 @@ private nonisolated final class StudioDocxBodyDelegate: StudioDocxXMLDelegate {
     }
 
     /// Only web and mail links come across; `javascript:` and friends stay plain text.
+    /// A raw control character or newline is rejected so the URL cannot break out of the href.
     private static func safeURL(_ raw: String) -> String? {
         let url = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !url.isEmpty else { return nil }
+        let scalarsAreSafe = url.unicodeScalars.allSatisfy { scalar in
+            scalar.value >= 32 && scalar.value != 127 && !scalar.properties.isWhitespace
+        }
+        guard scalarsAreSafe else { return nil }
         let lower = url.lowercased()
         let allowed = ["http://", "https://", "mailto:"].contains { lower.hasPrefix($0) }
         return allowed ? url : nil
+    }
+
+    /// Destination of a `HYPERLINK` field instruction, or nil for an internal bookmark
+    /// (`\l`), a tooltip (`\o`), or a scheme this importer will not write.
+    private static func hyperlinkURL(in instruction: String) -> String? {
+        let trimmed = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 9, trimmed.prefix(9).lowercased() == "hyperlink" else { return nil }
+        let rest = trimmed.dropFirst(9)
+        if let first = rest.first, !first.isWhitespace, first != "\\", first != "\"", first != "'" {
+            return nil
+        }
+        var pendingSwitch: Character?
+        var index = rest.startIndex
+        while index < rest.endIndex {
+            let character = rest[index]
+            if character.isWhitespace {
+                index = rest.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                let next = rest.index(after: index)
+                guard next < rest.endIndex else { return nil }
+                pendingSwitch = rest[next]
+                index = rest.index(after: next)
+                continue
+            }
+            if character == "\"" || character == "'" {
+                let quote = character
+                let start = rest.index(after: index)
+                guard let end = rest[start...].firstIndex(of: quote) else { return nil }
+                let value = String(rest[start..<end])
+                let isDestination = pendingSwitch == nil
+                pendingSwitch = nil
+                index = rest.index(after: end)
+                if isDestination { return safeURL(value) }
+                continue
+            }
+            pendingSwitch = nil
+            while index < rest.endIndex, !rest[index].isWhitespace, rest[index] != "\\" {
+                index = rest.index(after: index)
+            }
+        }
+        return nil
     }
 }
