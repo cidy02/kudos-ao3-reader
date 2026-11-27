@@ -285,9 +285,8 @@ extension StudioWorkFilesView {
 
     func storyNoteRow(_ note: WritingStoryNote) -> some View {
         let kindLabel = StudioWorkFilesLogic.storyNoteKindTitle(note.kind)
-        let meta: [String?] = [kindLabel, note.pinned ? "Pinned" : nil, ThisDevice.name]
-            .compactMap(\.self)
-            .joined(separator: " · ")
+        let parts: [String?] = [kindLabel, note.pinned ? "Pinned" : nil, ThisDevice.name]
+        let meta = parts.compactMap(\.self).joined(separator: " · ")
 
         return Button {
             noteSheetMode = .edit(note)
