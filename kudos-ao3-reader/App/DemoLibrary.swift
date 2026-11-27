@@ -804,6 +804,7 @@ enum DebugShots {
         ("texteditor", DebugShot(route: posted, pushes: ["texteditor"])),
         ("studiopostchapter", DebugShot(route: "writing", sheets: ["studiopostchapter"], pushes: ["newdocument"])),
         ("studiopostnew", DebugShot(route: "writing", sheets: ["studiopostnew"], pushes: ["newdocument"])),
+        ("studioeditor", DebugShot(route: "writing", pushes: ["newdocument"])),
         ("recovery", DebugShot(route: posted, pushes: ["recovery"])),
         ("seriespicker", DebugShot(route: posted, pushes: ["seriespicker"])),
         ("collectionsgifts", DebugShot(route: posted, pushes: ["collectionsgifts"])),
