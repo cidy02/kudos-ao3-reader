@@ -215,7 +215,15 @@ struct ChapterEditorScreen: View {
         .sprintHost(sprintController, words: currentWordCount, workID: documentBridge.workID, isClosing: isClosing)
         .writingDayLogHost(words: currentWordCount, isReady: initialWordCount != nil, sessionKey: recoveryTarget)
         // the Lock Screen widget's "what you're writing" (T-576e)
-        .onAppear { KudosWidgetBridge.noteEditing(work: workTitle, chapter: chapterTitle) }
+        .onAppear {
+            KudosWidgetBridge.noteEditing(work: workTitle, chapter: chapterTitle)
+            // screenshot routes for the posting sheets (simulator taps don't reach sheets on iOS 27)
+            if DebugLaunchRoute.takeSheet("studiopostchapter") {
+                openPostSheet(.postChapter(workID: 1001, chapterID: nil))
+            } else if DebugLaunchRoute.takeSheet("studiopostnew") {
+                openPostSheet(.postNewWork(existingDraftWorkID: nil))
+            }
+        }
         .onDisappear { KudosWidgetBridge.noteEditing(work: workTitle, chapter: chapterTitle) }
         .onDisappear {
             metadataSaveTask?.cancel()
