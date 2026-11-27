@@ -296,7 +296,7 @@ struct StudioStatsHistoryTests {
         #expect(StudioStatsHistory.weeks(first, metric: .kudos, calendar: Self.calendar).isEmpty)
         #expect(StudioStatsHistory.chartsBegin(first, calendar: Self.calendar) == date(11, 30, hour: 0))
         let message = StudioStatsHistory.emptyChartMessage(first, calendar: Self.calendar)
-        #expect(message.hasPrefix("Charts begin the week of"))
+        #expect(message.hasPrefix("Charts start "))
         #expect(message.contains("30"))
     }
 

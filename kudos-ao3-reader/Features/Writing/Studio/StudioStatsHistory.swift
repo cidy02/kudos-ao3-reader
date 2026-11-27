@@ -365,7 +365,7 @@ nonisolated enum StudioStatsHistory {
             return "Charts begin once Kudos has saved your totals."
         }
         let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone).month(.abbreviated).day()
-        return "Charts begin the week of \(begin.formatted(style))."
+        return "Charts start \(begin.formatted(style)), after a full week of totals."
     }
 
     /// VoiceOver text for the bar chart: every week's value, not only the latest.

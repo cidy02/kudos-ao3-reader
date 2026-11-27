@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Paper preview card shown in the Recent grid of `StudioDocumentsPagesView`.
-struct StudioRecentPaperCard: View {
+struct StudioDocumentsRecentCard: View {
     let item: StudioRecentDocumentItem
 
     @Environment(ThemeManager.self) private var theme

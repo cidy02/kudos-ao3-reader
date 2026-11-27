@@ -219,7 +219,7 @@ struct StudioDocumentsPagesView: View {
 
     @ViewBuilder
     private func recentCardLink(_ item: StudioRecentDocumentItem) -> some View {
-        let cardLabel = StudioRecentPaperCard(item: item)
+        let cardLabel = StudioDocumentsRecentCard(item: item)
         let spoken = [item.badgeText, item.title, item.metaLine]
             .compactMap(\.self)
             .joined(separator: ", ")
