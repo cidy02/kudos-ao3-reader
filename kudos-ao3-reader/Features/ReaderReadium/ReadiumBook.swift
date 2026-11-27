@@ -62,6 +62,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// section list use it, since the count alone cannot tell two copies apart.
     private(set) var sectionsGeneration = 0
     private(set) var currentLocator: Locator?
+
+    /// The end-of-chapter card's late ratio correction (T-578) rewrites the last settle into prose coordinates;
+    /// the setter stays private to this type.
+    func adoptChapterEndCorrectedLocator(_ locator: Locator) {
+        currentLocator = locator
+    }
     /// Bumped on every navigator-resolved `locationDidChange` that passes the
     /// ingestion gate; 0 until the first real settle after open (the seeded
     /// persisted locator does not count).

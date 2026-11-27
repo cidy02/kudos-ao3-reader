@@ -326,7 +326,7 @@ extension ReadiumBook {
         guard let raw = chapterEndState.lastRawLocator else { return }
         let fixed = normalizedLocatorForChapterEnd(raw)
         guard fixed != currentLocator else { return }
-        currentLocator = fixed
+        adoptChapterEndCorrectedLocator(fixed)
         // Match locationDidChange: a scrub's transient settles are not a place
         // the reader stopped. currentLocator still updates so a dismiss mid-drag
         // flushes the corrected spot.
