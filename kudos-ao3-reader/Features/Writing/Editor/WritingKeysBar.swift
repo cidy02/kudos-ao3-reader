@@ -112,29 +112,103 @@ struct WritingKeysBar<LeadingSlot: View>: View {
     let formatState: FormatState
     let showsLeadingContent: Bool
     let onAction: (WritingKeyAction) -> Void
+    /// Nil reads the environment. The keyboard accessory passes its own copy: it does not inherit the screen's.
+    private let phoneOverride: WritingKeysBarPhoneActions?
     @ViewBuilder let leadingSlot: () -> LeadingSlot
 
     @Environment(ThemeManager.self) private var themeManager: ThemeManager?
     @Environment(\.accentFill) private var envAccentFill
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.writingKeysBarPhone) private var environmentPhone
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    @State private var slide = KeysBarSlideState()
 
     private var appTheme: ReaderTheme { themeManager?.appTheme ?? .light }
     private var effectiveTint: Color { themeManager?.effectiveTint ?? envAccentFill }
     private var accentInk: Color { themeManager?.accentInk ?? effectiveTint }
+    private var phone: WritingKeysBarPhoneActions { phoneOverride ?? environmentPhone }
+    /// A horizontal pan on a scrolling keys row would either steal the scroll or the word slide.
+    private var scrollsKeys: Bool { dynamicTypeSize.isAccessibilitySize || showsLeadingContent }
+    /// Keeps the active slide's gesture host stable even if `showsLeadingContent` flips mid-slide.
+    private var showsTrackRow: Bool {
+        guard phone.wordSlideEnabled else { return false }
+        if slide.active { return slide.onTrackRow }
+        return scrollsKeys || voiceOverEnabled
+    }
+    private var coveringKeys: Bool { slide.active && !slide.onTrackRow }
 
     init(
         formatState: FormatState = FormatState(),
         showsLeadingContent: Bool = false,
         onAction: @escaping (WritingKeyAction) -> Void,
+        phone: WritingKeysBarPhoneActions? = nil,
         @ViewBuilder leadingSlot: @escaping () -> LeadingSlot
     ) {
         self.formatState = formatState
         self.showsLeadingContent = showsLeadingContent
         self.onAction = onAction
+        self.phoneOverride = phone
         self.leadingSlot = leadingSlot
     }
 
     var body: some View {
+        Group {
+            if phone.suppressesKeys {
+                EmptyView()
+            } else {
+                barChrome
+            }
+        }
+        .onChange(of: phone.wordSlideEnabled) { _, enabled in
+            if !enabled {
+                slide = KeysBarSlideState()
+            }
+        }
+        .onChange(of: phone.suppressesKeys) { _, suppressed in
+            if suppressed {
+                slide = KeysBarSlideState()
+            }
+        }
+    }
+
+    private var barChrome: some View {
+        barContent
+            .keysBarWordSlideGesture(enabled: phone.wordSlideEnabled && !showsTrackRow) {
+                delta, fraction, extend, ended in
+                handleSlide(delta: delta, fraction: fraction, extend: extend, ended: ended, fromTrackRow: false)
+            }
+            .background(barBackground)
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(appTheme.appSeparator ?? appTheme.glassStroke(0.16))
+                    .frame(height: 0.5)
+                    .accessibilityHidden(true)
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Writing keys")
+    }
+
+    /// Keys stay mounted under the track so the pan is not torn down on the sample that starts the slide.
+    private var barContent: some View {
+        VStack(spacing: 0) {
+            if showsTrackRow {
+                wordSlideTrackView
+                    .keysBarWordSlideGesture(enabled: true) { delta, fraction, extend, ended in
+                        handleSlide(delta: delta, fraction: fraction, extend: extend, ended: ended, fromTrackRow: true)
+                    }
+            }
+            ZStack {
+                keyLayouts
+                    .opacity(coveringKeys ? 0 : 1)
+                    .accessibilityHidden(coveringKeys)
+                if coveringKeys {
+                    wordSlideTrackView
+                }
+            }
+        }
+    }
+
+    private var keyLayouts: some View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -146,6 +220,7 @@ struct WritingKeysBar<LeadingSlot: View>: View {
                         ForEach(WritingKeyID.allCases) { key in
                             keyControl(key, fillsWidth: false)
                         }
+                        trailingPhoneControls
                     }
                     .padding(.horizontal, 6)
                     .padding(.vertical, 4)
@@ -158,6 +233,7 @@ struct WritingKeysBar<LeadingSlot: View>: View {
                         ForEach(WritingKeyID.allCases) { key in
                             keyControl(key, fillsWidth: false)
                         }
+                        trailingPhoneControls
                     }
                     .padding(.horizontal, 6)
                 }
@@ -168,20 +244,65 @@ struct WritingKeysBar<LeadingSlot: View>: View {
                     ForEach(WritingKeyID.allCases) { key in
                         keyControl(key, fillsWidth: true)
                     }
+                    trailingPhoneControls
                 }
                 .padding(.horizontal, 4)
                 .frame(height: 48)
             }
         }
-        .background(barBackground)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(appTheme.appSeparator ?? appTheme.glassStroke(0.16))
-                .frame(height: 0.5)
-                .accessibilityHidden(true)
+    }
+
+    private var wordSlideTrackView: some View {
+        KeysBarWordSlideTrack(
+            fraction: slide.fraction,
+            isDragging: slide.active,
+            onAdjust: { phone.onMoveByWord($0, false) }
+        )
+    }
+
+    private func handleSlide(
+        delta: CGFloat,
+        fraction: CGFloat,
+        extend: Bool,
+        ended: Bool,
+        fromTrackRow: Bool
+    ) {
+        if ended {
+            slide = KeysBarSlideState()
+            return
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Writing keys")
+        let direction = delta > 0 ? 1 : (delta < 0 ? -1 : 0)
+        let outcome = KeysBarWordSlide.resolve(
+            travel: abs(delta),
+            direction: direction,
+            carried: slide.remainder
+        )
+        if !slide.active {
+            slide.onTrackRow = fromTrackRow
+        }
+        slide.active = true
+        slide.fraction = fraction
+        slide.remainder = outcome.remainder
+        guard outcome.wordSteps != 0 else { return }
+        phone.onMoveByWord(outcome.wordSteps, extend)
+    }
+
+    @ViewBuilder
+    private var trailingPhoneControls: some View {
+        if phone.showsDictate {
+            Button {
+                playClick()
+                phone.onDictate()
+            } label: {
+                Image(systemName: "mic")
+                    .font(.body.weight(.medium))
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dictate")
+            .accessibilityHint("On this \(ThisDevice.name). Nothing leaves it.")
+        }
     }
 
     private var leadingSeparator: some View {
@@ -307,10 +428,14 @@ struct WritingKeysBar<LeadingSlot: View>: View {
     }
 
     private func trigger(_ action: WritingKeyAction) {
+        playClick()
+        onAction(action)
+    }
+
+    private func playClick() {
         #if os(iOS)
         UIDevice.current.playInputClick()
         #endif
-        onAction(action)
     }
 }
 
@@ -336,6 +461,7 @@ final class WritingKeysInputAccessoryView: UIInputView, UIInputViewAudioFeedback
         var onAction: (WritingKeyAction) -> Void
         var leadingSlotView: AnyView
         var hasLeadingContent: Bool
+        var phone = WritingKeysBarPhoneActions.disabled
 
         init(
             formatState: FormatState,
@@ -358,6 +484,7 @@ final class WritingKeysInputAccessoryView: UIInputView, UIInputViewAudioFeedback
                 formatState: stateBox.formatState,
                 showsLeadingContent: stateBox.hasLeadingContent,
                 onAction: { action in stateBox.onAction(action) },
+                phone: stateBox.phone,
                 leadingSlot: { stateBox.leadingSlotView }
             )
         }
@@ -450,6 +577,12 @@ final class WritingKeysInputAccessoryView: UIInputView, UIInputViewAudioFeedback
     ) {
         stateBox.hasLeadingContent = hasContent
         stateBox.leadingSlotView = AnyView(content())
+        invalidateIntrinsicContentSize()
+    }
+
+    /// Pushes word-slide and Dictate onto the accessory. It does not inherit the editor's environment.
+    func updatePhoneActions(_ actions: WritingKeysBarPhoneActions) {
+        stateBox.phone = actions
         invalidateIntrinsicContentSize()
     }
 

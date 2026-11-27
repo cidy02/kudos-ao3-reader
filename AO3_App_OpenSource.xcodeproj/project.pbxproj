@@ -598,6 +598,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Kudos;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock to reveal hidden mature works.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Scan another device's pairing code to trust its deletions.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dictation listens while you write by voice. What you say stays on this device.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Dictation turns what you say into text on this device; nothing is sent anywhere.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -660,6 +662,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Kudos;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock to reveal hidden mature works.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Scan another device's pairing code to trust its deletions.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dictation listens while you write by voice. What you say stays on this device.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Dictation turns what you say into text on this device; nothing is sent anywhere.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
