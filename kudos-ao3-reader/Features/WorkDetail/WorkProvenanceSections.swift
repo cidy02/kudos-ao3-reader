@@ -25,6 +25,7 @@ struct WorkProvenanceSections: View {
     @State private var rebuildError: String?
     @State private var rebuilt = false
     @State private var confirmingRedundantRebuild = false
+    @State private var previewingOriginal: URL?
 
     /// Lives in My copy (1a) only. The Library/Later/Favorite badges this used to
     /// repeat are the sheet's own strip and Status group; the preservation
@@ -104,6 +105,18 @@ struct WorkProvenanceSections: View {
                         .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
 
+                    // T-579: conversion is lossy (images dropped, layout reflowed), so the source is how a
+                    // reader tells a conversion artefact from what the author wrote. Same preview as the reader's.
+                    Button {
+                        previewingOriginal = Self.namedPreviewURL(
+                            for: candidate.originalURL,
+                            name: WorkRedownloadability.originalFile(for: work.id)?.suggestedName
+                        )
+                    } label: {
+                        Label("View Original", systemImage: "doc.text.magnifyingglass")
+                    }
+                    .buttonStyle(.borderless)
+
                     // Always offered, never conditional on staleness. A rebuild is also
                     // how a work picks up an *importer* fix — recovered metadata, for
                     // instance — which the converter version cannot describe, so hiding
@@ -134,6 +147,7 @@ struct WorkProvenanceSections: View {
                 }
                 .font(.system(size: rowContentSize))
                 .myCopyRow()
+                .quickLookPreview($previewingOriginal)
                 .confirmationDialog(
                     "Rebuild this work?",
                     isPresented: $confirmingRedundantRebuild,
@@ -158,6 +172,22 @@ struct WorkProvenanceSections: View {
                     Text(rebuildError ?? "")
                 }
             }
+        }
+    }
+
+    /// The stored original is named by the work's id; Quick Look titles and shares a file by its name, so preview a
+    /// hard link under the original's own name. Falls back to the stored file if the link can't be made.
+    static func namedPreviewURL(for original: URL, name: String?, in directory: URL? = nil) -> URL {
+        guard let name, !name.isEmpty, name != original.lastPathComponent else { return original }
+        let folder = (directory ?? FileManager.default.temporaryDirectory)
+            .appendingPathComponent("original-preview-\(UUID().uuidString)", isDirectory: true)
+        let named = folder.appendingPathComponent((name as NSString).lastPathComponent)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try FileManager.default.linkItem(at: original, to: named)
+            return named
+        } catch {
+            return original
         }
     }
 
