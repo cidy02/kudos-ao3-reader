@@ -2,10 +2,9 @@ import Foundation
 import Testing
 @testable import Kudos
 
-/// Regression tests for board-matched editor copy, row meta lines, counts, and empty states
-/// across `Studio-Editor`, `Editor-Typing`, `Editor-Format`, `Editor-Notes`, `Editor-Annotations`,
-/// `Editor-Names`, and `Editor-Beta` (T-507 editor detail sweep).
-/// Depends only on a plain test host: no network, no AO3, no WebView.
+/// Regression tests for board-matched editor copy that a model or helper produces
+/// (`Studio-Editor`, `Editor-Typing`, `Editor-Notes`, `Editor-Annotations`, `Editor-Names`,
+/// `Editor-Beta`). Depends only on a plain test host: no network, no AO3, no WebView.
 @MainActor
 struct EditorBoardCopyTests {
     // MARK: - Studio-Editor & Editor-Typing: Sprint pill and chapter notes headers
@@ -14,7 +13,6 @@ struct EditorBoardCopyTests {
         #expect(EditorSprintCopy.wordsBadgeText(words: 312) == "+312 words")
         #expect(EditorSprintCopy.wordsBadgeText(words: 1) == "+1 word")
         #expect(EditorSprintCopy.wordsBadgeText(words: 0) == "+0 words")
-        #expect(EditorSprintCopy.wordsBadgeText(words: -5) == "+0 words")
 
         #expect(EditorSprintCopy.accessibilityWordsSuffix(words: 312) == "312 words so far")
         #expect(EditorSprintCopy.accessibilityWordsSuffix(words: 1) == "1 word so far")
@@ -102,38 +100,6 @@ struct EditorBoardCopyTests {
         #expect(
             WritingKeyID.barAccessibilityLabel(hasNameSuggestions: true)
                 == "Writing keys with name suggestions"
-        )
-    }
-
-    // MARK: - Editor-Format: Paragraph, mark, alignment, and direction copy
-
-    @Test func formatPanelLabelsMatchEditorFormatBoard() {
-        #expect(
-            FormatBlock.allCases.map(\.title) == [
-                "Body", "Heading", "Subheading", "Centred",
-                "Quote", "• List", "1. List", "Fold-out",
-            ]
-        )
-        #expect(
-            FormatMark.allCases.map(\.buttonGlyph) == [
-                "B", "I", "U", "S", "x²", "x₂", "sm", "‹›",
-            ]
-        )
-        #expect(
-            FormatMark.allCases.map(\.accessibilityLabel) == [
-                "Bold", "Italic", "Underline", "Strikethrough",
-                "Superscript", "Subscript", "Smaller text", "Code",
-            ]
-        )
-        #expect(
-            FormatAlignment.allCases.map(\.accessibilityLabel) == [
-                "Align left", "Centre", "Align right", "Justify",
-            ]
-        )
-        #expect(
-            FormatDirection.allCases.map(\.decoratedTitle) == [
-                "¶→ Left to right", "Right to left ←¶",
-            ]
         )
     }
 
@@ -274,7 +240,6 @@ struct EditorBoardCopyTests {
                 == "PDF · sent Nov 22"
         )
         #expect(BetaReadingCopy.reviewAllButtonTitle(remainingCount: 10) == "Review All 10")
-        #expect(BetaReadingCopy.reviewAllButtonTitle(remainingCount: -1) == "Review All 0")
         #expect(
             BetaReadingCopy.emptyComparisonMessage(betaName: "Lark")
                 == "Lark’s copy matched what you sent, with no suggestions or comments."

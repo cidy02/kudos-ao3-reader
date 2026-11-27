@@ -187,13 +187,16 @@ struct EditorSprintPill: View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Image(systemName: "timer")
                             .accessibilityHidden(true)
                         timerText
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     wordsText
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 HStack(spacing: 4) {
                     Image(systemName: "timer")
@@ -299,7 +302,8 @@ struct EditorTopMetaStrip: View {
         if let chapterWordCountText = summary.chapterWordCountText {
             Text(chapterWordCountText)
                 .foregroundStyle(.secondaryInk)
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -464,7 +468,8 @@ struct EditorStatusLine: View {
         if let chapterWordCountText = summary.chapterWordCountText {
             Text(chapterWordCountText)
                 .foregroundStyle(.secondaryInk)
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

@@ -206,11 +206,9 @@ struct BetaReadingSheet: View {
                     .padding(.bottom, 32)
                 }
                 .background(appTheme.cardBackdrop.ignoresSafeArea())
-                #if os(iOS)
                 .navigationTitle("")
+                #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
-                #else
-                .navigationTitle(BetaReadingCopy.screenTitle)
                 #endif
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {

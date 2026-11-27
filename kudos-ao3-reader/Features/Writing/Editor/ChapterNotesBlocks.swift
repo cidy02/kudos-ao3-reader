@@ -353,7 +353,16 @@ struct ChapterCollapsibleNoteBlock: View {
     }
 
     private var headerAccessibilityLabel: String {
-        var parts = [field.title, "\(status.count.formatted()) of \(status.limit.formatted()) characters"]
+        var parts = [field.title]
+        // The button label replaces its children, so the collapsed preview and the
+        // header helper have to be spoken here or VoiceOver skips them.
+        if showsCollapsedPreview, !isExpanded, !text.isEmpty {
+            parts.append(text)
+        }
+        parts.append("\(status.count.formatted()) of \(status.limit.formatted()) characters")
+        if case let .helper(helper) = headerTrailing {
+            parts.append(helper)
+        }
         if let error = status.overLimitMessage {
             parts.append(error)
         }
