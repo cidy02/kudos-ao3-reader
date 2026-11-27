@@ -660,17 +660,21 @@ struct InsightsGatherTests {
     @Test func coordinatorOffMainDigestIgnoresPositionSavesAndDropsCancelledDigest() async throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let now = date(month: 8, day: 25)
+        // `noteSave` classifies with `Date()` and `Calendar.current` (the screen's
+        // clock). A baseline frozen on an older `now` changes `openedRecencyBucket`
+        // and Abandoned, so a locator write looks like a relevant save.
+        let now = Date()
         let work = SavedWork(title: "A", author: "Author")
         work.isSaved = true
         work.rating = "General Audiences"
+        work.isComplete = false
         work.readiumLocator = #"{"href":"c1.xhtml","locations":{"totalProgression":0.2}}"#
         work.lastReadDate = now
         context.insert(work)
         try context.save()
 
         let coordinator = InsightsReloadCoordinator(interval: .milliseconds(25))
-        coordinator.tracker.recordBaseline(works: [work], context: context, now: now, calendar: utcCalendar)
+        coordinator.tracker.recordBaseline(works: [work], context: context)
 
         final class NotificationCapture: @unchecked Sendable {
             private let lock = NSLock()
@@ -689,10 +693,14 @@ struct InsightsGatherTests {
         var digestCalls = 0
         var reloadedDigests: [String] = []
 
-        // 1. Mid-chapter position save is ignored in O(k) without calling off-main digest.
+        // 1. Mid-chapter position save (locator, spine, in-chapter scroll — what the
+        // reader writes) is ignored in O(k) without calling the off-main digest.
         work.applyDebouncedReadiumLocator(#"{"href":"c2.xhtml","locations":{"totalProgression":0.3}}"#, at: now)
+        work.lastSpineIndex = 1
+        work.lastScrollFraction = 0.3
         try context.save()
         let posNote = try #require(notes.last)
+        #expect(coordinator.tracker.classifySave(posNote, context: context) == .ignored)
         coordinator.noteSave(
             posNote,
             works: { [work] },
@@ -701,11 +709,7 @@ struct InsightsGatherTests {
             reload: { reloadedDigests.append($0.digest) },
             digest: {
                 digestCalls += 1
-                return try? await InsightsGatherActor(modelContainer: container).digest(
-                    batchSize: 2,
-                    now: now,
-                    calendar: utcCalendar
-                )
+                return try? await InsightsGatherActor(modelContainer: container).digest()
             }
         )
         try await Task.sleep(for: .milliseconds(80))
@@ -729,11 +733,7 @@ struct InsightsGatherTests {
             },
             digest: {
                 digestCalls += 1
-                return try? await InsightsGatherActor(modelContainer: container).digest(
-                    batchSize: 2,
-                    now: now,
-                    calendar: utcCalendar
-                )
+                return try? await InsightsGatherActor(modelContainer: container).digest()
             }
         )
         await reloadDone.waitUntilEntered()
@@ -741,7 +741,11 @@ struct InsightsGatherTests {
         #expect(reloadedDigests.count == 1)
 
         // 3. Cancelling while an off-main digest is suspended prevents reload from firing.
-        let gate = TestGate()
+        // The closure calls the gather only after `cancel`, so that gather sees the
+        // cancelled task and returns nil. `finished` is reached only then; a single
+        // `Task.yield` could assert before that return.
+        let started = TestGate()
+        let finished = TestGate()
         work.title = "Renamed"
         try context.save()
         let renameNote = try #require(notes.last)
@@ -752,18 +756,16 @@ struct InsightsGatherTests {
             isOnScreen: { true },
             reload: { reloadedDigests.append($0.digest) },
             digest: {
-                await gate.enterAndWait()
-                return try? await InsightsGatherActor(modelContainer: container).digest(
-                    batchSize: 2,
-                    now: now,
-                    calendar: utcCalendar
-                )
+                await started.enterAndWait()
+                let snapshot = try? await InsightsGatherActor(modelContainer: container).digest()
+                await finished.signalEntered()
+                return snapshot
             }
         )
-        await gate.waitUntilEntered()
+        await started.waitUntilEntered()
         coordinator.cancel()
-        await gate.release()
-        await Task.yield()
+        await started.release()
+        await finished.waitUntilEntered()
         #expect(reloadedDigests.count == 1)
     }
 
