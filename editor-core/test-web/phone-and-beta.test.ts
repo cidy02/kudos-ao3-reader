@@ -163,3 +163,10 @@ test('a name inside quotes is still suggested', async () => {
   caretAt(h, 'Ma');
   assert.equal(wordAtCaret(h.bridge.editor.view.state), 'Ma');
 });
+
+test('a > inside a quoted attribute does not end the tag', async () => {
+  const src = '<p><a title="a>b" href="https://example.com">t</a> end</p>';
+  const h = await opened(src);
+  const at = src.indexOf('href');
+  assert.equal((await command(h, 'replaceText', { from: at, to: at, text: 'X' })).applied, false);
+});

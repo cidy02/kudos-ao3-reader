@@ -233,22 +233,23 @@ extension DraftSession {
     /// Whether `offset` is between a tag's `<` and its `>`, quotes respected; a `<` that doesn't start a tag ("<3") is
     /// text.
     private nonisolated static func insideTag(_ ns: NSString, at offset: Int) -> Bool {
-        var k = offset - 1
-        while k >= 0 {
-            let c = ns.character(at: k)
-            if c == 0x3E { return false } // '>'
-            if c == 0x3C, k + 1 < ns.length, let next = Unicode.Scalar(ns.character(at: k + 1)),
-               CharacterSet.letters.contains(next) || next == "/" || next == "!" {
-                var quote: UInt16 = 0
-                for i in (k + 1)..<offset {
-                    let d = ns.character(at: i)
-                    if quote != 0 { if d == quote { quote = 0 } } else if d == 0x22 || d == 0x27 { quote = d } else if d == 0x3E { return false }
-                }
-                return true
+        // forward from the start: a '>' inside a quoted attribute doesn't end the tag, which a backward look can't tell
+        var inTag = false
+        var quote: UInt16 = 0
+        for i in 0..<offset {
+            let c = ns.character(at: i)
+            if !inTag {
+                if c == 0x3C, i + 1 < ns.length, let next = Unicode.Scalar(ns.character(at: i + 1)),
+                   CharacterSet.letters.contains(next) || next == "/" || next == "!" { inTag = true }
+            } else if quote != 0 {
+                if c == quote { quote = 0 }
+            } else if c == 0x22 || c == 0x27 {
+                quote = c
+            } else if c == 0x3E {
+                inTag = false
             }
-            k -= 1
         }
-        return false
+        return inTag
     }
 
     nonisolated static func escapedText(_ text: String) -> String {

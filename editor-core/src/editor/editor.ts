@@ -93,18 +93,17 @@ const INLINE_TAG = /^<\/?(?:a|abbr|acronym|b|bdi|bdo|big|cite|code|del|dfn|em|fo
 
 /** Whether `offset` sits inside a tag of `html` (between its `<` and `>`, quotes respected). */
 function insideTag(html: string, offset: number): boolean {
-  for (let k = offset - 1; k >= 0; k--) {
-    if (html[k] === '>') return false;
-    if (html[k] === '<' && /[A-Za-z/!]/.test(html[k + 1] ?? '')) {
-      let quote = '';
-      for (let i = k + 1; i < offset; i++) {
-        const c = html[i]!;
-        if (quote) { if (c === quote) quote = ''; } else if (c === '"' || c === "'") quote = c; else if (c === '>') return false;
-      }
-      return true;
-    }
+  // forward from the start: a '>' inside a quoted attribute doesn't end the tag, which a backward look can't tell
+  let inTag = false;
+  let quote = '';
+  for (let i = 0; i < offset; i++) {
+    const c = html[i]!;
+    if (!inTag) { if (c === '<' && /[A-Za-z/!]/.test(html[i + 1] ?? '')) inTag = true; }
+    else if (quote) { if (c === quote) quote = ''; }
+    else if (c === '"' || c === "'") quote = c;
+    else if (c === '>') inTag = false;
   }
-  return false;
+  return inTag;
 }
 
 export class Editor {
