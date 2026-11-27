@@ -149,6 +149,11 @@ struct WorkProvenanceSections: View {
                 .font(.system(size: rowContentSize))
                 .myCopyRow()
                 .quickLookPreview($previewingOriginal)
+                .onChange(of: previewingOriginal) { previous, current in
+                    if let previous {
+                        Self.discardReplacedPreview(previous, current: current)
+                    }
+                }
                 .confirmationDialog(
                     "Rebuild this work?",
                     isPresented: $confirmingRedundantRebuild,
@@ -176,20 +181,57 @@ struct WorkProvenanceSections: View {
         }
     }
 
-    /// The stored original is named by the work's id; Quick Look titles and shares a file by its name, so preview a
-    /// hard link under the original's own name. Falls back to the stored file if the link can't be made.
+    /// Quick Look titles a file by its name. macOS Quick Look markup also writes that file, and a hard link
+    /// shares the archived original's data, so the preview is a copy. A failed copy falls back to the stored file.
     static func namedPreviewURL(for original: URL, name: String?, in directory: URL? = nil) -> URL {
-        guard let name, !name.isEmpty, name != original.lastPathComponent else { return original }
         let folder = (directory ?? FileManager.default.temporaryDirectory)
             .appendingPathComponent("original-preview-\(UUID().uuidString)", isDirectory: true)
-        let named = folder.appendingPathComponent((name as NSString).lastPathComponent)
+        let named = folder.appendingPathComponent(previewName(name, for: original))
+        // `..` as a path component leaves the folder. Never copy there.
+        guard named.deletingLastPathComponent().standardizedFileURL.path
+            == folder.standardizedFileURL.path else { return original }
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try FileManager.default.linkItem(at: original, to: named)
+            try FileManager.default.copyItem(at: original, to: named)
             return named
         } catch {
+            try? FileManager.default.removeItem(at: folder)
             return original
         }
+    }
+
+    /// Drops the previous preview copy once Quick Look leaves it. The same file under another
+    /// path (`/private/var` versus `/var`) is still the open preview, so it stays.
+    static func discardReplacedPreview(_ previous: URL, current: URL?) {
+        let folder = previous.deletingLastPathComponent()
+        guard folder.lastPathComponent.hasPrefix("original-preview-") else { return }
+        if let current,
+           current.resolvingSymlinksInPath().standardizedFileURL.path
+           == previous.resolvingSymlinksInPath().standardizedFileURL.path {
+            return
+        }
+        try? FileManager.default.removeItem(at: folder)
+    }
+
+    /// One path component. A recorded name is just a string from the shared file, so `.`, `..`, and
+    /// separators must not be able to leave the preview folder or replace something beside it.
+    private static func previewName(_ name: String?, for original: URL) -> String {
+        let ext = original.pathExtension.filter { $0.isLetter || $0.isNumber }
+        let fallback = ext.isEmpty ? "Original" : "Original.\(ext.prefix(12))"
+        guard var base = name.map({ ($0 as NSString).lastPathComponent }),
+              !base.isEmpty, base != ".", base != "..", base != "/"
+        else { return fallback }
+        base = String(base.unicodeScalars.filter { $0.value >= 32 && $0.value != 0x7f })
+        if base.isEmpty || base == "." || base == ".." { return fallback }
+        // APFS rejects names past 255 bytes. Past that, copy would fail and the preview would
+        // open the archive itself. Keep the extension so Quick Look still knows the type.
+        guard base.utf8.count > 240 else { return base }
+        let keptExtension = (base as NSString).pathExtension.filter { $0.isLetter || $0.isNumber }
+        let suffix = keptExtension.isEmpty ? "" : "." + String(keptExtension.prefix(12))
+        let budget = max(240 - suffix.utf8.count, 1)
+        let stem = String(decoding: (base as NSString).deletingPathExtension.utf8.prefix(budget), as: UTF8.self)
+        if stem.isEmpty || stem == "." || stem == ".." { return fallback }
+        return stem + suffix
     }
 
     // MARK: - Content
