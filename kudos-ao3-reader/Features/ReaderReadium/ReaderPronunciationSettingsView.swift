@@ -116,7 +116,11 @@ struct ReaderPronunciationSettingsView: View {
                                         .font(.body)
                                         .foregroundStyle(.primary)
                                     Text(ReaderPronunciationCopy.saidAsSubtitle(for: entry.ipa))
-                                        .font(.footnote)
+                                        .font(
+                                            KokoroRespelling.looksLikeIPA(entry.ipa)
+                                                ? Font.footnote.monospaced()
+                                                : Font.footnote
+                                        )
                                         .foregroundStyle(.secondaryInk)
                                 }
                                 Spacer(minLength: 8)

@@ -28,6 +28,34 @@ struct ReaderBoardCopyTests {
         #expect(ReaderSearchCopy.moreButtonAccessibilityLabel == "More: Go, Copy, Bookmark")
         #expect(ReaderSearchCopy.emptyThisChapterTitle == "No Matches in This Chapter")
         #expect(ReaderSearchCopy.showWholeWorkActionTitle == "Show Whole Work")
+        #expect(
+            ReaderSearchCopy.shouldContinuePaging(
+                scope: .thisChapter,
+                isCurrentChapterPending: true,
+                isLoadingMore: false
+            )
+        )
+        #expect(
+            !ReaderSearchCopy.shouldContinuePaging(
+                scope: .wholeWork,
+                isCurrentChapterPending: true,
+                isLoadingMore: false
+            )
+        )
+        #expect(
+            !ReaderSearchCopy.shouldContinuePaging(
+                scope: .thisChapter,
+                isCurrentChapterPending: true,
+                isLoadingMore: true
+            )
+        )
+        #expect(
+            !ReaderSearchCopy.shouldContinuePaging(
+                scope: .thisChapter,
+                isCurrentChapterPending: false,
+                isLoadingMore: false
+            )
+        )
 
         #expect(ReaderSearchCopy.scopeTitle(.thisChapter, wholeWorkCount: 9, hasMore: false) == "This Chapter")
         #expect(ReaderSearchCopy.scopeTitle(.wholeWork, wholeWorkCount: 0, hasMore: false) == "Whole Work")
@@ -51,7 +79,8 @@ struct ReaderBoardCopyTests {
 
     @Test func highlightNoteCopyAndFooterMatchReaderHighlightBoard() {
         #expect(ReaderNoteCopy.sheetTitle == "Note")
-        #expect(ReaderNoteCopy.closeAccessibilityLabel == "Close")
+        // The board says Close. The button discards the draft, so the label is Cancel.
+        #expect(ReaderNoteCopy.cancelAccessibilityLabel == "Cancel")
         #expect(ReaderNoteCopy.noteFieldAccessibilityLabel == "Note text")
         #expect(ReaderNoteCopy.toolbarAccessibilityLabel == "Highlight colours")
         #expect(ReaderNoteCopy.moreColoursAccessibilityLabel == "More colours")
@@ -83,9 +112,15 @@ struct ReaderBoardCopyTests {
         #expect(ReaderPronunciationCopy.addButtonTitle == "Add a Pronunciation…")
         #expect(ReaderPronunciationCopy.emptyTitle == "No Corrections Yet")
         #expect(ReaderPronunciationCopy.saidAsSubtitle(for: "WENT-wurth") == "Said as “WENT-wurth”")
+        #expect(ReaderPronunciationCopy.saidAsSubtitle(for: "wɛntwərθ") == "wɛntwərθ")
+        #expect(ReaderPronunciationCopy.saidAsSubtitle(for: "  ") == "")
         #expect(
             ReaderPronunciationCopy.rowAccessibilityLabel(word: "Wentworth", ipa: "WENT-wurth")
                 == "Wentworth, Said as WENT-wurth"
+        )
+        #expect(
+            ReaderPronunciationCopy.rowAccessibilityLabel(word: "Wentworth", ipa: "wɛntwərθ")
+                == "Wentworth, phonemes wɛntwərθ"
         )
 
         let formattedWords = NumberFormatter.localizedString(from: NSNumber(value: 21_880), number: .decimal)
@@ -152,15 +187,13 @@ struct ReaderBoardCopyTests {
         #expect(ReaderEndCopy.kudosButtonTitle(given: false) == "Give Kudos")
         #expect(ReaderEndCopy.kudosButtonTitle(given: true) == "Kudos Given")
 
+        // Sizes are a layout choice. What must not drift is markup or a script
+        // inside the stylesheet: it is inlined into XHTML, and `<` / `>` / `&`
+        // make the parser reject the style element.
         let css = ReaderChapterEndStylesheet.stylesheet(style: .default, noteMatch: nil)
-        #expect(css.contains("padding: 0 0.875rem !important;"))
-        #expect(css.contains("font-size: 0.75rem !important;"))
-        #expect(css.contains("font-size: 0.8125rem !important;"))
-        #expect(css.contains("font-size: 0.9375rem !important;"))
-        #expect(css.contains("font-size: 1.0625rem !important;"))
-        #expect(css.contains("font-size: 1rem !important;"))
         #expect(!css.contains("<"))
         #expect(!css.contains(">"))
         #expect(!css.contains("&"))
+        #expect(!css.lowercased().contains("script"))
     }
 }

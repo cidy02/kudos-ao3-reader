@@ -100,7 +100,7 @@ struct ReaderNoteEditor: View {
                     } label: {
                         Image(systemName: "xmark")
                     }
-                    .accessibilityLabel(ReaderNoteCopy.closeAccessibilityLabel)
+                    .accessibilityLabel(ReaderNoteCopy.cancelAccessibilityLabel)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {

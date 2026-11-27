@@ -475,7 +475,28 @@ struct ReaderSearchView: View {
             // Hide the system grouped ground so the sheet's themed `cardBackdrop`
             // shows through in Light, Sepia, Dark, and OLED.
             .scrollContentBackground(.hidden)
+            .onAppear { continueThisChapterSearchIfNeeded() }
+            .onChange(of: scope) { _, _ in
+                continueThisChapterSearchIfNeeded()
+            }
+            .onChange(of: model.isLoadingMore) { _, isLoading in
+                guard !isLoading else { return }
+                continueThisChapterSearchIfNeeded()
+            }
         }
+    }
+
+    /// Whole Work keeps paging by scrolling a row near the end of what's loaded.
+    /// This Chapter draws none of those rows, so the same request has to come
+    /// from here or a deep chapter stops at "Searching…" once auto-paging
+    /// gives up.
+    private func continueThisChapterSearchIfNeeded() {
+        guard ReaderSearchCopy.shouldContinuePaging(
+            scope: scope,
+            isCurrentChapterPending: isCurrentChapterGroupPending,
+            isLoadingMore: model.isLoadingMore
+        ) else { return }
+        model.loadMoreIfNeeded(currentItem: model.results.last)
     }
 
     private func highlightedSnippet(for result: ReaderSearchModel.Result) -> AttributedString {

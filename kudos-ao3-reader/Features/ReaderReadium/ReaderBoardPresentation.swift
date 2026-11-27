@@ -32,6 +32,19 @@ nonisolated enum ReaderSearchCopy {
     static let emptyThisChapterTitle = "No Matches in This Chapter"
     static let showWholeWorkActionTitle = "Show Whole Work"
 
+    /// The This Chapter list hides every other chapter, so nothing near the end
+    /// of the loaded pages is on screen to scroll. Keep asking for the next
+    /// page until this chapter's hits arrive or the search finishes, and never
+    /// while a page is already in flight — the iterator corrupts if two
+    /// `next()` calls overlap.
+    static func shouldContinuePaging(
+        scope: Scope,
+        isCurrentChapterPending: Bool,
+        isLoadingMore: Bool
+    ) -> Bool {
+        scope == .thisChapter && isCurrentChapterPending && !isLoadingMore
+    }
+
     /// "This Chapter" or "Whole Work · 9" (with "+" while additional pages remain).
     static func scopeTitle(_ scope: Scope, wholeWorkCount: Int, hasMore: Bool) -> String {
         switch scope {
@@ -62,7 +75,10 @@ nonisolated enum ReaderSearchCopy {
 /// Copy for the highlight note sheet (`Reader-Highlight`).
 nonisolated enum ReaderNoteCopy {
     static let sheetTitle = "Note"
-    static let closeAccessibilityLabel = "Close"
+    /// The board draws this control as Close. The button still throws away the
+    /// draft and puts the highlight colour back (audit A12-6), so the name has
+    /// to say Cancel.
+    static let cancelAccessibilityLabel = "Cancel"
     static let noteFieldAccessibilityLabel = "Note text"
     static let toolbarAccessibilityLabel = "Highlight colours"
     static let moreColoursAccessibilityLabel = "More colours"
@@ -117,13 +133,20 @@ nonisolated enum ReaderPronunciationCopy {
     static let addButtonTitle = "Add a Pronunciation…"
     static let emptyTitle = "No Corrections Yet"
 
-    /// "Said as “WENT-wurth”"
-    static func saidAsSubtitle(for ipa: String) -> String {
-        "Said as “\(ipa)”"
+    /// "Said as “WENT-wurth”" for a syllable respelling. Stored phonemes stay
+    /// the phoneme string: the editor saves the resolved IPA, not the
+    /// respelling, and "Said as" would claim the phonemes are that respelling.
+    static func saidAsSubtitle(for stored: String) -> String {
+        let trimmed = stored.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || KokoroRespelling.looksLikeIPA(trimmed) { return trimmed }
+        return "Said as “\(trimmed)”"
     }
 
     static func rowAccessibilityLabel(word: String, ipa: String) -> String {
-        "\(word), Said as \(ipa)"
+        if KokoroRespelling.looksLikeIPA(ipa) {
+            return "\(word), phonemes \(ipa)"
+        }
+        return "\(word), Said as \(ipa)"
     }
 }
 
