@@ -31,7 +31,8 @@ static void KudosAppendLine(fz_stext_line *line, NSMutableString *buffer) {
 static NSString *const KudosSceneBreakMarker = @"* * *";
 
 /// The vertical centres, top to bottom, of horizontal rules that separate paragraphs: a vector at most 4 pt tall and at
-/// least 40% of the page wide that overlaps no text block (so underlines and strike-throughs don't count). Rules
+/// least 40% of the page wide that crosses no line of text (so underlines and strike-throughs don't count; a rule
+/// between two lines of one block still counts, because MuPDF can group paragraphs on either side of it). Rules
 /// within 6 pt of each other are one rule (calibre strokes an `<hr>` as two overlapping paths).
 /// shortcut: placed by height on the page, so a two-column layout could put a break in the wrong column; fan fiction
 /// PDFs are single-column, revisit if a multi-column import shows it.
@@ -48,10 +49,15 @@ static NSArray<NSNumber *> *KudosSceneBreakRules(fz_stext_page *page) {
         }
         float centre = (box.y0 + box.y1) / 2;
         BOOL overlapsText = NO;
-        for (fz_stext_block *text = page->first_block; text != NULL; text = text->next) {
-            if (text->type == FZ_STEXT_BLOCK_TEXT && centre >= text->bbox.y0 && centre <= text->bbox.y1) {
-                overlapsText = YES;
-                break;
+        for (fz_stext_block *text = page->first_block; text != NULL && !overlapsText; text = text->next) {
+            if (text->type != FZ_STEXT_BLOCK_TEXT) {
+                continue;
+            }
+            for (fz_stext_line *line = text->u.t.first_line; line != NULL; line = line->next) {
+                if (centre >= line->bbox.y0 && centre <= line->bbox.y1) {
+                    overlapsText = YES;
+                    break;
+                }
             }
         }
         if (!overlapsText) {
@@ -123,9 +129,19 @@ static NSArray<NSNumber *> *KudosSceneBreakRules(fz_stext_page *page) {
                         }
                     } else {
                         // One block is one paragraph; its lines are wrapped display
-                        // lines and join with a single space.
+                        // lines and join with a single space. A scene-break rule between two of its lines splits it.
                         NSMutableString *text = [NSMutableString string];
                         for (fz_stext_line *line = block->u.t.first_line; line != NULL; line = line->next) {
+                            if (nextRule < rules.count && rules[nextRule].floatValue < line->bbox.y0) {
+                                if (text.length > 0) {
+                                    [entries addObject:[text copy]];
+                                    [text setString:@""];
+                                }
+                                while (nextRule < rules.count && rules[nextRule].floatValue < line->bbox.y0) {
+                                    [entries addObject:KudosSceneBreakMarker];
+                                    nextRule++;
+                                }
+                            }
                             if (text.length > 0) {
                                 [text appendString:@" "];
                             }
