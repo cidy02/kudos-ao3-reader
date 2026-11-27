@@ -359,6 +359,35 @@ nonisolated struct ChapterEditorAnnotationCounts: Equatable, Hashable, Sendable 
     }
 }
 
+/// Board-aligned copy constants and formatting helpers for Notes & Annotations
+/// (`Editor-Notes.dc.html`, `Editor-Annotations.dc.html`).
+nonisolated enum ChapterEditorAnnotationCopy {
+    static let inThisChapterSectionTitle = "In this chapter"
+    static let emptyChapterNotesTitle = "No Notes in This Chapter"
+    static let newNoteButtonTitle = "New Note"
+
+    /// Header line inside the annotation detail sheet (`Editor-Annotations.dc.html`:
+    /// `"Your note · Nov 24"`, plus `"· Paragraph N"` when located).
+    static func detailHeaderLabel(
+        kind: WritingAnnotationKind,
+        isResolved: Bool,
+        dateText: String,
+        paragraphNumber: Int?
+    ) -> String {
+        let prefix: String
+        if isResolved {
+            prefix = "Resolved"
+        } else {
+            prefix = kind == .tk ? "TK" : "Your note"
+        }
+        var parts = [prefix, dateText]
+        if let paragraphNumber {
+            parts.append("Paragraph \(paragraphNumber)")
+        }
+        return parts.joined(separator: " · ")
+    }
+}
+
 /// Ordered groups for the Notes sheet's `In Chapter` list (`Editor-Annotations.dc.html`).
 nonisolated enum ChapterEditorAnnotationGroupKind: String, CaseIterable, Identifiable, Hashable, Sendable {
     case note
@@ -474,6 +503,22 @@ nonisolated enum ChapterEditorAnnotationListBuilder {
             built.append(ChapterEditorAnnotationGroup(kind: .resolved, rows: resolvedRows))
         }
         return built
+    }
+
+    /// Flat list in Note → TK → Resolved order for the unified `"In this chapter"` card
+    /// (`Editor-Annotations.dc.html`).
+    static func flatRows(
+        from annotations: [WritingAnnotation],
+        in bodyHTML: String,
+        lostIDs: Set<UUID> = [],
+        formatDate: (Date) -> String = Self.shortDateString
+    ) -> [ChapterEditorAnnotationRow] {
+        groups(
+            from: annotations,
+            in: bodyHTML,
+            lostIDs: lostIDs,
+            formatDate: formatDate
+        ).flatMap(\.rows)
     }
 
     private static func makeRow(

@@ -555,6 +555,8 @@ struct ReadiumReaderView: View {
                 // is already clear, which is the normal case.
                 book.isScrubbing = false
                 isEditingSlider = false
+                speechSeekHolding = false
+                speechSeekWasPlaying = false
                 // Flush the exact final position so resume lands precisely, even if the
                 // last scroll's debounce window hadn't elapsed before we left.
                 flushProgress(shelfStamp: true)
@@ -640,8 +642,11 @@ struct ReadiumReaderView: View {
                 // Locator seek, not goForward: one move, never an animated
                 // turn, so a sentence already on screen does not turn again.
                 guard !book.isLocatorIngestionBlocked, !speechSeekHolding else { return }
+                if let string = locator.persistenceString {
+                    initialPositionPersistence.observeSettledLocator(string)
+                }
                 ReadingLogService.noteActivity(for: work)
-                book.go(to: locator)
+                book.goForSpeech(to: locator)
             },
             onSpokenRange: { locator in book.applySpeechDecoration(at: locator) },
             onSessionEnded: { book.applySpeechDecoration(at: nil) },
@@ -898,9 +903,9 @@ struct ReadiumReaderView: View {
         return annotations
             .filter { $0.kind == .highlight }
             .first { annotation in
-                ReadingAnnotationMatching.isSamePassage(
-                    existingLocator: annotation.locatorString,
-                    selectionLocator: selectionLocator
+                ReadiumReaderPersistence.isSameHighlightPassage(
+                    stored: annotation.locatorString,
+                    selection: selectionLocator
                 )
             }
     }
@@ -1142,38 +1147,26 @@ struct ReadiumReaderView: View {
 
     /// Flush point (dismiss / background / disappear): persist the latest locator
     /// when it differs from disk, once a chapter-targeted open has actually moved.
-    /// Bypasses the debounce window — an eligible flush must never be dropped.
+    /// Prefers the confirmed speech locator when an async speech jump has not
+    /// settled (and no later user navigation superseded it). Bypasses the debounce
+    /// window — an eligible flush must never be dropped.
     private func flushProgress(shelfStamp: Bool) {
-        progressPersistence.cancelTrailingWrite()
-        guard initialPositionPersistence.allowsPersistence else { return }
-        // Prefer the live navigator locator; fall back to the last noted string.
         // After exit has committed (swipe peel or close/edge), never re-record a
         // live locator — freeze release / late TTS can still mutate `currentLocator`
         // while the view is tearing down.
         let exitCommitted = isDismissingByDrag || book.isDismissExitLatched
-        if !exitCommitted, let live = book.currentLocator?.persistenceString {
-            progressPersistence.record(
-                locatorString: live,
-                totalProgression: book.currentLocator?.locations.totalProgression
-            )
-        }
-        let now = Date()
-        if let toWrite = progressPersistence.locatorForFlush() {
-            writePosition(toWrite, at: now)
-            if shelfStamp { work.markProgressModified(now) }
-            progressPersistence.markPersisted(
-                locatorString: toWrite,
-                totalProgression: book.currentLocator?.locations.totalProgression
-                    ?? progressPersistence.latestTotalProgression,
-                at: now
-            )
-            try? modelContext.save()
+        let wrote = ReadiumReaderPersistence.flushProgress(
+            liveLocator: book.locatorForProgressFlush,
+            work: work,
+            sections: book.sections,
+            progressPersistence: progressPersistence,
+            allowsPersistence: initialPositionPersistence.allowsPersistence,
+            exitCommitted: exitCommitted,
+            shelfStamp: shelfStamp,
+            in: modelContext
+        )
+        if wrote {
             FolderSyncService.markDirty()
-        } else if shelfStamp, progressPersistence.hasSessionPosition {
-            // Locator already on disk — still bump lastReadDate so the shelf
-            // reflects this reading session on a quick open/close.
-            ReadiumSessionStamp.noteUnchangedLocatorShelf(work, at: now)
-            try? modelContext.save()
         }
     }
 
@@ -1734,13 +1727,13 @@ struct ReadiumReaderView: View {
             initialPositionPersistence.observeSettledLocator(string)
         }
         book.onLocatorChange = { locator in
-            guard let string = locator.persistenceString else { return }
             guard initialPositionPersistence.allowsPersistence else { return }
             ReadingLogService.noteActivity(for: work, chapter: readingLogChapter(for: locator))
             // note() may call onDebouncedWrite immediately or schedule a trailing write.
-            progressPersistence.note(
-                locatorString: string,
-                totalProgression: locator.locations.totalProgression
+            // An old unsorted locator string is kept when this settle is the same position.
+            ReadiumReaderPersistence.noteSettledLocator(
+                locator,
+                progressPersistence: progressPersistence
             )
         }
         // Finish a completed work only at the navigator's true end state — the
@@ -2184,42 +2177,19 @@ extension ReadiumReaderView {
         speechSeekWasPlaying = speech.isPlaying
         speechSeekHolding = true
         if speech.isPlaying {
+            speech.noteSeekLocator(nil)
             speech.pause()
         }
         // First seek step is the hold control's immediate first tick.
     }
 
     private func handleSpeechSeekHoldTick(forward: Bool) {
-        guard let positions = book.currentChapterPositions, positions.count > 1 else { return }
-        // Never index the positions list with visual page-1 (mixed metrics).
-        // Prefer the live locator's global position; else map visual→progression
-        // the same way the chapter scrub slider does.
-        let currentIdx: Int = {
-            if let globalPos = book.currentLocator?.locations.position,
-               let first = positions.first?.locations.position {
-                return max(0, min(positions.count - 1, globalPos - first))
-            }
-            if let progression = book.currentLocator?.locations.progression, positions.count > 1 {
-                let idx = Int((progression * Double(positions.count - 1)).rounded())
-                return max(0, min(positions.count - 1, idx))
-            }
-            if let pos = book.readingPosition {
-                return ReaderPageMetrics.positionIndex(
-                    visualPage: pos.page,
-                    visualPageCount: pos.pageCount,
-                    positionCount: positions.count
-                )
-            }
-            return 0
-        }()
-        let delta = forward ? 1 : -1
-        guard let newIdx = ReaderSpeechSkip.seekIndex(
-            current: currentIdx,
-            count: positions.count,
-            delta: delta
+        guard let locator = book.nextSpeechSeekLocator(
+            forward: forward,
+            pendingSeekLocator: speech.pendingSeekLocator,
+            speechLocator: speech.resumeLocator,
+            followsSpeech: speechSeekWasPlaying
         ) else { return }
-        let locator = positions[newIdx]
-        book.go(to: locator)
         speech.noteSeekLocator(locator)
         playSpeechSeekTickHaptic()
     }
@@ -2227,8 +2197,9 @@ extension ReadiumReaderView {
     private func handleSpeechSeekHoldEnd() {
         guard speechSeekHolding else { return }
         speechSeekHolding = false
-        speech.reanchor(to: speech.resumeLocator ?? book.currentLocator, resumePlaying: speechSeekWasPlaying)
+        let wasPlaying = speechSeekWasPlaying
         speechSeekWasPlaying = false
+        speech.finishSeekHold(resumePlaying: wasPlaying)
     }
 
     /// The AO3 story chapter the reader is currently on, for the chapter-aware

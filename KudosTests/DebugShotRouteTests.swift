@@ -36,9 +36,9 @@ struct DebugShotRouteTests {
             // T-575 Writing requests, orphan sheet, and import from URL; not in A82's list.
             "writingrequests", "orphansheet", "importwork",
             // S5 posting sheets (wave 56); not in A82's list.
-            "studiopostchapter", "studiopostnew",
+            "studiopostchapter", "studiopostnew", "studioeditor",
         ]
-        #expect(names.count == 96)
+        #expect(names.count == 97)
         for name in names {
             #expect(DebugShots.byName[name] != nil)
             #expect(!DebugShots.byName[name]!.route.isEmpty)

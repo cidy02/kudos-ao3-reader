@@ -10,17 +10,50 @@ func studioStatsSigned(_ change: Int) -> String {
     change.formatted(.number.sign(strategy: .always()))
 }
 
+/// Pure cell and subtitle formatting for `StudioStatsWorksTable` (`Studio-Stats`).
+nonisolated enum StudioStatsWorksFormatting {
+    /// Formats a table figure (`19.2k` for four-digit+ hits matching `Studio-Stats`,
+    /// grouped digits for kudos/comments, `"–"` when absent).
+    static func figureText(
+        _ value: Int?,
+        metric: StudioStatsMetric,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String {
+        guard let value else { return "–" }
+        if metric == .hits, abs(value) >= 1_000 {
+            return value.formatted(
+                .number
+                    .locale(locale)
+                    .notation(.compactName)
+                    .precision(.fractionLength(0...1))
+            )
+            .lowercased()
+        }
+        return value.formatted(.number.locale(locale))
+    }
+
+    static func workMeta(_ work: AO3UserStats.Work) -> String {
+        var parts = [work.fandoms.joined(separator: " · ")].filter { !$0.isEmpty }
+        if let words = work.wordCount {
+            parts.append(StudioWorkItem.wordCountLabel(words))
+        }
+        return parts.joined(separator: " · ")
+    }
+}
+
 /// A few small bars of a total's recent weeks. Decorative: the card's text says it all.
 struct StudioStatsSparkline: View {
     let fractions: [Double]
+    var isAccented = false
 
-    @Environment(\.accentFill) private var accentFill
+    @Environment(ThemeManager.self) private var theme
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 3) {
             ForEach(Array(fractions.enumerated()), id: \.offset) { index, fraction in
+                let lastFill: Color = isAccented ? theme.accentInk : Color.primary.opacity(0.75)
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(index == fractions.count - 1 ? accentFill : Color.primary.opacity(0.2))
+                    .fill(index == fractions.count - 1 ? lastFill : Color.primary.opacity(0.20))
                     .frame(height: max(2, CGFloat(fraction) * 22))
             }
         }
@@ -51,7 +84,7 @@ struct StudioStatsTotalCard: View {
                     .foregroundStyle(change == 0 ? AnyShapeStyle(SecondaryInkStyle()) : AnyShapeStyle(AccentInkStyle()))
             }
             if !sparkline.isEmpty {
-                StudioStatsSparkline(fractions: sparkline)
+                StudioStatsSparkline(fractions: sparkline, isAccented: metric == .kudos)
                     .padding(.top, 4)
             }
         }
@@ -173,8 +206,8 @@ struct StudioStatsWorksTable: View {
             Text(work.title)
                 .font(.system(.subheadline, design: .serif, weight: .semibold))
                 .foregroundStyle(Color.primary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-            Text(meta(work))
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+            Text(StudioStatsWorksFormatting.workMeta(work))
                 .font(.caption2)
                 .foregroundStyle(.secondaryInk)
         }
@@ -185,15 +218,26 @@ struct StudioStatsWorksTable: View {
             titleBlock(work)
                 .frame(maxWidth: .infinity, alignment: .leading)
             ForEach(Self.columns) { column in
+                let delta = changeText(column, work)
                 VStack(alignment: .trailing, spacing: 0) {
-                    Text(figure(column, work).map { $0.formatted() } ?? "–")
+                    Text(StudioStatsWorksFormatting.figureText(figure(column, work), metric: column.metric))
                         .font(.subheadline.weight(column.metric == .kudos ? .bold : .semibold))
                         .monospacedDigit()
-                        .foregroundStyle(column.metric == .kudos ? AnyShapeStyle(AccentInkStyle()) : AnyShapeStyle(Color.primary))
-                    Text(changeText(column, work))
-                        .font(.caption2)
-                        .monospacedDigit()
-                        .foregroundStyle(column.metric == .kudos ? AnyShapeStyle(AccentInkStyle()) : AnyShapeStyle(SecondaryInkStyle()))
+                        .foregroundStyle(
+                            column.metric == .kudos
+                                ? AnyShapeStyle(AccentInkStyle())
+                                : AnyShapeStyle(Color.primary)
+                        )
+                    if !delta.isEmpty {
+                        Text(delta)
+                            .font(.caption2)
+                            .monospacedDigit()
+                            .foregroundStyle(
+                                column.metric == .kudos
+                                    ? AnyShapeStyle(AccentInkStyle())
+                                    : AnyShapeStyle(SecondaryInkStyle())
+                            )
+                    }
                 }
                 .frame(width: column.width * scale, alignment: .trailing)
             }
@@ -204,18 +248,30 @@ struct StudioStatsWorksTable: View {
         VStack(alignment: .leading, spacing: 6) {
             titleBlock(work)
             ForEach(Self.columns) { column in
+                let delta = changeText(column, work)
                 HStack(alignment: .firstTextBaseline) {
                     Text(column.metric.title)
                         .font(.footnote)
                         .foregroundStyle(.secondaryInk)
                     Spacer(minLength: 8)
-                    Text(figure(column, work).map { $0.formatted() } ?? "–")
-                        .font(.subheadline.weight(.semibold))
+                    Text(StudioStatsWorksFormatting.figureText(figure(column, work), metric: column.metric))
+                        .font(.subheadline.weight(column.metric == .kudos ? .bold : .semibold))
                         .monospacedDigit()
-                    Text(changeText(column, work))
-                        .font(.caption)
-                        .monospacedDigit()
-                        .foregroundStyle(.accentInk)
+                        .foregroundStyle(
+                            column.metric == .kudos
+                                ? AnyShapeStyle(AccentInkStyle())
+                                : AnyShapeStyle(Color.primary)
+                        )
+                    if !delta.isEmpty {
+                        Text(delta)
+                            .font(.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(
+                                column.metric == .kudos
+                                    ? AnyShapeStyle(AccentInkStyle())
+                                    : AnyShapeStyle(SecondaryInkStyle())
+                            )
+                    }
                 }
             }
         }
@@ -238,12 +294,6 @@ struct StudioStatsWorksTable: View {
     private func changeText(_ column: Column, _ work: AO3UserStats.Work) -> String {
         guard let change = change(column, work), change != 0 else { return "" }
         return studioStatsSigned(change)
-    }
-
-    private func meta(_ work: AO3UserStats.Work) -> String {
-        var parts = [work.fandoms.joined(separator: " · ")].filter { !$0.isEmpty }
-        if let words = work.wordCount { parts.append("\(words.formatted()) words") }
-        return parts.joined(separator: " · ")
     }
 
     private func spokenLabel(_ work: AO3UserStats.Work) -> String {

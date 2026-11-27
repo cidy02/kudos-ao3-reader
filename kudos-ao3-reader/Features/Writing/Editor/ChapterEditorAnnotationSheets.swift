@@ -22,29 +22,24 @@ struct ChapterEditorAnnotationBadge: View {
 
     private var foregroundColor: Color {
         switch kind {
-        case .note:
-            appTheme.isDarkFamily ? Color.subjectAmber : Color(red: 0.48, green: 0.35, blue: 0.0)
-        case .tk:
-            appTheme.isDarkFamily ? Color.subjectAmber : Color(red: 0.54, green: 0.35, blue: 0.0)
+        case .note, .tk:
+            appTheme.isDarkFamily ? Color.subjectAmber : AO3TagPalette.teenTextOnLight
         case .resolved:
-            appTheme.isDarkFamily ? appTheme.statusSuccessColor : Color(red: 0.11, green: 0.37, blue: 0.23)
+            appTheme.statusSuccessColor
         }
     }
 
     private var backgroundColor: Color {
         switch kind {
         case .note:
-            appTheme.isDarkFamily
-                ? Color.subjectAmber.opacity(0.22)
-                : Color(red: 0.99, green: 0.95, blue: 0.78)
+            if appTheme.isDarkFamily {
+                return Color.subjectAmber.opacity(0.22)
+            }
+            return appTheme.favoriteColor.opacity(0.20)
         case .tk:
-            appTheme.isDarkFamily
-                ? Color.subjectAmber.opacity(0.28)
-                : Color(red: 0.99, green: 0.92, blue: 0.78)
+            return Color.subjectAmber.opacity(appTheme.isDarkFamily ? 0.28 : 0.22)
         case .resolved:
-            appTheme.isDarkFamily
-                ? appTheme.statusSuccessColor.opacity(0.22)
-                : Color(red: 0.90, green: 0.95, blue: 0.92)
+            return appTheme.statusSuccessColor.opacity(appTheme.isDarkFamily ? 0.22 : 0.14)
         }
     }
 }
@@ -78,13 +73,13 @@ struct WritingNameSuggestionChips: View {
         Button {
             onSelect(name)
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 Image(systemName: "doc.text")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(accentInk)
                     .accessibilityHidden(true)
                 Text(name)
-                    .font(.system(.subheadline, design: .serif).weight(.semibold))
+                    .font(.system(.callout, design: .serif).weight(.semibold))
                     .foregroundStyle(Color.primary)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
@@ -206,9 +201,9 @@ struct ChapterEditorAnnotationDetailSheet: View {
     private var effectiveTint: Color { themeManager?.effectiveTint ?? envAccentFill }
     private var isResolved: Bool { annotation.resolvedAt != nil }
 
-    private var badgeKind: ChapterEditorAnnotationGroupKind {
-        if isResolved { return .resolved }
-        return annotation.kind == .tk ? .tk : .note
+    private var statusDotColor: Color {
+        if isResolved { return appTheme.statusSuccessColor }
+        return appTheme.isDarkFamily ? Color.subjectAmber : appTheme.favoriteColor
     }
 
     private var quotePreview: String {
@@ -272,31 +267,35 @@ struct ChapterEditorAnnotationDetailSheet: View {
     }
 
     private var headerMetadata: some View {
-        FlowLayout(spacing: 8, rowSpacing: 6) {
-            ChapterEditorAnnotationBadge(kind: badgeKind)
+        HStack(alignment: .center, spacing: 8) {
+            Circle()
+                .fill(statusDotColor)
+                .frame(width: 10, height: 10)
+                .accessibilityHidden(true)
             Text(metadataLabel)
-                .font(.footnote.weight(.medium))
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var metadataLabel: String {
-        var parts: [String] = []
-        if let paragraphNumber {
-            parts.append("Paragraph \(paragraphNumber)")
-        }
         let date = annotation.resolvedAt ?? annotation.createdAt
-        parts.append(ChapterEditorAnnotationListBuilder.shortDateString(date))
-        return parts.joined(separator: " · ")
+        return ChapterEditorAnnotationCopy.detailHeaderLabel(
+            kind: annotation.kind,
+            isResolved: isResolved,
+            dateText: ChapterEditorAnnotationListBuilder.shortDateString(date),
+            paragraphNumber: paragraphNumber
+        )
     }
 
     @ViewBuilder
     private var quoteBlock: some View {
         if annotation.kind == .note, !quotePreview.isEmpty {
+            let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
             HStack(alignment: .top, spacing: 10) {
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(Color.subjectAmber)
+                    .fill(statusDotColor)
                     .frame(width: 3)
                     .accessibilityHidden(true)
                 Text("“\(quotePreview)”")
@@ -306,16 +305,14 @@ struct ChapterEditorAnnotationDetailSheet: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(appTheme.cardSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(appTheme.cardBorder, lineWidth: 0.5)
-            )
+            .background(appTheme.cardSurface, in: shape)
+            .overlay(shape.strokeBorder(appTheme.cardBorder, lineWidth: 0.5))
         }
     }
 
     @ViewBuilder
     private var noteBodySection: some View {
+        let cardShape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
         if isEditing {
             VStack(alignment: .leading, spacing: 10) {
                 TextField(
@@ -329,11 +326,8 @@ struct ChapterEditorAnnotationDetailSheet: View {
                 .font(.body)
                 .lineLimit(3 ... 8)
                 .padding(12)
-                .background(appTheme.cardSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(appTheme.cardBorder, lineWidth: 0.5)
-                )
+                .background(appTheme.cardSurface, in: cardShape)
+                .overlay(cardShape.strokeBorder(appTheme.cardBorder, lineWidth: 0.5))
                 .accessibilityLabel(annotation.kind == .tk ? "TK description" : "Note text")
 
                 FlowLayout(spacing: 8, rowSpacing: 8) {
@@ -366,12 +360,10 @@ struct ChapterEditorAnnotationDetailSheet: View {
                 .foregroundStyle(trimmed.isEmpty ? AnyShapeStyle(.secondaryInk) : AnyShapeStyle(.primary))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
-                .background(appTheme.cardSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(appTheme.cardBorder, lineWidth: 0.5)
-                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(appTheme.cardSurface, in: cardShape)
+                .overlay(cardShape.strokeBorder(appTheme.cardBorder, lineWidth: 0.5))
         }
     }
 
@@ -435,9 +427,9 @@ struct ChapterEditorAnnotationDetailSheet: View {
             Text(title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(foreground)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .frame(minHeight: 38)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .frame(minHeight: 34)
                 .background(background, in: shape)
                 .contentShape(shape)
         }

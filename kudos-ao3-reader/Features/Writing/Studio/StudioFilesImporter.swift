@@ -507,4 +507,10 @@ nonisolated enum StudioRecentlyDeletedHelper {
         guard let days = daysRemaining(deletedAt: deletedAt, now: now) else { return false }
         return days <= urgentThresholdDays
     }
+
+    static func rowSubtitle(count: Int) -> String {
+        if count == 0 { return "Empty · kept for 30 days" }
+        let noun = count == 1 ? "document" : "documents"
+        return "\(count.formatted()) \(noun) · kept for 30 days"
+    }
 }

@@ -201,7 +201,7 @@ struct ChapterEditorNotesSheet: View {
                         .font(.footnote)
                         .textCase(.uppercase)
                         .foregroundStyle(.secondaryInk)
-                        .padding(.leading, 4)
+                        .padding(.leading, 16)
                     TextField(
                         "Chapter title (optional)",
                         text: $chapterTitle,
@@ -263,24 +263,58 @@ struct ChapterEditorNotesSheet: View {
             }
 
             Section {
-                Button {
-                    resetNewNoteForm()
-                    activeSubSheet = .newStoryNote
-                } label: {
-                    Label("New Note", systemImage: "plus")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(accentInk)
-                }
-                .accessibilityLabel("New story note")
-            } footer: {
-                Text(
-                    "Story notes belong to this work, stay on this \(ThisDevice.name), "
-                        + "and never go to AO3."
-                )
+                newNoteActionRow
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             }
-            .listRowBackground(appTheme.appElevatedBackground)
         }
         .scrollContentBackground(appTheme.appBaseBackground == nil ? .automatic : .hidden)
+    }
+
+    @ViewBuilder
+    private var newNoteActionRow: some View {
+        let caption = Text(
+            "Story notes belong to this work, stay on this \(ThisDevice.name), "
+                + "and never go to AO3."
+        )
+        .font(.footnote)
+        .foregroundStyle(.secondaryInk)
+        .fixedSize(horizontal: false, vertical: true)
+
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 10) {
+                newNotePillButton
+                caption
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(alignment: .center, spacing: 12) {
+                newNotePillButton
+                caption
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var newNotePillButton: some View {
+        let shape = SubjectMetrics.controlShape(dynamicTypeSize)
+        return Button {
+            resetNewNoteForm()
+            activeSubSheet = .newStoryNote
+        } label: {
+            Text(ChapterEditorAnnotationCopy.newNoteButtonTitle)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(accentInk)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 9)
+                .frame(minHeight: 40)
+                .background(appTheme.cardSurface, in: shape)
+                .overlay(shape.strokeBorder(appTheme.cardBorder, lineWidth: 0.5))
+                .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .minimumHitTarget(44)
+        .accessibilityLabel(ChapterEditorAnnotationCopy.newNoteButtonTitle)
     }
 
     private func storyNoteRow(_ note: WritingStoryNote) -> some View {
@@ -307,7 +341,9 @@ struct ChapterEditorNotesSheet: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(note.pinned ? "Unpin \(note.name)" : "Pin \(note.name)")
+            .accessibilityLabel(
+                note.pinned ? "Pinned. Unpin \(note.name)" : "Not pinned. Pin \(note.name)"
+            )
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
@@ -412,16 +448,16 @@ struct ChapterEditorNotesSheet: View {
 
 extension ChapterEditorNotesSheet {
     var chapterNotesContent: some View {
-        let groups = ChapterEditorAnnotationListBuilder.groups(
+        let rows = ChapterEditorAnnotationListBuilder.flatRows(
             from: documentBridge.annotations,
             in: chapterHTML,
             lostIDs: documentBridge.lostAnnotationIDs
         )
         return List {
-            if groups.isEmpty {
+            if rows.isEmpty {
                 Section {
                     ContentUnavailableView(
-                        "No Notes in This Chapter",
+                        ChapterEditorAnnotationCopy.emptyChapterNotesTitle,
                         systemImage: "note.text",
                         description: Text(
                             "Select text in Rich Text and choose Add Note, or type TK followed by a "
@@ -431,20 +467,18 @@ extension ChapterEditorNotesSheet {
                     .listRowBackground(Color.clear)
                 }
             } else {
-                ForEach(groups) { group in
-                    Section(group.kind.sectionTitle) {
-                        ForEach(group.rows) { row in
-                            chapterAnnotationRow(row)
-                        }
+                Section {
+                    ForEach(rows) { row in
+                        chapterAnnotationRow(row)
                     }
-                    .listRowBackground(appTheme.appElevatedBackground)
-                }
-
-                Section {} footer: {
+                } header: {
+                    Text(ChapterEditorAnnotationCopy.inThisChapterSectionTitle)
+                } footer: {
                     Text(
                         "Notes and TK markers stay on this \(ThisDevice.name) and never go to AO3."
                     )
                 }
+                .listRowBackground(appTheme.appElevatedBackground)
             }
         }
         .scrollContentBackground(appTheme.appBaseBackground == nil ? .automatic : .hidden)
@@ -530,7 +564,8 @@ extension ChapterEditorNotesSheet {
                     Text(row.displayText)
                         .font(.subheadline)
                         .foregroundStyle(Color.primary)
-                        .lineLimit(2)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     Text(row.locationText)
                         .font(.caption)
                         .foregroundStyle(.secondaryInk)
@@ -538,6 +573,7 @@ extension ChapterEditorNotesSheet {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(minHeight: 40)
             .padding(.vertical, 2)
             .contentShape(Rectangle())
         }

@@ -45,17 +45,25 @@ nonisolated struct StudioWorkChapterItem: Identifiable, Equatable, Hashable, Sen
         localWorkID != nil && localChapterID != nil
     }
 
-    var metaLine: String {
+    var metaLine: String { metaLine() }
+
+    func metaLine(
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String {
         if badge == .planned { return "Planned" }
         var parts: [String] = []
         if let wordCount, wordCount > 0 {
             parts.append(StudioWorkItem.wordCountLabel(wordCount))
         }
-        if let dateText, !dateText.isEmpty {
-            let formatted = WorkStat.displayDate(dateText)
-            parts.append(badge == .posted ? "Posted \(formatted)" : formatted)
+        if badge == .posted, let dateText, !dateText.isEmpty {
+            parts.append(StudioDateCopy.shortAO3Date(dateText, now: now, calendar: calendar, locale: locale))
         } else if let updatedAt {
-            parts.append("edited \(WorkStat.displayDate(updatedAt))")
+            parts.append("edited \(StudioDateCopy.shortDate(updatedAt, now: now, calendar: calendar, locale: locale))")
+        } else if let dateText, !dateText.isEmpty {
+            let formatted = StudioDateCopy.shortAO3Date(dateText, now: now, calendar: calendar, locale: locale)
+            parts.append(badge == .ao3Draft ? "edited \(formatted)" : formatted)
         }
         return parts.isEmpty ? "Ready to edit" : parts.joined(separator: " · ")
     }
@@ -245,6 +253,35 @@ nonisolated enum StudioWorkFilesLogic {
         case .timeline: "Timeline"
         case .other: "Note"
         }
+    }
+
+    static func storyNoteMetaLine(note: WritingStoryNote, deviceName: String) -> String {
+        let kindLabel = storyNoteKindTitle(note.kind)
+        let wordCount = note.detail.split(whereSeparator: \.isWhitespace).count
+        let parts: [String?] = [
+            kindLabel,
+            wordCount > 0 ? StudioWorkItem.wordCountLabel(wordCount) : nil,
+            note.pinned ? "Pinned" : nil,
+            deviceName
+        ]
+        return parts.compactMap { $0 }.joined(separator: " · ")
+    }
+
+    static func workDetailsSubtitle(
+        postedDateText: String?,
+        isAO3Draft: Bool,
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String {
+        if let raw = postedDateText?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+            let formatted = StudioDateCopy.shortAO3Date(raw, now: now, calendar: calendar, locale: locale)
+            return "Summary, tags, rating, notes · as posted \(formatted)"
+        }
+        if isAO3Draft {
+            return "Summary, tags, rating, notes · AO3 draft"
+        }
+        return "Summary, tags, rating, notes"
     }
 
     private static func cleanedAO3ChapterTitle(_ title: String, position: Int) -> String {

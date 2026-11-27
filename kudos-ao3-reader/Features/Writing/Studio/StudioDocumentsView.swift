@@ -111,7 +111,7 @@ struct StudioDocumentsView: View {
                 }
             }
             .padding(.horizontal, SubjectMetrics.gutter)
-            .padding(.top, 10)
+            .padding(.top, 8)
             .padding(.bottom, 28)
         }
         .background(theme.appTheme.contentBackdrop.ignoresSafeArea())
@@ -159,7 +159,6 @@ struct StudioDocumentsView: View {
         } else {
             HStack(spacing: 8) {
                 modeSwitch
-                    .frame(maxWidth: 164)
                 Spacer(minLength: 8)
                 if mode == .files {
                     sortMenu
@@ -170,13 +169,7 @@ struct StudioDocumentsView: View {
     }
 
     private var modeSwitch: some View {
-        SubjectSegmentedControl(
-            options: StudioDocumentsMode.allCases,
-            title: \.title,
-            selection: $mode
-        )
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Documents view")
+        StudioDocumentsModeSwitch(selection: $mode)
     }
 
     private var sortMenu: some View {
@@ -422,5 +415,61 @@ struct StudioDocumentsView: View {
         } catch {
             // Keep prior local state on transient disk read failure.
         }
+    }
+}
+
+/// Inline `Pages | Files` segmented switch matching `Studio-Documents` and `Studio-Files`.
+private struct StudioDocumentsModeSwitch: View {
+    @Binding var selection: StudioDocumentsMode
+
+    @Environment(ThemeManager.self) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(StudioDocumentsMode.allCases) { option in
+                let isSelected = selection == option
+                Button {
+                    withAnimationUnlessReduced(.snappy(duration: 0.22), reduceMotion: reduceMotion) {
+                        selection = option
+                    }
+                } label: {
+                    Text(option.title)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(
+                            isSelected ? AnyShapeStyle(Color.primary) : AnyShapeStyle(Color.primary.opacity(0.78))
+                        )
+                        .lineLimit(1)
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 30)
+                        .background {
+                            if isSelected {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(theme.appTheme == .light ? Color.white : theme.appTheme.cardSurface)
+                                    .shadow(
+                                        color: theme.appTheme.cardShadow.color,
+                                        radius: theme.appTheme.cardShadow.radius > 0 ? 2 : 0,
+                                        y: theme.appTheme.cardShadow.radius > 0 ? 1 : 0
+                                    )
+                            }
+                        }
+                        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(option.title)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(theme.appTheme.glassFill(0.10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(theme.appTheme.glassStroke(0.14), lineWidth: 0.5)
+                )
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("View")
     }
 }

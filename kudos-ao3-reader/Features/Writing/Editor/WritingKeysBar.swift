@@ -52,11 +52,16 @@ nonisolated enum WritingKeyID: String, CaseIterable, Identifiable, Hashable, Sen
         case .sceneBreak: "Scene break"
         case .emDash: "Em dash"
         case .quotationMarks: "Quotation marks"
-        case .cursorLeft: "Move cursor left"
-        case .cursorRight: "Move cursor right"
+        case .cursorLeft: "Move left"
+        case .cursorRight: "Move right"
         case .undo: "Undo"
         case .format: "Format"
         }
+    }
+
+    /// Toolbar accessibility label for `WritingKeysBar` (`Editor-Typing.dc.html`, `Editor-Names.dc.html`).
+    static func barAccessibilityLabel(hasNameSuggestions: Bool) -> String {
+        hasNameSuggestions ? "Writing keys with name suggestions" : "Writing keys"
     }
 
     func accessibilityHint(for state: FormatState) -> String? {
@@ -173,9 +178,16 @@ struct WritingKeysBar<LeadingSlot: View>: View {
 
     private var barChrome: some View {
         barContent
-            .keysBarWordSlideGesture(enabled: phone.wordSlideEnabled && !showsTrackRow) {
-                delta, fraction, extend, ended in
-                handleSlide(delta: delta, fraction: fraction, extend: extend, ended: ended, fromTrackRow: false)
+            .keysBarWordSlideGesture(
+                enabled: phone.wordSlideEnabled && !showsTrackRow
+            ) { delta, fraction, extend, ended in
+                handleSlide(
+                    delta: delta,
+                    fraction: fraction,
+                    extend: extend,
+                    ended: ended,
+                    fromTrackRow: false
+                )
             }
             .background(barBackground)
             .overlay(alignment: .top) {
@@ -185,7 +197,7 @@ struct WritingKeysBar<LeadingSlot: View>: View {
                     .accessibilityHidden(true)
             }
             .accessibilityElement(children: .contain)
-            .accessibilityLabel("Writing keys")
+            .accessibilityLabel(WritingKeyID.barAccessibilityLabel(hasNameSuggestions: showsLeadingContent))
     }
 
     /// Keys stay mounted under the track so the pan is not torn down on the sample that starts the slide.

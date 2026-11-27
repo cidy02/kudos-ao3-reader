@@ -12,6 +12,7 @@ import Foundation
 /// already records both flags (`AO3InboxItem.isReplied`, `canReply`).
 enum StudioCommentsChip: String, CaseIterable, Identifiable, Sendable {
     case needsReply
+    case unread
     case all
     case byWork
 
@@ -20,6 +21,7 @@ enum StudioCommentsChip: String, CaseIterable, Identifiable, Sendable {
     var title: String {
         switch self {
         case .needsReply: "Needs Reply"
+        case .unread: "Unread"
         case .all: "All"
         case .byWork: "By Work"
         }
@@ -55,11 +57,21 @@ enum StudioCommentsBoard {
         items.count(where: needsReply)
     }
 
+    static func unreadCount(_ items: [AO3InboxItem]) -> Int {
+        items.count(where: { isOnYourWork($0) && $0.isUnread })
+    }
+
+    static func allWorkCommentsCount(_ items: [AO3InboxItem]) -> Int {
+        items.count(where: isOnYourWork)
+    }
+
     static func comments(_ items: [AO3InboxItem], chip: StudioCommentsChip) -> [AO3InboxItem] {
         let works = items.filter(isOnYourWork)
         switch chip {
         case .needsReply:
             return works.filter(needsReply)
+        case .unread:
+            return works.filter(\.isUnread)
         case .all, .byWork:
             return works
         }
@@ -92,6 +104,8 @@ enum StudioCommentsBoard {
         switch (chip, totalPages > 1) {
         case (.needsReply, true): "No comments waiting for a reply on this page."
         case (.needsReply, false): "No comments waiting for a reply."
+        case (.unread, true): "No unread comments on this page."
+        case (.unread, false): "No unread comments."
         case (_, true): "No comments on your works on this page."
         case (_, false): "No comments on your works."
         }

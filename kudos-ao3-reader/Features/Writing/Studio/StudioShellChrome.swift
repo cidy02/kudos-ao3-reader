@@ -73,8 +73,8 @@ struct StudioSectionBar: View {
                         .frame(width: 7, height: 7)
                         .accessibilityHidden(true)
                 } else if isLocked {
-                    Image(systemName: "lock.fill")
-                        .font(.caption2)
+                    Image(systemName: "lock")
+                        .font(.caption2.weight(.medium))
                         .accessibilityHidden(true)
                 }
             }
@@ -205,10 +205,7 @@ struct StudioPseudMenu: View {
     }
 
     var body: some View {
-        HStack(spacing: 4) {
-            Text("Posting as")
-                .font(.subheadline)
-                .foregroundStyle(.secondaryInk)
+        HStack(spacing: 0) {
             Menu {
                 Button {
                     setPseud(nil)
@@ -229,20 +226,23 @@ struct StudioPseudMenu: View {
                     }
                 }
             } label: {
-                HStack(spacing: 3) {
+                HStack(spacing: 4) {
+                    Text("Posting as")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondaryInk)
                     Text(activePseudLabel)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.primary.opacity(0.85))
                     Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption2)
+                        .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondaryInk)
+                        .accessibilityHidden(true)
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Posting as \(activePseudLabel). Change pseud")
             Spacer(minLength: 0)
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Posting as \(activePseudLabel). Change pseud")
     }
 
     private var availablePseuds: [AO3AuthorPseud] {

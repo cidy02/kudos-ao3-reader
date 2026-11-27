@@ -2,6 +2,41 @@ import Foundation
 
 // MARK: - Beta reading models (T-576f)
 
+/// Board-aligned copy constants and formatters for `BetaReadingSheet` (`Editor-Beta.dc.html`).
+nonisolated enum BetaReadingCopy {
+    static let screenTitle = "Beta Reading"
+    static let sendSectionTitle = "Send a copy"
+    static let sendSectionFooter = "Each beta gets their own copy, so their notes don’t sway each other."
+    static let withYourBetasSectionTitle = "With your betas"
+    static let footerPromise =
+        "Kudos saves a version of the chapter before anything comes in. Nothing changes until you accept it."
+
+    /// Subtitle beneath the Large Title (e.g. `"Chapter 4 · Slack Water"`).
+    static func chapterSubtitle(chapterNumber: Int?, chapterTitle: String) -> String {
+        let trimmedTitle = chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayTitle = trimmedTitle.isEmpty ? "Untitled" : trimmedTitle
+        if let chapterNumber, chapterNumber > 0 {
+            return "Chapter \(chapterNumber) · \(displayTitle)"
+        }
+        return displayTitle
+    }
+
+    /// Meta line on a row in `"With your betas"` (e.g. `"Word or Google Docs · sent Nov 20"`).
+    static func sentCopyDetail(format: BetaCopyFormat, dateText: String) -> String {
+        "\(format.sentDetailLabel) · sent \(dateText)"
+    }
+
+    /// Primary CTA button title below the review list (`"Review All 10"`).
+    static func reviewAllButtonTitle(remainingCount: Int) -> String {
+        "Review All \(max(0, remainingCount).formatted())"
+    }
+
+    /// Empty-state message when a returned copy has zero diffs and zero comments.
+    static func emptyComparisonMessage(betaName: String) -> String {
+        "\(betaName)’s copy matched what you sent, with no suggestions or comments."
+    }
+}
+
 /// Export format offered when sending a chapter to a beta reader.
 nonisolated enum BetaCopyFormat: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case docx
@@ -290,10 +325,10 @@ nonisolated struct BetaCopyRecord: Codable, Equatable, Sendable, Identifiable {
         let commentCount = comments.count
         var parts: [String] = []
         if suggestionCount > 0 {
-            parts.append("\(suggestionCount) \(suggestionCount == 1 ? "suggestion" : "suggestions")")
+            parts.append("\(suggestionCount.formatted()) \(suggestionCount == 1 ? "suggestion" : "suggestions")")
         }
         if commentCount > 0 {
-            parts.append("\(commentCount) \(commentCount == 1 ? "comment" : "comments")")
+            parts.append("\(commentCount.formatted()) \(commentCount == 1 ? "comment" : "comments")")
         }
         if parts.isEmpty {
             return "\(titlePrefix) · No changes found"

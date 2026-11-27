@@ -33,10 +33,13 @@ struct StudioFilesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            importDocumentCard
-            importURLRow
+            VStack(alignment: .leading, spacing: 12) {
+                importDocumentCard
+                importURLRow
+            }
             foldersSection
             recentlyDeletedRow
+                .padding(.top, -8)
             storageFooterCard
         }
         .fileImporter(
@@ -155,20 +158,11 @@ struct StudioFilesView: View {
     // MARK: - Folders
 
     private var foldersSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("Folders")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(Color.primary)
-                    .accessibilityAddTraits(.isHeader)
-                if !sortedWorks.isEmpty {
-                    Text(sortedWorks.count.formatted())
-                        .font(.subheadline)
-                        .foregroundStyle(.secondaryInk)
-                        .monospacedDigit()
-                }
-                Spacer(minLength: 0)
-            }
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Folders")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Color.primary)
+                .accessibilityAddTraits(.isHeader)
 
             if sortedWorks.isEmpty {
                 if isLoadingAO3 {
@@ -181,16 +175,15 @@ struct StudioFilesView: View {
                 }
             } else {
                 VStack(spacing: 0) {
-                    ForEach(Array(sortedWorks.enumerated()), id: \.element.id) { index, item in
+                    ForEach(sortedWorks) { item in
                         folderRow(item)
-                        if index < sortedWorks.count - 1 {
-                            SubjectRowSeparator(inset: 66)
-                        }
+                        SubjectRowSeparator(inset: 0)
                     }
                 }
-                .subjectPanel()
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Folders")
     }
 
     private var emptyFoldersCard: some View {
@@ -234,7 +227,7 @@ struct StudioFilesView: View {
             HStack(spacing: 12) {
                 folderIconTile(for: item)
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(item.title)
                         .font(.body.weight(.semibold))
                         .foregroundStyle(Color.primary)
@@ -270,11 +263,10 @@ struct StudioFilesView: View {
 
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondaryInk)
+                    .foregroundStyle(.tertiary)
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.vertical, 10)
             .frame(minHeight: 62)
             .contentShape(Rectangle())
         }
@@ -286,21 +278,20 @@ struct StudioFilesView: View {
 
     private func folderIconTile(for item: StudioWorkItem) -> some View {
         let iconName = item.isLooseDraft ? "doc.text" : "folder"
-        let tintColor: Color = if item.hasPostedBadge {
-            theme.appTheme.statusSuccessColor
-        } else if item.hasAO3DraftBadge {
-            .orange
-        } else {
-            theme.accentInk
-        }
+        let tileFill: Color = item.isLooseDraft
+            ? StudioTonePalette.draftAmberFill(for: theme.appTheme)
+            : StudioTonePalette.workFolderFill(for: theme.appTheme)
+        let iconInk: Color = item.isLooseDraft
+            ? StudioTonePalette.draftAmberInk(for: theme.appTheme)
+            : StudioTonePalette.workFolderInk(for: theme.appTheme)
 
-        return RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(tintColor.opacity(theme.appTheme.isDarkFamily ? 0.22 : 0.14))
+        return RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .fill(tileFill)
             .frame(width: 40, height: 32)
             .overlay {
                 Image(systemName: iconName)
                     .font(.callout.weight(.medium))
-                    .foregroundStyle(tintColor)
+                    .foregroundStyle(iconInk)
             }
             .accessibilityHidden(true)
     }
@@ -308,11 +299,7 @@ struct StudioFilesView: View {
     // MARK: - Recently Deleted
 
     private var recentlyDeletedRow: some View {
-        let subtitle = if deletedCount == 0 {
-            "Empty · kept for 30 days"
-        } else {
-            "\(deletedCount) \(deletedCount == 1 ? "document" : "documents") · kept for 30 days"
-        }
+        let subtitle = StudioRecentlyDeletedHelper.rowSubtitle(count: deletedCount)
         return NavigationLink {
             StudioFilesRecentlyDeletedView(store: store, onChanged: onChanged)
         } label: {
@@ -320,7 +307,7 @@ struct StudioFilesView: View {
                 Image(systemName: "trash")
                     .font(.body)
                     .foregroundStyle(.secondaryInk)
-                    .frame(width: 28)
+                    .frame(width: 24)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Recently Deleted")
@@ -334,13 +321,11 @@ struct StudioFilesView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondaryInk)
+                    .foregroundStyle(.tertiary)
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(minHeight: 54)
-            .subjectPanel()
+            .padding(.vertical, 8)
+            .frame(minHeight: 52)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -354,19 +339,19 @@ struct StudioFilesView: View {
     private var storageFooterCard: some View {
         let device = ThisDevice.name
         let legendBadges: [StudioFolderBadge] = [.onDevice, .ao3Draft, .posted]
-        return VStack(alignment: .leading, spacing: 10) {
-            Text(storageSummary.summaryText(deviceName: device))
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.primary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("Local manuscripts and story notes stay on this \(device).")
-                .font(.caption)
-                .foregroundStyle(.secondaryInk)
+        let leadText = Text(storageSummary.summaryText(deviceName: device))
+            .fontWeight(.semibold)
+            .foregroundStyle(Color.primary)
+        let noteText = Text(" Local manuscripts and story notes stay on this \(device).")
+            .foregroundStyle(.secondaryInk)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("\(leadText)\(noteText)")
+                .font(.footnote)
                 .fixedSize(horizontal: false, vertical: true)
 
             FlowLayout(spacing: 10, rowSpacing: 6) {
                 ForEach(legendBadges, id: \.self) { badge in
-                    HStack(spacing: 5) {
+                    HStack(spacing: 4) {
                         StudioFolderBadgePill(badge: badge)
                         Text(badge.legendDescription(deviceName: device))
                             .font(.caption)
@@ -381,7 +366,7 @@ struct StudioFilesView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .subjectPanel()
+        .subjectPanel(cornerRadius: 14)
     }
 
     // MARK: - File Import Handler
@@ -411,23 +396,15 @@ struct StudioFilesView: View {
 struct StudioFolderBadgePill: View {
     let badge: StudioFolderBadge
 
-    @Environment(ThemeManager.self) private var theme
-
     var body: some View {
         let text = badge.title(deviceName: ThisDevice.name)
         switch badge {
         case .posted:
-            SubjectStateBadge(title: text, color: theme.appTheme.statusSuccessColor)
+            StudioStatusPill(text: text, tone: .posted)
         case .ao3Draft:
-            SubjectStateBadge(title: text, color: .orange)
+            StudioStatusPill(text: text, tone: .draft)
         case .onDevice:
-            Text(text)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondaryInk)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 2)
-                .background(theme.appTheme.glassFill(0.12), in: Capsule())
-                .accessibilityLabel(text)
+            StudioStatusPill(text: text, tone: .onDevice)
         }
     }
 }
