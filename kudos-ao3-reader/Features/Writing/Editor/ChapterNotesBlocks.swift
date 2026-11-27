@@ -56,6 +56,13 @@ nonisolated struct CharacterLimitStatus: Equatable, Hashable, Sendable {
     }
 }
 
+/// Trailing accessory rendered in a `ChapterCollapsibleNoteBlock` header (`Studio-Editor.dc.html`).
+nonisolated enum ChapterNoteHeaderTrailing: Equatable, Hashable, Sendable {
+    case none
+    case counter(String)
+    case helper(String)
+}
+
 /// Identifies each collapsible metadata block around the chapter text.
 nonisolated enum ChapterNoteField: String, CaseIterable, Identifiable, Hashable, Sendable {
     case summary
@@ -89,6 +96,30 @@ nonisolated enum ChapterNoteField: String, CaseIterable, Identifiable, Hashable,
 
     var helperCaption: String? {
         self == .notesAfter ? "Shown at the end on AO3" : nil
+    }
+
+    /// Chooses what sits on the trailing side of a collapsible notes header (`Studio-Editor.dc.html`):
+    /// warning/exceeded counters always win; a collapsed Summary hides its normal counter so the
+    /// preview line breathes; Notes after shows `"Shown at the end on AO3"` while within normal range.
+    func headerTrailing(
+        isExpanded: Bool,
+        showsCollapsedPreview: Bool,
+        status: CharacterLimitStatus
+    ) -> ChapterNoteHeaderTrailing {
+        let charCount = status.count
+        if status.severity != .normal {
+            return .counter(status.counterText)
+        }
+        if showsCollapsedPreview, !isExpanded, charCount > 0 {
+            return .none
+        }
+        if let helper = helperCaption {
+            return .helper(helper)
+        }
+        if isExpanded || charCount > 0 {
+            return .counter(status.counterText)
+        }
+        return .none
     }
 }
 
@@ -177,7 +208,7 @@ struct ChapterCollapsibleNoteBlock: View {
 
     /// Readable amber on Light/Sepia paper, `Color.subjectAmber` on Dark/OLED.
     private var warningAmber: Color {
-        appTheme.isDarkFamily ? .subjectAmber : Color(red: 0.68, green: 0.40, blue: 0.0)
+        appTheme.isDarkFamily ? .subjectAmber : AO3TagPalette.teenTextOnLight
     }
 
     private var counterColor: Color {
@@ -186,6 +217,14 @@ struct ChapterCollapsibleNoteBlock: View {
         case .warning: warningAmber
         case .exceeded: appTheme.errorColor
         }
+    }
+
+    private var headerTrailing: ChapterNoteHeaderTrailing {
+        field.headerTrailing(
+            isExpanded: isExpanded,
+            showsCollapsedPreview: showsCollapsedPreview,
+            status: status
+        )
     }
 
     var body: some View {
@@ -204,12 +243,6 @@ struct ChapterCollapsibleNoteBlock: View {
                 .foregroundStyle(Color.primary)
                 .lineLimit(2 ... 12)
                 .accessibilityLabel(field.title)
-
-                if let helper = field.helperCaption, status.overLimitMessage == nil {
-                    Text(helper)
-                        .font(.caption)
-                        .foregroundStyle(.secondaryInk)
-                }
             }
 
             if let errorMessage = status.overLimitMessage {
@@ -264,9 +297,7 @@ struct ChapterCollapsibleNoteBlock: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                 }
-                if showsCounterInHeader {
-                    counterBadge
-                }
+                headerTrailingView
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
@@ -288,15 +319,28 @@ struct ChapterCollapsibleNoteBlock: View {
                     Spacer(minLength: 4)
                 }
 
-                if showsCounterInHeader {
-                    counterBadge
-                } else if let helper = field.helperCaption, !isExpanded {
-                    Text(helper)
-                        .font(.caption)
-                        .foregroundStyle(.secondaryInk)
-                        .lineLimit(1)
-                }
+                headerTrailingView
             }
+        }
+    }
+
+    @ViewBuilder
+    private var headerTrailingView: some View {
+        switch headerTrailing {
+        case .none:
+            EmptyView()
+        case let .counter(text):
+            Text(text)
+                .font(.caption.weight(status.severity == .normal ? .regular : .semibold))
+                .monospacedDigit()
+                .foregroundStyle(counterColor)
+                .fixedSize()
+        case let .helper(text):
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(.secondaryInk)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: true)
         }
     }
 
@@ -308,20 +352,17 @@ struct ChapterCollapsibleNoteBlock: View {
             .accessibilityHidden(true)
     }
 
-    private var showsCounterInHeader: Bool {
-        isExpanded || !text.isEmpty || status.severity != .normal
-    }
-
-    private var counterBadge: some View {
-        Text(status.counterText)
-            .font(.caption.weight(status.severity == .normal ? .regular : .semibold))
-            .monospacedDigit()
-            .foregroundStyle(counterColor)
-            .fixedSize()
-    }
-
     private var headerAccessibilityLabel: String {
-        var parts = [field.title, "\(status.count.formatted()) of \(status.limit.formatted()) characters"]
+        var parts = [field.title]
+        // The button label replaces its children, so the collapsed preview and the
+        // header helper have to be spoken here or VoiceOver skips them.
+        if showsCollapsedPreview, !isExpanded, !text.isEmpty {
+            parts.append(text)
+        }
+        parts.append("\(status.count.formatted()) of \(status.limit.formatted()) characters")
+        if case let .helper(helper) = headerTrailing {
+            parts.append(helper)
+        }
         if let error = status.overLimitMessage {
             parts.append(error)
         }
