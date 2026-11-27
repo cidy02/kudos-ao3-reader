@@ -34,7 +34,10 @@ nonisolated enum StudioDocumentsCatalog {
         ao3PostedWorks: [AO3WorkSummary],
         ao3DraftWorks: [AO3WorkSummary],
         ao3DraftDaysLeft: [Int: Int] = [:],
-        deviceName: String = "iPhone"
+        deviceName: String = "iPhone",
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        locale: Locale = .autoupdatingCurrent
     ) -> StudioDocumentsSnapshot {
         var postedByID: [Int: AO3WorkSummary] = [:]
         for work in ao3PostedWorks { postedByID[work.id] = work }
@@ -97,7 +100,11 @@ nonisolated enum StudioDocumentsCatalog {
         let sorted = sortFolders(merged, by: .edited)
         let manuscripts = sorted.filter { !$0.isLooseDraft }
         let looseDrafts = sorted.filter(\.isLooseDraft)
-        let recent = buildRecent(from: sorted, deviceName: deviceName)
+        let recent = buildRecent(
+            from: sorted,
+            deviceName: deviceName,
+            dateContext: DateContext(now: now, calendar: calendar, locale: locale)
+        )
         let counts: [StudioDocumentsFilterChip: Int] = [
             .all: sorted.count,
             .drafts: sorted.filter(\.hasDraftContent).count,
@@ -191,19 +198,45 @@ nonisolated enum StudioDocumentsCatalog {
         return lhs.id < rhs.id
     }
 
+    private nonisolated struct DateContext {
+        let now: Date
+        let calendar: Calendar
+        let locale: Locale
+
+        func shortDate(_ date: Date) -> String {
+            StudioDateCopy.shortDate(date, now: now, calendar: calendar, locale: locale)
+        }
+
+        func shortAO3Date(_ rawText: String) -> String {
+            StudioDateCopy.shortAO3Date(rawText, now: now, calendar: calendar, locale: locale)
+        }
+    }
+
     private static func buildRecent(
         from works: [StudioWorkItem],
-        deviceName: String
+        deviceName: String,
+        dateContext: DateContext
     ) -> [StudioRecentDocumentItem] {
         var candidates: [StudioRecentDocumentItem] = []
 
         for item in works {
             if let localWork = item.localWork {
-                candidates.append(recentLocalItem(for: item, localWork: localWork, deviceName: deviceName))
+                candidates.append(
+                    recentLocalItem(
+                        for: item,
+                        localWork: localWork,
+                        deviceName: deviceName,
+                        dateContext: dateContext
+                    )
+                )
             } else if let draft = item.ao3DraftWork {
-                candidates.append(recentAO3DraftItem(for: item, draft: draft))
+                candidates.append(
+                    recentAO3DraftItem(for: item, draft: draft, dateContext: dateContext)
+                )
             } else if let posted = item.ao3PostedWork {
-                candidates.append(recentAO3PostedItem(for: item, posted: posted))
+                candidates.append(
+                    recentAO3PostedItem(for: item, posted: posted, dateContext: dateContext)
+                )
             }
         }
 
@@ -217,7 +250,8 @@ nonisolated enum StudioDocumentsCatalog {
     private static func recentLocalItem(
         for item: StudioWorkItem,
         localWork: WritingWork,
-        deviceName: String
+        deviceName: String,
+        dateContext: DateContext
     ) -> StudioRecentDocumentItem {
         guard let latest = latestChapter(in: item.localChapters) else {
             return StudioRecentDocumentItem(
@@ -228,7 +262,7 @@ nonisolated enum StudioDocumentsCatalog {
                 excerpt: "Start writing…",
                 badgeText: deviceName,
                 badgeTone: .onDevice,
-                metaLine: WorkStat.displayDate(localWork.updatedAt),
+                metaLine: dateContext.shortDate(localWork.updatedAt),
                 editedAt: localWork.updatedAt,
                 target: .localWork(workID: localWork.id, workTitle: item.title)
             )
@@ -255,7 +289,8 @@ nonisolated enum StudioDocumentsCatalog {
             badgeText = nil
             badgeTone = .none
         }
-        let dateText = WorkStat.displayDate(latest.updatedAt)
+        let shortDate = dateContext.shortDate(latest.updatedAt)
+        let dateText = latest.status == .posted ? "posted \(shortDate)" : shortDate
         let meta = latest.wordCount > 0
             ? "\(StudioWorkItem.wordCountLabel(latest.wordCount)) · \(dateText)"
             : dateText
@@ -275,14 +310,14 @@ nonisolated enum StudioDocumentsCatalog {
 
     private static func recentAO3DraftItem(
         for item: StudioWorkItem,
-        draft: AO3WorkSummary
+        draft: AO3WorkSummary,
+        dateContext: DateContext
     ) -> StudioRecentDocumentItem {
         let edited = WorkStat.date(from: draft.dateUpdated) ?? .distantPast
         let words = draft.words ?? 0
-        let datePart = draft.dateUpdated.isEmpty ? nil : WorkStat.displayDate(draft.dateUpdated)
-        let meta = [words > 0 ? StudioWorkItem.wordCountLabel(words) : nil, datePart]
-            .compactMap(\.self)
-            .joined(separator: " · ")
+        let datePart = draft.dateUpdated.isEmpty ? nil : dateContext.shortAO3Date(draft.dateUpdated)
+        let parts: [String?] = [words > 0 ? StudioWorkItem.wordCountLabel(words) : nil, datePart]
+        let meta = parts.compactMap(\.self).joined(separator: " · ")
         return StudioRecentDocumentItem(
             id: "recent-draft-\(draft.id)",
             workItemID: item.id,
@@ -299,16 +334,16 @@ nonisolated enum StudioDocumentsCatalog {
 
     private static func recentAO3PostedItem(
         for item: StudioWorkItem,
-        posted: AO3WorkSummary
+        posted: AO3WorkSummary,
+        dateContext: DateContext
     ) -> StudioRecentDocumentItem {
         let edited = WorkStat.date(from: posted.dateUpdated) ?? .distantPast
         let words = posted.words ?? 0
         let datePart = posted.dateUpdated.isEmpty
             ? nil
-            : "posted \(WorkStat.displayDate(posted.dateUpdated))"
-        let meta = [words > 0 ? StudioWorkItem.wordCountLabel(words) : nil, datePart]
-            .compactMap(\.self)
-            .joined(separator: " · ")
+            : "posted \(dateContext.shortAO3Date(posted.dateUpdated))"
+        let parts: [String?] = [words > 0 ? StudioWorkItem.wordCountLabel(words) : nil, datePart]
+        let meta = parts.compactMap(\.self).joined(separator: " · ")
         return StudioRecentDocumentItem(
             id: "recent-posted-\(posted.id)",
             workItemID: item.id,

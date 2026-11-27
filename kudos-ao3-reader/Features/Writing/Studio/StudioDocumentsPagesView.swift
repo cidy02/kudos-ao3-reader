@@ -56,8 +56,10 @@ struct StudioDocumentsPagesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            searchBar
-            filterChipsRow
+            VStack(alignment: .leading, spacing: 14) {
+                searchBar
+                filterChipsRow
+            }
 
             if let ao3Error {
                 ao3ErrorBanner(ao3Error)
@@ -121,6 +123,7 @@ struct StudioDocumentsPagesView: View {
                 text: $searchQuery,
                 prompt: theme.appTheme.sepiaPrompt("Search your writing")
             )
+            .font(.body)
             .textFieldStyle(.plain)
             .accessibilityLabel("Search your writing")
 
@@ -138,7 +141,8 @@ struct StudioDocumentsPagesView: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
+        .frame(minHeight: 40)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(theme.appTheme.glassFill(0.09))
@@ -150,32 +154,54 @@ struct StudioDocumentsPagesView: View {
     }
 
     private var filterChipsRow: some View {
-        AccessibilityChipRail(spacing: 8) {
+        let shape = SubjectMetrics.controlShape(dynamicTypeSize)
+        return AccessibilityChipRail(spacing: 8) {
             ForEach(StudioDocumentsFilterChip.allCases) { chip in
                 let isSelected = selectedChip == chip
                 let count = snapshot.chipCounts[chip] ?? 0
-                let labelText: String = if chip == .all || count == 0 {
-                    chip.title
-                } else {
-                    "\(chip.title) \(count)"
-                }
+                let showsCount = chip != .all && count > 0
                 Button {
                     selectedChip = chip
                 } label: {
-                    SubjectChip(
-                        text: labelText,
-                        style: .pill(isSelected: isSelected),
-                        palette: theme.scopePalette,
-                        fontWeight: .semibold
+                    HStack(spacing: 5) {
+                        Text(chip.title)
+                            .fontWeight(.semibold)
+                        if showsCount {
+                            Text(count.formatted())
+                                .fontWeight(.medium)
+                                .monospacedDigit()
+                                .opacity(0.8)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(
+                        isSelected ? ThemeManager.label(on: theme.effectiveTint) : Color.primary
                     )
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .frame(minHeight: 32)
+                    .background {
+                        if isSelected {
+                            shape.fill(theme.effectiveTint)
+                        } else {
+                            shape
+                                .fill(theme.appTheme.glassFill(0.09))
+                                .overlay(shape.strokeBorder(theme.appTheme.glassStroke(0.13), lineWidth: 0.5))
+                        }
+                    }
+                    .contentShape(shape)
                 }
                 .buttonStyle(.plain)
+                .layoutFreeHitTarget { selectedChip = chip }
                 .accessibilityLabel(
                     chip == .all ? "Show all writing" : "Show \(chip.title), \(count)"
                 )
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Show")
     }
 
     private func ao3ErrorBanner(_ message: String) -> some View {
@@ -318,53 +344,38 @@ struct StudioDocumentsPagesView: View {
             let remaining = Array(filteredManuscripts.dropFirst())
             if !remaining.isEmpty {
                 VStack(spacing: 0) {
-                    ForEach(Array(remaining.enumerated()), id: \.element.id) { index, work in
+                    ForEach(remaining) { work in
                         StudioManuscriptListRow(
                             work: work,
                             store: store,
                             onChanged: onChanged,
                             onAO3Write: onAO3Write
                         )
-                        if index < remaining.count - 1 {
-                            SubjectRowSeparator(inset: 14)
-                        }
+                        SubjectRowSeparator(inset: 0)
                     }
                 }
-                .subjectPanel()
             }
         }
     }
 
     private var looseDraftsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Loose Drafts")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(Color.primary)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 8)
-                NavigationLink {
-                    LocalChapterEditorScreen(store: store)
-                } label: {
-                    Text("New Draft")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(theme.accentInk)
-                }
-                .buttonStyle(.plain)
-                .minimumHitTarget()
-                .accessibilityLabel("New loose draft")
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Loose Drafts")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Color.primary)
+                .accessibilityAddTraits(.isHeader)
 
             VStack(spacing: 0) {
                 ForEach(Array(filteredLooseDrafts.enumerated()), id: \.element.id) { index, item in
-                    StudioLooseDraftRow(item: item, store: store)
-                    if index < filteredLooseDrafts.count - 1 {
-                        SubjectRowSeparator(inset: 46)
+                    if index > 0 {
+                        SubjectRowSeparator(inset: 0)
                     }
+                    StudioLooseDraftRow(item: item, store: store)
                 }
             }
-            .subjectPanel()
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Loose drafts")
     }
 
     private var emptyStateCard: some View {

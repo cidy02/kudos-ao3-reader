@@ -9,6 +9,7 @@ struct StudioCommentsView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AO3InboxModel.self) private var inbox
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var localWorks: [SavedWork]
 
     @State private var model = StudioCommentsModel()
@@ -62,11 +63,13 @@ struct StudioCommentsView: View {
     }
 
     private var comments: some View {
-        let count = model.needsReplyCount(in: inbox.items)
+        let needsReplyCount = model.needsReplyCount(in: inbox.items)
+        let unreadCount = model.unreadCount(in: inbox.items)
+        let allCount = model.allWorkCommentsCount(in: inbox.items)
         return ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 8) {
-                    chipRow(count: count)
+                    chipRow(needsReply: needsReplyCount, unread: unreadCount, all: allCount)
                     if let pageNote = StudioCommentsBoard.pageNote(
                         currentPage: inbox.currentPage, totalPages: inbox.totalPages
                     ) {
@@ -108,7 +111,8 @@ struct StudioCommentsView: View {
                 inboxLink
             }
             .padding(.horizontal, SubjectMetrics.gutter)
-            .padding(.vertical, 8)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
         }
         .refreshable { await inbox.refresh(auth: auth) }
         .subjectScreenSurface(.content, palette: theme.scopePalette)
@@ -149,22 +153,39 @@ struct StudioCommentsView: View {
         .accessibilityLabel("Show all AO3 Inbox comments")
     }
 
-    /// The row stacks once the chips no longer fit. A horizontal scroller would
-    /// leave Needs Reply's count off-screen at the largest text sizes.
-    private func chipRow(count: Int) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) { chips(count: count) }
-            VStack(alignment: .leading, spacing: 8) { chips(count: count) }
+    /// Horizontal chip rail at regular sizes; stacks vertically at accessibility sizes
+    /// so Needs Reply's count never scrolls off-screen at AX5.
+    @ViewBuilder
+    private func chipRow(needsReply: Int, unread: Int, all: Int) -> some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    chips(needsReply: needsReply, unread: unread, all: all)
+                }
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        chips(needsReply: needsReply, unread: unread, all: all)
+                    }
+                }
+                .horizontalScrollViewport()
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Show comments")
     }
 
-    private func chips(count: Int) -> some View {
+    private func chips(needsReply: Int, unread: Int, all: Int) -> some View {
         ForEach(StudioCommentsChip.allCases) { chip in
+            let chipCount: Int? = switch chip {
+            case .needsReply: needsReply
+            case .unread: unread
+            case .all: all
+            case .byWork: nil
+            }
             StudioCommentsChipButton(
                 chip: chip,
-                count: chip == .needsReply ? count : nil,
+                count: chipCount,
                 pageNote: inbox.totalPages > 1,
                 isOn: model.chip == chip
             ) {
@@ -190,24 +211,28 @@ struct StudioCommentsView: View {
                     .accessibilityLabel("Try Again")
             }
         } else if model.chip == .byWork {
-            workList
-        } else if model.visibleComments(in: inbox.items).isEmpty {
-            Text(emptyMessage)
-                .font(.body)
-                .foregroundStyle(.secondaryInk)
-                .fixedSize(horizontal: false, vertical: true)
+            groupedFeed(model.workGroups(in: inbox.items))
+        } else if model.chip == .needsReply || model.chip == .unread {
+            groupedFeed(StudioCommentsBoard.groups(model.visibleComments(in: inbox.items)))
         } else {
-            VStack(spacing: 10) {
-                ForEach(model.visibleComments(in: inbox.items)) { item in
-                    commentLink(item, showsWork: true)
+            let visible = model.visibleComments(in: inbox.items)
+            if visible.isEmpty {
+                Text(emptyMessage)
+                    .font(.body)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(visible) { item in
+                        commentCardRow(item, showsWork: true)
+                    }
                 }
             }
         }
     }
 
     @ViewBuilder
-    private var workList: some View {
-        let groups = model.workGroups(in: inbox.items)
+    private func groupedFeed(_ groups: [StudioCommentWorkGroup]) -> some View {
         if groups.isEmpty {
             Text(emptyMessage)
                 .font(.body)
@@ -219,7 +244,7 @@ struct StudioCommentsView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         workHeading(group)
                         ForEach(group.comments) { item in
-                            commentLink(item, showsWork: false)
+                            commentCardRow(item, showsWork: false)
                         }
                     }
                     .accessibilityElement(children: .contain)
@@ -246,22 +271,134 @@ struct StudioCommentsView: View {
         .accessibilityAddTraits(.isHeader)
     }
 
-    private func commentLink(_ item: AO3InboxItem, showsWork: Bool) -> some View {
-        NavigationLink(value: StudioCommentsRoute.thread(item.id)) {
-            StudioCommentCard(item: item, showsWork: showsWork)
+    private func commentCardRow(_ item: AO3InboxItem, showsWork: Bool) -> some View {
+        let cardShape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+        let border = theme.appTheme.isDarkFamily
+            ? theme.appTheme.glassStroke(0.14)
+            : theme.appTheme.cardBorder
+        let shadowRadius: CGFloat = theme.appTheme.cardShadow.radius > 0 ? 1.5 : 0
+        let shadowY: CGFloat = theme.appTheme.cardShadow.radius > 0 ? 1 : 0
+
+        return VStack(alignment: .leading, spacing: 8) {
+            NavigationLink(value: StudioCommentsRoute.thread(item.id)) {
+                StudioCommentCardContent(item: item, showsWork: showsWork)
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(StudioCommentCard.summary(item))
+            .accessibilityHint("Shows the thread and a reply box")
+            .accessibilityAddTraits(.isButton)
+
+            commentActionRow(item)
+
+            if model.statusCommentID == item.id, model.statusIsError, let message = model.statusMessage {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(theme.appTheme.errorColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.appTheme.cardSurface, in: cardShape)
+        .overlay(cardShape.strokeBorder(border, lineWidth: 0.5))
+        .shadow(color: theme.appTheme.cardShadow.color, radius: shadowRadius, y: shadowY)
+    }
+
+    private func commentActionRow(_ item: AO3InboxItem) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                replyActionPill(item)
+                markReadActionPill(item)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                replyActionPill(item)
+                markReadActionPill(item)
+            }
+        }
+    }
+
+    private func replyActionPill(_ item: AO3InboxItem) -> some View {
+        let isReply = item.canReply && !item.isReplied
+        let label = isReply ? "Reply" : "Thread"
+        let shape = SubjectMetrics.controlShape(dynamicTypeSize)
+        return NavigationLink(value: StudioCommentsRoute.thread(item.id)) {
+            Text(label)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(theme.accentInk)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .frame(minHeight: 32)
+                .background(StudioTonePalette.softAccentFill(for: theme), in: shape)
+                .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(StudioCommentCard.summary(item))
-        .accessibilityHint("Shows the thread and a reply box")
-        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(
+            isReply ? "Reply to \(item.commenterName)" : "View thread with \(item.commenterName)"
+        )
+    }
+
+    @ViewBuilder
+    private func markReadActionPill(_ item: AO3InboxItem) -> some View {
+        if showsMarkRead(item) {
+            let shape = SubjectMetrics.controlShape(dynamicTypeSize)
+            let isBusy = isWriteInFlight
+            Button {
+                startMarkRead(item)
+            } label: {
+                Text("Mark Read")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.primary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .frame(minHeight: 32)
+                    .background(theme.appTheme.glassFill(0.10), in: shape)
+                    .contentShape(shape)
+            }
+            .buttonStyle(.plain)
+            .opacity(isBusy ? 0.5 : 1)
+            .disabled(isBusy)
+            .layoutFreeHitTarget {
+                guard !isBusy else { return }
+                startMarkRead(item)
+            }
+            .accessibilityLabel("Mark comment from \(item.commenterName) read")
+        }
+    }
+
+    private func showsMarkRead(_ item: AO3InboxItem) -> Bool {
+        guard item.isUnread, auth.isLoggedIn, let form = inbox.bulkForm else { return false }
+        return form.parameters(for: [item], action: .markRead) != nil
+    }
+
+    private func startMarkRead(_ item: AO3InboxItem) {
+        guard auth.isLoggedIn, !isWriteInFlight, let form = inbox.bulkForm else { return }
+        let auth = auth
+        let inbox = inbox
+        let model = model
+        let request = StudioCommentsThreadView.MarkReadRequest(
+            item: item,
+            form: form,
+            username: auth.username,
+            cacheScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth),
+            generation: auth.sessionGeneration
+        )
+        Task {
+            await StudioCommentsThreadView.performMarkRead(
+                request,
+                auth: auth,
+                inbox: inbox,
+                model: model
+            )
+        }
     }
 
     private var inboxLink: some View {
         NavigationLink(value: StudioCommentsRoute.inbox) {
             HStack(spacing: 6) {
                 Text("Everything else in your AO3 Inbox")
-                    .font(.body.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
                 Image(systemName: "chevron.right")
@@ -333,19 +470,22 @@ private struct StudioCommentsChipButton: View {
         return Button(action: action) {
             HStack(spacing: 5) {
                 Text(chip.title)
+                    .fontWeight(.semibold)
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
                 if let count {
                     Text(count.formatted())
+                        .fontWeight(.medium)
                         .monospacedDigit()
+                        .opacity(0.85)
                         .accessibilityHidden(true)
                 }
             }
-            .font(.subheadline.weight(.semibold))
+            .font(.subheadline)
             .foregroundStyle(isOn ? ThemeManager.label(on: theme.effectiveTint) : Color.primary)
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .frame(minHeight: 44)
+            .padding(.vertical, 6)
+            .frame(minHeight: 32)
             .background {
                 if isOn {
                     shape.fill(theme.effectiveTint)
@@ -358,95 +498,42 @@ private struct StudioCommentsChipButton: View {
             .contentShape(shape)
         }
         .buttonStyle(.plain)
+        .layoutFreeHitTarget(action: action)
         .accessibilityLabel(label)
         .accessibilityValue(isOn ? "Selected" : "Not selected")
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
     private var label: String {
-        guard let count, chip == .needsReply else { return chip.title }
-        if pageNote { return "Needs Reply, \(count.formatted()) on this page" }
-        return "Needs Reply, \(count.formatted())"
+        guard let count else { return chip.title }
+        if pageNote { return "\(chip.title), \(count.formatted()) on this page" }
+        return "\(chip.title), \(count.formatted())"
     }
 }
 
-/// Who, which work and chapter, when, and the comment text.
+/// Who, which work and chapter, when, and the comment text (white bordered card matching `Studio-Comments`).
 struct StudioCommentCard: View {
     let item: AO3InboxItem
     let showsWork: Bool
 
     @Environment(ThemeManager.self) private var theme
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            header
-            if !item.excerpt.isEmpty {
-                Text(item.excerpt)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .subjectPanel()
-        .accessibilityElement(children: .ignore)
-    }
+        let cardShape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+        let border = theme.appTheme.isDarkFamily
+            ? theme.appTheme.glassStroke(0.14)
+            : theme.appTheme.cardBorder
+        let shadowRadius: CGFloat = theme.appTheme.cardShadow.radius > 0 ? 1.5 : 0
+        let shadowY: CGFloat = theme.appTheme.cardShadow.radius > 0 ? 1 : 0
 
-    /// Name and chapter share a line until accessibility sizes, where that line
-    /// clips the chapter. Stack them so both stay visible.
-    private var header: some View {
-        HStack(alignment: .top, spacing: 10) {
-            initial
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.commenterName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: dynamicTypeSize.isAccessibilitySize)
-                Text(meta)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        StudioCommentCardContent(item: item, showsWork: showsWork)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            if item.isUnread {
-                Circle()
-                    .fill(theme.effectiveTint)
-                    .frame(width: 8, height: 8)
-                    .padding(.top, 6)
-                    .accessibilityHidden(true)
-            }
-        }
-    }
-
-    private var initial: some View {
-        let letter = item.commenterName.first.map { String($0).uppercased() } ?? "?"
-        return Text(letter)
-            .font(.subheadline.weight(.semibold))
-            .lineLimit(1)
-            .minimumScaleFactor(0.45)
-            .foregroundStyle(ThemeManager.label(on: theme.effectiveTint))
-            .frame(width: 32, height: 32)
-            .background(theme.effectiveTint, in: Circle())
-            .accessibilityHidden(true)
-    }
-
-    private var meta: String {
-        var parts: [String] = []
-        if showsWork {
-            let title = item.workTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !title.isEmpty { parts.append(title) }
-        }
-        if let chapter = item.chapterIndicatorTitle { parts.append(chapter) }
-        if let when = AO3InboxTimeLabel.label(for: item.postedAgo) {
-            parts.append(when.display)
-        } else if !item.postedAgo.isEmpty {
-            parts.append(item.postedAgo)
-        }
-        if item.isReplied { parts.append("Replied") }
-        return parts.joined(separator: " · ")
+            .background(theme.appTheme.cardSurface, in: cardShape)
+            .overlay(cardShape.strokeBorder(border, lineWidth: 0.5))
+            .shadow(color: theme.appTheme.cardShadow.color, radius: shadowRadius, y: shadowY)
+            .accessibilityElement(children: .ignore)
     }
 
     static func summary(_ item: AO3InboxItem) -> String {
@@ -464,5 +551,90 @@ struct StudioCommentCard: View {
         if !item.excerpt.isEmpty { parts.append(item.excerpt) }
         if item.isReplied { parts.append("Replied") }
         return parts.joined(separator: ". ")
+    }
+}
+
+/// Inner comment header and body shared by feed cards and `StudioCommentCard`.
+struct StudioCommentCardContent: View {
+    let item: AO3InboxItem
+    let showsWork: Bool
+
+    @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            header
+            if !item.excerpt.isEmpty {
+                Text(item.excerpt)
+                    .font(.subheadline)
+                    .lineSpacing(2)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// Name and chapter share a line until accessibility sizes, where that line
+    /// clips the chapter. Stack them so both stay visible.
+    private var header: some View {
+        HStack(alignment: dynamicTypeSize.isAccessibilitySize ? .top : .center, spacing: 10) {
+            AO3AuthorAvatar(
+                url: item.avatarURL,
+                name: item.commenterName,
+                size: 32,
+                isCircular: true
+            )
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.commenterName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !meta.isEmpty {
+                        Text(meta)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondaryInk)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                let nameText = Text(item.commenterName)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Color.primary)
+                let metaText = meta.isEmpty
+                    ? Text("")
+                    : Text(" · \(meta)").foregroundStyle(.secondaryInk)
+                Text("\(nameText)\(metaText)")
+                    .font(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if item.isUnread {
+                Circle()
+                    .fill(theme.accentInk)
+                    .frame(width: 8, height: 8)
+                    .padding(.top, dynamicTypeSize.isAccessibilitySize ? 6 : 0)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    private var meta: String {
+        var parts: [String] = []
+        if showsWork {
+            let title = item.workTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !title.isEmpty { parts.append(title) }
+        }
+        if let chapter = item.chapterIndicatorTitle { parts.append(chapter) }
+        if let when = AO3InboxTimeLabel.label(for: item.postedAgo) {
+            parts.append(when.display)
+        } else if !item.postedAgo.isEmpty {
+            parts.append(item.postedAgo)
+        }
+        if item.isReplied { parts.append("Replied") }
+        return parts.joined(separator: " · ")
     }
 }

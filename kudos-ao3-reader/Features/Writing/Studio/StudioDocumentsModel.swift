@@ -262,6 +262,44 @@ nonisolated struct StudioWorkItem: Identifiable, Equatable, Hashable, Sendable {
         return parts.joined(separator: " · ")
     }
 
+    /// Work header state line on `Studio-Work-Files`, matching
+    /// `"In progress · 3 of 8 posted · 9,800 words · last posted Oct 20"`.
+    func workFilesStateLine(
+        deviceName: String,
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String {
+        guard let posted = ao3PostedWork else {
+            return manuscriptStateLine(deviceName: deviceName)
+        }
+        let counts = StudioChapterCount.parse(posted.chapters)
+        let ao3Words = posted.words ?? totalWordCount
+        var parts: [String] = []
+        if isCompleteOnAO3 {
+            parts.append("Complete")
+            if let count = counts.posted ?? counts.expected, count > 0 {
+                parts.append(Self.chapterCountLabel(count))
+            }
+        } else {
+            parts.append("In progress")
+            if let postedCount = counts.posted, let expected = counts.expected {
+                parts.append("\(postedCount) of \(expected) posted")
+            } else if let postedCount = counts.posted {
+                parts.append("\(postedCount) posted")
+            }
+        }
+        if ao3Words > 0 {
+            parts.append(Self.wordCountLabel(ao3Words))
+        }
+        let updated = posted.dateUpdated.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !updated.isEmpty {
+            let formatted = StudioDateCopy.shortAO3Date(updated, now: now, calendar: calendar, locale: locale)
+            parts.append("last posted \(formatted)")
+        }
+        return parts.joined(separator: " · ")
+    }
+
     func looseDraftMetaLine(deviceName: String) -> String {
         let words = totalWordCount
         if words == 0 { return "Not started · only on this \(deviceName)" }

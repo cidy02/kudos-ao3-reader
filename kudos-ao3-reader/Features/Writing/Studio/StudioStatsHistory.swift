@@ -368,6 +368,36 @@ nonisolated enum StudioStatsHistory {
         return "Charts start \(begin.formatted(style)), after a full week of totals."
     }
 
+    /// Evenly spaced x-axis labels for `Kudos per Week` (`Studio-Stats`), matching the
+    /// board's four ticks across a 12-week chart (`Sep 1`, `Sep 29`, `Oct 27`, `This week`).
+    static func axisLabels(
+        for weeks: [StudioStatsWeek],
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        locale: Locale = .autoupdatingCurrent
+    ) -> [String] {
+        let count = weeks.count
+        let indices: [Int]
+        switch count {
+        case 0: return []
+        case 1: indices = [0]
+        case 2...5: indices = [0, count - 1]
+        case 6...8: indices = [0, count / 2, count - 1]
+        default: indices = [0, count / 3, (2 * count) / 3, count - 1]
+        }
+        let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
+            .locale(locale)
+            .month(.abbreviated)
+            .day()
+        return indices.map { index in
+            let start = weeks[index].start
+            if index == count - 1, calendar.isDate(start, equalTo: now, toGranularity: .weekOfYear) {
+                return "This week"
+            }
+            return start.formatted(style)
+        }
+    }
+
     /// VoiceOver text for the bar chart: every week's value, not only the latest.
     static func spokenChart(_ weeks: [StudioStatsWeek], best: StudioStatsWeek?) -> String {
         guard !weeks.isEmpty else { return "Kudos per week" }
