@@ -30,7 +30,7 @@ extension StudioWorkFilesView {
                     Text(ao3ChaptersError)
                         .font(.footnote)
                         .foregroundStyle(.secondaryInk)
-                    Button("Try Again") { reloadToken += 1 }
+                    Button("Try Again") { Task { await loadAO3Chapters(force: true) } }
                         .buttonStyle(.kudosSecondary)
                 }
                 .padding(.vertical, 8)
@@ -333,7 +333,7 @@ extension StudioWorkFilesView {
                 Label(note.pinned ? "Unpin" : "Pin", systemImage: note.pinned ? "pin.slash" : "pin")
             }
             Button(role: .destructive) {
-                Task { await deleteNote(note) }
+                deletingNote = note
             } label: {
                 Label("Delete", systemImage: "trash")
             }
@@ -348,8 +348,8 @@ extension StudioWorkFilesView {
                 if let ao3WorkID = currentWork.ao3WorkID, auth.isLoggedIn {
                     NavigationLink {
                         WritingWorkDestination(workID: ao3WorkID) {
-                            reloadToken += 1
-                            onChanged()
+                            onAO3Write()
+                            Task { await loadAO3Chapters(force: true) }
                         }
                     } label: {
                         HStack(spacing: 12) {

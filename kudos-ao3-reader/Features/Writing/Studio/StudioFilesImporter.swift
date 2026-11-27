@@ -119,8 +119,15 @@ nonisolated enum StudioDocumentImporter {
         if let text = String(data: data, encoding: .utf8) {
             return text
         }
-        if isLikelySingleByteText(bytes), let text = String(data: data, encoding: .isoLatin1) {
-            return text
+        // Windows-1252 before Latin-1: bytes 0x91–0x94 are curly quotes, which
+        // Latin-1 would keep as C1 controls. UTF-16 is only accepted with a BOM above.
+        if isLikelySingleByteText(bytes) {
+            if let text = String(data: data, encoding: .windowsCP1252), !text.isEmpty {
+                return text
+            }
+            if let text = String(data: data, encoding: .isoLatin1), !text.isEmpty {
+                return text
+            }
         }
         throw StudioDocumentImportError.unreadableText
     }
@@ -381,7 +388,7 @@ nonisolated enum StudioDocumentImporter {
     }
 
     private static func renderMarkdownInline(_ raw: String) -> String {
-        var result = escapeHTML(raw)
+        var result = escapeHTML(stripRemoteMarkdownImages(raw))
         result = replaceMarkdownLinks(in: result)
         result = replacingRegex(#"`([^`]+)`"#, in: result, with: "<code>$1</code>")
         result = replacingRegex(#"\*\*(.+?)\*\*"#, in: result, with: "<strong>$1</strong>")
@@ -390,6 +397,15 @@ nonisolated enum StudioDocumentImporter {
         result = replacingRegex(#"(?<!\*)\*([^*]+?)\*(?!\*)"#, in: result, with: "<em>$1</em>")
         result = replacingRegex(#"(?<![\w])_([^_]+?)_(?![\w])"#, in: result, with: "<em>$1</em>")
         return result
+    }
+
+    /// Remote Markdown images become their alt text so the chapter does not keep the URL.
+    private static func stripRemoteMarkdownImages(_ text: String) -> String {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"!\[([^\]]*)\]\((?:https?:)?//[^)\s]+(?:\s+"[^"]*")?\)"#
+        ) else { return text }
+        let range = NSRange(text.startIndex..., in: text)
+        return regex.stringByReplacingMatches(in: text, range: range, withTemplate: "$1")
     }
 
     private static func replaceMarkdownLinks(in text: String) -> String {

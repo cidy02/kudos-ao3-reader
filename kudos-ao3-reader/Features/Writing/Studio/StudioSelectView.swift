@@ -45,7 +45,10 @@ nonisolated struct StudioSelectCapabilities: Equatable, Sendable {
         }
         let counts = Self.joinedList(breakdown)
 
-        if !isSignedIn, !deleteAO3WorkIDs.isEmpty || postedCount > 0 || ao3DraftCount > 0 {
+        if !isSignedIn, postedCount > 0 || ao3DraftCount > 0 {
+            if !deleteLocalWorkIDs.isEmpty {
+                return "\(counts) · Sign in to edit or orphan on AO3. Delete moves the on-device copies to Recently Deleted."
+            }
             return "\(counts) · Sign in to AO3 to edit, orphan, or delete AO3 works."
         }
         if isOverOrphanCap {
@@ -85,7 +88,11 @@ nonisolated enum StudioSelectPolicy {
         var ao3DraftOnlyCount = 0
         var localOnlyCount = 0
         var exportableLocalIDs: [UUID] = []
-        var localIDs: [UUID] = []
+        var deleteAO3: [Int] = []
+        var deleteLocal: [UUID] = []
+        var deleteTitles: [String] = []
+        var seenAO3: Set<Int> = []
+        var seenLocal: Set<UUID> = []
 
         for item in selected {
             if let posted = item.ao3PostedWork {
@@ -100,8 +107,28 @@ nonisolated enum StudioSelectPolicy {
             }
 
             if let localWork = item.localWork {
-                localIDs.append(localWork.id)
                 exportableLocalIDs.append(localWork.id)
+            }
+
+            // AO3 ids come only from the posted or draft row that was selected,
+            // and only while signed in. A local link whose work is not in the
+            // loaded lists is not treated as permission to delete it on AO3.
+            let remoteID = item.ao3PostedWork?.id ?? item.ao3DraftWork?.id
+            var deletesThisItem = false
+            if isSignedIn, let remoteID {
+                if seenAO3.insert(remoteID).inserted {
+                    deleteAO3.append(remoteID)
+                }
+                deletesThisItem = true
+            }
+            if let localID = item.localWork?.id {
+                if seenLocal.insert(localID).inserted {
+                    deleteLocal.append(localID)
+                }
+                deletesThisItem = true
+            }
+            if deletesThisItem {
+                deleteTitles.append(item.title)
             }
         }
 
@@ -112,20 +139,20 @@ nonisolated enum StudioSelectPolicy {
         let canEditTogether = isSignedIn && allOnAO3
         let canExport = !exportableLocalIDs.isEmpty
         let canOrphan = isSignedIn && allPosted && postedIDs.count <= maxOrphanWorks
-        let canDelete = !selected.isEmpty && (isSignedIn || ao3IDs.isEmpty)
+        let canDelete = !deleteAO3.isEmpty || !deleteLocal.isEmpty
 
         return StudioSelectCapabilities(
             selectedCount: selected.count,
             postedCount: postedIDs.count,
             ao3DraftCount: ao3DraftOnlyCount,
             localOnlyCount: localOnlyCount,
-            editTogetherWorkIDs: canEditTogether ? ao3IDs : [],
-            orphanWorkIDs: canOrphan ? postedIDs : [],
+            editTogetherWorkIDs: canEditTogether ? uniqueIDs(ao3IDs) : [],
+            orphanWorkIDs: canOrphan ? uniqueIDs(postedIDs) : [],
             orphanFallbackTitles: canOrphan ? postedTitles : [],
             exportableLocalWorkIDs: exportableLocalIDs,
-            deleteAO3WorkIDs: isSignedIn ? ao3IDs : [],
-            deleteLocalWorkIDs: localIDs,
-            deleteTitles: selected.map(\.title),
+            deleteAO3WorkIDs: deleteAO3,
+            deleteLocalWorkIDs: deleteLocal,
+            deleteTitles: deleteTitles,
             canEditTogether: canEditTogether,
             canExport: canExport,
             canOrphan: canOrphan,
@@ -133,6 +160,42 @@ nonisolated enum StudioSelectPolicy {
             isOverOrphanCap: overOrphanCap,
             isSignedIn: isSignedIn
         )
+    }
+
+    private static func uniqueIDs(_ ids: [Int]) -> [Int] {
+        var seen: Set<Int> = []
+        return ids.filter { seen.insert($0).inserted }
+    }
+}
+
+/// The works named in the delete confirmation. Captured when Delete is tapped
+/// so a later sign-in or selection change cannot widen what the alert confirmed.
+nonisolated struct StudioPendingDelete: Equatable, Sendable {
+    var ao3WorkIDs: [Int]
+    var localWorkIDs: [UUID]
+    var titles: [String]
+    var generation: Int
+
+    var titleText: String {
+        let count = titles.count
+        if !ao3WorkIDs.isEmpty {
+            return count == 1 ? "Delete 1 work?" : "Delete \(count) works?"
+        }
+        return count == 1 ? "Move 1 work to Recently Deleted?" : "Move \(count) works to Recently Deleted?"
+    }
+
+    func message(deviceName: String) -> String {
+        let preview = titles.prefix(3).joined(separator: ", ")
+        let overflow = titles.count - 3
+        let named = overflow > 0 ? "\(preview), and \(overflow) more" : preview
+        if !ao3WorkIDs.isEmpty && !localWorkIDs.isEmpty {
+            return "\(named). Deleting on AO3 is permanent and cannot be undone. "
+                + "Local copies on this \(deviceName) will move to Recently Deleted for 30 days."
+        }
+        if !ao3WorkIDs.isEmpty {
+            return "\(named). This permanently deletes the selected works from AO3 and cannot be undone."
+        }
+        return "\(named). Local works stay in Recently Deleted for 30 days before permanent removal."
     }
 }
 
@@ -230,6 +293,7 @@ struct StudioSelectView: View {
     let works: [StudioWorkItem]
     let store: WritingDocumentStore
     var onChanged: () -> Void = {}
+    var onAO3Write: () -> Void = {}
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -240,7 +304,7 @@ struct StudioSelectView: View {
     @State private var bulkEditRoute: BulkEditRoute?
     @State private var orphanRoute: OrphanRoute?
     @State private var showingDeleteConfirm = false
-    @State private var deleteGeneration: Int?
+    @State private var pendingDelete: StudioPendingDelete?
     @State private var isWorking = false
     @State private var exportDocument: StudioExportDocument?
     @State private var exportFilename = "Export.html"
@@ -321,7 +385,7 @@ struct StudioSelectView: View {
         }
         .navigationDestination(item: $bulkEditRoute) { route in
             WritingBulkEditDestination(workIDs: route.workIDs) {
-                onChanged()
+                onAO3Write()
                 dismiss()
             }
         }
@@ -330,7 +394,7 @@ struct StudioSelectView: View {
                 target: .works(route.workIDs),
                 fallbackTitles: route.fallbackTitles
             ) { _ in
-                onChanged()
+                onAO3Write()
                 dismiss()
             }
         }
@@ -344,13 +408,13 @@ struct StudioSelectView: View {
                 errorMessage = UserFacingError.message(for: error)
             }
         }
-        .alert(deleteAlertTitle, isPresented: $showingDeleteConfirm) {
-            Button("Cancel", role: .cancel) { deleteGeneration = nil }
+        .alert(pendingDelete?.titleText ?? "Delete works?", isPresented: $showingDeleteConfirm) {
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
             Button("Delete", role: .destructive) {
                 Task { await performDelete() }
             }
         } message: {
-            Text(deleteAlertMessage)
+            Text(pendingDelete?.message(deviceName: ThisDevice.name) ?? "")
         }
         .alert(
             "Couldn't Complete Action",
@@ -515,7 +579,12 @@ struct StudioSelectView: View {
             isEnabled: capabilities.canDelete && !isWorking,
             accessibilityHint: "Deletes the selected works after confirmation"
         ) {
-            deleteGeneration = auth.sessionGeneration
+            pendingDelete = StudioPendingDelete(
+                ao3WorkIDs: capabilities.deleteAO3WorkIDs,
+                localWorkIDs: capabilities.deleteLocalWorkIDs,
+                titles: capabilities.deleteTitles,
+                generation: auth.sessionGeneration
+            )
             showingDeleteConfirm = true
         }
     }
@@ -566,31 +635,6 @@ struct StudioSelectView: View {
         }
     }
 
-    private var deleteAlertTitle: String {
-        let count = capabilities.selectedCount
-        if !capabilities.deleteAO3WorkIDs.isEmpty {
-            return count == 1 ? "Delete 1 work?" : "Delete \(count) works?"
-        }
-        return count == 1 ? "Move 1 work to Recently Deleted?" : "Move \(count) works to Recently Deleted?"
-    }
-
-    private var deleteAlertMessage: String {
-        let previewTitles = capabilities.deleteTitles.prefix(3).joined(separator: ", ")
-        let overflow = capabilities.deleteTitles.count - 3
-        let named = overflow > 0 ? "\(previewTitles), and \(overflow) more" : previewTitles
-
-        let ao3Count = capabilities.deleteAO3WorkIDs.count
-        let localCount = capabilities.deleteLocalWorkIDs.count
-        if ao3Count > 0 && localCount > 0 {
-            return "\(named). Deleting on AO3 is permanent and cannot be undone. "
-                + "Local copies on this \(ThisDevice.name) will move to Recently Deleted for 30 days."
-        }
-        if ao3Count > 0 {
-            return "\(named). This permanently deletes the selected works from AO3 and cannot be undone."
-        }
-        return "\(named). Local works stay in Recently Deleted for 30 days before permanent removal."
-    }
-
     private func prepareExport() async {
         let localIDs = capabilities.exportableLocalWorkIDs
         guard !localIDs.isEmpty else { return }
@@ -619,10 +663,10 @@ struct StudioSelectView: View {
     }
 
     private func performDelete() async {
-        let ao3IDs = capabilities.deleteAO3WorkIDs
-        let localIDs = capabilities.deleteLocalWorkIDs
-        let expectedGeneration = deleteGeneration ?? auth.sessionGeneration
-        deleteGeneration = nil
+        guard let pending = pendingDelete else { return }
+        pendingDelete = nil
+        let ao3IDs = pending.ao3WorkIDs
+        let localIDs = pending.localWorkIDs
 
         isWorking = true
         defer { isWorking = false }
@@ -631,14 +675,17 @@ struct StudioSelectView: View {
             if !ao3IDs.isEmpty {
                 _ = try await auth.deleteWorks(
                     workIDs: ao3IDs,
-                    expectedGeneration: expectedGeneration
+                    expectedGeneration: pending.generation
                 )
+                onAO3Write()
             }
             for localID in localIDs {
                 try await store.deleteWork(localID)
             }
+            if !localIDs.isEmpty {
+                onChanged()
+            }
             selectedIDs.removeAll()
-            onChanged()
             dismiss()
         } catch {
             errorMessage = UserFacingError.message(for: error)

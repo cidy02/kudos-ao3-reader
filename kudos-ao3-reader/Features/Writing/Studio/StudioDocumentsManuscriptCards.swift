@@ -86,6 +86,7 @@ struct StudioFeaturedManuscriptCard: View {
     let work: StudioWorkItem
     let store: WritingDocumentStore
     let onChanged: () -> Void
+    var onAO3Write: () -> Void = {}
     let onAddChapter: () -> Void
 
     @Environment(AO3AuthService.self) private var auth
@@ -119,7 +120,12 @@ struct StudioFeaturedManuscriptCard: View {
         let stateLine = work.manuscriptStateLine(deviceName: ThisDevice.name)
         return HStack(alignment: .top, spacing: 10) {
             NavigationLink {
-                StudioWorkFilesView(work: work, store: store, onChanged: onChanged)
+                StudioWorkFilesView(
+                    work: work,
+                    store: store,
+                    onChanged: onChanged,
+                    onAO3Write: onAO3Write
+                )
             } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(work.title)
@@ -141,7 +147,7 @@ struct StudioFeaturedManuscriptCard: View {
 
             if let ao3WorkID = work.ao3WorkID, auth.isLoggedIn {
                 NavigationLink {
-                    WritingWorkDestination(workID: ao3WorkID) { onChanged() }
+                    WritingWorkDestination(workID: ao3WorkID) { onAO3Write() }
                 } label: {
                     Image(systemName: "list.bullet.rectangle")
                         .font(.callout.weight(.medium))
@@ -162,7 +168,12 @@ struct StudioFeaturedManuscriptCard: View {
 
     private var openFilesLink: some View {
         NavigationLink {
-            StudioWorkFilesView(work: work, store: store, onChanged: onChanged)
+            StudioWorkFilesView(
+                work: work,
+                store: store,
+                onChanged: onChanged,
+                onAO3Write: onAO3Write
+            )
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "folder")
@@ -320,13 +331,19 @@ struct StudioManuscriptListRow: View {
     let work: StudioWorkItem
     let store: WritingDocumentStore
     let onChanged: () -> Void
+    var onAO3Write: () -> Void = {}
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         let stateLine = work.manuscriptStateLine(deviceName: ThisDevice.name)
         NavigationLink {
-            StudioWorkFilesView(work: work, store: store, onChanged: onChanged)
+            StudioWorkFilesView(
+                work: work,
+                store: store,
+                onChanged: onChanged,
+                onAO3Write: onAO3Write
+            )
         } label: {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {

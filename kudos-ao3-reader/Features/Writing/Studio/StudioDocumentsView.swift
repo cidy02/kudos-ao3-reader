@@ -24,10 +24,12 @@ struct StudioDocumentsView: View {
     @State private var storageSummary = StudioStorageSummary(documentCount: 0, byteCount: 0)
 
     @State private var profileModel: AO3AuthorProfileModel?
+    @State private var postedWorks: [AO3WorkSummary] = []
     @State private var ao3Drafts: AO3DraftsPage?
-    @State private var isLoadingDrafts = false
-    @State private var ao3DraftsError: String?
-    @State private var reloadToken = 0
+    @State private var isLoadingAO3 = false
+    @State private var ao3Error: String?
+    @State private var localReload = 0
+    @State private var ao3LoadGeneration = 0
 
     @State private var importedRoute: ImportedDocumentRoute?
 
@@ -47,7 +49,6 @@ struct StudioDocumentsView: View {
     }
 
     private var snapshot: StudioDocumentsSnapshot {
-        let postedWorks = auth.isLoggedIn ? (profileModel?.works ?? []) : []
         let draftWorks = auth.isLoggedIn ? (ao3Drafts?.page.works ?? []) : []
         let now = Date()
         var draftDaysLeft: [Int: Int] = [:]
@@ -60,22 +61,15 @@ struct StudioDocumentsView: View {
         }
         return StudioDocumentsCatalog.build(
             localWorks: localSnapshots,
-            ao3PostedWorks: postedWorks,
+            ao3PostedWorks: auth.isLoggedIn ? postedWorks : [],
             ao3DraftWorks: draftWorks,
             ao3DraftDaysLeft: draftDaysLeft,
             deviceName: ThisDevice.name
         )
     }
 
-    private var isLoadingAO3: Bool {
-        guard auth.isLoggedIn else { return false }
-        return isLoadingDrafts
-            || profileModel?.contentPhase == .loading
-            || profileModel?.headerPhase == .loading
-    }
-
-    private var activationKey: String {
-        "\(auth.sessionGeneration)|\(auth.username ?? "")|\(reloadToken)"
+    private var ao3ActivationKey: String {
+        "\(auth.sessionGeneration)|\(auth.username ?? "")"
     }
 
     var body: some View {
@@ -91,9 +85,10 @@ struct StudioDocumentsView: View {
                         selectedChip: $selectedChip,
                         searchQuery: $searchQuery,
                         isLoadingAO3: isLoadingAO3,
-                        ao3Error: ao3DraftsError,
-                        onRetryAO3: { reloadToken += 1 },
-                        onChanged: { reloadToken += 1 }
+                        ao3Error: ao3Error,
+                        onRetryAO3: { Task { await loadAO3(force: true) } },
+                        onChanged: { localReload += 1 },
+                        onAO3Write: { Task { await loadAO3(force: true) } }
                     )
                 case .files:
                     StudioFilesView(
@@ -103,7 +98,8 @@ struct StudioDocumentsView: View {
                         store: store,
                         sort: filesSort,
                         isLoadingAO3: isLoadingAO3,
-                        onChanged: { reloadToken += 1 },
+                        onChanged: { localReload += 1 },
+                        onAO3Write: { Task { await loadAO3(force: true) } },
                         onOpenImported: { imported in
                             importedRoute = ImportedDocumentRoute(
                                 workID: imported.work.id,
@@ -127,14 +123,18 @@ struct StudioDocumentsView: View {
                 store: store
             )
         }
-        .onChange(of: auth.username, initial: true) { _, _ in
-            syncProfileModel()
+        .onChange(of: auth.isLoggedIn) { _, loggedIn in
+            if !loggedIn { clearAO3Presentation() }
         }
-        .task(id: activationKey) {
-            await loadAll()
+        .task(id: localReload) {
+            await reloadLocalStore()
+        }
+        .task(id: ao3ActivationKey) {
+            await loadAO3(force: false)
         }
         .refreshable {
-            await refreshAll()
+            await reloadLocalStore()
+            await loadAO3(force: true)
         }
         .onDisappear {
             profileModel?.cancel()
@@ -215,7 +215,8 @@ struct StudioDocumentsView: View {
             StudioSelectView(
                 works: snapshot.allWorks,
                 store: store,
-                onChanged: { reloadToken += 1 }
+                onChanged: { localReload += 1 },
+                onAO3Write: { Task { await loadAO3(force: true) } }
             )
         } label: {
             Text("Select")
@@ -234,35 +235,153 @@ struct StudioDocumentsView: View {
 
     // MARK: - Data loading
 
-    private func syncProfileModel() {
-        guard auth.isLoggedIn,
-              let username = auth.username,
-              let route = AO3AuthorRoute(username: username) else {
-            profileModel?.cancel()
-            profileModel = nil
-            ao3Drafts = nil
-            ao3DraftsError = nil
+    private func clearAO3Presentation() {
+        ao3LoadGeneration += 1
+        profileModel?.cancel()
+        profileModel = nil
+        postedWorks = []
+        ao3Drafts = nil
+        ao3Error = nil
+        isLoadingAO3 = false
+        StudioAO3LoadCache.shared.clear()
+    }
+
+    /// Loads AO3 works and drafts once, then only on pull to refresh, after a
+    /// write, a sign-in or sign-out, or once `StudioAO3Freshness` says the last
+    /// load is stale. A fresh cache hit does not create a profile model.
+    private func loadAO3(force: Bool) async {
+        ao3LoadGeneration += 1
+        let loadID = ao3LoadGeneration
+        guard auth.isLoggedIn, let username = auth.username, !username.isEmpty else {
+            clearAO3Presentation()
             return
         }
+        let session = auth.sessionGeneration
+        let cache = StudioAO3LoadCache.shared
+        let cached = cache.documents(session: session, username: username)
+        if let cached {
+            postedWorks = cached.posted
+            ao3Drafts = cached.drafts
+            ao3Error = cached.error
+            if !force && !StudioAO3Freshness.isStale(cached.loadedAt) {
+                isLoadingAO3 = false
+                return
+            }
+        } else {
+            postedWorks = []
+            ao3Drafts = nil
+            ao3Error = nil
+        }
+        guard loadID == ao3LoadGeneration else { return }
+        isLoadingAO3 = postedWorks.isEmpty && ao3Drafts == nil
+
+        let posted = await reloadPostedWorks(session: session, username: username, force: force)
+        guard loadID == ao3LoadGeneration, !Task.isCancelled, session == auth.sessionGeneration, auth.isLoggedIn else {
+            if loadID == ao3LoadGeneration { isLoadingAO3 = false }
+            return
+        }
+        if let posted {
+            postedWorks = posted
+        }
+
+        let draftsOutcome = await reloadDrafts(session: session)
+        guard loadID == ao3LoadGeneration, !Task.isCancelled, session == auth.sessionGeneration, auth.isLoggedIn else {
+            if loadID == ao3LoadGeneration { isLoadingAO3 = false }
+            return
+        }
+        let draftsLoaded: Bool
+        let draftsPage: AO3DraftsPage?
+        let error: String?
+        switch draftsOutcome {
+        case .cancelled:
+            isLoadingAO3 = false
+            return
+        case let .loaded(page):
+            ao3Drafts = page
+            ao3Error = nil
+            draftsLoaded = true
+            draftsPage = page
+            error = nil
+        case let .failed(message):
+            ao3Error = message
+            draftsLoaded = false
+            draftsPage = nil
+            error = message
+        }
+        cache.storeDocuments(
+            session: session,
+            username: username,
+            posted: posted,
+            drafts: draftsPage,
+            draftsLoaded: draftsLoaded,
+            error: error,
+            loadedAt: Date()
+        )
+        isLoadingAO3 = false
+    }
+
+    private func reloadPostedWorks(
+        session: Int,
+        username: String,
+        force: Bool
+    ) async -> [AO3WorkSummary]? {
+        guard let route = AO3AuthorRoute(username: username) else { return nil }
         if profileModel?.route.username.localizedCaseInsensitiveCompare(username) != .orderedSame {
+            profileModel?.cancel()
             profileModel = AO3AuthorProfileModel(route: route)
         }
-        profileModel?.activate(auth: auth)
+        guard let model = profileModel else { return nil }
+        if force || (model.headerPhase == .loaded && model.contentPhase == .loaded) {
+            await model.refresh(auth: auth)
+        } else {
+            model.activate(auth: auth)
+            await waitUntilProfileSettles(model)
+        }
+        guard !Task.isCancelled, session == auth.sessionGeneration else { return nil }
+        guard model.contentPhase == .loaded else { return nil }
+        return model.works
     }
 
-    private func loadAll() async {
-        await reloadLocalStore()
-        syncProfileModel()
-        await loadAO3Drafts()
-    }
-
-    private func refreshAll() async {
-        await reloadLocalStore()
-        if auth.isLoggedIn {
-            if let profileModel {
-                await profileModel.refresh(auth: auth)
+    private func waitUntilProfileSettles(_ model: AO3AuthorProfileModel) async {
+        let deadline = Date().addingTimeInterval(45)
+        while !Task.isCancelled, Date() < deadline {
+            if profileSettled(model) { return }
+            do {
+                try await Task.sleep(nanoseconds: 50_000_000)
+            } catch {
+                return
             }
-            await loadAO3Drafts()
+        }
+    }
+
+    private func profileSettled(_ model: AO3AuthorProfileModel) -> Bool {
+        switch model.headerPhase {
+        case .idle, .loading:
+            return false
+        case .failed, .unavailable:
+            return true
+        case .loaded:
+            switch model.contentPhase {
+            case .idle, .loading: return false
+            case .loaded, .failed, .unavailable: return true
+            }
+        }
+    }
+
+    private enum DraftsFetch {
+        case loaded(AO3DraftsPage)
+        case failed(String)
+        case cancelled
+    }
+
+    private func reloadDrafts(session: Int) async -> DraftsFetch {
+        do {
+            let loaded = try await auth.loadDrafts(page: 1)
+            guard !Task.isCancelled, session == auth.sessionGeneration else { return .cancelled }
+            return .loaded(loaded)
+        } catch {
+            guard !Task.isCancelled, session == auth.sessionGeneration else { return .cancelled }
+            return .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -303,26 +422,5 @@ struct StudioDocumentsView: View {
         } catch {
             // Keep prior local state on transient disk read failure.
         }
-    }
-
-    private func loadAO3Drafts() async {
-        guard auth.isLoggedIn else {
-            ao3Drafts = nil
-            ao3DraftsError = nil
-            isLoadingDrafts = false
-            return
-        }
-        let generation = auth.sessionGeneration
-        isLoadingDrafts = true
-        ao3DraftsError = nil
-        do {
-            let loaded = try await auth.loadDrafts(page: 1)
-            guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
-            ao3Drafts = loaded
-        } catch {
-            guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
-            ao3DraftsError = UserFacingError.message(for: error)
-        }
-        isLoadingDrafts = false
     }
 }

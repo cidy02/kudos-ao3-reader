@@ -9,6 +9,7 @@ struct StudioWorkFilesView: View {
     let initialWork: StudioWorkItem
     let store: WritingDocumentStore
     var onChanged: () -> Void = {}
+    var onAO3Write: () -> Void = {}
 
     @Environment(AO3AuthService.self) var auth
     @Environment(ThemeManager.self) var theme
@@ -20,7 +21,7 @@ struct StudioWorkFilesView: View {
     @State var ao3Chapters: [AO3ChapterRef] = []
     @State var isLoadingAO3Chapters = false
     @State var ao3ChaptersError: String?
-    @State var reloadToken = 0
+    @State var ao3ChapterLoadID = 0
 
     @State var activeChapterRoute: LocalChapterOpenRoute?
     @State var activeAO3ChapterRoute: AO3ChapterOpenRoute?
@@ -29,6 +30,7 @@ struct StudioWorkFilesView: View {
     @State var renamingChapter: StudioWorkChapterItem?
     @State var renameChapterText = ""
     @State var deletingChapter: StudioWorkChapterItem?
+    @State var deletingNote: WritingStoryNote?
 
     @State var showingRenameWork = false
     @State var renameWorkText = ""
@@ -66,11 +68,13 @@ struct StudioWorkFilesView: View {
     init(
         work: StudioWorkItem,
         store: WritingDocumentStore,
-        onChanged: @escaping () -> Void = {}
+        onChanged: @escaping () -> Void = {},
+        onAO3Write: @escaping () -> Void = {}
     ) {
         self.initialWork = work
         self.store = store
         self.onChanged = onChanged
+        self.onAO3Write = onAO3Write
         _localWork = State(initialValue: work.localWork)
         _localChapters = State(initialValue: work.localChapters)
         _storyNotes = State(initialValue: work.storyNotes)
@@ -127,8 +131,8 @@ struct StudioWorkFilesView: View {
         .navigationDestination(item: $activeAO3ChapterRoute) { route in
             if route.chapterID == nil, currentWork.isAO3Draft, !currentWork.isPostedOnAO3 {
                 WritingWorkDestination(workID: route.workID) {
-                    reloadToken += 1
-                    onChanged()
+                    onAO3Write()
+                    Task { await loadAO3Chapters(force: true) }
                 }
             } else {
                 WritingChapterDestination(
@@ -137,21 +141,27 @@ struct StudioWorkFilesView: View {
                     chapterID: route.chapterID,
                     chapterCount: route.chapterCount
                 ) {
-                    reloadToken += 1
-                    onChanged()
+                    onAO3Write()
+                    Task { await loadAO3Chapters(force: true) }
                 }
             }
         }
         .navigationDestination(isPresented: $showingWorkDetails) {
             if let ao3WorkID = currentWork.ao3WorkID {
                 WritingWorkDestination(workID: ao3WorkID) {
-                    reloadToken += 1
-                    onChanged()
+                    onAO3Write()
+                    Task { await loadAO3Chapters(force: true) }
                 }
             }
         }
-        .task(id: "\(auth.sessionGeneration):\(reloadToken)") { await loadAll() }
-        .refreshable { reloadToken += 1 }
+        .task(id: auth.sessionGeneration) {
+            await reloadLocal()
+            await loadAO3Chapters(force: false)
+        }
+        .refreshable {
+            await reloadLocal()
+            await loadAO3Chapters(force: true)
+        }
         .sheet(item: $noteSheetMode) { mode in
             StudioStoryNoteEditorSheet(mode: mode) { kind, name, detail, pinned, existing in
                 Task {
@@ -201,6 +211,24 @@ struct StudioWorkFilesView: View {
         } message: {
             let name = deletingChapter?.shortTitle ?? "this chapter"
             Text("Moves \"\(name)\" to Recently Deleted for 30 days.")
+        }
+        .alert(
+            "Delete Note?",
+            isPresented: Binding(
+                get: { deletingNote != nil },
+                set: { if !$0 { deletingNote = nil } }
+            )
+        ) {
+            Button("Cancel", role: .cancel) { deletingNote = nil }
+            Button("Delete", role: .destructive) {
+                guard let note = deletingNote else { return }
+                deletingNote = nil
+                Task { await deleteNote(note) }
+            }
+        } message: {
+            let trimmed = deletingNote?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let name = trimmed.isEmpty ? "this note" : trimmed
+            Text("Deletes \"\(name)\" from this work. This cannot be undone.")
         }
         .alert(
             "Couldn't Update Work",
@@ -258,11 +286,6 @@ struct StudioWorkFilesView: View {
 
 extension StudioWorkFilesView {
 
-    func loadAll() async {
-        await reloadLocal()
-        await loadAO3ChaptersIfNeeded()
-    }
-
     func reloadLocal() async {
         guard let workID = localWork?.id else { return }
         do {
@@ -278,7 +301,7 @@ extension StudioWorkFilesView {
         }
     }
 
-    func loadAO3ChaptersIfNeeded() async {
+    func loadAO3Chapters(force: Bool) async {
         guard let ao3WorkID = currentWork.ao3WorkID,
               currentWork.isPostedOnAO3,
               auth.isLoggedIn else {
@@ -287,19 +310,52 @@ extension StudioWorkFilesView {
             isLoadingAO3Chapters = false
             return
         }
-        let generation = auth.sessionGeneration
-        isLoadingAO3Chapters = true
-        ao3ChaptersError = nil
+        ao3ChapterLoadID += 1
+        let loadID = ao3ChapterLoadID
+        let session = auth.sessionGeneration
+        let cache = StudioAO3LoadCache.shared
+        if let cached = cache.chapters(workID: ao3WorkID, session: session) {
+            ao3Chapters = cached.chapters
+            ao3ChaptersError = cached.chapters.isEmpty ? cached.error : nil
+            if !force && !StudioAO3Freshness.isStale(cached.loadedAt) {
+                isLoadingAO3Chapters = false
+                return
+            }
+        }
+        guard loadID == ao3ChapterLoadID else { return }
+        isLoadingAO3Chapters = ao3Chapters.isEmpty
         do {
             let request = try auth.authenticatedRequest(for: AO3Client.chapterIndexURL(workID: ao3WorkID))
             let loaded = try await AO3Client.shared.chapterIndex(workID: ao3WorkID, request: request)
-            guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
-            ao3Chapters = loaded
-        } catch {
-            guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
-            if ao3Chapters.isEmpty {
-                ao3ChaptersError = UserFacingError.message(for: error)
+            guard loadID == ao3ChapterLoadID, !Task.isCancelled, session == auth.sessionGeneration else {
+                if loadID == ao3ChapterLoadID { isLoadingAO3Chapters = false }
+                return
             }
+            ao3Chapters = loaded
+            ao3ChaptersError = nil
+            cache.storeChapters(
+                workID: ao3WorkID,
+                session: session,
+                chapters: loaded,
+                error: nil,
+                loadedAt: Date()
+            )
+        } catch {
+            guard loadID == ao3ChapterLoadID, !Task.isCancelled, session == auth.sessionGeneration else {
+                if loadID == ao3ChapterLoadID { isLoadingAO3Chapters = false }
+                return
+            }
+            let message = UserFacingError.message(for: error)
+            if ao3Chapters.isEmpty {
+                ao3ChaptersError = message
+            }
+            cache.storeChapters(
+                workID: ao3WorkID,
+                session: session,
+                chapters: ao3Chapters.isEmpty ? [] : nil,
+                error: ao3Chapters.isEmpty ? message : nil,
+                loadedAt: Date()
+            )
         }
         isLoadingAO3Chapters = false
     }
@@ -322,46 +378,33 @@ extension StudioWorkFilesView {
     }
 
     func addChapter() async {
-        if let localWorkID = localWork?.id {
-            do {
-                let created = try await store.addChapter(workID: localWorkID, title: "")
+        do {
+            let outcome = try await StudioAddChapterPlanner.perform(
+                work: currentWork,
+                isSignedIn: auth.isLoggedIn,
+                store: store,
+                ao3ChapterCount: mergedChapters.count
+            )
+            switch outcome {
+            case let .openedLocal(workID, chapterID, workTitle):
+                if localWork?.id != workID {
+                    localWork = try await store.openWork(workID)
+                }
                 await reloadLocal()
                 onChanged()
                 activeChapterRoute = LocalChapterOpenRoute(
-                    workID: localWorkID,
-                    chapterID: created.id,
-                    workTitle: currentWork.title
+                    workID: workID,
+                    chapterID: chapterID,
+                    workTitle: workTitle
                 )
-            } catch {
-                errorMessage = UserFacingError.message(for: error)
+            case let .openAO3(workID, workTitle, chapterCount):
+                activeAO3ChapterRoute = AO3ChapterOpenRoute(
+                    workID: workID,
+                    workTitle: workTitle,
+                    chapterID: nil,
+                    chapterCount: chapterCount
+                )
             }
-            return
-        }
-
-        if let ao3WorkID = currentWork.ao3WorkID, currentWork.isPostedOnAO3, auth.isLoggedIn {
-            activeAO3ChapterRoute = AO3ChapterOpenRoute(
-                workID: ao3WorkID,
-                workTitle: currentWork.title,
-                chapterID: nil,
-                chapterCount: mergedChapters.count
-            )
-            return
-        }
-
-        do {
-            let createdWork = try await store.createWork(
-                title: currentWork.title,
-                ao3WorkID: currentWork.ao3WorkID
-            )
-            let createdChapter = try await store.addChapter(workID: createdWork.id, title: "")
-            localWork = createdWork
-            await reloadLocal()
-            onChanged()
-            activeChapterRoute = LocalChapterOpenRoute(
-                workID: createdWork.id,
-                chapterID: createdChapter.id,
-                workTitle: createdWork.title
-            )
         } catch {
             errorMessage = UserFacingError.message(for: error)
         }
@@ -488,6 +531,13 @@ extension StudioWorkFilesView {
     }
 
     private func createCompanionLocalWork() async throws -> UUID {
+        if let existing = StudioAddChapterPlanner.existingLocalWorkID(
+            ao3WorkID: currentWork.ao3WorkID,
+            in: try await store.listWorks()
+        ) {
+            localWork = try await store.openWork(existing)
+            return existing
+        }
         let created = try await store.createWork(
             title: currentWork.title,
             ao3WorkID: currentWork.ao3WorkID

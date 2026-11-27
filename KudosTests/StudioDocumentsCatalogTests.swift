@@ -323,4 +323,128 @@ struct StudioDocumentsCatalogTests {
         #expect(byTitle == ["Alpha", "Zeta"])
         #expect(byWords == ["Alpha", "Zeta"])
     }
+
+    @Test func renamedLinkedWorkStaysOneRowUnderTheLocalTitle() {
+        let localID = UUID()
+        let local = makeLocalWork(
+            id: localID,
+            title: "Harbour Name",
+            ao3WorkID: 101,
+            chapters: [makeChapter(title: "One")]
+        )
+        let snapshot = StudioDocumentsCatalog.build(
+            localWorks: [local],
+            ao3PostedWorks: [makeAO3Work(id: 101, title: "AO3 Name")],
+            ao3DraftWorks: []
+        )
+        #expect(snapshot.allWorks.count == 1)
+        let row = snapshot.allWorks[0]
+        #expect(row.title == "Harbour Name")
+        #expect(row.id == "local:\(localID.uuidString)")
+        #expect(row.ao3PostedWork?.id == 101)
+    }
+
+    @Test func linkedLocalMissingFromAO3ListsStaysOneRow() {
+        let local = makeLocalWork(
+            title: "Kept",
+            ao3WorkID: 55,
+            chapters: [makeChapter(title: "One", status: .posted)]
+        )
+        let snapshot = StudioDocumentsCatalog.build(
+            localWorks: [local],
+            ao3PostedWorks: [],
+            ao3DraftWorks: []
+        )
+        #expect(snapshot.allWorks.count == 1)
+        let row = snapshot.allWorks[0]
+        #expect(row.localWork?.id == local.work.id)
+        #expect(row.ao3PostedWork == nil)
+        #expect(row.ao3DraftWork == nil)
+    }
+
+    @Test func twoLocalsSharingAnAO3IDStayDistinctRows() {
+        let first = makeLocalWork(
+            title: "First Copy",
+            ao3WorkID: 7,
+            chapters: [makeChapter(title: "A")]
+        )
+        let second = makeLocalWork(
+            title: "Second Copy",
+            ao3WorkID: 7,
+            chapters: [makeChapter(title: "B")]
+        )
+        let snapshot = StudioDocumentsCatalog.build(
+            localWorks: [first, second],
+            ao3PostedWorks: [makeAO3Work(id: 7, title: "On AO3")],
+            ao3DraftWorks: []
+        )
+        let ids = Set(snapshot.allWorks.map(\.id))
+        let postedIDs = snapshot.allWorks.compactMap { $0.ao3PostedWork?.id }
+        #expect(snapshot.allWorks.count == 2)
+        #expect(ids.count == 2)
+        #expect(postedIDs == [7, 7])
+    }
+}
+
+struct StudioAO3FreshnessTests {
+    @Test func windowMatchesTheWritingTabRule() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let fresh = StudioAO3Freshness.isStale(now.addingTimeInterval(-14 * 60), now: now)
+        let stale = StudioAO3Freshness.isStale(now.addingTimeInterval(-15 * 60), now: now)
+        let backwards = StudioAO3Freshness.isStale(now.addingTimeInterval(60), now: now)
+        #expect(StudioAO3Freshness.freshFor == 15 * 60)
+        #expect(StudioAO3Freshness.isStale(nil, now: now))
+        #expect(!fresh)
+        #expect(stale)
+        #expect(backwards)
+    }
+}
+
+@MainActor
+struct StudioAO3LoadCacheTests {
+    @Test func anotherSessionIsHiddenAndAFailedStoreKeepsWorks() {
+        let cache = StudioAO3LoadCache()
+        let work = makeAO3Work(id: 9, title: "Kept")
+        let loadedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        cache.storeDocuments(
+            session: 1,
+            username: "ada",
+            posted: [work],
+            drafts: nil,
+            draftsLoaded: true,
+            error: nil,
+            loadedAt: loadedAt
+        )
+        let otherSession = cache.documents(session: 2, username: "ada")
+        let otherUser = cache.documents(session: 1, username: "bea")
+        #expect(otherSession == nil)
+        #expect(otherUser == nil)
+        let readable = cache.documents(session: 1, username: "ADA")
+        let ids = readable?.posted.map(\.id)
+        #expect(ids == [9])
+        let stillStale = StudioAO3Freshness.isStale(readable?.loadedAt, now: loadedAt.addingTimeInterval(16 * 60))
+        #expect(stillStale)
+
+        cache.storeDocuments(
+            session: 1,
+            username: "ada",
+            posted: nil,
+            drafts: nil,
+            draftsLoaded: false,
+            error: "offline",
+            loadedAt: loadedAt.addingTimeInterval(20 * 60)
+        )
+        let afterFailure = cache.documents(session: 1, username: "ada")
+        let keptIDs = afterFailure?.posted.map(\.id)
+        #expect(keptIDs == [9])
+        #expect(afterFailure?.error == "offline")
+
+        let chapter = AO3ChapterRef(id: 3, position: 1, title: "One", dateText: "2026-01-01")
+        cache.storeChapters(workID: 9, session: 1, chapters: [chapter], error: nil, loadedAt: loadedAt)
+        cache.storeChapters(workID: 9, session: 1, chapters: nil, error: nil, loadedAt: loadedAt)
+        let keptChapters = cache.chapters(workID: 9, session: 1)?.chapters.map(\.id)
+        let otherSessionChapters = cache.chapters(workID: 9, session: 2)
+        #expect(keptChapters == [3])
+        #expect(otherSessionChapters == nil)
+    }
 }

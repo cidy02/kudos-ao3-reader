@@ -51,7 +51,9 @@ nonisolated enum StudioDocumentsCatalog {
             if let ao3ID, posted != nil || draft != nil {
                 consumedAO3IDs.insert(ao3ID)
             }
-            let itemID = ao3ID.map { "ao3:\($0)" } ?? "local:\(snapshot.work.id.uuidString)"
+            // A local folder keeps its own id. Two locals linked to the same AO3
+            // work must not share an identity, or selecting one selects both.
+            let itemID = "local:\(snapshot.work.id.uuidString)"
             merged.append(StudioWorkItem(
                 id: itemID,
                 localWork: snapshot.work,

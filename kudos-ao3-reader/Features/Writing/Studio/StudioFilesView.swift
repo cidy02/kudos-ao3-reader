@@ -13,6 +13,7 @@ struct StudioFilesView: View {
     let sort: StudioFilesSort
     let isLoadingAO3: Bool
     var onChanged: () -> Void = {}
+    var onAO3Write: () -> Void = {}
     var onOpenImported: (StudioImportedDocument) -> Void = { _ in }
 
     @Environment(AO3AuthService.self) private var auth
@@ -48,7 +49,7 @@ struct StudioFilesView: View {
         .sheet(isPresented: $showingURLImporter) {
             ImportWorkView(
                 onOpenDraft: { workID in
-                    onChanged()
+                    onAO3Write()
                     importedAO3DraftID = workID
                 },
                 onOpenWork: { workID in
@@ -58,7 +59,7 @@ struct StudioFilesView: View {
         }
         .navigationDestination(item: $importedAO3DraftID) { workID in
             WritingWorkDestination(workID: workID) {
-                onChanged()
+                onAO3Write()
             }
         }
         .alert(
@@ -223,7 +224,12 @@ struct StudioFilesView: View {
             : "\(item.title), \(meta), \(badgeSummary)"
 
         return NavigationLink {
-            StudioWorkFilesView(work: item, store: store, onChanged: onChanged)
+            StudioWorkFilesView(
+                work: item,
+                store: store,
+                onChanged: onChanged,
+                onAO3Write: onAO3Write
+            )
         } label: {
             HStack(spacing: 12) {
                 folderIconTile(for: item)

@@ -67,8 +67,13 @@ private func makeSelectWork(
         )
     }
 
-    let id = (postedID ?? draftID).map { "ao3:\($0)" }
-        ?? "local:\((localWork?.id ?? UUID()).uuidString)"
+    let id = if let localWork {
+        "local:\(localWork.id.uuidString)"
+    } else if let remoteID = postedID ?? draftID {
+        "ao3:\(remoteID)"
+    } else {
+        "local:\(UUID().uuidString)"
+    }
     return StudioWorkItem(
         id: id,
         localWork: localWork,
@@ -206,6 +211,37 @@ struct StudioDocumentsImportTests {
                 #expect(!allowed.contains(docx))
             }
         }
+    }
+
+    @Test func windows1252SmartQuotesDecodeAndRemoteImagesStayOut() throws {
+        let quotes = Data([0x93, 0x48, 0x69, 0x94])
+        let text = try StudioDocumentImporter.decodeText(quotes)
+        #expect(text.contains("\u{201C}"))
+        #expect(text.contains("Hi"))
+        #expect(text.contains("\u{201D}"))
+        #expect(!text.contains("\u{0093}"))
+
+        let html = """
+        <html><head><title>T</title></head><body><p>Hello</p>\
+        <div style="background-image:url(https://evil.example/a.png)">x</div>\
+        <img src="https://evil.example/b.png" alt="pic"></body></html>
+        """
+        let converted = try StudioDocumentImporter.convertToHTML(
+            text: html,
+            format: .html,
+            fallbackTitle: "T"
+        )
+        #expect(converted.bodyHTML.contains("Hello"))
+        #expect(!converted.bodyHTML.localizedCaseInsensitiveContains("evil.example"))
+
+        let markdown = "See ![cover](https://evil.example/a.png) please."
+        let rendered = try StudioDocumentImporter.convertToHTML(
+            text: markdown,
+            format: .markdown,
+            fallbackTitle: "Note"
+        )
+        #expect(rendered.bodyHTML.contains("cover"))
+        #expect(!rendered.bodyHTML.localizedCaseInsensitiveContains("evil.example"))
     }
 }
 
@@ -397,14 +433,69 @@ struct StudioSelectPolicyTests {
         }
     }
 
-    @Test func signedOutBlocksAO3EditOrphanAndDelete() {
+    @Test func signedOutCanTrashLocalCopyButNotTheAO3Work() throws {
         let posted = makeSelectWork(title: "Posted", postedID: 10, hasLocal: true)
+        let localID = try #require(posted.localWork?.id)
 
         let caps = StudioSelectPolicy.evaluate(selected: [posted], isSignedIn: false)
         #expect(!caps.canEditTogether)
         #expect(!caps.canOrphan)
-        #expect(!caps.canDelete)
+        #expect(caps.canDelete)
         #expect(caps.canExport)
+        #expect(caps.deleteAO3WorkIDs.isEmpty)
+        #expect(caps.deleteLocalWorkIDs == [localID])
+        #expect(caps.deleteTitles == ["Posted"])
+    }
+
+    @Test func signedOutAO3OnlySelectionCannotDelete() {
+        let remote = makeSelectWork(title: "Remote Only", postedID: 3, hasLocal: false)
+        let caps = StudioSelectPolicy.evaluate(selected: [remote], isSignedIn: false)
+        #expect(!caps.canEditTogether)
+        #expect(!caps.canOrphan)
+        #expect(!caps.canDelete)
+        #expect(caps.deleteAO3WorkIDs.isEmpty)
+        #expect(caps.deleteLocalWorkIDs.isEmpty)
+        #expect(caps.deleteTitles.isEmpty)
+    }
+
+    @Test func signedOutMixedSelectionDeletesOnlyTheLocalCopy() throws {
+        let onDevice = makeSelectWork(title: "On Device", postedID: 10, hasLocal: true)
+        let remote = makeSelectWork(title: "AO3 Only", postedID: 11, hasLocal: false)
+        let localID = try #require(onDevice.localWork?.id)
+
+        let caps = StudioSelectPolicy.evaluate(selected: [onDevice, remote], isSignedIn: false)
+        #expect(caps.canDelete)
+        #expect(caps.deleteAO3WorkIDs.isEmpty)
+        #expect(caps.deleteLocalWorkIDs == [localID])
+        #expect(caps.deleteTitles == ["On Device"])
+        let pending = StudioPendingDelete(
+            ao3WorkIDs: caps.deleteAO3WorkIDs,
+            localWorkIDs: caps.deleteLocalWorkIDs,
+            titles: caps.deleteTitles,
+            generation: 4
+        )
+        #expect(pending.titleText == "Move 1 work to Recently Deleted?")
+        let message = pending.message(deviceName: "iPhone")
+        #expect(message.contains("On Device"))
+        #expect(!message.contains("AO3 Only"))
+        #expect(message.contains("Recently Deleted"))
+    }
+
+    @Test func deleteIgnoresUnselectedWorksAndDuplicateAO3IDs() throws {
+        let first = makeSelectWork(title: "First", postedID: 9, hasLocal: true)
+        let second = makeSelectWork(title: "Second", postedID: 9, hasLocal: true)
+        let unselected = makeSelectWork(title: "Leave Me", postedID: 8, hasLocal: true)
+        let firstID = try #require(first.localWork?.id)
+        let secondID = try #require(second.localWork?.id)
+        let unselectedID = try #require(unselected.localWork?.id)
+
+        let caps = StudioSelectPolicy.evaluate(selected: [first, second], isSignedIn: true)
+        #expect(caps.deleteAO3WorkIDs == [9])
+        #expect(caps.editTogetherWorkIDs == [9])
+        #expect(caps.deleteLocalWorkIDs == [firstID, secondID])
+        #expect(!caps.deleteLocalWorkIDs.contains(unselectedID))
+        #expect(caps.deleteTitles == ["First", "Second"])
+        #expect(first.id != second.id)
     }
 
     @Test func orphanDisablesAbove100PostedWorks() {
@@ -447,5 +538,96 @@ struct StudioSelectPolicyTests {
         #expect(html.contains("<h2>1. Chapter One</h2>"))
         #expect(html.contains("<p>Hello world</p>"))
         #expect(StudioWorkExporter.defaultFilename(for: [work]) == "Salt & Light.html")
+    }
+}
+
+struct StudioAddChapterPlannerTests {
+    @Test func postedWithoutLocalOpensAO3WhenSignedIn() {
+        let item = makeSelectWork(title: "Posted", postedID: 4, hasLocal: false)
+        let target = StudioAddChapterPlanner.target(
+            work: item,
+            isSignedIn: true,
+            existingLocalWorkID: nil
+        )
+        #expect(target == .ao3NewChapter(workID: 4))
+    }
+
+    @Test func signedOutPostedCreatesALocalCopy() {
+        let item = makeSelectWork(title: "Posted", postedID: 4, hasLocal: false)
+        let target = StudioAddChapterPlanner.target(
+            work: item,
+            isSignedIn: false,
+            existingLocalWorkID: nil
+        )
+        #expect(target == .createLocal(ao3WorkID: 4, title: "Posted"))
+    }
+
+    @Test func existingLocalLinkWinsOverANewFolder() {
+        let existing = UUID()
+        let item = makeSelectWork(title: "Draft", draftID: 4, hasLocal: false)
+        let target = StudioAddChapterPlanner.target(
+            work: item,
+            isSignedIn: true,
+            existingLocalWorkID: existing
+        )
+        #expect(target == .localChapter(workID: existing))
+    }
+
+    @Test func localOnTheItemWinsOverAnotherFolder() throws {
+        let item = makeSelectWork(title: "Both", postedID: 4, hasLocal: true)
+        let localID = try #require(item.localWork?.id)
+        let target = StudioAddChapterPlanner.target(
+            work: item,
+            isSignedIn: true,
+            existingLocalWorkID: UUID()
+        )
+        #expect(target == .localChapter(workID: localID))
+    }
+
+    @Test func performReusesTheNewestLocalWorkWithTheSameAO3ID() async throws {
+        try await withTempStudioStore { store, clock, _ in
+            _ = try await store.createWork(title: "Older", ao3WorkID: 42)
+            clock.advance(days: 1)
+            let newer = try await store.createWork(title: "Newer", ao3WorkID: 42)
+            let item = makeSelectWork(title: "AO3 Draft", draftID: 42, hasLocal: false)
+            let outcome = try await StudioAddChapterPlanner.perform(
+                work: item,
+                isSignedIn: true,
+                store: store,
+                ao3ChapterCount: nil
+            )
+            let openedID: UUID?
+            if case let .openedLocal(workID, _, _) = outcome {
+                openedID = workID
+            } else {
+                openedID = nil
+            }
+            let works = try await store.listWorks()
+            let count = works.count
+            #expect(openedID == newer.id)
+            #expect(count == 2)
+        }
+    }
+
+    @Test func performDoesNotCreateALocalWorkForASignedInPostedWork() async throws {
+        try await withTempStudioStore { store, _, _ in
+            let item = makeSelectWork(title: "Posted", postedID: 7, hasLocal: false)
+            let outcome = try await StudioAddChapterPlanner.perform(
+                work: item,
+                isSignedIn: true,
+                store: store,
+                ao3ChapterCount: 3
+            )
+            let openedAO3: Int?
+            if case let .openAO3(workID, _, _) = outcome {
+                openedAO3 = workID
+            } else {
+                openedAO3 = nil
+            }
+            let works = try await store.listWorks()
+            let count = works.count
+            #expect(openedAO3 == 7)
+            #expect(count == 0)
+        }
     }
 }

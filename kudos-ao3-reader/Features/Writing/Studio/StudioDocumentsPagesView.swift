@@ -13,6 +13,7 @@ struct StudioDocumentsPagesView: View {
     let ao3Error: String?
     var onRetryAO3: () -> Void = {}
     var onChanged: () -> Void = {}
+    var onAO3Write: () -> Void = {}
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
@@ -90,7 +91,7 @@ struct StudioDocumentsPagesView: View {
                 chapterID: nil,
                 chapterCount: route.chapterCount
             ) {
-                onChanged()
+                onAO3Write()
             }
         }
         .alert(
@@ -259,7 +260,7 @@ struct StudioDocumentsPagesView: View {
         case let .ao3Draft(workID):
             if auth.isLoggedIn {
                 NavigationLink {
-                    WritingWorkDestination(workID: workID) { onChanged() }
+                    WritingWorkDestination(workID: workID) { onAO3Write() }
                 } label: {
                     cardLabel
                 }
@@ -276,7 +277,12 @@ struct StudioDocumentsPagesView: View {
         case .ao3PostedWork:
             if let workItem = snapshot.allWorks.first(where: { $0.id == item.workItemID }) {
                 NavigationLink {
-                    StudioWorkFilesView(work: workItem, store: store, onChanged: onChanged)
+                    StudioWorkFilesView(
+                        work: workItem,
+                        store: store,
+                        onChanged: onChanged,
+                        onAO3Write: onAO3Write
+                    )
                 } label: {
                     cardLabel
                 }
@@ -304,6 +310,7 @@ struct StudioDocumentsPagesView: View {
                     work: featured,
                     store: store,
                     onChanged: onChanged,
+                    onAO3Write: onAO3Write,
                     onAddChapter: { Task { await addChapter(to: featured) } }
                 )
             }
@@ -312,7 +319,12 @@ struct StudioDocumentsPagesView: View {
             if !remaining.isEmpty {
                 VStack(spacing: 0) {
                     ForEach(Array(remaining.enumerated()), id: \.element.id) { index, work in
-                        StudioManuscriptListRow(work: work, store: store, onChanged: onChanged)
+                        StudioManuscriptListRow(
+                            work: work,
+                            store: store,
+                            onChanged: onChanged,
+                            onAO3Write: onAO3Write
+                        )
                         if index < remaining.count - 1 {
                             SubjectRowSeparator(inset: 14)
                         }
@@ -396,42 +408,28 @@ struct StudioDocumentsPagesView: View {
     }
 
     private func addChapter(to work: StudioWorkItem) async {
-        if let localWork = work.localWork {
-            do {
-                let chapter = try await store.addChapter(workID: localWork.id, title: "")
+        do {
+            let outcome = try await StudioAddChapterPlanner.perform(
+                work: work,
+                isSignedIn: auth.isLoggedIn,
+                store: store,
+                ao3ChapterCount: work.chapterCountForDisplay
+            )
+            switch outcome {
+            case let .openedLocal(workID, chapterID, workTitle):
                 onChanged()
                 addedChapterRoute = AddedChapterRoute(
-                    workID: localWork.id,
-                    chapterID: chapter.id,
-                    workTitle: work.title
+                    workID: workID,
+                    chapterID: chapterID,
+                    workTitle: workTitle
                 )
-            } catch {
-                actionError = UserFacingError.message(for: error)
+            case let .openAO3(workID, workTitle, chapterCount):
+                addedAO3ChapterRoute = AddedAO3ChapterRoute(
+                    workID: workID,
+                    workTitle: workTitle,
+                    chapterCount: chapterCount
+                )
             }
-            return
-        }
-
-        if let ao3WorkID = work.ao3WorkID, work.isPostedOnAO3, auth.isLoggedIn {
-            addedAO3ChapterRoute = AddedAO3ChapterRoute(
-                workID: ao3WorkID,
-                workTitle: work.title,
-                chapterCount: work.chapterCountForDisplay
-            )
-            return
-        }
-
-        do {
-            let createdWork = try await store.createWork(
-                title: work.title,
-                ao3WorkID: work.ao3WorkID
-            )
-            let chapter = try await store.addChapter(workID: createdWork.id, title: "")
-            onChanged()
-            addedChapterRoute = AddedChapterRoute(
-                workID: createdWork.id,
-                chapterID: chapter.id,
-                workTitle: createdWork.title
-            )
         } catch {
             actionError = UserFacingError.message(for: error)
         }

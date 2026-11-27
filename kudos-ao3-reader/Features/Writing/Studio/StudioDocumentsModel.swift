@@ -367,3 +367,178 @@ nonisolated struct StudioRecentDocumentItem: Identifiable, Equatable, Hashable, 
     let editedAt: Date
     let target: Target
 }
+
+/// Same 15-minute window as `WritingView.isStale`. Duplicated here because that
+/// helper is not on this branch; a later merge can call the shared one.
+nonisolated enum StudioAO3Freshness {
+    static let freshFor: TimeInterval = 15 * 60
+
+    static func isStale(_ lastLoad: Date?, now: Date = Date()) -> Bool {
+        guard let lastLoad else { return true }
+        return now.timeIntervalSince(lastLoad) >= freshFor || now < lastLoad
+    }
+}
+
+/// Process cache so leaving Documents (S1 destroys the view) or opening a work
+/// does not hit AO3 again while the last load is still fresh.
+@MainActor
+final class StudioAO3LoadCache {
+    static let shared = StudioAO3LoadCache()
+
+    struct DocumentsEntry {
+        var sessionGeneration: Int
+        var username: String
+        var posted: [AO3WorkSummary]
+        var drafts: AO3DraftsPage?
+        var loadedAt: Date
+        var error: String?
+    }
+
+    struct ChaptersEntry {
+        var sessionGeneration: Int
+        var chapters: [AO3ChapterRef]
+        var loadedAt: Date
+        var error: String?
+    }
+
+    private var documentsEntry: DocumentsEntry?
+    private var chapterEntries: [String: ChaptersEntry] = [:]
+
+    func documents(session: Int, username: String) -> DocumentsEntry? {
+        guard let documentsEntry,
+              documentsEntry.sessionGeneration == session,
+              documentsEntry.username.localizedCaseInsensitiveCompare(username) == .orderedSame
+        else { return nil }
+        return documentsEntry
+    }
+
+    /// `posted == nil` keeps the previous successful list. `draftsLoaded == false`
+    /// keeps the previous drafts page. A failed reload must not blank what is shown.
+    func storeDocuments(
+        session: Int,
+        username: String,
+        posted: [AO3WorkSummary]?,
+        drafts: AO3DraftsPage?,
+        draftsLoaded: Bool,
+        error: String?,
+        loadedAt: Date
+    ) {
+        let previous = documents(session: session, username: username)
+        documentsEntry = DocumentsEntry(
+            sessionGeneration: session,
+            username: username,
+            posted: posted ?? previous?.posted ?? [],
+            drafts: draftsLoaded ? drafts : previous?.drafts,
+            loadedAt: loadedAt,
+            error: error
+        )
+    }
+
+    func chapters(workID: Int, session: Int) -> ChaptersEntry? {
+        chapterEntries["\(session)|\(workID)"]
+    }
+
+    /// `chapters == nil` keeps the previous index.
+    func storeChapters(
+        workID: Int,
+        session: Int,
+        chapters: [AO3ChapterRef]?,
+        error: String?,
+        loadedAt: Date
+    ) {
+        let key = "\(session)|\(workID)"
+        let previous = chapterEntries[key]
+        chapterEntries[key] = ChaptersEntry(
+            sessionGeneration: session,
+            chapters: chapters ?? previous?.chapters ?? [],
+            loadedAt: loadedAt,
+            error: error
+        )
+    }
+
+    func clear() {
+        documentsEntry = nil
+        chapterEntries.removeAll()
+    }
+}
+
+/// Where Add Chapter should land. Looks up an existing local work before creating
+/// another folder for the same `ao3WorkID`.
+nonisolated enum StudioAddChapterTarget: Equatable, Sendable {
+    case localChapter(workID: UUID)
+    case ao3NewChapter(workID: Int)
+    case createLocal(ao3WorkID: Int?, title: String)
+}
+
+nonisolated enum StudioAddChapterOutcome: Equatable, Sendable {
+    case openedLocal(workID: UUID, chapterID: UUID, workTitle: String)
+    case openAO3(workID: Int, workTitle: String, chapterCount: Int?)
+}
+
+nonisolated enum StudioAddChapterPlanner {
+    static func target(
+        work: StudioWorkItem,
+        isSignedIn: Bool,
+        existingLocalWorkID: UUID?
+    ) -> StudioAddChapterTarget {
+        if let localID = work.localWork?.id {
+            return .localChapter(workID: localID)
+        }
+        if let existingLocalWorkID {
+            return .localChapter(workID: existingLocalWorkID)
+        }
+        if let ao3WorkID = work.ao3WorkID, work.isPostedOnAO3, isSignedIn {
+            return .ao3NewChapter(workID: ao3WorkID)
+        }
+        return .createLocal(ao3WorkID: work.ao3WorkID, title: work.title)
+    }
+
+    /// Newest local folder already linked to this AO3 work, if one exists.
+    static func existingLocalWorkID(ao3WorkID: Int?, in works: [WritingWork]) -> UUID? {
+        guard let ao3WorkID else { return nil }
+        return works
+            .filter { $0.ao3WorkID == ao3WorkID }
+            .max { lhs, rhs in
+                if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt < rhs.updatedAt }
+                return lhs.id.uuidString > rhs.id.uuidString
+            }?
+            .id
+    }
+
+    static func perform(
+        work: StudioWorkItem,
+        isSignedIn: Bool,
+        store: WritingDocumentStore,
+        ao3ChapterCount: Int?
+    ) async throws -> StudioAddChapterOutcome {
+        let existing: UUID?
+        if work.localWork == nil, work.ao3WorkID != nil {
+            existing = existingLocalWorkID(
+                ao3WorkID: work.ao3WorkID,
+                in: try await store.listWorks()
+            )
+        } else {
+            existing = nil
+        }
+        switch target(work: work, isSignedIn: isSignedIn, existingLocalWorkID: existing) {
+        case let .localChapter(workID):
+            let chapter = try await store.addChapter(workID: workID, title: "")
+            let title = work.localWork?.title ?? work.title
+            return .openedLocal(workID: workID, chapterID: chapter.id, workTitle: title)
+        case let .ao3NewChapter(workID):
+            return .openAO3(
+                workID: workID,
+                workTitle: work.title,
+                chapterCount: ao3ChapterCount ?? work.chapterCountForDisplay
+            )
+        case let .createLocal(ao3WorkID, title):
+            let created = try await store.createWork(title: title, ao3WorkID: ao3WorkID)
+            let chapter = try await store.addChapter(workID: created.id, title: "")
+            return .openedLocal(
+                workID: created.id,
+                chapterID: chapter.id,
+                workTitle: created.title
+            )
+        }
+    }
+}
