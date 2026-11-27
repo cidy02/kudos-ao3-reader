@@ -148,7 +148,11 @@ struct StudioWorkFilesView: View {
         }
         .navigationDestination(isPresented: $showingWorkDetails) {
             if let ao3WorkID = currentWork.ao3WorkID {
-                WritingWorkDestination(workID: ao3WorkID) {
+                StudioWorkDetailsDestination(
+                    workID: ao3WorkID,
+                    workTitle: currentWork.title,
+                    subtitleText: currentWork.manuscriptStateLine(deviceName: ThisDevice.name)
+                ) {
                     onAO3Write()
                     Task { await loadAO3Chapters(force: true) }
                 }

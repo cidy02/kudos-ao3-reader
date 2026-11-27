@@ -207,10 +207,7 @@ struct ReadiumReaderView: View {
     /// Logged reading time for the end card, read once on arrival at the end
     /// (never fetched while the card renders).
     @State private var endCardDuration: Double = 0
-    /// The end-of-chapter card's author's note, read from the EPUB when a chapter's last page
-    /// arrives; keyed by spine index so a stale read never shows under another chapter.
-    @State private var chapterEndNotes: [Int: String?] = [:]
-    /// Chapter whose number the Comments sheet should open on (the chapter-end card's button),
+    /// Chapter whose number the Comments sheet should open on (the in-chapter end card's link),
     /// instead of the leading resource's chapter.
     @State private var commentsChapterOverride: Int?
     /// Drives the caught-up card's Subscribe (the same handler Work Detail's menu uses).
@@ -382,14 +379,6 @@ struct ReadiumReaderView: View {
                 if atEnd {
                     endCardDuration = ReadingLogService.currentTotalDuration(of: work.id, in: modelContext)
                 }
-            }
-            // Read only while the card is showing, and keyed by chapter: a slower read for an
-            // earlier chapter can neither overwrite nor cancel this chapter's note.
-            .task(id: chapterEndNoteKey) {
-                guard let spineIndex = chapterEndNoteKey, chapterEndNotes[spineIndex] == nil else { return }
-                let text = await book.endNote(forSpineIndex: spineIndex)
-                guard !Task.isCancelled else { return }
-                chapterEndNotes[spineIndex] = .some(text)
             }
             .onChange(of: showingComments) { _, showing in
                 if !showing { commentsChapterOverride = nil }
@@ -1120,6 +1109,7 @@ struct ReadiumReaderView: View {
         book.renderedLineHeightPoints = textStyle.fontSizePt * textStyle.lineHeight
         book.renderedPageMarginPoints = max(0, textStyle.margin)
         let changed = book.submit(preferences)
+        book.updateChapterEndAccent(chapterEndStyle)
         // Page turn is an EPUB preference (`pageTransition`) and also the
         // adapter's animated flag. Submit carries the style. Refresh keeps
         // edge taps in step when only the flag changes (Reduce Motion, or
@@ -1371,18 +1361,10 @@ struct ReadiumReaderView: View {
                     .allowsHitTesting(chromeVisible)
                     .accessibilityHidden(!chromeVisible)
                 } else {
-                    VStack(spacing: 10) {
-                        // Last page of a chapter another follows: the card sits above the
-                        // position card, which stays mounted so the scrubber is always there
-                        // (and is never swapped out mid-drag: the card just steps aside).
-                        if let chapterEnd = book.chapterEnd, !isEditingSlider, !book.isScrubbing {
-                            chapterEndCard(chapterEnd)
-                        }
-                        positionCard(includeMiniPlayer: speechActive)
-                    }
-                    .opacity(chromeVisible ? 1 : 0)
-                    .allowsHitTesting(chromeVisible)
-                    .accessibilityHidden(!chromeVisible)
+                    positionCard(includeMiniPlayer: speechActive)
+                        .opacity(chromeVisible ? 1 : 0)
+                        .allowsHitTesting(chromeVisible)
+                        .accessibilityHidden(!chromeVisible)
                 }
             }
         }
@@ -1405,41 +1387,6 @@ struct ReadiumReaderView: View {
         .allowsHitTesting(chromeVisible || speechActive || colorBarAnnotationID != nil)
     }
 
-    private func chapterEndCard(_ end: ReaderChapterEndFacts.ChapterEnd) -> some View {
-        let total = SavedWork.totalChapterCount(from: work.chapters)
-        let nextTitle = ReaderChapterEndFacts.nextChapterTitle(
-            number: end.nextStoryChapter,
-            sectionTitle: book.sections.indices.contains(end.nextSpineIndex)
-                ? book.sections[end.nextSpineIndex].title : ""
-        )
-        let storyTotal = book.sections.filter { $0.kind == .chapter }.count
-        return ReaderChapterEndCard(
-            chapter: end.storyChapter,
-            nextChapterTitle: nextTitle,
-            nextChapterTime: ReaderChapterEndFacts.nextChapterTime(
-                chapterWordCounts: work.chapterWordCounts,
-                storyChapterTotal: storyTotal,
-                nextStoryChapter: end.nextStoryChapter
-            ),
-            endNote: chapterEndNotes[end.spineIndex] ?? nil,
-            footer: ReaderChapterEndFacts.footer(
-                chapter: end.storyChapter,
-                totalChapters: total ?? (work.isComplete ? storyTotal : nil),
-                postedChapters: work.postedChapterCount
-            ),
-            showsAO3Actions: ao3WorkID != nil,
-            kudosGiven: work.hasGivenKudos,
-            kudosEnabled: !kudosWorking && !work.hasGivenKudos,
-            maxHeight: verticalSizeClass == .compact ? 200 : 420,
-            onNextChapter: { book.go(toSpineIndex: end.nextSpineIndex) },
-            onComment: {
-                commentsChapterOverride = end.storyChapter
-                showingComments = true
-            },
-            onKudos: { if let ao3WorkID { giveKudos(workID: ao3WorkID) } }
-        )
-    }
-
     /// Subscribed state for this work under the current sign-in, or nil when not known.
     private var knownSubscribedState: Bool? {
         guard let ao3WorkID else { return nil }
@@ -1452,11 +1399,6 @@ struct ReadiumReaderView: View {
             postedChapters: work.postedChapterCount,
             epubStoryChapters: book.sections.filter { $0.kind == .chapter }.count
         )
-    }
-
-    /// The chapter whose end note to read: only while its card is up (chrome showing).
-    private var chapterEndNoteKey: Int? {
-        chromeVisible ? book.chapterEnd?.spineIndex : nil
     }
 
     private var endOfWorkCard: some View {
@@ -1826,6 +1768,17 @@ struct ReadiumReaderView: View {
             // native screen where one exists; everything else opens the in-app web view.
             router.openAO3Link(url)
         }
+        book.onChapterEndAction = { action in
+            switch action {
+            case let .comment(chapter):
+                commentsChapterOverride = chapter
+                showingComments = true
+            case .kudos:
+                if let ao3WorkID {
+                    giveKudos(workID: ao3WorkID)
+                }
+            }
+        }
         let initialLocator = initialSpineIndex == nil
             ? Locator(persistenceString: work.readiumLocator)
             : nil
@@ -1840,12 +1793,22 @@ struct ReadiumReaderView: View {
             fontFamilyDeclarations: fontFamilyDeclarations,
             readiumCSSRSProperties: ReadiumReaderStyleMapper.readingSystemProperties
         )
+        let chapterEndContext = ReaderChapterEndWorkContext(
+            chapterWordCounts: work.chapterWordCounts,
+            totalChapters: SavedWork.totalChapterCount(from: work.chapters),
+            postedChapters: work.postedChapterCount,
+            isComplete: work.isComplete,
+            showsAO3Actions: ao3WorkID != nil,
+            kudosState: ReaderChapterEndKudosState(isGiven: work.hasGivenKudos),
+            style: chapterEndStyle
+        )
         // Pose can publish while `open` is suspended and `book.navigator` is
         // still nil. That submit is a no-op, and the navigator is then built
         // from the preferences captured above. Re-submit if they moved.
         let tokenAtOpen = preferencesToken
         await book.open(fileURL: work.fileURL, initialLocator: initialLocator,
-                        fallbackSpineIndex: fallbackSpineIndex, config: config)
+                        fallbackSpineIndex: fallbackSpineIndex, config: config,
+                        chapterEnd: chapterEndContext)
         if preferencesToken != tokenAtOpen {
             applyReaderPreferences()
         }
@@ -1939,13 +1902,25 @@ extension ReadiumReaderView {
         )
     }
 
+    /// Accent fill + per-theme ink tokens for the in-chapter end-of-chapter card.
+    private var chapterEndStyle: ReaderChapterEndStyle {
+        let fill = themeManager.effectiveTint
+        return ReaderChapterEndStyle(
+            accentHex: fill.hexString,
+            accentLabelHex: ThemeManager.label(on: fill).hexString,
+            lightAccentInkHex: ReaderTheme.light.accentInk(for: fill).hexString,
+            sepiaAccentInkHex: ReaderTheme.sepia.accentInk(for: fill).hexString,
+            darkAccentInkHex: ReaderTheme.dark.accentInk(for: fill).hexString
+        )
+    }
+
     /// Re-submit preferences whenever any mapped setting changes (instant updates).
     private var preferencesToken: String {
         let effectiveTwoPage = chromeLayout.effectiveTwoPageSpread(
             enabled: twoPageEnabled, wideLayout: wideLayoutAvailable
         )
         return "\(readingMode.rawValue)|\(pageTurn.rawValue)|\(readerTheme.rawValue)|"
-            + "\(readerPageColors.backgroundHex)|\(fontID)|\(effectiveTwoPage)|"
+            + "\(readerPageColors.backgroundHex)|\(themeManager.accentHex)|\(fontID)|\(effectiveTwoPage)|"
             + "\(bookPose)|\(tabletopPose)|"
             + "\(dynamicTypeSize.isAccessibilitySize)|\(textStyle.token)"
     }
@@ -2379,6 +2354,7 @@ extension ReadiumReaderView {
                 // Reached on both "Kudos left." and the benign "already left kudos
                 // here" outcome — either way it's confirmed given, so persist it.
                 work.hasGivenKudos = true
+                book.markChapterEndKudosGiven()
                 try? modelContext.save()
                 kudosSuccesses += 1
                 AccessibilityNotification.Announcement(message).post()

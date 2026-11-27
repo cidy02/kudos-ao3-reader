@@ -99,7 +99,7 @@ struct StudioFilesView: View {
                     Text("Import a Document")
                         .font(.body.weight(.semibold))
                         .foregroundStyle(Color.primary)
-                    Text("Plain text, Markdown, or HTML, from Files")
+                    Text("Word, plain text, Markdown or HTML, from Files")
                         .font(.footnote)
                         .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
@@ -118,7 +118,7 @@ struct StudioFilesView: View {
         }
         .buttonStyle(.plain)
         .disabled(isImportingDocument)
-        .accessibilityLabel("Import a Document. Plain text, Markdown, or HTML, from Files")
+        .accessibilityLabel("Import a Document. Word, plain text, Markdown or HTML, from Files")
     }
 
     @ViewBuilder
