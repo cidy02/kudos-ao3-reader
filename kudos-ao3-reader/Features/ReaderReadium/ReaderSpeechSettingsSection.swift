@@ -15,6 +15,9 @@ struct ReaderSpeechSettingsSection: View {
     /// Pre-flight scan of the open chapter. `nil` from global Settings.
     var onScanChapter: (() async -> Result<KokoroCastPreflight.ScanResult, Error>)?
 
+    /// Open work metadata forwarded to Pronunciations. `nil` from global Settings.
+    var workContext: ReaderPronunciationCopy.WorkContext?
+
     @AppStorage(ReaderSpeechPreferences.engineKey) private var engineID = ""
     @AppStorage(ReaderSpeechPreferences.voiceIDKey) private var voiceID = ""
     @AppStorage(ReaderSpeechPreferences.voiceNameKey) private var voiceName = ""
@@ -43,8 +46,17 @@ struct ReaderSpeechSettingsSection: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accentFill) private var accentFill
     @Environment(\.accentInk) private var accentInk
+    @Environment(ThemeManager.self) private var themeManager: ThemeManager?
     /// Optional: previews and tests can host Settings without the app's controller.
     @Environment(ReaderSpeechController.self) private var appSpeech: ReaderSpeechController?
+
+    private var errorColor: SwiftUI.Color {
+        themeManager?.appTheme.errorColor ?? .red
+    }
+
+    private var successColor: SwiftUI.Color {
+        themeManager?.appTheme.statusSuccessColor ?? .green
+    }
 
     private var sortedVoices: [TTSVoice] {
         voices.sorted()
@@ -54,19 +66,17 @@ struct ReaderSpeechSettingsSection: View {
     /// without opening it. Read on each render rather than cached: the list
     /// behind it writes to disk, and a stale count is worse than a cheap read
     /// of a file that is empty for most readers.
-    private var pronunciationCountLabel: String {
-        let count = KokoroPronunciationStore().overrides().count
-        return count == 0 ? "None" : "\(count)"
+    private var pronunciationCorrectionsCount: Int {
+        KokoroPronunciationStore().overrides().count
+    }
+
+    private var pronunciationGuessedCount: Int {
+        let corrected = Set(KokoroPronunciationStore().overrides().keys)
+        return KokoroGuessedWordStore().ranked().filter { !corrected.contains($0.word) }.count
     }
 
     private var selectedVoiceLabel: String {
-        if voiceID.isEmpty {
-            return "Automatic (best available)"
-        }
-        if let voice = voices.first(where: { $0.identifier == voiceID }) {
-            return ReaderSpeechPreferences.displayName(for: voice)
-        }
-        return "Automatic (best available)"
+        ReaderSpeechSettingsCopy.voiceRowValue(activeVoiceName: activeVoice?.name, voiceID: voiceID)
     }
 
     private var activeVoice: TTSVoice? {
@@ -213,6 +223,7 @@ struct ReaderSpeechSettingsSection: View {
             }
         }
         .accessibilityElement(children: .contain)
+        .accessibilityLabel(ReaderSpeechSettingsCopy.currentVoiceAccessibilityLabel)
     }
 
     private var voiceIconTile: some View {
@@ -374,9 +385,21 @@ struct ReaderSpeechSettingsSection: View {
                         .foregroundStyle(.secondaryInk)
                         .monospacedDigit()
                 }
-                Slider(value: $rate, in: ReaderSpeechPreferences.rateRange, step: 0.05)
-                    .accessibilityLabel("Read-aloud speed")
-                    .accessibilityValue(rateLabel)
+                HStack(spacing: 12) {
+                    Text(ReaderSpeechSettingsCopy.speedMinLabel)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                        .fixedSize()
+                        .accessibilityHidden(true)
+                    Slider(value: $rate, in: ReaderSpeechPreferences.rateRange, step: 0.05)
+                        .accessibilityLabel("Speed")
+                        .accessibilityValue(rateLabel)
+                    Text(ReaderSpeechSettingsCopy.speedMaxLabel)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                        .fixedSize()
+                        .accessibilityHidden(true)
+                }
 
                 FlowLayout(spacing: 8, rowSpacing: 8) {
                     ForEach(ReaderSpeechAuditionHarness.comparisonRates, id: \.self) { candidate in
@@ -396,7 +419,7 @@ struct ReaderSpeechSettingsSection: View {
             }
             .padding(.vertical, 4)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 12) {
                     SettingsIconTile(color: Color(hex: "#B3127A") ?? .pink, systemImage: "waveform.path")
                     Text("Pitch")
@@ -405,15 +428,27 @@ struct ReaderSpeechSettingsSection: View {
                         .foregroundStyle(.secondaryInk)
                         .monospacedDigit()
                 }
-                Slider(value: $pitch, in: ReaderSpeechPreferences.pitchRange, step: 0.05)
-                    .accessibilityLabel("Read-aloud pitch")
-                    .accessibilityValue(pitchLabel)
+                HStack(spacing: 12) {
+                    Text(ReaderSpeechSettingsCopy.pitchMinLabel)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                        .fixedSize()
+                        .accessibilityHidden(true)
+                    Slider(value: $pitch, in: ReaderSpeechPreferences.pitchRange, step: 0.05)
+                        .accessibilityLabel("Pitch")
+                        .accessibilityValue(pitchLabel)
+                    Text(ReaderSpeechSettingsCopy.pitchMaxLabel)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                        .fixedSize()
+                        .accessibilityHidden(true)
+                }
             }
             .padding(.vertical, 4)
 
             Toggle(isOn: $readAuthorNotes) {
                 HStack(spacing: 12) {
-                    SettingsIconTile(color: Color(hex: "#C25E00") ?? .orange, systemImage: "text.quote")
+                    SettingsIconTile(color: Color(hex: "#C25E00") ?? .orange, systemImage: "doc.text")
                     Text("Read author's notes")
                 }
             }
@@ -434,12 +469,52 @@ struct ReaderSpeechSettingsSection: View {
             NavigationLink {
                 ReaderPronunciationSettingsView(
                     characterTags: characterTags,
-                    onScanChapter: onScanChapter
+                    onScanChapter: onScanChapter,
+                    workContext: workContext
                 )
             } label: {
                 HStack(spacing: 12) {
-                    SettingsIconTile(color: Color(hex: "#2F8F3A") ?? .green, systemImage: "character.bubble")
-                    LabeledContent("Pronunciations", value: pronunciationCountLabel)
+                    SettingsIconTile(color: Color(hex: "#2F8F3A") ?? .green, systemImage: "pencil")
+                    LabeledContent(
+                        ReaderSpeechSettingsCopy.correctionsRowTitle,
+                        value: ReaderSpeechSettingsCopy.countLabel(pronunciationCorrectionsCount)
+                    )
+                }
+            }
+
+            NavigationLink {
+                ReaderPronunciationSettingsView(
+                    characterTags: characterTags,
+                    onScanChapter: onScanChapter,
+                    workContext: workContext
+                )
+            } label: {
+                HStack(spacing: 12) {
+                    SettingsIconTile(
+                        color: Color(hex: "#E07000") ?? .orange,
+                        systemImage: "questionmark.circle"
+                    )
+                    LabeledContent(
+                        ReaderSpeechSettingsCopy.guessedWordsRowTitle,
+                        value: ReaderSpeechSettingsCopy.countLabel(pronunciationGuessedCount)
+                    )
+                }
+            }
+
+            if onScanChapter != nil {
+                NavigationLink {
+                    ReaderPronunciationSettingsView(
+                        characterTags: characterTags,
+                        onScanChapter: onScanChapter,
+                        workContext: workContext,
+                        autoStartScan: true
+                    )
+                } label: {
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#1E63C8") ?? .blue, systemImage: "magnifyingglass")
+                        Text(ReaderSpeechSettingsCopy.scanChapterRowTitle)
+                            .foregroundStyle(accentInk)
+                    }
                 }
             }
         } header: {
@@ -447,6 +522,7 @@ struct ReaderSpeechSettingsSection: View {
         }
     }
 
+    @ViewBuilder
     private var developerAndResetSection: some View {
         Section {
             NavigationLink {
@@ -460,7 +536,9 @@ struct ReaderSpeechSettingsSection: View {
                     )
                 }
             }
+        }
 
+        Section {
             Button(role: .destructive) {
                 engineID = ""
                 voiceID = ""
@@ -470,11 +548,9 @@ struct ReaderSpeechSettingsSection: View {
                 kokoroModelPackID = KokoroModelPack.defaultPack.rawValue
                 kokoroExecutionProviderID = KokoroExecutionProvider.defaultProvider.rawValue
             } label: {
-                HStack(spacing: 12) {
-                    SettingsIconTile(color: Color(hex: "#D70015") ?? .red, systemImage: "arrow.counterclockwise")
-                    Text("Reset Read Aloud")
-                        .foregroundStyle(Color(hex: "#D70015") ?? .red)
-                }
+                Text("Reset Read Aloud")
+                    .foregroundStyle(errorColor)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
         }
     }
@@ -527,24 +603,26 @@ struct ReaderSpeechSettingsSection: View {
     private var coreMLPackStatusViews: some View {
         switch kokoroInstaller.status {
         case .downloading(let progress):
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 12) {
                     SettingsIconTile(color: Color(hex: "#1E63C8") ?? .blue, systemImage: "arrow.down")
-                    Text("Downloading · \(Int(progress * 100))%")
+                    Text(ReaderSpeechSettingsCopy.downloadingStatusLabel(progress: progress))
                     Spacer()
                     Text("Core ML pack")
                         .font(.footnote)
                         .foregroundStyle(.secondaryInk)
                 }
-                ProgressView(value: progress).accentFill()
+                ProgressView(value: progress)
+                    .accentFill()
+                    .accessibilityLabel(ReaderSpeechSettingsCopy.downloadProgressAccessibilityLabel)
                 HStack {
                     Text("Runs on the Neural Engine, fully offline.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
                     Spacer()
                     Button("Cancel Download", role: .cancel) { kokoroInstaller.cancel() }
                         .font(.subheadline)
-                        .foregroundColor(.red)
+                        .foregroundStyle(errorColor)
                 }
             }
         case .installing:
@@ -555,13 +633,13 @@ struct ReaderSpeechSettingsSection: View {
                 Text("Neural Engine pack ready")
                 Spacer()
                 Image(systemName: "checkmark")
-                    .foregroundColor(.green)
+                    .foregroundStyle(successColor)
             }
         case .failed(let error):
             VStack(alignment: .leading, spacing: 8) {
                 Text(error)
                     .font(.caption)
-                    .foregroundColor(.red)
+                    .foregroundStyle(errorColor)
                 Button {
                     isShowingCoreMLDownloadConfirmation = true
                 } label: {
@@ -626,15 +704,18 @@ struct ReaderSpeechSettingsSection: View {
         switch downloadManager.status {
         case .downloading(let progress) where isBusyWithSelectedPack:
             VStack(alignment: .leading, spacing: 8) {
-                ProgressView(value: progress).accentFill()
+                ProgressView(value: progress)
+                    .accentFill()
+                    .accessibilityLabel(ReaderSpeechSettingsCopy.downloadProgressAccessibilityLabel)
                 Text(selectedKokoroModelPack.requiresInt8SupportFiles
                      ? "Downloading official FP32 model from Hugging Face… \(Int(progress * 100))%"
                      : "Downloading... \(Int(progress * 100))%")
                     .font(.caption)
-                    .foregroundColor(.secondary)
-                Button("Cancel", role: .cancel) {
+                    .foregroundStyle(.secondaryInk)
+                Button("Cancel Download", role: .cancel) {
                     downloadManager.cancel()
                 }
+                .foregroundStyle(errorColor)
             }
         case .extracting where isBusyWithSelectedPack:
             busyRow("Extracting...")
@@ -661,13 +742,13 @@ struct ReaderSpeechSettingsSection: View {
                      : "Voice Pack Downloaded")
                 Spacer()
                 Image(systemName: "checkmark")
-                    .foregroundColor(.green)
+                    .foregroundStyle(successColor)
             }
         case .failed(let error) where downloadManager.statusPack == selectedKokoroModelPack:
             VStack(alignment: .leading, spacing: 8) {
                 Text(error)
                     .font(.caption)
-                    .foregroundColor(.red)
+                    .foregroundStyle(errorColor)
                 downloadOrRetryButton(title: "Retry Download")
             }
         case .idle, .completed, .failed, .downloading, .extracting, .installing, .verifying,
@@ -862,8 +943,10 @@ struct ReaderSpeechSettingsSection: View {
             }
         )
     }
+}
 
-    private var voicePicker: some View {
+private extension ReaderSpeechSettingsSection {
+    var voicePicker: some View {
         List {
             Section {
                 voiceRow(
@@ -894,7 +977,8 @@ struct ReaderSpeechSettingsSection: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: updateVoices)
     }
-    private func voiceRow(id: String, storedName: String, title: String, subtitle: String) -> some View {
+
+    func voiceRow(id: String, storedName: String, title: String, subtitle: String) -> some View {
         Button {
             voiceID = id
             voiceName = storedName
@@ -918,7 +1002,7 @@ struct ReaderSpeechSettingsSection: View {
         .buttonStyle(.plain)
     }
 
-    private var automaticSubtitle: String {
+    var automaticSubtitle: String {
         let language = Language(code: .bcp47(Locale.current.identifier))
         if let best = ReaderSpeechPreferences.bestVoice(for: language, from: voices) {
             return "Currently \(ReaderSpeechPreferences.displayName(for: best))"
@@ -926,20 +1010,18 @@ struct ReaderSpeechSettingsSection: View {
         return "Chooses the best installed voice for this work’s language"
     }
 
-    private func voiceSubtitle(_ voice: TTSVoice) -> String {
+    func voiceSubtitle(_ voice: TTSVoice) -> String {
         let quality = ReaderSpeechPreferences.qualityLabel(for: voice.quality)
         let lang = voice.language.code.bcp47
         return "\(quality) · \(lang)"
     }
 
-    private var rateLabel: String {
-        if abs(rate - 1.0) < 0.001 { return "Default" }
-        return String(format: "%.0f%%", rate * 100)
+    var rateLabel: String {
+        ReaderSpeechSettingsCopy.speedValueLabel(rate: rate)
     }
 
-    private var pitchLabel: String {
-        if abs(pitch - 1.0) < 0.001 { return "Default" }
-        return String(format: "%.2f×", pitch)
+    var pitchLabel: String {
+        ReaderSpeechSettingsCopy.pitchValueLabel(pitch: pitch)
     }
 }
 

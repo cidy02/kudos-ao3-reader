@@ -50,7 +50,7 @@ struct ReaderChapterEndCard: View {
     }
 
     private var content: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             headingRule
             if let endNote, !endNote.isEmpty {
                 noteCard(endNote)
@@ -84,7 +84,7 @@ struct ReaderChapterEndCard: View {
 
     private func noteCard(_ note: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Author's note")
+            Text(ReaderEndCopy.authorNoteHeading)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondaryInk)
             Text(note)
@@ -178,10 +178,11 @@ struct ReaderChapterEndCard: View {
                 action: onComment
             )
             ReaderEndSecondaryButton(
-                title: kudosGiven ? "Kudos given" : "Give Kudos",
+                title: ReaderEndCopy.kudosButtonTitle(given: kudosGiven),
                 systemImage: kudosGiven ? "heart.fill" : "heart",
-                label: kudosGiven ? "Kudos given" : "Give Kudos",
+                label: ReaderEndCopy.kudosButtonTitle(given: kudosGiven),
                 isEnabled: kudosEnabled && !kudosGiven,
+                isSelected: kudosGiven,
                 action: onKudos
             )
         }

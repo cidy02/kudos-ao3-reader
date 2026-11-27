@@ -107,7 +107,7 @@ struct ReaderEndCard: View {
                 isFinished: isFinished
             ) {
                 Text(subtitle)
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(.secondaryInk)
                     .multilineTextAlignment(.center)
             }
@@ -164,7 +164,7 @@ struct ReaderEndCard: View {
             HStack(spacing: 8) {
                 Image(systemName: kudosGiven ? "heart.fill" : "heart")
                     .font(.system(size: 18, weight: .semibold))
-                Text(kudosGiven ? "Kudos given" : "Give Kudos")
+                Text(ReaderEndCopy.kudosButtonTitle(given: kudosGiven))
                     .font(.headline)
             }
             .frame(maxWidth: .infinity)
@@ -176,7 +176,7 @@ struct ReaderEndCard: View {
         .background(fill, in: SubjectMetrics.controlShape(dynamicTypeSize))
         .disabled(!kudosEnabled || kudosGiven)
         .minimumHitTarget()
-        .accessibilityLabel(kudosGiven ? "Kudos given" : "Give Kudos")
+        .accessibilityLabel(ReaderEndCopy.kudosButtonTitle(given: kudosGiven))
     }
 
     @ViewBuilder
@@ -188,16 +188,18 @@ struct ReaderEndCard: View {
         let laidOut = isAccessibility
             ? AnyLayout(VStackLayout(spacing: 10))
             : AnyLayout(HStackLayout(spacing: threeAcross ? 8 : 10))
-        let font: Font = threeAcross ? .footnote.weight(.semibold) : .subheadline.weight(.semibold)
+        let font: Font = threeAcross ? .footnote.weight(.semibold) : .callout.weight(.semibold)
 
         laidOut {
             if showsSubscribeButton {
                 ReaderEndSecondaryButton(
                     title: "Kudos",
                     systemImage: kudosGiven ? "heart.fill" : "heart",
-                    label: kudosGiven ? "Kudos given" : "Give Kudos",
+                    label: ReaderEndCopy.kudosButtonTitle(given: kudosGiven),
                     font: font,
                     isEnabled: kudosEnabled && !kudosGiven,
+                    isSelected: kudosGiven,
+                    isCompact: threeAcross,
                     action: onKudos
                 )
             } else if offersSubscribe && showsAO3Actions && isSubscribed {
@@ -208,6 +210,7 @@ struct ReaderEndCard: View {
                     font: font,
                     isEnabled: subscribeEnabled,
                     isSelected: true,
+                    isCompact: threeAcross,
                     action: onSubscribe
                 )
             }
@@ -217,6 +220,7 @@ struct ReaderEndCard: View {
                     systemImage: "bubble.left",
                     label: "Comment",
                     font: font,
+                    isCompact: threeAcross,
                     action: onComment
                 )
             }
@@ -226,6 +230,8 @@ struct ReaderEndCard: View {
                 label: isBookmarked ? "Remove bookmark" : "Add bookmark",
                 font: font,
                 isEnabled: bookmarkEnabled,
+                isSelected: isBookmarked,
+                isCompact: threeAcross,
                 action: onBookmark
             )
         }
@@ -263,7 +269,7 @@ struct ReaderEndCard: View {
                     )
                     if !meta.isEmpty {
                         Text(meta)
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundStyle(.secondaryInk)
                             .lineLimit(1)
                     }
@@ -294,28 +300,29 @@ struct ReaderEndCard: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .frame(minHeight: 36)
-            .background(Color.primary.opacity(0.06), in: SubjectMetrics.controlShape(dynamicTypeSize))
+            .background(Color.primary.opacity(0.07), in: SubjectMetrics.controlShape(dynamicTypeSize))
     }
 }
 
-/// The tinted pill under an end card's filled button (Comment, Bookmark, Subscribed, Kudos).
+/// The neutral pill under an end card's filled button (Comment, Bookmark, Subscribed, Kudos).
 /// Shared by the end-of-work and end-of-chapter cards so the two cannot drift.
 struct ReaderEndSecondaryButton: View {
     let title: String
     let systemImage: String
     let label: String
-    var font: Font = .subheadline.weight(.semibold)
+    var font: Font = .callout.weight(.semibold)
     var isEnabled: Bool = true
     var isSelected: Bool = false
+    var isCompact: Bool = false
     let action: () -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: isCompact ? 5 : 7) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: isCompact ? 17 : 18, weight: .semibold))
                 Text(title)
                     .font(font)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
@@ -326,8 +333,8 @@ struct ReaderEndSecondaryButton: View {
             .frame(minHeight: 44)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.accentInk)
-        .background(Color.primary.opacity(0.06), in: SubjectMetrics.controlShape(dynamicTypeSize))
+        .foregroundStyle(isSelected ? AnyShapeStyle(.accentInk) : AnyShapeStyle(.primary))
+        .background(Color.primary.opacity(0.07), in: SubjectMetrics.controlShape(dynamicTypeSize))
         .disabled(!isEnabled)
         .minimumHitTarget()
         .accessibilityLabel(label)

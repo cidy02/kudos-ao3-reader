@@ -27,24 +27,34 @@ struct ReaderNoteEditor: View {
             Form {
                 Group {
                     if !annotation.selectedText.isEmpty {
-                        Section("Highlighted") {
+                        Section {
                             Text(annotation.selectedText)
-                                .font(.callout)
-                                .padding(.leading, 14)
+                                .font(.system(.subheadline, design: .serif))
+                                .padding(.leading, 12)
                                 .overlay(alignment: .leading) {
                                     Capsule()
                                         .fill(annotation.displayTint)
-                                        .frame(width: 4)
+                                        .frame(width: 3)
                                         .accessibilityHidden(true)
                                 }
                                 .listRowBackground(highlightedCardBackground)
                         }
                     }
 
-                    Section("Note") {
+                    Section {
                         TextEditor(text: $draft)
                             .frame(minHeight: 120)
                             .focused($isEditorFocused)
+                            .accessibilityLabel(ReaderNoteCopy.noteFieldAccessibilityLabel)
+                    } footer: {
+                        Text(
+                            ReaderNoteCopy.footerText(
+                                isBookmark: annotation.kind == .bookmark,
+                                chapterTitle: annotation.chapterTitle
+                            )
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
                     }
 
                     Section("Colour") {
@@ -71,7 +81,7 @@ struct ReaderNoteEditor: View {
                 .appThemedRows()
             }
             .appThemedScroll()
-            .navigationTitle(annotation.hasNote ? "Edit Note" : "Add Note")
+            .navigationTitle(ReaderNoteCopy.sheetTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -90,7 +100,7 @@ struct ReaderNoteEditor: View {
                     } label: {
                         Image(systemName: "xmark")
                     }
-                    .accessibilityLabel("Cancel")
+                    .accessibilityLabel(ReaderNoteCopy.closeAccessibilityLabel)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {

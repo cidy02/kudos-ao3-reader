@@ -29,6 +29,16 @@ struct ReaderPronunciationSettingsView: View {
     /// not the engine — sherpa-onnx exposes no G2P to ask.
     var onScanChapter: (() async -> Result<KokoroCastPreflight.ScanResult, Error>)?
 
+    /// The open work's metadata banner (`Reader-Pronunciation`). Nil from global Settings.
+    var workContext: ReaderPronunciationCopy.WorkContext?
+
+    /// Starts the chapter pre-flight scan once on appear when launched from
+    /// Read Aloud's "Scan this chapter" row.
+    var autoStartScan = false
+
+    @Environment(ThemeManager.self) private var themeManager: ThemeManager?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private let store = KokoroPronunciationStore()
 
     private let guesses = KokoroGuessedWordStore()
@@ -42,6 +52,7 @@ struct ReaderPronunciationSettingsView: View {
     @State private var alertTitle = "Pasted Corrections"
     @State private var isScanning = false
     @State private var scanMessage: String?
+    @State private var didAutoScan = false
     /// Only a scan can produce these — nothing else here has the chapter text.
     @State private var recognisedNames: Set<String> = []
 
@@ -53,6 +64,10 @@ struct ReaderPronunciationSettingsView: View {
 
     var body: some View {
         List {
+            if let workContext {
+                workContextSection(workContext)
+            }
+
             if onScanChapter != nil {
                 Section {
                     Button {
@@ -76,7 +91,7 @@ struct ReaderPronunciationSettingsView: View {
             if entries.isEmpty && guessed.isEmpty {
                 Section {
                     ContentUnavailableView {
-                        Label("No corrections yet", systemImage: "character.bubble")
+                        Label(ReaderPronunciationCopy.emptyTitle, systemImage: "character.bubble")
                     } description: {
                         Text(
                             "Add a word here to fix how Read Aloud says it. "
@@ -85,25 +100,42 @@ struct ReaderPronunciationSettingsView: View {
                     }
                 }
                 .appThemedRows()
-            } else {
+            } else if !entries.isEmpty {
                 Section {
                     ForEach(entries) { entry in
                         Button {
                             editing = entry
                         } label: {
-                            LabeledContent(entry.word) {
-                                Text(entry.ipa)
-                                    .foregroundStyle(.secondaryInk)
-                                    // IPA is easier to compare character by
-                                    // character in a fixed-width face.
-                                    .monospaced()
+                            HStack(spacing: 12) {
+                                SettingsIconTile(
+                                    color: Color(hex: "#5856D6") ?? .indigo,
+                                    systemImage: "waveform"
+                                )
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(entry.word)
+                                        .font(.body)
+                                        .foregroundStyle(.primary)
+                                    Text(ReaderPronunciationCopy.saidAsSubtitle(for: entry.ipa))
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondaryInk)
+                                }
+                                Spacer(minLength: 8)
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                                    .accessibilityHidden(true)
                             }
+                            .contentShape(Rectangle())
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(
+                                ReaderPronunciationCopy.rowAccessibilityLabel(word: entry.word, ipa: entry.ipa)
+                            )
                         }
                         .buttonStyle(.plain)
                     }
                     .onDelete(perform: delete)
                 } header: {
-                    Text("Corrections")
+                    Text(ReaderPronunciationCopy.allWorksSectionTitle)
                 } footer: {
                     Text(
                         "Read Aloud checks these before its own dictionary, "
@@ -129,7 +161,7 @@ struct ReaderPronunciationSettingsView: View {
                     }
                     .onDelete(perform: dismissGuesses)
                 } header: {
-                    Text("Words I guessed at")
+                    Text(ReaderPronunciationCopy.guessedWordsSectionTitle)
                 } footer: {
                     // Say plainly what the number is, or it reads as a score.
                     Text(
@@ -139,12 +171,25 @@ struct ReaderPronunciationSettingsView: View {
                 }
                 .appThemedRows()
             }
+
+            Section {
+                Button {
+                    isAdding = true
+                } label: {
+                    Text(ReaderPronunciationCopy.addButtonTitle)
+                        .foregroundStyle(.accentInk)
+                }
+            }
+            .appThemedRows()
         }
         .appThemedScroll()
         .navigationTitle("Pronunciations")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
+                if !entries.isEmpty || !guessed.isEmpty {
+                    EditButton()
+                }
                 Menu {
                     Button { isAdding = true } label: {
                         Label("Add Pronunciation", systemImage: "plus")
@@ -184,7 +229,49 @@ struct ReaderPronunciationSettingsView: View {
         #if DEBUG
         .task { if DebugLaunchRoute.takeSheet("pronunciationedit") { isAdding = true } }
         #endif
-        .onAppear(perform: reload)
+        .onAppear {
+            reload()
+            if autoStartScan, !didAutoScan, onScanChapter != nil {
+                didAutoScan = true
+                runScan()
+            }
+        }
+    }
+
+    private func workContextSection(_ context: ReaderPronunciationCopy.WorkContext) -> some View {
+        let palette = SubjectPalette(hue: context.tintHue, theme: themeManager?.appTheme ?? .light)
+        return Section {
+            HStack(alignment: .center, spacing: 12) {
+                if !dynamicTypeSize.isAccessibilitySize {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(palette.cardWash)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(palette.rowBorder, lineWidth: 0.5)
+                        }
+                        .frame(width: 40, height: 52)
+                        .accessibilityHidden(true)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(context.kicker)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(palette.accent)
+                    Text(context.title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !context.meta.isEmpty {
+                        Text(context.meta)
+                            .font(.footnote)
+                            .foregroundStyle(.secondaryInk)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.vertical, 2)
+            .accessibilityElement(children: .combine)
+        }
+        .appThemedRows()
     }
 
     private func reload() {

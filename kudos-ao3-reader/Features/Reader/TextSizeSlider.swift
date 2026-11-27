@@ -8,21 +8,23 @@ struct TextSizeSlider: View {
     @AppStorage("readerFontPt") private var fontSizePt: Double = ReaderTextStyle.defaultFontSizePt
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             Text("A")
-                .font(.caption2)
-                .foregroundStyle(.secondaryInk)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
                 // Its own width: a fixed 18 cut the letter in half at the largest text sizes.
                 .fixedSize()
+                .accessibilityHidden(true)
             Slider(value: $fontSizePt,
                    in: ReaderTextStyle.fontSizeRange,
                    step: ReaderTextStyle.fontSizeStep)
                 .accessibilityLabel("Text size")
                 .accessibilityValue("\(Int(fontSizePt.rounded())) points")
             Text("A")
-                .font(.title3)
-                .foregroundStyle(.secondaryInk)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(.primary)
                 .fixedSize()
+                .accessibilityHidden(true)
         }
         .padding(.vertical, 2)
     }

@@ -173,6 +173,16 @@ struct ReadiumReaderView: View {
         return work.workCharacters + work.workRelationships
     }
 
+    private var pronunciationWorkContext: ReaderPronunciationCopy.WorkContext {
+        ReaderPronunciationCopy.WorkContext(
+            title: work.title,
+            author: work.author,
+            primaryFandom: work.workFandoms.first,
+            wordCount: work.wordCount,
+            tintHue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
+        )
+    }
+
     /// `nil` where the Core ML frontend is not the engine, which is what
     /// hides the scan button rather than offering one that cannot work.
     private var scanChapterForPronunciation: (() async -> Result<KokoroCastPreflight.ScanResult, Error>)? {
@@ -224,7 +234,7 @@ struct ReadiumReaderView: View {
     /// padding), so the back button sat twice as far in as the menu button.
     /// The card uses it on all three of its free edges, so its bottom gap
     /// matches its sides.
-    private static let chromeInset: CGFloat = 12
+    private static let chromeInset: CGFloat = SubjectMetrics.gutter
 
     @State private var searchModel = ReaderSearchModel()
     /// The highlight whose note is being written, if the editor is open.
@@ -332,7 +342,8 @@ struct ReadiumReaderView: View {
             }) {
                 ReaderSpeechSettingsSheet(
                     characterTags: speechCastTags,
-                    onScanChapter: scanChapterForPronunciation
+                    onScanChapter: scanChapterForPronunciation,
+                    workContext: pronunciationWorkContext
                 )
             }
             .sheet(item: $correctingPronunciation) { target in
@@ -1440,7 +1451,16 @@ struct ReadiumReaderView: View {
             ReaderHighlightColorBar(
                 selectedRaw: annotation.colorRaw,
                 onSelectRaw: { applyHighlightColorRaw($0, to: annotation) },
-                onDismiss: { colorBarAnnotationID = nil }
+                onDismiss: { colorBarAnnotationID = nil },
+                onEditNote: {
+                    colorBarAnnotationID = nil
+                    editingNote = annotation
+                },
+                onDelete: {
+                    colorBarAnnotationID = nil
+                    deleteAnnotation(annotation)
+                    refreshHighlightDecorations()
+                }
             )
         }
     }
@@ -1589,7 +1609,7 @@ struct ReadiumReaderView: View {
             actions.append(ReaderFanRoundAction(
                 id: "kudos",
                 systemImage: work.hasGivenKudos ? "heart.fill" : "heart",
-                accessibilityLabel: work.hasGivenKudos ? "Kudos given" : "Give kudos",
+                accessibilityLabel: ReaderEndCopy.kudosButtonTitle(given: work.hasGivenKudos),
                 isEnabled: !kudosWorking && !work.hasGivenKudos,
                 isEmphasized: work.hasGivenKudos
             ) {
@@ -2033,7 +2053,7 @@ extension ReadiumReaderView {
         switch router.panel {
         case .readerChapters: work.title
         case .readerFind: "Find in Work"
-        default: "Display & Themes"
+        default: "Themes & Settings"
         }
     }
 
@@ -2375,7 +2395,7 @@ extension ReadiumReaderView {
                 contentsSegment = .chapters
                 router.panel = .readerChapters
             },
-            ReaderFanMenuPill(id: "bookmarks", title: "Bookmarks & Highlights", systemImage: "bookmark") {
+            ReaderFanMenuPill(id: "bookmarks", title: bookmarksPillTitle, systemImage: "bookmark") {
                 contentsSegment = .bookmarks
                 router.panel = .readerChapters
             },
@@ -2410,8 +2430,12 @@ extension ReadiumReaderView {
     }
 
     private var contentsPillTitle: String {
-        guard let percent = book.totalProgression.map({ Int(($0 * 100).rounded()) }) else { return "Contents" }
-        return "Contents · \(percent)%"
+        let percent = book.totalProgression.map { Int(($0 * 100).rounded()) }
+        return ReaderMenuCopy.contentsRowTitle(percent: percent)
+    }
+
+    private var bookmarksPillTitle: String {
+        ReaderMenuCopy.bookmarksRowTitle(count: bookmarkAnnotations.count + noteAnnotations.count)
     }
 
     /// What the fan's `ShareLink` slot offers, best available first.

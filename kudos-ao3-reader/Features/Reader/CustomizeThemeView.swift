@@ -123,7 +123,7 @@ struct CustomizeThemeView: View {
 
                     Section {
                         Button(role: .destructive, action: reset) {
-                            Label("Reset Theme", systemImage: "arrow.counterclockwise")
+                            Label("Reset to \(theme.title)", systemImage: "arrow.counterclockwise")
                         }
                     }
                 }

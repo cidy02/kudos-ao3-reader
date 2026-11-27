@@ -98,6 +98,11 @@ final class ReaderSearchModel {
     /// chapter before giving up and falling back to scroll-driven paging.
     private static let maxAutoPages = 40
 
+    /// True while additional result pages may still remain in the iterator.
+    var hasMoreResults: Bool {
+        !reachedEnd
+    }
+
     /// True while auto-paging ahead specifically to find "This Chapter"'s own
     /// hits — the results list uses this to show a "Searching this chapter…"
     /// placeholder where that group will land, rather than looking like the
@@ -238,6 +243,7 @@ struct ReaderSearchView: View {
     let onBookmark: (Locator) -> Void
 
     @State private var query = ""
+    @State private var scope: ReaderSearchCopy.Scope = .wholeWork
     @State private var debounceTask: Task<Void, Never>?
     @FocusState private var isFieldFocused: Bool
 
@@ -280,6 +286,9 @@ struct ReaderSearchView: View {
     var body: some View {
         VStack(spacing: 0) {
             searchField
+            if currentSpineIndex != nil {
+                scopePicker
+            }
             content
         }
         .onAppear { isFieldFocused = true }
@@ -294,14 +303,16 @@ struct ReaderSearchView: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondaryInk)
-            TextField("Find in Work", text: $query)
+                .accessibilityHidden(true)
+            TextField(ReaderSearchCopy.searchFieldAccessibilityLabel, text: $query)
                 .focused($isFieldFocused)
                 .submitLabel(.search)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
+                .accessibilityLabel(ReaderSearchCopy.searchFieldAccessibilityLabel)
                 // Searches as you type (debounced), like Apple Books, so results
                 // appear without a trip to the Return key. `.onSubmit` is kept for
                 // people who do press it, but it only re-runs the same query.
@@ -321,8 +332,30 @@ struct ReaderSearchView: View {
             }
         }
         .padding(.horizontal, 12)
-        .frame(height: 38)
+        .frame(minHeight: 40)
         .background(.quaternary, in: Capsule())
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
+    }
+
+    private var scopePicker: some View {
+        Picker(ReaderSearchCopy.scopeAccessibilityLabel, selection: $scope) {
+            ForEach(ReaderSearchCopy.Scope.allCases) { option in
+                Text(
+                    ReaderSearchCopy.scopeTitle(
+                        option,
+                        wholeWorkCount: model.results.count,
+                        hasMore: model.hasMoreResults
+                    )
+                )
+                .tag(option)
+            }
+        }
+        .pickerStyle(.segmented)
+        .accentFill()
+        .labelsHidden()
+        .accessibilityLabel(ReaderSearchCopy.scopeAccessibilityLabel)
         .padding(.horizontal, 16)
         .padding(.bottom, 12)
     }
@@ -366,74 +399,141 @@ struct ReaderSearchView: View {
         model.isSearchingCurrentChapter && groupedResults.first?.spineIndex != currentSpineIndex
     }
 
+    private var visibleGroups: [ReaderSearchGrouping.Group<ReaderSearchModel.Result>] {
+        guard scope == .thisChapter, let currentSpineIndex else { return groupedResults }
+        return groupedResults.filter { $0.spineIndex == currentSpineIndex }
+    }
+
+    @ViewBuilder
     private var resultList: some View {
-        List {
-            if isCurrentChapterGroupPending {
-                Section("This Chapter") {
-                    HStack(spacing: 8) {
-                        ProgressView().accentFill()
-                        Text("Searching…")
+        if scope == .thisChapter && !isCurrentChapterGroupPending && visibleGroups.isEmpty {
+            ContentUnavailableView {
+                Label(ReaderSearchCopy.emptyThisChapterTitle, systemImage: "magnifyingglass")
+            } description: {
+                Text(ReaderSearchCopy.emptyThisChapterMessage(wholeWorkCount: model.results.count))
+            } actions: {
+                Button(ReaderSearchCopy.showWholeWorkActionTitle) {
+                    scope = .wholeWork
+                }
+                .buttonStyle(.borderedProminent)
+                .accentFill()
+            }
+        } else {
+            List {
+                if isCurrentChapterGroupPending {
+                    Section {
+                        HStack(spacing: 8) {
+                            ProgressView().accentFill()
+                            Text("Searching…")
+                                .foregroundStyle(.secondaryInk)
+                        }
+                    } header: {
+                        Text("This Chapter")
+                            .font(.footnote.weight(.semibold))
+                            .tracking(0.3)
+                            .textCase(.uppercase)
                             .foregroundStyle(.secondaryInk)
+                    }
+                    .appThemedRows()
+                }
+                ForEach(visibleGroups) { group in
+                    Section {
+                        ForEach(group.results) { result in
+                            resultRow(result)
+                                // `.onAppear` keys off the flat append order (`result.id`),
+                                // not display order, since grouping reorders chapters —
+                                // this still fires once we've rendered results from near
+                                // the end of what's loaded so far, regardless of which
+                                // chapter section they land in.
+                                .onAppear { model.loadMoreIfNeeded(currentItem: result) }
+                        }
+                    } header: {
+                        Text(
+                            ReaderSearchCopy.sectionHeaderTitle(
+                                baseTitle: group.title,
+                                matchCount: group.results.count
+                            )
+                        )
+                        .font(.footnote.weight(.semibold))
+                        .tracking(0.3)
+                        .textCase(.uppercase)
+                        .foregroundStyle(.secondaryInk)
+                    }
+                    .appThemedRows()
+                }
+                if model.isLoadingMore {
+                    HStack {
+                        Spacer()
+                        ProgressView().accentFill()
+                        Spacer()
                     }
                     .listRowBackground(Color.clear)
                 }
             }
-            ForEach(groupedResults) { group in
-                Section(group.title) {
-                    ForEach(group.results) { result in
-                        resultRow(result)
-                            // `.onAppear` keys off the flat append order (`result.id`),
-                            // not display order, since grouping reorders chapters —
-                            // this still fires once we've rendered results from near
-                            // the end of what's loaded so far, regardless of which
-                            // chapter section they land in.
-                            .onAppear { model.loadMoreIfNeeded(currentItem: result) }
-                            .listRowBackground(Color.clear)
-                    }
-                }
-            }
-            if model.isLoadingMore {
-                HStack {
-                    Spacer()
-                    ProgressView().accentFill()
-                    Spacer()
-                }
-                .listRowBackground(Color.clear)
-            }
+            .listStyle(.insetGrouped)
+            .contentMargins(.top, 0, for: .scrollContent)
+            // Hide the system grouped ground so the sheet's themed `cardBackdrop`
+            // shows through in Light, Sepia, Dark, and OLED.
+            .scrollContentBackground(.hidden)
         }
-        .listStyle(.plain)
-        // A plain List paints `systemBackground`, which a sheet elevates to #1C1C1E —
-        // the system's grey, not the `cardBackdrop` this sheet sets as its own
-        // presentation background. Hide it and the sheet's theme colour shows through.
-        .scrollContentBackground(.hidden)
+    }
+
+    private func highlightedSnippet(for result: ReaderSearchModel.Result) -> AttributedString {
+        var snippet = AttributedString(result.before)
+        var match = AttributedString(result.match)
+        match.font = .system(.subheadline, design: .serif).weight(.semibold)
+        match.backgroundColor = ReadingAnnotationColor.yellow.tint.opacity(
+            theme.appTheme.isDarkFamily ? 0.30 : 0.42
+        )
+        snippet.append(match)
+        snippet.append(AttributedString(result.after))
+        return snippet
     }
 
     private func resultRow(_ result: ReaderSearchModel.Result) -> some View {
-        Button {
-            onSelect(result.locator)
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                if !result.title.isEmpty {
-                    Text(result.title)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tint)
-                        .lineLimit(1)
-                }
-                // The match itself is emphasised inside its surrounding sentence, so
-                // a result is readable in context rather than as a bare keyword.
-                (Text(result.before).foregroundStyle(.secondaryInk)
-                    + Text(result.match).bold()
-                    + Text(result.after).foregroundStyle(.secondaryInk))
-                    .font(.callout)
+        HStack(alignment: .center, spacing: 8) {
+            Button {
+                onSelect(result.locator)
+            } label: {
+                Text(highlightedSnippet(for: result))
+                    .font(.system(.subheadline, design: .serif))
+                    .foregroundStyle(.primary)
                     // Roomy enough to show real context either side of the match
                     // rather than a keyword stranded on its own line.
                     .lineLimit(5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
             }
-            .padding(.vertical, 6)
-            .contentShape(Rectangle())
-            .accessibilityElement(children: .combine)
+            .buttonStyle(.plain)
+
+            Menu {
+                Button {
+                    onSelect(result.locator)
+                } label: {
+                    Label("Go", systemImage: "arrow.forward.circle")
+                }
+                Button {
+                    UIPasteboard.general.string = result.copyText
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                Button {
+                    onBookmark(result.locator)
+                } label: {
+                    Label("Bookmark", systemImage: "bookmark")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondaryInk)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .minimumHitTarget()
+            .accessibilityLabel(ReaderSearchCopy.moreButtonAccessibilityLabel)
         }
-        .buttonStyle(.plain)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             // Full swipe defaults to the first action — Go, matching the tap.
             Button {
