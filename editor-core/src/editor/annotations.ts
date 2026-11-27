@@ -62,7 +62,8 @@ export function wordAtCaret(state: EditorState): string | null {
   if (!empty || !$head.parent.inlineContent) return null;
   const before = $head.parent.textBetween(Math.max(0, $head.parentOffset - 40), $head.parentOffset, undefined, '￼');
   const m = /[\p{L}\p{M}'’-]{2,40}$/u.exec(before);
-  const after = $head.parent.textBetween($head.parentOffset, Math.min($head.parent.content.size, $head.parentOffset + 1), undefined, '￼');
-  if (!m || /^[\p{L}\p{M}'’-]/u.test(after)) return null; // only at the end of a word, a hyphenated one included
+  const after = $head.parent.textBetween($head.parentOffset, Math.min($head.parent.content.size, $head.parentOffset + 2), undefined, '￼');
+  // only at the end of a word, a hyphenated one included ("Anne|-Marie"), though a closing quote ends it ("‘Ma|’")
+  if (!m || /^(?:[\p{L}\p{M}]|['’-][\p{L}\p{M}])/u.test(after)) return null;
   return m[0];
 }

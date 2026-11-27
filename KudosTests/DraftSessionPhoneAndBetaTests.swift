@@ -78,4 +78,29 @@ struct DraftSessionPhoneAndBetaTests {
         #expect(DraftSession.textRunRange(RichEditorTextRange(from: 0, to: ns.length + 1), in: html) == nil)
         #expect(DraftSession.escapedText("a<b>&c") == "a&lt;b&gt;&amp;c")
     }
+
+    @Test func tagsQuotesAndSurrogatePairsAreRespected() {
+        let emoji = "<p>Hello 👋 world</p>"
+        let wave = (emoji as NSString).range(of: "👋")
+        #expect(DraftSession.textRunRange(RichEditorTextRange(from: wave.location + 1, to: NSMaxRange(wave)), in: emoji) == nil)
+        #expect(DraftSession.textRunRange(RichEditorTextRange(from: wave.location, to: NSMaxRange(wave)), in: emoji) != nil)
+        let quoted = "<a title=\"a>b\" href=\"x\">t</a>"
+        let href = (quoted as NSString).range(of: "href")
+        #expect(DraftSession.textRunRange(RichEditorTextRange(from: href.location, to: NSMaxRange(href)), in: quoted) == nil,
+                "a > inside quotes doesn't close the tag")
+        let heart = "<p>I <3 you twice</p>"
+        let twice = (heart as NSString).range(of: "twice")
+        #expect(DraftSession.textRunRange(RichEditorTextRange(from: twice.location, to: NSMaxRange(twice)), in: heart) != nil,
+                "<3 is text, not a tag")
+    }
+
+    @Test func htmlModeReportsARefusedReplacement() async {
+        let html = "<p>Ines counted the ribs.</p>"
+        let (session, _, source) = await session(rich: false, text: html)
+        source.isFrozen = true
+        let ribs = (html as NSString).range(of: "ribs")
+        let replaced = await session.replaceText(in: RichEditorTextRange(from: ribs.location, to: NSMaxRange(ribs)), with: "hull")
+        #expect(!replaced)
+        #expect(source.text == html)
+    }
 }

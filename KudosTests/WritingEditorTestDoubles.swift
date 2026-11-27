@@ -123,11 +123,13 @@ final class FakeSourceEditor: DraftSourceBridge {
         onEdit?()
     }
 
-    func replaceText(in range: NSRange, with value: String) {
-        guard !isFrozen else { return }
+    @discardableResult
+    func replaceText(in range: NSRange, with value: String) -> Bool {
+        guard !isFrozen, NSMaxRange(range) <= (text as NSString).length else { return false }
         text = (text as NSString).replacingCharacters(in: range, with: value)
         canUndo = true
         onEdit?()
+        return true
     }
 
     func focus() {

@@ -82,3 +82,91 @@ test('replaceText also deletes and inserts', async () => {
   selectText(h, 'She');
   assert.equal((await command(h, 'replaceText', { from: 0, to: 0, text: '' })).applied, false, 'nothing to do');
 });
+
+// Gemini's review of the bridge: nothing the writer didn't pick may change.
+test('replaceText refuses offsets inside a tag, a split emoji, and an insertion whose neighbours differ', async () => {
+  let h = await opened('<p class="foo">bar</p>');
+  assert.equal((await command(h, 'replaceText', { from: 11, to: 11, text: 'X' })).applied, false, 'inside class="foo"');
+  h = await opened('<p>a <a href="x">b</a></p>');
+  assert.equal((await command(h, 'replaceText', { from: 7, to: 8, text: 'X' })).applied, false, 'the space inside <a href>');
+  const emoji = '<p>Hello 👋 world</p>';
+  h = await opened(emoji);
+  const wave = emoji.indexOf('👋');
+  assert.equal((await command(h, 'replaceText', { from: wave + 1, to: wave + 2, text: 'X' })).applied, false, 'half an emoji');
+  assert.equal((await command(h, 'replaceText', { from: wave, to: wave + 2, text: '🙂' })).applied, true, 'the whole emoji');
+  assert.equal(await html(h), '<p>Hello 🙂 world</p>');
+});
+
+test('replaceText keeps the run’s own marks: no bold from the caret, a link stays a link', async () => {
+  const src = '<p>See <a href="https://example.com">teh guide</a> now.</p>';
+  const h = await opened(src);
+  caretAt(h, 'now');
+  await command(h, 'toggleMark', { mark: 'bold' }); // a stored mark at the caret
+  const at = src.indexOf('teh guide');
+  assert.equal((await command(h, 'replaceText', { from: at, to: at + 'teh guide'.length, text: 'the guide' })).applied, true);
+  assert.equal(await html(h), '<p>See <a href="https://example.com">the guide</a> now.</p>');
+});
+
+test('replaceText and highlights place ends at &nbsp;, CRLF and tag-to-tag boundaries', async () => {
+  let src = '<p>hello&nbsp;world</p>';
+  let h = await opened(src);
+  assert.equal((await command(h, 'replaceText', { from: 3, to: 8, text: 'Hi' })).applied, true);
+  assert.equal(await html(h), '<p>Hi&nbsp;world</p>');
+  src = '<p><em>hello</em><strong>world</strong></p>';
+  h = await opened(src);
+  const s = src.indexOf('hello');
+  await h.call('setAnnotations', { items: [{ id: 'a', kind: 'note', from: s, to: s + 5 }] });
+  assert.equal(h.bridge.editor.view.dom.querySelector('[data-annotation="a"]')?.textContent, 'hello');
+  src = '<p>hello\r\nworld</p>';
+  h = await opened(src);
+  await h.call('setAnnotations', { items: [{ id: 'b', kind: 'note', from: 3, to: 8 }] });
+  assert.equal(h.bridge.editor.view.dom.querySelector('[data-annotation="b"]')?.textContent, 'hello');
+  h = await opened('<p>D&D night</p>');
+  assert.equal((await command(h, 'replaceText', { from: 5, to: 6, text: 'd' })).applied, true, 'a bare & is not a reference');
+});
+
+test('typing straight after a dictated phrase is its own undo step', async () => {
+  const h = await opened('<p>Out past the wall</p>');
+  caretAt(h, 'wall');
+  await command(h, 'insertPhrase', { text: 'the gulls' });
+  await command(h, 'insertText', { text: '!' });
+  await command(h, 'undo', {});
+  assert.equal(await html(h), '<p>Out past the wall the gulls</p>');
+  await command(h, 'insertPhrase', { text: ' quiet' });
+  assert.equal(await html(h), '<p>Out past the wall the gulls quiet</p>', 'a phrase that starts with a space gets no second one');
+});
+
+test('moveWord from Select All or a selected scene break keeps the selection in text', async () => {
+  const { AllSelection } = await import('prosemirror-state');
+  const h = await opened('<p>One two</p>\n<hr />\n<p>Three</p>');
+  const view = h.bridge.editor.view;
+  view.dispatch(view.state.tr.setSelection(new AllSelection(view.state.doc)));
+  await command(h, 'moveWord', { by: 1, extend: false });
+  assert.ok(view.state.selection.$head.parent.inlineContent);
+});
+
+test('a TK is not reported again on undo or on deleting back to it', async () => {
+  const h = await opened('<p>Name is </p>');
+  caretAt(h, 'is ');
+  await command(h, 'insertText', { text: 'TK' });
+  await command(h, 'insertText', { text: '.' });
+  await command(h, 'insertText', { text: ' x' });
+  const view = h.bridge.editor.view;
+  view.dispatch(view.state.tr.delete(view.state.selection.head - 2, view.state.selection.head)); // back to "TK."
+  await command(h, 'undo', {});
+  assert.equal(h.events.filter((e: any) => e.type === 'tkTyped').length, 1);
+});
+
+test('a name inside quotes is still suggested', async () => {
+  const { wordAtCaret } = await import('../src/editor/annotations.ts');
+  const h = await opened('<p>She said ‘Ma’ softly.</p>');
+  caretAt(h, 'Ma');
+  assert.equal(wordAtCaret(h.bridge.editor.view.state), 'Ma');
+});
+
+test('a > inside a quoted attribute does not end the tag', async () => {
+  const src = '<p><a title="a>b" href="https://example.com">t</a> end</p>';
+  const h = await opened(src);
+  const at = src.indexOf('href');
+  assert.equal((await command(h, 'replaceText', { from: at, to: at, text: 'X' })).applied, false);
+});
