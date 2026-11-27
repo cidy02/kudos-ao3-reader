@@ -26,6 +26,15 @@ struct WritingView: View {
     /// Bumped when the tab is shown and what it loaded is stale; switching tabs alone never refetches AO3.
     @State private var tabVisits = 0
     @State private var lastAutoLoad: Date?
+
+    /// How long drafts and stats loaded from AO3 count as fresh when the tab is shown again.
+    static let freshFor: TimeInterval = 15 * 60
+
+    static func isStale(_ lastLoad: Date?, now: Date) -> Bool {
+        guard let lastLoad else { return true }
+        return now.timeIntervalSince(lastLoad) >= freshFor || now < lastLoad
+    }
+
     @State private var editingWorkID: Int?
     @State private var postingPseudName: String?
     @State private var showingLogin = false
@@ -600,14 +609,6 @@ private extension WritingView {
             )
             .pageBodyRow(top: 18, gutter: 0)
         }
-    }
-
-    /// How long drafts and stats loaded from AO3 count as fresh when the tab is shown again.
-    static let freshFor: TimeInterval = 15 * 60
-
-    static func isStale(_ lastLoad: Date?, now: Date) -> Bool {
-        guard let lastLoad else { return true }
-        return now.timeIntervalSince(lastLoad) >= freshFor || now < lastLoad
     }
 
     func loadStats() async {
