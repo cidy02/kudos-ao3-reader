@@ -402,21 +402,31 @@ nonisolated enum PDFWorkConverter {
     /// No outline: flatten the whole document and reuse the plain-text converter's
     /// chapter heuristics, so PDFs and `.txt` files split on the same rules and
     /// there is only one place where "what looks like a chapter heading" is decided.
+    /// A private-use character no PDF text can contain, standing in for a scene break on the plain-text path.
+    private static let sceneBreakPlaceholder = "\u{E000}"
+
     private static func textHeuristicChapters(
         pageLines: [[String]],
         fallbackTitle: String
     ) -> [EPUBBuilder.Chapter] {
         // Each block is already a complete paragraph (repaired across page breaks),
         // so separate blocks with a blank line for `PlainTextWorkConverter`.
+        // `PlainTextWorkConverter` treats a `* * *` line as a chapter divider (right for .txt imports), which would turn
+        // every scene break in a PDF without an outline into a new untitled chapter; a placeholder carries each break
+        // through and becomes `* * *` again in the chapter body.
+        let separator = PDFParagraphRepair.normalizedSeparator
         let text = pageLines
             .flatMap(\.self)
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map { $0 == separator ? sceneBreakPlaceholder : $0 }
             .joined(separator: "\n\n")
         guard let result = try? PlainTextWorkConverter.convert(
             text: text,
             fallbackTitle: fallbackTitle
         ) else { return [] }
-        return result.chapters
+        return result.chapters.map {
+            .init(title: $0.title, bodyXHTML: $0.bodyXHTML.replacingOccurrences(of: sceneBreakPlaceholder, with: separator))
+        }
     }
 
     // MARK: - Metadata

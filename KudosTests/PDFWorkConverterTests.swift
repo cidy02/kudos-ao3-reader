@@ -119,6 +119,25 @@ struct PDFWorkConverterTests {
         #expect(first.upperBound < rule.lowerBound && rule.upperBound < second.lowerBound)
     }
 
+    @Test func aTypedSceneBreakStaysInsideItsChapter() throws {
+        // No outline, so this takes the plain-text path, where `* * *` alone on a line used to start a new chapter.
+        let url = try makePDF(pages: [[
+            "The first scene ends with the door closing behind her.",
+            "",
+            "* * *",
+            "",
+            "The second scene opens on the morning after the storm."
+        ]])
+        defer { try? FileManager.default.removeItem(at: url) }
+        let result = try convert(url)
+        #expect(result.chapters.count == 1)
+        let body = bodies(result)
+        let first = try #require(body.range(of: "door closing behind her"))
+        let rule = try #require(body.range(of: "* * *"))
+        let second = try #require(body.range(of: "morning after the storm"))
+        #expect(first.upperBound < rule.lowerBound && rule.upperBound < second.lowerBound)
+    }
+
     @Test func aRuleThroughTextIsNotASceneBreak() throws {
         let url = try makeRulePDF(ruleBetweenParagraphs: false)
         defer { try? FileManager.default.removeItem(at: url) }
