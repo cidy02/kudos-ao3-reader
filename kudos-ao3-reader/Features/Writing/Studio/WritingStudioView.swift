@@ -402,7 +402,7 @@ private extension WritingStudioView {
     }
 
     @ViewBuilder
-    func shellDestination(_ destination: ShellDestination) -> some View {
+    private func shellDestination(_ destination: ShellDestination) -> some View {
         switch destination {
         case .requests:
             WritingRequestsView()
