@@ -146,10 +146,10 @@ struct BetaReadingSheet: View {
                 return "Kudos saves a version of the chapter first. Any suggestion that can’t be placed "
                     + "will stay on screen so you can copy it."
             case .rejectAll:
-                "All remaining suggestions from this beta will be marked rejected. "
+                return "All remaining suggestions from this beta will be marked rejected. "
                     + "Your chapter text stays unchanged."
             case .resolveAllComments:
-                "This marks all remaining comments from this beta as resolved in your chapter notes."
+                return "This marks all remaining comments from this beta as resolved in your chapter notes."
             }
         }
 
