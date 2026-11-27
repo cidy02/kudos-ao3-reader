@@ -22,7 +22,7 @@ enum SettingsHubFilter {
 
     static func sections(
         matching query: String,
-        valueFor route: (SettingsRoute) -> String
+        valueFor: (SettingsRoute) -> String
     ) -> [SettingsHubSearchSection] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let showsBug = reportBugMatches(trimmed)
@@ -239,7 +239,7 @@ struct SettingsHubView: View {
         }
         .overlay {
             let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if filteredGroups.isEmpty && !showsWritingSection && !query.isEmpty {
+            if filteredSections.isEmpty && !showsWritingSection && !query.isEmpty {
                 ContentUnavailableView.search(text: query)
             }
         }
