@@ -503,6 +503,75 @@ export const moveCaret = (by: number): Command => (state, dispatch) => {
   return true;
 };
 
+const wordSegmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
+
+/** Word spans in a textblock, as parent offsets (leaves count as one character, as positions do). */
+const wordsIn = (block: PMNode): { from: number; to: number }[] => {
+  const text = block.textBetween(0, block.content.size, undefined, '￼');
+  const out: { from: number; to: number }[] = [];
+  for (const s of wordSegmenter.segment(text)) if (s.isWordLike) out.push({ from: s.index, to: s.index + s.segment.length });
+  return out;
+};
+
+/** One word from `pos`, the way Option-arrow moves on a Mac: forward to a word's end, back to its start. */
+const wordStep = (doc: PMNode, pos: number, forward: boolean): number | null => {
+  const $pos = doc.resolve(pos);
+  if ($pos.parent.inlineContent) {
+    const start = $pos.start();
+    const words = wordsIn($pos.parent);
+    const off = $pos.parentOffset;
+    const hit = forward ? words.find((w) => w.to > off) : words.findLast((w) => w.from < off);
+    if (hit) return start + (forward ? hit.to : hit.from);
+  }
+  // On to the nearest textblock after (or before) this one that has a word in it; else to this block's edge.
+  const hit = { pos: null as number | null };
+  const inBlock = $pos.parent.inlineContent;
+  const [from, to] = forward ? [inBlock ? $pos.after() : pos, doc.content.size] : [0, inBlock ? $pos.before() : pos];
+  doc.nodesBetween(from, to, (node, at) => {
+    if (forward && hit.pos !== null) return false;
+    if (!node.isTextblock) return true;
+    const w = forward ? wordsIn(node)[0] : wordsIn(node).at(-1);
+    if (w) hit.pos = at + 1 + (forward ? w.to : w.from); // backward keeps the last (nearest) one
+    return false;
+  });
+  if (hit.pos !== null) return hit.pos;
+  const edge = inBlock ? (forward ? $pos.end() : $pos.start()) : pos;
+  return edge !== pos ? edge : null;
+};
+
+/** Moves the caret by `by` words (T-576e, the keys bar's slide); `extend` keeps the anchor. False if nothing moved. */
+export const moveWord = (by: number, extend: boolean): Command => (state, dispatch) => {
+  if (!Number.isInteger(by) || by === 0 || Math.abs(by) > 1000) return false;
+  const sel = state.selection;
+  let head = extend ? sel.head : by > 0 ? sel.to : sel.from;
+  for (let i = 0; i < Math.abs(by); i++) {
+    const next = wordStep(state.doc, head, by > 0);
+    if (next === null || next === head) break;
+    head = next;
+  }
+  const collapsedSame = !extend && sel.empty && head === sel.head;
+  if (collapsedSame || (extend && head === sel.head)) return false;
+  if (dispatch) {
+    const next = extend ? TextSelection.create(state.doc, sel.anchor, head) : TextSelection.create(state.doc, head);
+    dispatch(state.tr.setSelection(next).scrollIntoView());
+  }
+  return true;
+};
+
+/**
+ * One dictated phrase at the caret (T-576e), replacing any selection, with a space before it unless the caret is at
+ * the start of a paragraph or line, after a space or an opening bracket or quote, or the phrase starts with
+ * punctuation. Its own undo step comes from the caller's label.
+ */
+export const insertPhrase = (text: string): Command => (state, dispatch) => {
+  const { from, to, $from } = state.selection;
+  if (!text.trim() || !$from.parent.inlineContent) return false;
+  const before = $from.parentOffset > 0 ? $from.parent.textBetween($from.parentOffset - 1, $from.parentOffset, undefined, '￼') : '';
+  const glue = before && !/[\s (\[{“‘"'￼]/u.test(before) && !/^[.,;:!?)\]}”’…]/u.test(text) ? ' ' : '';
+  if (dispatch) dispatch(state.tr.insertText(glue + text, from, to).scrollIntoView());
+  return true;
+};
+
 // ---- keys ----------------------------------------------------------------------------------------------------
 
 /** Shift+Return. S10: a break right after another splits the paragraph instead, as AO3's merge_br_tags would. */

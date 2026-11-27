@@ -289,13 +289,30 @@ struct ChapterEditorAnnotationTests {
         #expect(shiftedAnchor.prefix.hasSuffix("then "))
         #expect(shiftedAnchor.suffix.hasPrefix(" here."))
 
-        // No TK at or after range.from returns nil.
-        let missingHTML = "<p>TK was earlier, nothing later.</p>"
-        let laterStart = try utf16Start(of: "nothing", in: missingHTML)
+        // Text deleted before the TK since it was typed: the stale offset is past it, and the nearest TK behind it is
+        // the one (wave 48 review: the search used to look only forward and found nothing, or a later TK).
+        let earlierHTML = "<p>TK was earlier, nothing later.</p>"
+        let laterStart = try utf16Start(of: "nothing", in: earlierHTML)
+        let earlier = try #require(
+            ChapterEditorAnnotationAnchoring.anchorForTK(
+                html: earlierHTML,
+                range: RichEditorTextRange(from: laterStart, to: laterStart + 2)
+            )
+        )
+        #expect(earlier.utf16Offset == 3)
+        let twoHTML = "<p>The TK came, and much later another TK.</p>"
+        let firstTK = try utf16Start(of: "TK came", in: twoHTML)
+        let nearFirst = try #require(
+            ChapterEditorAnnotationAnchoring.anchorForTK(
+                html: twoHTML,
+                range: RichEditorTextRange(from: firstTK + 4, to: firstTK + 6)
+            )
+        )
+        #expect(nearFirst.utf16Offset == firstTK, "the nearer one, not the next one")
         #expect(
             ChapterEditorAnnotationAnchoring.anchorForTK(
-                html: missingHTML,
-                range: RichEditorTextRange(from: laterStart, to: laterStart + 2)
+                html: "<p>Nothing to see.</p>",
+                range: RichEditorTextRange(from: 3, to: 5)
             ) == nil
         )
     }
