@@ -29,6 +29,6 @@ struct WorkProvenanceOriginalPreviewTests {
         // a recorded name can't escape the preview folder
         let escaped = WorkProvenanceSections.namedPreviewURL(for: stored, name: "../../evil.pdf", in: root)
         #expect(escaped.lastPathComponent == "evil.pdf")
-        #expect(escaped.deletingLastPathComponent().deletingLastPathComponent() == root)
+        #expect(escaped.deletingLastPathComponent().deletingLastPathComponent().path == root.path)
     }
 }
