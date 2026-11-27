@@ -11,8 +11,9 @@ import SwiftData
 /// two works can never cancel out. Ordinary mid-chapter reading-position saves
 /// (detached Read Aloud checkpoints) leave a work's signature unchanged unless
 /// they cross a displayed bucket (unread → started, WIP caught-up, abandoned).
-@MainActor
-enum InsightsReloadDigest {
+///
+/// `nonisolated` so `InsightsGatherActor` can take the digest on its own context (T-537p).
+nonisolated enum InsightsReloadDigest {
     private struct DeterministicHasher {
         private(set) var state: UInt64 = 0xcbf29ce484222325
 
@@ -231,7 +232,7 @@ enum InsightsReloadDigest {
         return hasher.state
     }
 
-    struct Snapshot {
+    struct Snapshot: Sendable {
         let digest: String
         let liveWorkSignatures: [UUID: UInt64]
         let softDeletedAdultFlags: [UUID: Bool]
@@ -242,11 +243,14 @@ enum InsightsReloadDigest {
     static var snapshotCountForTests = 0
     #endif
 
+    /// `preloadedSessions` is the table the gather actor already fetched in batches; nil
+    /// fetches it here in one go, as the main-actor callers always did.
     static func snapshot(
         works: [SavedWork],
         context: ModelContext,
         now: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        preloadedSessions: [ReadingSession]? = nil
     ) -> Snapshot {
         #if DEBUG
         snapshotCountForTests += 1
@@ -271,7 +275,7 @@ enum InsightsReloadDigest {
             deletedBag.add(hasher.state)
         }
 
-        let sessions = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let sessions = preloadedSessions ?? ((try? context.fetch(FetchDescriptor<ReadingSession>())) ?? [])
         var sessionBag = BagDigest()
         for session in sessions {
             sessionBag.add(sessionSignature(session))
@@ -525,6 +529,8 @@ final class InsightsSaveCoalescer {
 final class InsightsReloadCoordinator {
     let tracker: InsightsReloadTracker
     private let coalescer: InsightsSaveCoalescer
+    /// The off-main digest of the latest coalesced save, cancelled when a newer one starts.
+    private var digestTask: Task<Void, Never>?
 
     init(
         interval: Duration = .milliseconds(500),
@@ -537,17 +543,28 @@ final class InsightsReloadCoordinator {
     var hasPendingRefresh: Bool { coalescer.hasPendingRefresh }
 
     /// Call for every `didSave` while the screen is up. `works` is read when the
-    /// refresh fires, not when the save arrives.
+    /// refresh fires, not when the save arrives. With `digest`, the library walk runs
+    /// there (off the main actor) instead of here; a newer refresh cancels an older one.
     func noteSave(
         _ notification: Notification,
         works: @escaping @MainActor () -> [SavedWork],
         context: ModelContext,
         isOnScreen: @escaping @MainActor () -> Bool,
-        reload: @escaping @MainActor (InsightsReloadDigest.Snapshot) -> Void
+        reload: @escaping @MainActor (InsightsReloadDigest.Snapshot) -> Void,
+        digest: (@MainActor () async -> InsightsReloadDigest.Snapshot?)? = nil
     ) {
         guard tracker.classifySave(notification, context: context) != .ignored else { return }
-        coalescer.schedule { [tracker] in
+        coalescer.schedule { [tracker, weak self] in
             guard isOnScreen() else { return }
+            if let digest {
+                self?.digestTask?.cancel()
+                self?.digestTask = Task { @MainActor in
+                    guard let snapshot = await digest(), !Task.isCancelled, isOnScreen() else { return }
+                    guard snapshot.digest != tracker.lastDigest else { return }
+                    reload(snapshot)
+                }
+                return
+            }
             let snapshot = InsightsReloadDigest.snapshot(works: works(), context: context)
             guard snapshot.digest != tracker.lastDigest else { return }
             reload(snapshot)
@@ -556,6 +573,8 @@ final class InsightsReloadCoordinator {
 
     func cancel() {
         coalescer.cancel()
+        digestTask?.cancel()
+        digestTask = nil
     }
 }
 

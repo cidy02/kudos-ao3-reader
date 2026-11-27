@@ -229,9 +229,9 @@ enum SavedSeriesStore {
         return (try? context.fetch(descriptor))?.first
     }
 
-    static func snapshots(in context: ModelContext) -> [SavedSeriesSnapshot] {
+    nonisolated static func snapshots(in context: ModelContext) -> [SavedSeriesSnapshot] {
         let rows = (try? context.fetch(FetchDescriptor<SavedSeries>())) ?? []
-        return rows.map(\.snapshot)
+        return rows.map { $0.snapshot }
     }
 
 }

@@ -725,7 +725,7 @@ enum ReadingLogService {
     /// `history` is every session the words read are measured against (each
     /// sitting is measured from the one before it, which may lie outside a
     /// period); it defaults to `sessions`.
-    static func facts(
+    nonisolated static func facts(
         from sessions: [ReadingSession],
         works: [SavedWork],
         history: [ReadingSession]? = nil,
@@ -788,7 +788,7 @@ enum ReadingLogService {
     /// 10% of AO3's reported word count, never double-counting a revised chapter
     /// already read in the current read-through. Falls back to the legacy
     /// `progress × wordCount` rule otherwise.
-    static func wordsRead(
+    nonisolated static func wordsRead(
         sessions: [ReadingSession],
         works: [SavedWork]
     ) -> [UUID: Int] {
@@ -797,13 +797,13 @@ enum ReadingLogService {
         )
         var read: [UUID: Int] = [:]
         var chapterPathSessions: Set<UUID> = []
-        for (workID, group) in Dictionary(grouping: sessions, by: \.workID) {
+        for (workID, group) in Dictionary(grouping: sessions, by: { $0.workID }) {
             let sorted = group.sorted {
                 ($0.startedAt, $0.id.uuidString) < ($1.startedAt, $1.id.uuidString)
             }
             let work = worksByID[workID]
             if let work, canUseChapterWordCounts(work.chapterWordCounts, for: work, sessions: sorted) {
-                chapterPathSessions.formUnion(sorted.map(\.id))
+                chapterPathSessions.formUnion(sorted.map { $0.id })
                 chapterWordsRead(
                     sortedSessions: sorted,
                     chapterCounts: work.chapterWordCounts,
@@ -827,7 +827,7 @@ enum ReadingLogService {
         return read
     }
 
-    private static func canUseChapterWordCounts(
+    private nonisolated static func canUseChapterWordCounts(
         _ counts: [Int],
         for work: SavedWork,
         sessions: [ReadingSession]
@@ -855,7 +855,7 @@ enum ReadingLogService {
         return true
     }
 
-    private static func inferredChapterCount(
+    private nonisolated static func inferredChapterCount(
         forWordCount wordCount: Int,
         in chapterCounts: [Int]
     ) -> Int {
@@ -877,7 +877,7 @@ enum ReadingLogService {
         return bestCount
     }
 
-    private static func chapterWordsRead(
+    private nonisolated static func chapterWordsRead(
         sortedSessions: [ReadingSession],
         chapterCounts: [Int],
         into read: inout [UUID: Int]
@@ -1023,7 +1023,7 @@ enum ReadingLogService {
         }
     }
 
-    private static func legacyWordsRead(
+    private nonisolated static func legacyWordsRead(
         sortedSessions: [ReadingSession],
         into read: inout [UUID: Int]
     ) {
@@ -1063,7 +1063,7 @@ enum ReadingLogService {
     /// measured against. Both are fetched here rather than in the view so the
     /// screen cannot accidentally compare a month against a week.
     /// Gathered and option-filtered Insights snapshot for a period.
-    struct InsightsGatherResult {
+    nonisolated struct InsightsGatherResult {
         var insights: ReadingInsights
         var taste: ReadingTasteInsights?
         var habits: ReadingHabitsInsights
@@ -1076,7 +1076,7 @@ enum ReadingLogService {
         var discreetMasker: InsightsDiscreetMasker
     }
 
-    private struct GatherRequest {
+    private nonisolated struct GatherRequest {
         var period: DateInterval
         var previousPeriod: DateInterval?
         var works: [SavedWork]
@@ -1091,7 +1091,10 @@ enum ReadingLogService {
     }
 
     /// Gathers one `InsightsScope` (main, Hidden section, or combined).
-    static func gatherInsights(
+    ///
+    /// `nonisolated` so `InsightsGatherActor` runs it on its own context; `rawSessions` is the
+    /// sittings that actor already fetched in batches (nil fetches them all here, as before).
+    nonisolated static func gatherInsights(
         for period: DateInterval,
         previousPeriod: DateInterval?,
         scope: InsightsScopeSelection,
@@ -1100,9 +1103,10 @@ enum ReadingLogService {
         context: ModelContext,
         options: InsightsOptions = InsightsOptions(),
         aliases: TagAliasResolver? = nil,
+        rawSessions: [ReadingSession]? = nil,
         now: Date = Date()
     ) -> InsightsGatherResult {
-        let rawHistory = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let rawHistory = rawSessions ?? ((try? context.fetch(FetchDescriptor<ReadingSession>())) ?? [])
         let history = scope.sessions(rawHistory, in: context)
         return gatherInsightsCore(GatherRequest(
             period: period,
@@ -1159,12 +1163,12 @@ enum ReadingLogService {
         ))
     }
 
-    private static func gatherInsightsCore(_ req: GatherRequest) -> InsightsGatherResult {
+    private nonisolated static func gatherInsightsCore(_ req: GatherRequest) -> InsightsGatherResult {
         let resolvedAliases = req.aliases ?? TagAliasStore.resolver(in: req.context)
         let filtered = req.options.filter(
             sessions: req.history, works: req.readingWorks, aliases: resolvedAliases
         )
-        let libraryIDs = Set(req.works.map(\.id))
+        let libraryIDs = Set(req.works.map { $0.id })
         let libraryWorks = filtered.works.filter { libraryIDs.contains($0.id) }
 
         let allFacts = facts(

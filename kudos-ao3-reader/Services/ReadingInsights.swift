@@ -341,7 +341,6 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
     }
 
     /// The 4:00-to-4:00 reading day for a persisted `ReadingSession`.
-    @MainActor
     static func readingDay(
         for session: ReadingSession,
         calendar: Calendar = .current
@@ -361,7 +360,6 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         return day >= calendar.startOfDay(for: period.start) && day < period.end
     }
 
-    @MainActor
     static func isInPeriod(
         _ session: ReadingSession,
         period: DateInterval,

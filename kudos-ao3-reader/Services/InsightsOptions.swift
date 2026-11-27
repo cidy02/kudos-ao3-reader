@@ -279,7 +279,7 @@ nonisolated struct InsightsOptions: Equatable, Sendable {
     /// Applies work/fandom/tag exclusions (checking both live `SavedWork` and
     /// `ReadingSession` D1 snapshot fields), Read Aloud inclusion (`countReadAloud`),
     /// and reread exclusion (`countRereads`, keeping only first read-through sessions).
-    @MainActor
+    /// `nonisolated` (like the rest of this struct) so the gather actor can filter on its own context.
     func filter(
         sessions: [ReadingSession],
         works: [SavedWork],
@@ -338,7 +338,6 @@ nonisolated struct InsightsOptions: Equatable, Sendable {
         )
     }
 
-    @MainActor
     private func isExcluded(work: SavedWork, matchers: ExclusionMatchers, aliases: TagAliasResolver) -> Bool {
         let fandomCandidates = work.workFandoms.isEmpty ? work.workTags : work.workFandoms
         if matchers.containsFandom(fandomCandidates, aliases: aliases) {
@@ -355,7 +354,6 @@ nonisolated struct InsightsOptions: Equatable, Sendable {
         return matchers.containsTag(tagCandidates, aliases: aliases)
     }
 
-    @MainActor
     private func isExcluded(session: ReadingSession, matchers: ExclusionMatchers, aliases: TagAliasResolver) -> Bool {
         if matchers.containsFandom(session.fandoms, aliases: aliases) {
             return true
@@ -371,10 +369,9 @@ nonisolated struct InsightsOptions: Equatable, Sendable {
     /// Returns the IDs of sessions belonging to each work's first read-through
     /// (`readThrough == 1`, matching `ReadingHistoryTimeline`'s reread boundary:
     /// every chronological sitting up to and including the first `didFinish == true`).
-    @MainActor
     static func firstReadThroughSessionIDs(from sessions: [ReadingSession]) -> Set<UUID> {
         var keep: Set<UUID> = []
-        for group in Dictionary(grouping: sessions, by: \.workID).values {
+        for group in Dictionary(grouping: sessions, by: { $0.workID }).values {
             let sorted = group.sorted {
                 ($0.startedAt, $0.id.uuidString) < ($1.startedAt, $1.id.uuidString)
             }
@@ -393,8 +390,7 @@ nonisolated struct InsightsOptions: Equatable, Sendable {
 }
 
 /// Result of `InsightsOptions.filter(sessions:works:aliases:)`.
-@MainActor
-struct InsightsFilteredData {
+nonisolated struct InsightsFilteredData {
     var works: [SavedWork]
     var sessions: [ReadingSession]
     /// Sessions of included works before mode (`countReadAloud`) and reread
@@ -630,7 +626,6 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
 
 
     /// Snapshot inputs used to seed deterministic Discreet Mode labels.
-    @MainActor
     struct ScreenSeed {
         var insights: ReadingInsights
         var taste: ReadingTasteInsights?
@@ -645,7 +640,6 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
     /// Builds a screen-wide masker seeded in visible card order, then falls back
     /// through remaining filtered works and sessions so every entity on every tab
     /// gets a stable alphabetical placeholder.
-    @MainActor
     static func forScreen(
         _ seed: ScreenSeed,
         aliases: TagAliasResolver = .empty
@@ -659,7 +653,6 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
         return builder.build()
     }
 
-    @MainActor
     private static func registerOverview(
         _ insights: ReadingInsights,
         finishedWorks: [SavedWork],
@@ -746,7 +739,6 @@ nonisolated struct InsightsDiscreetMasker: Equatable, Sendable {
         stats?.topFandoms.forEach { builder.registerFandom($0.name) }
     }
 
-    @MainActor
     private static func registerRemaining(
         works: [SavedWork],
         sessions: [ReadingSession],
