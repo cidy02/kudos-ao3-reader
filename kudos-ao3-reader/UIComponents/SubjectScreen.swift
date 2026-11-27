@@ -514,14 +514,15 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Byline: View, R
                         besideColumn
                         // One column, as in the default branch: a heading of several views
                         // (fandom label, title, byline) otherwise shared the line side by side.
-                        VStack(alignment: .leading, spacing: 12) { heading(true) }
+                        VStack(alignment: .leading, spacing: 3) { heading(true) }
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    remainder()
+                    VStack(alignment: .leading, spacing: 4) { remainder() }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     HStack(alignment: .top, spacing: WorkRowMetrics.columnGap) {
                         besideColumn
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
                             heading(true)
                             remainder()
                         }
@@ -600,14 +601,13 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Byline: View, R
     private func underTitleLine(_ kind: WorkUnderTitleLine.Kind) -> some View {
         switch kind {
         case .heading:
-            // Own stack, so the heading's parts keep their 12 pt spacing.
-            VStack(alignment: .leading, spacing: 12) { heading(false) }
+            VStack(alignment: .leading, spacing: 2) { heading(false) }
         case .symbols:
             symbols(.row)
         case .byline:
-            VStack(alignment: .leading, spacing: 12) { byline() }
+            VStack(alignment: .leading, spacing: 2) { byline() }
         case .remainder:
-            remainder()
+            VStack(alignment: .leading, spacing: 4) { remainder() }
         }
     }
 }
@@ -665,7 +665,7 @@ struct WorkChapterBarLine: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let label {
                     Text(label)
-                        .font(.caption2.weight(.semibold))
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: true, vertical: true)
                         .accessibilityHidden(true)
@@ -702,7 +702,7 @@ struct WorkReadProgressBar: View {
             .frame(height: 3)
             .accessibilityHidden(true)
             Text("\(percent)%")
-                .font(.caption2.weight(.semibold))
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize()
                 .accessibilityHidden(true)

@@ -55,7 +55,8 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
     /// Collections, which lists no works here.
     var orderDescription: String {
         switch self {
-        case .readingNow, .finished, .history: "most recently read first"
+        case .readingNow, .history: "most recently read first"
+        case .finished: "most recently finished first"
         case .savedForLater: "most recently read or added first"
         case .downloaded, .favorites: "newest first"
         case .collections: ""
@@ -175,4 +176,55 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
 nonisolated struct LibrarySectionRoute: Hashable, Sendable {
     let kind: LibrarySectionKind
     let originKicker: String
+}
+
+/// Board copy for Favourites cover card footers (`Library` board):
+/// single finish prints "Read Aug 2"; rereads print "Read ×2 · Oct 24".
+enum LibraryFavouriteCardCopy {
+    static func footer(
+        finishCount: Int,
+        lastFinishedAt: Date?,
+        locale: Locale = .autoupdatingCurrent,
+        timeZone: TimeZone = .autoupdatingCurrent
+    ) -> String? {
+        guard finishCount > 0, let lastFinishedAt else { return nil }
+        let date = Date.FormatStyle(locale: locale, timeZone: timeZone)
+            .month(.abbreviated)
+            .day()
+            .format(lastFinishedAt)
+        if finishCount == 1 {
+            return "Read \(date)"
+        }
+        return "Read ×\(finishCount) · \(date)"
+    }
+}
+
+/// Board copy for Library shelf page subtitles (`Shelf-List`, `Shelf-Grid`, `Library-Select`).
+enum LibraryShelfHeaderCopy {
+    static func tallyLine(
+        visibleCount: Int,
+        totalCount: Int,
+        orderDescription: String,
+        arrangement: WorkListArrangement,
+        hasActiveFilters: Bool,
+        isSelecting: Bool,
+        selectedCount: Int
+    ) -> String {
+        if isSelecting {
+            let tally = "\(selectedCount) of \(visibleCount) selected"
+            guard !hasActiveFilters, !orderDescription.isEmpty else { return tally }
+            return "\(tally) · \(orderDescription)"
+        }
+        if hasActiveFilters, visibleCount == 0, totalCount > 0 {
+            let noun = totalCount == 1 ? "work" : "works"
+            return "\(totalCount) \(noun) · none match the current filters"
+        }
+        let noun = visibleCount == 1 ? "work" : "works"
+        let tally = "\(visibleCount) \(noun)"
+        if arrangement == .grid {
+            return "\(tally) · Grid"
+        }
+        guard !hasActiveFilters, !orderDescription.isEmpty else { return tally }
+        return "\(tally) · \(orderDescription)"
+    }
 }

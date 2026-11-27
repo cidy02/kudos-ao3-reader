@@ -111,8 +111,9 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
 
             ForEach(timeline.days) { day in
                 Section {
-                    SectionRuleHeader(
-                        title: dayTitle(day.start), countText: ReadingInsights.durationLabel(day.totalSeconds)
+                    dayHeader(
+                        title: dayTitle(day.start),
+                        duration: ReadingInsights.durationLabel(day.totalSeconds)
                     )
                     .pageBodyRow(top: 22, gutter: 0)
                     ForEach(day.sittings) { sitting in
@@ -191,19 +192,44 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
         return parts.joined(separator: " · ")
     }
 
-    private func stepButton(_ delta: Int, systemImage: String, label: String) -> some View {
-        Button {
-            anchor = calendar.date(byAdding: scope.component, value: delta, to: anchor) ?? anchor
-        } label: {
-            Image(systemName: systemImage)
-                .font(.footnote.weight(.bold))
-                .frame(width: 32, height: 32)
-                .background(Circle().fill(themeManager.appTheme.glassFill(0.12)))
+    @ViewBuilder
+    private func dayHeader(title: String, duration: String) -> some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(Color.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(duration)
+                        .font(.subheadline)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondaryInk)
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(title)
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(duration)
+                        .font(.subheadline)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondaryInk)
+                        .lineLimit(1)
+                }
+            }
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(themeManager.accentInk)
-        .minimumHitTarget()
-        .accessibilityLabel(label)
+        .padding(.horizontal, SubjectMetrics.gutter)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    private func stepButton(_ delta: Int, systemImage: String, label: String) -> some View {
+        ReadingHistoryStepButton(systemImage: systemImage, label: label) {
+            anchor = calendar.date(byAdding: scope.component, value: delta, to: anchor) ?? anchor
+        }
     }
 
     // MARK: Month and Year extras
@@ -367,12 +393,12 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
         }
     }
 
-    /// Filled for a sitting that finished the work, a ring otherwise.
+    /// Filled green for a sitting that finished the work, an accent ring otherwise (`Library-Section` board).
     private func railDot(finished: Bool) -> some View {
-        let tint = themeManager.accentInk
+        let strokeTint = finished ? themeManager.appTheme.includeColor : themeManager.accentInk
         return Circle()
-            .fill(finished ? tint : themeManager.appTheme.cardSurface)
-            .overlay(Circle().strokeBorder(tint, lineWidth: 2))
+            .fill(finished ? themeManager.appTheme.includeColor : themeManager.appTheme.cardSurface)
+            .overlay(Circle().strokeBorder(strokeTint, lineWidth: 2))
             .frame(width: 12, height: 12)
             .accessibilityHidden(true)
     }
@@ -401,12 +427,25 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let badge = sitting.badge {
-                    SubjectStateBadge(title: badge.title, color: themeManager.accentInk)
+                    sittingBadge(badge)
                 }
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spoken.compactMap { $0 }.joined(separator: ", "))
+    }
+
+    private func sittingBadge(_ badge: ReadingHistoryTimeline.Badge) -> some View {
+        let foreground: Color = badge == .finished ? themeManager.appTheme.includeColor : .primary
+        let background: Color = badge == .finished
+            ? themeManager.appTheme.includeColor.opacity(0.14)
+            : themeManager.appTheme.shelfTileSurface
+        return Text(badge.title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(background, in: Capsule())
     }
 
     // MARK: Off the timeline

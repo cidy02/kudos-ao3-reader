@@ -275,3 +275,96 @@ struct LibraryCollapsingShelf<Content: View>: View {
         }
     }
 }
+
+/// Plain "On AO3" row on the Library page (`Library` board): 22 pt accent glyph,
+/// body title, tabular secondary count, chevron, and hairline divider under the text column.
+struct LibraryAO3Row: View {
+    let title: String
+    let systemImage: String
+    let count: String?
+    let showsSeparator: Bool
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var iconColumnWidth: CGFloat = 22
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    ViewThatFits(in: .horizontal) {
+                        rowContent(showsIcon: true, oneLine: true)
+                        rowContent(showsIcon: false, oneLine: false)
+                    }
+                } else {
+                    rowContent(showsIcon: true, oneLine: false)
+                }
+            }
+            .padding(.horizontal, SubjectMetrics.gutter)
+            .padding(.vertical, 10)
+            .frame(minHeight: 48)
+            .contentShape(Rectangle())
+
+            if showsSeparator {
+                Rectangle()
+                    .fill(.separator)
+                    .frame(height: 0.5)
+                    .padding(.leading, dynamicTypeSize.isAccessibilitySize ? SubjectMetrics.gutter : 52)
+                    .padding(.trailing, SubjectMetrics.gutter)
+                    .accessibilityHidden(true)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(count.map { "\(title), \($0)" } ?? title)
+    }
+
+    private func rowContent(showsIcon: Bool, oneLine: Bool) -> some View {
+        HStack(spacing: 14) {
+            if showsIcon {
+                Image(systemName: systemImage)
+                    .font(.body)
+                    .foregroundStyle(.accentInk)
+                    .frame(width: iconColumnWidth, alignment: .center)
+                    .accessibilityHidden(true)
+            }
+            Text(title)
+                .font(.body)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: oneLine, vertical: !oneLine)
+            Spacer(minLength: 8)
+            if let count {
+                Text(count)
+                    .font(.body.monospacedDigit())
+                    .foregroundStyle(.secondaryInk)
+                    .lineLimit(1)
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+/// Neutral circular step button for History's period pager (`Library-Section` board):
+/// primary ink when enabled, tertiary when disabled, on `shelfTileSurface`.
+struct ReadingHistoryStepButton: View {
+    let systemImage: String
+    let label: String
+    let action: () -> Void
+
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(ThemeManager.self) private var themeManager
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(isEnabled ? AnyShapeStyle(Color.primary) : AnyShapeStyle(.tertiary))
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(themeManager.appTheme.shelfTileSurface))
+        }
+        .buttonStyle(.plain)
+        .minimumHitTarget()
+        .accessibilityLabel(label)
+    }
+}

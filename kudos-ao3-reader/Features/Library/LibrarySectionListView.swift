@@ -356,24 +356,15 @@ struct LibrarySectionListView: View {
     }
 
     private var headerTallyLine: String {
-        if isSelecting {
-            let total = visibleItems.count
-            let tally = "\(selectedWorks.count) of \(total) selected"
-            let order = kind.orderDescription
-            guard !filters.hasActiveFilters, !order.isEmpty else { return tally }
-            return "\(tally) · \(order)"
-        }
-        if filters.hasActiveFilters, visibleItems.isEmpty, !items.isEmpty {
-            let count = items.count
-            return "\(count) \(count == 1 ? "work" : "works") · none match the current filters"
-        }
-        let workCount = visibleItems.count
-        let tally = "\(workCount) \(workCount == 1 ? "work" : "works")"
-        // A filter brings its own sort (`visibleItems`), so the section's order
-        // is only true while none is on.
-        let order = kind.orderDescription
-        guard !filters.hasActiveFilters, !order.isEmpty else { return tally }
-        return "\(tally) · \(order)"
+        LibraryShelfHeaderCopy.tallyLine(
+            visibleCount: visibleItems.count,
+            totalCount: items.count,
+            orderDescription: kind.orderDescription,
+            arrangement: arrangement,
+            hasActiveFilters: filters.hasActiveFilters,
+            isSelecting: isSelecting,
+            selectedCount: selectedWorks.count
+        )
     }
 
     private var filterCollisionCard: some View {
@@ -754,20 +745,19 @@ struct LibrarySectionListView: View {
 
             if !visibleItems.isEmpty {
                 ForEach(groups) { group in
-                    Section {
-                        ForEach(group.workIDs, id: \.self) { id in
-                            if let work = byID[id] {
-                                row(work, summary: summaries[id]).cardRow(
-                                    isSelected: isSelecting && selection.contains(work.id),
-                                    chrome: .plain
-                                )
-                            }
+                    if groups.count == 1, kind != .history {
+                        Section {
+                            sectionRows(for: group, byID: byID, summaries: summaries)
                         }
-                    } header: {
-                        SectionRuleHeader(title: group.title, count: group.workIDs.count)
-                            .textCase(nil)
-                            .listRowInsets(EdgeInsets())
-                            .padding(.bottom, 10)
+                    } else {
+                        Section {
+                            sectionRows(for: group, byID: byID, summaries: summaries)
+                        } header: {
+                            SectionRuleHeader(title: group.title, count: group.workIDs.count)
+                                .textCase(nil)
+                                .listRowInsets(EdgeInsets())
+                                .padding(.bottom, 10)
+                        }
                     }
                 }
             } else if filters.hasActiveFilters {
@@ -800,14 +790,33 @@ struct LibrarySectionListView: View {
                 if items.isEmpty, filters.hasActiveFilters {
                     filterCollisionCard.padding(.horizontal, 16)
                 } else {
-                    ForEach(groupedItems) { group in
-                        SectionRuleHeader(title: group.title, count: group.workIDs.count)
+                    let groups = groupedItems
+                    ForEach(groups) { group in
+                        if groups.count > 1 {
+                            SectionRuleHeader(title: group.title, count: group.workIDs.count)
+                        }
                         workGrid(Self.works(in: group, from: items))
                     }
                 }
             }
         }
         .subjectScreenWash(palette: scopePalette, role: .content)
+    }
+
+    @ViewBuilder
+    private func sectionRows(
+        for group: LibraryHistoryGrouping.Bucket,
+        byID: [UUID: SavedWork],
+        summaries: [UUID: WorkReadingSummary]
+    ) -> some View {
+        ForEach(group.workIDs, id: \.self) { id in
+            if let work = byID[id] {
+                row(work, summary: summaries[id]).cardRow(
+                    isSelected: isSelecting && selection.contains(work.id),
+                    chrome: .plain
+                )
+            }
+        }
     }
 
     /// A bucket's works in list order. Buckets keep the incoming order, so
@@ -817,12 +826,23 @@ struct LibrarySectionListView: View {
         return items.filter { ids.contains($0.id) }
     }
 
+    private func gridCardFooter(for work: SavedWork) -> String? {
+        guard kind == .favorites else { return nil }
+        if !work.isFinished, (work.readingProgress ?? 0) > 0 { return nil }
+        let finishes = finishingSessions.filter { $0.workID == work.id }
+        return LibraryFavouriteCardCopy.footer(
+            finishCount: finishes.count,
+            lastFinishedAt: finishes.map(\.endedAt).max()
+        )
+    }
+
     private func workGrid(_ works: [SavedWork]) -> some View {
         CarouselCardGrid {
             ForEach(works) { work in
                 if isSelecting {
                     SensitiveWorkCoverCard(
                         work: work,
+                        footer: gridCardFooter(for: work),
                         metadataStyle: kind == .downloaded ? .downloaded : .standard,
                         isSelecting: true,
                         isSelected: selection.contains(work.id),
@@ -833,6 +853,7 @@ struct LibrarySectionListView: View {
                     NavigationLink(value: LocalWorkDestination.reader(work)) {
                         SensitiveWorkCoverCard(
                             work: work,
+                            footer: gridCardFooter(for: work),
                             metadataStyle: kind == .downloaded ? .downloaded : .standard
                         )
                     }
@@ -845,7 +866,8 @@ struct LibrarySectionListView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
     }
 
     /// A local work row with the Library's standard swipe actions (save / favorite /
