@@ -73,7 +73,7 @@ struct ChapterEditorScreen: View {
     @State var annotationSyncTask: Task<Void, Never>?
     @State var annotationSyncGeneration = 0
     @State var isClosing = false
-    @State var sprintController = SprintController()
+    @State var sprintController = SprintController(outside: .system)
     @State var phoneWriting = ChapterEditorPhoneWriting()
 
     struct InitialSnapshot: Equatable {
@@ -195,6 +195,9 @@ struct ChapterEditorScreen: View {
         .onChange(of: notesBefore) { _, _ in scheduleLocalSave() }
         .onChange(of: notesAfter) { _, _ in scheduleLocalSave() }
         .sprintHost(sprintController, words: currentWordCount, workID: documentBridge.workID, isClosing: isClosing)
+        // the Lock Screen widget's "what you're writing" (T-576e)
+        .onAppear { KudosWidgetBridge.noteEditing(work: workTitle, chapter: chapterTitle) }
+        .onDisappear { KudosWidgetBridge.noteEditing(work: workTitle, chapter: chapterTitle) }
         .onDisappear {
             metadataSaveTask?.cancel()
             statusClearTask?.cancel()

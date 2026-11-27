@@ -30,10 +30,12 @@ final class SprintController {
     @ObservationIgnored private var records: [SprintRecord] = []
     @ObservationIgnored private var pendingSaveTask: Task<Void, Never>?
     @ObservationIgnored var tap: () -> Void = { SprintHaptics.lightTap() }
+    @ObservationIgnored private let outside: SprintOutsideHooks?
 
-    init(history: SprintHistory = .shared, calendar: Calendar = .current) {
+    init(history: SprintHistory = .shared, calendar: Calendar = .current, outside: SprintOutsideHooks? = nil) {
         self.history = history
         self.calendar = calendar
+        self.outside = outside
     }
 
     var statusInfo: SprintStatusInfo? {
@@ -59,7 +61,9 @@ final class SprintController {
 
     func start(minutes: Int, currentWords: Int, workID: UUID?, now: Date = Date()) {
         guard active == nil else { return }
-        active = SprintState(startedAt: now, plannedMinutes: minutes, startWords: currentWords, workID: workID)
+        let state = SprintState(startedAt: now, plannedMinutes: minutes, startWords: currentWords, workID: workID)
+        active = state
+        outside?.started(state)
         Task { await loadHistory() }
     }
 
@@ -71,6 +75,7 @@ final class SprintController {
         }
         let crossed = state.update(currentWords: current, now: now)
         active = state
+        outside?.progressed(state)
         if !crossed.isEmpty { tap() }
     }
 
@@ -117,6 +122,7 @@ final class SprintController {
             try? await history.append(record)
         }
         active = nil
+        outside?.finished(finished)
         if showsResult { result = finished }
         return finished
     }
