@@ -559,7 +559,7 @@ struct BackupSettingsSection: View {
                 }
             }
             .disabled(isBusy)
-            .accessibilityLabel("Export Backup")
+            .accessibilityLabel("Export Backup…")
             Button(action: onImport) {
                 HStack(spacing: 12) {
                     Image(systemName: "square.and.arrow.down")
@@ -576,7 +576,7 @@ struct BackupSettingsSection: View {
                 }
             }
             .disabled(isBusy)
-            .accessibilityLabel("Import Backup")
+            .accessibilityLabel("Import Backup…")
             // A full-width bar while either side is working. Indeterminate on
             // purpose: neither `writeArchive` nor `restore` reports per-record
             // progress today, and a bar that invented a percentage would be

@@ -483,7 +483,6 @@ struct ReaderFontSection: View {
 
             Button("Add Font…", action: onAddFont)
                 .foregroundStyle(.accentInk)
-                .accessibilityLabel("Add Font")
         }
     }
 

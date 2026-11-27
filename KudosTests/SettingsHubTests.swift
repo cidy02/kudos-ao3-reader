@@ -234,6 +234,29 @@ struct SettingsHubTests {
         #expect(!SettingsRoute.font.matches(query: "xyznonexistent", currentValue: "Georgia"))
     }
 
+    /// Report a Bug is not a route. Searching its title used to drop the About
+    /// group, so the row was gone for the words on the row itself.
+    @Test func reportBugRowStaysReachableWhenTheQueryIsItsOwnTitle() {
+        let titled = SettingsHubFilter.sections(matching: "Report a Bug") { _ in "" }
+        let about = titled.first { $0.title == "About" }
+        #expect(about?.showsReportBug == true)
+        #expect(about?.routes.contains(.about) == false)
+
+        let partial = SettingsHubFilter.sections(matching: "report a") { _ in "" }
+        #expect(partial.first { $0.title == "About" }?.showsReportBug == true)
+
+        let version = SettingsHubFilter.sections(matching: "version") { _ in "" }
+        #expect(version.first { $0.title == "About" }?.routes.contains(.about) == true)
+        #expect(version.first { $0.title == "About" }?.showsReportBug == false)
+
+        let storage = SettingsHubFilter.sections(matching: "storage") { _ in "" }
+        #expect(storage.contains { $0.title == "About" } == false)
+
+        let idle = SettingsHubFilter.sections(matching: "") { _ in "" }
+        #expect(idle.map(\.title) == SettingsRoute.hubGroups.map(\.title))
+        #expect(idle.first { $0.title == "About" }?.showsReportBug == true)
+    }
+
     @Test func hubFirstSectionFooterCarriesFactAndVoiceOverValue() {
         #expect(SettingsHubView.hubFooterText == "Changes here affect Kudos, not your AO3 account")
         #expect(SettingsHubView.hubFooterAccessibilityValue == "These settings are stored on this device only and are never sent to AO3.")

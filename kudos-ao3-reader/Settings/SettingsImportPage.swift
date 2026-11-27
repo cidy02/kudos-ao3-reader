@@ -170,7 +170,7 @@ struct EPUBImportSettingsSection: View {
                 }
             }
             .disabled(isImporting)
-            .accessibilityLabel("Import Files")
+            .accessibilityLabel("Import Files…")
 
             if isImporting {
                 HStack(spacing: 12) {

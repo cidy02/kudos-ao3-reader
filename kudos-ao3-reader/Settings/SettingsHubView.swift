@@ -1,6 +1,47 @@
 import SwiftData
 import SwiftUI
 
+/// One Settings hub section after search. `showsReportBug` is separate from
+/// `routes` because Report a Bug is not a `SettingsRoute`: searching its own
+/// title must still show the row when the About route does not match.
+struct SettingsHubSearchSection: Equatable {
+    var title: String
+    var routes: [SettingsRoute]
+    var showsReportBug: Bool
+}
+
+/// Search for the Settings hub, including the Report a Bug row.
+enum SettingsHubFilter {
+    static func reportBugMatches(_ query: String) -> Bool {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        return ["Report a Bug", "bug", "report", "feedback", "about"].contains {
+            $0.localizedCaseInsensitiveContains(trimmed)
+        }
+    }
+
+    static func sections(
+        matching query: String,
+        valueFor route: (SettingsRoute) -> String
+    ) -> [SettingsHubSearchSection] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let showsBug = reportBugMatches(trimmed)
+        if trimmed.isEmpty {
+            return SettingsRoute.hubGroups.map {
+                SettingsHubSearchSection(title: $0.title, routes: $0.routes, showsReportBug: $0.routes.contains(.about))
+            }
+        }
+        return SettingsRoute.hubGroups.compactMap { group in
+            let matching = group.routes.filter { route in
+                route.matches(query: trimmed, currentValue: valueFor(route))
+            }
+            let showsReportBug = group.routes.contains(.about) && showsBug
+            guard !matching.isEmpty || showsReportBug else { return nil }
+            return SettingsHubSearchSection(title: group.title, routes: matching, showsReportBug: showsReportBug)
+        }
+    }
+}
+
 /// Account → Settings, artboard **1ab**: a short hub of grouped value rows, each
 /// pushing the page that holds its controls (`SettingsRoute.hubGroups`).
 ///
@@ -39,17 +80,10 @@ struct SettingsHubView: View {
     static let hubFooterText = "Changes here affect Kudos, not your AO3 account"
     static let hubFooterAccessibilityValue = "These settings are stored on this device only and are never sent to AO3."
 
-    private var filteredGroups: [SettingsHubGroup] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if query.isEmpty {
-            return SettingsRoute.hubGroups
-        }
+    private var filteredSections: [SettingsHubSearchSection] {
         let currentInputs = inputs
-        return SettingsRoute.hubGroups.compactMap { group in
-            let matching = group.routes.filter { route in
-                route.matches(query: query, currentValue: SettingsHubValue.row(route, currentInputs))
-            }
-            return matching.isEmpty ? nil : SettingsHubGroup(title: group.title, routes: matching)
+        return SettingsHubFilter.sections(matching: searchText) { route in
+            SettingsHubValue.row(route, currentInputs)
         }
     }
 
@@ -74,26 +108,18 @@ struct SettingsHubView: View {
         return terms.contains { $0.localizedCaseInsensitiveContains(query) }
     }
 
-    private var showsReportBugRow: Bool {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return true }
-        return ["Report a Bug", "bug", "report", "feedback", "about"].contains {
-            $0.localizedCaseInsensitiveContains(query)
-        }
-    }
-
     var body: some View {
         let inputs = self.inputs
         List {
-            ForEach(filteredGroups) { group in
+            ForEach(filteredSections, id: \.title) { section in
                 Section {
-                    ForEach(group.routes, id: \.self) { route in
+                    ForEach(section.routes, id: \.self) { route in
                         let value = SettingsHubValue.row(route, inputs)
                         NavigationLink(value: route) {
                             SettingsHubRow(route: route, value: value)
                         }
                     }
-                    if group.routes.contains(.about) && showsReportBugRow {
+                    if section.showsReportBug {
                         Button {
                             showingBugReport = true
                         } label: {
@@ -106,9 +132,9 @@ struct SettingsHubView: View {
                         .accessibilityLabel("Report a Bug")
                     }
                 } header: {
-                    Text(group.title)
+                    Text(section.title)
                 } footer: {
-                    if group.id == SettingsRoute.hubGroups.first?.id {
+                    if section.title == SettingsRoute.hubGroups.first?.title {
                         Text(Self.hubFooterText)
                             .accessibilityLabel(Self.hubFooterText)
                             .accessibilityValue(Self.hubFooterAccessibilityValue)

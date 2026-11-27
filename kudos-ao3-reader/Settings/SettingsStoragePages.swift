@@ -82,7 +82,6 @@ struct SettingsDownloadsPage: View {
                             .foregroundStyle(.accentInk)
                     }
                 }
-                .accessibilityElement(children: .combine)
                 .accessibilityLabel("Check Availability")
                 .accessibilityValue(lastAvailabilityRun.map { Self.lastRunValue(for: $0) } ?? "")
             } header: {
@@ -136,7 +135,6 @@ struct SettingsPreservationPage: View {
                         }
                     }
                 }
-                .accessibilityElement(children: .combine)
                 .accessibilityLabel(Self.checkAvailabilityTitle)
                 .accessibilityValue(lastAvailabilityRun.map { Self.lastCheckedLabel(for: $0) } ?? "")
             } header: {
@@ -221,7 +219,6 @@ struct SettingsLibraryPage: View {
         .pickerStyle(.segmented)
         .labelsHidden()
         .accentFill()
-        .accessibilityLabel("Symbols")
     }
 
     private var shelvesSection: some View {
@@ -246,7 +243,6 @@ struct SettingsLibraryPage: View {
                     }
                 }
             }
-            .accessibilityElement(children: .combine)
             .accessibilityLabel("Edit Shelves")
             .accessibilityValue(Self.shelvesShownLabel(count: pageArrangement.sections.count))
         } header: {

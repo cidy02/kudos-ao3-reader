@@ -276,7 +276,6 @@ struct FolderSyncSettingsSection: View {
                 }
             }
         }
-        .accessibilityElement(children: .combine)
         .accessibilityLabel("Sync Details")
         .accessibilityValue(SyncFolderDisplayCopy.pendingLabel(isDirty: folderStatus.isDirty))
 

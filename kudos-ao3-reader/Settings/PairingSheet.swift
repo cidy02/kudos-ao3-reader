@@ -111,6 +111,9 @@ struct TombstoneTrustSettingsSection: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(TrustedDeviceCopy.thisDeviceTitle(deviceName: deviceName))
         .accessibilityValue(TrustedDeviceCopy.thisDeviceDetail)
+        .accessibilityAction(named: "Copy Key") {
+            copyDeviceKey()
+        }
         .contextMenu {
             Button("Copy Key") {
                 copyDeviceKey()
@@ -174,7 +177,7 @@ struct TombstoneTrustSettingsSection: View {
                         .foregroundStyle(.accentInk)
                 }
             }
-            .accessibilityLabel("Pair a Device")
+            .accessibilityLabel("Pair a Device…")
 
             if let statusMessage {
                 Text(statusMessage)
