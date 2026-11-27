@@ -48,3 +48,30 @@ export function offsetsFor(source: string, decoded: string): { starts: Int32Arra
   }
   return { starts, ends };
 }
+
+/** `source` (text between tags) with its character references decoded, as the tokenizer would. */
+export function decodeText(source: string): string {
+  let out = '';
+  let si = 0;
+  outer: while (si < source.length) {
+    if (source[si] === '&') {
+      const m = REF.exec(source.slice(si, si + 40));
+      for (let len = m ? m[0].length : 0; len >= 2; len--) {
+        const ref = source.slice(si, si + len);
+        const r = decodeRef(ref);
+        if (r !== ref) { out += r; si += len; continue outer; }
+      }
+    }
+    out += source[si];
+    si++;
+  }
+  return out;
+}
+
+/** The start of the character reference that covers `offset` in `source`, or null when none does. */
+export function refCovering(source: string, offset: number): number | null {
+  const amp = source.lastIndexOf('&', offset);
+  if (amp < 0 || offset - amp > 40) return null;
+  const m = REF.exec(source.slice(amp, amp + 40));
+  return m && amp + m[0].length > offset ? amp : null;
+}

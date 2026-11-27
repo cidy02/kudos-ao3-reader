@@ -56,6 +56,8 @@ protocol DraftSourceBridge: AnyObject {
     func setCaretOffsetUTF16(_ offset: Int)
     func replaceForModeHandoff(_ value: String, caretOffset: Int?)
     func restore(_ value: String)
+    /// Replaces a UTF-16 range of the text, undoably, caret after it (a beta's suggestion, T-576f).
+    func replaceText(in range: NSRange, with value: String)
     func focus()
     func undo()
     func redo()

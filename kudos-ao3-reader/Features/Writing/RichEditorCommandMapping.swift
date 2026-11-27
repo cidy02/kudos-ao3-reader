@@ -138,9 +138,10 @@ extension DraftSession {
         }
     }
 
-    /// The HTML Rich Text would hand back now, without a checkpoint or any other side effect: what a TK's range
-    /// (`lastTypedTK`) indexes into (T-576d).
+    /// The HTML the editor holds now, without a checkpoint or any other side effect: what a TK's range
+    /// (`lastTypedTK`, T-576d) and `replaceText(in:with:)` (T-576f) index into. HTML mode's own text there.
     func currentHTML() async -> String? {
+        if state == .sourceOwned { return source.text }
         guard state == .richOwned, let transport = richTransport else { return nil }
         do {
             return try await transport.snapshot(RichEditorSnapshotArgs(caret: false)).html
@@ -153,5 +154,101 @@ extension DraftSession {
     /// Replaces the word before the caret with a suggestion (a name from the work's story notes, T-576d).
     func completeWord(_ text: String) {
         applyRichCommand(name: "completeWord", attrs: ["text": .string(text)])
+    }
+
+    /// Moves the caret by `count` words (negative = back), the keys bar's slide (T-576e). `extend` keeps the anchor.
+    /// Rich Text only; false when nothing moved.
+    @discardableResult
+    func moveByWord(_ count: Int, extend: Bool) async -> Bool {
+        await richCommandApplied(.moveWord(count, extend: extend))
+    }
+
+    /// One dictated phrase at the caret, its own undo step "Dictation", with a space before it where one is needed
+    /// (T-576e). Undo Last Phrase is `undo()`. Rich Text only.
+    @discardableResult
+    func insertDictatedPhrase(_ text: String) async -> Bool {
+        await richCommandApplied(.insertPhrase(text))
+    }
+
+    /// A new paragraph at the caret, as Return makes, its own undo step (T-576e). Rich Text only.
+    @discardableResult
+    func insertParagraphBreak() async -> Bool {
+        await richCommandApplied(.newParagraph)
+    }
+
+    /// Replaces `range` (UTF-16 offsets into `currentHTML()`) with plain `text`, escaped here, as one undo step
+    /// (T-576f, a beta's suggestion). False when the range is stale or out of bounds, or isn't inside one run of text:
+    /// it crosses or sits in a tag, or splits a character reference. Rich Text and HTML mode.
+    func replaceText(in range: RichEditorTextRange, with text: String) async -> Bool {
+        switch state {
+        case .richOwned:
+            return await richCommandApplied(.replaceText(range, with: text))
+        case .sourceOwned:
+            guard !(text.isEmpty && range.from == range.to),
+                  let target = Self.textRunRange(range, in: source.text) else { return false }
+            source.replaceText(in: target, with: Self.escapedText(text))
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func richCommandApplied(_ args: RichEditorCommandArgs) async -> Bool {
+        guard state == .richOwned, let transport = richTransport else { return false }
+        do {
+            return try await transport.command(args).applied
+        } catch {
+            logNonFatal("Rich command '\(args.name)' failed: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// `range` as an NSRange of `html` when it lies in one run of text: in bounds, no tag inside it or around it, and
+    /// neither end inside a character reference.
+    nonisolated static func textRunRange(_ range: RichEditorTextRange, in html: String) -> NSRange? {
+        let ns = html as NSString
+        guard range.from >= 0, range.to >= range.from, range.to <= ns.length else { return nil }
+        let target = NSRange(location: range.from, length: range.to - range.from)
+        let slice = ns.substring(with: target)
+        guard !slice.contains("<"), !slice.contains(">") else { return nil }
+        let before = ns.substring(to: range.from)
+        if let open = before.lastIndex(of: "<"), before[open...].firstIndex(of: ">") == nil { return nil }
+        func insideReference(_ offset: Int) -> Bool {
+            guard offset > 0, offset < ns.length else { return false }
+            let lower = max(0, offset - 32)
+            let head = ns.substring(with: NSRange(location: lower, length: offset - lower))
+            guard let amp = head.lastIndex(of: "&") else { return false }
+            let name = head[head.index(after: amp)...]
+            let isRefChar: (Character) -> Bool = { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "#") }
+            guard !name.isEmpty, name.allSatisfy(isRefChar), let next = ns.substring(from: offset).first else { return false }
+            return isRefChar(next) || next == ";"
+        }
+        return insideReference(range.from) || insideReference(range.to) ? nil : target
+    }
+
+    nonisolated static func escapedText(_ text: String) -> String {
+        text.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+    }
+}
+
+extension RichEditorCommandArgs {
+    /// The keys bar's slide (T-576e).
+    static func moveWord(_ count: Int, extend: Bool) -> Self {
+        Self(name: "moveWord", attrs: ["by": .int(count), "extend": .bool(extend)])
+    }
+
+    /// One dictated phrase (T-576e).
+    static func insertPhrase(_ text: String) -> Self {
+        Self(name: "insertPhrase", attrs: ["text": .string(text)])
+    }
+
+    /// Return, as a command (dictation's "new paragraph", T-576e).
+    static let newParagraph = Self(name: "newParagraph", attrs: [:])
+
+    /// A beta's suggestion (T-576f).
+    static func replaceText(_ range: RichEditorTextRange, with text: String) -> Self {
+        Self(name: "replaceText", attrs: ["from": .int(range.from), "to": .int(range.to), "text": .string(text)])
     }
 }

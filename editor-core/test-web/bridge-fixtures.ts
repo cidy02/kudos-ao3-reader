@@ -35,6 +35,10 @@ export const COMMANDS: Fixtures['commands'] = [
   { id: 'host.insertQuotationMarks', name: 'insertQuotes', attrs: { open: '“', close: '”' } },
   { id: 'tag.lineBreak', name: 'insertLineBreak', attrs: {} },
   { id: 'session.completeWord', name: 'completeWord', attrs: { text: 'Marta' } },
+  { id: 'session.moveWord', name: 'moveWord', attrs: { by: -2, extend: true } },
+  { id: 'session.insertPhrase', name: 'insertPhrase', attrs: { text: 'as if listening' } },
+  { id: 'session.newParagraph', name: 'newParagraph', attrs: {} },
+  { id: 'session.replaceText', name: 'replaceText', attrs: { from: 3, to: 8, text: 'three times' } },
 ];
 
 /** Timings vary run to run; everything else is deterministic. */

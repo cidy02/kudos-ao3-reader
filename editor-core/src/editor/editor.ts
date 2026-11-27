@@ -4,11 +4,13 @@ import type { Command, Transaction } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { closeHistory, history, isHistoryTransaction, redoDepth, undoDepth } from 'prosemirror-history';
 import { keymap } from 'prosemirror-keymap';
-import { baseKeymap } from 'prosemirror-commands';
+import { baseKeymap, chainCommands } from 'prosemirror-commands';
+import { Mark } from 'prosemirror-model';
 import { liftListItem, sinkListItem, splitListItem } from 'prosemirror-schema-list';
 import { activate as mapCaret, lint, load, schema } from '../index.ts';
 import type { LoadResult, LossReport, Variant } from '../index.ts';
 import * as cmd from './commands.ts';
+import { decodeText, refCovering } from '../decode.ts';
 import type { FormatAlignment, FormatBlock, FormatDirection, FormatMark, SceneBreakStyle } from './commands.ts';
 import { IncrementalSerializer } from './incremental.ts';
 import { insertPaste, pasteContent, sliceHtml, sliceText } from './paste.ts';
@@ -542,9 +544,69 @@ export class Editor {
       case 'moveCaret': return cmd.moveCaret(num('by') ?? 0);
       case 'insertLineBreak': return cmd.hardBreak;
       case 'completeWord': return cmd.completeWord(str('text'));
+      case 'moveWord': return cmd.moveWord(num('by') ?? 0, a.extend === true);
+      case 'insertPhrase': return str('text').length <= 10_000 ? cmd.insertPhrase(str('text')) : null;
+      case 'newParagraph': return chainCommands(splitListItem(schema.nodes.list_item!), baseKeymap.Enter!);
+      case 'replaceText': return this.replaceText(num('from'), num('to'), str('text'));
       case 'openTableInHTML': return null; // the native side switches views; nothing changes here
       default: return null;
     }
+  }
+
+  /**
+   * Replaces [from, to) of the text HTML mode holds with plain text (T-576f, a beta's suggestion), only when the range
+   * maps back to exactly those offsets (no split entity) and lies in one run of text (no tag inside it).
+   */
+  private replaceText(from: number | null, to: number | null, text: string): Command | null {
+    if (from === null || to === null || !Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from) return null;
+    if (text.length > 10_000 || (!text && to === from)) return null;
+    return (state, dispatch) => {
+      const source = this.textForOffsets();
+      if (to > source.length) return false;
+      const slice = source.slice(from, to);
+      if (/[<>]/.test(slice)) return false;
+      const inRef = (o: number) => { const r = refCovering(source, o); return r !== null && r < o; };
+      if (inRef(from) || inRef(to)) return false;
+      // The source map aligns characters, not the spaces between them (part 1, 7.5): place each end from the nearest
+      // character in the same run of text, then check the document holds exactly this text there.
+      const posBefore = (o: number): number | null => {
+        for (let k = o; k < source.length && source[k] !== '<'; k++) {
+          if (!/\s/.test(source[k]!)) return this.posForOffset(k) - decodeText(source.slice(o, k)).length;
+        }
+        for (let k = o - 1; k >= 0 && source[k] !== '>'; k--) {
+          if (!/\s/.test(source[k]!)) { const s = refCovering(source, k) ?? k; return this.posForOffset(s) + decodeText(source.slice(s, o)).length; }
+        }
+        return null;
+      };
+      const pFrom = posBefore(from);
+      const pTo = to > from ? posBefore(to) : pFrom;
+      const size = state.doc.content.size;
+      if (pFrom === null || pTo === null || pFrom < 0 || pTo > size || pTo < pFrom) return false;
+      const $a = state.doc.resolve(pFrom);
+      if (!$a.parent.inlineContent || !$a.sameParent(state.doc.resolve(pTo))) return false;
+      if (state.doc.textBetween(pFrom, pTo) !== decodeText(slice)) return false;
+      let single = true;
+      let marks: readonly Mark[] | null = null;
+      state.doc.nodesBetween(pFrom, pTo, (node) => {
+        if (!node.isInline) return true;
+        if (!node.isText || (marks && !Mark.sameSet(marks, node.marks))) single = false;
+        marks = node.marks;
+        return false;
+      });
+      if (!single) return false;
+      if (dispatch) dispatch((text ? state.tr.insertText(text, pFrom, pTo) : state.tr.delete(pFrom, pTo)).scrollIntoView());
+      return true;
+    };
+  }
+
+  /** The text HTML mode holds, which `posForOffset` maps: the loaded text while unedited, else the serialization. */
+  private textForOffsets(): string {
+    const doc = this.view.state.doc;
+    const snap = this.lastSnapshot;
+    if (this.loaded && !(snap && !snap.original && snap.revision === this.revision) && (doc === this.loaded.doc || doc.eq(this.loaded.doc))) {
+      return this.loaded.sources.original;
+    }
+    return this.serializer.serialize(doc).html;
   }
 
   /** The name of the undo step a command makes (N6). */
@@ -569,6 +631,9 @@ export class Editor {
       case 'insertLineBreak': return L.stepLineBreak;
       case 'insertText': return L.stepTyping;
       case 'completeWord': return L.stepTyping;
+      case 'insertPhrase': return L.stepDictation;
+      case 'newParagraph': return L.stepNewParagraph;
+      case 'replaceText': return L.stepAcceptSuggestion;
       default: return null;
     }
   }
