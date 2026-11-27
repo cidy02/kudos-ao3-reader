@@ -411,7 +411,7 @@ struct ReadingQueueBrowserView: View {
                 pendingRemoval = work
             },
             queueMenu: queueMenu(for: entry),
-            showsVariantLabel: false
+            showsVariantLabel: true
         )
     }
 
@@ -469,7 +469,7 @@ struct ReadingQueueBrowserView: View {
                     } label: {
                         Label("Read Next", systemImage: "arrow.up.to.line")
                     }
-                    .tint(.accentColor)
+                    .tint(accentFill)
                 }
             }
         }
@@ -967,12 +967,9 @@ extension ReadingQueueBrowserView {
                     }
                 }
                 if let upNextEntry {
-                    // No card-row padding on the header: it sits on its card, as on the board.
-                    queueSectionHeader("Up next")
-                        .bareListRow(verticalPadding: 0, interCardSpacing: 0)
                     upNextLinked(upNextEntry)
-                        .bareListRow()
-                        .padding(.bottom, inLineEntries.isEmpty ? 16 : 8)
+                        .bareListRow(verticalPadding: 8, interCardSpacing: 8)
+                        .padding(.bottom, inLineEntries.isEmpty ? 8 : 4)
                         .swipeActions(edge: .trailing) {
                             if !isSelecting {
                                 Button(role: .destructive) {
@@ -1063,62 +1060,103 @@ extension ReadingQueueBrowserView {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, SubjectMetrics.gutter)
             .padding(.top, 12)
-            .padding(.bottom, 4)
+            .padding(.bottom, 2)
             .accessibilityAddTraits(.isHeader)
     }
 
     private func newSectionHeader(_ entries: [ReadingQueueSectionEntry]) -> some View {
-        let subtitle = entries.count == 1 ? "1 work · not sorted yet" : "\(entries.count) works · not sorted yet"
+        let subtitle = ReadingQueueFacts.newBannerSubtitle(for: entries)
         let canSort = !isSelecting && !isReordering && selectedQueue != nil
-        return Group {
+        let badge = Text("\(entries.count)")
+            .font(.footnote.weight(.bold))
+            .monospacedDigit()
+            .foregroundStyle(ThemeManager.label(on: accentFill))
+            .frame(minWidth: 28, minHeight: 28)
+            .padding(.horizontal, entries.count >= 100 ? 6 : 0)
+            .background(accentFill, in: Capsule())
+            .accessibilityHidden(true)
+        let labels = VStack(alignment: .leading, spacing: 1) {
+            Text(ReadingQueueFacts.newBannerTitle)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(.secondaryInk)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        let sortPill = Text("Sort")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(ThemeManager.label(on: accentFill))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .frame(minHeight: 36)
+            .background(accentFill, in: Capsule())
+        let bannerBody = Group {
             if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("New")
-                            .font(.title3.bold())
-                            .foregroundStyle(.primary)
-                            .accessibilityAddTraits(.isHeader)
-                        Text(subtitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondaryInk)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .center, spacing: 10) {
+                        badge
+                        labels
                     }
                     if canSort {
-                        sortNewButton(entries)
-                        sortAllIntoLineButton(entries)
+                        sortPill
                     }
                 }
             } else {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("New")
-                            .font(.title3.bold())
-                            .foregroundStyle(.primary)
-                            .accessibilityAddTraits(.isHeader)
-                        Text(subtitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondaryInk)
-                    }
+                HStack(alignment: .center, spacing: 10) {
+                    badge
+                    labels
                     Spacer(minLength: 8)
                     if canSort {
-                        // Both fit beside the title at large text; when they do
-                        // not, Sort into line folds into the pair under Sort.
-                        ViewThatFits(in: .horizontal) {
-                            HStack(alignment: .center, spacing: 12) {
-                                sortAllIntoLineButton(entries)
-                                sortNewButton(entries)
-                            }
-                            VStack(alignment: .trailing, spacing: 4) {
-                                sortNewButton(entries)
-                                sortAllIntoLineButton(entries)
-                            }
-                        }
+                        sortPill
                     }
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, 12)
+        .padding(.trailing, 8)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+        .background(
+            accentFill.opacity(0.10),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+        return Group {
+            if canSort {
+                Button {
+                    guard let queue = selectedQueue else { return }
+                    sortNewRequest = QueueSortNewRequest(
+                        queueID: queue.id,
+                        membershipIDs: entries.map(\.membership.id)
+                    )
+                } label: {
+                    bannerBody
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(entries.count == 1 ? "Sort 1 new work" : "Sort \(entries.count) new works")
+                .accessibilityValue(subtitle)
+                .accessibilityAction(named: "Sort all into line") {
+                    sortAllIntoLine(entries)
+                }
+                .contextMenu {
+                    Button {
+                        sortAllIntoLine(entries)
+                    } label: {
+                        Label("Sort All into Line", systemImage: "text.insert")
+                    }
+                }
+            } else {
+                bannerBody
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isHeader)
+            }
+        }
         .padding(.horizontal, SubjectMetrics.gutter)
-        .padding(.top, 12)
+        .padding(.top, 8)
         .padding(.bottom, 4)
     }
 
@@ -1137,36 +1175,21 @@ extension ReadingQueueBrowserView {
         }
     }
 
-    private func sortNewButton(_ entries: [ReadingQueueSectionEntry]) -> some View {
-        QueueSortNewButton(count: entries.count) {
-            guard let queue = selectedQueue else { return }
-            sortNewRequest = QueueSortNewRequest(queueID: queue.id, membershipIDs: entries.map(\.membership.id))
-        }
-    }
-
-    private func sortAllIntoLineButton(_ entries: [ReadingQueueSectionEntry]) -> some View {
-        Button {
-            guard let queue = selectedQueue else { return }
-            Haptics.selection()
-            ReadingQueueService.sortIntoLine(entries.map(\.membership), in: queue, context: context)
-        } label: {
-            Label("Sort into line", systemImage: "text.insert")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(accentInk)
-        }
-        .buttonStyle(.plain)
-        .minimumHitTarget()
+    private func sortAllIntoLine(_ entries: [ReadingQueueSectionEntry]) {
+        guard let queue = selectedQueue else { return }
+        Haptics.selection()
+        ReadingQueueService.sortIntoLine(entries.map(\.membership), in: queue, context: context)
     }
 
     private func waitingSectionHeader() -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 2) {
             Text("Waiting")
                 .font(.title3.bold())
                 .foregroundStyle(.primary)
                 .accessibilityAddTraits(.isHeader)
             if let subtitle = ReadingQueueSectionKind.waiting.subtitle {
                 Text(subtitle)
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1174,29 +1197,48 @@ extension ReadingQueueBrowserView {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, SubjectMetrics.gutter)
         .padding(.top, 12)
-        .padding(.bottom, 4)
+        .padding(.bottom, 2)
     }
 
     private func finishedSectionHeader(count: Int) -> some View {
-        let countText = count == 1 ? "1 work" : "\(count) works"
+        let countText = ReadingQueueFacts.finishedSectionCount(count)
         return Button {
             Haptics.selection()
             isFinishedExpanded.toggle()
         } label: {
-            HStack(spacing: 8) {
-                Text("Finished")
-                    .font(.title3.bold())
-                    .foregroundStyle(.primary)
-                Spacer(minLength: 8)
-                Text(countText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondaryInk)
-                Image(systemName: isFinishedExpanded ? "chevron.down" : "chevron.right")
+            HStack(alignment: .center, spacing: 8) {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Finished")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Text(countText)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondaryInk)
+                    }
+                    Spacer(minLength: 8)
+                } else {
+                    Text("Finished")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 8)
+                    Text(countText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondaryInk)
+                }
+                Image(systemName: isFinishedExpanded ? "chevron.up" : "chevron.down")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondaryInk)
+                    .accessibilityHidden(true)
             }
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .contentShape(Rectangle())
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+            .background(
+                themeManager.appTheme.glassFill(0.10),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
         .padding(.horizontal, SubjectMetrics.gutter)
@@ -1285,8 +1327,6 @@ extension ReadingQueueBrowserView {
                             .padding(.top, Self.afterRule)
                     }
                     if let upNextEntry {
-                        queueSectionHeader("Up next")
-                            .padding(.top, Self.ruleTop)
                         upNextCompact(upNextEntry)
                     }
                     if !inLineEntries.isEmpty {
@@ -1579,6 +1619,7 @@ extension ReadingQueueBrowserView {
         } label: {
             Label("Add Works", systemImage: "plus")
         }
+        .accessibilityLabel("Add works")
         .help("Add works from your library")
     }
 

@@ -41,12 +41,7 @@ struct AllReadingQueuesGridView: View {
 
     @State private var showingNewQueue = false
     @State private var newQueueHue: Double?
-    /// The row's name, count and storage line scale with the tag chips beside
-    /// them; at AX sizes the chips grew to twice the size of the queue's name.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .headline) private var rowTitleSize: CGFloat = 15.5
-    @ScaledMetric(relativeTo: .caption) private var rowCountSize: CGFloat = 11.5
-    @ScaledMetric(relativeTo: .caption2) private var rowStorageSize: CGFloat = 10.5
     /// 1i's tag rail. Empty means All; `untaggedFilter` means the queues with no
     /// tags; anything else is a tag name.
     @AppStorage("library.queueOrganizer.tagFilter") private var tagFilter = ""
@@ -169,14 +164,18 @@ struct AllReadingQueuesGridView: View {
     /// the sheet can produce, since that trims to non-empty plain text.
     static let untaggedFilter = "\u{0}untagged"
 
-    /// 1i's own placeholder, verbatim.
+    /// Board `Queues.dc.html` pill search bar (still searches queues, tags, and works).
     private var queueSearchField: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
+                .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondaryInk)
-            TextField("Search queues, tags and works", text: $searchText)
+                .accessibilityHidden(true)
+            TextField("Search queues", text: $searchText)
+                .font(.callout)
                 .textFieldStyle(.plain)
                 .autocorrectionDisabled()
+                .accessibilityLabel("Search queues")
             if !searchText.isEmpty {
                 Button {
                     searchText = ""
@@ -189,38 +188,54 @@ struct AllReadingQueuesGridView: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .subjectPanel()
+        .padding(.vertical, 8)
+        .frame(minHeight: 38)
+        .background(
+            themeManager.appTheme.glassFill(0.12),
+            in: SubjectMetrics.controlShape(dynamicTypeSize)
+        )
     }
 
     private var tagRail: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 7) {
-                // 1i: each pill carries how many queues it keeps — "Rereads 2".
+            HStack(spacing: 8) {
                 tagChip("All", value: "", count: readingQueues.count)
                 ForEach(queueTagNames, id: \.self) { name in
                     tagChip(name, value: name, count: readingQueues.count { $0.tags.contains { $0.name == name } })
                 }
                 let untagged = readingQueues.count { $0.tags.isEmpty }
                 if untagged > 0 {
-                    tagChip("Untagged", value: Self.untaggedFilter, count: untagged)
+                    tagChip("Unused", value: Self.untaggedFilter, count: untagged)
                 }
             }
             .padding(.horizontal, SubjectMetrics.gutter)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Filter by tag")
         }
         .horizontalScrollViewport()
     }
 
     private func tagChip(_ title: String, value: String, count: Int) -> some View {
         let isSelected = tagFilter == value
+        let fill = themeManager.effectiveTint
+        let shape = SubjectMetrics.controlShape(dynamicTypeSize)
         return Button {
             tagFilter = isSelected ? "" : value
         } label: {
-            SubjectChip(
-                text: "\(title) \(count.compactCount)",
-                style: .pill(isSelected: isSelected),
-                palette: organizerPalette
-            )
+            Text(title)
+                .font(.subheadline.weight(isSelected ? .semibold : .regular))
+                .foregroundStyle(isSelected ? ThemeManager.label(on: fill) : Color.primary)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .frame(minHeight: 32)
+                .background(
+                    shape.fill(
+                        isSelected
+                            ? AnyShapeStyle(fill)
+                            : AnyShapeStyle(themeManager.appTheme.cardSurface)
+                    )
+                )
         }
         .buttonStyle(.plain)
         .minimumHitTarget()
@@ -250,34 +265,46 @@ struct AllReadingQueuesGridView: View {
         let savedForLater = filteredSavedForLaterQueue(worksByQueueID: worksByQueueID)
         let visible = visibleQueues(pinned: pinned, savedForLater: savedForLater, custom: custom)
         let visibleCount = custom.count + (savedForLater == nil ? 0 : 1)
+        let showsTagRail = !queueTagNames.isEmpty || !tagFilter.isEmpty
+        let showsWhatFits = !isSelecting && !isReordering
+        let pinnedSegments = PanelSegment.keyed(pinned, id: \.id)
+        let customSegments = PanelSegment.keyed(custom, id: \.id)
         List {
             Section {
-                // 1i's tree puts the search above the signal strip, in the content.
                 queueSearchField
+                    .padding(.bottom, (!showsTagRail && !showsWhatFits && pinned.isEmpty) ? 12 : 0)
                     .pageBodyRow(top: 12, gutter: SubjectMetrics.gutter)
-                statStrip(worksByQueueID: worksByQueueID)
-                    .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
-                if !isSelecting, !isReordering {
+                if showsWhatFits {
                     WhatFitsOrganizerRow()
-                        .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+                        .padding(.bottom, (!showsTagRail && pinned.isEmpty) ? 12 : 0)
+                        .pageBodyRow(top: 12, gutter: SubjectMetrics.gutter)
                 }
             }
 
             // A persisted filter whose tag is gone still needs the rail's All chip,
             // or nothing on screen can clear it.
-            if !queueTagNames.isEmpty || !tagFilter.isEmpty {
+            if showsTagRail {
                 Section {
-                    tagRail.pageBodyRow(top: 14, gutter: 0)
+                    tagRail
+                        .padding(.bottom, pinned.isEmpty ? 12 : 0)
+                        .pageBodyRow(top: 12, gutter: 0)
                 }
             }
 
             if !pinned.isEmpty {
                 Section {
                     SectionRuleHeader(title: "Pinned", count: pinned.count)
-                        .pageBodyRow(top: 18, gutter: 0)
-                    ForEach(pinned) { queue in
+                        .padding(.bottom, 8)
+                        .pageBodyRow(top: 16, gutter: 0)
+                    ForEach(pinnedSegments, id: \.key) { segment in
+                        let queue = segment.element
                         organizerRow(queue, works: worksByQueueID[queue.id] ?? [], isReorderable: false)
-                            .organizerCard(queue)
+                            .subjectPanelSegmentRow(
+                                isFirst: segment.offset == 0,
+                                isLast: segment.offset == pinnedSegments.count - 1,
+                                gutter: SubjectMetrics.gutter,
+                                padsContent: false
+                            )
                             .swipeActions(edge: .trailing) { queueSwipes(queue) }
                             .modifier(QueueCardMenu(queue: queue, isEnabled: !isSelecting && !isReordering))
                     }
@@ -285,17 +312,31 @@ struct AllReadingQueuesGridView: View {
             }
 
             Section {
-                SectionRuleHeader(title: "All Queues", count: visibleCount)
-                    .pageBodyRow(top: 18, gutter: 0)
+                if !pinned.isEmpty {
+                    SectionRuleHeader(title: "All Queues", count: visibleCount)
+                        .padding(.bottom, 8)
+                        .pageBodyRow(top: 16, gutter: 0)
+                }
 
                 if let savedForLater {
                     organizerRow(savedForLater, works: worksByQueueID[savedForLater.id] ?? [], isReorderable: false)
-                        .organizerCard(savedForLater)
+                        .subjectPanelSegmentRow(
+                            isFirst: true,
+                            isLast: custom.isEmpty,
+                            gutter: SubjectMetrics.gutter,
+                            padsContent: false
+                        )
                 }
 
-                ForEach(custom) { queue in
+                ForEach(customSegments, id: \.key) { segment in
+                    let queue = segment.element
                     organizerRow(queue, works: worksByQueueID[queue.id] ?? [], isReorderable: true)
-                        .organizerCard(queue)
+                        .subjectPanelSegmentRow(
+                            isFirst: savedForLater == nil && segment.offset == 0,
+                            isLast: segment.offset == customSegments.count - 1,
+                            gutter: SubjectMetrics.gutter,
+                            padsContent: false
+                        )
                         .swipeActions(edge: .trailing) { queueSwipes(queue) }
                         .modifier(QueueCardMenu(queue: queue, isEnabled: !isSelecting && !isReordering))
                 }
@@ -316,12 +357,11 @@ struct AllReadingQueuesGridView: View {
                     }
                     .bareListRow()
                 }
-
             }
         }
         .cardList()
         .navigationTitle(isSelecting ? "\(selection.count) selected" : "Reading Queues")
-        .subjectScreenWash(palette: organizerPalette, role: .content)
+        .subjectScreenWash(palette: organizerPalette, role: .grouped)
         .toolbar { toolbarContent(visibleQueues: visible) }
         #if os(iOS)
         .environment(
@@ -458,21 +498,6 @@ struct AllReadingQueuesGridView: View {
         .accessibilityLabel("Done")
     }
 
-    private func statStrip(worksByQueueID: [UUID: [SavedWork]]) -> some View {
-        let works = readingQueues.flatMap { worksByQueueID[$0.id] ?? [] }
-        let preserved = works.filter { $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path) }
-        let bytes = preserved.reduce(Int64(0)) { $0 + queueWorkFileSize($1.fileURL) }
-        return SubjectStatStrip(
-            cells: [
-                .init(value: readingQueues.count.compactCount, label: "Queues"),
-                .init(value: works.count.compactCount, label: "Works"),
-                .init(value: preserved.count.compactCount, label: "Offline"),
-                .init(value: queueByteCountString(bytes), label: "Storage")
-            ],
-            palette: organizerPalette
-        )
-    }
-
     /// Edit and Delete for a custom queue, wherever its row is drawn —
     /// Pinned and All queues show the same queue. Saved for Later has neither.
     @ViewBuilder
@@ -494,86 +519,75 @@ struct AllReadingQueuesGridView: View {
 
     @ViewBuilder
     private func organizerRow(_ queue: ReadingQueue, works: [SavedWork], isReorderable: Bool) -> some View {
-        let preserved = works.filter { $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path) }
-        let byteCount = preserved.reduce(Int64(0)) { $0 + queueWorkFileSize($1.fileURL) }
-        let storageLine = preserved.isEmpty
-            ? "nothing kept yet"
-            : "\(preserved.count) offline · \(queueByteCountString(byteCount))"
-        // 1i: "count, tags and offline size on every row".
-        let tagNames = queue.tags.map(\.name).sorted()
-        let tagLine = tagNames.joined(separator: " · ")
+        let detail = ReadingQueueFacts.planFacts(for: works)
         let palette = queue.isUserQueue
             ? themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
             : organizerPalette
-
         let isSelected = selection.contains(queue.id)
+
         let content = HStack(spacing: 12) {
             if isSelecting {
                 WorkLeadingSelectionCheck(isSelected: isSelected)
             }
             peekTile(queue, works: works)
 
-            // 1i's row: dot · name · count, the per-work strip, then the tags
-            // as chips with the storage line after them.
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 7) {
-                    if queue.isUserQueue {
-                        Circle()
-                            .fill(palette.accent)
-                            .frame(width: 10, height: 10)
-                            .accessibilityHidden(true)
-                    }
-                    Text(queue.displayName)
-                        .font(.system(size: rowTitleSize, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
-                    Text(works.count.compactCount)
-                        .font(.system(size: rowCountSize, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondaryInk)
-                }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(queue.displayName)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
                 if !works.isEmpty {
                     QueueProgressStrip(
                         progress: ReadingQueueFacts.progress(of: works.map(\.readingState)),
-                        palette: palette
+                        palette: palette,
+                        fills: works.map {
+                            ReadingQueueFacts.segmentFill(state: $0.readingState, progress: $0.readingProgress)
+                        },
+                        height: 3,
+                        gap: 2
                     )
                     .accessibilityHidden(true)
                 }
-                FlowLayout(spacing: 6, rowSpacing: 4) {
-                    ForEach(tagNames, id: \.self) { name in
-                        QueueRowTagLabel(text: name)
-                    }
-                    Text(storageLine)
-                        .font(.system(size: rowStorageSize))
-                        .monospacedDigit()
-                        .foregroundStyle(.secondaryInk)
-                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: 0)
-
+            if !isSelecting && !isReordering {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(minHeight: 72)
         .contentShape(Rectangle())
-        let summary = "\(works.count) work\(works.count == 1 ? "" : "s"), "
-            + "\(tagLine.isEmpty ? "" : "\(tagLine), ")\(storageLine)"
 
-        Group {
-            if isSelecting {
-                Button {
-                    if isSelected { selection.remove(queue.id) } else { selection.insert(queue.id) }
-                } label: {
-                    content
-                }
-            } else {
-                NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
-                    content
-                }
+        if isSelecting {
+            Button {
+                if isSelected { selection.remove(queue.id) } else { selection.insert(queue.id) }
+            } label: {
+                content
             }
+            .buttonStyle(.plain)
+            .moveDisabled(!isReorderable)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(queue.displayName)
+            .accessibilityValue("\(isSelected ? "Selected" : "Not selected"), \(detail)")
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+        } else {
+            content
+                .accessibilityHidden(true)
+                .subjectRowNavigation(
+                    to: AllReadingQueuesDestination(initialQueueID: queue.id),
+                    accessibilityLabel: "\(queue.displayName), \(detail)"
+                )
+                .moveDisabled(!isReorderable)
         }
-        .buttonStyle(.plain)
-        .moveDisabled(!isReorderable)
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(isSelecting ? "\(isSelected ? "Selected" : "Not selected"), \(summary)" : summary)
-        .accessibilityAddTraits(isSelecting && isSelected ? .isSelected : [])
     }
 
     /// Board 05: the queue's 48pt cover stack (T-461) — its own colour and initial
@@ -766,18 +780,5 @@ struct QueueRowTagLabel: View {
                     shape.fill(Color.primary.opacity(0.08))
                 }
             }
-    }
-}
-
-private extension View {
-    /// 1i draws every queue as a card washed in its own colour (radius 16,
-    /// 11pt top and bottom, 8pt apart). Saved for Later has no colour.
-    func organizerCard(_ queue: ReadingQueue) -> some View {
-        cardRow(
-            tintHue: queue.isUserQueue ? queue.displayHue : nil,
-            tintHex: queue.isUserQueue ? queue.colorHex : nil,
-            verticalPadding: 11,
-            interCardSpacing: 8
-        )
     }
 }
