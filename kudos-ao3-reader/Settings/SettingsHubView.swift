@@ -10,6 +10,8 @@ import SwiftUI
 struct SettingsHubView: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) private var auth
+    @Environment(AppRouter.self) private var router: AppRouter?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
 
     @AppStorage("readerFontID") private var fontID: String = "system"
@@ -24,9 +26,14 @@ struct SettingsHubView: View {
     @AppStorage(ReaderSpeechPreferences.voiceIDKey) private var speechVoiceID = ""
     @AppStorage(ReaderSpeechPreferences.voiceNameKey) private var speechVoiceName = ""
     @AppStorage(RichEditorFeatureFlag.storageKey) private var richEditorEnabled = false
+    @AppStorage(StudioWritingGoal.storageKey) private var storedDailyGoal: Int = StudioWritingGoal.defaultGoal
 
     @State private var folderSyncStatus = FolderSyncService.snapshot()
     @State private var searchText = ""
+    @State private var showingWritingGoalSheet = false
+    @State private var startWritingDocument: StudioLocalDocumentTarget?
+    @State private var isStartingWriting = false
+    @State private var startWritingError: String?
 
     static let hubFooterText = "Changes here affect Kudos, not your AO3 account"
     static let hubFooterAccessibilityValue = "These settings are stored on this device only and are never sent to AO3."
@@ -50,6 +57,13 @@ struct SettingsHubView: View {
         guard !query.isEmpty else { return true }
         let terms = [
             "Writing",
+            "Start Writing",
+            "Daily Writing Goal",
+            "goal",
+            "daily",
+            "words",
+            "draft",
+            "document",
             "Rich Text editor (beta)",
             "rich text",
             "editor",
@@ -84,6 +98,41 @@ struct SettingsHubView: View {
 
             if showsWritingSection {
                 Section {
+                    Button {
+                        startWritingFromSettings()
+                    } label: {
+                        HStack(spacing: 12) {
+                            SettingsIconTile(
+                                color: themeManager.effectiveTint,
+                                systemImage: "pencil.line"
+                            )
+                            Text(isStartingWriting ? "Starting…" : "Start Writing")
+                                .foregroundStyle(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 8)
+                            if isStartingWriting {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .accentFill()
+                            } else {
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                    .disabled(isStartingWriting)
+                    .accessibilityLabel("Start Writing")
+                    .accessibilityHint("Creates a local document on this \(ThisDevice.name) and opens the editor")
+
+                    Button {
+                        showingWritingGoalSheet = true
+                    } label: {
+                        dailyWritingGoalRowLabel
+                    }
+                    .accessibilityLabel("Daily Writing Goal")
+                    .accessibilityValue(dailyGoalValueText)
+
                     Toggle(isOn: $richEditorEnabled) {
                         HStack(spacing: 12) {
                             SettingsIconTile(
@@ -99,8 +148,8 @@ struct SettingsHubView: View {
                     Text("Writing")
                 } footer: {
                     Text(
-                        "Opens chapters in the new Rich Text editor with formatting controls "
-                            + "and a local copy on this \(ThisDevice.name). Stored on this device only."
+                        "Your writing, drafts and daily word goal stay on this \(ThisDevice.name). "
+                            + "Start Writing creates a document and shows the Writing tab without an AO3 account."
                     )
                 }
                 .appThemedRows()
@@ -115,6 +164,27 @@ struct SettingsHubView: View {
         #endif
         .navigationTitle("Settings")
         .appThemedScroll()
+        .sheet(isPresented: $showingWritingGoalSheet) {
+            StudioWritingGoalSheet()
+        }
+        .navigationDestination(item: $startWritingDocument) { target in
+            LocalChapterEditorScreen(
+                workID: target.workID,
+                chapterID: target.chapterID,
+                initialWorkTitle: target.title
+            )
+        }
+        .alert(
+            "Couldn't Start Document",
+            isPresented: Binding(
+                get: { startWritingError != nil },
+                set: { if !$0 { startWritingError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { startWritingError = nil }
+        } message: {
+            Text(startWritingError ?? "")
+        }
         .overlay {
             let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
             if filteredGroups.isEmpty && !showsWritingSection && !query.isEmpty {
@@ -123,6 +193,60 @@ struct SettingsHubView: View {
         }
         // Sync can be connected or dropped on its page; re-read on the way back.
         .onAppear { folderSyncStatus = FolderSyncService.snapshot() }
+    }
+
+    private var dailyGoalValueText: String {
+        StudioWritingGoal.summaryText(for: StudioWritingGoal.resolvedGoal(fromStored: storedDailyGoal))
+    }
+
+    @ViewBuilder
+    private var dailyWritingGoalRowLabel: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            HStack(alignment: .top, spacing: 12) {
+                SettingsIconTile(
+                    color: themeManager.effectiveTint,
+                    systemImage: "target"
+                )
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Daily Writing Goal")
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(dailyGoalValueText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondaryInk)
+                }
+            }
+        } else {
+            HStack(spacing: 12) {
+                SettingsIconTile(
+                    color: themeManager.effectiveTint,
+                    systemImage: "target"
+                )
+                Text("Daily Writing Goal")
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                Spacer()
+                Text(dailyGoalValueText)
+                    .font(.body)
+                    .foregroundStyle(.secondaryInk)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private func startWritingFromSettings() {
+        guard !isStartingWriting else { return }
+        isStartingWriting = true
+        startWritingError = nil
+        Task {
+            defer { isStartingWriting = false }
+            do {
+                startWritingDocument = try await StudioStartWritingAction.createFirstDocument(router: router)
+            } catch {
+                startWritingError = UserFacingError.message(for: error)
+            }
+        }
     }
 
     private var inputs: SettingsHubInputs {

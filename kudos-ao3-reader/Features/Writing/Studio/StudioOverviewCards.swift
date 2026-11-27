@@ -1,0 +1,642 @@
+import SwiftUI
+
+/// Card and row building blocks for `StudioOverviewView` (`Studio-Overview.dc.html`,
+/// `Studio-Offline.dc.html`), themed across Light, Dark, OLED and Sepia with AX5 reflow.
+
+struct StudioTodayCard: View {
+    let snapshot: StudioDayLogSnapshot
+    let dailyGoal: Int?
+    let onTapGoal: () -> Void
+
+    @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        Button(action: onTapGoal) {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 14) {
+                        metricsColumn
+                        progressRing
+                    }
+                } else {
+                    HStack(alignment: .center, spacing: 14) {
+                        metricsColumn
+                        progressRing
+                    }
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                    .fill(theme.appTheme.cardSurface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                            .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+                    )
+            )
+            .shadow(
+                color: theme.appTheme.cardShadow.color,
+                radius: theme.appTheme.cardShadow.radius,
+                y: theme.appTheme.cardShadow.y
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint("Adjusts your daily writing goal")
+    }
+
+    private var metricsColumn: some View {
+        let wordUnit = snapshot.wordsToday == 1 ? "word" : "words"
+        return VStack(alignment: .leading, spacing: 4) {
+            Text("Today")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondaryInk)
+
+            Text("\(snapshot.wordsToday.formatted()) \(wordUnit)")
+                .font(.title.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(subtitle)
+                .font(.footnote)
+                .foregroundStyle(.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if !snapshot.recentDays.isEmpty {
+                sevenDayBars
+                    .padding(.top, 8)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var sevenDayBars: some View {
+        let maxDayWords = snapshot.recentDays.map(\.words).max() ?? 0
+        let ceiling = max(dailyGoal ?? 0, maxDayWords, 1)
+        return HStack(alignment: .bottom, spacing: 8) {
+            ForEach(snapshot.recentDays) { day in
+                let ratio = min(1, Double(day.words) / Double(ceiling))
+                let barHeight = max(3, CGFloat(ratio) * 32)
+                VStack(spacing: 3) {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(day.isToday ? theme.effectiveTint : theme.appTheme.glassStroke(0.32))
+                        .frame(width: 14, height: barHeight)
+                    Text(day.weekdayInitial)
+                        .font(.caption2.weight(day.isToday ? .bold : .medium))
+                        .foregroundStyle(
+                            day.isToday ? AnyShapeStyle(Color.primary) : AnyShapeStyle(.secondaryInk)
+                        )
+                }
+            }
+        }
+        .frame(height: 48, alignment: .bottom)
+        .accessibilityHidden(true)
+    }
+
+    private var progressRing: some View {
+        let progress = StudioWritingGoal.progress(wordsToday: snapshot.wordsToday, goal: dailyGoal)
+        let percent = StudioWritingGoal.percent(wordsToday: snapshot.wordsToday, goal: dailyGoal)
+        return ZStack {
+            Circle()
+                .stroke(theme.appTheme.glassStroke(0.24), lineWidth: 7)
+            if dailyGoal != nil {
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(
+                        theme.effectiveTint,
+                        style: StrokeStyle(lineWidth: 7, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                Text("\(percent)%")
+                    .font(.subheadline.weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
+            } else {
+                Text("Off")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondaryInk)
+            }
+        }
+        .frame(width: 72, height: 72)
+        .accessibilityHidden(true)
+    }
+
+    private var subtitle: String {
+        var parts: [String] = []
+        if let dailyGoal {
+            parts.append("of your \(dailyGoal.formatted())-word goal")
+        } else {
+            parts.append("Daily goal off")
+        }
+        if snapshot.streak > 0 {
+            parts.append("\(snapshot.streak)-day streak")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var accessibilityLabel: String {
+        let wordUnit = snapshot.wordsToday == 1 ? "word" : "words"
+        let wordsPart = "\(snapshot.wordsToday.formatted()) \(wordUnit) today"
+        let goalPart: String
+        if let dailyGoal {
+            let percent = StudioWritingGoal.percent(wordsToday: snapshot.wordsToday, goal: dailyGoal)
+            goalPart = "of your \(dailyGoal.formatted())-word goal, \(percent) percent"
+        } else {
+            goalPart = "daily goal off"
+        }
+        if snapshot.streak > 0 {
+            return "Today: \(wordsPart), \(goalPart), \(snapshot.streak)-day streak"
+        }
+        return "Today: \(wordsPart), \(goalPart)"
+    }
+}
+
+struct StudioContinueCard: View {
+    let item: StudioContinueItem
+    let now: Date
+    let onContinue: () -> Void
+
+    @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var paperBackground: Color {
+        switch theme.appTheme {
+        case .light: Color(red: 0.984, green: 0.980, blue: 0.965)
+        case .sepia, .dark, .oled: theme.appTheme.cardSurface
+        }
+    }
+
+    private var paperBorder: Color {
+        switch theme.appTheme {
+        case .light: Color(red: 0.898, green: 0.875, blue: 0.824)
+        case .sepia: theme.appTheme.cardBorder
+        case .dark, .oled: theme.appTheme.glassStroke(0.16)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            headerLine
+            excerptBlock
+            footerRow
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                .fill(paperBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                        .strokeBorder(paperBorder, lineWidth: 0.5)
+                )
+        )
+        .shadow(
+            color: theme.appTheme.cardShadow.color,
+            radius: theme.appTheme.cardShadow.radius,
+            y: theme.appTheme.cardShadow.y
+        )
+    }
+
+    private var headerLine: some View {
+        let titlePart = Text(workTitle)
+            .fontWeight(.semibold)
+            .foregroundStyle(Color.primary)
+        let detailPart = Text(" · \(contextDetail)")
+            .foregroundStyle(.secondaryInk)
+        return Text("\(titlePart)\(detailPart)")
+            .font(.footnote)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var excerptBlock: some View {
+        let text = previewText
+        return ZStack(alignment: .bottom) {
+            Group {
+                if text.isEmpty {
+                    Text("Open the editor to start writing your first lines.")
+                        .italic()
+                        .foregroundStyle(.secondaryInk)
+                } else {
+                    Text(text)
+                        .foregroundStyle(.primary)
+                }
+            }
+            .font(.system(.body, design: .serif))
+            .lineSpacing(4)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 6 : 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, text.isEmpty ? 0 : 12)
+
+            if !text.isEmpty {
+                LinearGradient(
+                    colors: [paperBackground.opacity(0), paperBackground],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 36)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var footerRow: some View {
+        let meta = VStack(alignment: .leading, spacing: 2) {
+            Text(wordAndEditLine)
+                .font(.footnote)
+                .foregroundStyle(.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+            if let expiryLine = ao3ExpiryLine {
+                Text(expiryLine)
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+
+        let button = Button("Continue", action: onContinue)
+            .buttonStyle(.kudosPrimary)
+            .accessibilityLabel("Continue writing \(workTitle)")
+
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 10) {
+                meta
+                button
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            HStack(alignment: .center, spacing: 12) {
+                meta
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                button
+            }
+        }
+    }
+
+    private var workTitle: String {
+        switch item {
+        case let .local(doc):
+            doc.displayWorkTitle
+        case let .ao3Draft(work, _):
+            work.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled" : work.title
+        }
+    }
+
+    private var contextDetail: String {
+        switch item {
+        case let .local(doc):
+            let trimmedChapter = doc.chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            if doc.totalChapters > 1 || !trimmedChapter.isEmpty {
+                if trimmedChapter.isEmpty {
+                    return "Chapter \(doc.chapterNumber)"
+                }
+                return "Chapter \(doc.chapterNumber), “\(trimmedChapter)”"
+            }
+            return "on this \(ThisDevice.name)"
+        case .ao3Draft:
+            return "AO3 draft"
+        }
+    }
+
+    private var previewText: String {
+        switch item {
+        case let .local(doc):
+            doc.excerpt
+        case let .ao3Draft(work, _):
+            work.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    private var wordAndEditLine: String {
+        var parts: [String] = []
+        switch item {
+        case let .local(doc):
+            parts.append("\(doc.wordCount.formatted()) \(doc.wordCount == 1 ? "word" : "words")")
+            parts.append("edited \(doc.updatedAt.formatted(.relative(presentation: .named)))")
+        case let .ao3Draft(work, _):
+            if let words = work.words {
+                parts.append("\(words.formatted()) \(words == 1 ? "word" : "words")")
+            }
+            if !work.dateUpdated.isEmpty {
+                let parsed = WorkStat.date(from: work.dateUpdated)
+                let edited = parsed?.formatted(.relative(presentation: .named)) ?? work.dateUpdated
+                parts.append("edited \(edited)")
+            }
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var ao3ExpiryLine: String? {
+        guard case let .ao3Draft(_, deletion) = item,
+              let deletion,
+              let daysLeft = DraftExpiry.daysLeft(until: deletion, now: now, calendar: .current)
+        else { return nil }
+        switch daysLeft {
+        case ...0: return "AO3 deletes this draft today"
+        case 1: return "AO3 keeps this draft 1 more day"
+        default: return "AO3 keeps this draft \(daysLeft) more days"
+        }
+    }
+}
+
+struct StudioOverviewCommentRow: View {
+    let item: AO3InboxItem
+    let now: Date
+    let onTap: () -> Void
+
+    @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var timeLabel: String {
+        AO3InboxTimeLabel.label(for: item.postedAgo, now: now)?.display ?? item.postedAgo
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 8) {
+                        commentContent
+                        if item.canReply && !item.isReplied {
+                            replyBadge
+                        }
+                    }
+                } else {
+                    HStack(alignment: .center, spacing: 10) {
+                        commentContent
+                        if item.canReply && !item.isReplied {
+                            replyBadge
+                        }
+                    }
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint("Opens Comments")
+    }
+
+    private var commentContent: some View {
+        HStack(alignment: .top, spacing: 10) {
+            AO3AuthorAvatar(
+                url: item.avatarURL,
+                name: item.commenterName,
+                size: 34,
+                isCircular: true
+            )
+            VStack(alignment: .leading, spacing: 3) {
+                let byline = Text(item.commenterName)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Color.primary)
+                let target = item.workTitle.isEmpty ? "" : " on \(item.workTitle)"
+                let when = timeLabel.isEmpty ? "" : " · \(timeLabel)"
+                let suffix = Text("\(target)\(when)")
+                    .foregroundStyle(.secondaryInk)
+                Text("\(byline)\(suffix)")
+                    .font(.footnote)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+
+                if !item.excerpt.isEmpty {
+                    Text(item.excerpt)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var replyBadge: some View {
+        Text("Reply")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.accentInk)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(theme.effectiveTint.opacity(0.14), in: Capsule())
+    }
+
+    private var accessibilityLabel: String {
+        var parts = ["Comment from \(item.commenterName)"]
+        if !item.workTitle.isEmpty { parts.append("on \(item.workTitle)") }
+        if !timeLabel.isEmpty { parts.append(timeLabel) }
+        if !item.excerpt.isEmpty { parts.append(item.excerpt) }
+        return parts.joined(separator: ", ")
+    }
+}
+
+struct StudioStatsGlanceGrid: View {
+    let stats: AO3UserStats
+
+    @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: 10),
+            count: dynamicTypeSize.isAccessibilitySize ? 1 : 2
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            LazyVGrid(columns: columns, spacing: 10) {
+                if let kudos = stats.kudos {
+                    metricCard(title: "Kudos", value: kudos.formatted(), accented: true)
+                }
+                if let hits = stats.hits {
+                    metricCard(title: "Hits", value: hits.formatted(), accented: false)
+                }
+            }
+
+            if !secondarySummary.isEmpty {
+                Text(secondarySummary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .monospacedDigit()
+                    .padding(.horizontal, 4)
+            }
+        }
+    }
+
+    private func metricCard(title: String, value: String, accented: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.footnote)
+                .foregroundStyle(.secondaryInk)
+            Text(value)
+                .font(.title2.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(accented ? AnyShapeStyle(.accentInk) : AnyShapeStyle(Color.primary))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                .fill(theme.appTheme.cardSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                        .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+                )
+        )
+    }
+
+    private var secondarySummary: String {
+        var parts: [String] = []
+        if let bookmarks = stats.bookmarks {
+            parts.append("\(bookmarks.formatted()) bookmarks")
+        }
+        if let subscriptions = stats.subscriptions {
+            parts.append("\(subscriptions.formatted()) subscriptions")
+        }
+        if let threads = stats.commentThreads {
+            parts.append("\(threads.formatted()) threads")
+        }
+        return parts.joined(separator: " · ")
+    }
+}
+
+struct StudioRecentPaperCard: View {
+    let entry: StudioRecentEntry
+    let action: () -> Void
+
+    @Environment(ThemeManager.self) private var theme
+    @ScaledMetric(relativeTo: .body) private var cardWidth: CGFloat = 114
+    @ScaledMetric(relativeTo: .body) private var pageHeight: CGFloat = 146
+
+    private var paperBackground: Color {
+        switch theme.appTheme {
+        case .light: Color(red: 0.984, green: 0.980, blue: 0.965)
+        case .sepia, .dark, .oled: theme.appTheme.cardSurface
+        }
+    }
+
+    private var paperBorder: Color {
+        switch theme.appTheme {
+        case .light: Color(red: 0.898, green: 0.875, blue: 0.824)
+        case .sepia: theme.appTheme.cardBorder
+        case .dark, .oled: theme.appTheme.glassStroke(0.18)
+        }
+    }
+
+    private var lineColor: Color {
+        switch theme.appTheme {
+        case .light: Color(red: 0.851, green: 0.831, blue: 0.784)
+        case .sepia: Color(red: 0.74, green: 0.67, blue: 0.56).opacity(0.6)
+        case .dark, .oled: theme.appTheme.glassStroke(0.24)
+        }
+    }
+
+    var body: some View {
+        let clampedWidth = min(cardWidth, 168)
+        let clampedHeight = min(pageHeight, 196)
+        return Button(action: action) {
+            VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(entry.title)
+                        .font(.system(size: 10, weight: .bold, design: .serif))
+                        .foregroundStyle(.primary)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+
+                    ForEach(Array(entry.lineWidths.enumerated()), id: \.offset) { _, fraction in
+                        GeometryReader { proxy in
+                            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                .fill(lineColor)
+                                .frame(width: max(8, proxy.size.width * fraction), height: 3)
+                        }
+                        .frame(height: 3)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(10)
+                .frame(width: clampedWidth, height: clampedHeight, alignment: .topLeading)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(paperBackground)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(paperBorder, lineWidth: 0.5)
+                        )
+                )
+                .shadow(
+                    color: theme.appTheme.cardShadow.color,
+                    radius: theme.appTheme.cardShadow.radius,
+                    y: theme.appTheme.cardShadow.y
+                )
+                .accessibilityHidden(true)
+
+                Text(entry.title)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(metaLine)
+                    .font(.caption)
+                    .foregroundStyle(.secondaryInk)
+                    .lineLimit(1)
+            }
+            .frame(width: clampedWidth, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(entry.title), \(metaLine)")
+    }
+
+    private var metaLine: String {
+        if let editedAt = entry.editedAt {
+            let relative = editedAt.formatted(.relative(presentation: .named))
+            return "\(entry.subtitle) · \(relative)"
+        }
+        if let fallback = entry.editedFallback {
+            return "\(entry.subtitle) · \(fallback)"
+        }
+        return entry.subtitle
+    }
+}
+
+struct StudioNewDocumentPaperTile: View {
+    let action: () -> Void
+
+    @Environment(ThemeManager.self) private var theme
+    @ScaledMetric(relativeTo: .body) private var cardWidth: CGFloat = 114
+    @ScaledMetric(relativeTo: .body) private var pageHeight: CGFloat = 146
+
+    var body: some View {
+        let clampedWidth = min(cardWidth, 168)
+        let clampedHeight = min(pageHeight, 196)
+        return Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.title2.weight(.semibold))
+                Text("New Document")
+                    .font(.footnote.weight(.semibold))
+                    .multilineTextAlignment(.center)
+            }
+            .foregroundStyle(.accentInk)
+            .padding(10)
+            .frame(width: clampedWidth, height: clampedHeight)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(
+                        theme.appTheme.glassStroke(0.32),
+                        style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
+                    )
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("New Document")
+        .accessibilityHint("Creates a new local document on this \(ThisDevice.name)")
+    }
+}

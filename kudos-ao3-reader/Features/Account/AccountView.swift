@@ -52,6 +52,9 @@ struct AccountView: View {
     @Environment(PrivacyGate.self) private var gate
     @State private var postingPseudName: String?
     @State private var confirmingLogOut = false
+    @State private var startWritingDocument: StudioLocalDocumentTarget?
+    @State private var isStartingWriting = false
+    @State private var startWritingError: String?
 
     enum Route: Hashable {
         case myCollections
@@ -174,6 +177,13 @@ struct AccountView: View {
                 }
                 #endif
                 .navigationDestination(item: $editingWorkID) { WritingWorkDestination(workID: $0) }
+                .navigationDestination(item: $startWritingDocument) { target in
+                    LocalChapterEditorScreen(
+                        workID: target.workID,
+                        chapterID: target.chapterID,
+                        initialWorkTitle: target.title
+                    )
+                }
                 .navigationDestination(for: SettingsRoute.self) { SettingsDestination(route: $0) }
                 .navigationDestination(for: AO3AccountWorksList.Kind.self) {
                     AO3AccountWorksList(kind: $0)
@@ -290,6 +300,10 @@ struct AccountView: View {
         List {
             profileCardSection
 
+            if !auth.isLoggedIn && !router.showsWritingTab {
+                signedOutStartWritingSection
+            }
+
             if auth.isLoggedIn {
                 accountProfileCountStrip
                 accountLatestSection
@@ -297,6 +311,9 @@ struct AccountView: View {
                 accountAO3Section
             }
             accountKudosSection
+            if !auth.isLoggedIn && !router.showsWritingTab {
+                signedOutStartWritingFootnote
+            }
             if auth.isLoggedIn { accountLogOutSection }
         }
         .listStyle(.plain)
@@ -774,6 +791,51 @@ struct AccountView: View {
             .accountControlCardRow()
             .logOutConfirmation(isPresented: $confirmingLogOut) {
                 Task { await auth.logout() }
+            }
+        }
+    }
+
+    private var signedOutStartWritingSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                StudioSignedOutStartWritingCard(isCreating: isStartingWriting) {
+                    startWritingLocally()
+                }
+                if let startWritingError {
+                    Text(startWritingError)
+                        .font(.footnote)
+                        .foregroundStyle(theme.appTheme.errorColor)
+                        .padding(.horizontal, 4)
+                }
+            }
+            .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+        }
+    }
+
+    private var signedOutStartWritingFootnote: some View {
+        Section {
+            Text(
+                "Start Writing is also in Settings › Writing. Once you have a document "
+                    + "the tab stays; it goes away again only if you delete every document "
+                    + "and are not signed in to an account that writes."
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondaryInk)
+            .fixedSize(horizontal: false, vertical: true)
+            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter + 4)
+        }
+    }
+
+    private func startWritingLocally() {
+        guard !isStartingWriting else { return }
+        isStartingWriting = true
+        startWritingError = nil
+        Task {
+            defer { isStartingWriting = false }
+            do {
+                startWritingDocument = try await StudioStartWritingAction.createFirstDocument(router: router)
+            } catch {
+                startWritingError = UserFacingError.message(for: error)
             }
         }
     }
