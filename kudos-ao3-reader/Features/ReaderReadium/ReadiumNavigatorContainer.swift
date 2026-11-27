@@ -504,7 +504,9 @@ extension Locator {
     var persistenceString: String? {
         let dict = jsonObject.mapValues(\.any)
         guard JSONSerialization.isValidJSONObject(dict),
-              let data = try? JSONSerialization.data(withJSONObject: dict),
+              // sorted keys: the same position always encodes to the same string, so progress saves compare by
+              // value (unsorted dictionaries reorder keys and made every close look like a move)
+              let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]),
               let string = String(data: data, encoding: .utf8)
         else { return nil }
         return string

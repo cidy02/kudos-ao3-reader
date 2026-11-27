@@ -278,7 +278,7 @@ struct ReadAloudFollowUpsTests {
         #expect(!bookController.isTransportOwnerForTests)
         #expect(!bookController.remoteCommandsInstalledForTests)
         #expect(NowPlayingInfo.shared.media == nil)
-        #expect(NowPlayingInfo.shared.playback == nil)
+        #expect(NowPlayingInfo.shared.playback.rate == nil) // Readium's cleared card: no media, an empty playback
         #expect(!rcc.playCommand.isEnabled)
         #expect(!rcc.pauseCommand.isEnabled)
     }
@@ -861,3 +861,16 @@ struct ReadAloudFollowUpsTests {
     }
 }
 #endif
+
+/// A position encodes to one string, so the close-time flush doesn't rewrite an unmoved position (T-535k).
+struct LocatorPersistenceStringTests {
+    @Test func equalPositionsEncodeIdentically() throws {
+        let json = #"{"href":"ch1.xhtml","type":"application/xhtml+xml","locations":{"position":1,"progression":0,"totalProgression":0}}"#
+        let a = try #require(Locator(persistenceString: json))
+        let b = try #require(Locator(persistenceString: #"{"type":"application/xhtml+xml","locations":{"totalProgression":0,"progression":0,"position":1},"href":"ch1.xhtml"}"#))
+        let encodedA = try #require(a.persistenceString)
+        let encodedB = try #require(b.persistenceString)
+        #expect(encodedA == encodedB)
+        #expect(encodedA.range(of: "\"href\"")!.lowerBound < encodedA.range(of: "\"locations\"")!.lowerBound)
+    }
+}
