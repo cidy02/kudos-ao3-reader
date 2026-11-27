@@ -131,10 +131,10 @@ struct AccountInboxPreviewRow: View {
                     isGuest: item.isGuest,
                     avatarURL: item.avatarURL,
                     name: item.commenterName,
-                    size: 30
+                    size: 29
                 )
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     byline
                     Text(item.isUnavailable ? "A comment here is unavailable" : item.excerpt)
                         .font(.subheadline)
@@ -144,14 +144,18 @@ struct AccountInboxPreviewRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
+        .accessibilityLabel(Self.previewAccessibilityLabel(for: item, timeLabel: timeLabel))
         .accessibilityHint("Opens the comment thread")
+    }
+
+    private var timeLabel: AO3InboxTimeLabel.Label? {
+        AO3InboxTimeLabel.label(for: item.postedAgo)
     }
 
     @ViewBuilder
@@ -160,57 +164,69 @@ struct AccountInboxPreviewRow: View {
         if dynamicTypeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.commenterName)
-                    .font(.caption.weight(.semibold))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.primary)
                 if !subject.isEmpty {
                     Text("on \(subject)")
-                        .font(.caption)
+                        .font(.footnote)
                         .foregroundStyle(.secondaryInk)
                 }
-                if !item.postedAgo.isEmpty {
-                    Text(item.postedAgo)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                if let timeLabel {
+                    Text(timeLabel.display)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
         } else {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 if item.isUnread {
                     Circle()
                         .fill(.accentFill)
                         .frame(width: 7, height: 7)
                         .accessibilityHidden(true)
                 }
-                Text(item.commenterName)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                if !subject.isEmpty {
-                    Text("on \(subject)")
-                        .font(.caption)
-                        .foregroundStyle(.secondaryInk)
-                        .lineLimit(1)
+                Group {
+                    if !subject.isEmpty {
+                        let commenter = Text(item.commenterName)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+                        Text("\(commenter) on \(subject)")
+                    } else {
+                        Text(item.commenterName)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+                    }
                 }
-                Spacer(minLength: 4)
-                if !item.postedAgo.isEmpty {
-                    Text(item.postedAgo)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                .font(.footnote)
+                .foregroundStyle(.secondaryInk)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let timeLabel {
+                    Text(timeLabel.display)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
                         .lineLimit(1)
                 }
             }
         }
     }
 
-    private var accessibilityLabel: String {
+    static func previewAccessibilityLabel(
+        for item: AO3InboxItem,
+        timeLabel: AO3InboxTimeLabel.Label?
+    ) -> String {
         if item.isUnavailable { return "A comment here is unavailable" }
-        return [
+        let parts: [String?] = [
             item.isUnread ? "Unread" : nil,
             item.commenterName,
             item.subjectTitle.isEmpty ? nil : "on \(item.subjectTitle)",
             item.excerpt.isEmpty ? nil : item.excerpt,
-            item.postedAgo.isEmpty ? nil : item.postedAgo
+            timeLabel?.spoken
         ]
-        .compactMap { $0 }
-        .joined(separator: ". ")
+        return parts
+            .compactMap { $0 }
+            .joined(separator: ". ")
     }
 }
 
