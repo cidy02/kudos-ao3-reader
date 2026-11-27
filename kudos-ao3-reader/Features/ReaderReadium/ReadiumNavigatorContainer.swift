@@ -512,6 +512,30 @@ extension Locator {
         return string
     }
 
+    /// Sorted-key encoding of a stored locator string. Nil when `raw` is not locator JSON.
+    /// An older build stored the same JSON with unstable key order; parsing then encoding
+    /// is how those strings compare to one this process just produced.
+    static func canonicalPersistenceString(_ raw: String) -> String? {
+        Locator(persistenceString: raw)?.persistenceString
+    }
+
+    /// True when both strings are the same locator, including an unsorted string already
+    /// on disk and the sorted encoding `persistenceString` writes now.
+    static func samePersistence(_ lhs: String, _ rhs: String) -> Bool {
+        if lhs == rhs { return !lhs.isEmpty }
+        guard let left = canonicalPersistenceString(lhs),
+              let right = canonicalPersistenceString(rhs)
+        else { return false }
+        return left == right
+    }
+
+    /// `stored` when `updated` is only a re-encoding of it, otherwise `updated`.
+    /// Keeps a progress row's bytes stable so a close does not look like a move.
+    static func persistenceStringKeepingStoredSpelling(stored: String?, updated: String) -> String {
+        guard let stored, !stored.isEmpty, samePersistence(stored, updated) else { return updated }
+        return stored
+    }
+
     /// Rebuilds a `Locator` from `persistenceString`; nil if absent/invalid.
     init?(persistenceString: String) {
         guard !persistenceString.isEmpty,

@@ -40,8 +40,15 @@ enum ReadiumReaderPersistence {
         progressPersistence.cancelTrailingWrite()
         guard allowsPersistence else { return false }
         if !exitCommitted, let live = liveLocator?.persistenceString {
+            // An unsorted string already stored is the same position as its sorted
+            // re-encoding. Recording the stored spelling keeps the flush from
+            // rewriting it (and bumping progress) on every close.
+            let stable = Locator.persistenceStringKeepingStoredSpelling(
+                stored: progressPersistence.latestLocatorString,
+                updated: live
+            )
             progressPersistence.record(
-                locatorString: live,
+                locatorString: stable,
                 totalProgression: liveLocator?.locations.totalProgression
             )
         }
@@ -65,6 +72,34 @@ enum ReadiumReaderPersistence {
         return false
     }
 
+    /// Debounced settle. Same spelling rule as `flushProgress`: a re-encoded
+    /// locator is not a new position.
+    static func noteSettledLocator(
+        _ locator: Locator,
+        progressPersistence: ReadiumProgressPersistence
+    ) {
+        guard let raw = locator.persistenceString else { return }
+        let stable = Locator.persistenceStringKeepingStoredSpelling(
+            stored: progressPersistence.latestLocatorString,
+            updated: raw
+        )
+        progressPersistence.note(
+            locatorString: stable,
+            totalProgression: locator.locations.totalProgression
+        )
+    }
+
+    /// Highlight identity. Stored marks keep whatever key order they were saved
+    /// with; a new selection encodes with sorted keys. Both name one passage.
+    static func isSameHighlightPassage(stored: String, selection: String) -> Bool {
+        let storedCanonical = Locator.canonicalPersistenceString(stored) ?? stored
+        let selectionCanonical = Locator.canonicalPersistenceString(selection) ?? selection
+        return ReadingAnnotationMatching.isSamePassage(
+            existingLocator: storedCanonical,
+            selectionLocator: selectionCanonical
+        )
+    }
+
     static func deleteAnnotation(_ annotation: ReadingAnnotation, in context: ModelContext) {
         SyncTombstones.recordDeletion(of: annotation, in: context, reason: "annotationDeleted")
         context.delete(annotation)
@@ -83,6 +118,12 @@ struct ReadiumSpeechNavigationState {
     /// Normalized href keys of chapters left behind by a pending speech jump.
     /// A late non-user settle in one of these chapters is a pre-jump echo.
     private var supersededPreJumpHrefs: Set<String> = []
+    /// True when this jump's target is at or past the locator speech left.
+    private var pendingMovesForward = true
+    /// Furthest position speech has reached in `heardHrefKey` on a forward jump.
+    /// A later settle behind it is an echo, until the user navigates.
+    private var heardHrefKey: String?
+    private var heardPosition: Int?
 
     mutating func beginJump(to locator: Locator, currentLocator: Locator?) -> UInt64 {
         generation &+= 1
@@ -95,6 +136,7 @@ struct ReadiumSpeechNavigationState {
             supersededPreJumpHrefs.insert(currentHref)
         }
         supersededPreJumpHrefs.remove(targetHref)
+        pendingMovesForward = Self.movesForward(from: currentLocator, to: locator)
         pendingLocator = locator
         pendingHrefKey = targetHref
         jumpSettled = false
@@ -105,7 +147,11 @@ struct ReadiumSpeechNavigationState {
     mutating func endJump(generation completed: UInt64) {
         jumpsInFlight = max(0, jumpsInFlight - 1)
         guard completed == generation, jumpsInFlight == 0, jumpSettled else { return }
-        clearPending()
+        // Drop the pending target but keep the chapters speech already left.
+        // A late echo of one of those can arrive after `go` returns.
+        pendingLocator = nil
+        pendingHrefKey = nil
+        jumpSettled = false
     }
 
     mutating func noteUserNavigation() {
@@ -115,18 +161,34 @@ struct ReadiumSpeechNavigationState {
 
     /// Returns `true` when `settled` is a stale pre-jump settle from a chapter
     /// speech already moved past (so debounced persistence does not regress).
-    mutating func noteLocationDidChange(_ settled: Locator, isUserScroll: Bool) -> Bool {
-        if isUserScroll {
-            noteUserNavigation()
+    ///
+    /// A scroll-gesture flag is not a user navigation: the jump's own web view
+    /// can be decelerating when the pre-jump locator settles. Scrubs, links,
+    /// committed turns and explicit `go` call `noteUserNavigation`.
+    mutating func noteLocationDidChange(_ settled: Locator) -> Bool {
+        let settledHref = ReaderSectionBuilder.hrefKey(settled.href.string)
+        guard let pendingHrefKey else {
+            if supersededPreJumpHrefs.contains(settledHref) { return true }
+            // Same chapter, but a page speech already moved past.
+            if settledHref == heardHrefKey,
+               let heardPosition,
+               let settledPosition = settled.locations.position,
+               settledPosition < heardPosition {
+                return true
+            }
             return false
         }
-        guard let pendingHrefKey else { return false }
-        let settledHref = ReaderSectionBuilder.hrefKey(settled.href.string)
         if settledHref == pendingHrefKey {
+            // Matching the chapter is not arrival. A forward jump's earlier
+            // position, or a backward jump's later one, is still the pre-jump page.
+            guard settledReachesPending(settled) else { return true }
+            rememberHeardPosition()
             if jumpsInFlight > 0 {
                 jumpSettled = true
             } else {
-                clearPending()
+                pendingLocator = nil
+                self.pendingHrefKey = nil
+                jumpSettled = false
             }
             return false
         }
@@ -135,6 +197,62 @@ struct ReadiumSpeechNavigationState {
         }
         clearPending()
         return false
+    }
+
+    /// Position order through the book. Equal counts as forward so a jump to the
+    /// page already on screen still settles.
+    private static func movesForward(from current: Locator?, to target: Locator) -> Bool {
+        if let currentPosition = current?.locations.position,
+           let targetPosition = target.locations.position {
+            return targetPosition >= currentPosition
+        }
+        let sameChapter = current.map { ReaderSectionBuilder.hrefKey($0.href.string) }
+            == ReaderSectionBuilder.hrefKey(target.href.string)
+        if sameChapter,
+           let currentProgression = current?.locations.progression,
+           let targetProgression = target.locations.progression {
+            return targetProgression >= currentProgression
+        }
+        return true
+    }
+
+    /// The navigator has landed on the heard locator, not a page on the other
+    /// side of it. Missing positions do not count as landing: the flush keeps
+    /// the heard locator until a real one arrives.
+    private func settledReachesPending(_ settled: Locator) -> Bool {
+        guard let pending = pendingLocator else { return true }
+        if let pendingPosition = pending.locations.position {
+            guard let settledPosition = settled.locations.position else { return false }
+            return pendingMovesForward
+                ? settledPosition >= pendingPosition
+                : settledPosition <= pendingPosition
+        }
+        if let pendingProgression = pending.locations.progression {
+            guard let settledProgression = settled.locations.progression else { return false }
+            return pendingMovesForward
+                ? settledProgression >= pendingProgression
+                : settledProgression <= pendingProgression
+        }
+        return true
+    }
+
+    private mutating func rememberHeardPosition() {
+        guard pendingMovesForward,
+              let pendingLocator,
+              let position = pendingLocator.locations.position
+        else {
+            if !pendingMovesForward {
+                heardHrefKey = nil
+                heardPosition = nil
+            }
+            return
+        }
+        if heardHrefKey != pendingHrefKey {
+            heardHrefKey = pendingHrefKey
+            heardPosition = position
+        } else {
+            heardPosition = max(heardPosition ?? position, position)
+        }
     }
 
     mutating func reset() {
@@ -148,6 +266,8 @@ struct ReadiumSpeechNavigationState {
         pendingHrefKey = nil
         jumpSettled = false
         supersededPreJumpHrefs.removeAll()
+        heardHrefKey = nil
+        heardPosition = nil
     }
 }
 

@@ -1651,6 +1651,10 @@ final class ReaderSpeechController {
                 releasePreparedSession()
             }
         case .playing:
+            // A stopped session, or the settings audition (no reader publication),
+            // must not publish Now Playing over a book that still owns transport.
+            // A late engine callback after Stop is the usual way that happens.
+            guard !stoppedManually, canOwnTransport else { return }
             if let request = activeRequest, case .awaitingFirstOutput = request.stage {
                 // Wait for the first playable utterance before exposing `.playing`
                 // (avoids unpausing a paused skip or flashing `.playing` on failure).
@@ -1660,6 +1664,7 @@ final class ReaderSpeechController {
             status = .playing
             reconcileTransport()
         case .paused:
+            guard !stoppedManually, canOwnTransport else { return }
             if var request = activeRequest {
                 request.desiredState = .paused
                 activeRequest = request
@@ -1831,11 +1836,30 @@ final class ReaderSpeechController {
     private(set) var transportForTests = "none"
     #endif
 
+    /// Reader sessions own the Lock Screen. The Listening-settings audition has
+    /// no publication (and tests give it no chapter provider), so its engine
+    /// callbacks cannot take or clear another controller's card.
+    private var canOwnTransport: Bool {
+        if publication != nil { return true }
+        #if DEBUG
+        if testUnitProvider != nil { return true }
+        #endif
+        return false
+    }
+
     /// The ONE place the Lock Screen card and remote targets are decided, derived
     /// from session state (`status`, a pending request). Nothing else installs,
     /// removes, publishes or clears them.
     private func reconcileTransport() {
         guard !isAuditioning else { return }
+        guard canOwnTransport else {
+            if Self.transportOwner === self {
+                relinquishTransportOwnership()
+            } else {
+                remoteCommandsInstalled = false
+            }
+            return
+        }
         switch status {
         case .playing:
             claimTransportOwnership()
@@ -1914,21 +1938,25 @@ final class ReaderSpeechController {
             return self.handleRemotePause()
         }
         rcc.togglePlayPauseCommand.addTarget { [weak self] _ in
-            guard let self else { return .commandFailed }
+            guard let self, Self.transportOwner === self else { return .noActionableNowPlayingItem }
             self.toggle(from: self.resumeLocator)
             return .success
         }
         rcc.nextTrackCommand.addTarget { [weak self] _ in
-            guard let self, self.isSessionActive else { return .noActionableNowPlayingItem }
+            guard let self, Self.transportOwner === self, self.isSessionActive else {
+                return .noActionableNowPlayingItem
+            }
             // Same chapter-skip as the mini player `>>` (not sentence step).
             return self.requestNextChapter() ? .success : .noActionableNowPlayingItem
         }
         rcc.previousTrackCommand.addTarget { [weak self] _ in
-            guard let self, self.isSessionActive else { return .noActionableNowPlayingItem }
+            guard let self, Self.transportOwner === self, self.isSessionActive else {
+                return .noActionableNowPlayingItem
+            }
             return self.requestPreviousChapter() ? .success : .noActionableNowPlayingItem
         }
         rcc.stopCommand.addTarget { [weak self] _ in
-            guard let self else { return .commandFailed }
+            guard let self, Self.transportOwner === self else { return .noActionableNowPlayingItem }
             self.stop()
             return .success
         }
@@ -1953,6 +1981,7 @@ final class ReaderSpeechController {
     }
 
     private func handleRemotePlay() -> MPRemoteCommandHandlerStatus {
+        guard Self.transportOwner === self else { return .noActionableNowPlayingItem }
         guard ttsService != nil else { return .commandFailed }
         applyPreferences()
         switch status {
@@ -1989,6 +2018,7 @@ final class ReaderSpeechController {
     }
 
     private func handleRemotePause() -> MPRemoteCommandHandlerStatus {
+        guard Self.transportOwner === self else { return .noActionableNowPlayingItem }
         guard ttsService != nil else { return .commandFailed }
         switch status {
         case .unavailable:

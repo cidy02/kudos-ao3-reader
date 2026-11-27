@@ -891,6 +891,11 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         // through successful dismiss teardown so a late settle cannot corrupt
         // the flushed resume point.
         guard !isLocatorIngestionBlocked else { return }
+        // A pre-jump echo must not become the resume point or clear the page bar.
+        // Checked before any settle side effect. The heard chapter stays in
+        // `speechNavigation` until this locator is the target, or the user navigates.
+        let locator = normalizedLocatorForChapterEnd(rawLocator)
+        if speechNavigation.noteLocationDidChange(locator) { return }
         // Hiding on a turn is reported by the input paths (edge tap / key / page-turner,
         // committed drag, trackpad Slide), never inferred from a settle (T-562f).
         let isPaged = isPagedReadingMode
@@ -898,7 +903,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         // First post-open settle: the spread has painted enough for Readium to
         // report a location — lift the skeleton that was covering its spinner.
         markFirstPagePresentedIfNeeded()
-        let locator = normalizedLocatorForChapterEnd(rawLocator)
         let rawProgression = rawLocator.locations.progression
         let previousHref = currentLocator.map { ReaderSectionBuilder.hrefKey($0.href.string) }
         let newHref = ReaderSectionBuilder.hrefKey(locator.href.string)
@@ -934,18 +938,14 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         }
         currentLocator = locator
         settledLocationCount += 1
-        let suppressesStalePreSpeechPersist = speechNavigation.noteLocationDidChange(
-            locator,
-            isUserScroll: scrollInteracting
-        )
         onLocatorSettled?(locator)
         // Mid-scrub locator settles are transient — the reader is flying past
         // these pages, not reading them. `currentLocator` still advances (so a
         // dismiss mid-drag flushes the right spot), but the debounced progress
         // write is skipped until release, which commits the final position.
-        // Stale pre-jump settles while a confirmed speech jump is unsettled are
-        // skipped too so they never overwrite a newer heard position.
-        if !isScrubbing, !suppressesStalePreSpeechPersist {
+        // A stale pre-jump settle returned before this point, so it cannot
+        // overwrite a chapter speech has already reached.
+        if !isScrubbing {
             onLocatorChange?(locator)
         }
     }

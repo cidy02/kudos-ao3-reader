@@ -352,7 +352,16 @@ struct ReadAloudFollowUpsTests {
         #expect(NowPlayingInfo.shared.media?.title == "Second Book")
 
         // A late stop/tearDown on the former owner must leave the new owner intact.
+        // Stop already ran when the second controller claimed the speech registry;
+        // a late engine ".playing" and a stale remote Play must not steal it back.
         first.stop()
+        first.handleEngineStatusChange(.playing)
+        #expect(second.isTransportOwnerForTests)
+        #expect(NowPlayingInfo.shared.media?.title == "Second Book")
+        #expect(first.handleRemotePlayForTests() == .noActionableNowPlayingItem)
+        #expect(first.handleRemotePauseForTests() == .noActionableNowPlayingItem)
+        #expect(second.status == .playing)
+        #expect(second.remoteCommandsInstalledForTests)
         first.tearDown()
 
         let rcc = MPRemoteCommandCenter.shared()
@@ -361,6 +370,73 @@ struct ReadAloudFollowUpsTests {
         #expect(NowPlayingInfo.shared.media?.title == "Second Book")
         #expect(NowPlayingInfo.shared.playback.rate == 1)
         #expect(rcc.playCommand.isEnabled)
+    }
+
+    @Test func auditionEngineCallbacksNeverTakeTheBooksNowPlayingCard() async {
+        let (positions, _) = makeChapterPositions(chapterCount: 2)
+        let bookEngine = FollowUpTTSService()
+        let book = await startActiveBookController(
+            title: "Active Book",
+            engine: bookEngine,
+            chapterStarts: positions.compactMap(\.first)
+        )
+        defer { book.stop() }
+
+        // Production audition: its own controller, no chapter provider, no publication.
+        let auditionEngine = FollowUpTTSService()
+        let audition = ReaderSpeechController()
+        audition.seedSessionForTests(
+            workID: UUID(),
+            status: .stopped,
+            isReaderOpen: false,
+            isAuditioning: true,
+            ttsService: auditionEngine
+        )
+        audition.audition(text: "Sample voice preview.")
+        await audition.waitForStartTaskForTests()
+        #expect(audition.isPlaying)
+        #expect(!audition.isTransportOwnerForTests)
+        #expect(book.isTransportOwnerForTests)
+        #expect(NowPlayingInfo.shared.media?.title == "Active Book")
+        #expect(NowPlayingInfo.shared.playback.rate == 1)
+
+        // Sample interrupted, then it ends, then the engine reports playing once more.
+        audition.handleEngineStatusChange(.paused)
+        #expect(book.isTransportOwnerForTests)
+        #expect(NowPlayingInfo.shared.playback.rate == 1)
+        audition.handleEngineStatusChange(.stopped)
+        #expect(!audition.isPlaying)
+        audition.handleEngineStatusChange(.playing)
+        #expect(!audition.isTransportOwnerForTests)
+        #expect(book.isTransportOwnerForTests)
+        #expect(book.remoteCommandsInstalledForTests)
+        #expect(NowPlayingInfo.shared.media?.title == "Active Book")
+        #expect(NowPlayingInfo.shared.playback.rate == 1)
+
+        audition.stop()
+        audition.tearDown()
+        #expect(book.isTransportOwnerForTests)
+        #expect(NowPlayingInfo.shared.media?.title == "Active Book")
+
+        // Book pauses; a later sample callback still must not retitle the card.
+        book.pause()
+        #expect(book.status == .paused)
+        #expect(NowPlayingInfo.shared.playback.rate == 0)
+        audition.handleEngineStatusChange(.playing)
+        #expect(book.isTransportOwnerForTests)
+        #expect(NowPlayingInfo.shared.media?.title == "Active Book")
+        #expect(NowPlayingInfo.shared.playback.rate == 0)
+        #expect(book.handleRemotePlayForTests() == .success)
+        #expect(book.status == .playing)
+        #expect(NowPlayingInfo.shared.playback.rate == 1)
+
+        // The book's own stop is what clears the card. The audition stopping again does not bring it back.
+        book.stop()
+        #expect(NowPlayingInfo.shared.media == nil)
+        #expect(!book.remoteCommandsInstalledForTests)
+        audition.stop()
+        #expect(NowPlayingInfo.shared.media == nil)
+        #expect(!book.remoteCommandsInstalledForTests)
     }
 
     // MARK: - #5: Close flush never lags behind heard speech
@@ -425,10 +501,12 @@ struct ReadAloudFollowUpsTests {
         #expect(book.currentLocator?.href.string == "ch1.xhtml")
         #expect(book.hasSpeechJumpInFlight)
 
-        // A stale pre-jump settle from ch1 during the jump must not regress the flush target.
+        // A stale pre-jump settle from ch1 during the jump must not regress the flush target
+        // or become the navigator's current position.
         let nav = FollowUpTestNavigator()
         book.navigator(nav, locationDidChange: ch1Late)
         #expect(book.locatorForProgressFlush?.href.string == "ch2.xhtml")
+        #expect(book.currentLocator?.locations.position == 1)
 
         // Close before navigator.go(to: ch2) settles -> must persist ch2, never ch1.
         let wrote = ReadiumReaderPersistence.flushProgress(
@@ -501,6 +579,127 @@ struct ReadAloudFollowUpsTests {
         )
         #expect(work.readiumLocator.contains("ch2.xhtml"))
         #expect(work.lastSpineIndex == 1)
+    }
+
+    @Test func latePreJumpEchoAfterSpeechJumpSettlesDoesNotFlushTheOldChapter() async throws {
+        let context = try makeContext()
+        let (positions, sections) = makeChapterPositions(chapterCount: 3)
+        let ch1 = positions[0][0]
+        let ch1Late = positions[0][1]
+        let ch2 = positions[1][0]
+        let ch1String = try #require(ch1.persistenceString)
+
+        let work = SavedWork(title: "Echo After Settle", author: "Author")
+        work.readiumLocator = ch1String
+        context.insert(work)
+        try context.save()
+
+        let book = ReadiumBook()
+        book.seedChaptersForTests(positions, current: ch1)
+        book.testGoToLocator = { _ in true }
+
+        let persistence = ReadiumProgressPersistence()
+        persistence.seed(persistedLocatorString: ch1String)
+        defer { persistence.cancelTrailingWrite() }
+        book.onLocatorChange = { locator in
+            ReadiumReaderPersistence.noteSettledLocator(locator, progressPersistence: persistence)
+        }
+
+        book.goForSpeech(to: ch2)
+        let jumpDone = await waitUntil { !book.hasSpeechJumpInFlight }
+        #expect(jumpDone)
+
+        let nav = FollowUpTestNavigator()
+        // Target settle clears the pending jump. A later echo of ch1 must not win.
+        book.navigator(nav, locationDidChange: ch2)
+        #expect(book.pendingSpeechLocator == nil)
+        #expect(book.currentLocator?.href.string == "ch2.xhtml")
+        book.navigator(nav, locationDidChange: ch1Late)
+        #expect(book.currentLocator?.href.string == "ch2.xhtml")
+        #expect(book.locatorForProgressFlush?.href.string == "ch2.xhtml")
+
+        ReadiumReaderPersistence.flushProgress(
+            liveLocator: book.locatorForProgressFlush,
+            work: work,
+            sections: sections,
+            progressPersistence: persistence,
+            allowsPersistence: true,
+            exitCommitted: false,
+            shelfStamp: true,
+            in: context
+        )
+        #expect(work.readiumLocator.contains("ch2.xhtml"))
+        #expect(!work.readiumLocator.contains("ch1.xhtml"))
+        #expect(work.lastSpineIndex == 1)
+    }
+
+    @Test func sameChapterPositionBehindHeardSpeechDoesNotFlush() async throws {
+        let context = try makeContext()
+        let (positions, sections) = makeChapterPositions(chapterCount: 1, positionsPerChapter: 6)
+        let pos1 = positions[0][0]
+        let pos2 = positions[0][1]
+        let pos4 = positions[0][3]
+        let pos1String = try #require(pos1.persistenceString)
+
+        let work = SavedWork(title: "Same Chapter Echo", author: "Author")
+        work.readiumLocator = pos1String
+        context.insert(work)
+        try context.save()
+
+        let book = ReadiumBook()
+        book.seedChaptersForTests(positions, current: pos1)
+        book.testGoToLocator = { _ in true }
+
+        let persistence = ReadiumProgressPersistence()
+        persistence.seed(persistedLocatorString: pos1String)
+        defer { persistence.cancelTrailingWrite() }
+
+        // Speech has reached pos 4. go() returns before any settle.
+        book.goForSpeech(to: pos4)
+        let jumpDone = await waitUntil { !book.hasSpeechJumpInFlight }
+        #expect(jumpDone)
+
+        let nav = FollowUpTestNavigator()
+        // An earlier position in the same chapter is not the jump arriving.
+        book.navigator(nav, locationDidChange: pos2)
+        #expect(book.currentLocator?.locations.position == 1)
+        #expect(book.locatorForProgressFlush?.locations.position == 4)
+
+        ReadiumReaderPersistence.flushProgress(
+            liveLocator: book.locatorForProgressFlush,
+            work: work,
+            sections: sections,
+            progressPersistence: persistence,
+            allowsPersistence: true,
+            exitCommitted: false,
+            shelfStamp: true,
+            in: context
+        )
+        #expect(Locator(persistenceString: work.readiumLocator)?.locations.position == 4)
+
+        // The heard position lands, then the old position echoes again.
+        book.navigator(nav, locationDidChange: pos4)
+        #expect(book.pendingSpeechLocator == nil)
+        #expect(book.currentLocator?.locations.position == 4)
+        book.navigator(nav, locationDidChange: pos2)
+        #expect(book.currentLocator?.locations.position == 4)
+        #expect(book.locatorForProgressFlush?.locations.position == 4)
+
+        // A real turn back still wins.
+        _ = book.beginExplicitUserTurn()
+        book.navigator(nav, locationDidChange: pos2)
+        #expect(book.locatorForProgressFlush?.locations.position == 2)
+
+        // Backward jump: the page speech left (pos 2) must not settle over pos 1.
+        book.goForSpeech(to: pos1)
+        let backwardDone = await waitUntil { !book.hasSpeechJumpInFlight }
+        #expect(backwardDone)
+        book.navigator(nav, locationDidChange: pos2)
+        #expect(book.currentLocator?.locations.position == 2)
+        #expect(book.locatorForProgressFlush?.locations.position == 1)
+        book.navigator(nav, locationDidChange: pos1)
+        #expect(book.pendingSpeechLocator == nil)
+        #expect(book.locatorForProgressFlush?.locations.position == 1)
     }
 
     @Test func laterUserNavigationSupersedesPendingSpeechLocatorOnClose() async throws {
@@ -672,10 +871,16 @@ struct ReadAloudFollowUpsTests {
         #expect(!wrote)
         #expect(work.readiumLocator == pos1String)
 
+        // Close resets the detached-save throttle. Arm it with a heard boundary,
+        // then Stop: both saves are the heard locator, never the seek target.
         _ = controller.readerDidClose(workID: work.id)
+        engine.emitUtterance(text: "Heard.", locator: pos1)
         controller.stop()
         #expect(controller.pendingSeekLocator == nil)
-        #expect(detachedSaves.isEmpty)
+        #expect(!detachedSaves.isEmpty)
+        for saved in detachedSaves {
+            #expect(Locator(persistenceString: saved)?.locations.position == 1)
+        }
         #expect(work.readiumLocator == pos1String)
     }
 
@@ -859,8 +1064,69 @@ struct ReadAloudFollowUpsTests {
         #expect(engine.resumeCount == 1)
         #expect(controller.status == .playing)
     }
+
+    @Test func unsortedStoredLocatorIsNotRewrittenUntilThePositionMoves() throws {
+        // Key order from before sorted encoding. Same locator as `persistenceString` emits now.
+        let unsorted = #"{"type":"application/xhtml+xml","href":"ch1.xhtml","locations":{"totalProgression":0.25,"position":2,"progression":0.5}}"#
+        let same = try #require(Locator(persistenceString: unsorted))
+        let sorted = try #require(same.persistenceString)
+        #expect(sorted != unsorted)
+        #expect(Locator.samePersistence(unsorted, sorted))
+
+        let context = try makeContext()
+        let (_, sections) = makeChapterPositions(chapterCount: 2)
+        let work = SavedWork(title: "Stored Spelling", author: "Author")
+        work.readiumLocator = unsorted
+        context.insert(work)
+        try context.save()
+
+        let persistence = ReadiumProgressPersistence()
+        persistence.seed(persistedLocatorString: unsorted)
+        defer { persistence.cancelTrailingWrite() }
+        var debounced: [String] = []
+        persistence.onDebouncedWrite = { debounced.append($0) }
+
+        ReadiumReaderPersistence.noteSettledLocator(same, progressPersistence: persistence)
+        #expect(debounced.isEmpty)
+        #expect(persistence.locatorForFlush() == nil)
+
+        let wrote = ReadiumReaderPersistence.flushProgress(
+            liveLocator: same,
+            work: work,
+            sections: sections,
+            progressPersistence: persistence,
+            allowsPersistence: true,
+            exitCommitted: false,
+            shelfStamp: true,
+            in: context
+        )
+        #expect(!wrote)
+        #expect(work.readiumLocator == unsorted)
+
+        let moved = makeLocator(chapter: 2, position: 3, progression: 0, totalProgression: 0.5)
+        ReadiumReaderPersistence.noteSettledLocator(moved, progressPersistence: persistence)
+        let movedString = try #require(debounced.first)
+        #expect(movedString.contains("ch2.xhtml"))
+        #expect(Locator(persistenceString: movedString)?.locations.position == 3)
+
+        // The debounced note already marked the move persisted in memory. A close
+        // still has to be able to write that position when it is the one that lands.
+        persistence.seed(persistedLocatorString: unsorted)
+        let wroteMove = ReadiumReaderPersistence.flushProgress(
+            liveLocator: moved,
+            work: work,
+            sections: sections,
+            progressPersistence: persistence,
+            allowsPersistence: true,
+            exitCommitted: false,
+            shelfStamp: false,
+            in: context
+        )
+        #expect(wroteMove)
+        #expect(work.readiumLocator.contains("ch2.xhtml"))
+        #expect(Locator(persistenceString: work.readiumLocator)?.locations.position == 3)
+    }
 }
-#endif
 
 /// A position encodes to one string, so the close-time flush doesn't rewrite an unmoved position (T-535k).
 struct LocatorPersistenceStringTests {
@@ -873,4 +1139,25 @@ struct LocatorPersistenceStringTests {
         #expect(encodedA == encodedB)
         #expect(encodedA.range(of: "\"href\"")!.lowerBound < encodedA.range(of: "\"locations\"")!.lowerBound)
     }
+
+    @Test func oldUnsortedHighlightLocatorStillMatchesTheSortedSelection() throws {
+        let stored = #"{"type":"application/xhtml+xml","locations":{"totalProgression":0,"progression":0.2,"position":4},"href":"ch1.xhtml"}"#
+        let selection = try #require(Locator(persistenceString: stored)?.persistenceString)
+        #expect(selection != stored)
+        #expect(ReadiumReaderPersistence.isSameHighlightPassage(stored: stored, selection: selection))
+
+        let other = #"{"href":"ch1.xhtml","type":"application/xhtml+xml","locations":{"position":5,"progression":0.2,"totalProgression":0}}"#
+        #expect(!ReadiumReaderPersistence.isSameHighlightPassage(stored: stored, selection: other))
+        #expect(!ReadiumReaderPersistence.isSameHighlightPassage(stored: "", selection: selection))
+
+        // The quote is part of the passage. Key order still must not split one mark,
+        // and a different quote at the same position must not collapse into it.
+        let storedQuote = #"{"type":"application/xhtml+xml","text":{"highlight":"alpha"},"locations":{"totalProgression":0,"progression":0.2,"position":4},"href":"ch1.xhtml"}"#
+        let sortedQuote = try #require(Locator(persistenceString: storedQuote)?.persistenceString)
+        #expect(sortedQuote != storedQuote)
+        #expect(ReadiumReaderPersistence.isSameHighlightPassage(stored: storedQuote, selection: sortedQuote))
+        let otherQuote = #"{"href":"ch1.xhtml","type":"application/xhtml+xml","locations":{"position":4,"progression":0.2,"totalProgression":0},"text":{"highlight":"beta"}}"#
+        #expect(!ReadiumReaderPersistence.isSameHighlightPassage(stored: storedQuote, selection: otherQuote))
+    }
 }
+#endif

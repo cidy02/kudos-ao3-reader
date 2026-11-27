@@ -903,9 +903,9 @@ struct ReadiumReaderView: View {
         return annotations
             .filter { $0.kind == .highlight }
             .first { annotation in
-                ReadingAnnotationMatching.isSamePassage(
-                    existingLocator: annotation.locatorString,
-                    selectionLocator: selectionLocator
+                ReadiumReaderPersistence.isSameHighlightPassage(
+                    stored: annotation.locatorString,
+                    selection: selectionLocator
                 )
             }
     }
@@ -1727,13 +1727,13 @@ struct ReadiumReaderView: View {
             initialPositionPersistence.observeSettledLocator(string)
         }
         book.onLocatorChange = { locator in
-            guard let string = locator.persistenceString else { return }
             guard initialPositionPersistence.allowsPersistence else { return }
             ReadingLogService.noteActivity(for: work, chapter: readingLogChapter(for: locator))
             // note() may call onDebouncedWrite immediately or schedule a trailing write.
-            progressPersistence.note(
-                locatorString: string,
-                totalProgression: locator.locations.totalProgression
+            // An old unsorted locator string is kept when this settle is the same position.
+            ReadiumReaderPersistence.noteSettledLocator(
+                locator,
+                progressPersistence: progressPersistence
             )
         }
         // Finish a completed work only at the navigator's true end state — the
