@@ -98,3 +98,13 @@ test('setAnnotations checks its arguments', async () => {
   await assert.rejects(h.call('setAnnotations', { items: 'no' }), (e: any) => e.code === 'bad-args');
   assert.deepEqual(await h.call('setAnnotations', { items: [] }), { placed: [] });
 });
+
+test('a note across two paragraphs is drawn in both, and the rest of the batch still draws', async () => {
+  const h = await opened(SRC);
+  const from = SRC.indexOf('the boat'), to = SRC.indexOf('tide') + 4;
+  const r = await h.call('setAnnotations', { items: [{ id: 'x', kind: 'note', from, to }, { id: 'y', kind: 'tk', from: SRC.indexOf('low'), to: SRC.indexOf('low') + 3 }] });
+  assert.deepEqual(r, { placed: [{ id: 'x', found: true }, { id: 'y', found: true }] });
+  const parts = [...h.bridge.editor.view.dom.querySelectorAll('[data-annotation="x"]')].map((e) => e.textContent);
+  assert.deepEqual(parts, ['the boat.', 'The tide']);
+  assert.equal(h.bridge.editor.view.dom.querySelector('[data-annotation="y"]')?.textContent, 'low');
+});

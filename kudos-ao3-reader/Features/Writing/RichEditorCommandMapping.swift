@@ -220,8 +220,8 @@ extension DraftSession {
             guard let amp = head.lastIndex(of: "&") else { return false }
             let name = head[head.index(after: amp)...]
             let isRefChar: (Character) -> Bool = { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "#") }
-            guard !name.isEmpty, name.allSatisfy(isRefChar), let next = ns.substring(from: offset).first else { return false }
-            return isRefChar(next) || next == ";"
+            guard name.allSatisfy(isRefChar), let next = ns.substring(from: offset).first else { return false }
+            return isRefChar(next) || (next == ";" && !name.isEmpty)
         }
         return insideReference(range.from) || insideReference(range.to) ? nil : target
     }
