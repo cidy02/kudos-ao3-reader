@@ -126,7 +126,6 @@ nonisolated struct TagAliasResolver: Equatable, Sendable {
         )
     }
 
-    @MainActor
     init(models: [TagAlias]) {
         self.init(
             entries: models.compactMap { model in

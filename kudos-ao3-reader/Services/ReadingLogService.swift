@@ -1087,13 +1087,15 @@ enum ReadingLogService {
         var context: ModelContext
         var options: InsightsOptions
         var aliases: TagAliasResolver?
+        var seriesSnapshots: [SavedSeriesSnapshot]? = nil
         var now: Date
     }
 
     /// Gathers one `InsightsScope` (main, Hidden section, or combined).
     ///
-    /// `nonisolated` so `InsightsGatherActor` runs it on its own context; `rawSessions` is the
-    /// sittings that actor already fetched in batches (nil fetches them all here, as before).
+    /// `nonisolated` so `InsightsGatherActor` runs it on its own context; preloaded tables
+    /// (`rawSessions`, `seriesSnapshots`, `softDeleted`) come from its bounded batch fetches
+    /// (nil falls back to direct fetches here, as main-actor callers always did).
     nonisolated static func gatherInsights(
         for period: DateInterval,
         previousPeriod: DateInterval?,
@@ -1104,10 +1106,12 @@ enum ReadingLogService {
         options: InsightsOptions = InsightsOptions(),
         aliases: TagAliasResolver? = nil,
         rawSessions: [ReadingSession]? = nil,
+        seriesSnapshots: [SavedSeriesSnapshot]? = nil,
+        softDeleted: (all: Set<UUID>, adult: Set<UUID>)? = nil,
         now: Date = Date()
     ) -> InsightsGatherResult {
         let rawHistory = rawSessions ?? ((try? context.fetch(FetchDescriptor<ReadingSession>())) ?? [])
-        let history = scope.sessions(rawHistory, in: context)
+        let history = scope.sessions(rawHistory, in: context, preloadedSoftDeleted: softDeleted)
         return gatherInsightsCore(GatherRequest(
             period: period,
             previousPeriod: previousPeriod,
@@ -1119,6 +1123,7 @@ enum ReadingLogService {
             context: context,
             options: options,
             aliases: aliases,
+            seriesSnapshots: seriesSnapshots,
             now: now
         ))
     }
@@ -1221,7 +1226,7 @@ enum ReadingLogService {
             readingWorks: filtered.works,
             facts: periodFacts,
             allFacts: allFacts,
-            seriesSnapshots: SavedSeriesStore.snapshots(in: req.context),
+            seriesSnapshots: req.seriesSnapshots ?? SavedSeriesStore.snapshots(in: req.context),
             periodInterval: req.period,
             periodMonths: req.periodMonths,
             calendar: req.calendar,

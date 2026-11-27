@@ -4,8 +4,8 @@ import SwiftData
 /// Local-only reading insights derived from the Library's `SavedWork` records.
 /// The app does not track sessions or per-word progress, so "words read" counts
 /// only finished works whose AO3 word count is known.
-nonisolated struct ReadingStatistics: Sendable {
-    struct FandomCount: Identifiable, Equatable {
+nonisolated struct ReadingStatistics: Equatable, Sendable {
+    struct FandomCount: Identifiable, Equatable, Sendable {
         let name: String
         let count: Int
 
@@ -348,7 +348,8 @@ nonisolated struct InsightsScopeSelection {
     /// return to main.
     func sessions(
         _ all: [ReadingSession],
-        in context: ModelContext? = nil
+        in context: ModelContext? = nil,
+        preloadedSoftDeleted: (all: Set<UUID>, adult: Set<UUID>)? = nil
     ) -> [ReadingSession] {
         if scope == .hidden && !revealed { return [] }
         guard hideMature else {
@@ -361,8 +362,7 @@ nonisolated struct InsightsScopeSelection {
         if scope == .combined && revealed { return all }
         var allHiddenIDs = hiddenWorkIDs
         var existingIDs = liveWorkIDs
-        if let context {
-            let softDeleted = HomeReadingStats.softDeletedWorkIDs(in: context)
+        if let softDeleted = preloadedSoftDeleted ?? context.map({ HomeReadingStats.softDeletedWorkIDs(in: $0) }) {
             allHiddenIDs.formUnion(softDeleted.adult)
             existingIDs.formUnion(softDeleted.all)
         }

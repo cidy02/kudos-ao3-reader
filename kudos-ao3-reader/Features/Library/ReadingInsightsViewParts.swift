@@ -2562,6 +2562,7 @@ struct LibraryWhereEverythingStandsCard: View {
 
 struct LibraryStillReadingCard: View {
     let candidate: ReadingLibraryInsights.StillReadingCandidate
+    let work: SavedWork
     let discreetMode: Bool
     var discreetMasker: InsightsDiscreetMasker = .empty
     let onStillReading: () -> Void
@@ -2621,7 +2622,7 @@ struct LibraryStillReadingCard: View {
                 }
                 .buttonStyle(.plain)
 
-                NavigationLink(value: candidate.work) {
+                NavigationLink(value: work) {
                     Text("Open Work")
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)

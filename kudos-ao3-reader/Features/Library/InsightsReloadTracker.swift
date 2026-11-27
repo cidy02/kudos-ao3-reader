@@ -239,9 +239,79 @@ nonisolated enum InsightsReloadDigest {
     }
 
     #if DEBUG
+    private final class LockedCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        func load() -> Int { lock.withLock { value } }
+        func increment() { lock.withLock { value += 1 } }
+    }
+
+    private static let snapshotCounter = LockedCounter()
+
     /// Counts full library digest walks (tests prove a refresh walks once).
-    static var snapshotCountForTests = 0
+    static var snapshotCountForTests: Int { snapshotCounter.load() }
     #endif
+
+    /// Streaming digest accumulator so `InsightsGatherActor` can fold bounded fetch batches
+    /// into the exact same `Snapshot` without holding full tables or running duplicate queries.
+    struct Builder {
+        private var liveBag = BagDigest()
+        private var liveSignatures: [UUID: UInt64] = [:]
+        private var deletedBag = BagDigest()
+        private var deletedFlags: [UUID: Bool] = [:]
+        private var sessionBag = BagDigest()
+        private var aliasBag = BagDigest()
+        private var seriesBag = BagDigest()
+        private let now: Date
+        private let calendar: Calendar
+
+        init(now: Date = Date(), calendar: Calendar = .current) {
+            self.now = now
+            self.calendar = calendar
+        }
+
+        mutating func addLiveWork(_ work: SavedWork) {
+            let sig = InsightsReloadDigest.workSignature(work, now: now, calendar: calendar)
+            liveSignatures[work.id] = sig
+            liveBag.add(sig)
+        }
+
+        mutating func addSoftDeleted(_ softDeleted: (all: Set<UUID>, adult: Set<UUID>)) {
+            deletedFlags.reserveCapacity(deletedFlags.count + softDeleted.all.count)
+            for id in softDeleted.all {
+                let isAdult = softDeleted.adult.contains(id)
+                deletedFlags[id] = isAdult
+                var hasher = DeterministicHasher()
+                hasher.mix(id)
+                hasher.mix(isAdult)
+                deletedBag.add(hasher.state)
+            }
+        }
+
+        mutating func addSession(_ session: ReadingSession) {
+            sessionBag.add(InsightsReloadDigest.sessionSignature(session))
+        }
+
+        mutating func addAlias(_ alias: TagAlias) {
+            aliasBag.add(InsightsReloadDigest.aliasSignature(alias))
+        }
+
+        mutating func addSeries(_ series: SavedSeries) {
+            seriesBag.add(InsightsReloadDigest.seriesSignature(series))
+        }
+
+        func build() -> Snapshot {
+            #if DEBUG
+            InsightsReloadDigest.snapshotCounter.increment()
+            #endif
+            let digest = "\(liveBag.token)|\(deletedBag.token)|\(sessionBag.token)|\(aliasBag.token)|\(seriesBag.token)"
+            return Snapshot(
+                digest: digest,
+                liveWorkSignatures: liveSignatures,
+                softDeletedAdultFlags: deletedFlags
+            )
+        }
+    }
 
     /// `preloadedSessions` is the table the gather actor already fetched in batches; nil
     /// fetches it here in one go, as the main-actor callers always did.
@@ -252,53 +322,24 @@ nonisolated enum InsightsReloadDigest {
         calendar: Calendar = .current,
         preloadedSessions: [ReadingSession]? = nil
     ) -> Snapshot {
-        #if DEBUG
-        snapshotCountForTests += 1
-        #endif
-        var liveBag = BagDigest()
-        var liveSignatures: [UUID: UInt64] = Dictionary(minimumCapacity: works.count)
+        var builder = Builder(now: now, calendar: calendar)
         for work in works {
-            let sig = workSignature(work, now: now, calendar: calendar)
-            liveSignatures[work.id] = sig
-            liveBag.add(sig)
+            builder.addLiveWork(work)
         }
-
-        let softDeleted = HomeReadingStats.softDeletedWorkIDs(in: context)
-        var deletedBag = BagDigest()
-        var deletedFlags: [UUID: Bool] = Dictionary(minimumCapacity: softDeleted.all.count)
-        for id in softDeleted.all {
-            let isAdult = softDeleted.adult.contains(id)
-            deletedFlags[id] = isAdult
-            var hasher = DeterministicHasher()
-            hasher.mix(id)
-            hasher.mix(isAdult)
-            deletedBag.add(hasher.state)
-        }
-
+        builder.addSoftDeleted(HomeReadingStats.softDeletedWorkIDs(in: context))
         let sessions = preloadedSessions ?? ((try? context.fetch(FetchDescriptor<ReadingSession>())) ?? [])
-        var sessionBag = BagDigest()
         for session in sessions {
-            sessionBag.add(sessionSignature(session))
+            builder.addSession(session)
         }
-
         let aliases = (try? context.fetch(FetchDescriptor<TagAlias>())) ?? []
-        var aliasBag = BagDigest()
         for alias in aliases {
-            aliasBag.add(aliasSignature(alias))
+            builder.addAlias(alias)
         }
-
         let seriesRows = (try? context.fetch(FetchDescriptor<SavedSeries>())) ?? []
-        var seriesBag = BagDigest()
         for series in seriesRows {
-            seriesBag.add(seriesSignature(series))
+            builder.addSeries(series)
         }
-
-        let digest = "\(liveBag.token)|\(deletedBag.token)|\(sessionBag.token)|\(aliasBag.token)|\(seriesBag.token)"
-        return Snapshot(
-            digest: digest,
-            liveWorkSignatures: liveSignatures,
-            softDeletedAdultFlags: deletedFlags
-        )
+        return builder.build()
     }
 
     static func make(
@@ -531,6 +572,7 @@ final class InsightsReloadCoordinator {
     private let coalescer: InsightsSaveCoalescer
     /// The off-main digest of the latest coalesced save, cancelled when a newer one starts.
     private var digestTask: Task<Void, Never>?
+    private var digestGeneration = 0
 
     init(
         interval: Duration = .milliseconds(500),
@@ -557,9 +599,17 @@ final class InsightsReloadCoordinator {
         coalescer.schedule { [tracker, weak self] in
             guard isOnScreen() else { return }
             if let digest {
-                self?.digestTask?.cancel()
-                self?.digestTask = Task { @MainActor in
-                    guard let snapshot = await digest(), !Task.isCancelled, isOnScreen() else { return }
+                guard let self else { return }
+                self.digestGeneration += 1
+                let gen = self.digestGeneration
+                self.digestTask?.cancel()
+                self.digestTask = Task { @MainActor [weak self] in
+                    guard let snapshot = await digest(),
+                          !Task.isCancelled,
+                          let self,
+                          self.digestGeneration == gen,
+                          isOnScreen()
+                    else { return }
                     guard snapshot.digest != tracker.lastDigest else { return }
                     reload(snapshot)
                 }
@@ -573,6 +623,7 @@ final class InsightsReloadCoordinator {
 
     func cancel() {
         coalescer.cancel()
+        digestGeneration += 1
         digestTask?.cancel()
         digestTask = nil
     }

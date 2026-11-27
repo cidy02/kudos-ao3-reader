@@ -2363,16 +2363,6 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         /// Nil when the work has no stored position; nothing is guessed.
         var progressPercent: Int?
         var daysUntouched: Int
-        var work: SavedWork
-
-        /// Identity plus what the card shows: the model object itself is not comparable off the main actor (macOS).
-        nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
-            lhs.id == rhs.id && lhs.title == rhs.title && lhs.fandom == rhs.fandom
-                && lhs.chapterProgress == rhs.chapterProgress
-                && lhs.discreetChapterProgress == rhs.discreetChapterProgress
-                && lhs.progressPercent == rhs.progressPercent
-                && lhs.daysUntouched == rhs.daysUntouched
-        }
     }
 
     static func make(
@@ -2483,8 +2473,7 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
                 chapterProgress: chapterProgress,
                 discreetChapterProgress: discreetChapterProgress,
                 progressPercent: progress,
-                daysUntouched: max(1, days),
-                work: w
+                daysUntouched: max(1, days)
             )
         }
 
