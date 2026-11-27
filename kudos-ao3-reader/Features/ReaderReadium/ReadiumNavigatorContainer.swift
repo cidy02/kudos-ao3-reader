@@ -504,10 +504,36 @@ extension Locator {
     var persistenceString: String? {
         let dict = jsonObject.mapValues(\.any)
         guard JSONSerialization.isValidJSONObject(dict),
-              let data = try? JSONSerialization.data(withJSONObject: dict),
+              // sorted keys: the same position always encodes to the same string, so progress saves compare by
+              // value (unsorted dictionaries reorder keys and made every close look like a move)
+              let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]),
               let string = String(data: data, encoding: .utf8)
         else { return nil }
         return string
+    }
+
+    /// Sorted-key encoding of a stored locator string. Nil when `raw` is not locator JSON.
+    /// An older build stored the same JSON with unstable key order; parsing then encoding
+    /// is how those strings compare to one this process just produced.
+    static func canonicalPersistenceString(_ raw: String) -> String? {
+        Locator(persistenceString: raw)?.persistenceString
+    }
+
+    /// True when both strings are the same locator, including an unsorted string already
+    /// on disk and the sorted encoding `persistenceString` writes now.
+    static func samePersistence(_ lhs: String, _ rhs: String) -> Bool {
+        if lhs == rhs { return !lhs.isEmpty }
+        guard let left = canonicalPersistenceString(lhs),
+              let right = canonicalPersistenceString(rhs)
+        else { return false }
+        return left == right
+    }
+
+    /// `stored` when `updated` is only a re-encoding of it, otherwise `updated`.
+    /// Keeps a progress row's bytes stable so a close does not look like a move.
+    static func persistenceStringKeepingStoredSpelling(stored: String?, updated: String) -> String {
+        guard let stored, !stored.isEmpty, samePersistence(stored, updated) else { return updated }
+        return stored
     }
 
     /// Rebuilds a `Locator` from `persistenceString`; nil if absent/invalid.

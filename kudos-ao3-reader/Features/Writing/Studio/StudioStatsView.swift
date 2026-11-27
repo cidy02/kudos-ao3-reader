@@ -18,7 +18,6 @@ struct StudioStatsView: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.accentFill) private var accentFill
 
     @State private var stats: AO3UserStats?
     @State private var history: [StudioStatsSnapshot] = []
@@ -64,6 +63,7 @@ struct StudioStatsView: View {
                 }
             }
             .padding(.horizontal, SubjectMetrics.gutter)
+            .padding(.top, 12)
             .padding(.bottom, 24)
         }
         .refreshable { await load(force: true) }
@@ -150,29 +150,33 @@ struct StudioStatsView: View {
 
     private func periodButton(_ title: String, year: Int?) -> some View {
         let isSelected = selectedYear == year
-        return Button {
+        let shape = SubjectMetrics.controlShape(dynamicTypeSize)
+        let selectPeriod = {
             if let account = auth.username {
                 StudioStatsPageCache.rememberYear(year, account: account)
             }
             yearRevision += 1
-        } label: {
+        }
+        return Button(action: selectPeriod) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(isSelected ? Color.white : Color.primary)
-                .padding(.horizontal, 13)
-                .padding(.vertical, 8)
-                .frame(minHeight: 44)
+                .foregroundStyle(isSelected ? ThemeManager.label(on: theme.effectiveTint) : Color.primary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .frame(minHeight: 32)
                 .background {
                     if isSelected {
-                        Capsule().fill(.accentFill)
+                        shape.fill(theme.effectiveTint)
                     } else {
-                        Capsule().fill(theme.appTheme.glassFill(0.09))
-                            .overlay(Capsule().stroke(theme.appTheme.glassStroke(0.13), lineWidth: 0.5))
+                        shape
+                            .fill(theme.appTheme.glassFill(0.09))
+                            .overlay(shape.strokeBorder(theme.appTheme.glassStroke(0.13), lineWidth: 0.5))
                     }
                 }
-                .contentShape(Capsule())
+                .contentShape(shape)
         }
         .buttonStyle(.plain)
+        .layoutFreeHitTarget(action: selectPeriod)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -237,26 +241,35 @@ struct StudioStatsView: View {
 
     private var weeklyTitle: some View {
         Text("Kudos per Week")
-            .font(.headline)
+            .font(.headline.weight(.bold))
             .accessibilityAddTraits(.isHeader)
     }
 
     @ViewBuilder
     private func bestLabel(_ best: StudioStatsWeek?) -> some View {
         if let best {
-            Text("Best: \(best.gain.formatted()), week of \(best.start.studioStatsShort)")
+            Text("best: \(best.gain.formatted())")
                 .font(.footnote)
                 .foregroundStyle(.secondaryInk)
+                .accessibilityLabel("Best week: \(best.gain.formatted()), week of \(best.start.studioStatsShort)")
         }
     }
 
     private func bars(_ weeks: [StudioStatsWeek], best: StudioStatsWeek?) -> some View {
         let top = max(1, weeks.map { $0.gain }.max() ?? 1)
         let last = weeks.count - 1
+        let labels = StudioStatsHistory.axisLabels(for: weeks)
+        let barShape = UnevenRoundedRectangle(
+            topLeadingRadius: 4,
+            bottomLeadingRadius: 2,
+            bottomTrailingRadius: 2,
+            topTrailingRadius: 4,
+            style: .continuous
+        )
         return VStack(spacing: 6) {
             HStack(alignment: .bottom, spacing: 5) {
                 ForEach(Array(weeks.enumerated()), id: \.offset) { index, week in
-                    RoundedRectangle(cornerRadius: 3)
+                    barShape
                         .fill(barFill(isLast: index == last, isBest: week.start == best?.start))
                         .opacity(week.isEstimate ? 0.5 : 1)
                         .frame(height: max(3, CGFloat(week.gain) / CGFloat(top) * Self.chartHeight))
@@ -264,10 +277,10 @@ struct StudioStatsView: View {
             }
             .frame(height: Self.chartHeight + 6, alignment: .bottom)
             HStack {
-                Text(weeks[0].start.studioStatsShort)
-                Spacer()
-                Text(Calendar.current.isDate(weeks[last].start, equalTo: Date(), toGranularity: .weekOfYear)
-                    ? "This week" : weeks[last].start.studioStatsShort)
+                ForEach(Array(labels.enumerated()), id: \.offset) { index, label in
+                    if index > 0 { Spacer(minLength: 4) }
+                    Text(label)
+                }
             }
             .font(.caption2)
             .foregroundStyle(.secondaryInk)
@@ -277,10 +290,10 @@ struct StudioStatsView: View {
         .accessibilityAddTraits(.isImage)
     }
 
-    private func barFill(isLast: Bool, isBest: Bool) -> AnyShapeStyle {
-        if isLast { return AnyShapeStyle(accentFill) }
-        if isBest { return AnyShapeStyle(accentFill.opacity(0.6)) }
-        return AnyShapeStyle(Color.primary.opacity(0.2))
+    private func barFill(isLast: Bool, isBest: Bool) -> Color {
+        if isLast { return theme.accentInk }
+        if isBest { return theme.accentInk.opacity(0.6) }
+        return Color.primary.opacity(0.20)
     }
 
     // MARK: Your Works

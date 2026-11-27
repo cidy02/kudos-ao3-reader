@@ -64,16 +64,20 @@ nonisolated struct ChapterEditorMenuCapabilities: Equatable, Hashable, Sendable 
     var savedVersionCount: Int?
     var canStartSprint: Bool = false
     var isSprintRunning: Bool = false
+    var canCompareWithPosted: Bool = false
+    var canDiscardChanges: Bool = false
 
     /// Exact set of implemented actions shown in `EditorMoreMenu`.
-    /// Unimplemented actions (Share, Compare with Posted, Discard Changes, Export As formats
-    /// without an exporter, Print, Version History, Writing Tools) are excluded.
+    /// Unimplemented actions (Share, Export As formats without an exporter,
+    /// Print, Version History, Writing Tools) are excluded.
     var visibleActions: Set<EditorMoreMenuActionID> {
         var actions: Set<EditorMoreMenuActionID> = []
         if canPostOrUpdate { actions.insert(.postOrUpdate) }
         if canPreview { actions.insert(.preview) }
         if canFind { actions.insert(.find) }
         if canSaveAsAO3Draft, !isPosted { actions.insert(.saveAsAO3Draft) }
+        if canCompareWithPosted, isPosted { actions.insert(.compareWithPosted) }
+        if canDiscardChanges, isPosted { actions.insert(.discardChanges) }
         if canEditChapterMetadata { actions.insert(.chapterMetadata) }
         if canOpenWorkDetails { actions.insert(.workDetails) }
         if canEditTags { actions.insert(.editTags) }
@@ -117,6 +121,8 @@ struct ChapterEditorMoreMenuHandlers {
     var format: () -> Void = {}
     var deleteChapter: () -> Void = {}
     var sprint: () -> Void = {}
+    var compareWithPosted: () -> Void = {}
+    var discardChanges: () -> Void = {}
 }
 
 /// Shared menu wiring used by both `ChapterEditorScreen` and unit tests: builds the filtered
@@ -136,6 +142,8 @@ struct ChapterEditorMoreMenuWiring {
         if visible.contains(.preview) { actions.onPreview = handlers.preview }
         if visible.contains(.find) { actions.onFind = handlers.find }
         if visible.contains(.saveAsAO3Draft) { actions.onSaveAsAO3Draft = handlers.saveAsAO3Draft }
+        if visible.contains(.compareWithPosted) { actions.onCompareWithPosted = handlers.compareWithPosted }
+        if visible.contains(.discardChanges) { actions.onDiscardChanges = handlers.discardChanges }
         if visible.contains(.chapterMetadata) { actions.onChapterMetadata = handlers.chapterMetadata }
         if visible.contains(.workDetails) { actions.onWorkDetails = handlers.workDetails }
         if visible.contains(.editTags) { actions.onEditTags = handlers.editTags }

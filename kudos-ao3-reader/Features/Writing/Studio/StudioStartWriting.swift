@@ -60,20 +60,22 @@ struct StudioSignedOutStartWritingCard: View {
     let onStartWriting: () -> Void
 
     @Environment(ThemeManager.self) private var theme
-    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 15
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 13) {
+        let cardShape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+        let buttonShape = SubjectMetrics.controlShape(dynamicTypeSize)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 14) {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(theme.appTheme.nestedCardSurface)
+                    .fill(StudioTonePalette.paperBackground(for: theme.appTheme))
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+                            .strokeBorder(StudioTonePalette.paperBorder(for: theme.appTheme), lineWidth: 0.5)
                     )
                     .overlay {
                         Image(systemName: "pencil.line")
-                            .font(.title3.weight(.semibold))
+                            .font(.title2.weight(.medium))
                             .foregroundStyle(.accentInk)
                     }
                     .frame(width: 52, height: 52)
@@ -92,7 +94,7 @@ struct StudioSignedOutStartWritingCard: View {
                 "Start a document and keep your drafts on this \(ThisDevice.name). "
                     + "The Writing tab appears with your first document; sign in whenever you want to post."
             )
-            .font(.system(size: bodySize))
+            .font(.subheadline)
             .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
 
@@ -105,19 +107,23 @@ struct StudioSignedOutStartWritingCard: View {
                     }
                     Text(isCreating ? "Starting…" : "Start Writing")
                 }
-                .frame(maxWidth: .infinity)
+                .font(.headline)
+                .foregroundStyle(.accentInk)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .background(StudioTonePalette.softAccentFill(for: theme), in: buttonShape)
+                .contentShape(buttonShape)
             }
-            .buttonStyle(.kudosSecondaryConfirm)
+            .buttonStyle(.plain)
             .disabled(isCreating)
+            .opacity(isCreating ? 0.65 : 1)
             .accessibilityLabel("Start Writing")
             .accessibilityHint("Creates a local document on this \(ThisDevice.name) and opens the editor")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .subjectPanel()
-        .overlay(
-            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                .strokeBorder(theme.effectiveTint, lineWidth: 1.5)
-        )
+        .padding(18)
+        .background(cardShape.fill(theme.appTheme.cardSurface))
+        .overlay(cardShape.strokeBorder(theme.accentInk, lineWidth: 2))
     }
 }

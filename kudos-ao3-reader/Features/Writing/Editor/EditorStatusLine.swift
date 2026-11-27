@@ -129,12 +129,193 @@ nonisolated struct EditorStatusSummary: Equatable, Hashable, Sendable {
     }
 }
 
+/// Pure copy helpers for the active sprint pill (`Editor-Typing.dc.html`).
+nonisolated enum EditorSprintCopy {
+    /// Visible word delta badge (e.g. `"+312 words"`).
+    static func wordsBadgeText(words: Int) -> String {
+        let clamped = max(0, words)
+        return "+\(clamped.formatted()) \(clamped == 1 ? "word" : "words")"
+    }
+
+    /// Spoken word count suffix (e.g. `"312 words so far"`).
+    static func accessibilityWordsSuffix(words: Int) -> String {
+        let clamped = max(0, words)
+        return "\(clamped.formatted()) \(clamped == 1 ? "word" : "words") so far"
+    }
+}
+
+/// Shared draft-chip colour mapping across `EditorTopMetaStrip` and `EditorStatusLine`.
+enum EditorStatusChipStyle {
+    static func draftChipColor(daysLeft: Int, theme: ReaderTheme, accentInk: Color) -> Color {
+        switch daysLeft {
+        case ...3:
+            theme.errorColor
+        case ...7:
+            theme.isDarkFamily ? .subjectAmber : AO3TagPalette.teenTextOnLight
+        default:
+            accentInk
+        }
+    }
+}
+
+/// Centered sprint pill shown beneath the editor header while a sprint runs (`Editor-Typing.dc.html`).
+/// `Text(timerInterval:)` counts down on its own without per-second SwiftUI invalidations.
+struct EditorSprintPill: View {
+    let info: SprintStatusInfo
+
+    @Environment(ThemeManager.self) private var themeManager: ThemeManager?
+    @Environment(\.accentFill) private var envAccentFill
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var appTheme: ReaderTheme { themeManager?.appTheme ?? .light }
+    private var effectiveTint: Color { themeManager?.effectiveTint ?? envAccentFill }
+    private var accentInk: Color { themeManager?.accentInk ?? effectiveTint }
+
+    var body: some View {
+        let interval = info.startedAt...max(info.startedAt, info.endsAt)
+        let countdown = Text(
+            timerInterval: interval,
+            pauseTime: nil,
+            countsDown: true,
+            showsHours: false
+        )
+        let wordsBadge = EditorSprintCopy.wordsBadgeText(words: info.words)
+        let timerText = Text("Sprint · \(countdown) left")
+        let wordsText = Text(wordsBadge)
+            .accessibilityLabel(EditorSprintCopy.accessibilityWordsSuffix(words: info.words))
+        let shape = SubjectMetrics.controlShape(dynamicTypeSize)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Image(systemName: "timer")
+                            .accessibilityHidden(true)
+                        timerText
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    wordsText
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(spacing: 4) {
+                    Image(systemName: "timer")
+                        .padding(.trailing, 2)
+                        .accessibilityHidden(true)
+                    timerText
+                    Text("·")
+                        .accessibilityHidden(true)
+                    wordsText
+                }
+            }
+        }
+        .font(.footnote.weight(.semibold))
+        .monospacedDigit()
+        .foregroundStyle(accentInk)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+        .frame(minHeight: 28)
+        .background(effectiveTint.opacity(appTheme.isDarkFamily ? 0.22 : 0.12), in: shape)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Compact metadata strip directly beneath `EditorHeader` (`Studio-Editor.dc.html`):
+/// optional AO3 draft expiry chip on the leading side and chapter word count on the trailing side.
+struct EditorTopMetaStrip: View {
+    let summary: EditorStatusSummary
+    var onTapDraftChip: (() -> Void)?
+
+    @Environment(ThemeManager.self) private var themeManager: ThemeManager?
+    @Environment(\.accentFill) private var envAccentFill
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var appTheme: ReaderTheme { themeManager?.appTheme ?? .light }
+    private var effectiveTint: Color { themeManager?.effectiveTint ?? envAccentFill }
+    private var accentInk: Color { themeManager?.accentInk ?? effectiveTint }
+
+    var body: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    draftChipView
+                    chapterWordsView
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(spacing: 8) {
+                    draftChipView
+                    Spacer(minLength: 4)
+                    chapterWordsView
+                }
+                .frame(minHeight: 30)
+            }
+        }
+        .font(.caption)
+        .monospacedDigit()
+        .padding(.horizontal, SubjectMetrics.gutter)
+        .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 6 : 0)
+        .background(stripBackground)
+    }
+
+    @ViewBuilder
+    private var stripBackground: some View {
+        if let base = appTheme.appBaseBackground {
+            base.opacity(0.92)
+        } else {
+            Rectangle().fill(.bar)
+        }
+    }
+
+    @ViewBuilder
+    private var draftChipView: some View {
+        if let chipText = summary.ao3DraftChipText, let daysLeft = summary.ao3DraftDaysLeft {
+            let chipColor = EditorStatusChipStyle.draftChipColor(
+                daysLeft: daysLeft,
+                theme: appTheme,
+                accentInk: accentInk
+            )
+            let pill = Text(chipText)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(chipColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(chipColor.opacity(appTheme.isDarkFamily ? 0.22 : 0.12), in: Capsule())
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+
+            if let onTapDraftChip {
+                Button(action: onTapDraftChip) {
+                    pill
+                }
+                .buttonStyle(.plain)
+                .minimumHitTarget(32)
+                .accessibilityLabel(summary.ao3DraftChipAccessibilityLabel ?? chipText)
+            } else {
+                pill.combinedAccessibilityRow(summary.ao3DraftChipAccessibilityLabel ?? chipText)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var chapterWordsView: some View {
+        if let chapterWordCountText = summary.chapterWordCountText {
+            Text(chapterWordCountText)
+                .foregroundStyle(.secondaryInk)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 /// Compact editor status bar (`Studio-Editor.dc.html`): daily word-goal ring and progress,
 /// note/TK counts, saved/sync state, and optional AO3 draft expiry chip.
 struct EditorStatusLine: View {
     let summary: EditorStatusSummary
     var onTapNotes: (() -> Void)?
     var onTapDraftChip: (() -> Void)?
+    var showsTopMeta: Bool = true
+    var showsSprintRow: Bool = true
 
     @Environment(ThemeManager.self) private var themeManager: ThemeManager?
     @Environment(\.accentFill) private var envAccentFill
@@ -147,10 +328,10 @@ struct EditorStatusLine: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let sprint = summary.sprint {
+            if showsSprintRow, let sprint = summary.sprint {
                 SprintStatusRow(info: sprint)
             }
-            if summary.ao3DraftChipText != nil || summary.chapterWordCountText != nil {
+            if showsTopMeta, summary.ao3DraftChipText != nil || summary.chapterWordCountText != nil {
                 topMetaRow
             }
             goalAndSyncRow
@@ -287,19 +468,13 @@ struct EditorStatusLine: View {
         if let chapterWordCountText = summary.chapterWordCountText {
             Text(chapterWordCountText)
                 .foregroundStyle(.secondaryInk)
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private func draftChipColor(daysLeft: Int) -> Color {
-        switch daysLeft {
-        case ...3:
-            appTheme.errorColor
-        case ...7:
-            appTheme.isDarkFamily ? .subjectAmber : Color(red: 0.68, green: 0.40, blue: 0.0)
-        default:
-            accentInk
-        }
+        EditorStatusChipStyle.draftChipColor(daysLeft: daysLeft, theme: appTheme, accentInk: accentInk)
     }
 }
 

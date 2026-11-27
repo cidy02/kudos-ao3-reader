@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 /// AO3 action callbacks provided by `AddChapterView` or `WorkEditView`.
@@ -44,8 +45,10 @@ struct ChapterEditorScreen: View {
 
     @Environment(\.dismiss) var dismiss
     @Environment(ThemeManager.self) var theme
+    @Environment(AO3AuthService.self) var auth: AO3AuthService?
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    @AppStorage(StudioWritingGoal.storageKey) var storedDailyGoal: Int = StudioWritingGoal.defaultGoal
 
     @State var documentBridge: ChapterEditorDocumentBridge
     @State var session: DraftSession?
@@ -54,6 +57,7 @@ struct ChapterEditorScreen: View {
     @State var initialSnapshot: InitialSnapshot
     @State var initialWordCount: Int?
     @State var fallbackWordCount: Int?
+    @State var loggedWordsToday: Int?
     @State var showingFormatPanel = false
     @State var pendingAddNoteAfterFormatDismiss = false
     @State var showingLinkSheet = false
@@ -76,6 +80,11 @@ struct ChapterEditorScreen: View {
     @State var isClosing = false
     @State var sprintController = SprintController(outside: .system)
     @State var phoneWriting = ChapterEditorPhoneWriting()
+    @State var localWorkAO3ID: Int?
+    @State var isComparingPostedChanges = false
+    @State var showingDiscardChangesConfirmation = false
+    @State var activePostSheet: StudioEditorPostSheet?
+    @State var postedChangesHTMLSnapshot = ""
 
     struct InitialSnapshot: Equatable {
         let title: String
@@ -136,10 +145,24 @@ struct ChapterEditorScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             headerView
+            if statusSummary.ao3DraftChipText != nil || statusSummary.chapterWordCountText != nil {
+                EditorTopMetaStrip(summary: statusSummary)
+            }
             noticeBanner
-            chapterPageBody
-            tkPromptBanner
-            bottomFooter
+            ZStack {
+                chapterPageBody
+                    .opacity(isComparingPostedChanges ? 0 : 1)
+                    .allowsHitTesting(!isComparingPostedChanges)
+                    .accessibilityHidden(isComparingPostedChanges)
+
+                if isComparingPostedChanges {
+                    StudioEditPostedChangesView(diff: postedChapterDiff)
+                }
+            }
+            if !isComparingPostedChanges {
+                tkPromptBanner
+                bottomFooter
+            }
         }
         .background(appTheme.contentBackdrop.ignoresSafeArea())
         .hidesFloatingTabBarInEditor()
@@ -150,7 +173,15 @@ struct ChapterEditorScreen: View {
         .navigationBarBackButtonHidden(true)
         #endif
         .task(id: recoveryTarget) {
+            loggedWordsToday = try? await StudioWritingDayLog.shared.words()
             await openDocumentBridge()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: StudioWritingDayLog.didChangeNotification)
+        ) { _ in
+            Task {
+                loggedWordsToday = try? await StudioWritingDayLog.shared.words()
+            }
         }
         .onChange(of: session?.lastPaste) { _, newPaste in
             withAnimationUnlessReduced(.snappy(duration: 0.2), reduceMotion: reduceMotion) {
@@ -198,7 +229,17 @@ struct ChapterEditorScreen: View {
         .sprintHost(sprintController, words: currentWordCount, workID: documentBridge.workID, isClosing: isClosing)
         .writingDayLogHost(words: currentWordCount, isReady: initialWordCount != nil, sessionKey: recoveryTarget)
         // the Lock Screen widget's "what you're writing" (T-576e)
-        .onAppear { KudosWidgetBridge.noteEditing(work: workTitle, chapter: chapterTitle) }
+        .onAppear {
+            KudosWidgetBridge.noteEditing(work: workTitle, chapter: chapterTitle)
+            #if DEBUG
+            // screenshot routes for the posting sheets (simulator taps don't reach sheets on iOS 27)
+            if DebugLaunchRoute.takeSheet("studiopostchapter") {
+                openPostSheet(.postChapter(workID: 1001, chapterID: nil))
+            } else if DebugLaunchRoute.takeSheet("studiopostnew") {
+                openPostSheet(.postNewWork(existingDraftWorkID: nil))
+            }
+            #endif
+        }
         .onDisappear { KudosWidgetBridge.noteEditing(work: workTitle, chapter: chapterTitle) }
         .onDisappear {
             metadataSaveTask?.cancel()
@@ -260,15 +301,26 @@ struct ChapterEditorScreen: View {
         .sheet(isPresented: $showingBetaReadingSheet) {
             betaReadingSheetView
         }
+        .sheet(item: $activePostSheet) { sheet in
+            studioPostSheetView(for: sheet)
+        }
         .navigationDestination(isPresented: $showingWorkDetailsDestination) {
-            if let workID = ao3Actions?.ao3WorkID {
-                WritingWorkDestination(workID: workID)
+            if let workID = resolvedAO3WorkID {
+                StudioWorkDetailsDestination(workID: workID, workTitle: resolvedWorkTitle)
             }
         }
         .navigationDestination(isPresented: $showingEditTagsDestination) {
             if let workID = ao3Actions?.ao3WorkID {
                 WritingTagsDestination(workID: workID, workTitle: workTitle)
             }
+        }
+        .alert("Discard unposted changes?", isPresented: $showingDiscardChangesConfirmation) {
+            Button("Discard Changes", role: .destructive) {
+                discardUnpostedChanges()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This reverts the text, title, summary, and notes back to the posted version.")
         }
         .alert(
             deleteAlertTitle,
@@ -335,9 +387,62 @@ extension ChapterEditorScreen {
         return trimmed.isEmpty ? "Untitled" : trimmed
     }
 
+    var isSignedInToAO3: Bool { auth?.isLoggedIn == true }
+    var resolvedAO3WorkID: Int? { ao3Actions?.ao3WorkID ?? localWorkAO3ID }
+
+    var isUnpostedWorkDraft: Bool {
+        if let ao3Actions {
+            return !ao3Actions.isPosted
+                && ao3Actions.ao3ChapterID == nil
+                && !ao3Actions.pushesWorkDetailsDestination
+        }
+        return localWorkAO3ID == nil
+    }
+
+    var studioPostRoute: StudioEditorPostRoute {
+        StudioEditorPostRouting.route(
+            isPosted: isPosted,
+            ao3WorkID: resolvedAO3WorkID,
+            ao3ChapterID: ao3Actions?.ao3ChapterID,
+            isUnpostedWorkDraft: isUnpostedWorkDraft,
+            hasPostCallback: ao3Actions?.postOrUpdate != nil,
+            isSignedIn: isSignedInToAO3
+        )
+    }
+
+    var postedBaselineSource: StudioPostedBaselineSource {
+        ao3Actions?.isPosted == true ? .loadedFromAO3 : .editorSessionStart
+    }
+
+    var postedChapterDiff: StudioPostedChapterDiff {
+        let liveBody = postedChangesHTMLSnapshot.isEmpty
+            ? (session?.text ?? content)
+            : postedChangesHTMLSnapshot
+        return StudioPostedChapterDiff.compare(
+            posted: StudioPostedChapterSnapshot(
+                title: initialSnapshot.title,
+                summary: initialSnapshot.summary,
+                notesBefore: initialSnapshot.notesBefore,
+                notesAfter: initialSnapshot.notesAfter,
+                bodyHTML: initialSnapshot.content
+            ),
+            current: StudioPostedChapterSnapshot(
+                title: chapterTitle,
+                summary: summary,
+                notesBefore: notesBefore,
+                notesAfter: notesAfter,
+                bodyHTML: liveBody
+            ),
+            baselineSource: postedBaselineSource
+        )
+    }
+
     var canOpenWorkDetails: Bool {
         if ao3Actions?.openWorkDetails != nil { return true }
-        return ao3Actions?.pushesWorkDetailsDestination == true && ao3Actions?.ao3WorkID != nil
+        if ao3Actions?.pushesWorkDetailsDestination == true, ao3Actions?.ao3WorkID != nil {
+            return true
+        }
+        return isLocalOnly && isSignedInToAO3 && localWorkAO3ID != nil
     }
 
     var canDeleteChapter: Bool {
@@ -359,8 +464,8 @@ extension ChapterEditorScreen {
         ChapterEditorMenuCapabilities(
             isPosted: isPosted,
             hasUnpostedChanges: hasUnpostedChanges,
-            canPostOrUpdate: ao3Actions?.postOrUpdate != nil,
-            canSaveAsAO3Draft: ao3Actions?.saveAsAO3Draft != nil && !isPosted,
+            canPostOrUpdate: studioPostRoute != .unavailable,
+            canSaveAsAO3Draft: !isPosted && (ao3Actions?.saveAsAO3Draft != nil || isSignedInToAO3),
             canPreview: ao3Actions?.preview != nil,
             canFind: supportsHostFind,
             canAddNote: isRichMode,
@@ -374,7 +479,9 @@ extension ChapterEditorScreen {
             canDeleteChapter: canDeleteChapter,
             savedVersionCount: documentBridge.versionCount > 0 ? documentBridge.versionCount : nil,
             canStartSprint: session != nil,
-            isSprintRunning: sprintController.active != nil
+            isSprintRunning: sprintController.active != nil,
+            canCompareWithPosted: isPosted,
+            canDiscardChanges: isPosted
         )
     }
 
@@ -425,10 +532,11 @@ extension ChapterEditorScreen {
 
     var statusSummary: EditorStatusSummary {
         let baseline = initialWordCount ?? currentWordCount
-        let wordsToday = max(0, currentWordCount - baseline)
+        let sessionDelta = max(0, currentWordCount - baseline)
+        let wordsToday = max(loggedWordsToday ?? 0, sessionDelta)
         return EditorStatusSummary(
             wordsToday: wordsToday,
-            dailyGoal: nil,
+            dailyGoal: StudioWritingGoal.resolvedGoal(fromStored: storedDailyGoal),
             noteCount: documentBridge.annotationCount,
             tkCount: documentBridge.tkCount,
             syncState: documentBridge.syncState,
@@ -446,10 +554,11 @@ extension ChapterEditorScreen {
         EditorHeader(
             workTitle: resolvedWorkTitle,
             showsNotes: true,
-            showsChangesToggle: false,
-            isComparingChanges: false,
+            showsChangesToggle: isPosted,
+            isComparingChanges: isComparingPostedChanges,
             onDone: { commitAndClose() },
             onNotes: { notesSheetTab = .storyNotes },
+            onToggleChanges: isPosted ? { togglePostedChangesView() } : nil,
             chapterTrigger: {
                 ChapterSwitcherMenu(
                     chapters: switcherChapters,
@@ -496,7 +605,13 @@ extension ChapterEditorScreen {
     @ViewBuilder
     var noticeBanner: some View {
         VStack(spacing: 0) {
-            if isPosted, hasUnpostedChanges {
+            if let sprint = sprintController.statusInfo {
+                EditorSprintPill(info: sprint)
+                    .padding(.horizontal, SubjectMetrics.gutter)
+                    .padding(.top, 8)
+            }
+
+            if isPosted, hasUnpostedChanges || isComparingPostedChanges {
                 let bannerFill = appTheme.isDarkFamily
                     ? Color.subjectAmber.opacity(0.18)
                     : Color(red: 1.0, green: 0.96, blue: 0.90)
@@ -521,7 +636,7 @@ extension ChapterEditorScreen {
                 htmlModeStrip(session: session)
             } else if isRichMode, session?.lastSwitchChanges != nil {
                 HStack {
-                    Button("What changed") { showingWhatChanged = true }
+                    Button("What Changed") { showingWhatChanged = true }
                         .font(.caption.weight(.medium))
                         .buttonStyle(.plain)
                         .foregroundStyle(.accentInk)
@@ -590,7 +705,7 @@ extension ChapterEditorScreen {
             VStack(alignment: .leading, spacing: 8) {
                 chapterHeadingAndBeforeNotes
                     .padding(.horizontal, SubjectMetrics.gutter)
-                    .padding(.top, 10)
+                    .padding(.top, 14)
 
                 embeddedEditorSurface
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -605,18 +720,18 @@ extension ChapterEditorScreen {
     }
 
     var chapterHeadingAndBeforeNotes: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("CHAPTER \(resolvedChapterNumber)")
                     .font(.caption.weight(.bold))
-                    .tracking(1.2)
+                    .tracking(1.4)
                     .foregroundStyle(.secondaryInk)
                 TextField(
                     "Chapter title",
                     text: $chapterTitle,
                     prompt: appTheme.sepiaPrompt("Chapter title")
                 )
-                .font(.system(.title2, design: .serif).weight(.semibold))
+                .font(.system(.title, design: .serif).weight(.semibold))
                 .foregroundStyle(Color.primary)
                 .accessibilityLabel("Chapter title")
             }

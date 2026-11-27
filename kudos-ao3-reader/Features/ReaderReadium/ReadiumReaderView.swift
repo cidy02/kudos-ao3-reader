@@ -207,10 +207,7 @@ struct ReadiumReaderView: View {
     /// Logged reading time for the end card, read once on arrival at the end
     /// (never fetched while the card renders).
     @State private var endCardDuration: Double = 0
-    /// The end-of-chapter card's author's note, read from the EPUB when a chapter's last page
-    /// arrives; keyed by spine index so a stale read never shows under another chapter.
-    @State private var chapterEndNotes: [Int: String?] = [:]
-    /// Chapter whose number the Comments sheet should open on (the chapter-end card's button),
+    /// Chapter whose number the Comments sheet should open on (the in-chapter end card's link),
     /// instead of the leading resource's chapter.
     @State private var commentsChapterOverride: Int?
     /// Drives the caught-up card's Subscribe (the same handler Work Detail's menu uses).
@@ -382,14 +379,6 @@ struct ReadiumReaderView: View {
                 if atEnd {
                     endCardDuration = ReadingLogService.currentTotalDuration(of: work.id, in: modelContext)
                 }
-            }
-            // Read only while the card is showing, and keyed by chapter: a slower read for an
-            // earlier chapter can neither overwrite nor cancel this chapter's note.
-            .task(id: chapterEndNoteKey) {
-                guard let spineIndex = chapterEndNoteKey, chapterEndNotes[spineIndex] == nil else { return }
-                let text = await book.endNote(forSpineIndex: spineIndex)
-                guard !Task.isCancelled else { return }
-                chapterEndNotes[spineIndex] = .some(text)
             }
             .onChange(of: showingComments) { _, showing in
                 if !showing { commentsChapterOverride = nil }
@@ -566,6 +555,8 @@ struct ReadiumReaderView: View {
                 // is already clear, which is the normal case.
                 book.isScrubbing = false
                 isEditingSlider = false
+                speechSeekHolding = false
+                speechSeekWasPlaying = false
                 // Flush the exact final position so resume lands precisely, even if the
                 // last scroll's debounce window hadn't elapsed before we left.
                 flushProgress(shelfStamp: true)
@@ -651,8 +642,11 @@ struct ReadiumReaderView: View {
                 // Locator seek, not goForward: one move, never an animated
                 // turn, so a sentence already on screen does not turn again.
                 guard !book.isLocatorIngestionBlocked, !speechSeekHolding else { return }
+                if let string = locator.persistenceString {
+                    initialPositionPersistence.observeSettledLocator(string)
+                }
                 ReadingLogService.noteActivity(for: work)
-                book.go(to: locator)
+                book.goForSpeech(to: locator)
             },
             onSpokenRange: { locator in book.applySpeechDecoration(at: locator) },
             onSessionEnded: { book.applySpeechDecoration(at: nil) },
@@ -909,9 +903,9 @@ struct ReadiumReaderView: View {
         return annotations
             .filter { $0.kind == .highlight }
             .first { annotation in
-                ReadingAnnotationMatching.isSamePassage(
-                    existingLocator: annotation.locatorString,
-                    selectionLocator: selectionLocator
+                ReadiumReaderPersistence.isSameHighlightPassage(
+                    stored: annotation.locatorString,
+                    selection: selectionLocator
                 )
             }
     }
@@ -1120,6 +1114,7 @@ struct ReadiumReaderView: View {
         book.renderedLineHeightPoints = textStyle.fontSizePt * textStyle.lineHeight
         book.renderedPageMarginPoints = max(0, textStyle.margin)
         let changed = book.submit(preferences)
+        book.updateChapterEndAccent(chapterEndStyle)
         // Page turn is an EPUB preference (`pageTransition`) and also the
         // adapter's animated flag. Submit carries the style. Refresh keeps
         // edge taps in step when only the flag changes (Reduce Motion, or
@@ -1152,38 +1147,26 @@ struct ReadiumReaderView: View {
 
     /// Flush point (dismiss / background / disappear): persist the latest locator
     /// when it differs from disk, once a chapter-targeted open has actually moved.
-    /// Bypasses the debounce window — an eligible flush must never be dropped.
+    /// Prefers the confirmed speech locator when an async speech jump has not
+    /// settled (and no later user navigation superseded it). Bypasses the debounce
+    /// window — an eligible flush must never be dropped.
     private func flushProgress(shelfStamp: Bool) {
-        progressPersistence.cancelTrailingWrite()
-        guard initialPositionPersistence.allowsPersistence else { return }
-        // Prefer the live navigator locator; fall back to the last noted string.
         // After exit has committed (swipe peel or close/edge), never re-record a
         // live locator — freeze release / late TTS can still mutate `currentLocator`
         // while the view is tearing down.
         let exitCommitted = isDismissingByDrag || book.isDismissExitLatched
-        if !exitCommitted, let live = book.currentLocator?.persistenceString {
-            progressPersistence.record(
-                locatorString: live,
-                totalProgression: book.currentLocator?.locations.totalProgression
-            )
-        }
-        let now = Date()
-        if let toWrite = progressPersistence.locatorForFlush() {
-            writePosition(toWrite, at: now)
-            if shelfStamp { work.markProgressModified(now) }
-            progressPersistence.markPersisted(
-                locatorString: toWrite,
-                totalProgression: book.currentLocator?.locations.totalProgression
-                    ?? progressPersistence.latestTotalProgression,
-                at: now
-            )
-            try? modelContext.save()
+        let wrote = ReadiumReaderPersistence.flushProgress(
+            liveLocator: book.locatorForProgressFlush,
+            work: work,
+            sections: book.sections,
+            progressPersistence: progressPersistence,
+            allowsPersistence: initialPositionPersistence.allowsPersistence,
+            exitCommitted: exitCommitted,
+            shelfStamp: shelfStamp,
+            in: modelContext
+        )
+        if wrote {
             FolderSyncService.markDirty()
-        } else if shelfStamp, progressPersistence.hasSessionPosition {
-            // Locator already on disk — still bump lastReadDate so the shelf
-            // reflects this reading session on a quick open/close.
-            ReadiumSessionStamp.noteUnchangedLocatorShelf(work, at: now)
-            try? modelContext.save()
         }
     }
 
@@ -1371,18 +1354,10 @@ struct ReadiumReaderView: View {
                     .allowsHitTesting(chromeVisible)
                     .accessibilityHidden(!chromeVisible)
                 } else {
-                    VStack(spacing: 10) {
-                        // Last page of a chapter another follows: the card sits above the
-                        // position card, which stays mounted so the scrubber is always there
-                        // (and is never swapped out mid-drag: the card just steps aside).
-                        if let chapterEnd = book.chapterEnd, !isEditingSlider, !book.isScrubbing {
-                            chapterEndCard(chapterEnd)
-                        }
-                        positionCard(includeMiniPlayer: speechActive)
-                    }
-                    .opacity(chromeVisible ? 1 : 0)
-                    .allowsHitTesting(chromeVisible)
-                    .accessibilityHidden(!chromeVisible)
+                    positionCard(includeMiniPlayer: speechActive)
+                        .opacity(chromeVisible ? 1 : 0)
+                        .allowsHitTesting(chromeVisible)
+                        .accessibilityHidden(!chromeVisible)
                 }
             }
         }
@@ -1405,41 +1380,6 @@ struct ReadiumReaderView: View {
         .allowsHitTesting(chromeVisible || speechActive || colorBarAnnotationID != nil)
     }
 
-    private func chapterEndCard(_ end: ReaderChapterEndFacts.ChapterEnd) -> some View {
-        let total = SavedWork.totalChapterCount(from: work.chapters)
-        let nextTitle = ReaderChapterEndFacts.nextChapterTitle(
-            number: end.nextStoryChapter,
-            sectionTitle: book.sections.indices.contains(end.nextSpineIndex)
-                ? book.sections[end.nextSpineIndex].title : ""
-        )
-        let storyTotal = book.sections.filter { $0.kind == .chapter }.count
-        return ReaderChapterEndCard(
-            chapter: end.storyChapter,
-            nextChapterTitle: nextTitle,
-            nextChapterTime: ReaderChapterEndFacts.nextChapterTime(
-                chapterWordCounts: work.chapterWordCounts,
-                storyChapterTotal: storyTotal,
-                nextStoryChapter: end.nextStoryChapter
-            ),
-            endNote: chapterEndNotes[end.spineIndex] ?? nil,
-            footer: ReaderChapterEndFacts.footer(
-                chapter: end.storyChapter,
-                totalChapters: total ?? (work.isComplete ? storyTotal : nil),
-                postedChapters: work.postedChapterCount
-            ),
-            showsAO3Actions: ao3WorkID != nil,
-            kudosGiven: work.hasGivenKudos,
-            kudosEnabled: !kudosWorking && !work.hasGivenKudos,
-            maxHeight: verticalSizeClass == .compact ? 200 : 420,
-            onNextChapter: { book.go(toSpineIndex: end.nextSpineIndex) },
-            onComment: {
-                commentsChapterOverride = end.storyChapter
-                showingComments = true
-            },
-            onKudos: { if let ao3WorkID { giveKudos(workID: ao3WorkID) } }
-        )
-    }
-
     /// Subscribed state for this work under the current sign-in, or nil when not known.
     private var knownSubscribedState: Bool? {
         guard let ao3WorkID else { return nil }
@@ -1452,11 +1392,6 @@ struct ReadiumReaderView: View {
             postedChapters: work.postedChapterCount,
             epubStoryChapters: book.sections.filter { $0.kind == .chapter }.count
         )
-    }
-
-    /// The chapter whose end note to read: only while its card is up (chrome showing).
-    private var chapterEndNoteKey: Int? {
-        chromeVisible ? book.chapterEnd?.spineIndex : nil
     }
 
     private var endOfWorkCard: some View {
@@ -1792,13 +1727,13 @@ struct ReadiumReaderView: View {
             initialPositionPersistence.observeSettledLocator(string)
         }
         book.onLocatorChange = { locator in
-            guard let string = locator.persistenceString else { return }
             guard initialPositionPersistence.allowsPersistence else { return }
             ReadingLogService.noteActivity(for: work, chapter: readingLogChapter(for: locator))
             // note() may call onDebouncedWrite immediately or schedule a trailing write.
-            progressPersistence.note(
-                locatorString: string,
-                totalProgression: locator.locations.totalProgression
+            // An old unsorted locator string is kept when this settle is the same position.
+            ReadiumReaderPersistence.noteSettledLocator(
+                locator,
+                progressPersistence: progressPersistence
             )
         }
         // Finish a completed work only at the navigator's true end state — the
@@ -1826,6 +1761,17 @@ struct ReadiumReaderView: View {
             // native screen where one exists; everything else opens the in-app web view.
             router.openAO3Link(url)
         }
+        book.onChapterEndAction = { action in
+            switch action {
+            case let .comment(chapter):
+                commentsChapterOverride = chapter
+                showingComments = true
+            case .kudos:
+                if let ao3WorkID {
+                    giveKudos(workID: ao3WorkID)
+                }
+            }
+        }
         let initialLocator = initialSpineIndex == nil
             ? Locator(persistenceString: work.readiumLocator)
             : nil
@@ -1840,12 +1786,22 @@ struct ReadiumReaderView: View {
             fontFamilyDeclarations: fontFamilyDeclarations,
             readiumCSSRSProperties: ReadiumReaderStyleMapper.readingSystemProperties
         )
+        let chapterEndContext = ReaderChapterEndWorkContext(
+            chapterWordCounts: work.chapterWordCounts,
+            totalChapters: SavedWork.totalChapterCount(from: work.chapters),
+            postedChapters: work.postedChapterCount,
+            isComplete: work.isComplete,
+            showsAO3Actions: ao3WorkID != nil,
+            kudosState: ReaderChapterEndKudosState(isGiven: work.hasGivenKudos),
+            style: chapterEndStyle
+        )
         // Pose can publish while `open` is suspended and `book.navigator` is
         // still nil. That submit is a no-op, and the navigator is then built
         // from the preferences captured above. Re-submit if they moved.
         let tokenAtOpen = preferencesToken
         await book.open(fileURL: work.fileURL, initialLocator: initialLocator,
-                        fallbackSpineIndex: fallbackSpineIndex, config: config)
+                        fallbackSpineIndex: fallbackSpineIndex, config: config,
+                        chapterEnd: chapterEndContext)
         if preferencesToken != tokenAtOpen {
             applyReaderPreferences()
         }
@@ -1939,13 +1895,25 @@ extension ReadiumReaderView {
         )
     }
 
+    /// Accent fill + per-theme ink tokens for the in-chapter end-of-chapter card.
+    private var chapterEndStyle: ReaderChapterEndStyle {
+        let fill = themeManager.effectiveTint
+        return ReaderChapterEndStyle(
+            accentHex: fill.hexString,
+            accentLabelHex: ThemeManager.label(on: fill).hexString,
+            lightAccentInkHex: ReaderTheme.light.accentInk(for: fill).hexString,
+            sepiaAccentInkHex: ReaderTheme.sepia.accentInk(for: fill).hexString,
+            darkAccentInkHex: ReaderTheme.dark.accentInk(for: fill).hexString
+        )
+    }
+
     /// Re-submit preferences whenever any mapped setting changes (instant updates).
     private var preferencesToken: String {
         let effectiveTwoPage = chromeLayout.effectiveTwoPageSpread(
             enabled: twoPageEnabled, wideLayout: wideLayoutAvailable
         )
         return "\(readingMode.rawValue)|\(pageTurn.rawValue)|\(readerTheme.rawValue)|"
-            + "\(readerPageColors.backgroundHex)|\(fontID)|\(effectiveTwoPage)|"
+            + "\(readerPageColors.backgroundHex)|\(themeManager.accentHex)|\(fontID)|\(effectiveTwoPage)|"
             + "\(bookPose)|\(tabletopPose)|"
             + "\(dynamicTypeSize.isAccessibilitySize)|\(textStyle.token)"
     }
@@ -2209,42 +2177,19 @@ extension ReadiumReaderView {
         speechSeekWasPlaying = speech.isPlaying
         speechSeekHolding = true
         if speech.isPlaying {
+            speech.noteSeekLocator(nil)
             speech.pause()
         }
         // First seek step is the hold control's immediate first tick.
     }
 
     private func handleSpeechSeekHoldTick(forward: Bool) {
-        guard let positions = book.currentChapterPositions, positions.count > 1 else { return }
-        // Never index the positions list with visual page-1 (mixed metrics).
-        // Prefer the live locator's global position; else map visual→progression
-        // the same way the chapter scrub slider does.
-        let currentIdx: Int = {
-            if let globalPos = book.currentLocator?.locations.position,
-               let first = positions.first?.locations.position {
-                return max(0, min(positions.count - 1, globalPos - first))
-            }
-            if let progression = book.currentLocator?.locations.progression, positions.count > 1 {
-                let idx = Int((progression * Double(positions.count - 1)).rounded())
-                return max(0, min(positions.count - 1, idx))
-            }
-            if let pos = book.readingPosition {
-                return ReaderPageMetrics.positionIndex(
-                    visualPage: pos.page,
-                    visualPageCount: pos.pageCount,
-                    positionCount: positions.count
-                )
-            }
-            return 0
-        }()
-        let delta = forward ? 1 : -1
-        guard let newIdx = ReaderSpeechSkip.seekIndex(
-            current: currentIdx,
-            count: positions.count,
-            delta: delta
+        guard let locator = book.nextSpeechSeekLocator(
+            forward: forward,
+            pendingSeekLocator: speech.pendingSeekLocator,
+            speechLocator: speech.resumeLocator,
+            followsSpeech: speechSeekWasPlaying
         ) else { return }
-        let locator = positions[newIdx]
-        book.go(to: locator)
         speech.noteSeekLocator(locator)
         playSpeechSeekTickHaptic()
     }
@@ -2252,8 +2197,9 @@ extension ReadiumReaderView {
     private func handleSpeechSeekHoldEnd() {
         guard speechSeekHolding else { return }
         speechSeekHolding = false
-        speech.reanchor(to: speech.resumeLocator ?? book.currentLocator, resumePlaying: speechSeekWasPlaying)
+        let wasPlaying = speechSeekWasPlaying
         speechSeekWasPlaying = false
+        speech.finishSeekHold(resumePlaying: wasPlaying)
     }
 
     /// The AO3 story chapter the reader is currently on, for the chapter-aware
@@ -2379,6 +2325,7 @@ extension ReadiumReaderView {
                 // Reached on both "Kudos left." and the benign "already left kudos
                 // here" outcome — either way it's confirmed given, so persist it.
                 work.hasGivenKudos = true
+                book.markChapterEndKudosGiven()
                 try? modelContext.save()
                 kudosSuccesses += 1
                 AccessibilityNotification.Announcement(message).post()

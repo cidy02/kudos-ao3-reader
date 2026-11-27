@@ -6,10 +6,15 @@ import UIKit
 #endif
 @testable import Kudos
 
+/// The router's tab rule reads the app's real Writing folder by default; on a shared simulator that folder can hold
+/// documents from a screenshot or a manual run, so these tests use one that never exists.
+private let noLocalDocuments = FileManager.default.temporaryDirectory
+    .appendingPathComponent("kudos-no-local-documents-\(UUID().uuidString)", isDirectory: true)
+
 @MainActor
 struct AppRouterTests {
     @Test func consumingFindMoreKeepsTheCurrentQueue() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         let queueID = UUID()
         let route = QueueSearchRoute(searchID: UUID(), queueID: queueID, page: nil)
         router.pendingQueueSearch = route
@@ -19,7 +24,7 @@ struct AppRouterTests {
     }
 
     @Test func mainTabsFollowTheWritingTabRule() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         #expect(router.mainTabs == [.home, .library, .browse])
         #expect(AppTab.mainTabs(showsWriting: false) == [.home, .library, .browse])
         #expect(AppTab.mainTabs(showsWriting: true) == [.home, .library, .writing, .browse])
@@ -50,14 +55,14 @@ struct AppRouterTests {
         let restored = AppRouter.restoredSelection(from: AppTab.account.rawValue)
         #expect(restored == .init(tab: .home, presentsAccount: true))
 
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.restoreSelection(from: AppTab.account.rawValue)
         #expect(router.selection == .home)
         #expect(router.isPresentingAccount)
     }
 
     @Test func legacyRouteUpdatesTheOwningTabState() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.openLegacyAccountRoute(.drafts)
         #expect(router.selection == .home)
         #expect(router.consumePendingWritingRoute() == .drafts)
@@ -172,7 +177,7 @@ struct AppRouterTests {
         let store = WritingTabStateStore(defaults: defaults)
         store.setLastKnownWrites(true, for: "draftonlywriter")
 
-        let router = AppRouter(writingStateStore: store)
+        let router = AppRouter(writingStateStore: store, localDocumentsRoot: noLocalDocuments)
         router.evaluateWritingTab(
             isSignedIn: true,
             username: "draftonlywriter",
@@ -206,7 +211,7 @@ struct AppRouterTests {
             recentWorks: [],
             recentSeries: []
         )
-        let headerRouter = AppRouter(writingStateStore: store)
+        let headerRouter = AppRouter(writingStateStore: store, localDocumentsRoot: noLocalDocuments)
         headerRouter.evaluateWritingTab(
             from: uncountedHeader,
             route: route,
@@ -234,11 +239,11 @@ struct AppRouterTests {
                             subscriptionForm: nil, actions: [], recentWorks: works, recentSeries: [])
         }
         // No count and nothing listed: unknown, so a first-seen account stays a reader.
-        let reader = AppRouter(writingStateStore: store)
+        let reader = AppRouter(writingStateStore: store, localDocumentsRoot: noLocalDocuments)
         reader.evaluateWritingTab(from: header([]), route: route, username: "latestonly", isSignedIn: true)
         #expect(reader.showsWritingTab == false)
         // No count but a work under "Your Latest": the account writes.
-        let writer = AppRouter(writingStateStore: store)
+        let writer = AppRouter(writingStateStore: store, localDocumentsRoot: noLocalDocuments)
         writer.evaluateWritingTab(from: header([recent]), route: route, username: "latestonly", isSignedIn: true)
         #expect(writer.showsWritingTab == true)
         #expect(store.lastKnownWrites(for: "latestonly") == true)
@@ -250,7 +255,7 @@ struct AppRouterTests {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let store = WritingTabStateStore(defaults: defaults)
-        let router = AppRouter(writingStateStore: store)
+        let router = AppRouter(writingStateStore: store, localDocumentsRoot: noLocalDocuments)
 
         router.evaluateWritingTab(isSignedIn: true, username: "alice", workCount: 2)
         router.selection = .writing
@@ -296,7 +301,7 @@ struct AppRouterTests {
         #expect(recovery.hasLocalDrafts(for: nil) == false)
 
         let store = WritingTabStateStore(defaults: defaults)
-        let router = AppRouter(writingStateStore: store, recoveryStore: recovery)
+        let router = AppRouter(writingStateStore: store, recoveryStore: recovery, localDocumentsRoot: noLocalDocuments)
 
         router.evaluateWritingTab(
             isSignedIn: true,
@@ -325,7 +330,7 @@ struct AppRouterTests {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let store = WritingTabStateStore(defaults: defaults)
-        let router = AppRouter(writingStateStore: store)
+        let router = AppRouter(writingStateStore: store, localDocumentsRoot: noLocalDocuments)
         router.evaluateWritingTab(
             isSignedIn: true,
             username: "alice",
@@ -473,7 +478,7 @@ struct AppRouterTests {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let store = WritingTabStateStore(defaults: defaults)
-        let router = AppRouter(writingStateStore: store)
+        let router = AppRouter(writingStateStore: store, localDocumentsRoot: noLocalDocuments)
         #expect(router.mainTabs == [.home, .library, .browse])
 
         router.evaluateWritingTab(isSignedIn: true, username: "saltwindow", workCount: 1)
@@ -496,7 +501,7 @@ struct AppRouterTests {
         #expect(store.lastKnownWrites(for: "saltwindow") == false)
 
         // Next launch offline uses the updated stored answer (false).
-        let nextLaunchRouter = AppRouter(writingStateStore: store)
+        let nextLaunchRouter = AppRouter(writingStateStore: store, localDocumentsRoot: noLocalDocuments)
         nextLaunchRouter.evaluateWritingTab(isSignedIn: true, username: "saltwindow")
         #expect(nextLaunchRouter.showsWritingTab == false)
         #expect(nextLaunchRouter.mainTabs == [.home, .library, .browse])
@@ -509,7 +514,7 @@ struct AppRouterTests {
         let visibleRestored = AppRouter.restoredSelection(from: AppTab.writing.rawValue, showsWriting: true)
         #expect(visibleRestored == .init(tab: .writing, presentsAccount: false))
 
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.pendingWritingRoute = .drafts
         router.restoreSelection(from: AppTab.writing.rawValue)
         #expect(router.selection == .home)
@@ -532,7 +537,7 @@ struct AppRouterTests {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let store = WritingTabStateStore(defaults: defaults)
-        let router = AppRouter(writingStateStore: store)
+        let router = AppRouter(writingStateStore: store, localDocumentsRoot: noLocalDocuments)
         router.evaluateWritingTab(
             isSignedIn: true,
             username: "newreader",
@@ -565,7 +570,7 @@ struct AppRouterTests {
 
     @Test(arguments: ["/tags/Fluff", "/tags/Fluff/works"])
     func tagLinkRoutesToNativeTagWorks(path: String) {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.openAO3Link(URL(string: "https://archiveofourown.org\(path)")!)
         #expect(router.pendingTagWorks?.title == "Fluff")
         #expect(router.selection == .browse)
@@ -573,7 +578,7 @@ struct AppRouterTests {
     }
 
     @Test func encodedSlashTagInfoURLBecomesAWorksListing() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.openAO3Link(URL(string: "https://archiveofourown.org/tags/A%2FB")!)
         #expect(router.pendingTagWorks?.title == "A/B")
         #expect(router.pendingTagWorks?.url.absoluteString == "https://archiveofourown.org/tags/A%2FB/works")
@@ -585,7 +590,7 @@ struct AppRouterTests {
         ("https://archiveofourown.org/collections/Summer/works/123", 123, nil)
     ])
     func workLinksPresentDetailWithoutChangingTabs(urlString: String, id: Int, chapterID: Int?) {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.openAO3Link(URL(string: urlString)!)
         #expect(router.pendingWorkLink?.id == id)
         #expect(router.pendingWorkLink?.chapterID == chapterID)
@@ -596,7 +601,7 @@ struct AppRouterTests {
 
     @Test func seriesAndSearchLinksKeepTheWebsiteFallback() {
         for path in ["/series/77", "/works/search?work_search%5Bquery%5D=Fluff"] {
-            let router = AppRouter()
+            let router = AppRouter(localDocumentsRoot: noLocalDocuments)
             let url = URL(string: "https://archiveofourown.org\(path)")!
             router.openAO3Link(url)
             #expect(router.pendingURL == url)
@@ -610,14 +615,14 @@ struct AppRouterTests {
     /// own host straight to `AO3Client.worksPage(at:)`. Same host gate as
     /// `open(_:)` (`isAO3URL`), not a looser inline check.
     @Test func lookalikeTagHostFallsBackToOpenInsteadOfNativeTagWorks() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         let lookalike = URL(string: "https://archiveofourown.org.evil.example/tags/Fluff/works")!
         router.openAO3Link(lookalike)
         #expect(router.pendingTagWorks == nil, "Lookalike host was routed to native tag works")
     }
 
     @Test func userLinkRoutesToNativeAuthorWithoutChangingTabs() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.openAO3Link(URL(string: "https://archiveofourown.org/users/someone")!)
 
         #expect(router.pendingAuthorProfile == AO3AuthorRoute(username: "someone"))
@@ -628,14 +633,14 @@ struct AppRouterTests {
     }
 
     @Test func authorWorksLinkKeepsItsNativeProfileRoute() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.openAO3Link(URL(string: "https://archiveofourown.org/users/someone/works")!)
         #expect(router.pendingAuthorProfile == AO3AuthorRoute(username: "someone"))
         #expect(router.pendingURL == nil)
     }
 
     @Test func openAuthorProfileBumpsEpochEvenForSameRoute() throws {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         let route = try #require(AO3AuthorRoute(username: "someone"))
 
         router.openAuthorProfile(route)
@@ -655,7 +660,7 @@ struct AppRouterTests {
     }
 
     @Test func percentEncodedPseudLinkRoutesToExactNativePseud() throws {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         let url = try #require(URL(
             string: "https://archiveofourown.org/users/Avery_Archive/pseuds/Avery%20Writes"
         ))
@@ -668,7 +673,7 @@ struct AppRouterTests {
     }
 
     @Test func nonAuthorUserPageFallsBackToWebWithoutChangingTabs() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         let url = URL(string: "https://archiveofourown.org/users/someone/readings")!
         router.openAO3Link(url)
 
@@ -680,7 +685,7 @@ struct AppRouterTests {
     }
 
     @Test func openWebsitePresentsSheetWithoutRequiringPendingURL() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.openWebsite()
         #expect(router.isPresentingWebBrowser)
         #expect(router.pendingURL == nil)
@@ -688,7 +693,7 @@ struct AppRouterTests {
     }
 
     @Test func openingAURLFromAccountWaitsForAccountDismissal() throws {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         let url = try #require(URL(string: "https://archiveofourown.org/users/someone"))
         router.showAccount()
 
@@ -705,7 +710,7 @@ struct AppRouterTests {
     }
 
     @Test func authorNavigationTargetsTheAccountSheetWhileItIsPresented() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         #expect(router.authorNavigationTarget == .home)
 
         router.showAccount()
@@ -723,7 +728,7 @@ struct AppRouterTests {
     // no double-push, no latch, no stale route surviving into a later presentation.
 
     @Test func queuedAuthorRouteOpensOnceWhenTheDismissCompletes() throws {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         let route = try #require(AO3AuthorRoute(username: "someone"))
 
         #expect(router.requestAuthorProfileAfterDismiss(route))
@@ -742,7 +747,7 @@ struct AppRouterTests {
     }
 
     @Test func secondTapMidDismissIsRefusedRatherThanOverwritingTheFirst() throws {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         let first = try #require(AO3AuthorRoute(username: "first"))
         let second = try #require(AO3AuthorRoute(username: "second"))
 
@@ -757,7 +762,7 @@ struct AppRouterTests {
     }
 
     @Test func drainingClearsTheQueueSoLaterTapsStillWork() throws {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         let first = try #require(AO3AuthorRoute(username: "first"))
         let second = try #require(AO3AuthorRoute(username: "second"))
 
@@ -773,7 +778,7 @@ struct AppRouterTests {
     }
 
     @Test func cancellingDropsAStrandedRouteInsteadOfPushingItLater() throws {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         let route = try #require(AO3AuthorRoute(username: "someone"))
 
         #expect(router.requestAuthorProfileAfterDismiss(route))
@@ -789,7 +794,7 @@ struct AppRouterTests {
     }
 
     @Test func lookalikeHostIsNotRoutedAsANativeTagPage() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         let bait = URL(string: "https://archiveofourown.org.evil.com/tags/Fluff/works")!
         router.openAO3Link(bait)
         // The subject of this test is the native-tag gate, not the sheet.
@@ -801,7 +806,7 @@ struct AppRouterTests {
     }
 
     @Test func httpAO3TagLinkUsesTrustedCanonicalURL() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.openAO3Link(URL(string: "http://archiveofourown.org/tags/Fluff/works")!)
         #expect(router.pendingTagWorks?.url.absoluteString == "https://archiveofourown.org/tags/Fluff/works")
         #expect(router.pendingURL == nil)
@@ -809,16 +814,16 @@ struct AppRouterTests {
     }
 
     @Test func shortHostUsesNativeAuthorAndTagRoutes() {
-        let author = AppRouter()
+        let author = AppRouter(localDocumentsRoot: noLocalDocuments)
         author.openAO3Link(URL(string: "https://ao3.org/users/someone")!)
         #expect(author.pendingAuthorProfile == AO3AuthorRoute(username: "someone"))
-        let tag = AppRouter()
+        let tag = AppRouter(localDocumentsRoot: noLocalDocuments)
         tag.openAO3Link(URL(string: "https://ao3.org/tags/Fluff")!)
         #expect(tag.pendingTagWorks?.url.host == "archiveofourown.org")
     }
 
     @Test func secondWorkLinkReplacesRouteEvenWhileSheetIsVisible() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.openAO3Link(URL(string: "https://archiveofourown.org/works/111")!)
         let firstEpoch = router.workLinkEpoch
         router.openAO3Link(URL(string: "https://archiveofourown.org/works/222/chapters/333")!)
@@ -828,14 +833,14 @@ struct AppRouterTests {
     }
 
     @Test func workLinkWaitsForWebsiteOrAccountSheetToDismiss() {
-        let browser = AppRouter()
+        let browser = AppRouter(localDocumentsRoot: noLocalDocuments)
         browser.isPresentingWebBrowser = true
         browser.openAO3Link(URL(string: "https://archiveofourown.org/works/123")!)
         #expect(!browser.isPresentingWebBrowser)
         #expect(!browser.isPresentingLinkedWork)
         #expect(browser.pendingWorkLink?.id == 123)
 
-        let account = AppRouter()
+        let account = AppRouter(localDocumentsRoot: noLocalDocuments)
         account.isPresentingAccount = true
         account.openAO3Link(URL(string: "https://archiveofourown.org/works/123")!)
         #expect(!account.isPresentingAccount)
@@ -844,7 +849,7 @@ struct AppRouterTests {
     }
 
     @Test func restrictedWorkLoginKeepsChapterAndDismissesLandingFirst() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.openAO3Link(URL(string: "https://archiveofourown.org/works/123/chapters/456")!)
         router.requestLinkedWorkLogin(sessionGeneration: 7)
         #expect(!router.isPresentingLinkedWork)
@@ -854,7 +859,7 @@ struct AppRouterTests {
     }
 
     @Test func landingTagTapStaysInItsSheet() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.isPresentingLinkedWork = true
         router.searchAO3(.fandom, "Some Fandom")
         #expect(router.pendingLandingTagSearch?.value == "Some Fandom")
@@ -863,7 +868,7 @@ struct AppRouterTests {
     }
 
     @Test func readerPanelsDoNotBlockOrDismissLinkedWorkLanding() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         for panel: AppRouter.Panel in [.none, .readerChapters, .readerDisplay, .readerFind] {
             router.panel = panel
             #expect(router.canPresentLinkedWorkOverPanel)
@@ -875,7 +880,7 @@ struct AppRouterTests {
     }
 
     @Test func openingAURLFromLinkedWorkLoginWaitsForLoginDismissal() throws {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         let url = try #require(URL(string: "https://archiveofourown.org/users/password/new"))
         router.isPresentingLinkedWorkLogin = true
 
@@ -892,7 +897,7 @@ struct AppRouterTests {
     }
 
     @Test func workLinkFromSearchFiltersWaitsForPanelDismissal() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.selection = .search
         router.panel = .searchFilters
         router.openAO3Link(URL(string: "https://archiveofourown.org/works/123")!)
@@ -908,7 +913,7 @@ struct AppRouterTests {
     }
 
     @Test func secondWorkLinkDuringLoginHandoffReplacesStaleLogin() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.openAO3Link(URL(string: "https://archiveofourown.org/works/111")!)
         router.requestLinkedWorkLogin(sessionGeneration: 3)
         router.openAO3Link(URL(string: "https://archiveofourown.org/works/222")!)
@@ -922,7 +927,7 @@ struct AppRouterTests {
     }
 
     @Test func secondAO3LinkDuringFilterDeferralKeepsTheNewerURL() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.selection = .search
         router.panel = .searchFilters
         router.openAO3Link(URL(string: "https://archiveofourown.org/works/111")!)
@@ -939,7 +944,7 @@ struct AppRouterTests {
     }
 
     @Test func filterHostRemovalDrainsLinkExactlyOnce() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.selection = .search
         router.panel = .searchFilters
         router.openAO3Link(URL(string: "https://archiveofourown.org/works/123")!)
@@ -959,7 +964,7 @@ struct AppRouterTests {
 
     #if os(iOS)
     @Test func filterPresentationWidthChangeDrainsDeferredLink() async throws {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.selection = .search
         router.panel = .searchFilters
         router.openAO3Link(URL(string: "https://archiveofourown.org/works/123")!)
@@ -999,7 +1004,7 @@ struct AppRouterTests {
     @Test func readerPanelBindingSuppressesAndRestoresCoveredReader() {
         #expect(!AppRouter.readerOwnsSharedPanel(landingCoversReader: true))
         #expect(AppRouter.readerOwnsSharedPanel(landingCoversReader: false))
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.panel = .readerDisplay
         let covered = router.readerPanelBinding(includesFind: true, suppressed: true)
         #expect(!covered.wrappedValue)
@@ -1021,7 +1026,7 @@ struct AppRouterTests {
     }
 
     @Test func passwordResetBrowserBindingRestoresRestrictedWorkLogin() throws {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         let reset = try #require(URL(string: "https://archiveofourown.org/users/password/new"))
         router.openAO3Link(URL(string: "https://archiveofourown.org/works/123/chapters/456")!)
         router.requestLinkedWorkLogin(sessionGeneration: 4)
@@ -1048,7 +1053,7 @@ struct AppRouterTests {
     }
 
     @Test func externalTagLinkWhileLandingIsUpStaysInSheet() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.isPresentingLinkedWork = true
         router.isPresentingWebBrowser = true
         router.openAO3Link(URL(string: "https://archiveofourown.org/tags/Fluff")!)
@@ -1074,7 +1079,7 @@ struct AppRouterTests {
     /// a normal https AO3 URL must set both, or the rejects could pass
     /// against a no-op `open()`.
     @Test func openRejectsNonHTTPSchemes() throws {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
 
         let javascript = try #require(URL(string: "javascript:alert(1)"))
         #expect(javascript.scheme?.lowercased() == "javascript")
@@ -1107,7 +1112,7 @@ struct AppRouterTests {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let store = WritingTabStateStore(defaults: defaults)
-        let router = AppRouter(writingStateStore: store)
+        let router = AppRouter(writingStateStore: store, localDocumentsRoot: noLocalDocuments)
         router.evaluateWritingTab(
             isSignedIn: true,
             username: "saltwindow",
@@ -1125,7 +1130,7 @@ struct AppRouterTests {
     }
 
     @Test func accountNavigationPathSurvivesHandoffAndClearsOnDismissal() {
-        let router = AppRouter()
+        let router = AppRouter(localDocumentsRoot: noLocalDocuments)
         router.openLegacyAccountRoute(.inbox)
         #expect(router.isPresentingAccount)
         #expect(router.consumePendingAccountRoute() == .inbox)

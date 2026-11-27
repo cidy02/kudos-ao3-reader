@@ -3,11 +3,12 @@ import SwiftSoup
 import UniformTypeIdentifiers
 
 /// Supported document formats for Writing Studio local import (`Studio-Files`).
-/// Word (`.docx`) is intentionally excluded until the beta lane's reader lands.
+/// Word (`.docx`) is read by `StudioDocxImport`; the older binary `.doc` is not.
 nonisolated enum StudioImportableFormat: String, Equatable, Sendable {
     case plainText
     case markdown
     case html
+    case docx
 }
 
 /// Typed failures for local document import.
@@ -20,11 +21,10 @@ nonisolated enum StudioDocumentImportError: Error, LocalizedError, Equatable, Se
     var errorDescription: String? {
         switch self {
         case let .unsupportedFormat(ext):
-            if ext.caseInsensitiveCompare("docx") == .orderedSame
-                || ext.caseInsensitiveCompare("doc") == .orderedSame {
-                return "Word documents aren't supported yet. Import plain text, Markdown, or HTML."
+            if ext.caseInsensitiveCompare("doc") == .orderedSame {
+                return "Older .doc files aren't supported. Save it as .docx in Word, then import that."
             }
-            return "Kudos can import plain text, Markdown, or HTML documents here."
+            return "Kudos can import Word (.docx), plain text, Markdown, or HTML documents here."
         case .unreadableText:
             return "This file couldn't be read as text."
         case .emptyDocument:
@@ -42,17 +42,20 @@ nonisolated struct StudioImportedDocument: Equatable, Sendable {
     let format: StudioImportableFormat
 }
 
-/// Imports plain text, Markdown, or HTML files from Files into a new local
-/// manuscript in `WritingDocumentStore`. Every other format is rejected.
+/// Imports Word (`.docx`), plain text, Markdown, or HTML files from Files into a new
+/// local manuscript in `WritingDocumentStore`. Every other format is rejected.
 nonisolated enum StudioDocumentImporter {
     static let maxFileBytes = 20 * 1024 * 1024
 
     static let plainTextExtensions: Set<String> = ["txt", "text"]
     static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd"]
     static let htmlExtensions: Set<String> = ["html", "htm", "xhtml"]
+    static let docxExtensions: Set<String> = ["docx"]
 
     static var allowedContentTypes: [UTType] {
         var types: [UTType] = [.plainText, .html]
+        // Not `BetaDOCXContentType.docx`: its `.data` fallback would let every file through.
+        if let docx = UTType("org.openxmlformats.wordprocessingml.document") { types.append(docx) }
         if let markdown = UTType(filenameExtension: "md"), !types.contains(markdown) {
             types.append(markdown)
         } else if let markdown = UTType("net.daringfireball.markdown"), !types.contains(markdown) {
@@ -68,11 +71,17 @@ nonisolated enum StudioDocumentImporter {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
 
-        let data = try Data(contentsOf: url)
+        // `readFileData` refuses an over-limit Word file before reading it into memory.
+        let data = docxExtensions.contains(url.pathExtension.lowercased())
+            ? try BetaDOCXReader.readFileData(at: url, maxBytes: maxFileBytes)
+            : try Data(contentsOf: url)
         let format = try detectFormat(url: url, data: data)
-        let text = try decodeText(data)
         let fallbackTitle = defaultTitle(for: url)
-        let converted = try convertToHTML(text: text, format: format, fallbackTitle: fallbackTitle)
+        let converted = if format == .docx {
+            try StudioDocxImport.convertToHTML(docxData: data, fallbackTitle: fallbackTitle)
+        } else {
+            try convertToHTML(text: try decodeText(data), format: format, fallbackTitle: fallbackTitle)
+        }
 
         let work = try await store.createWork(title: converted.title, ao3WorkID: nil)
         let chapter = try await store.addChapter(workID: work.id, title: "")
@@ -91,6 +100,8 @@ nonisolated enum StudioDocumentImporter {
         }
 
         let ext = url.pathExtension.lowercased()
+        // A .docx is a zip, so it skips the binary sniff; a broken one fails with its own message.
+        if docxExtensions.contains(ext) { return .docx }
         if let rejectedBinary = detectBinarySignature(in: data) {
             throw StudioDocumentImportError.unsupportedFormat(ext.isEmpty ? rejectedBinary : ext)
         }
@@ -154,6 +165,9 @@ nonisolated enum StudioDocumentImporter {
             return result
         case .html:
             return try sanitizeHTML(normalized, fallbackTitle: safeFallback)
+        case .docx:
+            // Binary: `importFile` routes it to `StudioDocxImport`, never through text.
+            throw StudioDocumentImportError.unsupportedFormat("docx")
         }
     }
 
@@ -422,7 +436,7 @@ nonisolated enum StudioDocumentImporter {
         return regex.stringByReplacingMatches(in: text, range: range, withTemplate: template)
     }
 
-    private static func escapeHTML(_ text: String) -> String {
+    static func escapeHTML(_ text: String) -> String {
         text
             .replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
@@ -492,5 +506,11 @@ nonisolated enum StudioRecentlyDeletedHelper {
     static func isUrgent(deletedAt: Date, now: Date = Date()) -> Bool {
         guard let days = daysRemaining(deletedAt: deletedAt, now: now) else { return false }
         return days <= urgentThresholdDays
+    }
+
+    static func rowSubtitle(count: Int) -> String {
+        if count == 0 { return "Empty · kept for 30 days" }
+        let noun = count == 1 ? "document" : "documents"
+        return "\(count.formatted()) \(noun) · kept for 30 days"
     }
 }

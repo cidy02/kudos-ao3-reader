@@ -8,6 +8,7 @@ struct StudioCommentsThreadView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AO3InboxModel.self) private var inbox
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Group {
@@ -83,26 +84,29 @@ struct StudioCommentsThreadView: View {
     private func replyBox(_ item: AO3InboxItem) -> some View {
         let trimmed = model.replyText(for: item.id).trimmingCharacters(in: .whitespacesAndNewlines)
         let remaining = StudioCommentsModel.remainingCharacters(for: trimmed)
-        let fieldShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        let fieldShape = RoundedRectangle(cornerRadius: 8, style: .continuous)
         return VStack(alignment: .leading, spacing: 8) {
-            Text("Your reply to \(item.commenterName)")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondaryInk)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityHidden(true)
-            TextField(
-                "Your reply to \(item.commenterName)",
-                text: replyBinding(item),
-                axis: .vertical
-            )
-            .textFieldStyle(.plain)
-            .lineLimit(3...8)
-            .font(.body)
-            .padding(10)
-            .background(theme.appTheme.cardSurface, in: fieldShape)
-            .overlay(fieldShape.strokeBorder(theme.appTheme.glassStroke(0.13), lineWidth: 0.5))
-            .accessibilityLabel("Your reply to \(item.commenterName)")
-            .disabled(isBusy(item))
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Your reply to \(item.commenterName)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityHidden(true)
+                TextField(
+                    "Your reply to \(item.commenterName)",
+                    text: replyBinding(item),
+                    axis: .vertical
+                )
+                .textFieldStyle(.plain)
+                .lineLimit(3...8)
+                .font(.subheadline)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 10)
+                .background(theme.appTheme.cardSurface, in: fieldShape)
+                .overlay(fieldShape.strokeBorder(theme.appTheme.glassStroke(0.13), lineWidth: 0.5))
+                .accessibilityLabel("Your reply to \(item.commenterName)")
+                .disabled(isBusy(item))
+            }
             if remaining < 0 {
                 let over = (-remaining).formatted()
                 Text("\(over) characters over AO3's 10,000-character limit.")
@@ -110,31 +114,40 @@ struct StudioCommentsThreadView: View {
                     .foregroundStyle(theme.appTheme.errorColor)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if !postingName.isEmpty {
-                Text("Posts on AO3 as \(postingName)")
-                    .font(.caption)
-                    .foregroundStyle(.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            replyFooter(item)
         }
-        .padding(14)
-        .subjectPanel()
+        .padding(10)
+        .subjectPanel(cornerRadius: 12)
     }
 
-    /// One row when both labels fit. The stack is the fallback so large text
-    /// cannot clip "Post Reply" or "Mark Read" off the side of the screen.
+    private func replyFooter(_ item: AO3InboxItem) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 8) {
+                postingAsLabel
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                postButton(item)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                postingAsLabel
+                postButton(item)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var postingAsLabel: some View {
+        if !postingName.isEmpty {
+            Text("Posts on AO3 as \(postingName)")
+                .font(.caption)
+                .foregroundStyle(.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// One row when labels fit; stacks at large text sizes so controls never clip.
     private func actions(_ item: AO3InboxItem) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) {
-                    markReadButton(item)
-                    postButton(item)
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    markReadButton(item)
-                    postButton(item)
-                }
-            }
+            markReadButton(item)
             if model.pendingCommentID == item.id, case .ambiguous = model.submissionPhase {
                 Button("Check Again") { startCheckAgain(item) }
                     .buttonStyle(.kudosSecondary)
@@ -144,7 +157,7 @@ struct StudioCommentsThreadView: View {
             if let route = fullThread(item, opensReply: false, focusChapter: false) {
                 NavigationLink(value: route) {
                     Text("Thread")
-                        .font(.headline)
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(theme.accentInk)
                         .frame(minHeight: 44)
                         .contentShape(Rectangle())
@@ -169,10 +182,25 @@ struct StudioCommentsThreadView: View {
     @ViewBuilder
     private func postButton(_ item: AO3InboxItem) -> some View {
         if item.canReply {
-            Button("Post Reply") { startPost(item) }
-                .buttonStyle(.kudosPrimary)
-                .disabled(cannotPost(item))
-                .accessibilityLabel("Post Reply")
+            let disabled = cannotPost(item)
+            let shape = SubjectMetrics.controlShape(dynamicTypeSize)
+            Button {
+                startPost(item)
+            } label: {
+                Text("Post Reply")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(ThemeManager.label(on: theme.effectiveTint))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .frame(minHeight: 34)
+                    .background(theme.effectiveTint, in: shape)
+                    .contentShape(shape)
+            }
+            .buttonStyle(.plain)
+            .opacity(disabled ? 0.45 : 1)
+            .disabled(disabled)
+            .minimumHitTarget()
+            .accessibilityLabel("Post Reply")
         }
     }
 
@@ -261,25 +289,28 @@ struct StudioCommentsThreadView: View {
         }
     }
 
+    struct MarkReadRequest {
+        let item: AO3InboxItem
+        let form: AO3InboxBulkForm
+        let username: String?
+        let cacheScope: String
+        let generation: Int
+    }
+
     private func startMarkRead(_ item: AO3InboxItem) {
         guard auth.isLoggedIn, !inbox.isPerformingBulkAction, let form = inbox.bulkForm else { return }
         let auth = auth
         let inbox = inbox
         let model = model
-        let generation = auth.sessionGeneration
-        let username = auth.username
-        let cacheScope = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+        let request = MarkReadRequest(
+            item: item,
+            form: form,
+            username: auth.username,
+            cacheScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth),
+            generation: auth.sessionGeneration
+        )
         Task {
-            await Self.performMarkRead(
-                item: item,
-                form: form,
-                username: username,
-                cacheScope: cacheScope,
-                generation: generation,
-                auth: auth,
-                inbox: inbox,
-                model: model
-            )
+            await Self.performMarkRead(request, auth: auth, inbox: inbox, model: model)
         }
     }
 
@@ -345,24 +376,20 @@ struct StudioCommentsThreadView: View {
         }
     }
 
-    private static func performMarkRead(
-        item: AO3InboxItem,
-        form: AO3InboxBulkForm,
-        username: String?,
-        cacheScope: String,
-        generation: Int,
+    static func performMarkRead(
+        _ request: MarkReadRequest,
         auth: AO3AuthService,
         inbox: AO3InboxModel,
         model: StudioCommentsModel
     ) async {
         guard auth.isLoggedIn,
-              auth.sessionGeneration == generation,
+              auth.sessionGeneration == request.generation,
               !inbox.isPerformingBulkAction
         else { return }
         let changed = await model.markRead(
-            item, form: form, referer: form.actionURL
+            request.item, form: request.form, referer: request.form.actionURL
         ) { action, form, items, referer in
-            try auth.requireSessionGeneration(generation)
+            try auth.requireSessionGeneration(request.generation)
             return try await auth.performInboxBulkAction(
                 action, form: form, items: items, referer: referer
             )
@@ -371,9 +398,9 @@ struct StudioCommentsThreadView: View {
             await refreshInboxAfterWrite(
                 auth: auth,
                 inbox: inbox,
-                username: username,
-                cacheScope: cacheScope,
-                generation: generation
+                username: request.username,
+                cacheScope: request.cacheScope,
+                generation: request.generation
             )
         }
     }

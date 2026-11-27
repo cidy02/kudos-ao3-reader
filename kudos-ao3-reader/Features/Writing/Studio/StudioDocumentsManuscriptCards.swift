@@ -1,5 +1,40 @@
 import SwiftUI
 
+/// Pure status-line formatting for the featured manuscript card on `Studio-Documents`.
+nonisolated enum StudioFeaturedManuscriptCopy {
+    static func chapterStatusLine(
+        badge: StudioChapterBadgeStatus,
+        updatedAt: Date,
+        ao3DraftDaysLeft: Int?,
+        deviceName: String,
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String {
+        switch badge {
+        case .posted:
+            let formatted = StudioDateCopy.shortDate(updatedAt, now: now, calendar: calendar, locale: locale)
+            return "Posted \(formatted)"
+        case .ao3Draft:
+            let edited = StudioDateCopy.shortDate(updatedAt, now: now, calendar: calendar, locale: locale)
+            var parts = ["Draft", "edited \(edited)"]
+            if let daysLeft = ao3DraftDaysLeft {
+                switch daysLeft {
+                case ...0: parts.append("AO3 deletes it today")
+                case 1: parts.append("AO3 keeps it 1 more day")
+                default: parts.append("AO3 keeps it \(daysLeft) more days")
+                }
+            }
+            return parts.joined(separator: " · ")
+        case .onDevice:
+            let edited = StudioDateCopy.shortDate(updatedAt, now: now, calendar: calendar, locale: locale)
+            return "On this \(deviceName) · edited \(edited)"
+        case .planned:
+            return "Planned"
+        }
+    }
+}
+
 /// Paper preview card shown in the Recent grid of `StudioDocumentsPagesView`.
 struct StudioDocumentsRecentCard: View {
     let item: StudioRecentDocumentItem
@@ -8,12 +43,8 @@ struct StudioDocumentsRecentCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        let paperBackground: Color = theme.appTheme == .light
-            ? Color(red: 0.984, green: 0.980, blue: 0.965)
-            : theme.appTheme.cardSurface
-        let paperBorder: Color = theme.appTheme == .light
-            ? Color(red: 0.898, green: 0.875, blue: 0.824)
-            : theme.appTheme.glassStroke(0.18)
+        let paperBackground = StudioTonePalette.paperBackground(for: theme.appTheme)
+        let paperBorder = StudioTonePalette.paperBorder(for: theme.appTheme)
 
         VStack(alignment: .leading, spacing: 6) {
             VStack(alignment: .leading, spacing: 6) {
@@ -24,41 +55,49 @@ struct StudioDocumentsRecentCard: View {
                 Text(item.excerpt)
                     .font(.system(.caption2, design: .serif))
                     .foregroundStyle(.secondaryInk)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 7)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 8)
                     .multilineTextAlignment(.leading)
                 Spacer(minLength: 0)
             }
-            .padding(12)
+            .padding(.vertical, 14)
+            .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .frame(
-                minHeight: dynamicTypeSize.isAccessibilitySize ? 130 : 172,
+                minHeight: dynamicTypeSize.isAccessibilitySize ? 130 : 196,
                 alignment: .topLeading
             )
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(paperBackground)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .strokeBorder(paperBorder, lineWidth: 0.5)
+            )
+            .shadow(
+                color: theme.appTheme.cardShadow.color,
+                radius: theme.appTheme.cardShadow.radius,
+                y: theme.appTheme.cardShadow.y
             )
             .accessibilityHidden(true)
 
-            HStack(spacing: 6) {
-                if let badgeText = item.badgeText {
-                    badgeView(text: badgeText, tone: item.badgeTone)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    if let badgeText = item.badgeText {
+                        badgeView(text: badgeText, tone: item.badgeTone)
+                    }
+                    Text(item.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Text(item.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.primary)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
 
-            Text(item.metaLine)
-                .font(.caption)
-                .foregroundStyle(.secondaryInk)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                Text(item.metaLine)
+                    .font(.caption)
+                    .foregroundStyle(.secondaryInk)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+            }
         }
     }
 
@@ -66,14 +105,9 @@ struct StudioDocumentsRecentCard: View {
     private func badgeView(text: String, tone: StudioRecentDocumentItem.BadgeTone) -> some View {
         switch tone {
         case .draft:
-            SubjectStateBadge(title: text, color: .orange)
+            StudioStatusPill(text: text, tone: .draft)
         case .onDevice:
-            Text(text)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondaryInk)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(theme.appTheme.glassFill(0.12), in: Capsule())
+            StudioStatusPill(text: text, tone: .onDevice)
         case .none:
             EmptyView()
         }
@@ -98,7 +132,8 @@ struct StudioFeaturedManuscriptCard: View {
             headerRow
             if let localWork = work.localWork, !previewChapters.isEmpty {
                 ForEach(Array(previewChapters.enumerated()), id: \.element.id) { index, chapter in
-                    SubjectRowSeparator(inset: 14)
+                    SubjectRowSeparator(inset: 0)
+                        .padding(.horizontal, 14)
                     chapterRow(
                         chapter: chapter,
                         position: index + 1,
@@ -107,10 +142,12 @@ struct StudioFeaturedManuscriptCard: View {
                     )
                 }
             } else {
-                SubjectRowSeparator(inset: 14)
+                SubjectRowSeparator(inset: 0)
+                    .padding(.horizontal, 14)
                 openFilesLink
             }
-            SubjectRowSeparator(inset: 14)
+            SubjectRowSeparator(inset: 0)
+                .padding(.horizontal, 14)
             addChapterButton
         }
         .subjectPanel(cornerRadius: 18)
@@ -127,7 +164,7 @@ struct StudioFeaturedManuscriptCard: View {
                     onAO3Write: onAO3Write
                 )
             } label: {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(work.title)
                         .font(.system(.title3, design: .serif, weight: .semibold))
                         .foregroundStyle(Color.primary)
@@ -152,7 +189,7 @@ struct StudioFeaturedManuscriptCard: View {
                     Image(systemName: "list.bullet.rectangle")
                         .font(.callout.weight(.medium))
                         .foregroundStyle(theme.accentInk)
-                        .frame(width: 34, height: 34)
+                        .frame(width: 32, height: 32)
                         .background(theme.appTheme.cardSurface, in: Circle())
                         .overlay(
                             Circle().strokeBorder(theme.appTheme.glassStroke(0.14), lineWidth: 0.5)
@@ -163,7 +200,9 @@ struct StudioFeaturedManuscriptCard: View {
                 .accessibilityLabel("Work details for \(work.title)")
             }
         }
-        .padding(14)
+        .padding(.horizontal, 14)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
     }
 
     private var openFilesLink: some View {
@@ -212,7 +251,8 @@ struct StudioFeaturedManuscriptCard: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
             .frame(minHeight: 46)
             .contentShape(Rectangle())
         }
@@ -229,13 +269,18 @@ struct StudioFeaturedManuscriptCard: View {
         let badge = StudioWorkFilesLogic.badgeStatus(for: chapter)
         let rawTitle = chapter.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = rawTitle.isEmpty ? "Untitled" : rawTitle
-        let statusLine = chapterStatusLine(chapter: chapter, badge: badge)
+        let statusLine = StudioFeaturedManuscriptCopy.chapterStatusLine(
+            badge: badge,
+            updatedAt: chapter.updatedAt,
+            ao3DraftDaysLeft: work.ao3DraftDaysLeft,
+            deviceName: ThisDevice.name
+        )
         let wordsText = chapter.wordCount > 0 ? chapter.wordCount.formatted() : ""
         let titleColor: AnyShapeStyle = badge == .planned
             ? AnyShapeStyle(.secondaryInk)
             : AnyShapeStyle(Color.primary)
         let statusColor: AnyShapeStyle = badge == .ao3Draft
-            ? AnyShapeStyle(Color.orange)
+            ? AnyShapeStyle(StudioTonePalette.draftAmberInk(for: theme.appTheme))
             : AnyShapeStyle(.secondaryInk)
 
         return NavigationLink {
@@ -250,7 +295,7 @@ struct StudioFeaturedManuscriptCard: View {
                 chapterNumberDot(position: position, badge: badge)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.body.weight(badge == .ao3Draft ? .semibold : .medium))
+                        .font(.body.weight(badge == .ao3Draft ? .bold : .medium))
                         .foregroundStyle(titleColor)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(statusLine)
@@ -268,7 +313,7 @@ struct StudioFeaturedManuscriptCard: View {
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 11)
+            .padding(.vertical, 10)
             .frame(minHeight: 50)
             .contentShape(Rectangle())
         }
@@ -294,7 +339,7 @@ struct StudioFeaturedManuscriptCard: View {
             case .ao3Draft, .onDevice:
                 Circle()
                     .fill(theme.appTheme.cardSurface)
-                    .overlay(Circle().strokeBorder(theme.accentInk, lineWidth: 1.5))
+                    .overlay(Circle().strokeBorder(theme.accentInk, lineWidth: 2))
                     .overlay(label.foregroundStyle(theme.accentInk))
             case .planned:
                 Circle()
@@ -307,22 +352,6 @@ struct StudioFeaturedManuscriptCard: View {
         }
         .frame(width: 26, height: 26)
         .accessibilityHidden(true)
-    }
-
-    private func chapterStatusLine(
-        chapter: WritingChapter,
-        badge: StudioChapterBadgeStatus
-    ) -> String {
-        switch badge {
-        case .posted:
-            "Posted · \(WorkStat.displayDate(chapter.updatedAt))"
-        case .ao3Draft:
-            "Draft · edited \(WorkStat.displayDate(chapter.updatedAt))"
-        case .onDevice:
-            "On this \(ThisDevice.name) · edited \(WorkStat.displayDate(chapter.updatedAt))"
-        case .planned:
-            "Planned"
-        }
     }
 }
 
@@ -346,7 +375,7 @@ struct StudioManuscriptListRow: View {
             )
         } label: {
             HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(work.title)
                         .font(.system(.body, design: .serif, weight: .semibold))
                         .foregroundStyle(Color.primary)
@@ -360,11 +389,10 @@ struct StudioManuscriptListRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondaryInk)
+                    .foregroundStyle(.tertiary)
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.vertical, 10)
             .frame(minHeight: 58)
             .contentShape(Rectangle())
         }
@@ -397,7 +425,7 @@ struct StudioLooseDraftRow: View {
                     Image(systemName: "doc.text")
                         .font(.body)
                         .foregroundStyle(theme.accentInk)
-                        .frame(width: 24)
+                        .frame(width: 22)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.title)
@@ -411,8 +439,7 @@ struct StudioLooseDraftRow: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
+                .padding(.vertical, 10)
                 .frame(minHeight: 52)
                 .contentShape(Rectangle())
             }

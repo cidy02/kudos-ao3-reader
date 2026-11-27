@@ -78,7 +78,7 @@ struct FormatPanel: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 16) {
                     paragraphSection
                     textSection
                     insertSection
@@ -86,7 +86,7 @@ struct FormatPanel: View {
                     footerNote
                 }
                 .padding(.horizontal, SubjectMetrics.gutter)
-                .padding(.top, 8)
+                .padding(.top, 6)
                 .padding(.bottom, 24)
             }
             .background(appTheme.cardBackdrop.ignoresSafeArea())
@@ -128,7 +128,7 @@ struct FormatPanel: View {
     // MARK: - Paragraph section
 
     private var paragraphSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             sectionHeader("Paragraph")
             FlowLayout(spacing: 8, rowSpacing: 8) {
                 ForEach(FormatBlock.allCases) { block in
@@ -174,7 +174,7 @@ struct FormatPanel: View {
     // MARK: - Text section
 
     private var textSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             sectionHeader("Text")
             marksGrid
             alignmentBar
@@ -307,7 +307,7 @@ struct FormatPanel: View {
             .font(.footnote)
             .textCase(.uppercase)
             .foregroundStyle(.secondaryInk)
-            .padding(.leading, 14)
+            .padding(.leading, 16)
             .accessibilityAddTraits(.isHeader)
     }
 
@@ -321,7 +321,7 @@ struct FormatPanel: View {
 extension FormatPanel {
     private var insertSection: some View {
         let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 6) {
             sectionHeader("Insert")
             VStack(spacing: 0) {
                 sceneBreakRow
@@ -342,15 +342,6 @@ extension FormatPanel {
                     systemImage: "note.text"
                 ) {
                     emit(.footnote)
-                }
-                if let onAddNote {
-                    rowDivider
-                    insertButtonRow(
-                        title: "Note",
-                        subtitle: "Private note anchored to the selected text; never posted to AO3",
-                        systemImage: "note.text.badge.plus",
-                        action: onAddNote
-                    )
                 }
                 rowDivider
                 insertButtonRow(
@@ -375,6 +366,15 @@ extension FormatPanel {
                     systemImage: "tablecells"
                 ) {
                     emit(.table)
+                }
+                if let onAddNote {
+                    rowDivider
+                    insertButtonRow(
+                        title: "Note",
+                        subtitle: "Private note anchored to the selected text; never posted to AO3",
+                        systemImage: "note.text.badge.plus",
+                        action: onAddNote
+                    )
                 }
             }
             .background(appTheme.cardSurface, in: shape)
@@ -457,7 +457,7 @@ extension FormatPanel {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         .frame(minHeight: 48)
         .contentShape(Rectangle())
     }

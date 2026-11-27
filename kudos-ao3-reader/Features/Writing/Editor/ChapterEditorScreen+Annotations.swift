@@ -71,7 +71,9 @@ extension ChapterEditorScreen {
             #endif
             EditorStatusLine(
                 summary: statusSummary,
-                onTapNotes: { notesSheetTab = .chapterNotes }
+                onTapNotes: { notesSheetTab = .chapterNotes },
+                showsTopMeta: false,
+                showsSprintRow: false
             )
             .padding(.horizontal, SubjectMetrics.gutter)
             .padding(.vertical, 8)

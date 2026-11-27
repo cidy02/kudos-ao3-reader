@@ -102,7 +102,7 @@ struct StudioWorkFilesView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 20) {
                 headerSection
                 chaptersSection
                 notesSection
@@ -148,7 +148,11 @@ struct StudioWorkFilesView: View {
         }
         .navigationDestination(isPresented: $showingWorkDetails) {
             if let ao3WorkID = currentWork.ao3WorkID {
-                WritingWorkDestination(workID: ao3WorkID) {
+                StudioWorkDetailsDestination(
+                    workID: ao3WorkID,
+                    workTitle: currentWork.title,
+                    subtitleText: currentWork.manuscriptStateLine(deviceName: ThisDevice.name)
+                ) {
                     onAO3Write()
                     Task { await loadAO3Chapters(force: true) }
                 }
@@ -275,7 +279,7 @@ struct StudioWorkFilesView: View {
                     }
                 }
             } label: {
-                Label("More options", systemImage: "ellipsis.circle")
+                Label("More options", systemImage: "ellipsis")
             }
             .accessibilityLabel("More options for \(currentWork.title)")
         }

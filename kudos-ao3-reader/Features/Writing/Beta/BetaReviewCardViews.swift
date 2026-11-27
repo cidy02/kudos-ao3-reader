@@ -22,9 +22,9 @@ struct BetaCopyStatusChip: View {
     private var foregroundColor: Color {
         switch status {
         case .cameBack:
-            appTheme.isDarkFamily ? appTheme.statusSuccessColor : Color(red: 0.11, green: 0.37, blue: 0.23)
+            appTheme.statusSuccessColor
         case .waiting:
-            appTheme.isDarkFamily ? Color.primary : Color(red: 0.23, green: 0.23, blue: 0.24)
+            Color.primary
         case .reviewed:
             themeManager?.secondaryInk ?? .secondary
         }
@@ -33,9 +33,7 @@ struct BetaCopyStatusChip: View {
     private var backgroundColor: Color {
         switch status {
         case .cameBack:
-            appTheme.isDarkFamily
-                ? appTheme.statusSuccessColor.opacity(0.22)
-                : Color(red: 0.90, green: 0.95, blue: 0.92)
+            appTheme.statusSuccessColor.opacity(appTheme.isDarkFamily ? 0.22 : 0.14)
         case .waiting:
             appTheme.glassFill(appTheme.isDarkFamily ? 0.16 : 0.08)
         case .reviewed:
@@ -62,42 +60,23 @@ struct BetaSuggestionCardView: View {
     private var appTheme: ReaderTheme { themeManager?.appTheme ?? .light }
     private var effectiveTint: Color { themeManager?.effectiveTint ?? envAccentFill }
 
-    private var cardFill: Color {
-        if appTheme == .light {
-            return Color(red: 0.984, green: 0.980, blue: 0.965)
-        }
-        return appTheme.cardSurface
-    }
-
-    private var cardBorder: Color {
-        if appTheme == .light {
-            return Color(red: 0.898, green: 0.875, blue: 0.824)
-        }
-        return appTheme.cardBorder
-    }
+    private var cardFill: Color { appTheme.cardSurface }
+    private var cardBorder: Color { appTheme.cardBorder }
 
     private var deleteBackground: Color {
-        appTheme.isDarkFamily
-            ? appTheme.errorColor.opacity(0.24)
-            : Color(red: 0.984, green: 0.890, blue: 0.898)
+        appTheme.errorColor.opacity(appTheme.isDarkFamily ? 0.24 : 0.14)
     }
 
     private var deleteStrikeColor: Color {
-        appTheme.isDarkFamily
-            ? appTheme.errorColor
-            : Color(red: 0.659, green: 0.196, blue: 0.243)
+        appTheme.errorColor
     }
 
     private var insertBackground: Color {
-        appTheme.isDarkFamily
-            ? appTheme.statusSuccessColor.opacity(0.24)
-            : Color(red: 0.886, green: 0.941, blue: 0.902)
+        appTheme.statusSuccessColor.opacity(appTheme.isDarkFamily ? 0.24 : 0.14)
     }
 
     private var insertUnderlineColor: Color {
-        appTheme.isDarkFamily
-            ? appTheme.statusSuccessColor
-            : Color(red: 0.114, green: 0.369, blue: 0.227)
+        appTheme.statusSuccessColor
     }
 
     var body: some View {
@@ -143,7 +122,7 @@ struct BetaSuggestionCardView: View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.footnote)
-                .foregroundStyle(appTheme.isDarkFamily ? Color.subjectAmber : Color(red: 0.68, green: 0.40, blue: 0.0))
+                .foregroundStyle(appTheme.isDarkFamily ? Color.subjectAmber : AO3TagPalette.teenTextOnLight)
                 .accessibilityHidden(true)
             Text("Couldn’t place this one. Copy it to apply by hand.")
                 .font(.footnote.weight(.medium))
@@ -361,9 +340,7 @@ struct BetaCommentCardView: View {
     private var accentInk: Color { themeManager?.accentInk ?? effectiveTint }
 
     private var avatarBackground: Color {
-        appTheme.isDarkFamily
-            ? Color(red: 0.34, green: 0.54, blue: 0.38)
-            : Color(red: 0.243, green: 0.357, blue: 0.227)
+        appTheme.statusSuccessColor
     }
 
     private var initialLetter: String {
@@ -382,9 +359,11 @@ struct BetaCommentCardView: View {
                 }
             } else {
                 HStack(alignment: .center, spacing: 10) {
-                    avatarCircle
-                    commentTextColumn
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(alignment: .top, spacing: 10) {
+                        avatarCircle
+                        commentTextColumn
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                     doneControl
                 }
             }
@@ -400,7 +379,7 @@ struct BetaCommentCardView: View {
     private var avatarCircle: some View {
         Text(initialLetter)
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Color.white)
+            .foregroundStyle(ThemeManager.label(on: avatarBackground))
             .frame(width: 32, height: 32)
             .background(avatarBackground, in: Circle())
             .accessibilityHidden(true)
