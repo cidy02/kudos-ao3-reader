@@ -601,6 +601,11 @@ struct ReadAloudFollowUpsTests {
         let persistence = ReadiumProgressPersistence()
         persistence.seed(persistedLocatorString: ch1String)
         defer { persistence.cancelTrailingWrite() }
+        // Same wiring as the reader: the first real settle commits immediately
+        // (`lastPersistAt` is nil), and close flush does not write that string again.
+        persistence.onDebouncedWrite = { locatorString in
+            ReadiumReaderPersistence.writePosition(locatorString, to: work, sections: sections)
+        }
         book.onLocatorChange = { locator in
             ReadiumReaderPersistence.noteSettledLocator(locator, progressPersistence: persistence)
         }

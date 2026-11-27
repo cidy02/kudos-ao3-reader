@@ -1658,10 +1658,13 @@ final class ReaderSpeechController {
                 releasePreparedSession()
             }
         case .playing:
-            // A stopped session, or the settings audition (no reader publication),
-            // must not publish Now Playing over a book that still owns transport.
-            // A late engine callback after Stop is the usual way that happens.
-            guard !stoppedManually, canOwnTransport else { return }
+            // A late callback after Stop must not revive the session. A settings
+            // audition has no work id and must not flip to playing either; a reader
+            // session still has to, because the reading log flushes from this status.
+            // The card is decided later: `reconcileTransport` ignores a controller
+            // that cannot own transport.
+            guard !stoppedManually else { return }
+            guard canOwnTransport || sessionWorkID != nil else { return }
             if let request = activeRequest, case .awaitingFirstOutput = request.stage {
                 // Wait for the first playable utterance before exposing `.playing`
                 // (avoids unpausing a paused skip or flashing `.playing` on failure).
@@ -1671,7 +1674,8 @@ final class ReaderSpeechController {
             status = .playing
             reconcileTransport()
         case .paused:
-            guard !stoppedManually, canOwnTransport else { return }
+            guard !stoppedManually else { return }
+            guard canOwnTransport || sessionWorkID != nil else { return }
             if var request = activeRequest {
                 request.desiredState = .paused
                 activeRequest = request
