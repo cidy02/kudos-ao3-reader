@@ -10,8 +10,9 @@ import AppKit
 
 /// The Home tab: a personal launchpad. Tapping a local work opens the reader;
 /// long-press opens its management actions, including Work Details.
-/// Sections, in order: weekly stats, Resume, Reading Now, New Chapters, Reading
-/// Queues, collections flagged Show on Home, then Subscriptions.
+/// Phone sections, in order: weekly stats, Resume with Also Reading, Subscriptions,
+/// New Chapters, Queues, then collections flagged Show on Home. Open and Book Duo
+/// keep Resume and Also Reading leading, and New Chapters, Queues, Subscriptions trailing.
 struct HomeView: View { // swiftlint:disable:this type_body_length
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
@@ -974,7 +975,9 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                             position: index + 1,
                             showsPosition: false,
                             isFirst: index == 0,
-                            isLast: index == updateRows.count - 1 && updates.count <= limit
+                            // The last shown row ends the rail. A further update is the
+                            // "more updates" row below, not another sitting.
+                            isLast: index == updateRows.count - 1
                         )
                         .padding(.horizontal, 16)
                         .contentShape(Rectangle())
@@ -987,6 +990,8 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     }
 
                     if updates.count > limit {
+                        Divider()
+                            .padding(.leading, newChapterRowInset)
                         ListMoreRow(
                             count: updates.count - limit,
                             sectionTitle: "Subscriptions",

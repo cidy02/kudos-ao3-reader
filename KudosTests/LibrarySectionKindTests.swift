@@ -106,6 +106,24 @@ struct LibrarySectionKindTests {
         #expect(LibrarySectionKind.collections.orderDescription.isEmpty)
     }
 
+    /// A later read sorts above an earlier one. The tally says "most recently read
+    /// first" because this is the key — a reread is not a new finish.
+    @Test func finishedSortsByLastRead() throws {
+        let context = try makeContext()
+        let reread = work(in: context, title: "Reread", dateAdded: Date(timeIntervalSince1970: 1))
+        reread.isFinished = true
+        reread.lastReadDate = Date(timeIntervalSince1970: 500)
+        let earlier = work(in: context, title: "Earlier", dateAdded: Date(timeIntervalSince1970: 400))
+        earlier.isFinished = true
+        earlier.lastReadDate = Date(timeIntervalSince1970: 100)
+
+        let titles = LibrarySectionKind.finished
+            .works(from: [earlier, reread], visible: { _ in true })
+            .map(\.title)
+        #expect(titles == ["Reread", "Earlier"])
+        #expect(LibrarySectionKind.finished.orderDescription == "most recently read first")
+    }
+
     /// 1ad heads Reading Now's rows with their state, "IN PROGRESS", as Home's
     /// Reading Now page already does; other sections keep their title.
     @Test func readingNowRowsAreHeadedInProgress() {

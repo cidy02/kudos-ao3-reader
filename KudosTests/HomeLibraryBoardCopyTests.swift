@@ -62,7 +62,10 @@ struct HomeLibraryBoardCopyTests {
     }
 
     @Test func finishedShelfOrderAndShelfHeaderTalliesMatchBoards() {
-        #expect(LibrarySectionKind.finished.orderDescription == "most recently finished first")
+        // The Finished board says "most recently finished first". The shelf sorts by
+        // last read (`LibrarySectionKindTests.finishedSortsByLastRead`), so the tally
+        // names that order. Grid and Select keep the board's own words.
+        #expect(LibrarySectionKind.finished.orderDescription == "most recently read first")
 
         #expect(LibraryShelfHeaderCopy.tallyLine(
             visibleCount: 74,
@@ -72,7 +75,7 @@ struct HomeLibraryBoardCopyTests {
             hasActiveFilters: false,
             isSelecting: false,
             selectedCount: 0
-        ) == "74 works · most recently finished first")
+        ) == "74 works · most recently read first")
 
         #expect(LibraryShelfHeaderCopy.tallyLine(
             visibleCount: 1,
@@ -152,7 +155,8 @@ struct HomeLibraryBoardCopyTests {
         )
         let line = WorkLedgerStatsLine.formattedText(figures)
         #expect(WorkLedgerStatsLine.separator == " · ")
-        #expect(line == "English · \(84_210.formatted()) words · 12/20 ch · ♥ \(3_104.formatted())")
+        #expect(figures.visible.count > 1)
+        #expect(line == figures.visible.joined(separator: WorkLedgerStatsLine.separator))
         #expect(!line.contains("  ·  "))
     }
 

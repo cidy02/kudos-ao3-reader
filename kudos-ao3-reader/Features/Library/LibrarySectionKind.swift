@@ -55,8 +55,9 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
     /// Collections, which lists no works here.
     var orderDescription: String {
         switch self {
-        case .readingNow, .history: "most recently read first"
-        case .finished: "most recently finished first"
+        // Finished sorts by `lastReadDate`, the same key as a reread, so the
+        // phrase stays "read" — the Finished board's "finished first" is not this sort.
+        case .readingNow, .history, .finished: "most recently read first"
         case .savedForLater: "most recently read or added first"
         case .downloaded, .favorites: "newest first"
         case .collections: ""
