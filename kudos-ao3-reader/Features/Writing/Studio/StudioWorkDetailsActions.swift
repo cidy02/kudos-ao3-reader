@@ -139,28 +139,32 @@ extension StudioWorkDetailsView {
     }
 
     func saveChanges() {
-        guard !isBusy, !needsTagRefresh else { return }
+        guard !isBusy, !ao3WriteUnconfirmed, !needsTagRefresh else { return }
         guard editingGeneration == auth.sessionGeneration else {
             errorMessage = "Your AO3 session changed. Reopen Work Details before saving."
             return
         }
         isSaving = true
         let submitAction: AO3WorkSubmitAction = form.isPosted ? .update : .saveDraft
+        let expectedGeneration = auth.sessionGeneration
         Task {
             do {
+                guard expectedGeneration == auth.sessionGeneration else {
+                    throw AO3WorkWriteError.notSignedIn
+                }
                 _ = try await auth.saveWork(form, submit: submitAction)
                 StudioAO3LoadCache.shared.clear()
                 onChanged()
                 dismiss()
             } catch {
                 isSaving = false
-                errorMessage = UserFacingError.message(for: error)
+                errorMessage = messageAfterWrite(error)
             }
         }
     }
 
     func removeMeAsCoCreator() {
-        guard let workID = form.workID, !isRemovingCoCreator else { return }
+        guard let workID = form.workID, !isRemovingCoCreator, !isSaving, !ao3WriteUnconfirmed else { return }
         guard editingGeneration == auth.sessionGeneration else {
             errorMessage = AO3WorkWriteError.notSignedIn.localizedDescription
             return
@@ -169,7 +173,14 @@ extension StudioWorkDetailsView {
         Task {
             let outcome = await WorkCoCreatorRemovalFlow.run(
                 kind: .work,
-                remove: { try await auth.removeMeAsCoCreator(workID: workID) },
+                remove: {
+                    do {
+                        return try await auth.removeMeAsCoCreator(workID: workID)
+                    } catch {
+                        _ = messageAfterWrite(error)
+                        throw error
+                    }
+                },
                 onRemoved: {
                     StudioAO3LoadCache.shared.clear()
                     onChanged()
@@ -181,13 +192,13 @@ extension StudioWorkDetailsView {
             case .removed:
                 break
             case let .onlyCreator(message), let .failed(message):
-                errorMessage = message
+                errorMessage = ao3WriteUnconfirmed ? unconfirmedWriteMessage : message
             }
         }
     }
 
     func confirmDelete() {
-        guard let workID = form.workID, !isCheckingDelete else { return }
+        guard let workID = form.workID, !isCheckingDelete, !isSaving, !ao3WriteUnconfirmed else { return }
         isCheckingDelete = true
         Task {
             do {
@@ -201,7 +212,7 @@ extension StudioWorkDetailsView {
     }
 
     func deleteWork() {
-        guard let workID = form.workID else { return }
+        guard let workID = form.workID, !isSaving, !isRemovingCoCreator, !ao3WriteUnconfirmed else { return }
         isSaving = true
         Task {
             do {
@@ -218,9 +229,23 @@ extension StudioWorkDetailsView {
                 dismiss()
             } catch {
                 isSaving = false
-                errorMessage = UserFacingError.message(for: error)
+                errorMessage = messageAfterWrite(error)
             }
         }
+    }
+
+    private var unconfirmedWriteMessage: String {
+        "This may have gone through on AO3. Check the work on AO3 before trying again."
+    }
+
+    /// Locks further writes when AO3 may already have applied this one.
+    /// Returns the sentence to show: a timeout's usual "try again" would invite a second delete.
+    private func messageAfterWrite(_ error: Error) -> String {
+        if AO3WriteOutcomeClassifier.mayHaveGoneThrough(error) {
+            ao3WriteUnconfirmed = true
+            return unconfirmedWriteMessage
+        }
+        return UserFacingError.message(for: error)
     }
 }
 

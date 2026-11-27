@@ -9,7 +9,7 @@ import SwiftUI
 struct StudioPostNewWorkSheet: View {
     let existingDraftWorkID: Int?
     let workTitle: String
-    let chapterTitle: String
+    @Binding var chapterTitle: String
     @Binding var summary: String
     @Binding var notesBefore: String
     @Binding var notesAfter: String
@@ -122,7 +122,10 @@ struct StudioPostNewWorkSheet: View {
         }
         ToolbarItem(placement: .confirmationAction) {
             Button("Preview") { openPreview() }
-                .disabled(form == nil || isLoading || isSubmitting || isPreviewing)
+                .disabled(
+                    form == nil || isLoading || isSubmitting || isPreviewing
+                        || ambiguousOutcomeMessage != nil
+                )
                 .accessibilityLabel("Preview work on AO3")
         }
     }

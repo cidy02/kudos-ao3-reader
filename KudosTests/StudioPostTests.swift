@@ -242,6 +242,46 @@ struct StudioPostChapterChecksTests {
         #expect(messyChecks[1].detail.contains("http/https/mailto"))
     }
 
+    @Test func textReadyCheckRejectsShortTextAndOverlongTitleThatAO3Rejects() {
+        let work = StudioPostTestFixtures.makePostedWorkForm()
+
+        let blank = StudioPostTestFixtures.makeChapterForm(content: "   <p></p>  ")
+        let blankCheck = StudioPostChapterChecker.checks(chapterForm: blank, workForm: work)[1]
+        #expect(blankCheck.status == .fail)
+        #expect(blankCheck.title == "Chapter text is empty")
+
+        let shortHTML = StudioPostTestFixtures.makeChapterForm(content: "<p>Hi</p>")
+        let shortPlain = StudioPostTestFixtures.makeChapterForm(content: "abcdefghi")
+        for chapter in [shortHTML, shortPlain] {
+            let checks = StudioPostChapterChecker.checks(chapterForm: chapter, workForm: work)
+            #expect(checks[1].status == .fail)
+            #expect(checks[1].title == "Chapter text is too short for AO3")
+            #expect(!StudioPostChapterChecker.canPost(checks: checks))
+        }
+
+        let exactHTML = StudioPostTestFixtures.makeChapterForm(content: "<p>Hey</p>")
+        let exactPlain = StudioPostTestFixtures.makeChapterForm(content: "abcdefghij")
+        for chapter in [exactHTML, exactPlain] {
+            let checks = StudioPostChapterChecker.checks(chapterForm: chapter, workForm: work)
+            #expect(checks[1].status == .pass)
+            #expect(checks[1].title == "Text is ready for AO3")
+            #expect(StudioPostChapterChecker.canPost(checks: checks))
+        }
+
+        var tooLongTitle = StudioPostTestFixtures.makeChapterForm(content: "abcdefghij")
+        tooLongTitle.title = String(repeating: "t", count: 256)
+        let tooLongChecks = StudioPostChapterChecker.checks(chapterForm: tooLongTitle, workForm: work)
+        #expect(tooLongChecks[1].status == .fail)
+        #expect(tooLongChecks[1].title == "Chapter title is too long")
+        #expect(!StudioPostChapterChecker.canPost(checks: tooLongChecks))
+
+        var maxTitle = StudioPostTestFixtures.makeChapterForm(content: "abcdefghij")
+        maxTitle.title = String(repeating: "t", count: 255)
+        let maxChecks = StudioPostChapterChecker.checks(chapterForm: maxTitle, workForm: work)
+        #expect(maxChecks[1].status == .pass)
+        #expect(StudioPostChapterChecker.canPost(checks: maxChecks))
+    }
+
     @Test func chapterCountCheckCoversOpenEndedCompletePastTotalAndInvalidInput() {
         var work = StudioPostTestFixtures.makePostedWorkForm()
         work.chapterTotal = ""
@@ -376,6 +416,106 @@ struct StudioPostNewWorkRequirementsTests {
         let req = StudioNewWorkRequirements.evaluate(form)
         #expect(req.canPost)
         #expect(req.remainingCount == 0)
+    }
+
+    @Test func lengthLimitsBlockPostWhenAO3WouldRejectTheWork() {
+        func completeForm() -> AO3WorkForm {
+            var form = StudioPostTestFixtures.makeNewWorkForm()
+            form.title = "The Harbour Pilot's Daughter"
+            form.rating = "Teen And Up Audiences"
+            form.warnings = ["No Archive Warnings Apply"]
+            form.fandoms = ["Original Work"]
+            form.languageID = "1"
+            form.chapter = AO3WorkChapterDraft(content: "<p>The harbour bell rang twice.</p>")
+            return form
+        }
+
+        var shortText = completeForm()
+        shortText.chapter?.content = "<p>Hi</p>"
+        let shortReq = StudioNewWorkRequirements.evaluate(shortText)
+        #expect(!shortReq.canPost)
+        #expect(shortReq.postButtonTitle == "Post — lengthen the Text first")
+        #expect(shortReq.items.first { $0.kind == .text }?.value == "AO3 needs at least 10 characters")
+
+        var plainShort = completeForm()
+        plainShort.chapter?.content = "abcdefghi"
+        #expect(StudioNewWorkRequirements.evaluate(plainShort).postButtonTitle == "Post — lengthen the Text first")
+
+        var exactText = completeForm()
+        exactText.chapter?.content = "abcdefghij"
+        #expect(StudioNewWorkRequirements.evaluate(exactText).canPost)
+        #expect(StudioNewWorkRequirements.evaluate(exactText).postButtonTitle == "Post")
+
+        var giantText = completeForm()
+        giantText.chapter?.content = String(
+            repeating: "a",
+            count: StudioPostChapterChecker.maxChapterCharacters + 1
+        )
+        let giantReq = StudioNewWorkRequirements.evaluate(giantText)
+        #expect(!giantReq.canPost)
+        #expect(giantReq.postButtonTitle == "Post — shorten the Text first")
+
+        var tooLongTitle = completeForm()
+        tooLongTitle.title = String(repeating: "T", count: 256)
+        let titleReq = StudioNewWorkRequirements.evaluate(tooLongTitle)
+        #expect(!titleReq.canPost)
+        #expect(titleReq.postButtonTitle == "Post — shorten the Title first")
+        #expect(titleReq.items.first { $0.kind == .title }?.value == "AO3 accepts up to 255 characters")
+
+        var maxTitle = completeForm()
+        maxTitle.title = String(repeating: "T", count: 255)
+        #expect(StudioNewWorkRequirements.evaluate(maxTitle).canPost)
+
+        var atSummaryLimit = completeForm()
+        atSummaryLimit.summary = String(repeating: "s", count: 1_250)
+        #expect(StudioNewWorkRequirements.evaluate(atSummaryLimit).canPost)
+
+        var overSummary = completeForm()
+        overSummary.summary = String(repeating: "s", count: 1_251)
+        let summaryReq = StudioNewWorkRequirements.evaluate(overSummary)
+        #expect(!summaryReq.canPost)
+        #expect(summaryReq.remainingCount == 0)
+        #expect(summaryReq.postButtonTitle == "Post — shorten the Summary first")
+
+        var atNotesLimit = completeForm()
+        atNotesLimit.notes = String(repeating: "n", count: 5_000)
+        #expect(StudioNewWorkRequirements.evaluate(atNotesLimit).canPost)
+
+        var overNotes = completeForm()
+        overNotes.notes = String(repeating: "n", count: 5_001)
+        #expect(StudioNewWorkRequirements.evaluate(overNotes).postButtonTitle == "Post — shorten the Notes first")
+
+        var overEndnotes = completeForm()
+        overEndnotes.endnotes = String(repeating: "n", count: 5_001)
+        let notesReq = StudioNewWorkRequirements.evaluate(overEndnotes)
+        #expect(!notesReq.canPost)
+        #expect(notesReq.postButtonTitle == "Post — shorten the Notes first")
+
+        var overChapterSummary = completeForm()
+        overChapterSummary.chapter?.summary = String(repeating: "s", count: 1_251)
+        let chapterSummaryReq = StudioNewWorkRequirements.evaluate(overChapterSummary)
+        #expect(!chapterSummaryReq.canPost)
+        #expect(chapterSummaryReq.postButtonTitle == "Post — shorten the Summary first")
+
+        var overChapterTitle = completeForm()
+        overChapterTitle.chapter?.title = String(repeating: "c", count: 256)
+        let chapterTitleReq = StudioNewWorkRequirements.evaluate(overChapterTitle)
+        #expect(!chapterTitleReq.canPost)
+        #expect(chapterTitleReq.remainingCount == 0)
+        #expect(chapterTitleReq.postButtonTitle == "Post — shorten the Chapter Title first")
+
+        var hiddenShort = completeForm()
+        hiddenShort.chapter = AO3WorkChapterDraft(content: "<p>Hi</p>", contentServed: false)
+        let hiddenShortReq = StudioNewWorkRequirements.evaluate(hiddenShort)
+        #expect(hiddenShortReq.canPost)
+        #expect(hiddenShortReq.items.first { $0.kind == .text }?.value == "Multi-chapter draft on AO3")
+
+        var hiddenGiant = completeForm()
+        hiddenGiant.chapter = AO3WorkChapterDraft(
+            content: String(repeating: "a", count: StudioPostChapterChecker.maxChapterCharacters + 1),
+            contentServed: false
+        )
+        #expect(StudioNewWorkRequirements.evaluate(hiddenGiant).canPost)
     }
 
     @Test func workTemplateAppliesOnlyBlankFieldsAndFormatsBanner() {

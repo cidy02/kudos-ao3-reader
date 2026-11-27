@@ -173,7 +173,10 @@ struct StudioPostChapterSheet: View {
         }
         ToolbarItem(placement: .confirmationAction) {
             Button("Preview") { openPreview() }
-                .disabled(chapterForm == nil || isLoading || isSubmitting || isPreviewing)
+                .disabled(
+                    chapterForm == nil || isLoading || isSubmitting || isPreviewing
+                        || ambiguousOutcomeMessage != nil
+                )
                 .accessibilityLabel("Preview chapter on AO3")
         }
     }

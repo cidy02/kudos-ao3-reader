@@ -178,7 +178,7 @@ extension ChapterEditorScreen {
                 StudioPostNewWorkSheet(
                     existingDraftWorkID: existingDraftWorkID,
                     workTitle: resolvedWorkTitle,
-                    chapterTitle: chapterTitle,
+                    chapterTitle: $chapterTitle,
                     summary: $summary,
                     notesBefore: $notesBefore,
                     notesAfter: $notesAfter,

@@ -285,8 +285,12 @@ nonisolated struct StudioPostHTMLInspection: Equatable, Sendable {
 
 /// Pure, testable evaluator for the 4 on-device checks on `Studio-Post-Chapter`.
 nonisolated enum StudioPostChapterChecker {
+    /// AO3's chapter content minimum (`otwarchive` `CONTENT_MIN = 10`).
+    static let minChapterCharacters = 10
     /// AO3's chapter content limit (`otwarchive` `CONTENT_MAX = 510000`).
     static let maxChapterCharacters = 510_000
+    /// Work and chapter titles (`otwarchive` `TITLE_MAX = 255`, validator `maximum: 255`).
+    static let maxTitleCharacters = 255
 
     static func positiveInt(_ raw: String) -> Int? {
         Int(raw.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0 > 0 ? $0 : nil }
@@ -485,6 +489,16 @@ nonisolated enum StudioPostChapterChecker {
                 detail: "Add chapter text before posting to AO3."
             )
         }
+        // Count the raw chapter string. AO3's length validator uses Ruby
+        // `String#length` (Unicode scalars), including tags: `<p>Hi</p>` is 9.
+        if inspection.characterCount < minChapterCharacters {
+            return StudioPostCheckItem(
+                id: .textReady,
+                status: .fail,
+                title: "Chapter text is too short for AO3",
+                detail: "AO3 needs at least \(minChapterCharacters) characters."
+            )
+        }
         if inspection.characterCount > maxChapterCharacters {
             return StudioPostCheckItem(
                 id: .textReady,
@@ -492,6 +506,14 @@ nonisolated enum StudioPostChapterChecker {
                 title: "Chapter text is too long for AO3",
                 detail: "\(inspection.characterCount.formatted()) characters — AO3 accepts up to "
                     + "\(maxChapterCharacters.formatted())."
+            )
+        }
+        if chapterForm.title.unicodeScalars.count > maxTitleCharacters {
+            return StudioPostCheckItem(
+                id: .textReady,
+                status: .fail,
+                title: "Chapter title is too long",
+                detail: "AO3 accepts up to \(maxTitleCharacters) characters."
             )
         }
         let summaryStatus = CharacterLimitStatus.evaluate(text: chapterForm.summary, field: .summary)

@@ -51,6 +51,8 @@ nonisolated struct StudioNewWorkRequiredItem: Identifiable, Equatable, Hashable,
     let kind: StudioNewWorkRequiredFieldKind
     let value: String
     let isComplete: Bool
+    /// Replaces `kind.postButtonPhrase` when the field is filled but AO3 will still reject it.
+    let buttonPhrase: String? = nil
 
     var id: StudioNewWorkRequiredFieldKind { kind }
     var label: String { kind.label }
@@ -59,13 +61,16 @@ nonisolated struct StudioNewWorkRequiredItem: Identifiable, Equatable, Hashable,
 /// Evaluates AO3's 6 required work fields (`works/_standard_form`) for `Studio-Post-New-Work`.
 nonisolated struct StudioNewWorkRequirements: Equatable, Sendable {
     let items: [StudioNewWorkRequiredItem]
+    /// Phrase for `"Post — <phrase> first"` when every required field is filled
+    /// but a length limit AO3 enforces (`TITLE_MAX`, `SUMMARY_MAX`, `NOTES_MAX`) still fails.
+    let rejectionReason: String?
 
     var missingItems: [StudioNewWorkRequiredItem] {
         items.filter { !$0.isComplete }
     }
 
     var remainingCount: Int { missingItems.count }
-    var canPost: Bool { missingItems.isEmpty }
+    var canPost: Bool { missingItems.isEmpty && rejectionReason == nil }
 
     var remainingBadgeText: String? {
         remainingCount > 0 ? "\(remainingCount) left" : nil
@@ -74,20 +79,47 @@ nonisolated struct StudioNewWorkRequirements: Equatable, Sendable {
     var postButtonTitle: String {
         let missing = missingItems
         if missing.isEmpty {
+            if let rejectionReason {
+                return "Post — \(rejectionReason) first"
+            }
             return "Post"
         }
         if missing.count == 1, let only = missing.first {
-            return "Post — \(only.kind.postButtonPhrase) first"
+            let phrase = only.buttonPhrase ?? only.kind.postButtonPhrase
+            return "Post — \(phrase) first"
         }
         return "Post — \(missing.count) required fields left"
     }
 
+    /// Why a post must be refused after `missingRequiredFields()` came back empty.
+    /// Nil when the block is an ordinary missing field (the flow names those itself).
+    var lengthRefusal: String? {
+        if missingItems.isEmpty {
+            return rejectionReason
+        }
+        guard missingItems.count == 1, let only = missingItems.first, let phrase = only.buttonPhrase else {
+            return nil
+        }
+        return phrase
+    }
+
     static func evaluate(_ form: AO3WorkForm) -> StudioNewWorkRequirements {
         let trimmedTitle = form.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let titleTooLong = !trimmedTitle.isEmpty
+            && form.title.unicodeScalars.count > StudioPostChapterChecker.maxTitleCharacters
+        let titleValue: String
+        if trimmedTitle.isEmpty {
+            titleValue = StudioNewWorkRequiredFieldKind.title.missingPlaceholder
+        } else if titleTooLong {
+            titleValue = "AO3 accepts up to \(StudioPostChapterChecker.maxTitleCharacters) characters"
+        } else {
+            titleValue = trimmedTitle
+        }
         let titleItem = StudioNewWorkRequiredItem(
             kind: .title,
-            value: trimmedTitle.isEmpty ? StudioNewWorkRequiredFieldKind.title.missingPlaceholder : trimmedTitle,
-            isComplete: !trimmedTitle.isEmpty
+            value: titleValue,
+            isComplete: !trimmedTitle.isEmpty && !titleTooLong,
+            buttonPhrase: titleTooLong ? "shorten the Title" : nil
         )
 
         let trimmedRating = form.rating.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -134,31 +166,75 @@ nonisolated struct StudioNewWorkRequirements: Equatable, Sendable {
         let contentText = form.chapter?.content ?? ""
         let requiresContent = (form.kind == .new || form.isDraft) && (form.chapter?.contentServed != false)
         let hasContent = !contentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let textComplete = !requiresContent || hasContent
+        let contentCount = contentText.unicodeScalars.count
+        let textTooShort = hasContent && contentCount < StudioPostChapterChecker.minChapterCharacters
+        let textTooLong = hasContent && contentCount > StudioPostChapterChecker.maxChapterCharacters
         let textValue: String
+        let textPhrase: String?
+        let textComplete: Bool
         if !requiresContent {
             textValue = "Multi-chapter draft on AO3"
-        } else if hasContent {
+            textPhrase = nil
+            textComplete = true
+        } else if !hasContent {
+            textValue = StudioNewWorkRequiredFieldKind.text.missingPlaceholder
+            textPhrase = nil
+            textComplete = false
+        } else if textTooShort {
+            textValue = "AO3 needs at least \(StudioPostChapterChecker.minChapterCharacters) characters"
+            textPhrase = "lengthen the Text"
+            textComplete = false
+        } else if textTooLong {
+            textValue = "Too long for AO3"
+            textPhrase = "shorten the Text"
+            textComplete = false
+        } else {
             let words = AO3WordCounter.count(contentText)
             let wordLabel = words == 1 ? "1 word" : "\(words.formatted()) words"
             textValue = "\(wordLabel) from your document"
-        } else {
-            textValue = StudioNewWorkRequiredFieldKind.text.missingPlaceholder
+            textPhrase = nil
+            textComplete = true
         }
         let textItem = StudioNewWorkRequiredItem(
             kind: .text,
             value: textValue,
-            isComplete: textComplete
+            isComplete: textComplete,
+            buttonPhrase: textPhrase
         )
 
-        return StudioNewWorkRequirements(items: [
-            titleItem,
-            ratingItem,
-            warningsItem,
-            fandomItem,
-            languageItem,
-            textItem
-        ])
+        return StudioNewWorkRequirements(
+            items: [
+                titleItem,
+                ratingItem,
+                warningsItem,
+                fandomItem,
+                languageItem,
+                textItem
+            ],
+            rejectionReason: lengthRejection(for: form)
+        )
+    }
+
+    /// Limits AO3 enforces on fields that are not in the six required blanks.
+    /// Hidden chapter text (`contentServed == false`) is not counted: it is not sent.
+    private static func lengthRejection(for form: AO3WorkForm) -> String? {
+        let summaryLimit = AO3ChapterFieldLimit.summary.characterLimit
+        let notesLimit = AO3ChapterFieldLimit.notes.characterLimit
+        if form.summary.unicodeScalars.count > summaryLimit {
+            return "shorten the Summary"
+        }
+        if form.notes.unicodeScalars.count > notesLimit || form.endnotes.unicodeScalars.count > notesLimit {
+            return "shorten the Notes"
+        }
+        if let chapter = form.chapter {
+            if chapter.title.unicodeScalars.count > StudioPostChapterChecker.maxTitleCharacters {
+                return "shorten the Chapter Title"
+            }
+            if chapter.summary.unicodeScalars.count > summaryLimit {
+                return "shorten the Summary"
+            }
+        }
+        return nil
     }
 }
 
@@ -294,6 +370,7 @@ enum StudioPostChapterSubmissionFlow {
         newWorkTotal: Int?,
         expectedGeneration: Int,
         currentGeneration: @MainActor () -> Int,
+        now: Date? = nil,
         createChapter: @MainActor (AO3ChapterForm, AO3WorkSubmitAction) async throws -> String,
         updateChapter: @MainActor (AO3ChapterForm, AO3WorkSubmitAction) async throws -> String,
         updateWorkTotals: @MainActor (Int, Int) async throws -> String
@@ -305,13 +382,16 @@ enum StudioPostChapterSubmissionFlow {
             return .sessionChanged
         }
 
-        let submit = submitAction(for: action, chapterID: chapterForm.chapterID)
+        // The row says "Today" when the year is blank. An update that omits
+        // published_at keeps AO3's old date, so send the date the row shows.
+        let formToSend = formShowingPublicationDate(chapterForm, now: now ?? Date())
+        let submit = submitAction(for: action, chapterID: formToSend.chapterID)
         let notice: String
         do {
-            if chapterForm.chapterID == nil {
-                notice = try await createChapter(chapterForm, submit)
+            if formToSend.chapterID == nil {
+                notice = try await createChapter(formToSend, submit)
             } else {
-                notice = try await updateChapter(chapterForm, submit)
+                notice = try await updateChapter(formToSend, submit)
             }
         } catch {
             if AO3WriteOutcomeClassifier.mayHaveGoneThrough(error) {
@@ -328,7 +408,7 @@ enum StudioPostChapterSubmissionFlow {
                 )
             }
             do {
-                _ = try await updateWorkTotals(chapterForm.workID, newWorkTotal)
+                _ = try await updateWorkTotals(formToSend.workID, newWorkTotal)
             } catch {
                 return .savedChapterButTotalFailed(
                     "The chapter was saved, but the work total was not updated. "
@@ -338,6 +418,18 @@ enum StudioPostChapterSubmissionFlow {
         }
 
         return .succeeded(notice: notice, isDraft: action == .saveDraft)
+    }
+
+    static func formShowingPublicationDate(_ form: AO3ChapterForm, now: Date) -> AO3ChapterForm {
+        guard form.publishedYear.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return form
+        }
+        var copy = form
+        let fields = AO3PublicationDate.fields(for: now)
+        copy.publishedYear = fields.year
+        copy.publishedMonth = fields.month
+        copy.publishedDay = fields.day
+        return copy
     }
 
     static func shouldUpdateWorkTotal(newTotal: Int?, existingWorkTotal: String?) -> Bool {
@@ -381,6 +473,13 @@ enum StudioPostNewWorkSubmissionFlow {
             }
             if !missing.isEmpty {
                 return .missingRequired(missing)
+            }
+            let requirements = StudioNewWorkRequirements.evaluate(form)
+            if !requirements.canPost {
+                if let refusal = requirements.lengthRefusal {
+                    return .missingRequired([refusal])
+                }
+                return .missingRequired(requirements.missingItems.map(\.label))
             }
         }
         guard expectedGeneration == currentGeneration() else {

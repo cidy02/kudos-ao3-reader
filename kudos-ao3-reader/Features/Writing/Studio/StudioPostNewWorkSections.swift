@@ -615,6 +615,9 @@ extension StudioPostNewWorkSheet {
 
     private func syncEditsBackToEditor() {
         guard let currentForm = form else { return }
+        if let draftedTitle = currentForm.chapter?.title, chapterTitle != draftedTitle {
+            chapterTitle = draftedTitle
+        }
         if summary != currentForm.summary { summary = currentForm.summary }
         if notesBefore != currentForm.notes { notesBefore = currentForm.notes }
         if notesAfter != currentForm.endnotes { notesAfter = currentForm.endnotes }
@@ -626,7 +629,11 @@ extension StudioPostNewWorkSheet {
     }
 
     func openPreview() {
-        guard let currentForm = form, !isSubmitting, !isPreviewing else { return }
+        guard let currentForm = form,
+              !isSubmitting,
+              !isPreviewing,
+              ambiguousOutcomeMessage == nil
+        else { return }
         guard editingGeneration == auth.sessionGeneration else {
             errorMessage = "Your AO3 session changed. Reopen this sheet before previewing."
             return
@@ -640,7 +647,13 @@ extension StudioPostNewWorkSheet {
                 form = try currentForm.adopting(page)
                 preview = page
             } catch {
-                errorMessage = UserFacingError.message(for: error)
+                // A preview that AO3 may have saved as a draft, without telling us
+                // which one, must not be posted again — that creates a second work.
+                if AO3WriteOutcomeClassifier.mayHaveGoneThrough(error) {
+                    ambiguousOutcomeMessage = StudioPostNewWorkSubmissionFlow.mayHaveGoneThroughMessage
+                } else {
+                    errorMessage = UserFacingError.message(for: error)
+                }
             }
         }
     }
@@ -659,10 +672,10 @@ extension StudioPostNewWorkSheet {
         guard let currentForm = form,
               let expectedGen = editingGeneration,
               !isSubmitting,
-              !isPreviewing
+              !isPreviewing,
+              ambiguousOutcomeMessage == nil
         else { return }
         isSubmitting = true
-        defer { isSubmitting = false }
 
         let authService = auth
         let outcome = await StudioPostNewWorkSubmissionFlow.run(
@@ -675,20 +688,25 @@ extension StudioPostNewWorkSheet {
             }
         )
 
+        syncEditsBackToEditor()
         switch outcome {
         case let .succeeded(_, isDraft):
-            syncEditsBackToEditor()
             StudioAO3LoadCache.shared.clear()
             preview = nil
             onCompleted(isDraft)
             dismiss()
         case let .missingRequired(missing):
+            isSubmitting = false
             errorMessage = WorkEditView.postConfirmationMessage(missing: missing)
         case .sessionChanged:
+            isSubmitting = false
             errorMessage = "Your AO3 session changed. Reopen this sheet before saving."
         case let .mayHaveGoneThrough(message):
+            // Clear the scroll lock so Close stays reachable. The banner keeps Post off.
+            isSubmitting = false
             ambiguousOutcomeMessage = message
         case let .failed(message):
+            isSubmitting = false
             errorMessage = message
         }
     }

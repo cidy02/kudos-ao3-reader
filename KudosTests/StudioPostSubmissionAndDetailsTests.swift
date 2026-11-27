@@ -657,6 +657,214 @@ struct StudioPostSubmissionTests {
         #expect(savedSubmits == [.saveDraft])
     }
 
+    @Test func newWorkFlowRefusesLengthsAO3RejectsAndStillAllowsDraftSave() async {
+        func completeForm() -> AO3WorkForm {
+            var form = StudioPostTestFixtures.makeNewWorkForm()
+            form.title = "The Harbour Pilot's Daughter"
+            form.rating = "Teen And Up Audiences"
+            form.warnings = ["No Archive Warnings Apply"]
+            form.fandoms = ["Original Work"]
+            form.languageID = "1"
+            form.chapter = AO3WorkChapterDraft(content: "<p>The harbour bell rang twice.</p>")
+            return form
+        }
+
+        func post(_ form: AO3WorkForm) async -> (StudioPostNewWorkSubmissionFlow.Outcome, Int) {
+            var calls = 0
+            let outcome = await StudioPostNewWorkSubmissionFlow.run(
+                action: .post,
+                form: form,
+                expectedGeneration: 1,
+                currentGeneration: { 1 },
+                saveWork: { _, _ in
+                    calls += 1
+                    return "Posted"
+                }
+            )
+            return (outcome, calls)
+        }
+
+        var shortText = completeForm()
+        shortText.chapter?.content = "<p>Hi</p>"
+        let (shortOutcome, shortCalls) = await post(shortText)
+        #expect(shortOutcome == .missingRequired(["lengthen the Text"]))
+        #expect(shortCalls == 0)
+
+        var giantText = completeForm()
+        giantText.chapter?.content = String(
+            repeating: "a",
+            count: StudioPostChapterChecker.maxChapterCharacters + 1
+        )
+        let (giantOutcome, giantCalls) = await post(giantText)
+        #expect(giantOutcome == .missingRequired(["shorten the Text"]))
+        #expect(giantCalls == 0)
+
+        var overTitle = completeForm()
+        overTitle.title = String(repeating: "T", count: 256)
+        let (titleOutcome, titleCalls) = await post(overTitle)
+        #expect(titleOutcome == .missingRequired(["shorten the Title"]))
+        #expect(titleCalls == 0)
+
+        var overSummary = completeForm()
+        overSummary.summary = String(repeating: "s", count: 1_251)
+        let (summaryOutcome, summaryCalls) = await post(overSummary)
+        #expect(summaryOutcome == .missingRequired(["shorten the Summary"]))
+        #expect(summaryCalls == 0)
+
+        var overChapterTitle = completeForm()
+        overChapterTitle.chapter?.title = String(repeating: "c", count: 256)
+        let (chapterTitleOutcome, chapterTitleCalls) = await post(overChapterTitle)
+        #expect(chapterTitleOutcome == .missingRequired(["shorten the Chapter Title"]))
+        #expect(chapterTitleCalls == 0)
+
+        var draftSubmits: [AO3WorkSubmitAction] = []
+        let drafted = await StudioPostNewWorkSubmissionFlow.run(
+            action: .saveDraft,
+            form: overSummary,
+            expectedGeneration: 1,
+            currentGeneration: { 1 },
+            saveWork: { _, submit in
+                draftSubmits.append(submit)
+                return "Draft was successfully created."
+            }
+        )
+        #expect(drafted == .succeeded(notice: "Draft was successfully created.", isDraft: true))
+        #expect(draftSubmits == [.saveDraft])
+
+        var hidden = completeForm()
+        hidden.chapter = AO3WorkChapterDraft(
+            content: String(repeating: "a", count: 9),
+            contentServed: false
+        )
+        var sentHidden: AO3WorkForm?
+        var hiddenSubmits: [AO3WorkSubmitAction] = []
+        let hiddenOutcome = await StudioPostNewWorkSubmissionFlow.run(
+            action: .post,
+            form: hidden,
+            expectedGeneration: 1,
+            currentGeneration: { 1 },
+            saveWork: { form, submit in
+                sentHidden = form
+                hiddenSubmits.append(submit)
+                return "Posted"
+            }
+        )
+        #expect(hiddenOutcome == .succeeded(notice: "Posted", isDraft: false))
+        #expect(hiddenSubmits == [.post])
+        #expect(sentHidden?.chapter?.contentServed == false)
+    }
+
+    @Test func postChapterFlowDoesNotSendTextShorterThanAO3Allows() async {
+        let work = StudioPostTestFixtures.makePostedWorkForm()
+        let short = StudioPostTestFixtures.makeChapterForm(content: "<p>Hi</p>")
+        let checks = StudioPostChapterChecker.checks(chapterForm: short, workForm: work)
+        var called = false
+        let outcome = await StudioPostChapterSubmissionFlow.run(
+            action: .post,
+            chapterForm: short,
+            workForm: work,
+            checks: checks,
+            newWorkTotal: nil,
+            expectedGeneration: 1,
+            currentGeneration: { 1 },
+            createChapter: { _, _ in
+                called = true
+                return ""
+            },
+            updateChapter: { _, _ in
+                called = true
+                return ""
+            },
+            updateWorkTotals: { _, _ in
+                called = true
+                return ""
+            }
+        )
+        #expect(!called)
+        if case .blockedByChecks = outcome {
+            // Expected.
+        } else {
+            Issue.record("Expected blockedByChecks, got \(outcome)")
+        }
+    }
+
+    @Test func postChapterFlowSendsThePublicationDateTheRowShowsAsToday() async {
+        let work = StudioPostTestFixtures.makePostedWorkForm()
+        let fixed = Date(timeIntervalSince1970: 1_700_000_000)
+        let expected = AO3PublicationDate.fields(for: fixed)
+        let chapter = StudioPostTestFixtures.makeChapterForm(chapterID: 9001)
+        let checks = StudioPostChapterChecker.checks(chapterForm: chapter, workForm: work)
+
+        var sent: AO3ChapterForm?
+        let posted = await StudioPostChapterSubmissionFlow.run(
+            action: .post,
+            chapterForm: chapter,
+            workForm: work,
+            checks: checks,
+            newWorkTotal: nil,
+            expectedGeneration: 1,
+            currentGeneration: { 1 },
+            now: fixed,
+            createChapter: { _, _ in "" },
+            updateChapter: { form, _ in
+                sent = form
+                return "Updated."
+            },
+            updateWorkTotals: { _, _ in "" }
+        )
+        #expect(posted == .succeeded(notice: "Updated.", isDraft: false))
+        #expect(sent?.publishedYear == expected.year)
+        #expect(sent?.publishedMonth == expected.month)
+        #expect(sent?.publishedDay == expected.day)
+
+        var custom = chapter
+        custom.publishedYear = "2019"
+        custom.publishedMonth = "3"
+        custom.publishedDay = "7"
+        var kept: AO3ChapterForm?
+        _ = await StudioPostChapterSubmissionFlow.run(
+            action: .post,
+            chapterForm: custom,
+            workForm: work,
+            checks: checks,
+            newWorkTotal: nil,
+            expectedGeneration: 1,
+            currentGeneration: { 1 },
+            now: fixed,
+            createChapter: { _, _ in "" },
+            updateChapter: { form, _ in
+                kept = form
+                return "Updated."
+            },
+            updateWorkTotals: { _, _ in "" }
+        )
+        #expect(kept?.publishedYear == "2019")
+        #expect(kept?.publishedMonth == "3")
+        #expect(kept?.publishedDay == "7")
+
+        sent = nil
+        let drafted = await StudioPostChapterSubmissionFlow.run(
+            action: .saveDraft,
+            chapterForm: chapter,
+            workForm: work,
+            checks: checks,
+            newWorkTotal: nil,
+            expectedGeneration: 1,
+            currentGeneration: { 1 },
+            now: fixed,
+            createChapter: { _, _ in "" },
+            updateChapter: { form, _ in
+                sent = form
+                return "Draft saved."
+            },
+            updateWorkTotals: { _, _ in "" }
+        )
+        #expect(drafted == .succeeded(notice: "Draft saved.", isDraft: true))
+        #expect(sent?.publishedYear == expected.year)
+        #expect(sent?.publishedMonth == expected.month)
+        #expect(sent?.publishedDay == expected.day)
+    }
+
     @Test func stubbedAuthServicePostsChapterThroughExistingEndpoint() async {
         let auth = await makeSignedInAuth()
         let client = makeStubClient()

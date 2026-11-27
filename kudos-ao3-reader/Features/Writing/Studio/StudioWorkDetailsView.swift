@@ -86,6 +86,9 @@ struct StudioWorkDetailsView: View {
     @State var form: AO3WorkForm
     @State var editingGeneration: Int?
     @State var isSaving = false
+    /// Set when a write may already have reached AO3. Write actions stay disabled;
+    /// the form itself stays scrollable so the writer's edits are not trapped.
+    @State var ao3WriteUnconfirmed = false
     @State var isRemovingCoCreator = false
     @State var isCheckingDelete = false
     @State var errorMessage: String?
@@ -149,7 +152,7 @@ struct StudioWorkDetailsView: View {
                         saveChanges()
                     }
                     .sheetConfirmStyle()
-                    .disabled(isBusy || needsTagRefresh)
+                    .disabled(isBusy || needsTagRefresh || ao3WriteUnconfirmed)
                     .accessibilityLabel("Save work details to AO3")
                 }
             }
@@ -390,7 +393,7 @@ struct StudioWorkDetailsView: View {
                 standardRowLabel(row)
             }
             .buttonStyle(.plain)
-            .disabled(isBusy)
+            .disabled(isBusy || ao3WriteUnconfirmed)
             .accessibilityLabel("Remove Me as Co-Creator")
 
         case .series:
@@ -489,7 +492,7 @@ struct StudioWorkDetailsView: View {
                 standardRowLabel(row)
             }
             .buttonStyle(.plain)
-            .disabled(isBusy)
+            .disabled(isBusy || ao3WriteUnconfirmed)
             .accessibilityLabel("Orphan Work")
 
         case .deleteWork:
@@ -499,7 +502,7 @@ struct StudioWorkDetailsView: View {
                 standardRowLabel(row)
             }
             .buttonStyle(.plain)
-            .disabled(isBusy)
+            .disabled(isBusy || ao3WriteUnconfirmed)
             .accessibilityLabel(row.label)
 
         default:

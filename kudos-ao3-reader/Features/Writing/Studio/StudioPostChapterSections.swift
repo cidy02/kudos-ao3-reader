@@ -418,7 +418,11 @@ extension StudioPostChapterSheet {
     }
 
     func openPreview() {
-        guard let currentForm = chapterForm, !isSubmitting, !isPreviewing else { return }
+        guard let currentForm = chapterForm,
+              !isSubmitting,
+              !isPreviewing,
+              ambiguousOutcomeMessage == nil
+        else { return }
         guard editingGeneration == auth.sessionGeneration else {
             errorMessage = "Your AO3 session changed. Reopen this sheet before previewing."
             return
@@ -438,7 +442,13 @@ extension StudioPostChapterSheet {
                 chapterForm = try currentForm.adopting(page)
                 preview = page
             } catch {
-                errorMessage = UserFacingError.message(for: error)
+                // A preview that AO3 may have saved as a draft, without telling us
+                // which one, must not be posted again — that creates a second chapter.
+                if AO3WriteOutcomeClassifier.mayHaveGoneThrough(error) {
+                    ambiguousOutcomeMessage = StudioPostChapterSubmissionFlow.mayHaveGoneThroughMessage
+                } else {
+                    errorMessage = UserFacingError.message(for: error)
+                }
             }
         }
     }
@@ -457,10 +467,10 @@ extension StudioPostChapterSheet {
         guard let currentForm = chapterForm,
               let expectedGen = editingGeneration,
               !isSubmitting,
-              !isPreviewing
+              !isPreviewing,
+              ambiguousOutcomeMessage == nil
         else { return }
         isSubmitting = true
-        defer { isSubmitting = false }
 
         let targetTotal: Int? = if isLastChapter {
             resolvedPosition
@@ -504,21 +514,27 @@ extension StudioPostChapterSheet {
         )
 
         handleSubmissionOutcome(outcome, targetTotal: targetTotal)
+        // Leave the lock set after success so a tap during dismiss cannot post
+        // twice. Clear it otherwise: Close lives in the scroll this flag disables,
+        // and the banner already blocks another post.
+        if case .succeeded = outcome {
+            return
+        }
+        isSubmitting = false
     }
 
     private func handleSubmissionOutcome(
         _ outcome: StudioPostChapterSubmissionFlow.Outcome,
         targetTotal: Int?
     ) {
+        syncEditsBackToEditor()
         switch outcome {
         case let .succeeded(_, isDraft):
-            syncEditsBackToEditor()
             StudioAO3LoadCache.shared.clear()
             preview = nil
             onCompleted(isDraft)
             dismiss()
         case let .savedChapterButTotalFailed(message):
-            syncEditsBackToEditor()
             StudioAO3LoadCache.shared.clear()
             chapterSavedTotalRetryPending = true
             pendingTotalToRetry = targetTotal
@@ -544,7 +560,6 @@ extension StudioPostChapterSheet {
             return
         }
         isSubmitting = true
-        defer { isSubmitting = false }
         let authService = auth
         do {
             _ = try await AO3RequestCoordinator.shared.withSlot {
@@ -557,6 +572,7 @@ extension StudioPostChapterSheet {
             onCompleted(false)
             dismiss()
         } catch {
+            isSubmitting = false
             errorMessage = "The work total still couldn't be updated. " + UserFacingError.message(for: error)
         }
     }
