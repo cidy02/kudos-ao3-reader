@@ -21,11 +21,6 @@ enum AccountSheetCopy {
         "Logged in to archiveofourown.org. Kudos keeps the session on this \(deviceName) only."
     }
 
-    static func inboxHeaderAccessibilityLabel(unreadCount: Int?) -> String {
-        guard let unreadCount, unreadCount > 0 else { return "Inbox" }
-        return "Inbox, \(unreadCount.formatted()) unread"
-    }
-
     static func inboxUnreadAccessibilityValue(_ unreadCount: Int?) -> String? {
         guard let unreadCount, unreadCount > 0 else { return nil }
         return "\(unreadCount.formatted()) unread"
@@ -123,7 +118,9 @@ struct AccountSheetRow: View {
         .padding(.vertical, 10)
         .frame(minHeight: 48)
         .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
+        // Ignore the tile, the badge digits and the detail: they repeat the
+        // label and value below ("3" plus "3 unread").
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
         .accessibilityValue(accessibilityValueText)
     }

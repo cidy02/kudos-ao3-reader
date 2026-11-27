@@ -158,9 +158,16 @@ struct AccountInboxPreviewRow: View {
         AO3InboxTimeLabel.label(for: item.postedAgo)
     }
 
+    /// The work name the row prints. A chapter subject ("Chapter 3 of Lantern Season")
+    /// shows the work title; VoiceOver has to say that same name.
+    static func visibleSubject(for item: AO3InboxItem) -> String {
+        let title = item.workTitle
+        return title.isEmpty ? item.subjectTitle : title
+    }
+
     @ViewBuilder
     private var byline: some View {
-        let subject = item.workTitle.isEmpty ? item.subjectTitle : item.workTitle
+        let subject = Self.visibleSubject(for: item)
         if dynamicTypeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.commenterName)
@@ -217,10 +224,11 @@ struct AccountInboxPreviewRow: View {
         timeLabel: AO3InboxTimeLabel.Label?
     ) -> String {
         if item.isUnavailable { return "A comment here is unavailable" }
+        let subject = visibleSubject(for: item)
         let parts: [String?] = [
             item.isUnread ? "Unread" : nil,
             item.commenterName,
-            item.subjectTitle.isEmpty ? nil : "on \(item.subjectTitle)",
+            subject.isEmpty ? nil : "on \(subject)",
             item.excerpt.isEmpty ? nil : item.excerpt,
             timeLabel?.spoken
         ]

@@ -878,8 +878,10 @@ struct AuthorProfileLatestCard: View {
                 parts.append(hits == 1 ? "1 hit" : "\(hits.compactCount) hits")
             }
         case .account:
+            // Blurb `p.datetime` is the revised date, so this stays "Updated".
+            // The account board's "Posted" would name a date the summary does not have.
             if !work.dateUpdated.isEmpty {
-                parts.append("Posted \(WorkStat.displayDate(work.dateUpdated, locale: locale))")
+                parts.append("Updated \(WorkStat.displayDate(work.dateUpdated, locale: locale))")
             }
             if let progress = chapterProgress(from: work.chapters) {
                 parts.append(progress)

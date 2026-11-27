@@ -39,9 +39,6 @@ struct AccountBoardCopyTests {
             AccountSheetCopy.sessionFootnote(deviceName: "iPad")
                 == "Logged in to archiveofourown.org. Kudos keeps the session on this iPad only."
         )
-        #expect(AccountSheetCopy.inboxHeaderAccessibilityLabel(unreadCount: 3) == "Inbox, 3 unread")
-        #expect(AccountSheetCopy.inboxHeaderAccessibilityLabel(unreadCount: 0) == "Inbox")
-        #expect(AccountSheetCopy.inboxHeaderAccessibilityLabel(unreadCount: nil) == "Inbox")
         #expect(AccountSheetCopy.inboxUnreadAccessibilityValue(3) == "3 unread")
         #expect(AccountSheetCopy.inboxUnreadAccessibilityValue(0) == nil)
         #expect(AccountSheetCopy.inboxUnreadAccessibilityValue(nil) == nil)
@@ -110,23 +107,28 @@ struct AccountBoardCopyTests {
         )
     }
 
-    @Test func inboxPreviewAccessibilityUsesFormattedTimeAndUnavailableFallback() {
+    @Test func inboxPreviewAccessibilityNamesTheVisibleWorkAndUnavailableFallback() {
         let item = AO3InboxItem(
             id: 7,
             commenterName: "anne_at_lyme",
             isGuest: false,
-            subjectTitle: "Lantern Season",
+            subjectTitle: "Chapter 3 of Lantern Season",
             excerpt: "Bookmarking for the winter.",
             postedAgo: "2 hours ago",
             isUnread: true,
             isReplied: false,
             canReply: true
         )
-        let timeLabel = AO3InboxTimeLabel.Label(display: "2h", spoken: "2 hours ago")
-        #expect(
-            AccountInboxPreviewRow.previewAccessibilityLabel(for: item, timeLabel: timeLabel)
-                == "Unread. anne_at_lyme. on Lantern Season. Bookmarking for the winter.. 2 hours ago"
-        )
+        let timeLabel = AO3InboxTimeLabel.label(for: item.postedAgo)
+        let label = AccountInboxPreviewRow.previewAccessibilityLabel(for: item, timeLabel: timeLabel)
+        #expect(AccountInboxPreviewRow.visibleSubject(for: item) == "Lantern Season")
+        #expect(label.contains("Unread"))
+        #expect(label.contains("anne_at_lyme"))
+        #expect(label.contains("on Lantern Season"))
+        #expect(!label.contains("Chapter 3"))
+        #expect(label.contains(item.excerpt))
+        #expect(timeLabel?.spoken == "2 hours ago")
+        #expect(label.contains("2 hours ago"))
 
         var unavailable = item
         unavailable.isUnavailable = true
@@ -160,9 +162,10 @@ struct AccountBoardCopyTests {
             hits: 4_108
         )
         #expect(AuthorProfileLatestCard.kicker(for: accountWork) == "Original Work · Chapter 3")
-        let postedDate = WorkStat.displayDate("20 Oct 2026", locale: Self.usLocale)
+        // The blurb date is the revision, so the account line says Updated, not the board's "Posted".
+        let revisedDate = WorkStat.displayDate("20 Oct 2026", locale: Self.usLocale)
         let expectedAccountStats = [
-            "Posted \(postedDate)",
+            "Updated \(revisedDate)",
             "3 of 8",
             "♥ \(412.formatted())",
             "\(4_108.formatted()) hits",
