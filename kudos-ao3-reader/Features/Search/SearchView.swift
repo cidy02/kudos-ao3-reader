@@ -556,7 +556,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                             ),
                             query: filters.query,
                             showsOnAO3Header: hasLibrarySections,
-                            rankedResultCount: showsRankedResults ? results.count : nil
+                            rankedResultCount: showsRankedResults ? results.count : nil,
+                            // Same column order as Sort By. The hero's own default is
+                            // `Sort.allCases`, which lists Creator before the dates.
+                            sortOptions: SearchSortByView.displayedColumns(allowsRelevanceSort: true)
                         )
                         // Its own gutters, like every page header: bareListRow's
                         // card insets on top of them pushed it 26pt right of the cards.
@@ -818,11 +821,11 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             }
         }
         #endif
-        .accessibilityLabel(QueueSourceChecks.savedSearchAccessibilityLabel(
+        .accessibilityLabel(SavedSearchRowPresentation.accessibilityLabel(
             name: saved.name,
-            count: saved.queueLinks.compactMap(\.newResultCount).max(),
-            isLinked: !saved.queueLinks.isEmpty,
-            filters: saved.filters
+            filters: saved.filters,
+            newCount: saved.queueLinks.compactMap(\.newResultCount).max(),
+            isLinked: !saved.queueLinks.isEmpty
         ))
     }
 

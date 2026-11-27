@@ -140,6 +140,13 @@ struct SearchResultsHero: View {
     /// rather than silently dropped, so the card never implies it listed everything.
     private static let visibleChipLimit = 6
 
+    /// The board keeps the query on one line. At an accessibility size a title
+    /// that has a space wraps instead, so it is not clipped. A title with no
+    /// space cannot wrap, and stays on one line at every size.
+    static func titleStaysOnOneLine(_ title: String, isAccessibilitySize: Bool) -> Bool {
+        !isAccessibilitySize || !title.contains(where: \.isWhitespace)
+    }
+
     /// The results page is scoped to whatever was searched, so it takes that
     /// subject's hue — the same one its work cards take, which is what makes a
     /// gold fandom's results page and its rows read as one surface. A free-text
@@ -189,13 +196,16 @@ struct SearchResultsHero: View {
                     }
                 }
             } else {
-                let isOneWord = !displayTitle.contains(where: \.isWhitespace)
+                let staysOnOneLine = Self.titleStaysOnOneLine(
+                    displayTitle,
+                    isAccessibilitySize: dynamicTypeSize.isAccessibilitySize
+                )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(displayTitle)
                         .font(.largeTitle.bold())
                         .foregroundStyle(Color.primary)
-                        .lineLimit(isOneWord ? 1 : nil)
-                        .minimumScaleFactor(isOneWord ? 0.6 : 1.0)
+                        .lineLimit(staysOnOneLine ? 1 : nil)
+                        .minimumScaleFactor(staysOnOneLine ? 0.6 : 1.0)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
 

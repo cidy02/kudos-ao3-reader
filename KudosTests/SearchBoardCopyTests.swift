@@ -9,6 +9,13 @@ import Testing
 struct SearchBoardCopyTests {
     // MARK: - Search (`Search.dc.html`)
 
+    @Test func resultsTitleStaysOneLineExceptWhenAccessibilityTextCanWrap() {
+        #expect(SearchResultsHero.titleStaysOnOneLine("lighthouse", isAccessibilitySize: false))
+        #expect(SearchResultsHero.titleStaysOnOneLine("to the lighthouse", isAccessibilitySize: false))
+        #expect(SearchResultsHero.titleStaysOnOneLine("lighthouse", isAccessibilitySize: true))
+        #expect(!SearchResultsHero.titleStaysOnOneLine("to the lighthouse", isAccessibilitySize: true))
+    }
+
     @Test func fandomRowFormatsCompactCountsAndAccessibleLabels() {
         let lighthouse = AO3Fandom(name: "To the Lighthouse - Virginia Woolf", workCount: 312)
         let single = AO3Fandom(name: "Rare Fandom", workCount: 1)
@@ -223,6 +230,26 @@ struct SearchBoardCopyTests {
         )
 
         #expect(SavedSearchRowPresentation.subtitle(for: AO3SearchFilters()) == nil)
+
+        let spoken = SavedSearchRowPresentation.accessibilityLabel(
+            name: "Holmes casefic under 20k",
+            filters: holmes,
+            newCount: nil,
+            isLinked: false
+        )
+        let subtitle = SavedSearchRowPresentation.subtitle(for: holmes)
+        #expect(spoken.hasPrefix("Open saved search Holmes casefic under 20k"))
+        #expect(subtitle != nil)
+        #expect(spoken.contains(subtitle ?? ""))
+
+        #expect(
+            SavedSearchRowPresentation.accessibilityLabel(
+                name: "Anything",
+                filters: AO3SearchFilters(),
+                newCount: nil,
+                isLinked: false
+            ) == "Open saved search Anything"
+        )
     }
 
     // MARK: - Filter-Tags (`Filter-Tags.dc.html`)

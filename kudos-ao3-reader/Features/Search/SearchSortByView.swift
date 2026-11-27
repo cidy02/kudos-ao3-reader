@@ -175,6 +175,7 @@ struct SearchSortByView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
+                    .accessibilityLabel("Order")
                     .accentFill()
                 }
             }
@@ -188,6 +189,7 @@ struct SearchSortByView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
+                    .accessibilityLabel("Order")
                     .accentFill()
                 }
             }
@@ -200,12 +202,14 @@ struct SearchSortByView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Order")
                     .foregroundStyle(.primary)
+                    .accessibilityHidden(true)
                 control()
             }
         } else {
             HStack(spacing: 12) {
                 Text("Order")
                     .foregroundStyle(.primary)
+                    .accessibilityHidden(true)
                 Spacer(minLength: 8)
                 control()
                     .fixedSize()

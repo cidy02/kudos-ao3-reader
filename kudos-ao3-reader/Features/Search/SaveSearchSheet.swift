@@ -388,6 +388,24 @@ enum SavedSearchRowPresentation {
         guard !parts.isEmpty else { return nil }
         return SaveSearchPresentation.capitalizeFirst(parts.joined(separator: " · "))
     }
+
+    /// The row's visible name, subtitle and new-count badge as one VoiceOver stop.
+    /// The button sets this explicitly, which would otherwise hide the subtitle.
+    static func accessibilityLabel(
+        name: String,
+        filters: AO3SearchFilters,
+        newCount: Int?,
+        isLinked: Bool
+    ) -> String {
+        let open = QueueSourceChecks.savedSearchAccessibilityLabel(
+            name: name,
+            count: newCount,
+            isLinked: isLinked,
+            filters: filters
+        )
+        guard let subtitle = subtitle(for: filters) else { return open }
+        return "\(open), \(subtitle)"
+    }
 }
 
 private struct SaveSearchSummaryChip: View {

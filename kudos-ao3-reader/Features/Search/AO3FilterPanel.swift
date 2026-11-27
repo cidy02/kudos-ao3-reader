@@ -684,31 +684,38 @@ extension AO3FilterPanel {
             systemImage: "checkmark.circle"
         )
         if dynamicTypeSize.isAccessibilitySize {
-            HStack(spacing: 12) {
-                tile
-                Picker("Completion", selection: $filters.completion) {
-                    ForEach(AO3SearchFilters.Completion.allCases) { option in
-                        Text(Self.completionSegmentTitle(option)).tag(option)
-                    }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    tile
+                    Text("Completion")
+                        .foregroundStyle(.primary)
+                        .accessibilityHidden(true)
                 }
+                completionPicker
             }
         } else {
             HStack(spacing: 12) {
                 tile
                 Text("Completion")
                     .foregroundStyle(.primary)
+                    .accessibilityHidden(true)
                 Spacer(minLength: 8)
-                Picker("Completion", selection: $filters.completion) {
-                    ForEach(AO3SearchFilters.Completion.allCases) { option in
-                        Text(Self.completionSegmentTitle(option)).tag(option)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .accentFill()
-                .fixedSize()
+                completionPicker
+                    .pickerStyle(.segmented)
+                    .fixedSize()
             }
         }
+    }
+
+    private var completionPicker: some View {
+        Picker("Completion", selection: $filters.completion) {
+            ForEach(AO3SearchFilters.Completion.allCases) { option in
+                Text(Self.completionSegmentTitle(option)).tag(option)
+            }
+        }
+        .labelsHidden()
+        .accessibilityLabel("Completion")
+        .accentFill()
     }
 
     private var languageRowLabel: some View {

@@ -32,10 +32,7 @@ struct SearchLocalResultsList: View {
                     Label("Search AO3 for “\(query)”", systemImage: "magnifyingglass")
                 }
             } header: {
-                Text("Archive of Our Own")
-                    .font(.footnote)
-                    .foregroundStyle(.secondaryInk)
-                    .textCase(nil)
+                sectionHeader("Archive of Our Own")
             }
 
             if !works.isEmpty {
