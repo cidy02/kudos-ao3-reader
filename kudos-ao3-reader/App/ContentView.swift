@@ -130,6 +130,8 @@ struct ContentView: View {
             .task { if DebugLaunchRoute.opensLogin { showingDebugLogin = true } }
             // `-KudosDebugRoute bugreport`: the shake-to-report sheet, for side-by-side shots.
             .task { if DebugLaunchRoute.value == "bugreport" { showingBugReport = true } }
+            // `-KudosDebugRoute newidea`: the New Idea sheet the App Intent opens (T-576e), for screenshots.
+            .task { if DebugLaunchRoute.value == "newidea" { NewIdeaRequest.shared.request() } }
             #if os(iOS)
             .task { await DebugLaunchRoute.runRotations() }
             #endif
