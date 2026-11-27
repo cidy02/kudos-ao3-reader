@@ -93,6 +93,9 @@ final class LoopbackHTTPServer: @unchecked Sendable {
     private(set) var port: UInt16 = 0
     private var listenFD: Int32 = -1
     private var acceptThread: Thread?
+    /// `stop()` runs on the test's thread while `acceptLoop` reads the descriptor on its own (Thread Sanitizer, 2026-11-27).
+    private let fdLock = NSLock()
+    private var currentFD: Int32 { fdLock.lock(); defer { fdLock.unlock() }; return listenFD }
 
     func start() throws {
         listenFD = socket(AF_INET, SOCK_STREAM, 0)
@@ -133,16 +136,21 @@ final class LoopbackHTTPServer: @unchecked Sendable {
     }
 
     func stop() {
-        if listenFD >= 0 {
-            shutdown(listenFD, SHUT_RDWR)
-            close(listenFD)
-            listenFD = -1
+        fdLock.lock()
+        let fd = listenFD
+        listenFD = -1
+        fdLock.unlock()
+        if fd >= 0 {
+            shutdown(fd, SHUT_RDWR)
+            close(fd)
         }
     }
 
     private func acceptLoop() {
-        while listenFD >= 0 {
-            let client = accept(listenFD, nil, nil)
+        while true {
+            let fd = currentFD
+            guard fd >= 0 else { return }
+            let client = accept(fd, nil, nil)
             if client < 0 { continue }
             handle(client: client)
         }
