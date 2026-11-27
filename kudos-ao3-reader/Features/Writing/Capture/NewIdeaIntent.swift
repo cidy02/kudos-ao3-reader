@@ -10,13 +10,22 @@ final class NewIdeaRequest {
     static let shared = NewIdeaRequest()
 
     var isPresenting = false
+    /// Set by the sheet while it is on screen.
+    var isShowing = false
     private(set) var requestID = 0
 
     init() {}
 
     func request() {
-        isPresenting = true
         requestID &+= 1
+        if isPresenting && !isShowing {
+            // The last request never showed (SwiftUI shows one sheet at a time and another was up): ask again from
+            // scratch rather than stay stuck. A sheet already open, text and all, is left alone.
+            isPresenting = false
+            Task { @MainActor in self.isPresenting = true }
+        } else {
+            isPresenting = true
+        }
     }
 }
 

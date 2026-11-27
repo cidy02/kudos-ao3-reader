@@ -31,16 +31,27 @@ struct NewIdeaHandOffTests {
         NewIdeaRequest.shared.isPresenting = false
     }
 
-    @Test func repeatedRequestAdvancesRequestID() {
+    @Test func repeatedRequestAdvancesRequestID() async {
         let request = NewIdeaRequest()
         let initial = request.requestID
         request.request()
         let first = request.requestID
         request.request()
         let second = request.requestID
-        #expect(request.isPresenting == true)
         #expect(first != initial)
         #expect(second != first)
+        // The first never showed (no sheet in a test), so the second asks again from scratch.
+        #expect(request.isPresenting == false)
+        for _ in 0..<5 { await Task.yield() }
+        #expect(request.isPresenting == true)
+    }
+
+    @Test func aRequestWhileTheSheetIsOpenLeavesItOpen() {
+        let request = NewIdeaRequest()
+        request.request()
+        request.isShowing = true
+        request.request()
+        #expect(request.isPresenting == true, "not closed and reopened, so typed text stays")
     }
 }
 
