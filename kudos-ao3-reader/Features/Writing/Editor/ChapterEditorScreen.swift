@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 /// AO3 action callbacks provided by `AddChapterView` or `WorkEditView`.
@@ -46,6 +47,7 @@ struct ChapterEditorScreen: View {
     @Environment(ThemeManager.self) var theme
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    @AppStorage(StudioWritingGoal.storageKey) var storedDailyGoal: Int = StudioWritingGoal.defaultGoal
 
     @State var documentBridge: ChapterEditorDocumentBridge
     @State var session: DraftSession?
@@ -54,6 +56,7 @@ struct ChapterEditorScreen: View {
     @State var initialSnapshot: InitialSnapshot
     @State var initialWordCount: Int?
     @State var fallbackWordCount: Int?
+    @State var loggedWordsToday: Int?
     @State var showingFormatPanel = false
     @State var pendingAddNoteAfterFormatDismiss = false
     @State var showingLinkSheet = false
@@ -136,6 +139,9 @@ struct ChapterEditorScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             headerView
+            if statusSummary.ao3DraftChipText != nil || statusSummary.chapterWordCountText != nil {
+                EditorTopMetaStrip(summary: statusSummary)
+            }
             noticeBanner
             chapterPageBody
             tkPromptBanner
@@ -150,7 +156,15 @@ struct ChapterEditorScreen: View {
         .navigationBarBackButtonHidden(true)
         #endif
         .task(id: recoveryTarget) {
+            loggedWordsToday = try? await StudioWritingDayLog.shared.words()
             await openDocumentBridge()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: StudioWritingDayLog.didChangeNotification)
+        ) { _ in
+            Task {
+                loggedWordsToday = try? await StudioWritingDayLog.shared.words()
+            }
         }
         .onChange(of: session?.lastPaste) { _, newPaste in
             withAnimationUnlessReduced(.snappy(duration: 0.2), reduceMotion: reduceMotion) {
@@ -425,10 +439,11 @@ extension ChapterEditorScreen {
 
     var statusSummary: EditorStatusSummary {
         let baseline = initialWordCount ?? currentWordCount
-        let wordsToday = max(0, currentWordCount - baseline)
+        let sessionDelta = max(0, currentWordCount - baseline)
+        let wordsToday = max(loggedWordsToday ?? 0, sessionDelta)
         return EditorStatusSummary(
             wordsToday: wordsToday,
-            dailyGoal: nil,
+            dailyGoal: StudioWritingGoal.resolvedGoal(fromStored: storedDailyGoal),
             noteCount: documentBridge.annotationCount,
             tkCount: documentBridge.tkCount,
             syncState: documentBridge.syncState,
@@ -496,13 +511,15 @@ extension ChapterEditorScreen {
     @ViewBuilder
     var noticeBanner: some View {
         VStack(spacing: 0) {
+            if let sprint = sprintController.statusInfo {
+                EditorSprintPill(info: sprint)
+                    .padding(.horizontal, SubjectMetrics.gutter)
+                    .padding(.top, 8)
+            }
+
             if isPosted, hasUnpostedChanges {
-                let bannerFill = appTheme.isDarkFamily
-                    ? Color.subjectAmber.opacity(0.18)
-                    : Color(red: 1.0, green: 0.96, blue: 0.90)
-                let bannerInk = appTheme.isDarkFamily
-                    ? Color.subjectAmber
-                    : Color(red: 0.42, green: 0.23, blue: 0.0)
+                let bannerFill = Color.subjectAmber.opacity(appTheme.isDarkFamily ? 0.18 : 0.14)
+                let bannerInk = appTheme.isDarkFamily ? Color.subjectAmber : AO3TagPalette.teenTextOnLight
                 Text(
                     "Your edits stay on this \(ThisDevice.name) until you choose "
                         + "Update on AO3 in the ••• menu."
@@ -521,7 +538,7 @@ extension ChapterEditorScreen {
                 htmlModeStrip(session: session)
             } else if isRichMode, session?.lastSwitchChanges != nil {
                 HStack {
-                    Button("What changed") { showingWhatChanged = true }
+                    Button("What Changed") { showingWhatChanged = true }
                         .font(.caption.weight(.medium))
                         .buttonStyle(.plain)
                         .foregroundStyle(.accentInk)
@@ -590,7 +607,7 @@ extension ChapterEditorScreen {
             VStack(alignment: .leading, spacing: 8) {
                 chapterHeadingAndBeforeNotes
                     .padding(.horizontal, SubjectMetrics.gutter)
-                    .padding(.top, 10)
+                    .padding(.top, 14)
 
                 embeddedEditorSurface
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -605,18 +622,18 @@ extension ChapterEditorScreen {
     }
 
     var chapterHeadingAndBeforeNotes: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("CHAPTER \(resolvedChapterNumber)")
                     .font(.caption.weight(.bold))
-                    .tracking(1.2)
+                    .tracking(1.4)
                     .foregroundStyle(.secondaryInk)
                 TextField(
                     "Chapter title",
                     text: $chapterTitle,
                     prompt: appTheme.sepiaPrompt("Chapter title")
                 )
-                .font(.system(.title2, design: .serif).weight(.semibold))
+                .font(.system(.title, design: .serif).weight(.semibold))
                 .foregroundStyle(Color.primary)
                 .accessibilityLabel("Chapter title")
             }

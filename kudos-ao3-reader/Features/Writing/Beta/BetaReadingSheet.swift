@@ -172,12 +172,7 @@ struct BetaReadingSheet: View {
     var accentInk: Color { themeManager?.accentInk ?? effectiveTint }
 
     var chapterSubtitle: String {
-        let trimmedTitle = chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let displayTitle = trimmedTitle.isEmpty ? "Untitled" : trimmedTitle
-        if let chapterNumber, chapterNumber > 0 {
-            return "Chapter \(chapterNumber) · \(displayTitle)"
-        }
-        return displayTitle
+        BetaReadingCopy.chapterSubtitle(chapterNumber: chapterNumber, chapterTitle: chapterTitle)
     }
 
     var selectedReturnedCopy: BetaCopyRecord? {
@@ -211,9 +206,11 @@ struct BetaReadingSheet: View {
                     .padding(.bottom, 32)
                 }
                 .background(appTheme.cardBackdrop.ignoresSafeArea())
-                .navigationTitle("Beta Reading")
                 #if os(iOS)
+                .navigationTitle("")
                 .navigationBarTitleDisplayMode(.inline)
+                #else
+                .navigationTitle(BetaReadingCopy.screenTitle)
                 #endif
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
@@ -362,6 +359,11 @@ struct BetaReadingSheet: View {
 extension BetaReadingSheet {
     private var headerBlock: some View {
         VStack(alignment: .leading, spacing: 4) {
+            Text(BetaReadingCopy.screenTitle)
+                .font(.largeTitle.bold())
+                .foregroundStyle(Color.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
             Text(chapterSubtitle)
                 .font(.subheadline)
                 .foregroundStyle(.secondaryInk)
@@ -373,7 +375,7 @@ extension BetaReadingSheet {
         let formats = BetaCopyFormat.availableSendFormats
         let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
         return VStack(alignment: .leading, spacing: 6) {
-            sectionHeader("Send a copy")
+            sectionHeader(BetaReadingCopy.sendSectionTitle)
             VStack(spacing: 0) {
                 ForEach(Array(formats.enumerated()), id: \.element.id) { index, format in
                     if index > 0 {
@@ -383,7 +385,7 @@ extension BetaReadingSheet {
                         activeModal = .namePrompt(format)
                     } label: {
                         HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: 1) {
                                 Text(format.rowTitle)
                                     .font(.body)
                                     .foregroundStyle(Color.primary)
@@ -401,7 +403,7 @@ extension BetaReadingSheet {
                                 .accessibilityHidden(true)
                         }
                         .padding(.horizontal, 14)
-                        .padding(.vertical, 11)
+                        .padding(.vertical, 9)
                         .frame(minHeight: 52)
                         .contentShape(Rectangle())
                     }
@@ -413,7 +415,7 @@ extension BetaReadingSheet {
             .background(appTheme.cardSurface, in: shape)
             .overlay(shape.strokeBorder(appTheme.cardBorder, lineWidth: 0.5))
 
-            Text("Each beta gets their own copy, so their notes don’t sway each other.")
+            Text(BetaReadingCopy.sendSectionFooter)
                 .font(.footnote)
                 .foregroundStyle(.secondaryInk)
                 .padding(.horizontal, 16)
@@ -424,7 +426,7 @@ extension BetaReadingSheet {
     private var withYourBetasSection: some View {
         let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
         return VStack(alignment: .leading, spacing: 6) {
-            sectionHeader("With your betas")
+            sectionHeader(BetaReadingCopy.withYourBetasSectionTitle)
             VStack(spacing: 0) {
                 ForEach(Array(copies.enumerated()), id: \.element.id) { index, copy in
                     if index > 0 {
@@ -441,7 +443,7 @@ extension BetaReadingSheet {
     private func betaCopyRow(_ copy: BetaCopyRecord) -> some View {
         let isSelected = selectedReturnedCopy?.id == copy.id && copy.returnedAt != nil
         let dateText = ChapterEditorAnnotationListBuilder.shortDateString(copy.sentAt)
-        let detail = "\(copy.format.sentDetailLabel) · sent \(dateText)"
+        let detail = BetaReadingCopy.sentCopyDetail(format: copy.format, dateText: dateText)
         return VStack(alignment: .leading, spacing: 8) {
             Button {
                 handleCopyRowTap(copy)
@@ -474,7 +476,7 @@ extension BetaReadingSheet {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(isSelected ? effectiveTint.opacity(appTheme.isDarkFamily ? 0.14 : 0.06) : Color.clear)
         .contextMenu {
@@ -519,7 +521,7 @@ extension BetaReadingSheet {
             .contentShape(Rectangle())
         } else {
             HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(copy.betaName)
                         .font(.body)
                         .foregroundStyle(Color.primary)
@@ -537,7 +539,7 @@ extension BetaReadingSheet {
 
     private func reviewSection(for copy: BetaCopyRecord) -> some View {
         let cards = copy.orderedReviewCards
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 8) {
             sectionHeader(copy.reviewSectionTitle)
 
             if let bulkStatusMessage {
@@ -546,7 +548,7 @@ extension BetaReadingSheet {
 
             if cards.isEmpty {
                 let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                Text("\(copy.betaName)’s copy matched what you sent, with no suggestions or comments.")
+                Text(BetaReadingCopy.emptyComparisonMessage(betaName: copy.betaName))
                     .font(.subheadline)
                     .foregroundStyle(.secondaryInk)
                     .padding(16)
@@ -586,20 +588,24 @@ extension BetaReadingSheet {
                 }
             }
 
-            if copy.remainingCount > 0 {
-                Button {
-                    showingReviewAllDialog = true
-                } label: {
-                    Text("Review All \(copy.remainingCount)")
-                        .frame(maxWidth: .infinity)
+            VStack(spacing: 10) {
+                if copy.remainingCount > 0 {
+                    Button {
+                        showingReviewAllDialog = true
+                    } label: {
+                        Text(BetaReadingCopy.reviewAllButtonTitle(remainingCount: copy.remainingCount))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.kudosPrimaryConfirm)
+                    .disabled(isWorking)
+                    .accessibilityLabel(
+                        "Review all \(copy.remainingCount.formatted()) remaining items from \(copy.betaName)"
+                    )
                 }
-                .buttonStyle(.kudosPrimaryConfirm)
-                .disabled(isWorking)
-                .accessibilityLabel("Review all \(copy.remainingCount) remaining items from \(copy.betaName)")
-                .padding(.top, 6)
-            }
 
-            footerPromiseText
+                footerPromiseText
+            }
+            .padding(.top, 12)
         }
     }
 
@@ -635,15 +641,12 @@ extension BetaReadingSheet {
     }
 
     private var footerPromiseText: some View {
-        Text(
-            "Kudos saves a version of the chapter before anything comes in. "
-                + "Nothing changes until you accept it."
-        )
-        .font(.footnote)
-        .foregroundStyle(.secondaryInk)
-        .multilineTextAlignment(.center)
-        .frame(maxWidth: .infinity)
-        .fixedSize(horizontal: false, vertical: true)
+        Text(BetaReadingCopy.footerPromise)
+            .font(.footnote)
+            .foregroundStyle(.secondaryInk)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func sectionHeader(_ title: String) -> some View {

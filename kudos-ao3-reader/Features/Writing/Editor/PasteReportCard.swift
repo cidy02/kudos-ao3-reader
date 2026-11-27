@@ -9,6 +9,11 @@ nonisolated struct PasteChangeItem: Identifiable, Equatable, Hashable, Sendable 
     let count: Int
     let examples: [String]
 
+    var hasCount: Bool {
+        let occurrences = count
+        return occurrences > 0
+    }
+
     init(id: String? = nil, label: String, count: Int, examples: [String] = []) {
         self.id = id ?? label
         self.label = label
@@ -70,7 +75,7 @@ nonisolated struct PasteLossReport: Equatable, Hashable, Sendable {
 
     /// Natural-language summary of removed elements/styles AO3 can't show.
     var removedSummary: String? {
-        let nonZero = removed.filter { $0.count > 0 }
+        let nonZero = removed.filter(\.hasCount)
         guard !nonZero.isEmpty else { return nil }
         if nonZero.count == 1, let only = nonZero.first {
             return "Removed \(only.count.formatted()) \(only.label) AO3 can’t show."
@@ -118,7 +123,7 @@ struct PasteReportCard: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             headerRow
             actionRow
         }
@@ -139,7 +144,7 @@ struct PasteReportCard: View {
     }
 
     private var headerRow: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: dynamicTypeSize.isAccessibilitySize ? .top : .center, spacing: 10) {
             statusIcon
             VStack(alignment: .leading, spacing: 2) {
                 Text(report.headline)
@@ -184,9 +189,9 @@ struct PasteReportCard: View {
 
     private var actionRow: some View {
         FlowLayout(spacing: 8, rowSpacing: 8) {
-            pillButton(title: "Undo Paste", accessibilityLabel: "Undo paste", action: onUndoPaste)
+            pillButton(title: "Undo Paste", accessibilityLabel: "Undo Paste", action: onUndoPaste)
             if report.hasChangeDetails || onWhatChanged != nil {
-                pillButton(title: "What Changed", accessibilityLabel: "What changed") {
+                pillButton(title: "What Changed", accessibilityLabel: "What Changed") {
                     if let onWhatChanged {
                         onWhatChanged()
                     } else {
@@ -246,7 +251,7 @@ struct PasteReportDetailsSheet: View {
                             changeRow(
                                 item,
                                 symbol: "minus.circle.fill",
-                                tint: appTheme.isDarkFamily ? .subjectAmber : Color(red: 0.68, green: 0.40, blue: 0.0)
+                                tint: appTheme.isDarkFamily ? .subjectAmber : AO3TagPalette.teenTextOnLight
                             )
                         }
                     } header: {
@@ -295,7 +300,7 @@ struct PasteReportDetailsSheet: View {
                     .font(.body)
                     .foregroundStyle(Color.primary)
                 Spacer(minLength: 8)
-                if item.count > 0 {
+                if item.hasCount {
                     Text("×\(item.count.formatted())")
                         .font(.footnote.weight(.medium))
                         .monospacedDigit()
