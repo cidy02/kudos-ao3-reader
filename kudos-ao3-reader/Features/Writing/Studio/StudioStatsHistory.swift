@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// The figures Writing Studio's Stats tracks, in the order the board lists them.
 /// The raw value is the key a snapshot saves them under, so don't rename a case.
@@ -98,6 +99,9 @@ nonisolated struct StudioStatsHistoryStore: Sendable {
     }
 
     private let url: URL
+    /// One lock for every account: two year pages finishing together must not
+    /// each write a file that is missing the other's snapshot.
+    private static let writeLock = OSAllocatedUnfairLock(initialState: ())
 
     /// `directory` is for tests; the app uses Application Support/StudioStats.
     init(account: String, directory: URL? = nil) {
@@ -116,38 +120,63 @@ nonisolated struct StudioStatsHistoryStore: Sendable {
     func record(
         _ stats: AO3UserStats, year: Int?, at date: Date = Date(), calendar: Calendar = .current
     ) -> [StudioStatsSnapshot] {
-        let existing = read()
-        if existing == nil {
-            let aside = url.appendingPathExtension("unreadable")
-            try? FileManager.default.removeItem(at: aside)
-            try? FileManager.default.moveItem(at: url, to: aside)
+        Self.writeLock.withLock { _ in
+            let existing = read()
+            let snapshot = StudioStatsSnapshot(stats: stats, year: year, at: date)
+            // A file that cannot be decoded is moved aside. If that move fails,
+            // leave the bytes where they are instead of writing over them.
+            if existing == nil, !preserveUnreadableFile() {
+                return [snapshot]
+            }
+            let merged = Self.merging(existing ?? [], adding: snapshot, calendar: calendar)
+            // Best effort: a failed write still lets this screen draw from memory.
+            do {
+                try FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(), withIntermediateDirectories: true
+                )
+                try Self.encoder.encode(File(snapshots: merged)).write(to: url, options: .atomic)
+            } catch {}
+            return merged
         }
-        let merged = Self.merging(
-            existing ?? [],
-            adding: StudioStatsSnapshot(stats: stats, year: year, at: date),
-            calendar: calendar
-        )
-        // Best effort: a failed write still lets this screen draw from memory.
-        do {
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(), withIntermediateDirectories: true
-            )
-            try Self.encoder.encode(File(snapshots: merged)).write(to: url, options: .atomic)
-        } catch {}
-        return merged
     }
 
-    /// One snapshot per day and year filter (the later look wins, totals only
-    /// grow), nothing older than `keptDays` before the new one, oldest first.
+    /// Moves a corrupt file to `.unreadable`. False when the bytes could not be kept.
+    private func preserveUnreadableFile() -> Bool {
+        let aside = url.appendingPathExtension("unreadable")
+        do {
+            if FileManager.default.fileExists(atPath: aside.path) {
+                try FileManager.default.removeItem(at: aside)
+            }
+            try FileManager.default.moveItem(at: url, to: aside)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// One snapshot per local calendar day and year filter: the later look
+    /// replaces that day, even when a total fell (a work was deleted).
+    /// Anything before the calendar day `keptDays` earlier is dropped.
     static func merging(
         _ existing: [StudioStatsSnapshot], adding new: StudioStatsSnapshot, calendar: Calendar
     ) -> [StudioStatsSnapshot] {
-        let cutoff = calendar.date(byAdding: .day, value: -keptDays, to: new.date) ?? .distantPast
-        var kept = existing.filter {
-            $0.date >= cutoff
-                && !($0.year == new.year && calendar.isDate($0.date, inSameDayAs: new.date))
+        // Start of that day, not the same clock time: an evening look must not
+        // drop the morning of the day a year ago.
+        let cutoff = calendar.date(
+            byAdding: .day, value: -keptDays, to: calendar.startOfDay(for: new.date)
+        ) ?? .distantPast
+        var kept = existing.filter { $0.date >= cutoff }
+        // Two loads can finish out of order. The later look wins; an earlier
+        // one must not replace the snapshot this day already has.
+        let newerAlreadyKept = kept.contains {
+            $0.year == new.year && calendar.isDate($0.date, inSameDayAs: new.date) && $0.date > new.date
         }
-        kept.append(new)
+        if !newerAlreadyKept {
+            kept.removeAll {
+                $0.year == new.year && calendar.isDate($0.date, inSameDayAs: new.date)
+            }
+            kept.append(new)
+        }
         return kept.sorted { $0.date < $1.date }
     }
 
@@ -171,6 +200,81 @@ nonisolated struct StudioStatsHistoryStore: Sendable {
     private static func fileName(for account: String) -> String {
         let name = String(account.lowercased().map { $0.isLetter || $0.isNumber || $0 == "_" ? $0 : "-" })
         return name.isEmpty ? "account" : name
+    }
+}
+
+/// Whether a stats page already in memory may be shown again without asking AO3.
+/// Fifteen minutes, the same window the Writing tab uses for its own pages.
+enum StudioStatsFreshness {
+    static let window: TimeInterval = 15 * 60
+
+    /// `force` is a pull to refresh or Try Again. A missing load is always fetched.
+    /// A load exactly `window` old is stale. The first look of a new local day
+    /// is fetched too, so that day gets its snapshot even inside the window.
+    static func shouldFetch(
+        fetchedAt: Date?, force: Bool, now: Date = Date(),
+        calendar: Calendar = .current, lastSnapshot: Date? = nil
+    ) -> Bool {
+        if force { return true }
+        if let lastSnapshot, !calendar.isDate(lastSnapshot, inSameDayAs: now) { return true }
+        guard let fetchedAt else { return true }
+        return now.timeIntervalSince(fetchedAt) >= window
+    }
+}
+
+/// The last stats page for each account, sign-in, and year filter. Memory only:
+/// it holds titles, so it is never written to the history file. A new sign-in
+/// drops the previous account's pages.
+@MainActor
+enum StudioStatsPageCache {
+    struct Key: Hashable, Sendable {
+        var account: String
+        var sessionGeneration: Int
+        var year: Int?
+    }
+
+    struct Entry {
+        var stats: AO3UserStats
+        var fetchedAt: Date
+    }
+
+    private static var entries: [Key: Entry] = [:]
+    /// The year chip the reader picked, per account. The Stats view is created
+    /// again each time the section is shown, and forgetting this would load
+    /// All Years and ask AO3. Nil means All Years. Not written to disk.
+    private static var selectedYears: [String: Int] = [:]
+
+    static func entry(for key: Key) -> Entry? { entries[normalized(key)] }
+
+    static func store(_ stats: AO3UserStats, for key: Key, at date: Date) {
+        let key = normalized(key)
+        entries = entries.filter {
+            $0.key.account == key.account && $0.key.sessionGeneration == key.sessionGeneration
+        }
+        selectedYears = selectedYears.filter { $0.key == key.account }
+        entries[key] = Entry(stats: stats, fetchedAt: date)
+    }
+
+    static func removeAll() {
+        entries.removeAll()
+        selectedYears.removeAll()
+    }
+
+    static func rememberYear(_ year: Int?, account: String) {
+        let account = account.lowercased()
+        if let year {
+            selectedYears[account] = year
+        } else {
+            selectedYears.removeValue(forKey: account)
+        }
+    }
+
+    static func rememberedYear(account: String) -> Int? {
+        selectedYears[account.lowercased()]
+    }
+
+    private static func normalized(_ key: Key) -> Key {
+        Key(account: key.account.lowercased(), sessionGeneration: key.sessionGeneration, year: key.year)
     }
 }
 
@@ -262,6 +366,21 @@ nonisolated enum StudioStatsHistory {
         }
         let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone).month(.abbreviated).day()
         return "Charts begin the week of \(begin.formatted(style))."
+    }
+
+    /// VoiceOver text for the bar chart: every week's value, not only the latest.
+    static func spokenChart(_ weeks: [StudioStatsWeek], best: StudioStatsWeek?) -> String {
+        guard !weeks.isEmpty else { return "Kudos per week" }
+        var parts = ["Kudos per week for \(weeks.count) \(weeks.count == 1 ? "week" : "weeks")"]
+        for week in weeks {
+            var piece = "Week of \(week.start.studioStatsShort), \(week.gain.formatted())"
+            if week.isEstimate { piece += ", estimated" }
+            parts.append(piece)
+        }
+        if let best {
+            parts.append("Best \(best.gain.formatted()), the week of \(best.start.studioStatsShort)")
+        }
+        return parts.joined(separator: ". ")
     }
 
     private static func weeklyEnds(

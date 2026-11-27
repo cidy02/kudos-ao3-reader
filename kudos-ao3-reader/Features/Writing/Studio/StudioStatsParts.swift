@@ -123,7 +123,7 @@ struct StudioStatsWorksTable: View {
                 .frame(minHeight: 44, alignment: .leading)
         }
         .accessibilityLabel("Sort works")
-        .accessibilityValue(Self.columns.first { $0.sort == sort }?.title ?? "Kudos")
+        .accessibilityValue(Self.columns.first { $0.sort == sort }?.metric.title ?? "Kudos")
     }
 
     private var headerRow: some View {
@@ -143,7 +143,7 @@ struct StudioStatsWorksTable: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Sort by \(column.title)")
+                .accessibilityLabel("Sort by \(column.metric.title)")
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }

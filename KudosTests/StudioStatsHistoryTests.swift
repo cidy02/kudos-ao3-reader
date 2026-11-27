@@ -68,16 +68,59 @@ struct StudioStatsHistoryTests {
     @Test func oneSnapshotADayAndTheLaterLookWins() throws {
         try withStore { folder in
             let store = StudioStatsHistoryStore(account: "a", directory: folder)
-            store.record(page(kudos: 10, works: []), year: nil, at: date(11, 26, hour: 8), calendar: Self.calendar)
-            store.record(page(kudos: 12, works: []), year: nil, at: date(11, 26, hour: 20), calendar: Self.calendar)
+            store.record(
+                page(kudos: 10, works: [work(1, kudos: 10)]),
+                year: nil, at: date(11, 26, hour: 8), calendar: Self.calendar
+            )
+            // Later the same day, and lower: a deleted work must not be kept by taking the max.
+            store.record(
+                page(kudos: 4, works: [work(2, kudos: 4)]),
+                year: nil, at: date(11, 26, hour: 20), calendar: Self.calendar
+            )
             let sameDay = store.load()
             #expect(sameDay.count == 1)
-            #expect(sameDay.first?.total(.kudos) == 12)
+            #expect(sameDay.first?.total(.kudos) == 4)
+            #expect(sameDay.first?.works.map(\.id) == [2])
+
+            // A slower load that started earlier must not put the deleted work back.
+            let stale = store.record(
+                page(kudos: 10, works: [work(1, kudos: 10)]),
+                year: nil, at: date(11, 26, hour: 8), calendar: Self.calendar
+            )
+            #expect(stale.count == 1)
+            #expect(stale.first?.total(.kudos) == 4)
+            #expect(stale.first?.works.map(\.id) == [2])
+            // A different year filter the same day is still its own snapshot.
+            store.record(page(kudos: 1, works: []), year: 2024, at: date(11, 26, hour: 7), calendar: Self.calendar)
 
             store.record(page(kudos: 15, works: []), year: nil, at: date(11, 27), calendar: Self.calendar)
             // Another year filter on the same day is its own history.
             store.record(page(kudos: 3, works: []), year: 2025, at: date(11, 27), calendar: Self.calendar)
-            #expect(store.load().count == 3)
+            let saved = store.load()
+            #expect(saved.count == 4)
+            #expect(saved.first { $0.year == nil && Self.calendar.component(.day, from: $0.date) == 26 }?.total(.kudos) == 4)
+        }
+    }
+
+    @Test func oneSnapshotFollowsTheLocalDayNotUTC() throws {
+        var pacific = Calendar(identifier: .gregorian)
+        pacific.timeZone = TimeZone(identifier: "America/Los_Angeles") ?? .gmt
+        pacific.firstWeekday = 2
+        pacific.minimumDaysInFirstWeek = 4
+        func local(_ day: Int, _ hour: Int) -> Date {
+            pacific.date(from: DateComponents(year: 2026, month: 11, day: day, hour: hour)) ?? .distantPast
+        }
+        try withStore { folder in
+            let store = StudioStatsHistoryStore(account: "a", directory: folder)
+            // 01:00 and 23:00 Pacific are one local day and two UTC days.
+            store.record(page(kudos: 1, works: []), year: nil, at: local(26, 1), calendar: pacific)
+            store.record(page(kudos: 2, works: []), year: nil, at: local(26, 23), calendar: pacific)
+            let sameEvening = store.load()
+            #expect(sameEvening.count == 1)
+            #expect(sameEvening.first?.total(.kudos) == 2)
+            // Midnight the next Pacific morning is the next snapshot.
+            store.record(page(kudos: 3, works: []), year: nil, at: local(27, 0), calendar: pacific)
+            #expect(store.load().count == 2)
         }
     }
 
@@ -90,6 +133,20 @@ struct StudioStatsHistoryTests {
         let today = StudioStatsSnapshot(date: now, year: nil, totals: [:], works: [])
         let kept = StudioStatsHistoryStore.merging(old, adding: today, calendar: Self.calendar)
         #expect(kept.map(\.date) == [ago(365), ago(10), now])
+
+        // An evening look must still keep the morning of the day a year ago.
+        let evening = date(11, 26, hour: 22)
+        let morningAYearAgo = Self.calendar.date(byAdding: .day, value: -365, to: date(11, 26, hour: 1)) ?? evening
+        let dayBeforeThat = Self.calendar.date(byAdding: .day, value: -366, to: evening) ?? evening
+        let acrossTheDay = StudioStatsHistoryStore.merging(
+            [
+                StudioStatsSnapshot(date: morningAYearAgo, year: nil, totals: [:], works: []),
+                StudioStatsSnapshot(date: dayBeforeThat, year: nil, totals: [:], works: [])
+            ],
+            adding: StudioStatsSnapshot(date: evening, year: nil, totals: [:], works: []),
+            calendar: Self.calendar
+        )
+        #expect(acrossTheDay.map(\.date) == [morningAYearAgo, evening])
     }
 
     @Test func anUnreadableFileIsSetAsideNotOverwritten() throws {
@@ -102,6 +159,20 @@ struct StudioStatsHistoryTests {
             #expect(result.count == 1)
             let aside = try String(contentsOf: file.appendingPathExtension("unreadable"), encoding: .utf8)
             #expect(aside == "not json")
+            let reloaded = StudioStatsHistoryStore(account: "a", directory: folder).load()
+            #expect(reloaded.count == 1)
+            #expect(reloaded.first?.total(.kudos) == 1)
+        }
+    }
+
+    @Test func aMissingFileIsEmptyHistory() throws {
+        try withStore { folder in
+            let store = StudioStatsHistoryStore(account: "a", directory: folder)
+            #expect(store.load().isEmpty)
+            store.record(page(kudos: 2, works: []), year: nil, at: date(11, 26), calendar: Self.calendar)
+            #expect(store.load().count == 1)
+            let aside = folder.appendingPathComponent("a.json").appendingPathExtension("unreadable")
+            #expect(!FileManager.default.fileExists(atPath: aside.path))
         }
     }
 
@@ -122,6 +193,16 @@ struct StudioStatsHistoryTests {
         let best = StudioStatsHistory.best(weeks)
         #expect(best?.gain == 65)
         #expect(best?.start == date(11, 23, hour: 0))
+        // The same gain later in the chart is the one that is named.
+        let tied = weeks + [StudioStatsWeek(start: date(11, 30, hour: 0), gain: 65, isEstimate: false)]
+        #expect(StudioStatsHistory.best(tied)?.start == date(11, 30, hour: 0))
+    }
+
+    @Test func midnightSplitsAWeek() {
+        let snaps = [snapshot(11, 29, kudos: 100, hour: 23), snapshot(11, 30, kudos: 110, hour: 1)]
+        let weeks = StudioStatsHistory.weeks(snaps, metric: .kudos, calendar: Self.calendar)
+        #expect(weeks.map(\.gain) == [10])
+        #expect(weeks.first?.start == date(11, 30, hour: 0))
     }
 
     @Test func aWeekNobodyLookedIsSpreadAndMarkedAnEstimate() {
@@ -149,6 +230,13 @@ struct StudioStatsHistoryTests {
         #expect(baseline?.total(.kudos) == 130)
         #expect(StudioStatsHistory.change(150, since: baseline?.total(.kudos)) == 20)
         #expect(StudioStatsHistory.change(150, since: nil) == nil)
+        // Nov 18 is a day from the target; Nov 25 is the latest look and six days off.
+        // The latest look must not win just by being latest.
+        let nearerTheWeek = [snapshot(11, 18, kudos: 100), snapshot(11, 25, kudos: 500)]
+        #expect(StudioStatsHistory.baseline(nearerTheWeek, now: now, calendar: Self.calendar)?.total(.kudos) == 100)
+        // The same distance either side of the target keeps the older look.
+        let tied = [snapshot(11, 16, kudos: 40), snapshot(11, 22, kudos: 80)]
+        #expect(StudioStatsHistory.baseline(tied, now: now, calendar: Self.calendar)?.total(.kudos) == 40)
     }
 
     @Test func aShortHistoryUsesItsEarliestEarlierDayAndTodayIsNeverTheBaseline() {
@@ -210,5 +298,66 @@ struct StudioStatsHistoryTests {
         let message = StudioStatsHistory.emptyChartMessage(first, calendar: Self.calendar)
         #expect(message.hasPrefix("Charts begin the week of"))
         #expect(message.contains("30"))
+    }
+
+    @Test func theChartSaysEveryWeeksValue() {
+        let snaps = [snapshot(11, 3, kudos: 100), snapshot(11, 10, kudos: 120), snapshot(11, 17, kudos: 125)]
+        let weeks = StudioStatsHistory.weeks(snaps, metric: .kudos, calendar: Self.calendar)
+        let text = StudioStatsHistory.spokenChart(weeks, best: StudioStatsHistory.best(weeks))
+        #expect(text.contains(", 20"))
+        #expect(text.contains(", 5"))
+        #expect(!text.contains("estimated"))
+        let gap = StudioStatsHistory.weeks(
+            [snapshot(11, 3, kudos: 100), snapshot(11, 24, kudos: 131)],
+            metric: .kudos, calendar: Self.calendar
+        )
+        let estimated = StudioStatsHistory.spokenChart(gap, best: StudioStatsHistory.best(gap))
+        #expect(estimated.contains(", 10"))
+        #expect(estimated.contains(", 11"))
+        #expect(estimated.contains("estimated"))
+    }
+
+    // MARK: Asking AO3 again
+
+    @Test func aPageInsideTheWindowIsNotFetchedUnlessTheDayChangedOrTheReaderAsked() {
+        let now = date(11, 26)
+        let fresh = now.addingTimeInterval(-(15 * 60 - 1))
+        let due = now.addingTimeInterval(-(15 * 60))
+        #expect(!StudioStatsFreshness.shouldFetch(fetchedAt: fresh, force: false, now: now, calendar: Self.calendar, lastSnapshot: now))
+        #expect(StudioStatsFreshness.shouldFetch(fetchedAt: due, force: false, now: now, calendar: Self.calendar, lastSnapshot: now))
+        #expect(StudioStatsFreshness.shouldFetch(fetchedAt: fresh, force: true, now: now, calendar: Self.calendar, lastSnapshot: now))
+        #expect(StudioStatsFreshness.shouldFetch(fetchedAt: nil, force: false, now: now, calendar: Self.calendar, lastSnapshot: now))
+        let yesterday = Self.calendar.date(byAdding: .day, value: -1, to: now) ?? now
+        #expect(StudioStatsFreshness.shouldFetch(
+            fetchedAt: fresh, force: false, now: now, calendar: Self.calendar, lastSnapshot: yesterday
+        ))
+    }
+
+    @Test func aCachedPageIsKeptForThatSignInAndYearOnly() {
+        StudioStatsPageCache.removeAll()
+        defer { StudioStatsPageCache.removeAll() }
+        let stats = page(kudos: 9, works: [])
+        let now = date(11, 26)
+        let key = StudioStatsPageCache.Key(account: "Salt", sessionGeneration: 4, year: nil)
+        StudioStatsPageCache.store(stats, for: key, at: now)
+        #expect(StudioStatsPageCache.entry(for: key)?.stats.kudos == 9)
+        #expect(StudioStatsPageCache.entry(for: StudioStatsPageCache.Key(account: "salt", sessionGeneration: 4, year: 2026)) == nil)
+        #expect(StudioStatsPageCache.entry(for: StudioStatsPageCache.Key(account: "Salt", sessionGeneration: 9, year: nil)) == nil)
+        StudioStatsPageCache.rememberYear(2025, account: "Salt")
+        // Saving this account's page must keep the year the reader picked.
+        StudioStatsPageCache.store(stats, for: key, at: now)
+        #expect(StudioStatsPageCache.rememberedYear(account: "salt") == 2025)
+        StudioStatsPageCache.store(
+            stats,
+            for: StudioStatsPageCache.Key(account: "other", sessionGeneration: 5, year: nil),
+            at: now
+        )
+        #expect(StudioStatsPageCache.entry(for: key) == nil)
+        // A different account's page drops the previous account's year filter too.
+        #expect(StudioStatsPageCache.rememberedYear(account: "Salt") == nil)
+        StudioStatsPageCache.rememberYear(2024, account: "other")
+        #expect(StudioStatsPageCache.rememberedYear(account: "other") == 2024)
+        StudioStatsPageCache.rememberYear(nil, account: "other")
+        #expect(StudioStatsPageCache.rememberedYear(account: "Other") == nil)
     }
 }
