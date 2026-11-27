@@ -4,11 +4,13 @@ import type { Command, Transaction } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { closeHistory, history, isHistoryTransaction, redoDepth, undoDepth } from 'prosemirror-history';
 import { keymap } from 'prosemirror-keymap';
-import { baseKeymap } from 'prosemirror-commands';
+import { baseKeymap, chainCommands } from 'prosemirror-commands';
+import { Mark } from 'prosemirror-model';
 import { liftListItem, sinkListItem, splitListItem } from 'prosemirror-schema-list';
 import { activate as mapCaret, lint, load, schema } from '../index.ts';
 import type { LoadResult, LossReport, Variant } from '../index.ts';
 import * as cmd from './commands.ts';
+import { decodeText, refCovering } from '../decode.ts';
 import type { FormatAlignment, FormatBlock, FormatDirection, FormatMark, SceneBreakStyle } from './commands.ts';
 import { IncrementalSerializer } from './incremental.ts';
 import { insertPaste, pasteContent, sliceHtml, sliceText } from './paste.ts';
@@ -74,6 +76,12 @@ export type BridgeErrorShape = { code: string; message: string };
 export const bridgeError = (code: string, message: string): BridgeErrorShape => ({ code, message });
 
 export const COMPOSITION_CAP_MS = 500;
+
+/** Where the character starting at `at` in `html` ends: past a whole `&…;` reference, or a surrogate pair. */
+function charEnd(html: string, at: number): number {
+  if (html[at] === '&') { const semi = html.indexOf(';', at); return semi > at && semi - at <= 12 ? semi + 1 : at + 1; }
+  return at + ((html.codePointAt(at) ?? 0) > 0xffff ? 2 : 1);
+}
 
 export class Editor {
   readonly view: EditorView;
@@ -217,8 +225,10 @@ export class Editor {
     const paste = tr.getMeta('kudosPaste') as PasteInfo | undefined;
     if (paste) this.hooks.pasted(paste);
     if (state.doc !== before.doc && !paste) {
+      // only when the TK is newly finished: an edit elsewhere while the caret still sits after it is not a new one
       const tk = typedTK(state);
-      if (tk) this.hooks.tkTyped(this.rangeOffsets(tk.from, tk.to));
+      const was = typedTK(before);
+      if (tk && !(was && tr.mapping.map(was.to) === tk.to)) this.hooks.tkTyped(this.rangeOffsets(tk.from, tk.to));
     }
     const word = this.frozen ? null : wordAtCaret(state);
     if (word !== this.lastWord) { this.lastWord = word; this.hooks.word(word); }
@@ -431,9 +441,25 @@ export class Editor {
     const doc = this.view.state.doc;
     let html: string, start: number, last: number;
     if (this.loaded && (doc === this.loaded.doc || (!this.lastSnapshot || this.lastSnapshot.original) && doc.eq(this.loaded.doc))) {
-      html = this.loaded.sources.original;
-      start = this.loaded.sources.offsetForPos(from) ?? 0;
-      last = this.loaded.sources.offsetForPos(Math.max(from, to - 1)) ?? start;
+      const loaded = this.loaded;
+      html = loaded.sources.original;
+      const src = html;
+      const isSpace = (p: number) => /^[ \t\n\r\f]$/.test(doc.textBetween(p, Math.min(p + 1, doc.content.size), undefined, '\ufffc'));
+      // A space isn't aligned (offsetForPos gives the next word's first letter): count on from the character before
+      // it in the same block, when the source between holds only spaces.
+      const startOf = (p: number): number | null => {
+        if (!isSpace(p)) return loaded.sources.offsetForPos(p) ?? null;
+        for (let q = p - 1; q >= doc.resolve(p).start(); q--) {
+          if (isSpace(q)) continue;
+          const s = loaded.sources.offsetForPos(q);
+          if (s == null) return null;
+          const o = charEnd(src, s) + (p - q - 1);
+          return /^[ \t\n\r\f]+$/.test(src.slice(charEnd(src, s), o + 1)) ? o : null;
+        }
+        return null;
+      };
+      start = startOf(from) ?? loaded.sources.offsetForPos(from) ?? 0;
+      last = startOf(Math.max(from, to - 1)) ?? loaded.sources.offsetForPos(Math.max(from, to - 1)) ?? start;
     } else {
       const a = this.serializer.serialize(doc, from);
       html = a.html;
@@ -441,10 +467,7 @@ export class Editor {
       last = this.serializer.serialize(doc, Math.max(from, to - 1)).headOffset ?? start;
     }
     if (to <= from) return { from: start, to: start };
-    let end: number;
-    if (html[last] === '&') { const semi = html.indexOf(';', last); end = semi > last && semi - last <= 12 ? semi + 1 : last + 1; }
-    else end = last + ((html.codePointAt(last) ?? 0) > 0xffff ? 2 : 1);
-    return { from: start, to: Math.max(end, start) };
+    return { from: start, to: Math.max(charEnd(html, last), start) };
   }
 
   /** The document position for an offset in the text HTML mode holds (the loaded text, or the last snapshot). */
@@ -464,10 +487,13 @@ export class Editor {
   setAnnotations(items: { id: string; kind: AnnotationKind; from: number; to: number }[]): { placed: { id: string; found: boolean }[] } {
     if (!this.loaded) throw bridgeError('not-loaded', 'setAnnotations before load');
     const size = this.view.state.doc.content.size;
+    const source = this.textForOffsets();
+    const clamp = (p: number, lo = 0) => Math.min(Math.max(p, lo), size);
     const placed = items.map((a) => {
-      const from = Math.min(Math.max(this.posForOffset(a.from), 0), size);
-      // the end through its last character (see rangeOffsets)
-      const to = a.to > a.from ? Math.min(Math.max(this.posForOffset(a.to - 1) + 1, from), size) : from;
+      const from = clamp(this.posAtOffset(source, a.from) ?? this.posForOffset(a.from));
+      // the end from the character at `to` (or the last one before it): not `posForOffset(to - 1) + 1`, which
+      // overshoots when the last character is a reference's `;` or a space, neither of which the source map aligns
+      const to = a.to > a.from ? clamp(this.posAtOffset(source, a.to) ?? this.posForOffset(a.to - 1) + 1, from) : from;
       return { id: a.id, kind: a.kind, from, to };
     });
     this.view.dispatch(setAnnotations(this.view.state, placed));
@@ -542,9 +568,76 @@ export class Editor {
       case 'moveCaret': return cmd.moveCaret(num('by') ?? 0);
       case 'insertLineBreak': return cmd.hardBreak;
       case 'completeWord': return cmd.completeWord(str('text'));
+      case 'moveWord': return cmd.moveWord(num('by') ?? 0, a.extend === true);
+      case 'insertPhrase': return str('text').length <= 10_000 ? cmd.insertPhrase(str('text')) : null;
+      case 'newParagraph': return chainCommands(splitListItem(schema.nodes.list_item!), baseKeymap.Enter!);
+      case 'replaceText': return this.replaceText(num('from'), num('to'), str('text'));
       case 'openTableInHTML': return null; // the native side switches views; nothing changes here
       default: return null;
     }
+  }
+
+  /**
+   * Replaces [from, to) of the text HTML mode holds with plain text (T-576f, a beta's suggestion), only when the range
+   * maps back to exactly those offsets (no split entity) and lies in one run of text (no tag inside it).
+   */
+  private replaceText(from: number | null, to: number | null, text: string): Command | null {
+    if (from === null || to === null || !Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from) return null;
+    if (text.length > 10_000 || (!text && to === from)) return null;
+    return (state, dispatch) => {
+      const source = this.textForOffsets();
+      if (to > source.length) return false;
+      const slice = source.slice(from, to);
+      if (/[<>]/.test(slice)) return false;
+      const inRef = (o: number) => { const r = refCovering(source, o); return r !== null && r < o; };
+      if (inRef(from) || inRef(to)) return false;
+      // place each end from the nearest character, then check the document holds exactly this text there
+      const pFrom = this.posAtOffset(source, from);
+      const pTo = to > from ? this.posAtOffset(source, to) : pFrom;
+      const size = state.doc.content.size;
+      if (pFrom === null || pTo === null || pFrom < 0 || pTo > size || pTo < pFrom) return false;
+      const $a = state.doc.resolve(pFrom);
+      if (!$a.parent.inlineContent || !$a.sameParent(state.doc.resolve(pTo))) return false;
+      if (state.doc.textBetween(pFrom, pTo) !== decodeText(slice)) return false;
+      let single = true;
+      let marks: readonly Mark[] | null = null;
+      state.doc.nodesBetween(pFrom, pTo, (node) => {
+        if (!node.isInline) return true;
+        if (!node.isText || (marks && !Mark.sameSet(marks, node.marks))) single = false;
+        marks = node.marks;
+        return false;
+      });
+      if (!single) return false;
+      if (dispatch) dispatch((text ? state.tr.insertText(text, pFrom, pTo) : state.tr.delete(pFrom, pTo)).scrollIntoView());
+      return true;
+    };
+  }
+
+  /**
+   * The document position just before the character at `offset` of `source` (the text HTML mode holds), or just
+   * after the last one before it when a tag comes first. The source map aligns characters, not the spaces between
+   * them nor the inside of a reference (part 1, 7.5), so this goes through the nearest character in the same run of
+   * text. Null when there's none.
+   */
+  private posAtOffset(source: string, offset: number): number | null {
+    if (offset < 0 || offset > source.length) return null;
+    for (let k = offset; k < source.length && source[k] !== '<'; k++) {
+      if (!/\s/.test(source[k]!)) return this.posForOffset(k) - decodeText(source.slice(offset, k)).length;
+    }
+    for (let k = offset - 1; k >= 0 && source[k] !== '>'; k--) {
+      if (!/\s/.test(source[k]!)) { const s = refCovering(source, k) ?? k; return this.posForOffset(s) + decodeText(source.slice(s, offset)).length; }
+    }
+    return null;
+  }
+
+  /** The text HTML mode holds, which `posForOffset` maps: the loaded text while unedited, else the serialization. */
+  private textForOffsets(): string {
+    const doc = this.view.state.doc;
+    const snap = this.lastSnapshot;
+    if (this.loaded && !(snap && !snap.original && snap.revision === this.revision) && (doc === this.loaded.doc || doc.eq(this.loaded.doc))) {
+      return this.loaded.sources.original;
+    }
+    return this.serializer.serialize(doc).html;
   }
 
   /** The name of the undo step a command makes (N6). */
@@ -569,6 +662,9 @@ export class Editor {
       case 'insertLineBreak': return L.stepLineBreak;
       case 'insertText': return L.stepTyping;
       case 'completeWord': return L.stepTyping;
+      case 'insertPhrase': return L.stepDictation;
+      case 'newParagraph': return L.stepNewParagraph;
+      case 'replaceText': return L.stepAcceptSuggestion;
       default: return null;
     }
   }

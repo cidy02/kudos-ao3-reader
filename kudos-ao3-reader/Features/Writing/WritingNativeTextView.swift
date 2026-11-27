@@ -271,6 +271,18 @@ final class WritingTextController: NSObject {
         replace(NSRange(location: 0, length: (text as NSString).length), with: value)
     }
 
+    func replaceText(in range: NSRange, with value: String) {
+        guard !isFrozen, NSMaxRange(range) <= (text as NSString).length else { return }
+        commitComposition()
+        replace(range, with: value)
+        let caret = NSRange(location: range.location + (value as NSString).length, length: 0)
+        #if os(iOS)
+        textView.selectedRange = caret
+        #else
+        textView.setSelectedRange(caret)
+        #endif
+    }
+
     /// Puts the keyboard away (the preview toggle).
     func endEditing() {
         #if os(iOS)

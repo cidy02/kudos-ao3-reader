@@ -375,11 +375,14 @@ struct ChapterEditorAnnotationDetailSheet: View {
         }
     }
 
+    /// The labels name what this is: a note or a TK (wave 48 review).
+    private var kindNoun: String { annotation.kind == .tk ? "TK" : "note" }
+
     private var actionButtons: some View {
         FlowLayout(spacing: 8, rowSpacing: 8) {
             pillActionButton(
                 title: isResolved ? "Reopen" : "Resolve",
-                accessibilityLabel: isResolved ? "Reopen note" : "Resolve note",
+                accessibilityLabel: isResolved ? "Reopen \(kindNoun)" : "Resolve \(kindNoun)",
                 style: .primary,
                 isDisabled: isWorking
             ) {
@@ -387,7 +390,7 @@ struct ChapterEditorAnnotationDetailSheet: View {
             }
             pillActionButton(
                 title: "Edit",
-                accessibilityLabel: "Edit note",
+                accessibilityLabel: "Edit \(kindNoun)",
                 style: .secondary,
                 isDisabled: isWorking
             ) {
@@ -396,7 +399,7 @@ struct ChapterEditorAnnotationDetailSheet: View {
             }
             pillActionButton(
                 title: "Delete",
-                accessibilityLabel: "Delete note",
+                accessibilityLabel: "Delete \(kindNoun)",
                 style: .destructive,
                 isDisabled: isWorking
             ) {
