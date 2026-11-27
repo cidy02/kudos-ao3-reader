@@ -55,7 +55,7 @@ nonisolated struct StudioSelectCapabilities: Equatable, Sendable {
             return "\(counts) · Orphan supports up to \(StudioSelectPolicy.maxOrphanWorks) works at a time."
         }
         if canEditTogether {
-            return "\(counts) · Edit Together changes them all at once on AO3."
+            return "\(counts) · Edit Together changes them all at once on AO3"
         }
         if localOnlyCount == selectedCount {
             return "\(counts) · Export or move to Recently Deleted."
@@ -349,11 +349,9 @@ struct StudioSelectView: View {
                 .padding(.top, 48)
             } else {
                 LazyVStack(spacing: 0) {
-                    ForEach(Array(works.enumerated()), id: \.element.id) { index, item in
+                    ForEach(works) { item in
                         selectRow(item)
-                        if index < works.count - 1 {
-                            SubjectRowSeparator(inset: 52)
-                        }
+                        SubjectRowSeparator(inset: 0)
                     }
                 }
                 .padding(.horizontal, SubjectMetrics.gutter)
@@ -368,6 +366,7 @@ struct StudioSelectView: View {
         .navigationTitle(navigationTitleText)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
         #endif
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -452,7 +451,7 @@ struct StudioSelectView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.vertical, 12)
-            .frame(minHeight: 60)
+            .frame(minHeight: 64)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -484,7 +483,7 @@ struct StudioSelectView: View {
     }
 
     private var actionFooter: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             if isWorking {
                 ProgressView("Working…")
                     .font(.footnote)
@@ -599,9 +598,9 @@ struct StudioSelectView: View {
     ) -> some View {
         let activeColor = isDestructive ? theme.appTheme.errorColor : theme.accentInk
         return Button(action: action) {
-            VStack(spacing: 4) {
+            VStack(spacing: 3) {
                 Image(systemName: systemImage)
-                    .font(.body.weight(.medium))
+                    .font(.title3.weight(.medium))
                 Text(title)
                     .font(.caption2.weight(.semibold))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
@@ -610,7 +609,7 @@ struct StudioSelectView: View {
             }
             .foregroundStyle(activeColor)
             .opacity(isEnabled ? 1 : 0.35)
-            .frame(maxWidth: .infinity, minHeight: 48)
+            .frame(maxWidth: .infinity, minHeight: 50)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

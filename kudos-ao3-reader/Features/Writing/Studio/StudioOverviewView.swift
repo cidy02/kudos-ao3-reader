@@ -8,6 +8,41 @@ import SwiftUI
 ///
 /// Challenge assignments are intentionally omitted: `AO3Client+Challenges` only exposes
 /// collection-maintainer assignment endpoints, not a user's personal assignments due list.
+/// Pure copy helpers for `StudioOverviewView` (`Studio-Overview`, `Studio-Offline`).
+nonisolated enum StudioOverviewCopy {
+    static func commentsSubtitle(awaitingReplyCount: Int, unreadCount: Int?) -> String {
+        if awaitingReplyCount > 0 {
+            return awaitingReplyCount == 1
+                ? "1 needs a reply"
+                : "\(awaitingReplyCount.formatted()) need a reply"
+        }
+        if let unreadCount, unreadCount > 0 {
+            return "\(unreadCount.formatted()) unread"
+        }
+        return "All caught up"
+    }
+
+    static func statsSubtitle(
+        baselineDate: Date?,
+        calendar: Calendar = .current,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String {
+        guard let baselineDate else { return "All Years" }
+        let short = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
+            .locale(locale)
+            .month(.abbreviated)
+            .day()
+            .format(baselineDate)
+        return "since \(short)"
+    }
+
+    static func statsGlanceValue(total: Int, change: Int?) -> String {
+        guard let change else { return total.formatted() }
+        if change == 0 { return "0" }
+        return change.formatted(.number.sign(strategy: .always()))
+    }
+}
+
 struct StudioOverviewView: View {
     let daySnapshot: StudioDayLogSnapshot
     let localDocuments: [StudioLocalDocumentSummary]
@@ -15,6 +50,7 @@ struct StudioOverviewView: View {
     let isLoadingDrafts: Bool
     let draftsError: String?
     let stats: AO3UserStats?
+    let statsHistory: [StudioStatsSnapshot]
     let isLoadingStats: Bool
     let statsError: String?
     let recentPostedWorks: [AO3WorkSummary]
@@ -27,12 +63,9 @@ struct StudioOverviewView: View {
     let onOpenAO3Work: (AO3WorkSummary) -> Void
     let onSelectSection: (StudioSection) -> Void
     let onOpenRequests: () -> Void
-    let onOpenYourWorks: () -> Void
-    let onOpenAO3Drafts: () -> Void
     let onOpenSeries: () -> Void
     let onOpenCollections: () -> Void
     let onOpenGifts: () -> Void
-    let onOpenImport: () -> Void
     let onRetryDrafts: () -> Void
     let onRetryStats: () -> Void
     let onSignIn: () -> Void
@@ -40,6 +73,7 @@ struct StudioOverviewView: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(AO3InboxModel.self) private var inboxModel
+    @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @AppStorage(StudioWritingGoal.storageKey) private var storedDailyGoal: Int = StudioWritingGoal.defaultGoal
@@ -171,13 +205,13 @@ struct StudioOverviewView: View {
     // MARK: - Comments glance (signed in)
 
     private var commentsNeedingReply: [AO3InboxItem] {
-        let awaiting = inboxModel.items.filter { $0.canReply && !$0.isReplied && !$0.isUnavailable }
+        let awaiting = StudioCommentsBoard.comments(inboxModel.items, chip: .needsReply)
         if !awaiting.isEmpty { return awaiting }
-        return inboxModel.items.filter { $0.isUnread && !$0.isUnavailable }
+        return inboxModel.items.filter { StudioCommentsBoard.isOnYourWork($0) && $0.isUnread }
     }
 
     private var awaitingReplyCount: Int {
-        AO3InboxTally.awaitingReplyCount(inboxModel.items)
+        StudioCommentsBoard.needsReplyCount(inboxModel.items)
     }
 
     private var commentsSubtitle: String? {
@@ -185,19 +219,15 @@ struct StudioOverviewView: View {
         case .idle, .loading, .failed:
             return nil
         case .loaded, .paginationFailed:
-            if awaitingReplyCount > 0 {
-                if awaitingReplyCount == 1 { return "1 needs a reply" }
-                return "\(awaitingReplyCount.formatted()) need a reply"
-            }
-            if let unread = inboxModel.unreadCount, unread > 0 {
-                return "\(unread.formatted()) unread"
-            }
-            return "All caught up"
+            return StudioOverviewCopy.commentsSubtitle(
+                awaitingReplyCount: awaitingReplyCount,
+                unreadCount: inboxModel.unreadCount
+            )
         }
     }
 
     private var commentsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 4) {
             sectionHeader(
                 title: "Comments",
                 subtitle: commentsSubtitle,
@@ -255,13 +285,12 @@ struct StudioOverviewView: View {
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(previews.enumerated()), id: \.element.id) { index, item in
-                            if index > 0 { SubjectRowSeparator() }
+                            if index > 0 { SubjectRowSeparator(inset: 0) }
                             StudioOverviewCommentRow(item: item, now: now) {
                                 onSelectSection(.comments)
                             }
                         }
                     }
-                    .subjectPanel()
                 }
             }
         }
@@ -269,11 +298,21 @@ struct StudioOverviewView: View {
 
     // MARK: - Stats glance (signed in)
 
+    private var allYearsHistory: [StudioStatsSnapshot] {
+        StudioStatsHistory.snapshots(statsHistory, year: nil)
+    }
+
+    private var statsBaseline: StudioStatsSnapshot? {
+        StudioStatsHistory.baseline(allYearsHistory, now: now)
+    }
+
     private var statsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let baseline = statsBaseline
+        let subtitle = StudioOverviewCopy.statsSubtitle(baselineDate: baseline?.date)
+        return VStack(alignment: .leading, spacing: 10) {
             sectionHeader(
                 title: "Stats",
-                subtitle: "All Years",
+                subtitle: subtitle,
                 actionTitle: "Open",
                 actionAccessibilityLabel: "Open Stats"
             ) {
@@ -281,11 +320,22 @@ struct StudioOverviewView: View {
             }
 
             if let stats, !stats.isEmpty {
+                let kudosSparkline = StudioStatsHistory.sparkline(
+                    allYearsHistory, metric: .kudos, points: 7
+                )
+                let hitsSparkline = StudioStatsHistory.sparkline(
+                    allYearsHistory, metric: .hits, points: 7
+                )
                 Button { onSelectSection(.stats) } label: {
-                    StudioStatsGlanceGrid(stats: stats)
+                    StudioStatsGlanceGrid(
+                        stats: stats,
+                        baseline: baseline,
+                        kudosSparkline: kudosSparkline,
+                        hitsSparkline: hitsSparkline
+                    )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(statsAccessibilityLabel(stats))
+                .accessibilityLabel(statsAccessibilityLabel(stats, baseline: baseline, subtitle: subtitle))
                 .accessibilityHint("Opens the Stats section")
             } else if isLoadingStats {
                 HStack(spacing: 10) {
@@ -325,11 +375,20 @@ struct StudioOverviewView: View {
         }
     }
 
-    private func statsAccessibilityLabel(_ stats: AO3UserStats) -> String {
-        var parts = ["Stats, All Years"]
-        if let kudos = stats.kudos { parts.append("\(kudos.formatted()) Kudos") }
-        if let hits = stats.hits { parts.append("\(hits.formatted()) Hits") }
-        if let bookmarks = stats.bookmarks { parts.append("\(bookmarks.formatted()) Bookmarks") }
+    private func statsAccessibilityLabel(
+        _ stats: AO3UserStats,
+        baseline: StudioStatsSnapshot?,
+        subtitle: String
+    ) -> String {
+        var parts = ["Stats, \(subtitle)"]
+        if let kudos = stats.kudos {
+            let change = StudioStatsHistory.change(kudos, since: baseline?.total(.kudos))
+            parts.append("\(StudioOverviewCopy.statsGlanceValue(total: kudos, change: change)) Kudos")
+        }
+        if let hits = stats.hits {
+            let change = StudioStatsHistory.change(hits, since: baseline?.total(.hits))
+            parts.append("\(StudioOverviewCopy.statsGlanceValue(total: hits, change: change)) Hits")
+        }
         return parts.joined(separator: ", ")
     }
 }
@@ -349,7 +408,7 @@ private extension StudioOverviewView {
             entries.append(StudioRecentEntry(
                 id: "local:\(doc.workID.uuidString)",
                 title: title,
-                subtitle: doc.totalWordCount > 0 ? "\(doc.totalWordCount.formatted()) words" : "Draft",
+                subtitle: doc.totalWordCount > 0 ? StudioWorkItem.wordCountLabel(doc.totalWordCount) : "Draft",
                 wordCount: doc.totalWordCount,
                 editedAt: doc.updatedAt,
                 editedFallback: nil,
@@ -361,26 +420,32 @@ private extension StudioOverviewView {
         if auth.isLoggedIn {
             for draft in drafts?.page.works.prefix(5) ?? [] where !seenAO3IDs.contains(draft.id) {
                 seenAO3IDs.insert(draft.id)
+                let draftDate = draft.dateUpdated.isEmpty
+                    ? nil
+                    : StudioDateCopy.shortAO3Date(draft.dateUpdated, now: now)
                 entries.append(StudioRecentEntry(
                     id: "draft:\(draft.id)",
                     title: draft.title.isEmpty ? "Untitled" : draft.title,
-                    subtitle: draft.words.map { "\($0.formatted()) words" } ?? "AO3 draft",
+                    subtitle: draft.words.map(StudioWorkItem.wordCountLabel) ?? "AO3 draft",
                     wordCount: draft.words,
                     editedAt: WorkStat.date(from: draft.dateUpdated),
-                    editedFallback: draft.dateUpdated.isEmpty ? nil : draft.dateUpdated,
+                    editedFallback: draftDate,
                     lineWidths: StudioRecentEntry.lineWidths(forWordCount: draft.words),
                     action: .ao3Draft(draft.id)
                 ))
             }
             for work in recentPostedWorks.prefix(5) where !seenAO3IDs.contains(work.id) {
                 seenAO3IDs.insert(work.id)
+                let workDate = work.dateUpdated.isEmpty
+                    ? nil
+                    : StudioDateCopy.shortAO3Date(work.dateUpdated, now: now)
                 entries.append(StudioRecentEntry(
                     id: "work:\(work.id)",
                     title: work.title.isEmpty ? "Untitled" : work.title,
-                    subtitle: work.words.map { "\($0.formatted()) words" } ?? "Posted",
+                    subtitle: work.words.map(StudioWorkItem.wordCountLabel) ?? "Posted",
                     wordCount: work.words,
                     editedAt: WorkStat.date(from: work.dateUpdated),
-                    editedFallback: work.dateUpdated.isEmpty ? nil : work.dateUpdated,
+                    editedFallback: workDate,
                     lineWidths: StudioRecentEntry.lineWidths(forWordCount: work.words),
                     action: .ao3Work(work)
                 ))
@@ -399,6 +464,7 @@ private extension StudioOverviewView {
         let title = auth.isLoggedIn ? "Recent" : "Documents"
         let subtitle = auth.isLoggedIn ? nil : (entries.isEmpty ? nil : "\(entries.count)")
         let actionTitle = auth.isLoggedIn ? "All Documents" : "All"
+        let showsNewTile = !auth.isLoggedIn || entries.isEmpty
 
         return VStack(alignment: .leading, spacing: 10) {
             sectionHeader(
@@ -414,7 +480,7 @@ private extension StudioOverviewView {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 14) {
                     ForEach(entries) { entry in
-                        StudioRecentPaperCard(entry: entry) {
+                        StudioRecentPaperCard(entry: entry, now: now) {
                             switch entry.action {
                             case let .local(target): onOpenLocalDocument(target)
                             case let .ao3Draft(workID): onOpenAO3Draft(workID)
@@ -423,7 +489,9 @@ private extension StudioOverviewView {
                         }
                     }
 
-                    StudioNewDocumentPaperTile(action: onStartNewDocument)
+                    if showsNewTile {
+                        StudioNewDocumentPaperTile(action: onStartNewDocument)
+                    }
                 }
                 .padding(.horizontal, gutter)
                 .padding(.vertical, 2)
@@ -431,78 +499,40 @@ private extension StudioOverviewView {
         }
     }
 
-    // MARK: - Manage links (signed in, per Studio-Overview & Studio-Coverage)
-
-    var draftsCountText: String? {
-        if let page = drafts?.page {
-            if let total = page.summary?.total { return total.formatted() }
-            if page.totalPages == 1 { return page.works.count.formatted() }
-        }
-        return cachedCount(.drafts)
-    }
+    // MARK: - Manage links (signed in, per Studio-Overview)
 
     var manageSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionHeader(
-                title: "Manage",
-                subtitle: nil,
-                actionTitle: nil,
-                actionAccessibilityLabel: nil,
-                action: nil
+        VStack(spacing: 0) {
+            manageRow(
+                title: "Requests",
+                systemImage: "envelope",
+                count: nil,
+                action: onOpenRequests
             )
-
-            VStack(spacing: 0) {
-                manageRow(
-                    title: "Requests",
-                    systemImage: "tray.and.arrow.down",
-                    count: nil,
-                    action: onOpenRequests
-                )
-                SubjectRowSeparator()
-                manageRow(
-                    title: "Your Works",
-                    systemImage: "books.vertical",
-                    count: cachedCount(.myWorks),
-                    action: onOpenYourWorks
-                )
-                SubjectRowSeparator()
-                manageRow(
-                    title: "AO3 Drafts",
-                    systemImage: "doc.badge.clock",
-                    count: draftsCountText,
-                    action: onOpenAO3Drafts
-                )
-                SubjectRowSeparator()
-                manageRow(
-                    title: "Series",
-                    systemImage: "square.stack.3d.up",
-                    count: cachedCount(.series),
-                    action: onOpenSeries
-                )
-                SubjectRowSeparator()
-                manageRow(
-                    title: "Collections & Challenges",
-                    systemImage: "person.3.sequence",
-                    count: cachedCount(.collections),
-                    action: onOpenCollections
-                )
-                SubjectRowSeparator()
-                manageRow(
-                    title: "Gifts",
-                    systemImage: "gift",
-                    count: nil,
-                    action: onOpenGifts
-                )
-                SubjectRowSeparator()
-                manageRow(
-                    title: "Import a Work from a URL",
-                    systemImage: "square.and.arrow.down",
-                    count: nil,
-                    action: onOpenImport
-                )
-            }
-            .subjectPanel()
+            SubjectRowSeparator(inset: 36)
+            manageRow(
+                title: "Series",
+                systemImage: "list.bullet",
+                count: cachedCount(.series),
+                action: onOpenSeries
+            )
+            SubjectRowSeparator(inset: 36)
+            manageRow(
+                title: "Collections & Challenges",
+                systemImage: "square.stack",
+                count: cachedCount(.collections),
+                action: onOpenCollections
+            )
+            SubjectRowSeparator(inset: 36)
+            manageRow(
+                title: "Gifts",
+                systemImage: "gift",
+                count: nil,
+                action: onOpenGifts
+            )
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Manage")
     }
 
     func manageRow(
@@ -512,8 +542,34 @@ private extension StudioOverviewView {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            AccountNavCardLabel(title: title, systemImage: systemImage, count: count)
-                .padding(.horizontal, 14)
+            HStack(spacing: 14) {
+                Image(systemName: systemImage)
+                    .font(.title3.weight(.regular))
+                    .foregroundStyle(.accentInk)
+                    .frame(width: 22, alignment: .center)
+                    .accessibilityHidden(true)
+
+                Text(title)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let count {
+                    Text(count)
+                        .font(.body)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondaryInk)
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, 10)
+            .frame(minHeight: 48)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(count.map { "\(title), \($0)" } ?? title)
@@ -522,7 +578,8 @@ private extension StudioOverviewView {
     // MARK: - Signed-out share prompt (Studio-Offline)
 
     var signedOutShareCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let buttonShape = SubjectMetrics.controlShape(dynamicTypeSize)
+        return VStack(alignment: .leading, spacing: 10) {
             Text("Ready to share it?")
                 .font(.headline.weight(.bold))
                 .foregroundStyle(.primary)
@@ -536,13 +593,22 @@ private extension StudioOverviewView {
             .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
 
-            Button("Sign In to AO3", action: onSignIn)
-                .buttonStyle(.kudosSecondary)
-                .accessibilityLabel("Sign In to AO3")
+            Button(action: onSignIn) {
+                Text("Sign In to AO3")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.accentInk)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .frame(minHeight: 40)
+                    .background(StudioTonePalette.softAccentFill(for: theme), in: buttonShape)
+                    .contentShape(buttonShape)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Sign In to AO3")
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .subjectPanel()
+        .subjectPanel(cornerRadius: 18, isFilled: false)
     }
 
     @ViewBuilder

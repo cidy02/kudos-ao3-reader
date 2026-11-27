@@ -102,7 +102,7 @@ struct StudioWorkFilesView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 20) {
                 headerSection
                 chaptersSection
                 notesSection
@@ -275,7 +275,7 @@ struct StudioWorkFilesView: View {
                     }
                 }
             } label: {
-                Label("More options", systemImage: "ellipsis.circle")
+                Label("More options", systemImage: "ellipsis")
             }
             .accessibilityLabel("More options for \(currentWork.title)")
         }

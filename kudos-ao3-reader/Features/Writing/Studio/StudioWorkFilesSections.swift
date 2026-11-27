@@ -8,7 +8,7 @@ extension StudioWorkFilesView {
                 .foregroundStyle(Color.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
-            Text(currentWork.manuscriptStateLine(deviceName: ThisDevice.name))
+            Text(currentWork.workFilesStateLine(deviceName: ThisDevice.name))
                 .font(.subheadline)
                 .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
@@ -17,8 +17,8 @@ extension StudioWorkFilesView {
     }
 
     var chaptersSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SubjectFieldLabel(text: "Chapters", style: .formGroup, count: mergedChapters.count)
+        VStack(alignment: .leading, spacing: 4) {
+            SubjectFieldLabel(text: "Chapters", style: .formGroup)
 
             if isLoadingAO3Chapters && mergedChapters.isEmpty {
                 ProgressView("Loading chapters…")
@@ -36,18 +36,13 @@ extension StudioWorkFilesView {
                 .padding(.vertical, 8)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(Array(mergedChapters.enumerated()), id: \.element.id) { index, chapter in
+                    ForEach(mergedChapters) { chapter in
                         chapterRow(chapter)
-                        if index < mergedChapters.count - 1 {
-                            SubjectRowSeparator(inset: 44)
-                        }
-                    }
-                    if !mergedChapters.isEmpty {
-                        SubjectRowSeparator(inset: 44)
+                        SubjectRowSeparator(inset: 0)
                     }
                     addChapterRow
+                    SubjectRowSeparator(inset: 0)
                 }
-                .subjectPanel()
             }
         }
     }
@@ -85,7 +80,6 @@ extension StudioWorkFilesView {
             .minimumHitTarget()
             .accessibilityLabel("Actions for \(chapter.displayTitle)")
         }
-        .padding(.horizontal, 14)
         .contextMenu {
             chapterMenuItems(chapter, canMoveUp: canMoveUp, canMoveDown: canMoveDown)
         }
@@ -117,14 +111,17 @@ extension StudioWorkFilesView {
         let titleColor: AnyShapeStyle = chapter.badge == .planned
             ? AnyShapeStyle(.secondaryInk)
             : AnyShapeStyle(Color.primary)
+        let iconColor: AnyShapeStyle = chapter.badge == .planned
+            ? AnyShapeStyle(.secondaryInk)
+            : AnyShapeStyle(theme.accentInk)
         return HStack(spacing: 12) {
             Image(systemName: "doc.text")
                 .font(.body)
-                .foregroundStyle(chapter.badge == .planned ? Color.secondary : theme.accentInk)
-                .frame(width: 24)
+                .foregroundStyle(iconColor)
+                .frame(width: 22)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(chapter.displayTitle)
                     .font(.body.weight(.semibold))
                     .foregroundStyle(titleColor)
@@ -151,7 +148,8 @@ extension StudioWorkFilesView {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, 8)
+        .frame(minHeight: 56)
         .contentShape(Rectangle())
     }
 
@@ -215,15 +213,15 @@ extension StudioWorkFilesView {
                 Image(systemName: "plus.circle")
                     .font(.body.weight(.semibold))
                     .foregroundStyle(theme.accentInk)
-                    .frame(width: 24)
+                    .frame(width: 22)
                     .accessibilityHidden(true)
                 Text("Add Chapter")
                     .font(.body.weight(.semibold))
                     .foregroundStyle(theme.accentInk)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.vertical, 10)
+            .frame(minHeight: 52)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -231,12 +229,8 @@ extension StudioWorkFilesView {
     }
 
     var notesSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SubjectFieldLabel(
-                text: "Notes",
-                style: .formGroup,
-                count: storyNotes.isEmpty ? nil : storyNotes.count
-            )
+        VStack(alignment: .leading, spacing: 4) {
+            SubjectFieldLabel(text: "Notes", style: .formGroup)
 
             VStack(spacing: 0) {
                 if storyNotes.isEmpty {
@@ -248,16 +242,14 @@ extension StudioWorkFilesView {
                     .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
+                    .padding(.vertical, 10)
+                    SubjectRowSeparator(inset: 0)
                 } else {
-                    ForEach(Array(storyNotes.enumerated()), id: \.element.id) { index, note in
+                    ForEach(storyNotes) { note in
                         storyNoteRow(note)
-                        if index < storyNotes.count - 1 {
-                            SubjectRowSeparator(inset: 44)
-                        }
+                        SubjectRowSeparator(inset: 0)
                     }
                 }
-                SubjectRowSeparator(inset: 44)
                 Button {
                     noteSheetMode = .create
                 } label: {
@@ -265,28 +257,26 @@ extension StudioWorkFilesView {
                         Image(systemName: "plus.circle")
                             .font(.body.weight(.semibold))
                             .foregroundStyle(theme.accentInk)
-                            .frame(width: 24)
+                            .frame(width: 22)
                             .accessibilityHidden(true)
                         Text("New Story Note")
                             .font(.body.weight(.semibold))
                             .foregroundStyle(theme.accentInk)
                         Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 10)
+                    .frame(minHeight: 52)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("New story note for \(currentWork.title)")
+                SubjectRowSeparator(inset: 0)
             }
-            .subjectPanel()
         }
     }
 
     func storyNoteRow(_ note: WritingStoryNote) -> some View {
-        let kindLabel = StudioWorkFilesLogic.storyNoteKindTitle(note.kind)
-        let parts: [String?] = [kindLabel, note.pinned ? "Pinned" : nil, ThisDevice.name]
-        let meta = parts.compactMap(\.self).joined(separator: " · ")
+        let meta = StudioWorkFilesLogic.storyNoteMetaLine(note: note, deviceName: ThisDevice.name)
 
         return Button {
             noteSheetMode = .edit(note)
@@ -294,8 +284,12 @@ extension StudioWorkFilesView {
             HStack(spacing: 12) {
                 Image(systemName: note.pinned ? "pin.fill" : "note.text")
                     .font(.body)
-                    .foregroundStyle(note.pinned ? theme.accentInk : theme.appTheme.favoriteColor)
-                    .frame(width: 24)
+                    .foregroundStyle(
+                        note.pinned
+                            ? theme.accentInk
+                            : StudioTonePalette.draftAmberInk(for: theme.appTheme)
+                    )
+                    .frame(width: 22)
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -315,8 +309,8 @@ extension StudioWorkFilesView {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.vertical, 8)
+            .frame(minHeight: 52)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -341,7 +335,7 @@ extension StudioWorkFilesView {
     }
 
     var forAO3Section: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             SubjectFieldLabel(text: "For AO3", style: .formGroup)
 
             VStack(spacing: 0) {
@@ -355,8 +349,8 @@ extension StudioWorkFilesView {
                         HStack(spacing: 12) {
                             Image(systemName: "list.bullet.rectangle")
                                 .font(.body)
-                                .foregroundStyle(theme.accentInk)
-                                .frame(width: 24)
+                                .foregroundStyle(StudioTonePalette.workFolderInk(for: theme.appTheme))
+                                .frame(width: 22)
                                 .accessibilityHidden(true)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Work details")
@@ -368,13 +362,9 @@ extension StudioWorkFilesView {
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondaryInk)
-                                .accessibilityHidden(true)
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
+                        .padding(.vertical, 8)
+                        .frame(minHeight: 52)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -384,7 +374,7 @@ extension StudioWorkFilesView {
                         Image(systemName: "list.bullet.rectangle")
                             .font(.body)
                             .foregroundStyle(.secondaryInk)
-                            .frame(width: 24)
+                            .frame(width: 22)
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Work details")
@@ -397,52 +387,29 @@ extension StudioWorkFilesView {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 8)
+                    .frame(minHeight: 52)
                 }
+                SubjectRowSeparator(inset: 0)
             }
-            .subjectPanel()
         }
     }
 
     var workDetailsSubtitle: String {
-        if let dateText = currentWork.ao3PostedWork?.dateUpdated, !dateText.isEmpty {
-            return "Summary, tags, rating, notes · posted \(WorkStat.displayDate(dateText))"
-        }
-        if currentWork.isAO3Draft {
-            return "Summary, tags, rating, notes · AO3 draft"
-        }
-        return "Summary, tags, rating, notes"
+        StudioWorkFilesLogic.workDetailsSubtitle(
+            postedDateText: currentWork.ao3PostedWork?.dateUpdated,
+            isAO3Draft: currentWork.isAO3Draft
+        )
     }
 
-    @ViewBuilder
     func chapterBadgeView(_ status: StudioChapterBadgeStatus) -> some View {
-        let title = status.label(deviceName: ThisDevice.name)
-        switch status {
-        case .posted:
-            SubjectStateBadge(title: title, color: theme.appTheme.statusSuccessColor)
-        case .ao3Draft:
-            SubjectStateBadge(title: title, color: .orange)
-        case .onDevice:
-            Text(title)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondaryInk)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 2)
-                .background(theme.appTheme.glassFill(0.12), in: Capsule())
-        case .planned:
-            Text(title)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondaryInk)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 2)
-                .overlay(
-                    Capsule().strokeBorder(
-                        theme.appTheme.glassStroke(0.32),
-                        style: StrokeStyle(lineWidth: 1, dash: [3, 2])
-                    )
-                )
+        let tone: StudioStatusPill.Tone = switch status {
+        case .posted: .posted
+        case .ao3Draft: .draft
+        case .onDevice: .onDevice
+        case .planned: .notStarted
         }
+        return StudioStatusPill(text: status.label(deviceName: ThisDevice.name), tone: tone)
     }
 }
 

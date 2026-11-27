@@ -60,6 +60,7 @@ struct WritingStudioView: View {
     @State private var draftsStamp = StudioAO3Load.Stamp()
 
     @State private var stats: AO3UserStats?
+    @State private var statsHistory: [StudioStatsSnapshot] = []
     @State private var statsError: String?
     @State private var isLoadingStats = false
     @State private var statsReload = 0
@@ -102,8 +103,6 @@ struct WritingStudioView: View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
                 studioHeader
-                Divider()
-                    .overlay(theme.appTheme.appSeparator ?? theme.appTheme.glassStroke(0.14))
                 sectionBody
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -228,7 +227,7 @@ struct WritingStudioView: View {
     // MARK: - Header & section bar (pinned under title while section scrolls)
 
     private var studioHeader: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             if auth.isLoggedIn {
                 StudioPseudMenu(
                     profileModel: profileModel,
@@ -249,8 +248,8 @@ struct WritingStudioView: View {
             )
         }
         .padding(.horizontal, SubjectMetrics.accountGutter)
-        .padding(.top, 4)
-        .padding(.bottom, 12)
+        .padding(.top, 2)
+        .padding(.bottom, 6)
     }
 
     @ViewBuilder
@@ -264,6 +263,7 @@ struct WritingStudioView: View {
                 isLoadingDrafts: isLoadingDrafts,
                 draftsError: draftsError,
                 stats: stats,
+                statsHistory: statsHistory,
                 isLoadingStats: isLoadingStats,
                 statsError: statsError,
                 recentPostedWorks: Array((profileModel?.works ?? []).prefix(5)),
@@ -276,12 +276,9 @@ struct WritingStudioView: View {
                 onOpenAO3Work: { path.append($0) },
                 onSelectSection: { selectedSectionRaw = $0.rawValue },
                 onOpenRequests: { path.append(ShellDestination.requests) },
-                onOpenYourWorks: { path.append(WritingRoute.works) },
-                onOpenAO3Drafts: { path.append(WritingRoute.drafts) },
                 onOpenSeries: { path.append(WritingRoute.series) },
                 onOpenCollections: { path.append(WritingRoute.collectionsAndChallenges) },
                 onOpenGifts: { path.append(ShellDestination.gifts) },
-                onOpenImport: { showingImport = true },
                 onRetryDrafts: { draftsReload += 1 },
                 onRetryStats: { statsReload += 1 },
                 onSignIn: { showingLogin = true },
@@ -489,7 +486,14 @@ private extension WritingStudioView {
     // MARK: - Data loading
 
     var localActivationKey: String {
-        "\(router.selection == .writing)|\(selectedSectionRaw)|\(localReload)|\(path.count)"
+        [
+            "\(router.selection == .writing)",
+            selectedSectionRaw,
+            "\(localReload)",
+            "\(path.count)",
+            "\(auth.sessionGeneration)",
+            auth.username ?? ""
+        ].joined(separator: "|")
     }
 
     var ao3ActivationKey: String {
@@ -509,6 +513,15 @@ private extension WritingStudioView {
         }
         if let docs = try? await StudioLocalLibraryLoader.loadRecent() {
             localDocuments = docs
+        }
+        if auth.isLoggedIn, let account = auth.username, !account.isEmpty {
+            let store = StudioStatsHistoryStore(account: account)
+            let loaded = await Task.detached(priority: .utility) { store.load() }.value
+            if auth.isLoggedIn, auth.username == account {
+                statsHistory = loaded
+            }
+        } else {
+            statsHistory = []
         }
     }
 
@@ -589,6 +602,7 @@ private extension WritingStudioView {
             isLoadingDrafts = false
             draftsStamp = StudioAO3Load.Stamp()
             stats = nil
+            statsHistory = []
             statsError = nil
             isLoadingStats = false
             activeStatsRequestID = nil
@@ -655,6 +669,7 @@ private extension WritingStudioView {
     func loadStats(force: Bool = false) async {
         guard auth.isLoggedIn else {
             stats = nil
+            statsHistory = []
             statsError = nil
             isLoadingStats = false
             activeStatsRequestID = nil

@@ -3,6 +3,47 @@ import SwiftUI
 /// Card and row building blocks for `StudioOverviewView` (`Studio-Overview.dc.html`,
 /// `Studio-Offline.dc.html`), themed across Light, Dark, OLED and Sepia with AX5 reflow.
 
+/// Pure copy helpers for Overview's Today and Continue cards (`Studio-Overview`, `Studio-Offline`).
+nonisolated enum StudioTodayCopy {
+    static func subtitle(dailyGoal: Int?, streak: Int) -> String {
+        var parts: [String] = []
+        if let dailyGoal {
+            parts.append("of your \(dailyGoal.formatted())-word goal")
+        } else {
+            parts.append("Daily goal off")
+        }
+        if streak > 0 {
+            parts.append("\(streak)-day streak")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    static func accessibilityLabel(wordsToday: Int, dailyGoal: Int?, streak: Int) -> String {
+        let wordsPart = StudioWorkItem.wordCountLabel(wordsToday)
+        let goalPart: String
+        if let dailyGoal {
+            let percent = StudioWritingGoal.percent(wordsToday: wordsToday, goal: dailyGoal)
+            goalPart = "of your \(dailyGoal.formatted())-word goal, \(percent) percent"
+        } else {
+            goalPart = "daily goal off"
+        }
+        if streak > 0 {
+            return "Today: \(wordsPart), \(goalPart), \(streak)-day streak"
+        }
+        return "Today: \(wordsPart), \(goalPart)"
+    }
+}
+
+nonisolated enum StudioContinueCopy {
+    static func expiryLine(daysLeft: Int) -> String {
+        switch daysLeft {
+        case ...0: "AO3 deletes this draft today"
+        case 1: "AO3 keeps this draft 1 more day"
+        default: "AO3 keeps this draft \(daysLeft) more days"
+        }
+    }
+}
+
 struct StudioTodayCard: View {
     let snapshot: StudioDayLogSnapshot
     let dailyGoal: Int?
@@ -26,42 +67,35 @@ struct StudioTodayCard: View {
                     }
                 }
             }
-            .padding(16)
+            .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                    .fill(theme.appTheme.cardSurface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                            .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
-                    )
-            )
-            .shadow(
-                color: theme.appTheme.cardShadow.color,
-                radius: theme.appTheme.cardShadow.radius,
-                y: theme.appTheme.cardShadow.y
-            )
+            .subjectPanel(cornerRadius: 18)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
+        .accessibilityLabel(
+            StudioTodayCopy.accessibilityLabel(
+                wordsToday: snapshot.wordsToday,
+                dailyGoal: dailyGoal,
+                streak: snapshot.streak
+            )
+        )
         .accessibilityHint("Adjusts your daily writing goal")
     }
 
     private var metricsColumn: some View {
-        let wordUnit = snapshot.wordsToday == 1 ? "word" : "words"
-        return VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
             Text("Today")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondaryInk)
 
-            Text("\(snapshot.wordsToday.formatted()) \(wordUnit)")
+            Text(StudioWorkItem.wordCountLabel(snapshot.wordsToday))
                 .font(.title.weight(.bold))
                 .monospacedDigit()
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text(subtitle)
+            Text(StudioTodayCopy.subtitle(dailyGoal: dailyGoal, streak: snapshot.streak))
                 .font(.footnote)
                 .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
@@ -83,13 +117,11 @@ struct StudioTodayCard: View {
                 let barHeight = max(3, CGFloat(ratio) * 32)
                 VStack(spacing: 3) {
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(day.isToday ? theme.effectiveTint : theme.appTheme.glassStroke(0.32))
+                        .fill(day.isToday ? theme.accentInk : Color.primary.opacity(0.20))
                         .frame(width: 14, height: barHeight)
                     Text(day.weekdayInitial)
                         .font(.caption2.weight(day.isToday ? .bold : .medium))
-                        .foregroundStyle(
-                            day.isToday ? AnyShapeStyle(Color.primary) : AnyShapeStyle(.secondaryInk)
-                        )
+                        .foregroundStyle(.secondaryInk)
                 }
             }
         }
@@ -107,12 +139,12 @@ struct StudioTodayCard: View {
                 Circle()
                     .trim(from: 0, to: progress)
                     .stroke(
-                        theme.effectiveTint,
+                        theme.accentInk,
                         style: StrokeStyle(lineWidth: 7, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
                 Text("\(percent)%")
-                    .font(.subheadline.weight(.bold))
+                    .font(.callout.weight(.bold))
                     .monospacedDigit()
                     .foregroundStyle(.primary)
             } else {
@@ -123,35 +155,6 @@ struct StudioTodayCard: View {
         }
         .frame(width: 72, height: 72)
         .accessibilityHidden(true)
-    }
-
-    private var subtitle: String {
-        var parts: [String] = []
-        if let dailyGoal {
-            parts.append("of your \(dailyGoal.formatted())-word goal")
-        } else {
-            parts.append("Daily goal off")
-        }
-        if snapshot.streak > 0 {
-            parts.append("\(snapshot.streak)-day streak")
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private var accessibilityLabel: String {
-        let wordUnit = snapshot.wordsToday == 1 ? "word" : "words"
-        let wordsPart = "\(snapshot.wordsToday.formatted()) \(wordUnit) today"
-        let goalPart: String
-        if let dailyGoal {
-            let percent = StudioWritingGoal.percent(wordsToday: snapshot.wordsToday, goal: dailyGoal)
-            goalPart = "of your \(dailyGoal.formatted())-word goal, \(percent) percent"
-        } else {
-            goalPart = "daily goal off"
-        }
-        if snapshot.streak > 0 {
-            return "Today: \(wordsPart), \(goalPart), \(snapshot.streak)-day streak"
-        }
-        return "Today: \(wordsPart), \(goalPart)"
     }
 }
 
@@ -164,18 +167,11 @@ struct StudioContinueCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var paperBackground: Color {
-        switch theme.appTheme {
-        case .light: Color(red: 0.984, green: 0.980, blue: 0.965)
-        case .sepia, .dark, .oled: theme.appTheme.cardSurface
-        }
+        StudioTonePalette.paperBackground(for: theme.appTheme)
     }
 
     private var paperBorder: Color {
-        switch theme.appTheme {
-        case .light: Color(red: 0.898, green: 0.875, blue: 0.824)
-        case .sepia: theme.appTheme.cardBorder
-        case .dark, .oled: theme.appTheme.glassStroke(0.16)
-        }
+        StudioTonePalette.paperBorder(for: theme.appTheme)
     }
 
     var body: some View {
@@ -187,10 +183,10 @@ struct StudioContinueCard: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(paperBackground)
                 .overlay(
-                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .strokeBorder(paperBorder, lineWidth: 0.5)
                 )
         )
@@ -237,7 +233,7 @@ struct StudioContinueCard: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(height: 36)
+                .frame(height: 48)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
@@ -270,7 +266,7 @@ struct StudioContinueCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         } else {
-            HStack(alignment: .center, spacing: 12) {
+            HStack(alignment: .center, spacing: 10) {
                 meta
                     .frame(maxWidth: .infinity, alignment: .leading)
                 button
@@ -316,16 +312,14 @@ struct StudioContinueCard: View {
         var parts: [String] = []
         switch item {
         case let .local(doc):
-            parts.append("\(doc.wordCount.formatted()) \(doc.wordCount == 1 ? "word" : "words")")
-            parts.append("edited \(doc.updatedAt.formatted(.relative(presentation: .named)))")
+            parts.append(StudioWorkItem.wordCountLabel(doc.wordCount))
+            parts.append(StudioDateCopy.editedPhrase(doc.updatedAt, now: now))
         case let .ao3Draft(work, _):
             if let words = work.words {
-                parts.append("\(words.formatted()) \(words == 1 ? "word" : "words")")
+                parts.append(StudioWorkItem.wordCountLabel(words))
             }
             if !work.dateUpdated.isEmpty {
-                let parsed = WorkStat.date(from: work.dateUpdated)
-                let edited = parsed?.formatted(.relative(presentation: .named)) ?? work.dateUpdated
-                parts.append("edited \(edited)")
+                parts.append("edited \(StudioDateCopy.shortAO3Date(work.dateUpdated, now: now))")
             }
         }
         return parts.joined(separator: " · ")
@@ -336,11 +330,7 @@ struct StudioContinueCard: View {
               let deletion,
               let daysLeft = DraftExpiry.daysLeft(until: deletion, now: now, calendar: .current)
         else { return nil }
-        switch daysLeft {
-        case ...0: return "AO3 deletes this draft today"
-        case 1: return "AO3 keeps this draft 1 more day"
-        default: return "AO3 keeps this draft \(daysLeft) more days"
-        }
+        return StudioContinueCopy.expiryLine(daysLeft: daysLeft)
     }
 }
 
@@ -375,7 +365,7 @@ struct StudioOverviewCommentRow: View {
                     }
                 }
             }
-            .padding(14)
+            .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
@@ -389,10 +379,10 @@ struct StudioOverviewCommentRow: View {
             AO3AuthorAvatar(
                 url: item.avatarURL,
                 name: item.commenterName,
-                size: 34,
+                size: 32,
                 isCircular: true
             )
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 let byline = Text(item.commenterName)
                     .fontWeight(.semibold)
                     .foregroundStyle(Color.primary)
@@ -422,7 +412,8 @@ struct StudioOverviewCommentRow: View {
             .foregroundStyle(.accentInk)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(theme.effectiveTint.opacity(0.14), in: Capsule())
+            .frame(minHeight: 32)
+            .background(StudioTonePalette.softAccentFill(for: theme), in: Capsule())
     }
 
     private var accessibilityLabel: String {
@@ -436,6 +427,9 @@ struct StudioOverviewCommentRow: View {
 
 struct StudioStatsGlanceGrid: View {
     let stats: AO3UserStats
+    let baseline: StudioStatsSnapshot?
+    let kudosSparkline: [Double]
+    let hitsSparkline: [Double]
 
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -448,28 +442,35 @@ struct StudioStatsGlanceGrid: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            LazyVGrid(columns: columns, spacing: 10) {
-                if let kudos = stats.kudos {
-                    metricCard(title: "Kudos", value: kudos.formatted(), accented: true)
-                }
-                if let hits = stats.hits {
-                    metricCard(title: "Hits", value: hits.formatted(), accented: false)
-                }
+        LazyVGrid(columns: columns, spacing: 10) {
+            if let kudos = stats.kudos {
+                let change = StudioStatsHistory.change(kudos, since: baseline?.total(.kudos))
+                metricCard(
+                    title: "Kudos",
+                    value: StudioOverviewCopy.statsGlanceValue(total: kudos, change: change),
+                    accented: true,
+                    sparkline: kudosSparkline
+                )
             }
-
-            if !secondarySummary.isEmpty {
-                Text(secondarySummary)
-                    .font(.footnote)
-                    .foregroundStyle(.secondaryInk)
-                    .monospacedDigit()
-                    .padding(.horizontal, 4)
+            if let hits = stats.hits {
+                let change = StudioStatsHistory.change(hits, since: baseline?.total(.hits))
+                metricCard(
+                    title: "Hits",
+                    value: StudioOverviewCopy.statsGlanceValue(total: hits, change: change),
+                    accented: false,
+                    sparkline: hitsSparkline
+                )
             }
         }
     }
 
-    private func metricCard(title: String, value: String, accented: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private func metricCard(
+        title: String,
+        value: String,
+        accented: Bool,
+        sparkline: [Double]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.footnote)
                 .foregroundStyle(.secondaryInk)
@@ -479,55 +480,45 @@ struct StudioStatsGlanceGrid: View {
                 .foregroundStyle(accented ? AnyShapeStyle(.accentInk) : AnyShapeStyle(Color.primary))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
+            if !sparkline.isEmpty {
+                HStack(alignment: .bottom, spacing: 4) {
+                    ForEach(Array(sparkline.enumerated()), id: \.offset) { index, fraction in
+                        let isLast = index == sparkline.count - 1
+                        let barColor: Color = if isLast {
+                            accented ? theme.accentInk : Color.primary.opacity(0.75)
+                        } else {
+                            Color.primary.opacity(0.20)
+                        }
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(barColor)
+                            .frame(height: max(3, CGFloat(fraction) * 28))
+                    }
+                }
+                .frame(height: 28, alignment: .bottom)
+                .accessibilityHidden(true)
+            }
         }
-        .padding(14)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                .fill(theme.appTheme.cardSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                        .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
-                )
-        )
-    }
-
-    private var secondarySummary: String {
-        var parts: [String] = []
-        if let bookmarks = stats.bookmarks {
-            parts.append("\(bookmarks.formatted()) bookmarks")
-        }
-        if let subscriptions = stats.subscriptions {
-            parts.append("\(subscriptions.formatted()) subscriptions")
-        }
-        if let threads = stats.commentThreads {
-            parts.append("\(threads.formatted()) threads")
-        }
-        return parts.joined(separator: " · ")
+        .subjectPanel(cornerRadius: SubjectMetrics.cornerRadius)
     }
 }
 
 struct StudioRecentPaperCard: View {
     let entry: StudioRecentEntry
+    let now: Date
     let action: () -> Void
 
     @Environment(ThemeManager.self) private var theme
-    @ScaledMetric(relativeTo: .body) private var cardWidth: CGFloat = 114
+    @ScaledMetric(relativeTo: .body) private var cardWidth: CGFloat = 112
     @ScaledMetric(relativeTo: .body) private var pageHeight: CGFloat = 146
 
     private var paperBackground: Color {
-        switch theme.appTheme {
-        case .light: Color(red: 0.984, green: 0.980, blue: 0.965)
-        case .sepia, .dark, .oled: theme.appTheme.cardSurface
-        }
+        StudioTonePalette.paperBackground(for: theme.appTheme)
     }
 
     private var paperBorder: Color {
-        switch theme.appTheme {
-        case .light: Color(red: 0.898, green: 0.875, blue: 0.824)
-        case .sepia: theme.appTheme.cardBorder
-        case .dark, .oled: theme.appTheme.glassStroke(0.18)
-        }
+        StudioTonePalette.paperBorder(for: theme.appTheme)
     }
 
     private var lineColor: Color {
@@ -560,13 +551,14 @@ struct StudioRecentPaperCard: View {
                     }
                     Spacer(minLength: 0)
                 }
-                .padding(10)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 9)
                 .frame(width: clampedWidth, height: clampedHeight, alignment: .topLeading)
                 .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(paperBackground)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 .strokeBorder(paperBorder, lineWidth: 0.5)
                         )
                 )
@@ -577,15 +569,17 @@ struct StudioRecentPaperCard: View {
                 )
                 .accessibilityHidden(true)
 
-                Text(entry.title)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.title)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
 
-                Text(metaLine)
-                    .font(.caption)
-                    .foregroundStyle(.secondaryInk)
-                    .lineLimit(1)
+                    Text(metaLine)
+                        .font(.caption)
+                        .foregroundStyle(.secondaryInk)
+                        .lineLimit(1)
+                }
             }
             .frame(width: clampedWidth, alignment: .leading)
         }
@@ -595,8 +589,8 @@ struct StudioRecentPaperCard: View {
 
     private var metaLine: String {
         if let editedAt = entry.editedAt {
-            let relative = editedAt.formatted(.relative(presentation: .named))
-            return "\(entry.subtitle) · \(relative)"
+            let short = StudioDateCopy.shortDate(editedAt, now: now)
+            return "\(entry.subtitle) · \(short)"
         }
         if let fallback = entry.editedFallback {
             return "\(entry.subtitle) · \(fallback)"
@@ -609,7 +603,7 @@ struct StudioNewDocumentPaperTile: View {
     let action: () -> Void
 
     @Environment(ThemeManager.self) private var theme
-    @ScaledMetric(relativeTo: .body) private var cardWidth: CGFloat = 114
+    @ScaledMetric(relativeTo: .body) private var cardWidth: CGFloat = 112
     @ScaledMetric(relativeTo: .body) private var pageHeight: CGFloat = 146
 
     var body: some View {
@@ -618,22 +612,22 @@ struct StudioNewDocumentPaperTile: View {
         return Button(action: action) {
             VStack(spacing: 6) {
                 Image(systemName: "plus")
-                    .font(.title2.weight(.semibold))
+                    .font(.title2.weight(.medium))
                 Text("New Document")
-                    .font(.footnote.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .multilineTextAlignment(.center)
             }
             .foregroundStyle(.accentInk)
             .padding(10)
             .frame(width: clampedWidth, height: clampedHeight)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .strokeBorder(
                         theme.appTheme.glassStroke(0.32),
                         style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
                     )
             )
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("New Document")

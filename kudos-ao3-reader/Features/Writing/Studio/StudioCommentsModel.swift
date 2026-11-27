@@ -183,6 +183,14 @@ final class StudioCommentsModel {
         StudioCommentsBoard.needsReplyCount(displayed(items))
     }
 
+    func unreadCount(in items: [AO3InboxItem]) -> Int {
+        StudioCommentsBoard.unreadCount(displayed(items))
+    }
+
+    func allWorkCommentsCount(in items: [AO3InboxItem]) -> Int {
+        StudioCommentsBoard.allWorkCommentsCount(displayed(items))
+    }
+
     func visibleComments(in items: [AO3InboxItem]) -> [AO3InboxItem] {
         StudioCommentsBoard.comments(displayed(items), chip: chip)
     }
