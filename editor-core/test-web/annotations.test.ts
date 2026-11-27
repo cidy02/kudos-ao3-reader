@@ -98,3 +98,70 @@ test('setAnnotations checks its arguments', async () => {
   await assert.rejects(h.call('setAnnotations', { items: 'no' }), (e: any) => e.code === 'bad-args');
   assert.deepEqual(await h.call('setAnnotations', { items: [] }), { placed: [] });
 });
+
+test('a note across two paragraphs is drawn in both, and the rest of the batch still draws', async () => {
+  const h = await opened(SRC);
+  const from = SRC.indexOf('the boat'), to = SRC.indexOf('tide') + 4;
+  const r = await h.call('setAnnotations', { items: [{ id: 'x', kind: 'note', from, to }, { id: 'y', kind: 'tk', from: SRC.indexOf('low'), to: SRC.indexOf('low') + 3 }] });
+  assert.deepEqual(r, { placed: [{ id: 'x', found: true }, { id: 'y', found: true }] });
+  const parts = [...h.bridge.editor.view.dom.querySelectorAll('[data-annotation="x"]')].map((e) => e.textContent);
+  assert.deepEqual(parts, ['the boat.', 'The tide']);
+  assert.equal(h.bridge.editor.view.dom.querySelector('[data-annotation="y"]')?.textContent, 'low');
+});
+
+// Wave 48 review (Grok): the source map doesn't align spaces or the inside of a reference.
+test('a highlight ending on a reference or a space ends there on an unedited chapter', async () => {
+  const src = '<p>She said &ldquo;hello&rdquo; quietly, and then left.</p>';
+  const h = await opened(src);
+  const from = src.indexOf('&ldquo;'), to = src.indexOf('&rdquo;') + '&rdquo;'.length;
+  const sp = src.indexOf('quietly,') + 'quietly,'.length + 1; // through the space after the comma
+  await h.call('setAnnotations', { items: [{ id: 'q', kind: 'note', from, to }, { id: 's', kind: 'note', from: src.indexOf('quietly'), to: sp }] });
+  const dom = h.bridge.editor.view.dom;
+  assert.equal(dom.querySelector('[data-annotation="q"]')?.textContent, '“hello”');
+  assert.equal(dom.querySelector('[data-annotation="s"]')?.textContent, 'quietly, ');
+});
+
+test('a selection ending or starting on a space keeps the space and nothing more in its range', async () => {
+  const src = '<p>The tide was low.</p>';
+  const h = await opened(src);
+  const view = h.bridge.editor.view;
+  const { TextSelection } = await import('prosemirror-state');
+  selectText(h, 'tide');
+  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.selection.from, view.state.selection.to + 1)));
+  let s = await h.call('snapshot', { selection: true });
+  assert.equal(s.html.slice(s.selection.from, s.selection.to), 'tide ');
+  selectText(h, 'was');
+  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.selection.from - 1, view.state.selection.to)));
+  s = await h.call('snapshot', { selection: true });
+  assert.equal(s.html.slice(s.selection.from, s.selection.to), ' was');
+});
+
+test('a TK is reported once, not again for an edit elsewhere while the caret still sits after it', async () => {
+  const h = await opened('<p>Start. The name of the boat is </p>');
+  caretAt(h, 'is ');
+  await command(h, 'insertText', { text: 'TK' });
+  await command(h, 'insertText', { text: '.' });
+  const view = h.bridge.editor.view;
+  view.dispatch(view.state.tr.insertText('Then. ', 1)); // the selection maps along and still follows "TK."
+  assert.equal(h.events.filter((e: any) => e.type === 'tkTyped').length, 1);
+});
+
+test('no name suggestion in the middle of a hyphenated word', async () => {
+  const { wordAtCaret } = await import('../src/editor/annotations.ts');
+  const h = await opened('<p>Anne-Marie came.</p>');
+  caretAt(h, 'Anne');
+  assert.equal(wordAtCaret(h.bridge.editor.view.state), null);
+  caretAt(h, 'Anne-Marie');
+  assert.equal(wordAtCaret(h.bridge.editor.view.state), 'Anne-Marie');
+});
+
+test('a stored quote ending on a space after an inline tag ends at that space', async () => {
+  const src = '<p><em>tide</em> was low.</p>';
+  const h = await opened(src);
+  const view = h.bridge.editor.view;
+  const { TextSelection } = await import('prosemirror-state');
+  selectText(h, 'tide');
+  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.selection.from, view.state.selection.to + 1)));
+  const s = await h.call('snapshot', { selection: true });
+  assert.equal(s.html.slice(s.selection.from, s.selection.to), 'tide</em> ');
+});

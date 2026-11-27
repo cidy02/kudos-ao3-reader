@@ -271,6 +271,20 @@ final class WritingTextController: NSObject {
         replace(NSRange(location: 0, length: (text as NSString).length), with: value)
     }
 
+    @discardableResult
+    func replaceText(in range: NSRange, with value: String) -> Bool {
+        guard !isFrozen, NSMaxRange(range) <= (text as NSString).length else { return false }
+        commitComposition()
+        guard replace(range, with: value) else { return false }
+        let caret = NSRange(location: range.location + (value as NSString).length, length: 0)
+        #if os(iOS)
+        textView.selectedRange = caret
+        #else
+        textView.setSelectedRange(caret)
+        #endif
+        return true
+    }
+
     /// Puts the keyboard away (the preview toggle).
     func endEditing() {
         #if os(iOS)
@@ -292,19 +306,21 @@ final class WritingTextController: NSObject {
         #endif
     }
 
-    private func replace(_ range: NSRange, with value: String) {
+    @discardableResult
+    private func replace(_ range: NSRange, with value: String) -> Bool {
         #if os(iOS)
         guard let start = textView.position(from: textView.beginningOfDocument, offset: range.location),
               let end = textView.position(from: start, offset: range.length),
-              let target = textView.textRange(from: start, to: end) else { return }
+              let target = textView.textRange(from: start, to: end) else { return false }
         textView.replace(target, withText: value)
         #else
         textView.breakUndoCoalescing()
-        guard textView.shouldChangeText(in: range, replacementString: value) else { return }
+        guard textView.shouldChangeText(in: range, replacementString: value) else { return false }
         textView.textStorage?.replaceCharacters(in: range, with: value)
         textView.didChangeText()
         #endif
         noteEdit()
+        return true
     }
 
     /// Records a change. O(1): no text is read here.

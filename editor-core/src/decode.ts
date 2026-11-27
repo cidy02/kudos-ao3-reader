@@ -48,3 +48,45 @@ export function offsetsFor(source: string, decoded: string): { starts: Int32Arra
   }
   return { starts, ends };
 }
+
+/** `source` (text between tags) with its character references decoded, as the tokenizer would. */
+export function decodeText(source: string): string {
+  let out = '';
+  let si = 0;
+  outer: while (si < source.length) {
+    if (source[si] === '&') {
+      const m = REF.exec(source.slice(si, si + 40));
+      for (let len = m ? m[0].length : 0; len >= 2; len--) {
+        const ref = source.slice(si, si + len);
+        const r = decodeRef(ref);
+        if (r !== ref) { out += r; si += len; continue outer; }
+      }
+    }
+    out += source[si];
+    si++;
+  }
+  return out;
+}
+
+/**
+ * The length of the character reference starting at `at` in `source`, or 0 when there is none (a bare `&`, `D&D`).
+ * The longest prefix that decodes to one character: `&copyright` is `&copy` and then text.
+ */
+export function refLength(source: string, at: number): number {
+  if (source[at] !== '&') return 0;
+  const m = REF.exec(source.slice(at, at + 40));
+  for (let len = m ? m[0].length : 0; len >= 2; len--) {
+    const ref = source.slice(at, at + len);
+    const r = decodeRef(ref);
+    if (r !== ref && r.length <= 2) return len;
+  }
+  return 0;
+}
+
+/** The start of the character reference that covers `offset` in `source`, or null when none does. */
+export function refCovering(source: string, offset: number): number | null {
+  const amp = source.lastIndexOf('&', offset);
+  if (amp < 0 || offset - amp > 40) return null;
+  const len = refLength(source, amp);
+  return len && amp + len > offset ? amp : null;
+}

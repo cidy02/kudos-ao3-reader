@@ -73,6 +73,7 @@ struct ChapterEditorScreen: View {
     @State var annotationSyncTask: Task<Void, Never>?
     @State var annotationSyncGeneration = 0
     @State var isClosing = false
+    @State var sprintController = SprintController()
 
     struct InitialSnapshot: Equatable {
         let title: String
@@ -191,6 +192,7 @@ struct ChapterEditorScreen: View {
         .onChange(of: summary) { _, _ in scheduleLocalSave() }
         .onChange(of: notesBefore) { _, _ in scheduleLocalSave() }
         .onChange(of: notesAfter) { _, _ in scheduleLocalSave() }
+        .sprintHost(sprintController, words: currentWordCount, workID: documentBridge.workID, isClosing: isClosing)
         .onDisappear {
             metadataSaveTask?.cancel()
             statusClearTask?.cancel()
@@ -359,7 +361,9 @@ extension ChapterEditorScreen {
             canCopyAsAO3HTML: true,
             availableExportFormats: [],
             canDeleteChapter: canDeleteChapter,
-            savedVersionCount: documentBridge.versionCount > 0 ? documentBridge.versionCount : nil
+            savedVersionCount: documentBridge.versionCount > 0 ? documentBridge.versionCount : nil,
+            canStartSprint: session != nil,
+            isSprintRunning: sprintController.active != nil
         )
     }
 
@@ -418,7 +422,8 @@ extension ChapterEditorScreen {
             tkCount: documentBridge.tkCount,
             syncState: documentBridge.syncState,
             ao3DraftDaysLeft: ao3Actions?.ao3DraftDaysLeft,
-            chapterWordCount: currentWordCount
+            chapterWordCount: currentWordCount,
+            sprint: sprintController.statusInfo
         )
     }
 }

@@ -156,6 +156,7 @@ export class Bridge {
       }
       case 'load': {
         this.edited.cancel();
+        this.words.cancel(); // a word from the last document is not at this caret
         const r = ed.load(str(a, 'html'), int(a, 'revision'));
         return r;
       }
@@ -178,7 +179,7 @@ export class Bridge {
           return { id: str(it, 'id'), kind, from: int(it, 'from'), to: int(it, 'to') };
         }));
       }
-      case 'dispose': this.edited.cancel(); ed.dispose(); return {};
+      case 'dispose': this.edited.cancel(); this.words.cancel(); ed.dispose(); return {};
       case 'verifySwitch': case 'verify': {
         const direction = a.direction === 'richToSource' || a.direction === 'sourceToRich' ? a.direction : fail('bad-args', 'direction must be richToSource or sourceToRich');
         return ed.verifySwitch(direction, a.html === undefined || a.html === null ? undefined : str(a, 'html'));

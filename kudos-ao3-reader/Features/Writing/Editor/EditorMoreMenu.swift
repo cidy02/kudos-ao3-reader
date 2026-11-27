@@ -53,6 +53,8 @@ nonisolated enum EditorMoreMenuActionID: Hashable, Sendable {
     case print
     case versionHistory
     case writingTools
+    case startSprint
+    case endSprint
     case addNote
     case format
     case deleteChapter
@@ -159,7 +161,9 @@ nonisolated struct EditorMoreMenuModel: Equatable, Sendable {
             savedVersionCount: savedVersionCount,
             deviceName: deviceName,
             includesAddNote: visibleActions?.contains(.addNote) == true,
-            includesFormat: visibleActions?.contains(.format) == true
+            includesFormat: visibleActions?.contains(.format) == true,
+            includesStartSprint: visibleActions?.contains(.startSprint) == true,
+            includesEndSprint: visibleActions?.contains(.endSprint) == true
         )
         let deleteItem = Item(
             id: .deleteChapter,
@@ -242,7 +246,9 @@ nonisolated struct EditorMoreMenuModel: Equatable, Sendable {
         savedVersionCount: Int?,
         deviceName: String,
         includesAddNote: Bool,
-        includesFormat: Bool
+        includesFormat: Bool,
+        includesStartSprint: Bool,
+        includesEndSprint: Bool
     ) -> [Item] {
         let versionSubtitle = savedVersionCount.map { count in
             "\(count.formatted()) saved \(count == 1 ? "version" : "versions") on this \(deviceName)"
@@ -263,6 +269,12 @@ nonisolated struct EditorMoreMenuModel: Equatable, Sendable {
             ),
             Item(id: .writingTools, title: "Writing Tools", systemImage: "textformat.abc")
         ])
+        if includesStartSprint {
+            items.append(Item(id: .startSprint, title: "Start Sprint", systemImage: "timer"))
+        }
+        if includesEndSprint {
+            items.append(Item(id: .endSprint, title: "End Sprint", systemImage: "stop.circle"))
+        }
         return items
     }
 }
@@ -288,6 +300,8 @@ struct EditorMoreMenuActions {
     var onWritingTools: () -> Void = {}
     var onAddNote: () -> Void = {}
     var onFormat: () -> Void = {}
+    /// Start Sprint and End Sprint share one handler: it ends a running sprint, or asks how long.
+    var onSprint: () -> Void = {}
     var onDeleteChapter: () -> Void = {}
 
     func dispatch(_ actionID: EditorMoreMenuActionID) {
@@ -322,6 +336,7 @@ struct EditorMoreMenuActions {
         case .writingTools: onWritingTools()
         case .addNote: onAddNote()
         case .format: onFormat()
+        case .startSprint, .endSprint: onSprint()
         case .deleteChapter: onDeleteChapter()
         default: break
         }

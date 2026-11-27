@@ -45,6 +45,8 @@ struct ContentView: View {
     @State private var dismissedSyncFolderOnboardingThisSession = false
     /// Shake-to-report bug reporter (also reachable from Settings → About).
     @State private var showingBugReport = false
+    /// Set by the "New Idea" App Intent (Shortcuts, Spotlight, Siri, Action button).
+    @State private var newIdeaRequest = NewIdeaRequest.shared
     #if DEBUG
     @State private var showingDebugLogin = false
     @State private var debugDismissedWelcome = false
@@ -128,6 +130,8 @@ struct ContentView: View {
             .task { if DebugLaunchRoute.opensLogin { showingDebugLogin = true } }
             // `-KudosDebugRoute bugreport`: the shake-to-report sheet, for side-by-side shots.
             .task { if DebugLaunchRoute.value == "bugreport" { showingBugReport = true } }
+            // `-KudosDebugRoute newidea`: the New Idea sheet the App Intent opens (T-576e), for screenshots.
+            .task { if DebugLaunchRoute.value == "newidea" { NewIdeaRequest.shared.request() } }
             #if os(iOS)
             .task { await DebugLaunchRoute.runRotations() }
             #endif
@@ -277,6 +281,7 @@ struct ContentView: View {
                     .accentTint(theme.effectiveTint, on: theme.appTheme)
                 #endif
             }
+            .newIdeaSheetPresenter(request: newIdeaRequest, theme: theme)
             .onAppear {
                 #if DEBUG
                 if DebugLaunchRoute.pageRoute == "welcome" || DebugLaunchRoute.pageRoute == "protectlibrary" {

@@ -35,6 +35,10 @@ export const COMMANDS: Fixtures['commands'] = [
   { id: 'host.insertQuotationMarks', name: 'insertQuotes', attrs: { open: '“', close: '”' } },
   { id: 'tag.lineBreak', name: 'insertLineBreak', attrs: {} },
   { id: 'session.completeWord', name: 'completeWord', attrs: { text: 'Marta' } },
+  { id: 'session.moveWord', name: 'moveWord', attrs: { by: -2, extend: true } },
+  { id: 'session.insertPhrase', name: 'insertPhrase', attrs: { text: 'as if listening' } },
+  { id: 'session.newParagraph', name: 'newParagraph', attrs: {} },
+  { id: 'session.replaceText', name: 'replaceText', attrs: { from: 3, to: 8, text: 'three times' } },
 ];
 
 /** Timings vary run to run; everything else is deterministic. */
@@ -60,6 +64,8 @@ export async function record(): Promise<Fixtures> {
   await call('setMirror', { enabled: true });
   h.clock.advance(10);
   await call('activate', { caret: SOURCE.indexOf('three'), focus: true });
+  // offsets into SOURCE are right only while it is unedited
+  await call('setAnnotations', { items: [{ id: 'note-1', kind: 'note', from: SOURCE.indexOf('Four'), to: SOURCE.indexOf('Four') + 4 }] });
   h.clock.advance(400);
   await call('command', { name: 'toggleMark', attrs: { mark: 'bold' } });
   await call('command', { name: 'insertText', attrs: { text: 'very ' } });
@@ -67,7 +73,6 @@ export async function record(): Promise<Fixtures> {
   await call('command', { name: 'paste', attrs: { html: '<p><font color="red">Hi</font> there</p>' } });
   h.clock.advance(400);
   // notes and TKs (T-576d): drawn by offsets in the text HTML mode holds, a tap, a typed TK, a name suggestion
-  await call('setAnnotations', { items: [{ id: 'note-1', kind: 'note', from: SOURCE.indexOf('Four'), to: SOURCE.indexOf('Four') + 4 }] });
   h.bridge.editor.view.dom.querySelector('[data-annotation="note-1"]')?.dispatchEvent(new (globalThis as any).window.MouseEvent('click', { bubbles: true }));
   await call('command', { name: 'insertText', attrs: { text: ' TK' } });
   await call('command', { name: 'insertText', attrs: { text: ',' } });
