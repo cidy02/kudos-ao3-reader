@@ -27,7 +27,7 @@ struct ReaderChapterEndHTMLTests {
         chapter: Int = 7,
         nextTitle: String = "Chapter 8: The Tide Table",
         nextHref: String = "ch8.xhtml",
-        nextTime: String? = "About 14 min",
+        nextTime: String? = "About 15 min",
         footer: String = "Chapter 7 of 20 · 12 posted · or keep swiping to read on",
         showsAO3Actions: Bool = true,
         kudosGiven: Bool = false
@@ -195,7 +195,7 @@ struct ReaderChapterEndHTMLTests {
         #expect(ch1Card?.chapter == 1)
         #expect(ch1Card?.nextChapterTitle == "Chapter 2: The Tide Table")
         #expect(ch1Card?.nextChapterHref == "ch2.xhtml")
-        #expect(ch1Card?.nextChapterTime == "About 14 min")
+        #expect(ch1Card?.nextChapterTime == "About 15 min")
         #expect(ch1Card?.footer == "Chapter 1 of 20 · 12 posted · or keep swiping to read on")
     }
 
@@ -386,7 +386,7 @@ struct ReaderChapterEndHTMLTests {
         #expect(!prefaceHTML.contains(ReaderChapterEndHTML.sectionID))
         #expect(ch1HTML.contains("id=\"\(ReaderChapterEndHTML.sectionID)\""))
         #expect(ch1HTML.contains("href=\"ch2.xhtml\""))
-        #expect(ch1HTML.contains("About 14 min"))
+        #expect(ch1HTML.contains("About 15 min"))
         #expect(ch1HTML.contains("Give Kudos"))
         #expect(isValidXML(ch1HTML))
         #expect(!ch2HTML.contains(ReaderChapterEndHTML.sectionID))
