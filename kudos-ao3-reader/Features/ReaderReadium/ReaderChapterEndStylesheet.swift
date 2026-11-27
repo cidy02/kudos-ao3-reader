@@ -299,9 +299,12 @@ nonisolated enum ReaderChapterEndStylesheet {
     private static var actionsAndFooterCSS: String {
         let sectionID = ReaderChapterEndHTML.sectionID
         return """
+        /* Column pagination gives this row an indefinite inline size, so a grid
+           track list collapses to one column. A 7rem floor stays two-up at the
+           default size and wraps only when two buttons no longer fit. */
         #\(sectionID) .kudos-ce-actions {
-          display: grid !important;
-          grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr)) !important;
+          display: flex !important;
+          flex-wrap: wrap !important;
           gap: 0.625rem !important;
           margin: 0 0 0.875rem 0 !important;
           break-inside: avoid !important;
@@ -313,11 +316,14 @@ nonisolated enum ReaderChapterEndStylesheet {
         #\(sectionID) a.kudos-ce-btn:hover,
         #\(sectionID) a.kudos-ce-btn:active {
           display: flex !important;
+          flex: 1 1 calc(50% - 0.625rem) !important;
           align-items: center !important;
           justify-content: center !important;
           gap: 0.4375rem !important;
+          min-width: min(100%, 7rem) !important;
           min-height: 2.75rem !important;
           padding: 0.625rem 0.875rem !important;
+          white-space: normal !important;
           border-radius: 1.375rem !important;
           background-color: var(--kudos-ce-pill) !important;
           color: var(--USER__textColor, currentColor) !important;
@@ -336,6 +342,12 @@ nonisolated enum ReaderChapterEndStylesheet {
         #\(sectionID) a.kudos-ce-btn:visited * {
           color: var(--USER__textColor, currentColor) !important;
           text-decoration: none !important;
+        }
+        #\(sectionID) .kudos-ce-btn-label,
+        #\(sectionID) .kudos-ce-kudos-label {
+          min-width: 0 !important;
+          white-space: normal !important;
+          overflow-wrap: break-word !important;
         }
         #\(sectionID) .kudos-ce-kudos[data-kudos-given="true"] {
           opacity: 0.72 !important;

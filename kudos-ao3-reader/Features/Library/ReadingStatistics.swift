@@ -4,8 +4,8 @@ import SwiftData
 /// Local-only reading insights derived from the Library's `SavedWork` records.
 /// The app does not track sessions or per-word progress, so "words read" counts
 /// only finished works whose AO3 word count is known.
-struct ReadingStatistics {
-    struct FandomCount: Identifiable, Equatable {
+nonisolated struct ReadingStatistics: Equatable, Sendable {
+    struct FandomCount: Identifiable, Equatable, Sendable {
         let name: String
         let count: Int
 
@@ -39,7 +39,7 @@ struct ReadingStatistics {
         for work in works where Self.hasStarted(work) {
             started.append(work)
         }
-        let finished = works.filter(\.isFinished)
+        let finished = works.filter { $0.isFinished }
         let inProgress = started.filter { !$0.isFinished }
 
         totalWorks = works.count
@@ -49,7 +49,7 @@ struct ReadingStatistics {
         wordsRead = finished.filter { $0.wordUnit == .words }.reduce(0) { total, work in
             total + max(0, work.wordCount)
         }
-        latestReadDate = works.compactMap(\.lastReadDate).max()
+        latestReadDate = works.compactMap { $0.lastReadDate }.max()
 
         let startOfToday = calendar.startOfDay(for: now)
         let sevenDayStart = calendar.date(byAdding: .day, value: -6, to: startOfToday)
@@ -192,12 +192,12 @@ struct HomeReadingStats: Equatable, Sendable {
     /// when the gate opens. Queue-only works are not singled out: their reading counts
     /// (owner, 2026-11-19). Needs the UNFILTERED library: on an already-filtered list it
     /// is always empty.
-    static func insightsHiddenWorkIDs(
+    nonisolated static func insightsHiddenWorkIDs(
         from libraryWorks: [SavedWork],
         hideMature: Bool
     ) -> Set<UUID> {
         guard hideMature else { return [] }
-        return Set(libraryWorks.lazy.filter(\.isAdult).map(\.id))
+        return Set(libraryWorks.lazy.filter { $0.isAdult }.map { $0.id })
     }
 
     /// Adult-rated works sitting in Recently Deleted (`isPendingDeletion == true`).
@@ -211,12 +211,11 @@ struct HomeReadingStats: Equatable, Sendable {
     /// Every work in Recently Deleted, and the adult-rated ones among them. A
     /// soft-deleted work still exists, so it follows its current rating like a live
     /// one; only hard-deleted works fall back to a sitting's recorded rating.
-    @MainActor
-    static func softDeletedWorkIDs(in context: ModelContext) -> (all: Set<UUID>, adult: Set<UUID>) {
+    nonisolated static func softDeletedWorkIDs(in context: ModelContext) -> (all: Set<UUID>, adult: Set<UUID>) {
         let deleted = (try? context.fetch(
             FetchDescriptor<SavedWork>(predicate: #Predicate { $0.isPendingDeletion })
         )) ?? []
-        return (Set(deleted.map(\.id)), Set(deleted.lazy.filter(\.isAdult).map(\.id)))
+        return (Set(deleted.map { $0.id }), Set(deleted.lazy.filter { $0.isAdult }.map { $0.id }))
     }
 
     /// Whether Library's `•••` menu offers "Reading Insights": whenever the user has
@@ -233,7 +232,7 @@ struct HomeReadingStats: Equatable, Sendable {
     /// What one Insights scope counts. `revealed` is `PrivacyGate.revealAll`: while it is
     /// false the Hidden scope is empty and the combined scope is the main one, so nothing
     /// hidden is computed or exported.
-    static func insightsScope(
+    nonisolated static func insightsScope(
         _ scope: InsightsScope,
         from libraryWorks: [SavedWork],
         hideMature: Bool,
@@ -241,7 +240,7 @@ struct HomeReadingStats: Equatable, Sendable {
     ) -> InsightsScopeSelection {
         let hidden = insightsHiddenWorkIDs(from: libraryWorks, hideMature: hideMature)
         let liveWorks = libraryWorks.filter { !$0.isPendingDeletion }
-        let liveIDs = Set(liveWorks.map(\.id))
+        let liveIDs = Set(liveWorks.map { $0.id })
         switch scope {
         case .hidden where !revealed:
             return InsightsScopeSelection(
@@ -311,14 +310,14 @@ struct HomeReadingStats: Equatable, Sendable {
 
 /// Which reading Insights counts (owner, 2026-11-19): `main` leaves out the works Hide
 /// Mature conceals, `hidden` is only those (the Hidden section), `combined` is both.
-enum InsightsScope: Equatable, Sendable {
+nonisolated enum InsightsScope: Equatable, Sendable {
     case main
     case hidden
     case combined
 }
 
 /// The works and sittings one `InsightsScope` counts.
-struct InsightsScopeSelection {
+nonisolated struct InsightsScopeSelection {
     /// Saved-library works (never queue-only): the library-inventory figures (statuses,
     /// unread backlog, WIP freshness, stopped works, preserved stats) and export statuses.
     var libraryWorks: [SavedWork]
@@ -347,10 +346,10 @@ struct InsightsScopeSelection {
     /// when revealed. A work that still exists (live, or soft-deleted) follows its
     /// current rating instead: re-rated General/Teen, its old Explicit sittings
     /// return to main.
-    @MainActor
     func sessions(
         _ all: [ReadingSession],
-        in context: ModelContext? = nil
+        in context: ModelContext? = nil,
+        preloadedSoftDeleted: (all: Set<UUID>, adult: Set<UUID>)? = nil
     ) -> [ReadingSession] {
         if scope == .hidden && !revealed { return [] }
         guard hideMature else {
@@ -363,8 +362,7 @@ struct InsightsScopeSelection {
         if scope == .combined && revealed { return all }
         var allHiddenIDs = hiddenWorkIDs
         var existingIDs = liveWorkIDs
-        if let context {
-            let softDeleted = HomeReadingStats.softDeletedWorkIDs(in: context)
+        if let softDeleted = preloadedSoftDeleted ?? context.map({ HomeReadingStats.softDeletedWorkIDs(in: $0) }) {
             allHiddenIDs.formUnion(softDeleted.adult)
             existingIDs.formUnion(softDeleted.all)
         }

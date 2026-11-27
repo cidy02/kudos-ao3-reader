@@ -126,7 +126,6 @@ nonisolated struct TagAliasResolver: Equatable, Sendable {
         )
     }
 
-    @MainActor
     init(models: [TagAlias]) {
         self.init(
             entries: models.compactMap { model in
@@ -319,7 +318,7 @@ final class TagAlias {
 @MainActor
 enum TagAliasStore {
     /// Builds a `TagAliasResolver` from all persisted aliases in `context`.
-    static func resolver(in context: ModelContext) -> TagAliasResolver {
+    nonisolated static func resolver(in context: ModelContext) -> TagAliasResolver {
         let aliases = (try? context.fetch(FetchDescriptor<TagAlias>())) ?? []
         return TagAliasResolver(models: aliases)
     }

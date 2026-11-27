@@ -62,6 +62,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// section list use it, since the count alone cannot tell two copies apart.
     private(set) var sectionsGeneration = 0
     private(set) var currentLocator: Locator?
+
+    /// The end-of-chapter card's late ratio correction (T-578) rewrites the last settle into prose coordinates;
+    /// the setter stays private to this type.
+    func adoptChapterEndCorrectedLocator(_ locator: Locator) {
+        currentLocator = locator
+    }
     /// Bumped on every navigator-resolved `locationDidChange` that passes the
     /// ingestion gate; 0 until the first real settle after open (the seeded
     /// persisted locator does not count).
@@ -903,6 +909,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         // First post-open settle: the spread has painted enough for Readium to
         // report a location — lift the skeleton that was covering its spinner.
         markFirstPagePresentedIfNeeded()
+        // The content-ratio message often arrives after this settle. Keeping the
+        // pre-normalization locator (of an accepted settle, past the speech-echo check)
+        // lets that message rewrite the saved place once, instead of scaling twice.
+        chapterEndState.lastRawLocator = rawLocator
         let rawProgression = rawLocator.locations.progression
         let previousHref = currentLocator.map { ReaderSectionBuilder.hrefKey($0.href.string) }
         let newHref = ReaderSectionBuilder.hrefKey(locator.href.string)

@@ -7,12 +7,26 @@ import WebKit
 /// Keeps saved reading positions anchored to the original chapter prose when
 /// the in-chapter end-of-chapter card adds height or an extra column at the end.
 nonisolated enum ReaderChapterEndProgress {
-    /// Normalizes a resource href or `window.location.pathname` so JS and Swift
-    /// key the same chapter consistently (preserving subdirectories and decoding `%xx`).
+    /// Normalizes a resource href, `readium.link.href`, `window.location.href`,
+    /// or `window.location.pathname` so JS and Swift key the same chapter
+    /// (preserving subdirectories and decoding `%xx`).
+    ///
+    /// A served page URL is `readium://<uuid>/OEBPS/ch.xhtml`. Stripping the
+    /// scheme and host leaves the publication href the locator already uses.
+    /// Keying only `location.pathname` misses when WebKit leaves that empty
+    /// for the custom scheme, and the ratio is then never applied.
     static func normalizedHrefKey(_ href: String) -> String {
         var trimmed = href.trimmingCharacters(in: .whitespacesAndNewlines)
         if let cut = trimmed.firstIndex(where: { $0 == "#" || $0 == "?" }) {
             trimmed = String(trimmed[..<cut])
+        }
+        if let scheme = trimmed.range(of: "://") {
+            let afterScheme = trimmed[scheme.upperBound...]
+            if let slash = afterScheme.firstIndex(of: "/") {
+                trimmed = String(afterScheme[afterScheme.index(after: slash)...])
+            } else {
+                trimmed = ""
+            }
         }
         while trimmed.hasPrefix("/") { trimmed.removeFirst() }
         let decoded = trimmed.removingPercentEncoding ?? trimmed
@@ -22,6 +36,30 @@ nonisolated enum ReaderChapterEndProgress {
     private static func basenameKey(_ href: String) -> String {
         let normalized = normalizedHrefKey(href)
         return normalized.split(separator: "/").last.map(String.init) ?? normalized
+    }
+
+    /// Ratio for `href` from the map the page script fills.
+    ///
+    /// Full path first. A unique basename match covers a pathname that dropped
+    /// its directories. Two stored chapters that share a filename do not match,
+    /// so one chapter's card cannot scale the other.
+    static func contentRatio(forHref href: String, in ratios: [String: Double]) -> Double? {
+        let full = normalizedHrefKey(href)
+        if let ratio = ratios[full] { return ratio }
+        let base = basenameKey(href)
+        guard !base.isEmpty else { return nil }
+        let hits = ratios.filter { basenameKey($0.key) == base }
+        guard hits.count == 1, let ratio = hits.values.first else { return nil }
+        return ratio
+    }
+
+    /// Progression stored on a locator. Exactly `1` is the expanded document's
+    /// end, past the card. Scroll mode seeks `0` and `1` in native code and
+    /// never calls `readium.scrollToPosition`, so the in-page scale would not
+    /// run and reopen would jump to the bottom of the card. A hair under 1
+    /// still maps to the last position and restores at the end of the prose.
+    static func progressionForRestore(_ normalized: Double) -> Double {
+        normalized >= 1 ? (1 - 1e-6) : normalized
     }
 
     /// Maps a Readium-reported locator (whose progression divides by prose + card)
@@ -67,7 +105,7 @@ nonisolated enum ReaderChapterEndProgress {
         }
 
         return locator.copy(locations: {
-            $0.progression = normalizedProg
+            $0.progression = progressionForRestore(normalizedProg)
             $0.position = updatedPosition
             $0.totalProgression = updatedTotal
         })
@@ -126,7 +164,11 @@ nonisolated enum ReaderChapterEndProgress {
                 var origScrollToPosition = window.readium.scrollToPosition;
                 window.readium.scrollToPosition = function(position, dir, animated) {
                     var pos = parseFloat(position);
-                    if (isFinite(pos) && pos > 0 && pos < 1) {
+                    // Include 1. A saved end-of-prose progression of 1 must scale
+                    // back onto the prose, not the bottom of the card. Scroll mode
+                    // never reaches this for exactly 0 or 1; Swift stores a hair
+                    // under 1 so the scale still runs.
+                    if (isFinite(pos) && pos > 0 && pos <= 1) {
                         var ratio = originalContentRatio();
                         if (ratio > 0 && ratio < 1) {
                             return origScrollToPosition(String(pos * ratio), dir, animated);
@@ -135,12 +177,22 @@ nonisolated enum ReaderChapterEndProgress {
                     return origScrollToPosition(position, dir, animated);
                 };
             }
+            function chapterHref() {
+                try {
+                    var link = window.readium && window.readium.link && window.readium.link.href;
+                    if (link) return String(link);
+                } catch (e0) {}
+                var loc = window.location;
+                if (!loc) return '';
+                if (loc.pathname) return loc.pathname;
+                return loc.href || '';
+            }
             var lastPostedRatio = null;
             var lastPostedHref = null;
             function postRatio() {
                 try {
                     var ratio = originalContentRatio();
-                    var href = window.location.pathname || '';
+                    var href = chapterHref();
                     if (!href) return;
                     if (lastPostedHref === href && lastPostedRatio !== null
                         && Math.abs(ratio - lastPostedRatio) < 0.0005) {
@@ -164,7 +216,18 @@ nonisolated enum ReaderChapterEndProgress {
                 }
             });
             window.addEventListener('scroll', postRatio, { passive: true });
-            postRatio();
+            // `readium.link` is assigned after the document-end scripts, in
+            // spreadDidLoad. Retry until that href exists so the ratio is
+            // stored under the same key as the locator, not only a pathname
+            // that may not match it.
+            var hrefTries = 0;
+            function postUntilLinked() {
+                postRatio();
+                hrefTries += 1;
+                var linked = window.readium && window.readium.link && window.readium.link.href;
+                if (!linked && hrefTries < 8) window.setTimeout(postUntilLinked, 80);
+            }
+            postUntilLinked();
         })();
         """
     }
@@ -179,6 +242,10 @@ struct ReaderChapterEndBookState {
     var accentChangedSinceOpen = false
     var contentRatioByHref: [String: Double] = [:]
     var lastRawLocatorProgression: Double?
+    /// Locator Readium reported, before card-length normalization. The ratio
+    /// message often arrives after the first settle; re-applying it here keeps
+    /// the saved place in prose coordinates.
+    var lastRawLocator: Locator?
 
     mutating func reset(for chapterEnd: ReaderChapterEndWorkContext?) {
         kudosState = chapterEnd?.kudosState
@@ -187,6 +254,7 @@ struct ReaderChapterEndBookState {
         accentChangedSinceOpen = false
         contentRatioByHref = [:]
         lastRawLocatorProgression = nil
+        lastRawLocator = nil
     }
 }
 
@@ -234,17 +302,37 @@ extension ReadiumBook {
         let key = ReaderChapterEndProgress.normalizedHrefKey(href)
         guard !key.isEmpty else { return }
         chapterEndState.contentRatioByHref[key] = ratio
+        applyChapterEndRatioToLastRawLocator()
     }
 
     func normalizedLocatorForChapterEnd(_ locator: Locator) -> Locator {
-        let key = ReaderChapterEndProgress.normalizedHrefKey(locator.href.normalized.string)
-        guard let ratio = chapterEndState.contentRatioByHref[key] else { return locator }
+        guard let ratio = ReaderChapterEndProgress.contentRatio(
+            forHref: locator.href.normalized.string,
+            in: chapterEndState.contentRatioByHref
+        ) else { return locator }
         return ReaderChapterEndProgress.normalizeLocator(
             locator,
             contentRatio: ratio,
             readingOrder: readingOrder,
             positionsByReadingOrder: positionsByReadingOrder
         )
+    }
+
+    /// The first settle often lands before the page reports its ratio. Once the
+    /// ratio arrives, rewrite that settle into prose coordinates so the
+    /// debounced save is not the expanded-document progression (which reopen
+    /// would scale a second time and walk backward).
+    private func applyChapterEndRatioToLastRawLocator() {
+        guard let raw = chapterEndState.lastRawLocator else { return }
+        let fixed = normalizedLocatorForChapterEnd(raw)
+        guard fixed != currentLocator else { return }
+        adoptChapterEndCorrectedLocator(fixed)
+        // Match locationDidChange: a scrub's transient settles are not a place
+        // the reader stopped. currentLocator still updates so a dismiss mid-drag
+        // flushes the corrected spot.
+        if !isScrubbing {
+            onLocatorChange?(fixed)
+        }
     }
 
     private func evaluateChapterEndScriptOnLoadedSpreads(_ script: String) {
