@@ -29,6 +29,8 @@ nonisolated struct EditorStatusSummary: Equatable, Hashable, Sendable {
     var syncState: EditorSyncState
     var ao3DraftDaysLeft: Int?
     var chapterWordCount: Int?
+    /// Set while a writing sprint runs (T-576e).
+    var sprint: SprintStatusInfo?
 
     init(
         wordsToday: Int,
@@ -37,7 +39,8 @@ nonisolated struct EditorStatusSummary: Equatable, Hashable, Sendable {
         tkCount: Int = 0,
         syncState: EditorSyncState = .saved,
         ao3DraftDaysLeft: Int? = nil,
-        chapterWordCount: Int? = nil
+        chapterWordCount: Int? = nil,
+        sprint: SprintStatusInfo? = nil
     ) {
         self.wordsToday = max(0, wordsToday)
         self.dailyGoal = dailyGoal.flatMap { $0 > 0 ? $0 : nil }
@@ -46,6 +49,7 @@ nonisolated struct EditorStatusSummary: Equatable, Hashable, Sendable {
         self.syncState = syncState
         self.ao3DraftDaysLeft = ao3DraftDaysLeft
         self.chapterWordCount = chapterWordCount.map { max(0, $0) }
+        self.sprint = sprint
     }
 
     var goalProgress: Double {
@@ -143,6 +147,9 @@ struct EditorStatusLine: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if let sprint = summary.sprint {
+                SprintStatusRow(info: sprint)
+            }
             if summary.ao3DraftChipText != nil || summary.chapterWordCountText != nil {
                 topMetaRow
             }

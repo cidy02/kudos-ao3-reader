@@ -50,6 +50,9 @@ extension ChapterEditorScreen {
             },
             deleteChapter: {
                 showingDeleteConfirmation = true
+            },
+            sprint: {
+                sprintController.toggleFromMenu()
             }
         )
         return ChapterEditorMoreMenuWiring(

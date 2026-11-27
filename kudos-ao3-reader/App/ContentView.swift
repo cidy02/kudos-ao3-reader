@@ -45,6 +45,8 @@ struct ContentView: View {
     @State private var dismissedSyncFolderOnboardingThisSession = false
     /// Shake-to-report bug reporter (also reachable from Settings → About).
     @State private var showingBugReport = false
+    /// Set by the "New Idea" App Intent (Shortcuts, Spotlight, Siri, Action button).
+    @State private var newIdeaRequest = NewIdeaRequest.shared
     #if DEBUG
     @State private var showingDebugLogin = false
     @State private var debugDismissedWelcome = false
@@ -276,6 +278,11 @@ struct ContentView: View {
                     .environment(theme)
                     .accentTint(theme.effectiveTint, on: theme.appTheme)
                 #endif
+            }
+            .sheet(isPresented: $newIdeaRequest.isPresenting) {
+                NewIdeaSheet()
+                    .environment(theme)
+                    .accentTint(theme.effectiveTint, on: theme.appTheme)
             }
             .onAppear {
                 #if DEBUG

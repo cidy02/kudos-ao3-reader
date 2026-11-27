@@ -61,6 +61,8 @@ nonisolated struct ChapterEditorMenuCapabilities: Equatable, Hashable, Sendable 
     var availableExportFormats: [EditorExportFormat] = []
     var canDeleteChapter: Bool = false
     var savedVersionCount: Int?
+    var canStartSprint: Bool = false
+    var isSprintRunning: Bool = false
 
     /// Exact set of implemented actions shown in `EditorMoreMenu`.
     /// Unimplemented actions (Share, Compare with Posted, Discard Changes, Export As formats
@@ -78,6 +80,7 @@ nonisolated struct ChapterEditorMenuCapabilities: Equatable, Hashable, Sendable 
         if canAddNote { actions.insert(.addNote) }
         if canFormat { actions.insert(.format) }
         if canDeleteChapter { actions.insert(.deleteChapter) }
+        if canStartSprint { actions.insert(isSprintRunning ? .endSprint : .startSprint) }
         for format in availableExportFormats {
             actions.insert(.exportFormat(format))
         }
@@ -110,6 +113,7 @@ struct ChapterEditorMoreMenuHandlers {
     var addNote: () -> Void = {}
     var format: () -> Void = {}
     var deleteChapter: () -> Void = {}
+    var sprint: () -> Void = {}
 }
 
 /// Shared menu wiring used by both `ChapterEditorScreen` and unit tests: builds the filtered
@@ -144,6 +148,7 @@ struct ChapterEditorMoreMenuWiring {
         if visible.contains(.addNote) { actions.onAddNote = handlers.addNote }
         if visible.contains(.format) { actions.onFormat = handlers.format }
         if visible.contains(.deleteChapter) { actions.onDeleteChapter = handlers.deleteChapter }
+        if visible.contains(.startSprint) || visible.contains(.endSprint) { actions.onSprint = handlers.sprint }
         return actions
     }
 }
