@@ -11,9 +11,7 @@ extension ChapterEditorScreen {
     func makeMoreMenuActions() -> EditorMoreMenuActions {
         let handlers = ChapterEditorMoreMenuHandlers(
             postOrUpdate: {
-                if let postOrUpdate = ao3Actions?.postOrUpdate {
-                    commitAndClose(then: postOrUpdate)
-                }
+                handlePostOrUpdateAction()
             },
             preview: {
                 if let preview = ao3Actions?.preview {
@@ -26,9 +24,7 @@ extension ChapterEditorScreen {
                 #endif
             },
             saveAsAO3Draft: {
-                if let saveDraft = ao3Actions?.saveAsAO3Draft {
-                    commitAndClose(then: saveDraft)
-                }
+                handleSaveAsAO3DraftAction()
             },
             chapterMetadata: {
                 notesSheetTab = .forAO3
@@ -56,6 +52,12 @@ extension ChapterEditorScreen {
             },
             sprint: {
                 sprintController.toggleFromMenu()
+            },
+            compareWithPosted: {
+                togglePostedChangesView()
+            },
+            discardChanges: {
+                showingDiscardChangesConfirmation = true
             }
         )
         return ChapterEditorMoreMenuWiring(
@@ -104,10 +106,143 @@ extension ChapterEditorScreen {
     func openWorkDetails() {
         if let open = ao3Actions?.openWorkDetails {
             commitAndClose(then: open)
-        } else if ao3Actions?.pushesWorkDetailsDestination == true, ao3Actions?.ao3WorkID != nil {
+        } else if resolvedAO3WorkID != nil,
+                  (ao3Actions?.pushesWorkDetailsDestination == true) || (isLocalOnly && isSignedInToAO3) {
             Task {
                 _ = await commitAndPersist(kind: .edit)
                 showingWorkDetailsDestination = true
+            }
+        }
+    }
+
+    func handlePostOrUpdateAction() {
+        switch studioPostRoute {
+        case .updatePosted, .fallbackCallback:
+            if let postOrUpdate = ao3Actions?.postOrUpdate {
+                commitAndClose(then: postOrUpdate)
+            }
+        case let .postChapter(workID, chapterID):
+            openPostSheet(.postChapter(workID: workID, chapterID: chapterID))
+        case let .postNewWork(existingDraftWorkID):
+            openPostSheet(.postNewWork(existingDraftWorkID: existingDraftWorkID))
+        case .unavailable:
+            break
+        }
+    }
+
+    func handleSaveAsAO3DraftAction() {
+        if let saveDraft = ao3Actions?.saveAsAO3Draft {
+            commitAndClose(then: saveDraft)
+            return
+        }
+        switch studioPostRoute {
+        case let .postChapter(workID, chapterID):
+            openPostSheet(.postChapter(workID: workID, chapterID: chapterID))
+        case let .postNewWork(existingDraftWorkID):
+            openPostSheet(.postNewWork(existingDraftWorkID: existingDraftWorkID))
+        case .updatePosted, .fallbackCallback, .unavailable:
+            break
+        }
+    }
+
+    func openPostSheet(_ sheet: StudioEditorPostSheet) {
+        guard isSignedInToAO3 else { return }
+        Task {
+            _ = await commitAndPersist(kind: .edit)
+            activePostSheet = sheet
+        }
+    }
+
+    @ViewBuilder
+    func studioPostSheetView(for sheet: StudioEditorPostSheet) -> some View {
+        if let authService = auth {
+            switch sheet {
+            case let .postChapter(workID, chapterID):
+                StudioPostChapterSheet(
+                    workID: workID,
+                    chapterID: chapterID,
+                    workTitle: resolvedWorkTitle,
+                    chapterTitle: $chapterTitle,
+                    summary: $summary,
+                    notesBefore: $notesBefore,
+                    notesAfter: $notesAfter,
+                    content: $content,
+                    openTKCount: documentBridge.tkCount,
+                    openNoteCount: documentBridge.annotationCount
+                ) { isDraft in
+                    handlePostSheetCompleted(isDraft: isDraft)
+                }
+                .environment(authService)
+
+            case let .postNewWork(existingDraftWorkID):
+                StudioPostNewWorkSheet(
+                    existingDraftWorkID: existingDraftWorkID,
+                    workTitle: resolvedWorkTitle,
+                    chapterTitle: chapterTitle,
+                    summary: $summary,
+                    notesBefore: $notesBefore,
+                    notesAfter: $notesAfter,
+                    content: $content
+                ) { isDraft in
+                    handlePostSheetCompleted(isDraft: isDraft)
+                }
+                .environment(authService)
+            }
+        }
+    }
+
+    func handlePostSheetCompleted(isDraft: Bool) {
+        if let session, session.text != content {
+            let wasRich = isRichMode
+            session.restoreRecoveryCopy(content)
+            if wasRich, session.isRichAvailable {
+                Task { _ = await session.switchToRich() }
+            }
+        }
+        initialSnapshot = InitialSnapshot(
+            title: chapterTitle,
+            summary: summary,
+            notesBefore: notesBefore,
+            notesAfter: notesAfter,
+            content: content
+        )
+        Task {
+            await persistLocalCopy(kind: .edit)
+        }
+        showTransientStatus(isDraft ? "Saved as AO3 draft" : "Posted to AO3")
+        if !isLocalOnly {
+            dismiss()
+        }
+    }
+
+    func togglePostedChangesView() {
+        guard isPosted else { return }
+        if isComparingPostedChanges {
+            isComparingPostedChanges = false
+            return
+        }
+        Task {
+            let committed = await commitAndPersist(kind: .edit)
+            postedChangesHTMLSnapshot = committed
+            isComparingPostedChanges = true
+        }
+    }
+
+    func discardUnpostedChanges() {
+        let wasRich = isRichMode
+        chapterTitle = initialSnapshot.title
+        summary = initialSnapshot.summary
+        notesBefore = initialSnapshot.notesBefore
+        notesAfter = initialSnapshot.notesAfter
+        content = initialSnapshot.content
+        postedChangesHTMLSnapshot = initialSnapshot.content
+        session?.restoreRecoveryCopy(initialSnapshot.content)
+        isComparingPostedChanges = false
+        showTransientStatus("Changes discarded")
+        Task {
+            await persistLocalCopy(kind: .destructive)
+            if wasRich, let session, session.isRichAvailable {
+                _ = await session.switchToRich()
             }
         }
     }
@@ -189,6 +324,10 @@ extension ChapterEditorScreen {
            documentBridge.workID == workID,
            documentBridge.chapterID == chapterID,
            let active = documentBridge.activeChapter {
+            if let existingWorkID = workID,
+               let loadedWork = try? await documentBridge.store.openWork(existingWorkID) {
+                localWorkAO3ID = loadedWork.ao3WorkID
+            }
             fallbackWordCount = active.wordCount
             if initialWordCount == nil { initialWordCount = active.wordCount }
             if session?.owner == .rich {
@@ -202,6 +341,7 @@ extension ChapterEditorScreen {
             initialPayload: currentPayload()
         )
         if let snapshot {
+            localWorkAO3ID = snapshot.work.ao3WorkID
             fallbackWordCount = snapshot.activeChapter.wordCount
             if initialWordCount == nil {
                 initialWordCount = snapshot.activeChapter.wordCount
