@@ -116,8 +116,8 @@ nonisolated enum ChapterEditorAnnotationAnchoring {
     /// Builds a `WritingAnnotationAnchor` for a typed `"TK"` at `range` in `html`.
     ///
     /// Uses `html[range]` directly when it is still `"TK"`. If the writer edited or typed on
-    /// before saving, falls back to the nearest `"TK"` outside HTML tags at or after
-    /// `range.from` (preferring a word-bounded `"TK"`).
+    /// before saving, falls back to the nearest `"TK"` outside HTML tags on either side of `range.from`, within
+    /// `tkSearchReach` (preferring a word-bounded `"TK"`).
     static func anchorForTK(
         html: String,
         range: RichEditorTextRange
@@ -229,6 +229,8 @@ nonisolated enum ChapterEditorAnnotationAnchoring {
 
     // MARK: TK search helpers
 
+    static let tkSearchReach = 400
+
     private static func nearestTKUTF16Range(in html: String, fromUTF16Offset startOffset: Int) -> Range<Int>? {
         let units = Array(html.utf16)
         let count = units.count
@@ -240,6 +242,8 @@ nonisolated enum ChapterEditorAnnotationAnchoring {
         var nearestBounded: Range<Int>?
         var nearestLoose: Range<Int>?
         func closer(_ candidate: Range<Int>, than current: Range<Int>?) -> Bool {
+            // a TK further away than a few lines of typing is some other TK, not this one moved
+            guard abs(candidate.lowerBound - startOffset) <= tkSearchReach else { return false }
             guard let current else { return true }
             return abs(candidate.lowerBound - startOffset) <= abs(current.lowerBound - startOffset)
         }

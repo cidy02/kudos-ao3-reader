@@ -184,10 +184,10 @@ extension DraftSession {
         case .richOwned:
             return await richCommandApplied(.replaceText(range, with: text))
         case .sourceOwned:
+            source.commitComposition() // the text checked is the text changed
             guard !(text.isEmpty && range.from == range.to),
                   let target = Self.textRunRange(range, in: source.text) else { return false }
-            source.replaceText(in: target, with: Self.escapedText(text))
-            return true
+            return source.replaceText(in: target, with: Self.escapedText(text))
         default:
             return false
         }
@@ -203,16 +203,20 @@ extension DraftSession {
         }
     }
 
-    /// `range` as an NSRange of `html` when it lies in one run of text: in bounds, no tag inside it or around it, and
-    /// neither end inside a character reference.
+    /// `range` as an NSRange of `html` when it lies in one run of text: in bounds, no tag inside it or around it,
+    /// neither end inside a character reference or between the halves of a surrogate pair.
     nonisolated static func textRunRange(_ range: RichEditorTextRange, in html: String) -> NSRange? {
         let ns = html as NSString
         guard range.from >= 0, range.to >= range.from, range.to <= ns.length else { return nil }
         let target = NSRange(location: range.from, length: range.to - range.from)
         let slice = ns.substring(with: target)
         guard !slice.contains("<"), !slice.contains(">") else { return nil }
-        let before = ns.substring(to: range.from)
-        if let open = before.lastIndex(of: "<"), before[open...].firstIndex(of: ">") == nil { return nil }
+        if insideTag(ns, at: range.from) { return nil }
+        func splitsPair(_ offset: Int) -> Bool {
+            offset > 0 && offset < ns.length
+                && UTF16.isLeadSurrogate(ns.character(at: offset - 1)) && UTF16.isTrailSurrogate(ns.character(at: offset))
+        }
+        if splitsPair(range.from) || splitsPair(range.to) { return nil }
         func insideReference(_ offset: Int) -> Bool {
             guard offset > 0, offset < ns.length else { return false }
             let lower = max(0, offset - 32)
@@ -224,6 +228,27 @@ extension DraftSession {
             return isRefChar(next) || (next == ";" && !name.isEmpty)
         }
         return insideReference(range.from) || insideReference(range.to) ? nil : target
+    }
+
+    /// Whether `offset` is between a tag's `<` and its `>`, quotes respected; a `<` that doesn't start a tag ("<3") is
+    /// text.
+    private nonisolated static func insideTag(_ ns: NSString, at offset: Int) -> Bool {
+        var k = offset - 1
+        while k >= 0 {
+            let c = ns.character(at: k)
+            if c == 0x3E { return false } // '>'
+            if c == 0x3C, k + 1 < ns.length, let next = Unicode.Scalar(ns.character(at: k + 1)),
+               CharacterSet.letters.contains(next) || next == "/" || next == "!" {
+                var quote: UInt16 = 0
+                for i in (k + 1)..<offset {
+                    let d = ns.character(at: i)
+                    if quote != 0 { if d == quote { quote = 0 } } else if d == 0x22 || d == 0x27 { quote = d } else if d == 0x3E { return false }
+                }
+                return true
+            }
+            k -= 1
+        }
+        return false
     }
 
     nonisolated static func escapedText(_ text: String) -> String {
