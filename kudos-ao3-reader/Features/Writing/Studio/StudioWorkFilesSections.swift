@@ -18,7 +18,7 @@ extension StudioWorkFilesView {
 
     var chaptersSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SubjectFieldLabel(text: "Chapters", count: mergedChapters.count, style: .formGroup)
+            SubjectFieldLabel(text: "Chapters", style: .formGroup, count: mergedChapters.count)
 
             if isLoadingAO3Chapters && mergedChapters.isEmpty {
                 ProgressView("Loading chapters…")
@@ -234,8 +234,8 @@ extension StudioWorkFilesView {
         VStack(alignment: .leading, spacing: 8) {
             SubjectFieldLabel(
                 text: "Notes",
-                count: storyNotes.isEmpty ? nil : storyNotes.count,
-                style: .formGroup
+                style: .formGroup,
+                count: storyNotes.isEmpty ? nil : storyNotes.count
             )
 
             VStack(spacing: 0) {
@@ -285,7 +285,7 @@ extension StudioWorkFilesView {
 
     func storyNoteRow(_ note: WritingStoryNote) -> some View {
         let kindLabel = StudioWorkFilesLogic.storyNoteKindTitle(note.kind)
-        let meta = [kindLabel, note.pinned ? "Pinned" : nil, ThisDevice.name]
+        let meta: [String?] = [kindLabel, note.pinned ? "Pinned" : nil, ThisDevice.name]
             .compactMap(\.self)
             .joined(separator: " · ")
 
