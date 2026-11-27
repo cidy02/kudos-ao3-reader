@@ -176,6 +176,7 @@ struct AllReadingQueuesGridView: View {
                 .textFieldStyle(.plain)
                 .autocorrectionDisabled()
                 .accessibilityLabel("Search queues")
+                .accessibilityHint("Also searches tags and works")
             if !searchText.isEmpty {
                 Button {
                     searchText = ""
@@ -205,7 +206,7 @@ struct AllReadingQueuesGridView: View {
                 }
                 let untagged = readingQueues.count { $0.tags.isEmpty }
                 if untagged > 0 {
-                    tagChip("Unused", value: Self.untaggedFilter, count: untagged)
+                    tagChip("Untagged", value: Self.untaggedFilter, count: untagged)
                 }
             }
             .padding(.horizontal, SubjectMetrics.gutter)

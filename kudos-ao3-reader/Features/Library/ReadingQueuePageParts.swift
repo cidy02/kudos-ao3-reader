@@ -348,7 +348,8 @@ enum ReadingQueueFacts {
         let allAddedToday = !entries.isEmpty && entries.allSatisfy {
             calendar.isDate($0.membership.queuedAt, inSameDayAs: now)
         }
-        let fromFindMore = entries.contains {
+        // Every work, not any one of them: a mixed batch must not claim Find More.
+        let fromFindMore = !entries.isEmpty && entries.allSatisfy {
             let kind = $0.membership.originKind
             return kind == .search || kind == .source
         }

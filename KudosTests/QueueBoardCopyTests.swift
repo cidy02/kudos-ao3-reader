@@ -37,15 +37,17 @@ struct QueueBoardCopyTests {
                 workCount: 0, totalWordCount: 0, finishedCount: 0, offlineCount: 0
             ) == "No works yet"
         )
+        let eightWorks = ReadingQueueFacts.readingTimeEstimate(wordCount: 116_000) ?? ""
         #expect(
             ReadingQueueFacts.contextCardMeta(
                 workCount: 8, totalWordCount: 116_000, finishedCount: 2, offlineCount: 6
-            ) == "About 9 h 40 min · 2 finished · 6 offline"
+            ) == ReadingQueueFacts.capitalizedSentenceStart("\(eightWorks) · 2 finished · 6 offline")
         )
+        let fiveWorks = ReadingQueueFacts.readingTimeEstimate(wordCount: 49_000) ?? ""
         #expect(
             ReadingQueueFacts.contextCardMeta(
                 workCount: 5, totalWordCount: 49_000, finishedCount: 0, offlineCount: 5
-            ) == "About 4 h 5 min · all offline"
+            ) == ReadingQueueFacts.capitalizedSentenceStart("\(fiveWorks) · all offline")
         )
         #expect(
             ReadingQueueFacts.contextCardMeta(
@@ -127,6 +129,48 @@ struct QueueBoardCopyTests {
         #expect(ReadingQueueFacts.finishedSectionCount(2) == "2 works")
     }
 
+    @Test func newBannerDoesNotClaimFindMoreUnlessEveryWorkCameFromIt() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let earlier = now.addingTimeInterval(-3 * 24 * 60 * 60)
+        #expect(
+            ReadingQueueFacts.newBannerSubtitle(
+                for: [bannerEntry(kind: .search, queuedAt: now), bannerEntry(kind: .manual, queuedAt: now)],
+                now: now
+            ) == "Added today"
+        )
+        #expect(
+            ReadingQueueFacts.newBannerSubtitle(
+                for: [bannerEntry(kind: .search, queuedAt: earlier), bannerEntry(kind: .source, queuedAt: earlier)],
+                now: now
+            ) == "Added from Find More"
+        )
+        #expect(
+            ReadingQueueFacts.newBannerSubtitle(
+                for: [bannerEntry(kind: .search, queuedAt: now), bannerEntry(kind: .source, queuedAt: now)],
+                now: now
+            ) == "Added today from Find More"
+        )
+    }
+
+    private func bannerEntry(
+        kind: ReadingQueueMembershipOriginKind,
+        queuedAt: Date
+    ) -> ReadingQueueSectionEntry {
+        let work = SavedWork(title: "Work", author: "Author")
+        let membership = ReadingQueueMembership(
+            queue: nil,
+            work: work,
+            queuedAt: queuedAt,
+            origin: ReadingQueueMembershipOrigin(kind: kind)
+        )
+        return ReadingQueueSectionEntry(
+            membership: membership,
+            work: work,
+            section: .new,
+            hasNewChapter: false
+        )
+    }
+
     @Test func seriesSourceAndEditOfflineSubtitlesMatchBoards() {
         #expect(ReadingQueueFacts.seriesSourceSubtitle(partCount: 0, isComplete: false) == "Series")
         #expect(
@@ -159,6 +203,11 @@ struct QueueBoardCopyTests {
         #expect(
             NewReadingQueueSheet.offlineFootnote
                 == "Kudos downloads each work you add and keeps it while it's in this queue."
+        )
+        #expect(NewReadingQueueSheet.offlineFootnote(keepsWorksOffline: true) == NewReadingQueueSheet.offlineFootnote)
+        #expect(
+            NewReadingQueueSheet.offlineFootnote(keepsWorksOffline: false)
+                == "When this is off, the queue keeps only your list and uses no extra storage."
         )
         #expect(
             NewReadingQueueSheet.smartFootnote

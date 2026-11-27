@@ -1127,27 +1127,42 @@ extension ReadingQueueBrowserView {
 
         return Group {
             if canSort {
-                Button {
-                    guard let queue = selectedQueue else { return }
-                    sortNewRequest = QueueSortNewRequest(
-                        queueID: queue.id,
-                        membershipIDs: entries.map(\.membership.id)
-                    )
-                } label: {
-                    bannerBody
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(entries.count == 1 ? "Sort 1 new work" : "Sort \(entries.count) new works")
-                .accessibilityValue(subtitle)
-                .accessibilityAction(named: "Sort all into line") {
-                    sortAllIntoLine(entries)
-                }
-                .contextMenu {
+                VStack(alignment: .leading, spacing: 8) {
+                    Button {
+                        guard let queue = selectedQueue else { return }
+                        sortNewRequest = QueueSortNewRequest(
+                            queueID: queue.id,
+                            membershipIDs: entries.map(\.membership.id)
+                        )
+                    } label: {
+                        bannerBody
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(entries.count == 1 ? "Sort 1 new work" : "Sort \(entries.count) new works")
+                    .accessibilityValue(subtitle)
+                    .accessibilityAction(named: "Sort all into line") {
+                        sortAllIntoLine(entries)
+                    }
+                    .contextMenu {
+                        Button {
+                            sortAllIntoLine(entries)
+                        } label: {
+                            Label("Sort All into Line", systemImage: "text.insert")
+                        }
+                    }
+                    // The board's banner is only Sort. Sort into line is the other
+                    // action this section already had; it stays one tap, under the banner.
                     Button {
                         sortAllIntoLine(entries)
                     } label: {
-                        Label("Sort All into Line", systemImage: "text.insert")
+                        Text("Sort into line")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(accentInk)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .buttonStyle(.plain)
+                    .minimumHitTarget()
+                    .accessibilityLabel("Sort all into line")
                 }
             } else {
                 bannerBody

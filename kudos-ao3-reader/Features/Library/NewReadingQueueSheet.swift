@@ -665,8 +665,16 @@ struct NewReadingQueueSheet: View {
         .queueFormCard(theme: theme.appTheme)
     }
 
-    /// Board `Queues.dc.html` copy for Keep works offline (`KeepOffline`, `SavedWork.isKeptOffline`).
+    /// Board `Queues.dc.html` copy for Keep works offline when the toggle is on
+    /// (`KeepOffline`, `SavedWork.isKeptOffline`). The off sentence is the other
+    /// state: the board draws the switch on, so its line is not true when it is off.
     static let offlineFootnote = "Kudos downloads each work you add and keeps it while it's in this queue."
+
+    static let offlineOffFootnote = "When this is off, the queue keeps only your list and uses no extra storage."
+
+    static func offlineFootnote(keepsWorksOffline: Bool) -> String {
+        keepsWorksOffline ? offlineFootnote : offlineOffFootnote
+    }
 
     private var seedPanel: some View {
         VStack(spacing: 0) {
@@ -778,7 +786,7 @@ extension NewReadingQueueSheet {
 
         Section {
             offlinePanel.pageBodyRow(top: 14, gutter: gutter)
-            footnote(Self.offlineFootnote)
+            footnote(Self.offlineFootnote(keepsWorksOffline: options.keepsWorksOffline))
         }
 
         Section {
@@ -845,7 +853,7 @@ extension NewReadingQueueSheet {
                 byteCount: offlineBytes
             )
             .pageBodyRow(top: 6, gutter: gutter)
-            footnote(Self.offlineFootnote)
+            footnote(Self.offlineFootnote(keepsWorksOffline: options.keepsWorksOffline))
         }
     }
 
@@ -867,6 +875,7 @@ extension NewReadingQueueSheet {
                     Text("Name")
                         .font(.callout)
                         .foregroundStyle(.primary)
+                        .accessibilityHidden(true)
                     field
                 }
             } else {
@@ -874,7 +883,8 @@ extension NewReadingQueueSheet {
                     Text("Name")
                         .font(.callout)
                         .foregroundStyle(.primary)
-                        .frame(width: 70, alignment: .leading)
+                        .frame(minWidth: 70, alignment: .leading)
+                        .accessibilityHidden(true)
                     field
                 }
             }
@@ -902,7 +912,7 @@ extension NewReadingQueueSheet {
                         Text("Colour")
                             .font(.callout)
                             .foregroundStyle(.primary)
-                            .frame(width: 70, alignment: .leading)
+                            .frame(minWidth: 70, alignment: .leading)
                         swatches
                     }
                     VStack(alignment: .leading, spacing: 6) {
@@ -957,7 +967,7 @@ extension NewReadingQueueSheet {
                     Text("Tags")
                         .font(.callout)
                         .foregroundStyle(.primary)
-                        .frame(width: 70, alignment: .leading)
+                        .frame(minWidth: 70, alignment: .leading)
                     content
                 }
             }
@@ -1023,7 +1033,7 @@ extension NewReadingQueueSheet {
     private var editSourcesSection: some View {
         let linkedSearches = savedSearches.filter { options.searchIDs.contains($0.id) }
         return Section {
-            groupLabel("Sources")
+            groupLabel("Find More")
             VStack(spacing: 0) {
                 ForEach(Array(linkedSearches.enumerated()), id: \.element.id) { index, search in
                     if index > 0 { SubjectRowSeparator(inset: 52) }
@@ -1109,21 +1119,26 @@ extension NewReadingQueueSheet {
             totalCount: totalCount,
             byteCount: byteCount
         )
-        let toggle = Toggle("Keep works offline", isOn: $options.keepsWorksOffline)
-            .labelsHidden()
-            .accentFill()
         let labelStack = VStack(alignment: .leading, spacing: 2) {
             Text("Keep works offline")
                 .font(.body)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityHidden(true)
             if let subtitle {
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityHidden(true)
             }
         }
+        let toggle = Toggle("Keep works offline", isOn: $options.keepsWorksOffline)
+            .labelsHidden()
+            .accentFill()
+            // Hint, not value: a toggle's value is On or Off, and replacing it
+            // would hide which way the switch sits.
+            .accessibilityHint(subtitle ?? "")
         return Group {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 8) {
