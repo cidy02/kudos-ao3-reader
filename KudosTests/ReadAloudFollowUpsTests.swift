@@ -256,7 +256,7 @@ struct ReadAloudFollowUpsTests {
         #expect(bookController.isTransportOwnerForTests)
         #expect(bookController.remoteCommandsInstalledForTests)
         #expect(NowPlayingInfo.shared.media?.title == "Active Book")
-        #expect(NowPlayingInfo.shared.playback?.rate == 1)
+        #expect(NowPlayingInfo.shared.playback.rate == 1)
         #expect(rcc.playCommand.isEnabled)
         #expect(rcc.pauseCommand.isEnabled)
 
@@ -269,7 +269,7 @@ struct ReadAloudFollowUpsTests {
         #expect(bookController.isTransportOwnerForTests)
         #expect(bookController.remoteCommandsInstalledForTests)
         #expect(NowPlayingInfo.shared.media?.title == "Active Book")
-        #expect(NowPlayingInfo.shared.playback?.rate == 1)
+        #expect(NowPlayingInfo.shared.playback.rate == 1)
         #expect(rcc.playCommand.isEnabled)
         #expect(rcc.pauseCommand.isEnabled)
 
@@ -297,7 +297,7 @@ struct ReadAloudFollowUpsTests {
         bookController.pause()
         #expect(bookController.status == .paused)
         #expect(NowPlayingInfo.shared.media?.title == "Paused Book")
-        #expect(NowPlayingInfo.shared.playback?.rate == 0)
+        #expect(NowPlayingInfo.shared.playback.rate == 0)
 
         let auditionEngine = FollowUpTTSService()
         let auditionController = ReaderSpeechController()
@@ -319,12 +319,12 @@ struct ReadAloudFollowUpsTests {
         #expect(bookController.isTransportOwnerForTests)
         #expect(bookController.remoteCommandsInstalledForTests)
         #expect(NowPlayingInfo.shared.media?.title == "Paused Book")
-        #expect(NowPlayingInfo.shared.playback?.rate == 0)
+        #expect(NowPlayingInfo.shared.playback.rate == 0)
         #expect(rcc.playCommand.isEnabled)
         let remotePlayStatus = bookController.handleRemotePlayForTests()
         #expect(remotePlayStatus == .success)
         #expect(bookController.status == .playing)
-        #expect(NowPlayingInfo.shared.playback?.rate == 1)
+        #expect(NowPlayingInfo.shared.playback.rate == 1)
     }
 
     @Test func formerTransportOwnerStoppingAfterHandoffDoesNotClearNewOwner() async {
@@ -359,7 +359,7 @@ struct ReadAloudFollowUpsTests {
         #expect(second.isTransportOwnerForTests)
         #expect(second.remoteCommandsInstalledForTests)
         #expect(NowPlayingInfo.shared.media?.title == "Second Book")
-        #expect(NowPlayingInfo.shared.playback?.rate == 1)
+        #expect(NowPlayingInfo.shared.playback.rate == 1)
         #expect(rcc.playCommand.isEnabled)
     }
 
