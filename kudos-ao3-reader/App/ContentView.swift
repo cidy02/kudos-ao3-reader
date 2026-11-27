@@ -504,7 +504,7 @@ struct ContentView: View {
                 LibraryView()
             }
         case .writing:
-            ProgressiveTabContent(shell: .blank) { WritingView() }
+            ProgressiveTabContent(shell: .blank) { WritingStudioView() }
         case .browse:
             ProgressiveTabContent(shell: .blank) { BrowseView() }
         case .account:

@@ -214,13 +214,14 @@ struct AO3TagWorksRequest: Hashable {
     }
 }
 
-/// Pure rule for whether the Writing tab appears in the tab bar / sidebar (T-513).
+/// Pure rule for whether the Writing tab appears in the tab bar / sidebar (T-513, T-574).
 ///
-/// The Writing tab is shown only when a signed-in AO3 account has at least one
-/// work, series or draft, or Kudos holds a local draft. Offline or before the
-/// account answers, the stored last-known answer is used (never guessing `true`
-/// for an account never seen to write). Once shown during an app run, the tab is
-/// never removed while the app remains open; logging out removes it.
+/// The Writing tab is shown whenever Kudos holds a local manuscript/draft on this
+/// device (even when signed out), or when a signed-in AO3 account has at least one
+/// work, series or draft. Offline or before the account answers, the stored
+/// last-known answer is used (never guessing `true` for an account never seen to
+/// write). Once shown during an app run, the tab stays while signed in; logging
+/// out removes it unless a local document exists on this device.
 nonisolated struct WritingTabRule: Equatable, Sendable {
     var isSignedIn: Bool
     var workCount: Int?
@@ -231,9 +232,9 @@ nonisolated struct WritingTabRule: Equatable, Sendable {
     var alreadyShownThisRun: Bool = false
 
     var showsWritingTab: Bool {
+        if hasLocalDrafts { return true }
         guard isSignedIn else { return false }
         if alreadyShownThisRun { return true }
-        if hasLocalDrafts { return true }
         if (workCount ?? 0) > 0 || (seriesCount ?? 0) > 0 || (draftCount ?? 0) > 0 {
             return true
         }
@@ -284,6 +285,7 @@ nonisolated enum WritingTabEvents {
         case authChanged(isSignedIn: Bool, username: String?, authenticationScope: String?)
         case countsChanged(authenticationScope: String)
         case draftSaved(username: String?)
+        case localDocumentsChanged(root: URL)
     }
 
     static let notificationName = Notification.Name("KudosWritingTabInputsDidChange")
@@ -302,6 +304,10 @@ nonisolated enum WritingTabEvents {
 
     static func notifyDraftSaved(username: String? = nil) {
         post(.draftSaved(username: username))
+    }
+
+    static func notifyLocalDocumentsChanged(root: URL) {
+        post(.localDocumentsChanged(root: root))
     }
 
     private static func post(_ payload: Payload) {
@@ -344,6 +350,8 @@ final class AppRouter {
 
     /// Whether the Writing tab is currently in `mainTabs`.
     private(set) var showsWritingTab = false
+    /// Whether this device currently holds any local document or recovery draft (T-574).
+    private(set) var hasLocalDrafts = false
     /// Active core tabs derived from `showsWritingTab`.
     var mainTabs: [AppTab] {
         AppTab.mainTabs(showsWriting: showsWritingTab)
@@ -351,6 +359,8 @@ final class AppRouter {
 
     @ObservationIgnored private var writingStateStore: WritingTabStateStore
     @ObservationIgnored private var recoveryStore: WritingTextRecovery
+    @ObservationIgnored private var localDocumentsRoot: URL
+    @ObservationIgnored private var isSignedInSession = false
     @ObservationIgnored private var activeUsername: String?
     @ObservationIgnored private var evaluatedAccount: String?
     @ObservationIgnored private var activeAuthenticationScope: String?
@@ -359,10 +369,12 @@ final class AppRouter {
 
     init(
         writingStateStore: WritingTabStateStore = WritingTabStateStore(),
-        recoveryStore: WritingTextRecovery = WritingTextRecovery()
+        recoveryStore: WritingTextRecovery = WritingTextRecovery(),
+        localDocumentsRoot: URL = WritingDocumentStore.defaultRoot
     ) {
         self.writingStateStore = writingStateStore
         self.recoveryStore = recoveryStore
+        self.localDocumentsRoot = localDocumentsRoot
         writingTabObserver = NotificationCenter.default.addObserver(
             forName: WritingTabEvents.notificationName,
             object: nil,
@@ -740,6 +752,7 @@ final class AppRouter {
         draftCount: Int? = nil,
         hasLocalDrafts: Bool? = nil
     ) -> Bool {
+        isSignedInSession = isSignedIn
         let effectiveUsername = username ?? activeUsername
         let normalizedUser = Self.normalizedAccount(effectiveUsername)
         let accountSwitched = isSignedIn
@@ -754,9 +767,13 @@ final class AppRouter {
             restoredWritingSelection = false
             pendingWritingRoute = nil
         }
-        let resolvedHasLocalDrafts = isSignedIn
-            ? (hasLocalDrafts ?? recoveryStore.hasLocalDrafts(for: effectiveUsername))
-            : false
+        let resolvedHasLocalDrafts: Bool
+        if let hasLocalDrafts {
+            resolvedHasLocalDrafts = hasLocalDrafts
+        } else {
+            resolvedHasLocalDrafts = Self.hasLiveLocalDocuments(in: localDocumentsRoot)
+                || (isSignedIn && recoveryStore.hasLocalDrafts(for: effectiveUsername))
+        }
         if isSignedIn {
             if resolvedHasLocalDrafts || (workCount ?? 0) > 0 || (seriesCount ?? 0) > 0 || (draftCount ?? 0) > 0 {
                 writingStateStore.setLastKnownWrites(true, for: effectiveUsername)
@@ -796,13 +813,15 @@ final class AppRouter {
         let seriesCount = header.listCount(for: .series, route: route)
             ?? header.recentSeries.flatMap { $0.isEmpty ? nil : $0.count }
         let draftCount = header.draftsListCount()
+        let hasLocal = Self.hasLiveLocalDocuments(in: localDocumentsRoot)
+            || (isSignedIn && recoveryStore.hasLocalDrafts(for: effectiveUsername))
         return evaluateWritingTab(
             isSignedIn: isSignedIn,
             username: effectiveUsername,
             workCount: workCount,
             seriesCount: seriesCount,
             draftCount: draftCount,
-            hasLocalDrafts: recoveryStore.hasLocalDrafts(for: effectiveUsername)
+            hasLocalDrafts: hasLocal
         )
     }
 
@@ -817,6 +836,36 @@ final class AppRouter {
         )
     }
 
+    /// Marks that a local document now exists on this device (`Studio-Start-Writing`),
+    /// flipping `hasLocalDrafts` and showing the Writing tab immediately, signed in or not.
+    func noteLocalDocumentCreated() {
+        hasLocalDrafts = true
+        _ = evaluateWritingTab(
+            isSignedIn: isSignedInSession,
+            username: activeUsername,
+            hasLocalDrafts: true
+        )
+    }
+
+    /// Synchronous check for live manuscripts under `WritingDocumentStore`'s folder.
+    static func hasLiveLocalDocuments(in root: URL) -> Bool {
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return false }
+        for directory in entries {
+            guard UUID(uuidString: directory.lastPathComponent) != nil else { continue }
+            let workFile = WritingDocumentPaths.workFile(directory)
+            let deletionMarker = WritingDocumentPaths.deletionMarker(directory)
+            if FileManager.default.fileExists(atPath: workFile.path),
+               !FileManager.default.fileExists(atPath: deletionMarker.path) {
+                return true
+            }
+        }
+        return false
+    }
+
     /// Shows the Writing tab for the current session without writing to
     /// persistent account defaults (used by DEBUG screenshot routes).
     func revealWritingTabForSession() {
@@ -824,6 +873,7 @@ final class AppRouter {
     }
 
     private func applyWritingTabRule(_ rule: WritingTabRule) -> Bool {
+        hasLocalDrafts = rule.hasLocalDrafts
         let next = rule.showsWritingTab
         if next {
             showsWritingTab = true
@@ -858,7 +908,10 @@ final class AppRouter {
             activeUsername = isSignedIn ? username : nil
             activeAuthenticationScope = isSignedIn ? authenticationScope : nil
             guard isSignedIn else {
-                _ = evaluateWritingTab(isSignedIn: false)
+                _ = evaluateWritingTab(
+                    isSignedIn: false,
+                    hasLocalDrafts: Self.hasLiveLocalDocuments(in: localDocumentsRoot)
+                )
                 return
             }
             let workCount = authenticationScope.flatMap {
@@ -876,7 +929,8 @@ final class AppRouter {
                 workCount: workCount,
                 seriesCount: seriesCount,
                 draftCount: draftCount,
-                hasLocalDrafts: recoveryStore.hasLocalDrafts(for: username)
+                hasLocalDrafts: Self.hasLiveLocalDocuments(in: localDocumentsRoot)
+                    || recoveryStore.hasLocalDrafts(for: username)
             )
         case let .countsChanged(authenticationScope):
             guard let username = activeUsername else { return }
@@ -892,7 +946,8 @@ final class AppRouter {
                 workCount: workCount,
                 seriesCount: seriesCount,
                 draftCount: draftCount,
-                hasLocalDrafts: recoveryStore.hasLocalDrafts(for: username)
+                hasLocalDrafts: Self.hasLiveLocalDocuments(in: localDocumentsRoot)
+                    || recoveryStore.hasLocalDrafts(for: username)
             )
         case let .draftSaved(username):
             if let username, let activeUsername,
@@ -901,6 +956,15 @@ final class AppRouter {
             }
             guard activeUsername != nil || username != nil else { return }
             noteDraftSaved(username: username ?? activeUsername)
+        case let .localDocumentsChanged(root):
+            guard root.standardizedFileURL == localDocumentsRoot.standardizedFileURL else { return }
+            let hasLocal = Self.hasLiveLocalDocuments(in: localDocumentsRoot)
+                || (isSignedInSession && recoveryStore.hasLocalDrafts(for: activeUsername))
+            _ = evaluateWritingTab(
+                isSignedIn: isSignedInSession,
+                username: activeUsername,
+                hasLocalDrafts: hasLocal
+            )
         }
     }
 

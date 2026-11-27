@@ -80,16 +80,28 @@ struct AppRouterTests {
     // MARK: - T-513 Writing tab rule
 
     @Test func writingTabRuleSignedOut() {
-        let rule = WritingTabRule(
+        let signedOutWithoutLocalDrafts = WritingTabRule(
             isSignedIn: false,
             workCount: 4,
             seriesCount: 2,
             draftCount: 1,
-            hasLocalDrafts: true,
+            hasLocalDrafts: false,
             lastKnownWrites: true,
+            alreadyShownThisRun: true
+        )
+        #expect(signedOutWithoutLocalDrafts.showsWritingTab == false)
+
+        // T-574: local documents on this device keep the Writing tab available offline.
+        let signedOutWithLocalDrafts = WritingTabRule(
+            isSignedIn: false,
+            workCount: nil,
+            seriesCount: nil,
+            draftCount: nil,
+            hasLocalDrafts: true,
+            lastKnownWrites: false,
             alreadyShownThisRun: false
         )
-        #expect(rule.showsWritingTab == false)
+        #expect(signedOutWithLocalDrafts.showsWritingTab == true)
     }
 
     @Test func writingTabRuleSignedInWithNothing() {

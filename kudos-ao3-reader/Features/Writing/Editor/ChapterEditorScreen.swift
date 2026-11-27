@@ -195,6 +195,7 @@ struct ChapterEditorScreen: View {
         .onChange(of: notesBefore) { _, _ in scheduleLocalSave() }
         .onChange(of: notesAfter) { _, _ in scheduleLocalSave() }
         .sprintHost(sprintController, words: currentWordCount, workID: documentBridge.workID, isClosing: isClosing)
+        .writingDayLogHost(words: currentWordCount, isReady: initialWordCount != nil, sessionKey: recoveryTarget)
         // the Lock Screen widget's "what you're writing" (T-576e)
         .onAppear { KudosWidgetBridge.noteEditing(work: workTitle, chapter: chapterTitle) }
         .onDisappear { KudosWidgetBridge.noteEditing(work: workTitle, chapter: chapterTitle) }
