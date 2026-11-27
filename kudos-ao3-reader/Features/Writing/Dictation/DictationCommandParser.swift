@@ -68,13 +68,12 @@ nonisolated enum DictationItalics {
 
 /// Splits a recognised phrase into prose and commands.
 ///
-/// Case and punctuation stuck to a word don't matter. A command is two whole words, so
-/// "paragraphs" or "newparagraph" is prose.
+/// Case and trailing punctuation on the command don't matter. Punctuation between the two words
+/// (such as "new. Paragraph") stays prose, and a command word inside a longer word doesn't count.
 nonisolated enum DictationCommandParser {
     static func parse(_ phrase: String) -> [DictationSegment] {
         let tokens = phrase.split(whereSeparator: \.isWhitespace).map(String.init)
         guard !tokens.isEmpty else { return [] }
-        let keys = tokens.map(matchKey)
         var segments: [DictationSegment] = []
         var prose: [String] = []
         var index = 0
@@ -86,7 +85,7 @@ nonisolated enum DictationCommandParser {
         }
 
         while index < tokens.count {
-            if let command = command(at: index, keys: keys) {
+            if let command = command(at: index, tokens: tokens) {
                 flushProse()
                 segments.append(.command(command))
                 index += 2
@@ -99,23 +98,11 @@ nonisolated enum DictationCommandParser {
         return segments
     }
 
-    /// Match key: lowercased, with punctuation peeled off either end. Letters inside the word stay,
-    /// so a command cannot match inside a longer word.
-    static func matchKey(_ token: String) -> String {
-        var scalars = Array(token.unicodeScalars)
-        while let first = scalars.first, !isWordScalar(first) {
-            scalars.removeFirst()
-        }
-        while let last = scalars.last, !isWordScalar(last) {
-            scalars.removeLast()
-        }
-        let core = String(String.UnicodeScalarView(scalars))
-        return core.lowercased()
-    }
-
-    private static func command(at index: Int, keys: [String]) -> DictationCommand? {
-        guard index + 1 < keys.count else { return nil }
-        return switch (keys[index], keys[index + 1]) {
+    private static func command(at index: Int, tokens: [String]) -> DictationCommand? {
+        guard index + 1 < tokens.count else { return nil }
+        let first = tokens[index].lowercased()
+        let second = strippingTrailingPunctuation(tokens[index + 1]).lowercased()
+        return switch (first, second) {
         case ("new", "paragraph"): .newParagraph
         case ("scene", "break"): .sceneBreak
         case ("italics", "on"): .italicsOn
@@ -124,7 +111,11 @@ nonisolated enum DictationCommandParser {
         }
     }
 
-    private static func isWordScalar(_ scalar: Unicode.Scalar) -> Bool {
-        CharacterSet.alphanumerics.contains(scalar)
+    private static func strippingTrailingPunctuation(_ token: String) -> String {
+        var scalars = Array(token.unicodeScalars)
+        while let last = scalars.last, CharacterSet.punctuationCharacters.contains(last) {
+            scalars.removeLast()
+        }
+        return String(String.UnicodeScalarView(scalars))
     }
 }

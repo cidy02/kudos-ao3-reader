@@ -61,4 +61,37 @@ struct WordSlideTests {
         #expect(forward.wordSteps == 1)
         #expect(forward.remainder == 0)
     }
+
+    @Test func twoFingerSelectStaysLatchedAndAbsorbsCentroidJumpOnFingerLift() {
+        var tracker = KeysBarWordSlideTracker()
+        let began = tracker.begin(translation: 22, touchCount: 2)
+        #expect(began == .init(delta: 22, extend: true))
+
+        let dragged = tracker.change(translation: 44, touchCount: 2)
+        #expect(dragged == .init(delta: 22, extend: true))
+
+        // Lifting one finger first shifts UIKit's touch centroid and drops touch count to 1:
+        // selection stays extended and the jump does not emit a bogus word step.
+        let oneLifted = tracker.change(translation: 74, touchCount: 1)
+        #expect(oneLifted == .init(delta: 0, extend: true))
+
+        let wiggle = tracker.change(translation: 80, touchCount: 1)
+        #expect(wiggle == .init(delta: 6, extend: true))
+
+        tracker.end()
+        let nextSlide = tracker.begin(translation: 22, touchCount: 1)
+        #expect(nextSlide == .init(delta: 22, extend: false))
+    }
+
+    @Test func secondFingerLandingMidSlideLatchesSelectWithoutCentroidJump() {
+        var tracker = KeysBarWordSlideTracker()
+        let began = tracker.begin(translation: 10, touchCount: 1)
+        #expect(began == .init(delta: 10, extend: false))
+
+        let secondLanded = tracker.change(translation: -20, touchCount: 2)
+        #expect(secondLanded == .init(delta: 0, extend: true))
+
+        let moved = tracker.change(translation: 2, touchCount: 2)
+        #expect(moved == .init(delta: 22, extend: true))
+    }
 }

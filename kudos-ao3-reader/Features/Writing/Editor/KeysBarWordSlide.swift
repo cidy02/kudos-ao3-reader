@@ -30,6 +30,51 @@ nonisolated enum KeysBarWordSlide {
     }
 }
 
+/// Tracks pan translation and touch count across a horizontal keys-bar slide.
+///
+/// Once two fingers touch the bar, selection extension stays latched for the rest of the gesture
+/// so lifting one finger slightly before the other never collapses the selection. Any touch-count
+/// transition absorbs UIKit's touch-centroid jump instead of emitting a spurious word step.
+nonisolated struct KeysBarWordSlideTracker: Equatable, Sendable {
+    struct Sample: Equatable, Sendable {
+        var delta: CGFloat
+        var extend: Bool
+    }
+
+    private(set) var lastTranslation: CGFloat = 0
+    private(set) var lastTouchCount = 0
+    private(set) var isSelecting = false
+
+    mutating func begin(translation: CGFloat, touchCount: Int) -> Sample {
+        lastTranslation = translation
+        lastTouchCount = max(touchCount, 1)
+        isSelecting = touchCount >= 2
+        return Sample(delta: translation, extend: isSelecting)
+    }
+
+    mutating func change(translation: CGFloat, touchCount: Int) -> Sample {
+        let count = touchCount > 0 ? touchCount : lastTouchCount
+        if count >= 2 {
+            isSelecting = true
+        }
+        if lastTouchCount > 0, count != lastTouchCount {
+            lastTouchCount = count
+            lastTranslation = translation
+            return Sample(delta: 0, extend: isSelecting)
+        }
+        let delta = translation - lastTranslation
+        lastTranslation = translation
+        lastTouchCount = count
+        return Sample(delta: delta, extend: isSelecting)
+    }
+
+    mutating func end() {
+        lastTranslation = 0
+        lastTouchCount = 0
+        isSelecting = false
+    }
+}
+
 /// What the keys bar may do for this lane. Defaults do nothing, so every existing bar stays as it is.
 struct WritingKeysBarPhoneActions {
     var wordSlideEnabled = false
@@ -55,12 +100,13 @@ extension EnvironmentValues {
 
 struct KeysBarSlideState: Equatable {
     var active = false
+    var onTrackRow = false
     var remainder: CGFloat = 0
     var fraction: CGFloat = 0.5
 }
 
-/// The track drawn while a slide is in progress, and the large-text row that keeps word
-/// movement off the scrolling keys.
+/// The track drawn while a slide is in progress, and the large-text / VoiceOver row that keeps
+/// word movement off the scrolling keys.
 struct KeysBarWordSlideTrack: View {
     var fraction: CGFloat
     var isDragging: Bool
@@ -84,10 +130,12 @@ struct KeysBarWordSlideTrack: View {
                 .accessibilityHidden(true)
         }
         .padding(.horizontal, 10)
+        .padding(.vertical, 7)
         .frame(minHeight: 48)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(isDragging ? "Moving by word" : "Move the cursor by word")
-        .accessibilityValue(isDragging ? "Lift to stop" : "Swipe up or down to move one word")
+        .accessibilityValue(isDragging ? "Lift to stop" : "")
+        .accessibilityHint("Swipe up for the next word. Swipe down for the previous word.")
         .accessibilityAdjustableAction { direction in
             switch direction {
             case .increment: onAdjust(1)
@@ -98,81 +146,97 @@ struct KeysBarWordSlideTrack: View {
     }
 
     private var track: some View {
-        GeometryReader { proxy in
-            let clamped = min(1, max(0, fraction))
-            let thumbX = clamped * proxy.size.width
-            ZStack {
-                Capsule()
-                    .fill(Color.primary.opacity(0.08))
-                Text(isDragging ? "Moving by word · lift to stop" : "Move by word")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.primary)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.75)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 16)
+        Text(isDragging ? "Moving by word · lift to stop" : "Move by word")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(Color.primary)
+            .lineLimit(2)
+            .minimumScaleFactor(0.75)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, minHeight: 34)
+            .background(Color.primary.opacity(0.08), in: Capsule())
+            .overlay {
                 if isDragging {
-                    Circle()
-                        .fill(effectiveTint.opacity(0.85))
-                        .frame(width: 30, height: 30)
-                        .overlay {
-                            Circle().stroke(effectiveTint.opacity(0.18), lineWidth: 6)
-                        }
-                        .position(x: thumbX, y: proxy.size.height / 2)
-                        .accessibilityHidden(true)
+                    GeometryReader { proxy in
+                        let clamped = min(1, max(0, fraction))
+                        let radius: CGFloat = 15
+                        let usable = max(0, proxy.size.width - radius * 2)
+                        let thumbX = radius + clamped * usable
+                        Circle()
+                            .fill(effectiveTint.opacity(0.85))
+                            .frame(width: 30, height: 30)
+                            .overlay {
+                                Circle().stroke(effectiveTint.opacity(0.18), lineWidth: 6)
+                            }
+                            .position(x: thumbX, y: proxy.size.height / 2)
+                    }
+                    .accessibilityHidden(true)
                 }
             }
-        }
-        .frame(height: 34)
-        .accessibilityHidden(true)
+            .accessibilityHidden(true)
     }
 }
 
 extension View {
-    @ViewBuilder
     func keysBarWordSlideGesture(
         enabled: Bool,
-        onSample: @escaping (CGFloat, CGFloat, Int, Bool) -> Void
+        onSample: @escaping (CGFloat, CGFloat, Bool, Bool) -> Void
     ) -> some View {
-        if enabled {
-            modifier(KeysBarWordSlideGestureModifier(onSample: onSample))
-        } else {
-            self
-        }
+        modifier(KeysBarWordSlideGestureModifier(enabled: enabled, onSample: onSample))
     }
 }
 
 private struct KeysBarWordSlideGestureModifier: ViewModifier {
-    var onSample: (CGFloat, CGFloat, Int, Bool) -> Void
+    var enabled: Bool
+    var onSample: (CGFloat, CGFloat, Bool, Bool) -> Void
     @State private var lastTranslation: CGFloat = 0
+    @State private var horizontalLocked: Bool?
     @State private var width: CGFloat = 1
 
     func body(content: Content) -> some View {
-        #if os(iOS)
-        content.gesture(KeysBarWordSlidePan(onSample: onSample))
-        #else
-        content
-            .background {
-                GeometryReader { proxy in
-                    Color.clear
-                        .onChange(of: proxy.size.width, initial: true) { _, newWidth in
-                            width = max(newWidth, 1)
-                        }
-                }
+        let measured = content.background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onChange(of: proxy.size.width, initial: true) { _, newWidth in
+                        width = max(newWidth, 1)
+                    }
             }
+        }
+        #if os(iOS)
+        measured.gesture(
+            KeysBarWordSlidePan(isEnabled: enabled, viewWidth: width, onSample: onSample)
+        )
+        #else
+        measured
             .gesture(
                 DragGesture(minimumDistance: 12, coordinateSpace: .local)
                     .onChanged { value in
+                        if horizontalLocked == nil {
+                            horizontalLocked = abs(value.translation.width) > abs(value.translation.height)
+                        }
+                        guard horizontalLocked == true else { return }
                         let delta = value.translation.width - lastTranslation
                         lastTranslation = value.translation.width
                         let fraction = min(1, max(0, value.location.x / width))
-                        onSample(delta, fraction, 1, false)
+                        onSample(delta, fraction, false, false)
                     }
                     .onEnded { _ in
+                        let wasActive = horizontalLocked == true
                         lastTranslation = 0
-                        onSample(0, 0.5, 1, true)
-                    }
+                        horizontalLocked = nil
+                        if wasActive {
+                            onSample(0, 0.5, false, true)
+                        }
+                    },
+                isEnabled: enabled
             )
+            .onChange(of: enabled) { _, isEnabled in
+                if !isEnabled {
+                    lastTranslation = 0
+                    horizontalLocked = nil
+                }
+            }
         #endif
     }
 }
@@ -181,16 +245,22 @@ private struct KeysBarWordSlideGestureModifier: ViewModifier {
 /// Horizontal pan on the keys bar. One finger moves the caret; two fingers extend the selection.
 /// A tap never begins the pan, so the keys still receive their taps.
 private struct KeysBarWordSlidePan: UIGestureRecognizerRepresentable {
-    var onSample: (CGFloat, CGFloat, Int, Bool) -> Void
+    var isEnabled: Bool
+    var viewWidth: CGFloat
+    var onSample: (CGFloat, CGFloat, Bool, Bool) -> Void
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        var lastTranslation: CGFloat = 0
-        var touches = 1
+        var tracker = KeysBarWordSlideTracker()
 
-        nonisolated func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-            guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
-            let velocity = pan.velocity(in: pan.view)
-            return abs(velocity.x) > abs(velocity.y)
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer,
+                  let view = pan.view else { return true }
+            let velocity = pan.velocity(in: view)
+            if velocity.x != 0 || velocity.y != 0 {
+                return abs(velocity.x) > abs(velocity.y)
+            }
+            let translation = pan.translation(in: view)
+            return abs(translation.x) > abs(translation.y)
         }
     }
 
@@ -203,29 +273,37 @@ private struct KeysBarWordSlidePan: UIGestureRecognizerRepresentable {
         pan.minimumNumberOfTouches = 1
         pan.maximumNumberOfTouches = 2
         pan.cancelsTouchesInView = true
+        pan.isEnabled = isEnabled
         pan.delegate = context.coordinator
         return pan
     }
 
+    func updateUIGestureRecognizer(_ recognizer: UIPanGestureRecognizer, context _: Context) {
+        if recognizer.isEnabled != isEnabled {
+            recognizer.isEnabled = isEnabled
+        }
+    }
+
     func handleUIGestureRecognizerAction(_ recognizer: UIPanGestureRecognizer, context: Context) {
         let translation = context.converter.localTranslation?.x ?? 0
-        let width = max(recognizer.view?.bounds.width ?? 1, 1)
+        let width = max(viewWidth, 1)
         let fraction = min(1, max(0, context.converter.localLocation.x / width))
-        if recognizer.numberOfTouches > 0 {
-            context.coordinator.touches = recognizer.numberOfTouches
-        }
         switch recognizer.state {
         case .began:
-            // `translation` is already the distance that made the pan begin. Count it, then continue from there.
-            context.coordinator.lastTranslation = translation
-            onSample(translation, fraction, context.coordinator.touches, false)
+            let sample = context.coordinator.tracker.begin(
+                translation: translation,
+                touchCount: recognizer.numberOfTouches
+            )
+            onSample(sample.delta, fraction, sample.extend, false)
         case .changed:
-            let delta = translation - context.coordinator.lastTranslation
-            context.coordinator.lastTranslation = translation
-            onSample(delta, fraction, context.coordinator.touches, false)
+            let sample = context.coordinator.tracker.change(
+                translation: translation,
+                touchCount: recognizer.numberOfTouches
+            )
+            onSample(sample.delta, fraction, sample.extend, false)
         case .ended, .cancelled, .failed:
-            context.coordinator.lastTranslation = 0
-            onSample(0, fraction, context.coordinator.touches, true)
+            context.coordinator.tracker.end()
+            onSample(0, fraction, false, true)
         default:
             break
         }

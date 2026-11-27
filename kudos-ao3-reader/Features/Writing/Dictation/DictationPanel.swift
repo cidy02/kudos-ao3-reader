@@ -25,7 +25,6 @@ struct DictationPanel: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
-                    .accessibilityAddTraits(.updatesFrequently)
 
                 if !controller.pendingText.isEmpty {
                     Text(controller.pendingText)
@@ -34,6 +33,7 @@ struct DictationPanel: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityLabel("Still recognizing")
                         .accessibilityValue(controller.pendingText)
+                        .accessibilityAddTraits(.updatesFrequently)
                 }
 
                 if controller.phase == .listening {
@@ -65,9 +65,16 @@ struct DictationPanel: View {
                     .accessibilityLabel("Open Settings")
                 }
 
-                HStack(spacing: 10) {
-                    panelButton("Undo Last Phrase", action: onUndoPhrase)
-                    panelButton("Keyboard", action: onKeyboard)
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: 10) {
+                        panelButton("Undo Last Phrase", action: onUndoPhrase)
+                        panelButton("Keyboard", action: onKeyboard)
+                    }
+                } else {
+                    HStack(spacing: 10) {
+                        panelButton("Undo Last Phrase", action: onUndoPhrase)
+                        panelButton("Keyboard", action: onKeyboard)
+                    }
                 }
             }
             .padding(.horizontal, 20)
@@ -144,6 +151,8 @@ struct DictationPanel: View {
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
                 .multilineTextAlignment(.center)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .background(Color.primary.opacity(0.06), in: Capsule())
         }

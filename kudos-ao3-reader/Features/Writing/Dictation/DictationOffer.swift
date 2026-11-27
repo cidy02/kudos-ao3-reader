@@ -12,26 +12,27 @@ nonisolated enum DictationOffer {
 
     static func infoPlistAllowsDictation(_ info: [String: Any]?) -> Bool {
         guard let info else { return false }
-        return info[microphoneUsageDescription] != nil
-            && info[speechRecognitionUsageDescription] != nil
+        return hasNonEmptyString(info[microphoneUsageDescription])
+            && hasNonEmptyString(info[speechRecognitionUsageDescription])
     }
 
     static func isOffered(
         infoDictionary: [String: Any]?,
         supportsOnDeviceRecognition: Bool
     ) -> Bool {
-        supportsOnDeviceRecognition && infoPlistAllowsDictation(infoDictionary)
+        infoPlistAllowsDictation(infoDictionary) && supportsOnDeviceRecognition
     }
 
     #if os(iOS)
-    /// Device capability, read once. Locales without an on-device model hide Dictate.
-    static let deviceSupportsOnDeviceRecognition: Bool = SFSpeechRecognizer()?.supportsOnDeviceRecognition == true
-
+    /// Checks the Info.plist keys before ever touching `SFSpeechRecognizer`.
     static var currentDeviceAllows: Bool {
-        isOffered(
-            infoDictionary: Bundle.main.infoDictionary,
-            supportsOnDeviceRecognition: deviceSupportsOnDeviceRecognition
-        )
+        guard infoPlistAllowsDictation(Bundle.main.infoDictionary) else { return false }
+        return SFSpeechRecognizer()?.supportsOnDeviceRecognition == true
     }
     #endif
+
+    private static func hasNonEmptyString(_ value: Any?) -> Bool {
+        guard let text = value as? String else { return false }
+        return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }

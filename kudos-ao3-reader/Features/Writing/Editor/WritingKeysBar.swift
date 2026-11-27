@@ -129,7 +129,13 @@ struct WritingKeysBar<LeadingSlot: View>: View {
     private var phone: WritingKeysBarPhoneActions { phoneOverride ?? environmentPhone }
     /// A horizontal pan on a scrolling keys row would either steal the scroll or the word slide.
     private var scrollsKeys: Bool { dynamicTypeSize.isAccessibilitySize || showsLeadingContent }
-    private var coveringKeys: Bool { slide.active && !scrollsKeys }
+    /// Keeps the active slide's gesture host stable even if `showsLeadingContent` flips mid-slide.
+    private var showsTrackRow: Bool {
+        guard phone.wordSlideEnabled else { return false }
+        if slide.active { return slide.onTrackRow }
+        return scrollsKeys || voiceOverEnabled
+    }
+    private var coveringKeys: Bool { slide.active && !slide.onTrackRow }
 
     init(
         formatState: FormatState = FormatState(),
@@ -146,18 +152,30 @@ struct WritingKeysBar<LeadingSlot: View>: View {
     }
 
     var body: some View {
-        if phone.suppressesKeys {
-            EmptyView()
-        } else {
-            barChrome
+        Group {
+            if phone.suppressesKeys {
+                EmptyView()
+            } else {
+                barChrome
+            }
+        }
+        .onChange(of: phone.wordSlideEnabled) { _, enabled in
+            if !enabled {
+                slide = KeysBarSlideState()
+            }
+        }
+        .onChange(of: phone.suppressesKeys) { _, suppressed in
+            if suppressed {
+                slide = KeysBarSlideState()
+            }
         }
     }
 
     private var barChrome: some View {
         barContent
-            .keysBarWordSlideGesture(enabled: phone.wordSlideEnabled && !scrollsKeys) {
-                delta, fraction, touches, ended in
-                handleSlide(delta: delta, fraction: fraction, touches: touches, ended: ended)
+            .keysBarWordSlideGesture(enabled: phone.wordSlideEnabled && !showsTrackRow) {
+                delta, fraction, extend, ended in
+                handleSlide(delta: delta, fraction: fraction, extend: extend, ended: ended, fromTrackRow: false)
             }
             .background(barBackground)
             .overlay(alignment: .top) {
@@ -168,30 +186,23 @@ struct WritingKeysBar<LeadingSlot: View>: View {
             }
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Writing keys")
-            .onChange(of: phone.wordSlideEnabled) { _, enabled in
-                if !enabled {
-                    slide = KeysBarSlideState()
-                }
-            }
-            .onChange(of: phone.suppressesKeys) { _, suppressed in
-                if suppressed {
-                    slide = KeysBarSlideState()
-                }
-            }
     }
 
     /// Keys stay mounted under the track so the pan is not torn down on the sample that starts the slide.
     private var barContent: some View {
         VStack(spacing: 0) {
-            if phone.wordSlideEnabled, scrollsKeys {
-                wordSlideTrack(ownsGesture: true)
+            if showsTrackRow {
+                wordSlideTrackView
+                    .keysBarWordSlideGesture(enabled: true) { delta, fraction, extend, ended in
+                        handleSlide(delta: delta, fraction: fraction, extend: extend, ended: ended, fromTrackRow: true)
+                    }
             }
             ZStack {
                 keyLayouts
                     .opacity(coveringKeys ? 0 : 1)
                     .accessibilityHidden(coveringKeys)
                 if coveringKeys {
-                    wordSlideTrack(ownsGesture: false)
+                    wordSlideTrackView
                 }
             }
         }
@@ -241,18 +252,21 @@ struct WritingKeysBar<LeadingSlot: View>: View {
         }
     }
 
-    private func wordSlideTrack(ownsGesture: Bool) -> some View {
+    private var wordSlideTrackView: some View {
         KeysBarWordSlideTrack(
             fraction: slide.fraction,
             isDragging: slide.active,
             onAdjust: { phone.onMoveByWord($0, false) }
         )
-        .keysBarWordSlideGesture(enabled: ownsGesture) { delta, fraction, touches, ended in
-            handleSlide(delta: delta, fraction: fraction, touches: touches, ended: ended)
-        }
     }
 
-    private func handleSlide(delta: CGFloat, fraction: CGFloat, touches: Int, ended: Bool) {
+    private func handleSlide(
+        delta: CGFloat,
+        fraction: CGFloat,
+        extend: Bool,
+        ended: Bool,
+        fromTrackRow: Bool
+    ) {
         if ended {
             slide = KeysBarSlideState()
             return
@@ -263,33 +277,18 @@ struct WritingKeysBar<LeadingSlot: View>: View {
             direction: direction,
             carried: slide.remainder
         )
+        if !slide.active {
+            slide.onTrackRow = fromTrackRow
+        }
         slide.active = true
         slide.fraction = fraction
         slide.remainder = outcome.remainder
         guard outcome.wordSteps != 0 else { return }
-        for _ in 0..<abs(outcome.wordSteps) {
-            Haptics.selection()
-        }
-        phone.onMoveByWord(outcome.wordSteps, touches >= 2)
+        phone.onMoveByWord(outcome.wordSteps, extend)
     }
 
     @ViewBuilder
     private var trailingPhoneControls: some View {
-        if phone.wordSlideEnabled, voiceOverEnabled, !scrollsKeys {
-            Text("‹‹ ››")
-                .font(.body.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(minWidth: 44, minHeight: 44)
-                .accessibilityLabel("Move the cursor by word")
-                .accessibilityHint("Swipe up for the next word. Swipe down for the previous word.")
-                .accessibilityAdjustableAction { direction in
-                    switch direction {
-                    case .increment: phone.onMoveByWord(1, false)
-                    case .decrement: phone.onMoveByWord(-1, false)
-                    default: break
-                    }
-                }
-        }
         if phone.showsDictate {
             Button {
                 playClick()
@@ -302,7 +301,7 @@ struct WritingKeysBar<LeadingSlot: View>: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Dictate")
-            .accessibilityHint("On this iPhone. Nothing leaves it.")
+            .accessibilityHint("On this \(ThisDevice.name). Nothing leaves it.")
         }
     }
 
