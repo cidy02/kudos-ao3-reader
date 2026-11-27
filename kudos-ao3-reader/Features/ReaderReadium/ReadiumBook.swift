@@ -189,6 +189,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     @ObservationIgnored var onUserPageTurn: (() -> Void)?
     /// Programmatic jumps and the input paths that report a user turn.
     @ObservationIgnored private var turnAutoHide = TurnAutoHideState()
+    /// Pending Read Aloud jump state so a close flush never lags behind heard speech.
+    @ObservationIgnored var speechNavigation = ReadiumSpeechNavigationState()
+    #if DEBUG
+    /// Test seam replacing `navigator?.go(to:options:)` without a UIKit WebView.
+    @ObservationIgnored var testGoToLocator: ((Locator) async -> Bool)?
+    #endif
 
     /// The body's rendered line height in points — font size × the line-height
     /// multiplier, mirrored from the view's `ReaderTextStyle` whenever
@@ -436,6 +442,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     fileprivate func applyVisualPageFromUserScroll(page: Int, pageCount: Int) {
         guard !isLocatorIngestionBlocked else { return }
         guard Date() >= userScrollMuteUntil else { return }
+        if !hasJumpInFlight {
+            speechNavigation.noteUserNavigation()
+        }
         // First paint is layout-only. Until ready, ignore all scroll posts.
         guard pageBarReady, let known = visualPageCount, known > 0 else { return }
         let pageCount = max(1, pageCount)
@@ -493,6 +502,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// flight and always redirects it to the newest thumb position, so cost
     /// stays flat no matter how fast the drag is.
     func scrubToProgressionInCurrentResource(_ progression: Double) {
+        speechNavigation.noteUserNavigation()
         pendingScrubProgression = min(1, max(0, progression))
         guard !isScrubSeekInFlight else { return }
         isScrubSeekInFlight = true
@@ -730,16 +740,17 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     }
 
     func go(to link: ReadiumShared.Link) {
+        speechNavigation.noteUserNavigation()
         jump { [weak self] in _ = await self?.navigator?.go(to: link) }
     }
 
-    /// Navigates directly to a `Locator` — the position card, search, annotations
-    /// and Read Aloud. Always unanimated. Read Aloud calls this on every
-    /// utterance, including one already on screen; an animated seek would play
-    /// a page turn on top of that, and a `goForward` would turn a second time.
+    /// Navigates directly to a `Locator` — the position card, search, and
+    /// annotations. Always unanimated; Read Aloud uses `goForSpeech(to:)` so an
+    /// unsettled jump still preserves the confirmed speech position on close.
     func go(to locator: Locator) {
+        speechNavigation.noteUserNavigation()
         jump { [weak self] in
-            _ = await self?.navigator?.go(to: locator, options: NavigatorGoOptions(animated: false))
+            _ = await self?.navigate(to: locator)
         }
     }
 
@@ -923,12 +934,18 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         }
         currentLocator = locator
         settledLocationCount += 1
+        let suppressesStalePreSpeechPersist = speechNavigation.noteLocationDidChange(
+            locator,
+            isUserScroll: scrollInteracting
+        )
         onLocatorSettled?(locator)
         // Mid-scrub locator settles are transient — the reader is flying past
         // these pages, not reading them. `currentLocator` still advances (so a
         // dismiss mid-drag flushes the right spot), but the debounced progress
         // write is skipped until release, which commits the final position.
-        if !isScrubbing {
+        // Stale pre-jump settles while a confirmed speech jump is unsettled are
+        // skipped too so they never overwrite a newer heard position.
+        if !isScrubbing, !suppressesStalePreSpeechPersist {
             onLocatorChange?(locator)
         }
     }
@@ -1256,6 +1273,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
 
     /// An internal EPUB link is about to move the reader: its settles are not turns.
     func navigator(_: VisualNavigator, shouldNavigateToLink _: ReadiumShared.Link) -> Bool {
+        speechNavigation.noteUserNavigation()
         invalidatePendingTurnAttribution()
         return true
     }
@@ -1781,6 +1799,25 @@ private struct TurnAutoHideState {
 /// Same file, so the stored state above stays `private`; outside the class body,
 /// which SwiftLint already holds over its length limit.
 extension ReadiumBook {
+    /// Read Aloud page-follow jump. Unanimated, and remembers `locator` for close
+    /// flushes until the navigator settles onto its chapter or the user navigates.
+    func goForSpeech(to locator: Locator) {
+        let generation = speechNavigation.beginJump(to: locator, currentLocator: currentLocator)
+        jump { [weak self] in
+            _ = await self?.navigate(to: locator)
+            self?.speechNavigation.endJump(generation: generation)
+        }
+    }
+
+    fileprivate func navigate(to locator: Locator) async -> Bool {
+        #if DEBUG
+        if let testGoToLocator {
+            return await testGoToLocator(locator)
+        }
+        #endif
+        return await navigator?.go(to: locator, options: NavigatorGoOptions(animated: false)) ?? false
+    }
+
     /// Shows or hides the controls with the shared fade (T-562b). Every path goes
     /// through here — centre tap, a page turn, the mini player — so none snaps.
     func setChromeHidden(_ hidden: Bool) {
@@ -1809,6 +1846,7 @@ extension ReadiumBook {
     var hasJumpInFlight: Bool { turnAutoHide.jumpsInFlight > 0 }
 
     fileprivate func resetTurnAutoHideForOpen() {
+        speechNavigation.reset()
         invalidatePendingTurnAttribution()
     }
 
@@ -1834,6 +1872,7 @@ extension ReadiumBook {
     /// Starts a scoped directional turn attempt (edge tap, hardware key, `goForward`/
     /// `goBackward`).
     func beginExplicitUserTurn() -> UInt64 {
+        speechNavigation.noteUserNavigation()
         turnAutoHide.nextAttemptToken &+= 1
         let token = turnAutoHide.nextAttemptToken
         turnAutoHide.inFlightAttempts[token] = turnAutoHide.generation
@@ -1856,6 +1895,7 @@ extension ReadiumBook {
         didCommitUserPageTurn _: UserPageTurnDirection,
         source _: UserPageTurnSource
     ) {
+        speechNavigation.noteUserNavigation()
         reportUserTurn()
     }
 

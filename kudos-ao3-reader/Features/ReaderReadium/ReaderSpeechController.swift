@@ -229,6 +229,14 @@ final class ReaderSpeechController {
     /// auto-advance uses it so skipping an unspeakable chapter never stalls on a
     /// stale navigator locator.
     private(set) var resumeLocator: Locator?
+    /// Target stepped to by hold-to-seek before speech reaches it. Kept separate
+    /// from `resumeLocator` so paused hold-to-seek never moves persisted progress
+    /// or Now Playing until Play starts speech and `handleAudible` commits it.
+    private(set) var pendingSeekLocator: Locator?
+    /// Process-wide owner of `NowPlayingInfo.shared` and `MPRemoteCommandCenter`.
+    /// Only the owner may clear the card or remove targets on relinquishment; an
+    /// idle or auditioning controller must leave another controller's transport alone.
+    private static weak var transportOwner: ReaderSpeechController?
     private var remoteCommandsInstalled = false
     #if DEBUG
     private var testUnitProvider: ((Locator?) async -> [TTSSpeechUnit])?
@@ -786,6 +794,7 @@ final class ReaderSpeechController {
         let hasContentSource = publication != nil
         #endif
         guard hasContentSource else { return }
+        pendingSeekLocator = nil
         isAuditioning = false
         if isUserInitiated {
             showsNothingToSpeakAlert = false
@@ -913,6 +922,7 @@ final class ReaderSpeechController {
     private func commitPendingRequest(_ request: SpeechRequest, locator: Locator?) {
         guard activeRequest?.token == request.token else { return }
         activeRequest = nil
+        pendingSeekLocator = nil
         enginePlaybackActive = true
 
         if let locator {
@@ -1122,6 +1132,17 @@ final class ReaderSpeechController {
     }
 
     private func resumeFromPaused(fallbackLocator: Locator?) {
+        if let seekTarget = pendingSeekLocator {
+            pendingSeekLocator = nil
+            startSpeechRequest(
+                from: seekTarget,
+                direction: .forward,
+                desiredState: .playing,
+                isUserInitiated: true,
+                isManualSkip: false
+            )
+            return
+        }
         if var request = activeRequest {
             request.desiredState = .playing
             activeRequest = request
@@ -1212,6 +1233,7 @@ final class ReaderSpeechController {
         let releasesPublication = !isReaderOpen && publication != nil
         SpeechOwnerRegistry.shared.release(self)
         activeRequest = nil
+        pendingSeekLocator = nil
         nextRequestToken &+= 1
         currentAuditionToken &+= 1
         speechErrorMessage = nil
@@ -1290,9 +1312,24 @@ final class ReaderSpeechController {
         }
     }
 
-    /// Updates the resume point during hold-to-seek without touching playback.
+    /// Records the hold-to-seek target without moving `resumeLocator`, the
+    /// navigator, or persisted progress until speech reaches it.
     func noteSeekLocator(_ locator: Locator?) {
-        resumeLocator = locator
+        pendingSeekLocator = locator
+    }
+
+    /// Commits or holds the pending hold-to-seek target on release. When
+    /// `resumePlaying` is true, starts speaking from `pendingSeekLocator` (or
+    /// resumes paused playback if no step occurred); when false, keeps the
+    /// target for the next Resume or hold without moving progress.
+    func finishSeekHold(resumePlaying: Bool) {
+        guard resumePlaying else { return }
+        if let target = pendingSeekLocator {
+            pendingSeekLocator = nil
+            reanchor(to: target, resumePlaying: true)
+        } else if status == .paused {
+            resumeFromPaused(fallbackLocator: nil)
+        }
     }
 
     /// Full teardown used for an idle reader close or switching publications.
@@ -1303,6 +1340,7 @@ final class ReaderSpeechController {
         }
         SpeechOwnerRegistry.shared.release(self)
         activeRequest = nil
+        pendingSeekLocator = nil
         nextRequestToken &+= 1
         currentAuditionToken &+= 1
         showsNothingToSpeakAlert = false
@@ -1348,6 +1386,7 @@ final class ReaderSpeechController {
         sections = []
         chapterStartLocators = []
         resumeLocator = nil
+        pendingSeekLocator = nil
         nowPlayingTitle = ""
         nowPlayingArtist = nil
         concealsNowPlayingMetadata = false
@@ -1459,11 +1498,13 @@ final class ReaderSpeechController {
         unitProvider: ((Locator?) async -> [TTSSpeechUnit])? = nil,
         resumeLocator: Locator? = nil,
         chapterStartLocators: [Locator?] = [],
-        onSkipNext: (() -> Bool)? = nil
+        onSkipNext: (() -> Bool)? = nil,
+        title: String = ""
     ) {
         self.startTask?.cancel()
         self.startTask = nil
         self.activeRequest = nil
+        self.pendingSeekLocator = nil
         self.isAuditioning = true
         if let customService {
             self.skipsEngineReplacementForTests = true
@@ -1477,6 +1518,9 @@ final class ReaderSpeechController {
         self.openReaderWorkID = isReaderOpen ? workID : nil
         self.resumeLocator = resumeLocator
         self.chapterStartLocators = chapterStartLocators
+        if !title.isEmpty {
+            self.nowPlayingTitle = title
+        }
         self.stoppedManually = false
         self.enginePlaybackActive = (status == .playing || status == .paused)
         self.showsNothingToSpeakAlert = false
@@ -1499,6 +1543,7 @@ final class ReaderSpeechController {
     }
 
     var remoteCommandsInstalledForTests: Bool { remoteCommandsInstalled }
+    var isTransportOwnerForTests: Bool { Self.transportOwner === self }
 
     /// Test seam: invokes the Lock Screen / Now Playing Play handler directly.
     @discardableResult
@@ -1793,28 +1838,47 @@ final class ReaderSpeechController {
         guard !isAuditioning else { return }
         switch status {
         case .playing:
+            claimTransportOwnership()
             publishNowPlaying(playing: true)
             #if DEBUG
             transportForTests = "playing"
             #endif
         case .paused:
+            claimTransportOwnership()
             publishNowPlaying(playing: false)
             #if DEBUG
             transportForTests = "paused"
             #endif
         case .stopped where activeRequest != nil:
+            claimTransportOwnership()
             installRemoteCommandsIfNeeded()
             clearNowPlaying()
             #if DEBUG
             transportForTests = "starting"
             #endif
         case .stopped, .unavailable:
-            clearNowPlaying()
-            removeRemoteCommands()
+            relinquishTransportOwnership()
             #if DEBUG
             transportForTests = "none"
             #endif
         }
+    }
+
+    private func claimTransportOwnership() {
+        if let previous = Self.transportOwner, previous !== self {
+            previous.remoteCommandsInstalled = false
+        }
+        Self.transportOwner = self
+    }
+
+    private func relinquishTransportOwnership() {
+        guard Self.transportOwner === self else {
+            remoteCommandsInstalled = false
+            return
+        }
+        Self.transportOwner = nil
+        clearNowPlaying()
+        removeRemoteCommands()
     }
 
     private func clearNowPlaying() {
