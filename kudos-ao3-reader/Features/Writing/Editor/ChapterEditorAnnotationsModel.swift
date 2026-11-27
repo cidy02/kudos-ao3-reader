@@ -195,6 +195,13 @@ nonisolated enum ChapterEditorAnnotationAnchoring {
             .replacingOccurrences(of: "&apos;", with: "'")
             .replacingOccurrences(of: "&lt;", with: "<")
             .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&ldquo;", with: "\u{201C}")
+            .replacingOccurrences(of: "&rdquo;", with: "\u{201D}")
+            .replacingOccurrences(of: "&lsquo;", with: "\u{2018}")
+            .replacingOccurrences(of: "&rsquo;", with: "\u{2019}")
+            .replacingOccurrences(of: "&mdash;", with: "\u{2014}")
+            .replacingOccurrences(of: "&ndash;", with: "\u{2013}")
+            .replacingOccurrences(of: "&hellip;", with: "\u{2026}")
             .replacingOccurrences(of: "&amp;", with: "&")
 
         return decoded
@@ -227,30 +234,34 @@ nonisolated enum ChapterEditorAnnotationAnchoring {
         let count = units.count
         guard count >= 2 else { return nil }
 
+        // The nearest "TK" on either side of the stale offset: text deleted before it since it was typed moves it
+        // back, text added moves it on (wave 48 review). A word-bounded one wins over a loose one; on a tie, the later.
         var index = 0
-        var firstLooseMatch: Range<Int>?
-
+        var nearestBounded: Range<Int>?
+        var nearestLoose: Range<Int>?
+        func closer(_ candidate: Range<Int>, than current: Range<Int>?) -> Bool {
+            guard let current else { return true }
+            return abs(candidate.lowerBound - startOffset) <= abs(current.lowerBound - startOffset)
+        }
         while index < count {
             if units[index] == 0x3C { // '<'
                 index = skipTagOrComment(in: units, from: index)
                 continue
             }
-            if index >= startOffset,
-               units[index] == 0x54, // 'T'
+            if units[index] == 0x54, // 'T'
                index + 1 < count,
                units[index + 1] == 0x4B { // 'K'
                 let candidate = index..<(index + 2)
                 if isWordBoundedTK(at: index, in: html) {
-                    return candidate
-                }
-                if firstLooseMatch == nil {
-                    firstLooseMatch = candidate
+                    if closer(candidate, than: nearestBounded) { nearestBounded = candidate }
+                } else if closer(candidate, than: nearestLoose) {
+                    nearestLoose = candidate
                 }
             }
             index += 1
         }
 
-        return firstLooseMatch
+        return nearestBounded ?? nearestLoose
     }
 
     private static func skipTagOrComment(in units: [UInt16], from start: Int) -> Int {

@@ -77,6 +77,12 @@ export const bridgeError = (code: string, message: string): BridgeErrorShape => 
 
 export const COMPOSITION_CAP_MS = 500;
 
+/** Where the character starting at `at` in `html` ends: past a whole `&…;` reference, or a surrogate pair. */
+function charEnd(html: string, at: number): number {
+  if (html[at] === '&') { const semi = html.indexOf(';', at); return semi > at && semi - at <= 12 ? semi + 1 : at + 1; }
+  return at + ((html.codePointAt(at) ?? 0) > 0xffff ? 2 : 1);
+}
+
 export class Editor {
   readonly view: EditorView;
   variant: Variant = 'content';
@@ -219,8 +225,10 @@ export class Editor {
     const paste = tr.getMeta('kudosPaste') as PasteInfo | undefined;
     if (paste) this.hooks.pasted(paste);
     if (state.doc !== before.doc && !paste) {
+      // only when the TK is newly finished: an edit elsewhere while the caret still sits after it is not a new one
       const tk = typedTK(state);
-      if (tk) this.hooks.tkTyped(this.rangeOffsets(tk.from, tk.to));
+      const was = typedTK(before);
+      if (tk && !(was && tr.mapping.map(was.to) === tk.to)) this.hooks.tkTyped(this.rangeOffsets(tk.from, tk.to));
     }
     const word = this.frozen ? null : wordAtCaret(state);
     if (word !== this.lastWord) { this.lastWord = word; this.hooks.word(word); }
@@ -433,9 +441,25 @@ export class Editor {
     const doc = this.view.state.doc;
     let html: string, start: number, last: number;
     if (this.loaded && (doc === this.loaded.doc || (!this.lastSnapshot || this.lastSnapshot.original) && doc.eq(this.loaded.doc))) {
-      html = this.loaded.sources.original;
-      start = this.loaded.sources.offsetForPos(from) ?? 0;
-      last = this.loaded.sources.offsetForPos(Math.max(from, to - 1)) ?? start;
+      const loaded = this.loaded;
+      html = loaded.sources.original;
+      const src = html;
+      const isSpace = (p: number) => /^[ \t\n\r\f]$/.test(doc.textBetween(p, Math.min(p + 1, doc.content.size), undefined, '\ufffc'));
+      // A space isn't aligned (offsetForPos gives the next word's first letter): count on from the character before
+      // it in the same block, when the source between holds only spaces.
+      const startOf = (p: number): number | null => {
+        if (!isSpace(p)) return loaded.sources.offsetForPos(p) ?? null;
+        for (let q = p - 1; q >= doc.resolve(p).start(); q--) {
+          if (isSpace(q)) continue;
+          const s = loaded.sources.offsetForPos(q);
+          if (s == null) return null;
+          const o = charEnd(src, s) + (p - q - 1);
+          return /^[ \t\n\r\f]+$/.test(src.slice(charEnd(src, s), o + 1)) ? o : null;
+        }
+        return null;
+      };
+      start = startOf(from) ?? loaded.sources.offsetForPos(from) ?? 0;
+      last = startOf(Math.max(from, to - 1)) ?? loaded.sources.offsetForPos(Math.max(from, to - 1)) ?? start;
     } else {
       const a = this.serializer.serialize(doc, from);
       html = a.html;
@@ -443,10 +467,7 @@ export class Editor {
       last = this.serializer.serialize(doc, Math.max(from, to - 1)).headOffset ?? start;
     }
     if (to <= from) return { from: start, to: start };
-    let end: number;
-    if (html[last] === '&') { const semi = html.indexOf(';', last); end = semi > last && semi - last <= 12 ? semi + 1 : last + 1; }
-    else end = last + ((html.codePointAt(last) ?? 0) > 0xffff ? 2 : 1);
-    return { from: start, to: Math.max(end, start) };
+    return { from: start, to: Math.max(charEnd(html, last), start) };
   }
 
   /** The document position for an offset in the text HTML mode holds (the loaded text, or the last snapshot). */
@@ -466,10 +487,13 @@ export class Editor {
   setAnnotations(items: { id: string; kind: AnnotationKind; from: number; to: number }[]): { placed: { id: string; found: boolean }[] } {
     if (!this.loaded) throw bridgeError('not-loaded', 'setAnnotations before load');
     const size = this.view.state.doc.content.size;
+    const source = this.textForOffsets();
+    const clamp = (p: number, lo = 0) => Math.min(Math.max(p, lo), size);
     const placed = items.map((a) => {
-      const from = Math.min(Math.max(this.posForOffset(a.from), 0), size);
-      // the end through its last character (see rangeOffsets)
-      const to = a.to > a.from ? Math.min(Math.max(this.posForOffset(a.to - 1) + 1, from), size) : from;
+      const from = clamp(this.posAtOffset(source, a.from) ?? this.posForOffset(a.from));
+      // the end from the character at `to` (or the last one before it): not `posForOffset(to - 1) + 1`, which
+      // overshoots when the last character is a reference's `;` or a space, neither of which the source map aligns
+      const to = a.to > a.from ? clamp(this.posAtOffset(source, a.to) ?? this.posForOffset(a.to - 1) + 1, from) : from;
       return { id: a.id, kind: a.kind, from, to };
     });
     this.view.dispatch(setAnnotations(this.view.state, placed));
@@ -567,19 +591,9 @@ export class Editor {
       if (/[<>]/.test(slice)) return false;
       const inRef = (o: number) => { const r = refCovering(source, o); return r !== null && r < o; };
       if (inRef(from) || inRef(to)) return false;
-      // The source map aligns characters, not the spaces between them (part 1, 7.5): place each end from the nearest
-      // character in the same run of text, then check the document holds exactly this text there.
-      const posBefore = (o: number): number | null => {
-        for (let k = o; k < source.length && source[k] !== '<'; k++) {
-          if (!/\s/.test(source[k]!)) return this.posForOffset(k) - decodeText(source.slice(o, k)).length;
-        }
-        for (let k = o - 1; k >= 0 && source[k] !== '>'; k--) {
-          if (!/\s/.test(source[k]!)) { const s = refCovering(source, k) ?? k; return this.posForOffset(s) + decodeText(source.slice(s, o)).length; }
-        }
-        return null;
-      };
-      const pFrom = posBefore(from);
-      const pTo = to > from ? posBefore(to) : pFrom;
+      // place each end from the nearest character, then check the document holds exactly this text there
+      const pFrom = this.posAtOffset(source, from);
+      const pTo = to > from ? this.posAtOffset(source, to) : pFrom;
       const size = state.doc.content.size;
       if (pFrom === null || pTo === null || pFrom < 0 || pTo > size || pTo < pFrom) return false;
       const $a = state.doc.resolve(pFrom);
@@ -597,6 +611,23 @@ export class Editor {
       if (dispatch) dispatch((text ? state.tr.insertText(text, pFrom, pTo) : state.tr.delete(pFrom, pTo)).scrollIntoView());
       return true;
     };
+  }
+
+  /**
+   * The document position just before the character at `offset` of `source` (the text HTML mode holds), or just
+   * after the last one before it when a tag comes first. The source map aligns characters, not the spaces between
+   * them nor the inside of a reference (part 1, 7.5), so this goes through the nearest character in the same run of
+   * text. Null when there's none.
+   */
+  private posAtOffset(source: string, offset: number): number | null {
+    if (offset < 0 || offset > source.length) return null;
+    for (let k = offset; k < source.length && source[k] !== '<'; k++) {
+      if (!/\s/.test(source[k]!)) return this.posForOffset(k) - decodeText(source.slice(offset, k)).length;
+    }
+    for (let k = offset - 1; k >= 0 && source[k] !== '>'; k--) {
+      if (!/\s/.test(source[k]!)) { const s = refCovering(source, k) ?? k; return this.posForOffset(s) + decodeText(source.slice(s, offset)).length; }
+    }
+    return null;
   }
 
   /** The text HTML mode holds, which `posForOffset` maps: the loaded text while unedited, else the serialization. */

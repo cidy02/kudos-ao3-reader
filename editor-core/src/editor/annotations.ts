@@ -63,6 +63,6 @@ export function wordAtCaret(state: EditorState): string | null {
   const before = $head.parent.textBetween(Math.max(0, $head.parentOffset - 40), $head.parentOffset, undefined, '￼');
   const m = /[\p{L}\p{M}'’-]{2,40}$/u.exec(before);
   const after = $head.parent.textBetween($head.parentOffset, Math.min($head.parent.content.size, $head.parentOffset + 1), undefined, '￼');
-  if (!m || /^[\p{L}\p{M}]/u.test(after)) return null; // only at the end of a word
+  if (!m || /^[\p{L}\p{M}'’-]/u.test(after)) return null; // only at the end of a word, a hyphenated one included
   return m[0];
 }

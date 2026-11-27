@@ -80,6 +80,27 @@
       }
     },
     {
+      "name": "setAnnotations",
+      "args": {
+        "items": [
+          {
+            "id": "note-1",
+            "kind": "note",
+            "from": 34,
+            "to": 38
+          }
+        ]
+      },
+      "result": {
+        "placed": [
+          {
+            "id": "note-1",
+            "found": true
+          }
+        ]
+      }
+    },
+    {
       "name": "command",
       "args": {
         "name": "toggleMark",
@@ -177,27 +198,6 @@
             "<font> ×1"
           ]
         }
-      }
-    },
-    {
-      "name": "setAnnotations",
-      "args": {
-        "items": [
-          {
-            "id": "note-1",
-            "kind": "note",
-            "from": 34,
-            "to": 38
-          }
-        ]
-      },
-      "result": {
-        "placed": [
-          {
-            "id": "note-1",
-            "found": true
-          }
-        ]
       }
     },
     {
