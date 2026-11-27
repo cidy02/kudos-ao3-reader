@@ -96,6 +96,8 @@ struct SettingsBackupPage: View {
                         detail: BackupSyncSummary.detail(folderSyncStatus)
                     )
                 }
+            } header: {
+                Text("Sync folder")
             }
             BackupSettingsSection(
                 isPreparingExport: isPreparingBackupExport,
@@ -530,6 +532,11 @@ struct BackupSettingsSection: View {
     let onExport: () -> Void
     let onImport: () -> Void
 
+    static let footerText =
+        "A .kudosbackup holds your works, progress, tags, queues, collections and fonts. "
+        + "Importing merges by default; you can replace your library instead, after a preview "
+        + "and an undo copy. Your AO3 sign-in is never included."
+
     private var isBusy: Bool {
         isPreparingExport || isImporting
     }
@@ -538,8 +545,13 @@ struct BackupSettingsSection: View {
         Section {
             Button(action: onExport) {
                 HStack(spacing: 12) {
-                    SettingsIconTile(color: Color(hex: "#64D2FF") ?? .cyan, systemImage: "square.and.arrow.up")
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.body)
+                        .foregroundStyle(.accentInk)
+                        .frame(width: 22)
+                        .accessibilityHidden(true)
                     Text("Export Backup…")
+                        .foregroundStyle(.accentInk)
                     if isPreparingExport {
                         Spacer()
                         ProgressView().accentFill()
@@ -547,10 +559,16 @@ struct BackupSettingsSection: View {
                 }
             }
             .disabled(isBusy)
+            .accessibilityLabel("Export Backup")
             Button(action: onImport) {
                 HStack(spacing: 12) {
-                    SettingsIconTile(color: Color(hex: "#AF52DE") ?? .purple, systemImage: "square.and.arrow.down")
+                    Image(systemName: "square.and.arrow.down")
+                        .font(.body)
+                        .foregroundStyle(.accentInk)
+                        .frame(width: 22)
+                        .accessibilityHidden(true)
                     Text("Import Backup…")
+                        .foregroundStyle(.accentInk)
                     if isImporting {
                         Spacer()
                         ProgressView().accentFill()
@@ -558,6 +576,7 @@ struct BackupSettingsSection: View {
                 }
             }
             .disabled(isBusy)
+            .accessibilityLabel("Import Backup")
             // A full-width bar while either side is working. Indeterminate on
             // purpose: neither `writeArchive` nor `restore` reports per-record
             // progress today, and a bar that invented a percentage would be
@@ -568,11 +587,10 @@ struct BackupSettingsSection: View {
                     .accessibilityLabel(isImporting ? "Importing backup" : "Preparing backup")
                     .accentFill()
             }
+        } header: {
+            Text("Backup file")
         } footer: {
-            Text("Your backup file includes your Library, Reading Queues, downloaded copies, "
-                + "User Tags, saved links, custom fonts, imported original files, and app "
-                + "settings. Importing adds anything you don't have without removing what is "
-                + "already here. Your AO3 sign-in and password are never included.")
+            Text(Self.footerText)
         }
     }
 }

@@ -31,6 +31,7 @@ struct SettingsHubView: View {
     @State private var folderSyncStatus = FolderSyncService.snapshot()
     @State private var searchText = ""
     @State private var showingWritingGoalSheet = false
+    @State private var showingBugReport = false
     @State private var startWritingDocument: StudioLocalDocumentTarget?
     @State private var isStartingWriting = false
     @State private var startWritingError: String?
@@ -73,6 +74,14 @@ struct SettingsHubView: View {
         return terms.contains { $0.localizedCaseInsensitiveContains(query) }
     }
 
+    private var showsReportBugRow: Bool {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+        return ["Report a Bug", "bug", "report", "feedback", "about"].contains {
+            $0.localizedCaseInsensitiveContains(query)
+        }
+    }
+
     var body: some View {
         let inputs = self.inputs
         List {
@@ -83,6 +92,18 @@ struct SettingsHubView: View {
                         NavigationLink(value: route) {
                             SettingsHubRow(route: route, value: value)
                         }
+                    }
+                    if group.routes.contains(.about) && showsReportBugRow {
+                        Button {
+                            showingBugReport = true
+                        } label: {
+                            SettingsHubActionRow(
+                                title: "Report a Bug",
+                                color: Color(hex: "#FF3B30") ?? .red,
+                                systemImage: "ladybug"
+                            )
+                        }
+                        .accessibilityLabel("Report a Bug")
                     }
                 } header: {
                     Text(group.title)
@@ -166,6 +187,11 @@ struct SettingsHubView: View {
         .appThemedScroll()
         .sheet(isPresented: $showingWritingGoalSheet) {
             StudioWritingGoalSheet()
+        }
+        .sheet(isPresented: $showingBugReport) {
+            BugReportView()
+                .environment(themeManager)
+                .accentTint(themeManager.effectiveTint, on: themeManager.appTheme)
         }
         .navigationDestination(item: $startWritingDocument) { target in
             LocalChapterEditorScreen(
@@ -327,6 +353,44 @@ struct SettingsHubRow: View {
     }
 }
 
+/// A grouped Settings hub action row with a 29 pt icon tile and disclosure chevron.
+private struct SettingsHubActionRow: View {
+    let title: String
+    let color: Color
+    let systemImage: String
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            HStack(alignment: .top, spacing: 12) {
+                SettingsIconTile(color: color, systemImage: systemImage)
+                Text(title)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+        } else {
+            HStack(spacing: 12) {
+                SettingsIconTile(color: color, systemImage: systemImage)
+                Text(title)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+}
+
 /// The page each `SettingsRoute` pushes. The host registers this once
 /// (`.navigationDestination(for: SettingsRoute.self)`), so a new page is a new
 /// case here and nowhere else.
@@ -378,7 +442,7 @@ struct SettingsPageForm<Content: View>: View {
         }
         .formStyle(.grouped)
         .appThemedScroll()
-        .navigationTitle(route.title)
+        .navigationTitle(route.pageTitle)
         #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif

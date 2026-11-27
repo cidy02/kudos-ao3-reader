@@ -21,9 +21,9 @@ struct SettingsHubTests {
         #endif
         let expected: [(String, [SettingsRoute])] = [
             ("Reading", reading),
-            ("Downloads & Storage", [.downloads, .preservation, .readingQueues]),
-            ("Library & Sync", [.library, .backup, .syncFolder, .importFiles]),
-            ("Account & Privacy", [.account, .privacySettings]),
+            ("Downloads & storage", [.downloads, .preservation, .readingQueues]),
+            ("Library & sync", [.library, .backup, .syncFolder, .importFiles]),
+            ("Account & privacy", [.account, .privacySettings]),
             ("About", [.about])
         ]
         #expect(groups.map(\.0) == expected.map(\.0))
@@ -120,19 +120,19 @@ struct SettingsHubTests {
                 .appearance: "Dark, Sepia reader", .font: "Georgia", .reader: "Paged",
                 .listening: "Kokoro · Bella",
                 .downloads: "On subscribe", .readingQueues: "Auto up to 7 works", .syncFolder: "Paused",
-                .account: "reader", .privacySettings: "Off", .about: Changelog.currentVersion
+                .account: "reader", .privacySettings: "Off", .about: "Version \(Changelog.currentVersion)"
             ]),
             (second, [
                 .appearance: "OLED", .font: "Menlo", .reader: "Scrolled",
                 .listening: "Apple · Samantha",
                 .downloads: "Manual", .readingQueues: "Auto up to 3 works", .syncFolder: "On",
-                .account: "Not signed in", .privacySettings: "Off", .about: Changelog.currentVersion
+                .account: "Not signed in", .privacySettings: "Off", .about: "Version \(Changelog.currentVersion)"
             ]),
             (third, [
                 .appearance: "Sepia", .font: "System", .reader: "Paged",
                 .listening: "Automatic",
                 .downloads: "On subscribe", .readingQueues: "Ask first", .syncFolder: "Off",
-                .account: "Checking…", .privacySettings: "Hide mature works", .about: Changelog.currentVersion
+                .account: "Checking…", .privacySettings: "Hide mature works", .about: "Version \(Changelog.currentVersion)"
             ])
         ]
         for (inputs, expected) in cases {

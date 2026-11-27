@@ -59,6 +59,28 @@ enum QRCodeGenerator {
     }
 }
 
+/// Copy helpers for the Devices section (`Settings-Backup-Sync`).
+enum TrustedDeviceCopy {
+    static let thisDeviceDetail = "Signs deletions with its own key"
+    static let emptyState = "No other devices paired yet."
+
+    static func thisDeviceTitle(deviceName: String) -> String {
+        "This \(deviceName)"
+    }
+
+    static func thisDeviceSymbol(deviceName: String) -> String {
+        switch deviceName {
+        case "Mac": "desktopcomputer"
+        case "iPad": "ipad"
+        default: "iphone"
+        }
+    }
+
+    static func trustedSince(_ date: Date) -> String {
+        "Trusted since \(date.formatted(.dateTime.month(.abbreviated).day()))"
+    }
+}
+
 struct TombstoneTrustSettingsSection: View {
     @Environment(ThemeManager.self) private var themeManager
     @State private var showPairingSheet = false
@@ -67,14 +89,38 @@ struct TombstoneTrustSettingsSection: View {
     @State private var revokeTarget: TrustedDevice?
     @State private var statusMessage: String?
 
+    private var thisDeviceRow: some View {
+        let deviceName = ThisDevice.name
+        return HStack(spacing: 12) {
+            Image(systemName: TrustedDeviceCopy.thisDeviceSymbol(deviceName: deviceName))
+                .font(.body)
+                .foregroundStyle(.secondaryInk)
+                .frame(width: 22)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(TrustedDeviceCopy.thisDeviceTitle(deviceName: deviceName))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(TrustedDeviceCopy.thisDeviceDetail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(TrustedDeviceCopy.thisDeviceTitle(deviceName: deviceName))
+        .accessibilityValue(TrustedDeviceCopy.thisDeviceDetail)
+        .contextMenu {
+            Button("Copy Key") {
+                copyDeviceKey()
+            }
+        }
+    }
+
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("This device")
-                Text(TombstoneSigning.publicKeyHex())
-                    .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-            }
+            thisDeviceRow
 
             if unknownSignerCount > 0 {
                 Button {
@@ -93,7 +139,7 @@ struct TombstoneTrustSettingsSection: View {
             }
 
             if trustedDevices.isEmpty {
-                Text("No other devices paired yet.")
+                Text(TrustedDeviceCopy.emptyState)
                     .font(.footnote)
                     .foregroundStyle(.secondaryInk)
             } else {
@@ -119,10 +165,16 @@ struct TombstoneTrustSettingsSection: View {
                 showPairingSheet = true
             } label: {
                 HStack(spacing: 12) {
-                    SettingsIconTile(color: themeManager.effectiveTint, systemImage: "iphone")
+                    Image(systemName: "iphone")
+                        .font(.body)
+                        .foregroundStyle(.accentInk)
+                        .frame(width: 22)
+                        .accessibilityHidden(true)
                     Text("Pair a Device…")
+                        .foregroundStyle(.accentInk)
                 }
             }
+            .accessibilityLabel("Pair a Device")
 
             if let statusMessage {
                 Text(statusMessage)
@@ -130,7 +182,7 @@ struct TombstoneTrustSettingsSection: View {
                     .foregroundStyle(.secondaryInk)
             }
         } header: {
-            Text("Deletion signing")
+            Text("Devices")
         } footer: {
             Text("Kudos checks that deletions came from one of your devices. Devices using the "
                 + "same Apple account are trusted automatically; for a different account, scan "
@@ -169,6 +221,16 @@ struct TombstoneTrustSettingsSection: View {
     private func refresh() {
         trustedDevices = TombstoneTrustStore.trustedDevices()
     }
+
+    private func copyDeviceKey() {
+        let payload = PairingKeyCodec.encode(TombstoneSigning.publicKeyHex())
+        #if os(iOS)
+        UIPasteboard.general.string = payload
+        #else
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(payload, forType: .string)
+        #endif
+    }
 }
 
 private struct TrustedDeviceRow: View {
@@ -177,6 +239,7 @@ private struct TrustedDeviceRow: View {
     let onUndo: () -> Void
     let onRevoke: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var isRenaming = false
     @State private var nameDraft = ""
 
@@ -184,30 +247,69 @@ private struct TrustedDeviceRow: View {
         Date().timeIntervalSince(device.trustedAt) <= TombstoneTrustStore.undoTrustWindow
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(device.label.isEmpty ? "Unnamed device" : device.label)
-                    Text(String(device.publicKeyHex.prefix(8)) + "…")
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondaryInk)
-                }
-                Spacer()
-                Button("Rename") {
-                    nameDraft = device.label
-                    isRenaming = true
-                }
+    private var displayName: String {
+        device.label.isEmpty ? "Unnamed device" : device.label
+    }
+
+    private var trustedDetail: String {
+        TrustedDeviceCopy.trustedSince(device.trustedAt)
+    }
+
+    @ViewBuilder
+    private var rowActions: some View {
+        Button("Rename") {
+            nameDraft = device.label
+            isRenaming = true
+        }
+        .font(.footnote)
+        .buttonStyle(.borderless)
+        if withinUndoWindow {
+            Button("Undo Trust", action: onUndo)
                 .font(.footnote)
                 .buttonStyle(.borderless)
-                if withinUndoWindow {
-                    Button("Undo Trust", action: onUndo)
-                        .font(.footnote)
-                        .buttonStyle(.borderless)
-                } else {
-                    Button("Revoke", role: .destructive, action: onRevoke)
-                        .font(.footnote)
-                        .buttonStyle(.borderless)
+        } else {
+            Button("Revoke", role: .destructive, action: onRevoke)
+                .font(.footnote)
+                .buttonStyle(.borderless)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if dynamicTypeSize.isAccessibilitySize {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "ipad.and.iphone")
+                        .font(.body)
+                        .foregroundStyle(.secondaryInk)
+                        .frame(width: 22)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(displayName)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(trustedDetail)
+                            .font(.footnote)
+                            .foregroundStyle(.secondaryInk)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                HStack(spacing: 16) {
+                    rowActions
+                }
+            } else {
+                HStack(spacing: 12) {
+                    Image(systemName: "ipad.and.iphone")
+                        .font(.body)
+                        .foregroundStyle(.secondaryInk)
+                        .frame(width: 22)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(displayName)
+                        Text(trustedDetail)
+                            .font(.footnote)
+                            .foregroundStyle(.secondaryInk)
+                    }
+                    Spacer()
+                    rowActions
                 }
             }
             if isRenaming {
@@ -220,6 +322,7 @@ private struct TrustedDeviceRow: View {
                 }
             }
         }
+        .padding(.vertical, 2)
     }
 }
 

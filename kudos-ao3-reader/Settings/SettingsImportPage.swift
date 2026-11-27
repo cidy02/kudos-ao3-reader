@@ -153,16 +153,24 @@ struct EPUBImportSettingsSection: View {
     let progressText: String?
     let onImport: () -> Void
 
+    static let buttonTitle = "Import Files…"
+    static let footerText = "Add EPUBs and other books from Files. They join your library like any work."
+
     var body: some View {
         Section {
             Button(action: onImport) {
                 HStack(spacing: 12) {
-                    SettingsIconTile(color: Color(hex: "#AF52DE") ?? .purple, systemImage: "doc.badge.plus")
-                    Text("Import Files")
+                    Image(systemName: "doc.badge.plus")
+                        .font(.body)
+                        .foregroundStyle(.accentInk)
+                        .frame(width: 22)
+                        .accessibilityHidden(true)
+                    Text(Self.buttonTitle)
+                        .foregroundStyle(.accentInk)
                 }
             }
             .disabled(isImporting)
-            .accessibilityLabel("Import files")
+            .accessibilityLabel("Import Files")
 
             if isImporting {
                 HStack(spacing: 12) {
@@ -171,10 +179,10 @@ struct EPUBImportSettingsSection: View {
                         .foregroundStyle(.secondaryInk)
                 }
             }
+        } header: {
+            Text("Import")
         } footer: {
-            Text("Import downloaded works, web pages, text files, or zipped chapters into your "
-                + "Library. Kudos prepares supported files for reading, keeps the original, "
-                + "and stores both so you can read offline.")
+            Text(Self.footerText)
         }
     }
 }
