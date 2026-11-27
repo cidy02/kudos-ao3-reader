@@ -78,6 +78,55 @@ struct PDFWorkConverterTests {
 
     // MARK: - Text layer
 
+    /// Two paragraphs with a horizontal rule drawn between them (`rule: true`) or across the first paragraph's line
+    /// (`rule: false`, a strike-through), the way calibre draws a FanFiction.net `<hr>`: a thin grey stroked path.
+    private func makeRulePDF(ruleBetweenParagraphs: Bool) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pdf-rule-\(UUID().uuidString)")
+            .appendingPathExtension("pdf")
+        var box = CGRect(x: 0, y: 0, width: 612, height: 792)
+        guard let context = CGContext(url as CFURL, mediaBox: &box, [:] as CFDictionary) else {
+            throw PDFTestError.contextUnavailable
+        }
+        let font = CTFontCreateWithName("Helvetica" as CFString, 12, nil)
+        func draw(_ line: String, at y: CGFloat) {
+            let attributed = NSAttributedString(string: line, attributes: [kCTFontAttributeName as NSAttributedString.Key: font])
+            context.textPosition = CGPoint(x: 72, y: y)
+            CTLineDraw(CTLineCreateWithAttributedString(attributed), context)
+        }
+        context.beginPage(mediaBox: &box)
+        context.setFillColor(gray: 0, alpha: 1)
+        draw("The first scene ends with the door closing behind her.", at: 700)
+        draw("The second scene opens on the morning after the storm.", at: 640)
+        context.setStrokeColor(gray: 0.5, alpha: 1)
+        context.setLineWidth(1)
+        let ruleY: CGFloat = ruleBetweenParagraphs ? 672 : 704
+        context.move(to: CGPoint(x: 72, y: ruleY))
+        context.addLine(to: CGPoint(x: 540, y: ruleY))
+        context.strokePath()
+        context.endPage()
+        context.closePDF()
+        return url
+    }
+
+    @Test func aRuleDrawnBetweenParagraphsBecomesASceneBreak() throws {
+        let url = try makeRulePDF(ruleBetweenParagraphs: true)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let body = bodies(try convert(url))
+        let first = try #require(body.range(of: "door closing behind her"))
+        let rule = try #require(body.range(of: "* * *"))
+        let second = try #require(body.range(of: "morning after the storm"))
+        #expect(first.upperBound < rule.lowerBound && rule.upperBound < second.lowerBound)
+    }
+
+    @Test func aRuleThroughTextIsNotASceneBreak() throws {
+        let url = try makeRulePDF(ruleBetweenParagraphs: false)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let body = bodies(try convert(url))
+        #expect(body.contains("door closing behind her"))
+        #expect(!body.contains("* * *"))
+    }
+
     @Test func extractsProseAndRejoinsHardWrappedLines() throws {
         // PDF text comes out one line per *display* line; naive conversion would make
         // each its own paragraph and read terribly once reflowed.

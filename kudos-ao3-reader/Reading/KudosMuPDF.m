@@ -27,6 +27,47 @@ static void KudosAppendLine(fz_stext_line *line, NSMutableString *buffer) {
     }
 }
 
+/// What a drawn scene break becomes in the extracted text (the same string the converter uses for typed ones).
+static NSString *const KudosSceneBreakMarker = @"* * *";
+
+/// The vertical centres, top to bottom, of horizontal rules that separate paragraphs: a vector at most 4 pt tall and at
+/// least 40% of the page wide that overlaps no text block (so underlines and strike-throughs don't count). Rules
+/// within 6 pt of each other are one rule (calibre strokes an `<hr>` as two overlapping paths).
+/// shortcut: placed by height on the page, so a two-column layout could put a break in the wrong column; fan fiction
+/// PDFs are single-column, revisit if a multi-column import shows it.
+static NSArray<NSNumber *> *KudosSceneBreakRules(fz_stext_page *page) {
+    float pageWidth = page->mediabox.x1 - page->mediabox.x0;
+    NSMutableArray<NSNumber *> *centres = [NSMutableArray array];
+    for (fz_stext_block *block = page->first_block; block != NULL; block = block->next) {
+        if (block->type != FZ_STEXT_BLOCK_VECTOR) {
+            continue;
+        }
+        fz_rect box = block->bbox;
+        if (box.y1 - box.y0 > 4 || box.x1 - box.x0 < pageWidth * 0.4f) {
+            continue;
+        }
+        float centre = (box.y0 + box.y1) / 2;
+        BOOL overlapsText = NO;
+        for (fz_stext_block *text = page->first_block; text != NULL; text = text->next) {
+            if (text->type == FZ_STEXT_BLOCK_TEXT && centre >= text->bbox.y0 && centre <= text->bbox.y1) {
+                overlapsText = YES;
+                break;
+            }
+        }
+        if (!overlapsText) {
+            [centres addObject:@(centre)];
+        }
+    }
+    [centres sortUsingSelector:@selector(compare:)];
+    NSMutableArray<NSNumber *> *rules = [NSMutableArray array];
+    for (NSNumber *centre in centres) {
+        if (rules.count == 0 || centre.floatValue - rules.lastObject.floatValue > 6) {
+            [rules addObject:centre];
+        }
+    }
+    return rules;
+}
+
 + (nullable NSArray<NSArray<NSString *> *> *)extractFromPDFAtPath:(NSString *)path
                                                      granularity:(KudosMuPDFGranularity)granularity {
     fz_context *ctx = fz_new_context(NULL, NULL, FZ_STORE_DEFAULT);
@@ -47,6 +88,11 @@ static void KudosAppendLine(fz_stext_line *line, NSMutableString *buffer) {
 
         for (int index = 0; index < pageCount; index++) {
             fz_stext_options options = { 0 };
+            // Paragraph mode also collects vector drawings, so a scene break drawn as a rule (FanFiction.net's <hr>,
+            // which calibre draws as a thin grey line) can come back as a `* * *` paragraph instead of vanishing.
+            if (granularity == KudosMuPDFGranularityParagraph) {
+                options.flags = FZ_STEXT_COLLECT_VECTORS;
+            }
             fz_stext_page *stext = NULL;
             NSMutableArray<NSString *> *entries = [NSMutableArray array];
 
@@ -55,9 +101,17 @@ static void KudosAppendLine(fz_stext_line *line, NSMutableString *buffer) {
             // last chapter is fine.
             fz_try(ctx) {
                 stext = fz_new_stext_page_from_page_number(ctx, doc, index, &options);
+                NSArray<NSNumber *> *rules = granularity == KudosMuPDFGranularityParagraph
+                    ? KudosSceneBreakRules(stext) : @[];
+                NSUInteger nextRule = 0;
                 for (fz_stext_block *block = stext->first_block; block != NULL; block = block->next) {
                     if (block->type != FZ_STEXT_BLOCK_TEXT) {
                         continue;
+                    }
+                    // Rules above this block come first, in page order.
+                    while (nextRule < rules.count && rules[nextRule].floatValue < block->bbox.y0) {
+                        [entries addObject:KudosSceneBreakMarker];
+                        nextRule++;
                     }
                     if (granularity == KudosMuPDFGranularityLine) {
                         for (fz_stext_line *line = block->u.t.first_line; line != NULL; line = line->next) {
@@ -81,6 +135,10 @@ static void KudosAppendLine(fz_stext_line *line, NSMutableString *buffer) {
                             [entries addObject:text];
                         }
                     }
+                }
+                while (nextRule < rules.count) {
+                    [entries addObject:KudosSceneBreakMarker];
+                    nextRule++;
                 }
             }
             fz_always(ctx) {
