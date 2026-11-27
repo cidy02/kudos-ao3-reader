@@ -154,3 +154,14 @@ test('no name suggestion in the middle of a hyphenated word', async () => {
   caretAt(h, 'Anne-Marie');
   assert.equal(wordAtCaret(h.bridge.editor.view.state), 'Anne-Marie');
 });
+
+test('a stored quote ending on a space after an inline tag ends at that space', async () => {
+  const src = '<p><em>tide</em> was low.</p>';
+  const h = await opened(src);
+  const view = h.bridge.editor.view;
+  const { TextSelection } = await import('prosemirror-state');
+  selectText(h, 'tide');
+  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.selection.from, view.state.selection.to + 1)));
+  const s = await h.call('snapshot', { selection: true });
+  assert.equal(s.html.slice(s.selection.from, s.selection.to), 'tide</em> ');
+});

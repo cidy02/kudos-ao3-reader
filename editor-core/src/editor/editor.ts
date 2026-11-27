@@ -10,7 +10,7 @@ import { liftListItem, sinkListItem, splitListItem } from 'prosemirror-schema-li
 import { activate as mapCaret, lint, load, schema } from '../index.ts';
 import type { LoadResult, LossReport, Variant } from '../index.ts';
 import * as cmd from './commands.ts';
-import { decodeText, refCovering } from '../decode.ts';
+import { decodeText, refCovering, refLength } from '../decode.ts';
 import type { FormatAlignment, FormatBlock, FormatDirection, FormatMark, SceneBreakStyle } from './commands.ts';
 import { IncrementalSerializer } from './incremental.ts';
 import { insertPaste, pasteContent, sliceHtml, sliceText } from './paste.ts';
@@ -77,10 +77,33 @@ export const bridgeError = (code: string, message: string): BridgeErrorShape => 
 
 export const COMPOSITION_CAP_MS = 500;
 
-/** Where the character starting at `at` in `html` ends: past a whole `&…;` reference, or a surrogate pair. */
+/** Where the character starting at `at` in `html` ends: past a whole reference, or a surrogate pair. */
 function charEnd(html: string, at: number): number {
-  if (html[at] === '&') { const semi = html.indexOf(';', at); return semi > at && semi - at <= 12 ? semi + 1 : at + 1; }
-  return at + ((html.codePointAt(at) ?? 0) > 0xffff ? 2 : 1);
+  return at + (refLength(html, at) || ((html.codePointAt(at) ?? 0) > 0xffff ? 2 : 1));
+}
+
+/** The character starting at `at` in `html` (a reference decoded), with where it ends. */
+function charAt(html: string, at: number): { ch: string; end: number } {
+  const end = charEnd(html, at);
+  return { ch: html[at] === '&' && end - at > 1 ? decodeText(html.slice(at, end)) : html.slice(at, end), end };
+}
+
+/** Inline tags hold no characters of their own: the offset helpers step over them within a block. */
+const INLINE_TAG = /^<\/?(?:a|abbr|acronym|b|bdi|bdo|big|cite|code|del|dfn|em|font|i|ins|kbd|mark|q|s|samp|small|span|strike|strong|sub|sup|tt|u|var)(?:\s[^>]*)?>/i;
+
+/** Whether `offset` sits inside a tag of `html` (between its `<` and `>`, quotes respected). */
+function insideTag(html: string, offset: number): boolean {
+  // forward from the start: a '>' inside a quoted attribute doesn't end the tag, which a backward look can't tell
+  let inTag = false;
+  let quote = '';
+  for (let i = 0; i < offset; i++) {
+    const c = html[i]!;
+    if (!inTag) { if (c === '<' && /[A-Za-z/!]/.test(html[i + 1] ?? '')) inTag = true; }
+    else if (quote) { if (c === quote) quote = ''; }
+    else if (c === '"' || c === "'") quote = c;
+    else if (c === '>') inTag = false;
+  }
+  return inTag;
 }
 
 export class Editor {
@@ -177,7 +200,11 @@ export class Editor {
 
   /** A command whose transaction is its own undo step, named `label` (typing is the only thing that groups). */
   private labelled(label: string, command: Command): Command {
-    return (state, dispatch, view) => command(state, dispatch && ((tr) => dispatch(closeHistory(tr.setMeta('kudosLabel', label)))), view);
+    return (state, dispatch, view) => command(state, dispatch && ((tr) => {
+      dispatch(closeHistory(tr.setMeta('kudosLabel', label)));
+      // and after it, so typing straight after is a step of its own, not folded into this one
+      this.view?.dispatch(closeHistory(this.view.state.tr));
+    }), view);
   }
 
   private newState(doc: EditorState['doc'], selection?: Selection): EditorState {
@@ -228,7 +255,8 @@ export class Editor {
       // only when the TK is newly finished: an edit elsewhere while the caret still sits after it is not a new one
       const tk = typedTK(state);
       const was = typedTK(before);
-      if (tk && !(was && tr.mapping.map(was.to) === tk.to)) this.hooks.tkTyped(this.rangeOffsets(tk.from, tk.to));
+      const typed = !isHistoryTransaction(tr) && state.doc.content.size > before.doc.content.size; // not undo, redo or a deletion
+      if (tk && typed && !(was && tr.mapping.map(was.to) === tk.to)) this.hooks.tkTyped(this.rangeOffsets(tk.from, tk.to));
     }
     const word = this.frozen ? null : wordAtCaret(state);
     if (word !== this.lastWord) { this.lastWord = word; this.hooks.word(word); }
@@ -361,6 +389,7 @@ export class Editor {
   /** Replaces the document, read-only and not focused, with fresh history. */
   load(html: string, revision: number): { revision: number; loss: LossReport; timing: { parseMs: number; buildMs: number; renderMs: number } } {
     const loaded = load(html, this.variant);
+    this.lastWord = null; // the bridge drops a pending word on load; start the next one fresh
     const t0 = this.now();
     this.frozen = true;
     this.view.dom.blur();
@@ -440,21 +469,29 @@ export class Editor {
   private rangeOffsets(from: number, to: number): { from: number; to: number } {
     const doc = this.view.state.doc;
     let html: string, start: number, last: number;
-    if (this.loaded && (doc === this.loaded.doc || (!this.lastSnapshot || this.lastSnapshot.original) && doc.eq(this.loaded.doc))) {
-      const loaded = this.loaded;
+    if (this.holdsLoadedText()) {
+      const loaded = this.loaded!;
       html = loaded.sources.original;
       const src = html;
-      const isSpace = (p: number) => /^[ \t\n\r\f]$/.test(doc.textBetween(p, Math.min(p + 1, doc.content.size), undefined, '\ufffc'));
+      const charOf = (p: number) => doc.textBetween(p, Math.min(p + 1, doc.content.size), undefined, '\ufffc');
+      const isSpace = (p: number) => /^\s$/u.test(charOf(p));
       // A space isn't aligned (offsetForPos gives the next word's first letter): count on from the character before
-      // it in the same block, when the source between holds only spaces.
+      // it in the same block, over inline tags, when the source between holds only spaces.
       const startOf = (p: number): number | null => {
         if (!isSpace(p)) return loaded.sources.offsetForPos(p) ?? null;
         for (let q = p - 1; q >= doc.resolve(p).start(); q--) {
           if (isSpace(q)) continue;
+          if (charOf(q) === '\ufffc') return null; // an image or a line break: no character to count from
           const s = loaded.sources.offsetForPos(q);
           if (s == null) return null;
-          const o = charEnd(src, s) + (p - q - 1);
-          return /^[ \t\n\r\f]+$/.test(src.slice(charEnd(src, s), o + 1)) ? o : null;
+          let i = charEnd(src, s);
+          for (let n = q + 1; ; n++) {
+            for (let m; src[i] === '<' && (m = INLINE_TAG.exec(src.slice(i, i + 300))); ) i += m[0].length;
+            const c = charAt(src, i);
+            if (!/^\s$/u.test(c.ch)) return null;
+            if (n === p) return i;
+            i = src.startsWith('\r\n', i) ? i + 2 : c.end;
+          }
         }
         return null;
       };
@@ -583,61 +620,112 @@ export class Editor {
    */
   private replaceText(from: number | null, to: number | null, text: string): Command | null {
     if (from === null || to === null || !Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from) return null;
-    if (text.length > 10_000 || (!text && to === from)) return null;
+    if (text.length > 510_000 || (!text && to === from)) return null; // a whole rewritten scene fits (the content limit)
     return (state, dispatch) => {
       const source = this.textForOffsets();
       if (to > source.length) return false;
       const slice = source.slice(from, to);
-      if (/[<>]/.test(slice)) return false;
       const inRef = (o: number) => { const r = refCovering(source, o); return r !== null && r < o; };
-      if (inRef(from) || inRef(to)) return false;
+      const splitsPair = (o: number) => /[\uD800-\uDBFF]/.test(source[o - 1] ?? '') && /[\uDC00-\uDFFF]/.test(source[o] ?? '');
+      if (/[<>]/.test(slice) || insideTag(source, from) || inRef(from) || inRef(to) || splitsPair(from) || splitsPair(to)) return false;
       // place each end from the nearest character, then check the document holds exactly this text there
       const pFrom = this.posAtOffset(source, from);
       const pTo = to > from ? this.posAtOffset(source, to) : pFrom;
-      const size = state.doc.content.size;
-      if (pFrom === null || pTo === null || pFrom < 0 || pTo > size || pTo < pFrom) return false;
-      const $a = state.doc.resolve(pFrom);
-      if (!$a.parent.inlineContent || !$a.sameParent(state.doc.resolve(pTo))) return false;
-      if (state.doc.textBetween(pFrom, pTo) !== decodeText(slice)) return false;
-      let single = true;
-      let marks: readonly Mark[] | null = null;
-      state.doc.nodesBetween(pFrom, pTo, (node) => {
+      const doc = state.doc;
+      if (pFrom === null || pTo === null || pFrom < 0 || pTo > doc.content.size || pTo < pFrom) return false;
+      const $a = doc.resolve(pFrom);
+      if (!$a.parent.inlineContent || !$a.sameParent(doc.resolve(pTo))) return false;
+      if (to > from) {
+        if (doc.textBetween(pFrom, pTo) !== decodeText(slice)) return false;
+      } else {
+        // an insertion: the characters on each side must be the ones around `from` in the text
+        const before = from > 0 && source[from - 1] !== '>' ? charAt(source, refCovering(source, from - 1) ?? (splitsPair(from - 1) ? from - 2 : from - 1)).ch : null;
+        const after = from < source.length && source[from] !== '<' ? charAt(source, from).ch : null;
+        if (before === null && after === null) return false;
+        if (before !== null && doc.textBetween(Math.max(pFrom - before.length, $a.start()), pFrom) !== before) return false;
+        if (after !== null && doc.textBetween(pFrom, Math.min(pFrom + after.length, $a.end())) !== after) return false;
+      }
+      const run = { marks: null as readonly Mark[] | null, single: true };
+      doc.nodesBetween(pFrom, pTo, (node) => {
         if (!node.isInline) return true;
-        if (!node.isText || (marks && !Mark.sameSet(marks, node.marks))) single = false;
-        marks = node.marks;
+        if (!node.isText || (run.marks && !Mark.sameSet(run.marks, node.marks))) run.single = false;
+        run.marks = node.marks;
         return false;
       });
-      if (!single) return false;
-      if (dispatch) dispatch((text ? state.tr.insertText(text, pFrom, pTo) : state.tr.delete(pFrom, pTo)).scrollIntoView());
+      if (!run.single) return false;
+      if (dispatch) {
+        // the run's own marks, never the caret's stored ones, and a link stays a link to its end
+        const tr = text ? state.tr.replaceWith(pFrom, pTo, schema.text(text, run.marks ?? $a.marks())) : state.tr.delete(pFrom, pTo);
+        dispatch(tr.scrollIntoView());
+      }
       return true;
     };
   }
 
   /**
    * The document position just before the character at `offset` of `source` (the text HTML mode holds), or just
-   * after the last one before it when a tag comes first. The source map aligns characters, not the spaces between
-   * them nor the inside of a reference (part 1, 7.5), so this goes through the nearest character in the same run of
-   * text. Null when there's none.
+   * after the last one before it when a block tag comes first. The source map aligns characters, not the spaces between
+   * them (`&nbsp;` included) nor the inside of a reference (part 1, 7.5), so this goes through the nearest character
+   * in the same block, stepping over inline tags, and counts the spaces between only as far as the document has them
+   * (the loader drops some, and a CRLF is one). Null when there's no character to go through.
    */
   private posAtOffset(source: string, offset: number): number | null {
     if (offset < 0 || offset > source.length) return null;
-    for (let k = offset; k < source.length && source[k] !== '<'; k++) {
-      if (!/\s/.test(source[k]!)) return this.posForOffset(k) - decodeText(source.slice(offset, k)).length;
+    const doc = this.view.state.doc;
+    const isGap = (ch: string) => /^\s+$/u.test(ch);
+    const spacesBy = (pos: number, before: boolean) => {
+      const $p = doc.resolve(pos);
+      if (!$p.parent.inlineContent) return 0;
+      const text = before ? $p.parent.textBetween(0, $p.parentOffset, undefined, '\ufffc') : $p.parent.textBetween($p.parentOffset, $p.parent.content.size, undefined, '\ufffc');
+      return (before ? /\s*$/u : /^\s*/u).exec(text)![0].length;
+    };
+    // the character we land on must be the one in the source there
+    const placed = (k: number, ch: string) => {
+      const pos = this.posForOffset(k);
+      return pos >= 0 && doc.textBetween(pos, Math.min(pos + ch.length, doc.content.size), undefined, '\ufffc') === ch ? pos : null;
+    };
+    let k = offset;
+    let gap = 0;
+    while (k < source.length) {
+      if (source[k] === '<') {
+        const m = INLINE_TAG.exec(source.slice(k, k + 300));
+        if (!m) break;
+        k += m[0].length;
+        continue;
+      }
+      const c = charAt(source, k);
+      if (isGap(c.ch)) { gap += 1; k = source.startsWith('\r\n', k) ? k + 2 : c.end; continue; }
+      const pos = placed(k, c.ch);
+      return pos === null ? null : pos - Math.min(gap, spacesBy(pos, true));
     }
-    for (let k = offset - 1; k >= 0 && source[k] !== '>'; k--) {
-      if (!/\s/.test(source[k]!)) { const s = refCovering(source, k) ?? k; return this.posForOffset(s) + decodeText(source.slice(s, offset)).length; }
+    k = offset;
+    gap = 0;
+    while (k > 0) {
+      if (source[k - 1] === '>') {
+        const lt = source.lastIndexOf('<', k - 1);
+        if (lt < 0 || INLINE_TAG.exec(source.slice(lt, k))?.[0].length !== k - lt) break;
+        k = lt;
+        continue;
+      }
+      let s = refCovering(source, k - 1) ?? k - 1;
+      if (/[\uDC00-\uDFFF]/.test(source[k - 1]!) && /[\uD800-\uDBFF]/.test(source[k - 2] ?? '')) s = k - 2;
+      const c = charAt(source, s);
+      if (isGap(c.ch)) { gap += 1; k = source[k - 1] === '\n' && source[k - 2] === '\r' ? k - 2 : s; continue; }
+      const pos = placed(s, c.ch);
+      return pos === null ? null : pos + c.ch.length + Math.min(gap, spacesBy(pos + c.ch.length, false));
     }
     return null;
   }
 
-  /** The text HTML mode holds, which `posForOffset` maps: the loaded text while unedited, else the serialization. */
-  private textForOffsets(): string {
+  /** Whether HTML mode holds the loaded text as it was: `snapshot()` returns it whenever the document is unchanged. */
+  private holdsLoadedText(): boolean {
     const doc = this.view.state.doc;
-    const snap = this.lastSnapshot;
-    if (this.loaded && !(snap && !snap.original && snap.revision === this.revision) && (doc === this.loaded.doc || doc.eq(this.loaded.doc))) {
-      return this.loaded.sources.original;
-    }
-    return this.serializer.serialize(doc).html;
+    return !!this.loaded && (doc === this.loaded.doc || doc.eq(this.loaded.doc));
+  }
+
+  /** The text HTML mode holds, which the offsets index: the loaded text while unchanged, else the serialization. */
+  private textForOffsets(): string {
+    return this.holdsLoadedText() ? this.loaded!.sources.original : this.serializer.serialize(this.view.state.doc).html;
   }
 
   /** The name of the undo step a command makes (N6). */
@@ -705,6 +793,7 @@ export class Editor {
 
   dispose(): void {
     this.loaded = null;
+    this.lastWord = null;
     this.lastSnapshot = null;
     this.sourceVerdict = null;
     this.mirror.sent = [];

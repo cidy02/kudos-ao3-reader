@@ -549,12 +549,11 @@ export const moveWord = (by: number, extend: boolean): Command => (state, dispat
     if (next === null || next === head) break;
     head = next;
   }
-  const collapsedSame = !extend && sel.empty && head === sel.head;
-  if (collapsedSame || (extend && head === sel.head)) return false;
-  if (dispatch) {
-    const next = extend ? TextSelection.create(state.doc, sel.anchor, head) : TextSelection.create(state.doc, head);
-    dispatch(state.tr.setSelection(next).scrollIntoView());
-  }
+  // between/near keep the selection inside text even from a selected scene break or Select All
+  const $head = state.doc.resolve(head);
+  const next = extend ? TextSelection.between(state.doc.resolve(sel.anchor), $head) : Selection.near($head, by > 0 ? 1 : -1);
+  if (next.eq(sel)) return false;
+  if (dispatch) dispatch(state.tr.setSelection(next).scrollIntoView());
   return true;
 };
 
@@ -567,7 +566,7 @@ export const insertPhrase = (text: string): Command => (state, dispatch) => {
   const { from, to, $from } = state.selection;
   if (!text.trim() || !$from.parent.inlineContent) return false;
   const before = $from.parentOffset > 0 ? $from.parent.textBetween($from.parentOffset - 1, $from.parentOffset, undefined, '￼') : '';
-  const glue = before && !/[\s (\[{“‘"'￼]/u.test(before) && !/^[.,;:!?)\]}”’…]/u.test(text) ? ' ' : '';
+  const glue = before && !/[\s (\[{“‘"'￼]/u.test(before) && !/^[\s.,;:!?)\]}”’…]/u.test(text) ? ' ' : '';
   if (dispatch) dispatch(state.tr.insertText(glue + text, from, to).scrollIntoView());
   return true;
 };
