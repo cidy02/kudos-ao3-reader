@@ -714,8 +714,9 @@ struct BetaRoundTripTests {
             betaName: "Lark"
         )
         #expect(jaCmp.suggestions.count == 1)
-        #expect(jaCmp.suggestions.first?.deletedText == "いい")
-        #expect(jaCmp.suggestions.first?.insertedText == "悪い")
+        // one token per kana and ideograph: only the first い changes (accepting it gives the beta's sentence)
+        #expect(jaCmp.suggestions.first?.deletedText == "い")
+        #expect(jaCmp.suggestions.first?.insertedText == "悪")
 
         // Long paragraph (> 500 words = > 1,000 tokens -> > 1,000,000 cells, past the 250,000 DP cap).
         var sentWords = (0 ..< 520).map { "word\($0)" }
