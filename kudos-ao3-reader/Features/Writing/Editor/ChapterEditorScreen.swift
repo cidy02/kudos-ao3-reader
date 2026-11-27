@@ -73,6 +73,7 @@ struct ChapterEditorScreen: View {
     @State var annotationSyncTask: Task<Void, Never>?
     @State var annotationSyncGeneration = 0
     @State var isClosing = false
+    @State var phoneWriting = ChapterEditorPhoneWriting()
 
     struct InitialSnapshot: Equatable {
         let title: String
@@ -140,6 +141,7 @@ struct ChapterEditorScreen: View {
         }
         .background(appTheme.contentBackdrop.ignoresSafeArea())
         .hidesFloatingTabBarInEditor()
+        .modifier(phoneWritingModifier)
         #if os(iOS)
         .toolbar(.hidden, for: .navigationBar)
         #else

@@ -232,6 +232,7 @@ extension ChapterEditorScreen {
 
     func syncKeysAccessorySuggestions() {
         #if os(iOS)
+        syncWritingKeysPhoneActions()
         guard let accessory = richHost?.webView.keysAccessoryView else { return }
         let suggestions = nameSuggestions
         if suggestions.isEmpty {
@@ -250,6 +251,7 @@ extension ChapterEditorScreen {
     func clearKeysAccessorySuggestions() {
         #if os(iOS)
         richHost?.webView.keysAccessoryView?.clearLeadingSlot()
+        syncWritingKeysPhoneActions()
         #endif
     }
 
