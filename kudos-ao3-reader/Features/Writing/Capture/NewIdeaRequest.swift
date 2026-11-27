@@ -29,18 +29,7 @@ final class NewIdeaRequest {
     }
 }
 
-/// "New Idea" in Shortcuts, Spotlight and Siri, and on the Action button (Settings → Action Button →
-/// Shortcut). Opens the app straight to the New Idea sheet.
-nonisolated struct NewIdeaIntent: AppIntent {
-    static let title: LocalizedStringResource = "New Idea"
-    static let openAppWhenRun = true
-
-    @MainActor
-    func perform() async throws -> some IntentResult {
-        NewIdeaRequest.shared.request()
-        return .result()
-    }
-}
+// `NewIdeaIntent` itself is in `KudosShared/`, so the Lock Screen widget and the Control Center control can offer it.
 
 nonisolated struct KudosShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {

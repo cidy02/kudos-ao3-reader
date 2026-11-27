@@ -16,6 +16,7 @@
 		000000000000000820000000 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000810000000 /* FluidAudio */; };
 		000000000000000720000000 /* sherpa-onnx in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000710000000 /* sherpa-onnx */; };
 		000000000000000591000000 /* KudosMail.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000590000000 /* KudosMail.xcframework */; platformFilter = ios; };
+		0000000000000000000A0181 /* KudosWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0000000000000000000A0150 /* KudosWidgets.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -26,7 +27,26 @@
 			remoteGlobalIDString = 000000000000000100000000;
 			remoteInfo = AO3_App_OpenSource;
 		};
+		0000000000000000000A0190 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0000000000000000000A0100;
+			remoteInfo = KudosWidgets;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		0000000000000000000A0180 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				0000000000000000000A0181 /* KudosWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* Kudos.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kudos.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -35,6 +55,7 @@
 		000000000000000000000900 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Shared.xcconfig; sourceTree = "<group>"; };
 		000000000000000000000901 /* Kudos-iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "kudos-ao3-reader/Kudos-iOS.entitlements"; sourceTree = "<group>"; };
 		000000000000000590000000 /* KudosMail.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = KudosMail.xcframework; path = build/KudosMail.xcframework; sourceTree = SOURCE_ROOT; };
+		0000000000000000000A0150 /* KudosWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = KudosWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -46,6 +67,16 @@
 		000000000000000000000510 /* KudosTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = KudosTests;
+			sourceTree = "<group>";
+		};
+		0000000000000000000A0170 /* KudosShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = KudosShared;
+			sourceTree = "<group>";
+		};
+		0000000000000000000A0160 /* KudosWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = KudosWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -70,6 +101,11 @@
 			files = (
 			);
 		};
+		0000000000000000000A0130 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -78,6 +114,8 @@
 			children = (
 				000000000000000000000010 /* kudos-ao3-reader */,
 				000000000000000000000510 /* KudosTests */,
+				0000000000000000000A0170 /* KudosShared */,
+				0000000000000000000A0160 /* KudosWidgets */,
 				000000000000000592000000 /* Frameworks */,
 				000000000000000000000020 /* Products */,
 				000000000000000000000900 /* Shared.xcconfig */,
@@ -90,6 +128,7 @@
 			children = (
 				000000000000000000000120 /* Kudos.app */,
 				000000000000000000000520 /* KudosTests.xctest */,
+				0000000000000000000A0150 /* KudosWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -112,13 +151,18 @@
 				000000000000000120000000 /* Sources */,
 				000000000000000130000000 /* Frameworks */,
 				000000000000000140000000 /* Resources */,
+				0000000000000000000A0180 /* Embed Foundation Extensions */,
 				000000000000000150000000 /* Strip Readium Bundle xattrs (for signing) */,
 				000000000000000160000000 /* Inject Info.plist keys (git SHA + iOS background modes) */,
 			);
 			buildRules = (
 			);
+			dependencies = (
+				0000000000000000000A0191 /* PBXTargetDependency */,
+			);
 			fileSystemSynchronizedGroups = (
 				000000000000000000000010 /* kudos-ao3-reader */,
+				0000000000000000000A0170 /* KudosShared */,
 			);
 			name = AO3_App_OpenSource;
 			packageProductDependencies = (
@@ -155,6 +199,25 @@
 			productReference = 000000000000000000000520 /* KudosTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		0000000000000000000A0100 /* KudosWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0000000000000000000A0110 /* Build configuration list for PBXNativeTarget "KudosWidgets" */;
+			buildPhases = (
+				0000000000000000000A0120 /* Sources */,
+				0000000000000000000A0130 /* Frameworks */,
+				0000000000000000000A0140 /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				0000000000000000000A0160 /* KudosWidgets */,
+				0000000000000000000A0170 /* KudosShared */,
+			);
+			name = KudosWidgets;
+			productName = KudosWidgets;
+			productReference = 0000000000000000000A0150 /* KudosWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -171,6 +234,9 @@
 					000000000000000500000000 = {
 						CreatedOnToolsVersion = 26.3;
 						TestTargetID = 000000000000000100000000;
+					};
+					0000000000000000000A0100 = {
+						CreatedOnToolsVersion = 27.2;
 					};
 				};
 			};
@@ -197,6 +263,7 @@
 			targets = (
 				000000000000000100000000 /* AO3_App_OpenSource */,
 				000000000000000500000000 /* KudosTests */,
+				0000000000000000000A0100 /* KudosWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -208,6 +275,11 @@
 			);
 		};
 		000000000000000540000000 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+		0000000000000000000A0140 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
 			);
@@ -425,6 +497,11 @@
 			files = (
 			);
 		};
+		0000000000000000000A0120 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -433,12 +510,19 @@
 			target = 000000000000000100000000 /* AO3_App_OpenSource */;
 			targetProxy = 000000000000000550000000 /* PBXContainerItemProxy */;
 		};
+		0000000000000000000A0191 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = 0000000000000000000A0100 /* KudosWidgets */;
+			targetProxy = 0000000000000000000A0190 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		000000000000000011000000 /* Debug configuration for PBXProject "AO3_App_OpenSource" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				KUDOS_BUNDLE_ID = com.cidy02.Kudos;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				APPLETVOS_DEPLOYMENT_TARGET = 27.0;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -509,6 +593,7 @@
 		000000000000000012000000 /* Release configuration for PBXProject "AO3_App_OpenSource" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				KUDOS_BUNDLE_ID = com.cidy02.Kudos;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				APPLETVOS_DEPLOYMENT_TARGET = 27.0;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -598,6 +683,10 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Kudos;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock to reveal hidden mature works.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Scan another device's pairing code to trust its deletions.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dictation listens while you write by voice. What you say stays on this device.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Dictation turns what you say into text on this device; nothing is sent anywhere.";
+				"INFOPLIST_KEY_NSSupportsLiveActivities[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_NSSupportsLiveActivities[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -612,7 +701,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.cidy02.Kudos;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(KUDOS_BUNDLE_ID)";
 				PRODUCT_MODULE_NAME = Kudos;
 				PRODUCT_NAME = Kudos;
 				REGISTER_APP_GROUPS = YES;
@@ -660,6 +749,10 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Kudos;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock to reveal hidden mature works.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Scan another device's pairing code to trust its deletions.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dictation listens while you write by voice. What you say stays on this device.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Dictation turns what you say into text on this device; nothing is sent anywhere.";
+				"INFOPLIST_KEY_NSSupportsLiveActivities[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_NSSupportsLiveActivities[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -674,7 +767,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.cidy02.Kudos;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(KUDOS_BUNDLE_ID)";
 				PRODUCT_MODULE_NAME = Kudos;
 				PRODUCT_NAME = Kudos;
 				REGISTER_APP_GROUPS = YES;
@@ -736,6 +829,60 @@
 			};
 			name = Release;
 		};
+		0000000000000000000A0111 /* Debug configuration for PBXNativeTarget "KudosWidgets" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 000000000000000000000900 /* Shared.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/KudosWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/KudosWidgets-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Kudos;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(KUDOS_BUNDLE_ID).widgets";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "KUDOS_WIDGETS $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		0000000000000000000A0112 /* Release configuration for PBXNativeTarget "KudosWidgets" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 000000000000000000000900 /* Shared.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/KudosWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/KudosWidgets-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Kudos;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(KUDOS_BUNDLE_ID).widgets";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "KUDOS_WIDGETS $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -760,6 +907,14 @@
 			buildConfigurations = (
 				000000000000000514000000 /* Debug configuration for PBXNativeTarget "KudosTests" */,
 				000000000000000515000000 /* Release configuration for PBXNativeTarget "KudosTests" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		0000000000000000000A0110 /* Build configuration list for PBXNativeTarget "KudosWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0000000000000000000A0111 /* Debug configuration for PBXNativeTarget "KudosWidgets" */,
+				0000000000000000000A0112 /* Release configuration for PBXNativeTarget "KudosWidgets" */,
 			);
 			defaultConfigurationName = Release;
 		};
