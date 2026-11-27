@@ -12,13 +12,28 @@ nonisolated extension BetaComparisonEngine {
             return .wholeParagraphAddition
         }
         let textMap = BetaHTMLTextMapper.build(from: liveHTML)
-        // Replacing U+00A0 with ASCII space preserves every UTF-16 offset 1-to-1 while
-        // surviving Google Docs's habit of converting &nbsp; into a regular space.
+        // Normalizing NBSP and curly quotes 1-to-1 preserves every UTF-16 offset while
+        // surviving Word/Google Docs space and smart-quote conversions.
         let normalizedLive = normalizeForComparison(textMap.plainText)
         guard let plainRange = locatePlainRange(for: suggestion, in: normalizedLive) else {
             return .notFound
         }
         return textMap.htmlRange(forPlainUTF16Range: plainRange, allowInlineTags: false)
+    }
+
+    /// Confirms that `range` stays inside one HTML text run of `html` and its decoded text
+    /// equals `deletedText` before `DraftSession.replaceText` modifies the chapter.
+    static func rangeMatchesDeletedText(
+        _ deletedText: String,
+        at range: RichEditorTextRange,
+        in html: String
+    ) -> Bool {
+        guard DraftSession.textRunRange(range, in: html) != nil,
+              let rawSlice = sliceUTF16Range(in: html, range: range.from ..< range.to)
+        else {
+            return false
+        }
+        return BetaHTMLTextMapper.decodeEntities(in: rawSlice) == deletedText
     }
 
     /// Captures a 576d `WritingAnnotationAnchor` in `liveHTML` for a returned beta comment.
@@ -233,6 +248,22 @@ nonisolated extension BetaComparisonEngine {
                     ) {
                         let start = placedPara.utf16Offset + placedQuote.utf16Offset
                         return start ..< (start + placedQuote.quote.utf16.count)
+                    }
+                    if trimmedQuote.contains("\n") {
+                        let crossParaAnchor = WritingAnnotationAnchor(
+                            quote: trimmedQuote,
+                            prefix: "",
+                            suffix: "",
+                            utf16Offset: placedPara.utf16Offset
+                                + min(comment.characterOffsetUTF16, placedPara.quote.utf16.count)
+                        )
+                        if case let .placed(placedCross) = WritingAnnotationReanchor.reanchor(
+                            crossParaAnchor,
+                            in: livePlainText
+                        ) {
+                            return placedCross.utf16Offset
+                                ..< (placedCross.utf16Offset + placedCross.quote.utf16.count)
+                        }
                     }
                 }
                 if !placedPara.quote.isEmpty {

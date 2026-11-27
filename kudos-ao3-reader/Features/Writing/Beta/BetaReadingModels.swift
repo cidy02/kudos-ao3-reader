@@ -242,6 +242,16 @@ nonisolated struct BetaCopyRecord: Codable, Equatable, Sendable, Identifiable {
         suggestions.filter { $0.state == .pending }
     }
 
+    /// Pending suggestions that can be placed automatically into an existing text run.
+    var acceptablePendingSuggestions: [BetaSuggestionItem] {
+        suggestions.filter { $0.state == .pending && !$0.isWholeParagraphAddition }
+    }
+
+    /// Pending whole-paragraph additions that the writer copies and pastes by hand.
+    var pasteOnlyPendingSuggestions: [BetaSuggestionItem] {
+        suggestions.filter { $0.state == .pending && $0.isWholeParagraphAddition }
+    }
+
     var openComments: [BetaCommentItem] {
         comments.filter { !$0.isDone }
     }
@@ -256,20 +266,21 @@ nonisolated struct BetaCopyRecord: Codable, Equatable, Sendable, Identifiable {
 
     /// Cards interleaved in chapter order (paragraph index, then offset within the paragraph).
     var orderedReviewCards: [BetaReviewCard] {
-        let cards: [BetaReviewCard] =
-            suggestions.map(BetaReviewCard.suggestion) + comments.map(BetaReviewCard.comment)
-        return cards.sorted { lhs, rhs in
-            if lhs.paragraphIndex != rhs.paragraphIndex {
-                return lhs.paragraphIndex < rhs.paragraphIndex
+        let indexed: [(order: Int, card: BetaReviewCard)] =
+            suggestions.enumerated().map { ($0.offset, .suggestion($0.element)) }
+            + comments.enumerated().map { ($0.offset, .comment($0.element)) }
+        return indexed.sorted { lhs, rhs in
+            if lhs.card.paragraphIndex != rhs.card.paragraphIndex {
+                return lhs.card.paragraphIndex < rhs.card.paragraphIndex
             }
-            if lhs.offsetUTF16 != rhs.offsetUTF16 {
-                return lhs.offsetUTF16 < rhs.offsetUTF16
+            if lhs.card.offsetUTF16 != rhs.card.offsetUTF16 {
+                return lhs.card.offsetUTF16 < rhs.card.offsetUTF16
             }
-            if lhs.kindOrder != rhs.kindOrder {
-                return lhs.kindOrder < rhs.kindOrder
+            if lhs.card.kindOrder != rhs.card.kindOrder {
+                return lhs.card.kindOrder < rhs.card.kindOrder
             }
-            return lhs.id < rhs.id
-        }
+            return lhs.order < rhs.order
+        }.map(\.card)
     }
 
     /// Section title matching `Editor-Beta.dc.html` (e.g. `"Lark’s edits · 6 suggestions, 4 comments"`).
@@ -342,6 +353,7 @@ nonisolated enum BetaReadingError: LocalizedError, Equatable, Sendable {
     case missingDocumentXML
     case xmlParseFailed(String)
     case fileReadFailed(String)
+    case fileTooLarge(maxBytes: Int)
 
     var errorDescription: String? {
         switch self {
@@ -353,6 +365,8 @@ nonisolated enum BetaReadingError: LocalizedError, Equatable, Sendable {
             "Couldn’t read the document’s contents: \(detail)"
         case let .fileReadFailed(detail):
             "Couldn’t read the selected file: \(detail)"
+        case let .fileTooLarge(maxBytes):
+            "That file is too large to import (limit is \(maxBytes / (1024 * 1024)) MB)."
         }
     }
 }
@@ -389,4 +403,75 @@ nonisolated enum BetaExportFileName {
             .joined(separator: " ")
         return String(collapsed.drop(while: { $0 == "." })).trimmingCharacters(in: .whitespaces)
     }
+}
+
+// MARK: - Parsed .docx model
+
+nonisolated struct BetaDOCXSegment: Equatable, Hashable, Sendable {
+    enum Kind: Equatable, Hashable, Sendable {
+        case unchanged
+        case insertion(author: String?, date: Date?, revisionID: String?)
+        case deletion(author: String?, date: Date?, revisionID: String?)
+    }
+
+    var kind: Kind
+    var text: String
+}
+
+nonisolated struct BetaDOCXParagraph: Equatable, Hashable, Sendable {
+    var segments: [BetaDOCXSegment]
+
+    /// Text with deletions kept and insertions dropped (what was sent before tracked edits).
+    var baselineText: String {
+        var result = ""
+        for segment in segments {
+            switch segment.kind {
+            case .unchanged, .deletion:
+                result.append(segment.text)
+            case .insertion:
+                break
+            }
+        }
+        return result
+    }
+
+    /// Text with insertions kept and deletions dropped (the beta's proposed paragraph).
+    var finalText: String {
+        var result = ""
+        for segment in segments {
+            switch segment.kind {
+            case .unchanged, .insertion:
+                result.append(segment.text)
+            case .deletion:
+                break
+            }
+        }
+        return result
+    }
+
+    var hasTrackedChanges: Bool {
+        segments.contains { segment in
+            switch segment.kind {
+            case .unchanged: false
+            case .insertion, .deletion: !segment.text.isEmpty
+            }
+        }
+    }
+}
+
+nonisolated struct BetaDOCXComment: Equatable, Hashable, Sendable {
+    var id: String
+    var author: String?
+    var date: Date?
+    var initials: String?
+    var text: String
+    var paragraphIndex: Int
+    var baselineStartUTF16: Int
+    var baselineEndUTF16: Int
+    var quote: String
+}
+
+nonisolated struct BetaDOCXDocument: Equatable, Sendable {
+    var paragraphs: [BetaDOCXParagraph]
+    var comments: [BetaDOCXComment]
 }

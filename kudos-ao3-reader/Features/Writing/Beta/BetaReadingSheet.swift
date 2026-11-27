@@ -55,6 +55,7 @@ struct BetaReadingSheet: View {
     @State var isWorking = false
     @State var copiedSuggestionID: UUID?
     @State var copiedResetTask: Task<Void, Never>?
+    @State var bulkStatusMessage: String?
     @State var errorMessage: String?
 
     #if os(macOS)
@@ -109,13 +110,13 @@ struct BetaReadingSheet: View {
     }
 
     enum BulkReviewAction: Identifiable {
-        case acceptAll(copyID: UUID, count: Int)
+        case acceptAll(copyID: UUID, count: Int, skippedPasteCount: Int)
         case rejectAll(copyID: UUID, count: Int)
         case resolveAllComments(copyID: UUID, count: Int)
 
         var id: String {
             switch self {
-            case let .acceptAll(copyID, _): "accept-\(copyID.uuidString)"
+            case let .acceptAll(copyID, _, _): "accept-\(copyID.uuidString)"
             case let .rejectAll(copyID, _): "reject-\(copyID.uuidString)"
             case let .resolveAllComments(copyID, _): "comments-\(copyID.uuidString)"
             }
@@ -123,7 +124,7 @@ struct BetaReadingSheet: View {
 
         var alertTitle: String {
             switch self {
-            case let .acceptAll(_, count):
+            case let .acceptAll(_, count, _):
                 "Accept all \(count) \(count == 1 ? "suggestion" : "suggestions")?"
             case let .rejectAll(_, count):
                 "Reject all \(count) \(count == 1 ? "suggestion" : "suggestions")?"
@@ -134,8 +135,15 @@ struct BetaReadingSheet: View {
 
         var alertMessage: String {
             switch self {
-            case .acceptAll:
-                "Kudos saves a version of the chapter first. Any suggestion that can’t be placed "
+            case let .acceptAll(_, _, skippedPasteCount):
+                if skippedPasteCount > 0 {
+                    let pasteNote = skippedPasteCount == 1
+                        ? "1 added paragraph needs pasting by hand and will be skipped."
+                        : "\(skippedPasteCount) added paragraphs need pasting by hand and will be skipped."
+                    return "Kudos saves a version of the chapter first. \(pasteNote) "
+                        + "Any other suggestion that can’t be placed will stay on screen so you can copy it."
+                }
+                return "Kudos saves a version of the chapter first. Any suggestion that can’t be placed "
                     + "will stay on screen so you can copy it."
             case .rejectAll:
                 "All remaining suggestions from this beta will be marked rejected. "
@@ -321,11 +329,19 @@ struct BetaReadingSheet: View {
     @ViewBuilder
     private var reviewAllDialogActions: some View {
         if let activeCopy = selectedReturnedCopy {
+            let acceptableCount = activeCopy.acceptablePendingSuggestions.count
+            let pasteOnlyCount = activeCopy.pasteOnlyPendingSuggestions.count
             let pendingCount = activeCopy.pendingSuggestions.count
-            if pendingCount > 0 {
-                Button("Accept All Suggestions (\(pendingCount))") {
-                    pendingBulkAction = .acceptAll(copyID: activeCopy.id, count: pendingCount)
+            if acceptableCount > 0 {
+                Button("Accept All Suggestions (\(acceptableCount))") {
+                    pendingBulkAction = .acceptAll(
+                        copyID: activeCopy.id,
+                        count: acceptableCount,
+                        skippedPasteCount: pasteOnlyCount
+                    )
                 }
+            }
+            if pendingCount > 0 {
                 Button("Reject All Suggestions (\(pendingCount))", role: .destructive) {
                     pendingBulkAction = .rejectAll(copyID: activeCopy.id, count: pendingCount)
                 }
@@ -524,6 +540,10 @@ extension BetaReadingSheet {
         return VStack(alignment: .leading, spacing: 10) {
             sectionHeader(copy.reviewSectionTitle)
 
+            if let bulkStatusMessage {
+                bulkStatusBanner(bulkStatusMessage)
+            }
+
             if cards.isEmpty {
                 let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 Text("\(copy.betaName)’s copy matched what you sent, with no suggestions or comments.")
@@ -581,6 +601,37 @@ extension BetaReadingSheet {
 
             footerPromiseText
         }
+    }
+
+    private func bulkStatusBanner(_ message: String) -> some View {
+        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+        return HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "doc.on.clipboard")
+                .font(.footnote)
+                .foregroundStyle(accentInk)
+                .accessibilityHidden(true)
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(Color.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                bulkStatusMessage = nil
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondaryInk)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .minimumHitTarget(44)
+            .accessibilityLabel("Dismiss notice")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(appTheme.cardSurface, in: shape)
+        .overlay(shape.strokeBorder(appTheme.cardBorder, lineWidth: 0.5))
     }
 
     private var footerPromiseText: some View {

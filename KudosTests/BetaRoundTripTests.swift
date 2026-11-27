@@ -406,6 +406,446 @@ struct BetaRoundTripTests {
         #expect(addedCmp.comments.first?.quote == "sunset")
     }
 
+    // MARK: - Review regressions (fields, moves, replies, cross-paragraph comments, CJK, quotes, hostile docx)
+
+    @Test func fldSimpleKeepsVisibleTextWhileComplexFieldInstrTextStaysIgnored() throws {
+        let sentHTML = """
+        <p>Check <a href="https://example.com">the chart</a> and \
+        <a href="https://example.org">the log</a>.</p>
+        """
+        let documentXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:r><w:t xml:space="preserve">Check </w:t></w:r>
+              <w:fldSimple w:instr=" HYPERLINK &quot;https://example.com&quot; ">
+                <w:r><w:t>the chart</w:t></w:r>
+              </w:fldSimple>
+              <w:r><w:t xml:space="preserve"> and </w:t></w:r>
+              <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+              <w:r><w:instrText> HYPERLINK "https://example.org" </w:instrText></w:r>
+              <w:r><w:fldChar w:fldCharType="separate"/></w:r>
+              <w:r><w:t>the log</w:t></w:r>
+              <w:r><w:fldChar w:fldCharType="end"/></w:r>
+              <w:r><w:t>.</w:t></w:r>
+            </w:p>
+          </w:body>
+        </w:document>
+        """
+
+        let parsed = try BetaDOCXReader.parse(documentXML: Data(documentXML.utf8))
+        let para = try #require(parsed.paragraphs.first)
+        #expect(para.baselineText == "Check the chart and the log.")
+        #expect(para.finalText == "Check the chart and the log.")
+
+        let comparison = BetaComparisonEngine.compare(
+            sentHTML: sentHTML,
+            returned: parsed,
+            betaName: "Lark"
+        )
+        #expect(comparison.suggestions.isEmpty)
+    }
+
+    @Test func wordTrackedMovesEmitTrackedDeletionAndInsertionInsteadOfDuplicating() throws {
+        let sentHTML = "<p>The cold wind rose.</p><p>The water darkened.</p>"
+        let documentXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:r><w:t xml:space="preserve">The </w:t></w:r>
+              <w:moveFromRangeStart w:id="10" w:name="move1"/>
+              <w:moveFrom w:id="11" w:author="Lark" w:date="2026-11-21T10:00:00Z">
+                <w:r><w:t xml:space="preserve">cold </w:t></w:r>
+              </w:moveFrom>
+              <w:moveFromRangeEnd w:id="10"/>
+              <w:r><w:t>wind rose.</w:t></w:r>
+            </w:p>
+            <w:p>
+              <w:r><w:t xml:space="preserve">The </w:t></w:r>
+              <w:moveToRangeStart w:id="12" w:name="move1"/>
+              <w:moveTo w:id="13" w:author="Lark" w:date="2026-11-21T10:00:00Z">
+                <w:r><w:t xml:space="preserve">cold </w:t></w:r>
+              </w:moveTo>
+              <w:moveToRangeEnd w:id="12"/>
+              <w:r><w:t>water darkened.</w:t></w:r>
+            </w:p>
+          </w:body>
+        </w:document>
+        """
+
+        let parsed = try BetaDOCXReader.parse(documentXML: Data(documentXML.utf8))
+        #expect(parsed.paragraphs.count == 2)
+        #expect(parsed.paragraphs[0].baselineText == "The cold wind rose.")
+        #expect(parsed.paragraphs[0].finalText == "The wind rose.")
+        #expect(parsed.paragraphs[1].baselineText == "The water darkened.")
+        #expect(parsed.paragraphs[1].finalText == "The cold water darkened.")
+
+        let comparison = BetaComparisonEngine.compare(
+            sentHTML: sentHTML,
+            returned: parsed,
+            betaName: "Lark"
+        )
+        #expect(comparison.suggestions.count == 2)
+        #expect(comparison.suggestions[0].paragraphIndex == 0)
+        #expect(comparison.suggestions[0].isTracked)
+        #expect(comparison.suggestions[0].author == "Lark")
+        #expect(comparison.suggestions[0].deletedText == "cold ")
+        #expect(comparison.suggestions[0].insertedText.isEmpty)
+
+        #expect(comparison.suggestions[1].paragraphIndex == 1)
+        #expect(comparison.suggestions[1].isTracked)
+        #expect(comparison.suggestions[1].author == "Lark")
+        #expect(comparison.suggestions[1].deletedText.isEmpty)
+        #expect(comparison.suggestions[1].insertedText == "cold ")
+    }
+
+    @Test func commentRepliesViaCommentsExtendedAndUnrangedCommentsArePreserved() throws {
+        let documentXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:r><w:t xml:space="preserve">The harbour was quiet at </w:t></w:r>
+              <w:commentRangeStart w:id="1"/>
+              <w:r><w:t>slack water</w:t></w:r>
+              <w:commentRangeEnd w:id="1"/>
+              <w:r><w:commentReference w:id="1"/></w:r>
+              <w:r><w:t>.</w:t></w:r>
+            </w:p>
+          </w:body>
+        </w:document>
+        """
+        let commentsXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" \
+        xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
+          <w:comment w:id="1" w:author="Lark" w:date="2026-11-22T09:00:00Z">
+            <w:p w14:paraId="1111AAAA"><w:r><w:t>This line lands softly.</w:t></w:r></w:p>
+          </w:comment>
+          <w:comment w:id="2" w:author="Marta" w:date="2026-11-22T09:05:00Z">
+            <w:p w14:paraId="2222BBBB"><w:r><w:t>Agreed, keep it.</w:t></w:r></w:p>
+          </w:comment>
+          <w:comment w:id="3" w:author="Lark" w:date="2026-11-22T09:10:00Z">
+            <w:p w14:paraId="3333CCCC"><w:r><w:t>General pacing note.</w:t></w:r></w:p>
+          </w:comment>
+        </w:comments>
+        """
+        let commentsExtendedXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w15:commentsEx xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml">
+          <w15:commentEx w15:paraId="1111AAAA" w15:done="0"/>
+          <w15:commentEx w15:paraId="2222BBBB" w15:paraIdParent="1111AAAA" w15:done="0"/>
+        </w15:commentsEx>
+        """
+
+        let docxData = try MiniZip.archiveData([
+            (name: "word/document.xml", data: Data(documentXML.utf8)),
+            (name: "word/comments.xml", data: Data(commentsXML.utf8)),
+            (name: "word/commentsExtended.xml", data: Data(commentsExtendedXML.utf8)),
+        ])
+        let parsed = try BetaDOCXReader.read(docxData: docxData)
+        #expect(parsed.comments.count == 3)
+
+        let parent = try #require(parsed.comments.first { $0.id == "1" })
+        let reply = try #require(parsed.comments.first { $0.id == "2" })
+        let unranged = try #require(parsed.comments.first { $0.id == "3" })
+
+        #expect(parent.quote == "slack water")
+        #expect(parent.text == "This line lands softly.")
+        #expect(reply.author == "Marta")
+        #expect(reply.quote == "slack water")
+        #expect(reply.paragraphIndex == parent.paragraphIndex)
+        #expect(reply.text == "Reply to Lark (“This line lands softly.”): Agreed, keep it.")
+        #expect(unranged.text == "General pacing note.")
+        #expect(unranged.quote.isEmpty)
+
+        let parentIndex = try #require(parsed.comments.firstIndex { $0.id == "1" })
+        let replyIndex = try #require(parsed.comments.firstIndex { $0.id == "2" })
+        #expect(parentIndex < replyIndex)
+    }
+
+    @Test func crossParagraphCommentRangeAndTrailingNewParagraphCommentAnchorCleanly() throws {
+        // Case 1: commentRangeStart sits at the end of para A, words live in para B.
+        let sentTwoParas = "<p>First paragraph stays quiet.</p><p>Second paragraph holds the clue.</p>"
+        let trailingStartXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:r><w:t>First paragraph stays quiet.</w:t></w:r>
+              <w:commentRangeStart w:id="1"/>
+            </w:p>
+            <w:p>
+              <w:r><w:t>Second paragraph holds the clue.</w:t></w:r>
+              <w:commentRangeEnd w:id="1"/>
+              <w:r><w:commentReference w:id="1"/></w:r>
+            </w:p>
+          </w:body>
+        </w:document>
+        """
+        let oneCommentXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:comment w:id="1" w:author="Lark"><w:p><w:r><w:t>Sharp clue.</w:t></w:r></w:p></w:comment>
+        </w:comments>
+        """
+        let parsedTrailing = try BetaDOCXReader.parse(
+            documentXML: Data(trailingStartXML.utf8),
+            commentsXML: Data(oneCommentXML.utf8)
+        )
+        let trailingComment = try #require(parsedTrailing.comments.first)
+        #expect(trailingComment.paragraphIndex == 1)
+        #expect(trailingComment.quote == "Second paragraph holds the clue.")
+
+        let trailingCmp = BetaComparisonEngine.compare(
+            sentHTML: sentTwoParas,
+            returned: parsedTrailing,
+            betaName: "Lark"
+        )
+        let trailingAnchor = BetaComparisonEngine.anchor(
+            for: try #require(trailingCmp.comments.first),
+            sentHTML: sentTwoParas,
+            in: sentTwoParas
+        )
+        #expect(trailingAnchor.quote == "Second paragraph holds the clue.")
+
+        // Case 2: commentRange spans text at the end of para A into the start of para B.
+        let spanningXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:r><w:t xml:space="preserve">First paragraph </w:t></w:r>
+              <w:commentRangeStart w:id="1"/>
+              <w:r><w:t>stays quiet.</w:t></w:r>
+            </w:p>
+            <w:p>
+              <w:r><w:t>Second paragraph</w:t></w:r>
+              <w:commentRangeEnd w:id="1"/>
+              <w:r><w:commentReference w:id="1"/></w:r>
+              <w:r><w:t xml:space="preserve"> holds the clue.</w:t></w:r>
+            </w:p>
+          </w:body>
+        </w:document>
+        """
+        let parsedSpan = try BetaDOCXReader.parse(
+            documentXML: Data(spanningXML.utf8),
+            commentsXML: Data(oneCommentXML.utf8)
+        )
+        let spanComment = try #require(parsedSpan.comments.first)
+        #expect(spanComment.quote == "stays quiet.\nSecond paragraph")
+        let spanCmp = BetaComparisonEngine.compare(
+            sentHTML: sentTwoParas,
+            returned: parsedSpan,
+            betaName: "Lark"
+        )
+        let spanAnchor = BetaComparisonEngine.anchor(
+            for: try #require(spanCmp.comments.first),
+            sentHTML: sentTwoParas,
+            in: sentTwoParas
+        )
+        #expect(spanAnchor.quote == "stays quiet.</p><p>Second paragraph")
+
+        // Case 3: comment on a brand-new paragraph added after the last sent paragraph clamps to sentCount - 1.
+        let trailingNewParaXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p><w:r><w:t>First paragraph stays quiet.</w:t></w:r></w:p>
+            <w:p><w:r><w:t>Second paragraph holds the clue.</w:t></w:r></w:p>
+            <w:p>
+              <w:commentRangeStart w:id="1"/>
+              <w:r><w:t>Brand new coda paragraph.</w:t></w:r>
+              <w:commentRangeEnd w:id="1"/>
+              <w:r><w:commentReference w:id="1"/></w:r>
+            </w:p>
+          </w:body>
+        </w:document>
+        """
+        let parsedNewPara = try BetaDOCXReader.parse(
+            documentXML: Data(trailingNewParaXML.utf8),
+            commentsXML: Data(oneCommentXML.utf8)
+        )
+        let newParaCmp = BetaComparisonEngine.compare(
+            sentHTML: sentTwoParas,
+            returned: parsedNewPara,
+            betaName: "Lark"
+        )
+        let newParaComment = try #require(newParaCmp.comments.first)
+        #expect(newParaComment.paragraphIndex == 1)
+        let newParaAnchor = BetaComparisonEngine.anchor(
+            for: newParaComment,
+            sentHTML: sentTwoParas,
+            in: sentTwoParas
+        )
+        #expect(newParaAnchor.quote == "Second paragraph holds the clue.")
+        #expect(newParaAnchor.utf16Offset > 0)
+    }
+
+    @Test func cjkTokenizationAndLongUntrackedParagraphMyersDiffAvoidGiantHunks() throws {
+        // CJK ideographs emit one token per character.
+        let zhXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body><w:p><w:r><w:t>今天天晴很好</w:t></w:r></w:p></w:body>
+        </w:document>
+        """
+        let zhCmp = BetaComparisonEngine.compare(
+            sentHTML: "<p>今天天气很好</p>",
+            returned: try BetaDOCXReader.parse(documentXML: Data(zhXML.utf8)),
+            betaName: "Lark"
+        )
+        #expect(zhCmp.suggestions.count == 1)
+        #expect(zhCmp.suggestions.first?.deletedText == "气")
+        #expect(zhCmp.suggestions.first?.insertedText == "晴")
+
+        // Japanese kana and kanji emit one token per character.
+        let jaXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body><w:p><w:r><w:t>今日は悪い天気です</w:t></w:r></w:p></w:body>
+        </w:document>
+        """
+        let jaCmp = BetaComparisonEngine.compare(
+            sentHTML: "<p>今日はいい天気です</p>",
+            returned: try BetaDOCXReader.parse(documentXML: Data(jaXML.utf8)),
+            betaName: "Lark"
+        )
+        #expect(jaCmp.suggestions.count == 1)
+        #expect(jaCmp.suggestions.first?.deletedText == "いい")
+        #expect(jaCmp.suggestions.first?.insertedText == "悪い")
+
+        // Long paragraph (> 500 words = > 1,000 tokens -> > 1,000,000 cells, past the 250,000 DP cap).
+        var sentWords = (0 ..< 520).map { "word\($0)" }
+        sentWords[5] = "alpha"
+        sentWords[515] = "omega"
+        var returnedWords = sentWords
+        returnedWords[5] = "ALPHA"
+        returnedWords[515] = "OMEGA"
+        let sentLong = "<p>\(sentWords.joined(separator: " "))</p>"
+        let longXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body><w:p><w:r><w:t>\(returnedWords.joined(separator: " "))</w:t></w:r></w:p></w:body>
+        </w:document>
+        """
+        let longCmp = BetaComparisonEngine.compare(
+            sentHTML: sentLong,
+            returned: try BetaDOCXReader.parse(documentXML: Data(longXML.utf8)),
+            betaName: "Lark"
+        )
+        #expect(longCmp.suggestions.count == 2)
+        #expect(longCmp.suggestions[0].deletedText == "alpha")
+        #expect(longCmp.suggestions[0].insertedText == "ALPHA")
+        #expect(longCmp.suggestions[1].deletedText == "omega")
+        #expect(longCmp.suggestions[1].insertedText == "OMEGA")
+    }
+
+    @Test func smartQuoteCurlingDoesNotManufactureDiffsAndPreservesReturnedQuotesInEdits() throws {
+        let sentHTML = "<p>It's \"cold\" and we'll stay.</p>"
+        let curledOnlyXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body><w:p><w:r><w:t>It’s “cold” and we’ll stay.</w:t></w:r></w:p></w:body>
+        </w:document>
+        """
+        let curledOnlyCmp = BetaComparisonEngine.compare(
+            sentHTML: sentHTML,
+            returned: try BetaDOCXReader.parse(documentXML: Data(curledOnlyXML.utf8)),
+            betaName: "Lark"
+        )
+        #expect(curledOnlyCmp.suggestions.isEmpty)
+
+        let editedWithCurledXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body><w:p><w:r><w:t>It’s “warm” and won’t stay.</w:t></w:r></w:p></w:body>
+        </w:document>
+        """
+        let editedCmp = BetaComparisonEngine.compare(
+            sentHTML: sentHTML,
+            returned: try BetaDOCXReader.parse(documentXML: Data(editedWithCurledXML.utf8)),
+            betaName: "Lark"
+        )
+        #expect(editedCmp.suggestions.count == 2)
+        #expect(editedCmp.suggestions[0].deletedText == "cold")
+        #expect(editedCmp.suggestions[0].insertedText == "warm")
+        #expect(editedCmp.suggestions[1].deletedText == "we'll")
+        #expect(editedCmp.suggestions[1].insertedText == "won’t")
+    }
+
+    @Test func readerHandlesTabsLineBreaksSmartTagsAndRejectsHostileDOCX() throws {
+        // w:tab, w:br, and w:smartTag keep their text intact.
+        let richElementsXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:r><w:t>A</w:t><w:tab/><w:t>B</w:t><w:br/><w:t>C</w:t></w:r>
+              <w:smartTag w:element="place"><w:r><w:t xml:space="preserve"> London</w:t></w:r></w:smartTag>
+            </w:p>
+          </w:body>
+        </w:document>
+        """
+        let parsed = try BetaDOCXReader.parse(documentXML: Data(richElementsXML.utf8))
+        #expect(parsed.paragraphs.first?.finalText == "A\tB\nC London")
+
+        // File larger than 20 MB is refused before reading.
+        let oversizedURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("beta-oversized-\(UUID().uuidString).docx")
+        defer { try? FileManager.default.removeItem(at: oversizedURL) }
+        FileManager.default.createFile(atPath: oversizedURL.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: oversizedURL)
+        try handle.truncate(atOffset: UInt64(BetaDOCXReader.maxFileBytes + 1))
+        try handle.close()
+        #expect(throws: BetaReadingError.fileTooLarge(maxBytes: BetaDOCXReader.maxFileBytes)) {
+            _ = try BetaDOCXReader.readFileData(at: oversizedURL)
+        }
+
+        // Zip bombs under EPUB's 200 MB / 1100:1 limits are rejected by tighter beta docxLimits (25 MB / 200:1).
+        let overEntryLimitArchive = HostileZipFixture.build([
+            HostileZipFixture.Entry(
+                name: "word/document.xml",
+                method: 8,
+                payload: Data([0x00, 0x01, 0x02, 0x03]),
+                declaredCompressedSize: 400_000,
+                declaredUncompressedSize: 40_000_000
+            ),
+        ])
+        _ = try MiniZip(data: overEntryLimitArchive, limits: .epub)
+        #expect(throws: BetaReadingError.self) {
+            _ = try BetaDOCXReader.read(docxData: overEntryLimitArchive)
+        }
+
+        let overRatioLimitArchive = HostileZipFixture.build([
+            HostileZipFixture.Entry(
+                name: "word/document.xml",
+                method: 8,
+                payload: Data([0x00, 0x01, 0x02, 0x03]),
+                declaredCompressedSize: 100,
+                declaredUncompressedSize: 30_000
+            ),
+        ])
+        _ = try MiniZip(data: overRatioLimitArchive, limits: .epub)
+        #expect(throws: BetaReadingError.self) {
+            _ = try BetaDOCXReader.read(docxData: overRatioLimitArchive)
+        }
+
+        // Internal XML entity declarations (billion-laughs defense) are rejected.
+        let entityXML = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE doc [<!ENTITY lol "boom">]>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body><w:p><w:r><w:t>&lol;</w:t></w:r></w:p></w:body>
+        </w:document>
+        """
+        #expect(throws: BetaReadingError.self) {
+            _ = try BetaDOCXReader.parse(documentXML: Data(entityXML.utf8))
+        }
+    }
+
     // MARK: - Helpers
 
     private func utf8Entry(_ name: String, in zip: MiniZip) throws -> String {

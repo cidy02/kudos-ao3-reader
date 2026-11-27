@@ -118,6 +118,8 @@ struct BetaSuggestionCardView: View {
 
             if suggestion.state == .unplaceable {
                 unplaceableBanner
+            } else if suggestion.state == .pending, suggestion.isWholeParagraphAddition {
+                manualPasteHint
             }
 
             footerRow
@@ -128,6 +130,13 @@ struct BetaSuggestionCardView: View {
         .background(cardFill, in: shape)
         .overlay(shape.strokeBorder(cardBorder, lineWidth: 0.5))
         .opacity(suggestion.state.isHandled ? 0.62 : 1.0)
+    }
+
+    private var manualPasteHint: some View {
+        Text("Paste it where it goes.")
+            .font(.footnote)
+            .foregroundStyle(.secondaryInk)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var unplaceableBanner: some View {
@@ -170,19 +179,36 @@ struct BetaSuggestionCardView: View {
     private var actionControls: some View {
         switch suggestion.state {
         case .pending:
-            FlowLayout(spacing: 8, rowSpacing: 8) {
-                pillButton(
-                    title: "Reject",
-                    accessibilityLabel: "Reject suggestion by \(suggestion.author)",
-                    isPrimary: false,
-                    action: onReject
-                )
-                pillButton(
-                    title: "Accept",
-                    accessibilityLabel: "Accept suggestion by \(suggestion.author)",
-                    isPrimary: true,
-                    action: onAccept
-                )
+            if suggestion.isWholeParagraphAddition {
+                FlowLayout(spacing: 8, rowSpacing: 8) {
+                    pillButton(
+                        title: "Dismiss",
+                        accessibilityLabel: "Dismiss added paragraph by \(suggestion.author)",
+                        isPrimary: false,
+                        action: onDismissUnplaceable
+                    )
+                    pillButton(
+                        title: wasCopied ? "Copied" : "Copy",
+                        accessibilityLabel: "Copy added paragraph by \(suggestion.author)",
+                        isPrimary: true,
+                        action: onCopy
+                    )
+                }
+            } else {
+                FlowLayout(spacing: 8, rowSpacing: 8) {
+                    pillButton(
+                        title: "Reject",
+                        accessibilityLabel: "Reject suggestion by \(suggestion.author)",
+                        isPrimary: false,
+                        action: onReject
+                    )
+                    pillButton(
+                        title: "Accept",
+                        accessibilityLabel: "Accept suggestion by \(suggestion.author)",
+                        isPrimary: true,
+                        action: onAccept
+                    )
+                }
             }
         case .unplaceable:
             FlowLayout(spacing: 8, rowSpacing: 8) {
@@ -241,7 +267,7 @@ struct BetaSuggestionCardView: View {
     }
 
     private var diffAttributedText: AttributedString {
-        let slices = paragraphContextSlices()
+        let slices = Self.contextSlices(for: suggestion)
         var output = AttributedString()
         if !slices.before.isEmpty {
             output.append(AttributedString(slices.before))
@@ -268,17 +294,35 @@ struct BetaSuggestionCardView: View {
     }
 
     private var diffAccessibilityText: String {
-        var parts: [String] = []
-        if !suggestion.deletedText.isEmpty {
-            parts.append("Delete: \(suggestion.deletedText)")
-        }
-        if !suggestion.insertedText.isEmpty {
-            parts.append("Insert: \(suggestion.insertedText)")
-        }
-        return parts.isEmpty ? suggestion.paragraphText : parts.joined(separator: ". ")
+        Self.accessibilityText(for: suggestion)
     }
 
-    private func paragraphContextSlices() -> (before: String, after: String) {
+    nonisolated static func accessibilityText(for suggestion: BetaSuggestionItem) -> String {
+        if suggestion.isWholeParagraphAddition {
+            let text = suggestion.insertedText.trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? "Added paragraph" : "Added paragraph: \(text)"
+        }
+        let slices = contextSlices(for: suggestion)
+        var changeParts: [String] = []
+        if !suggestion.deletedText.isEmpty {
+            changeParts.append("Delete: \(suggestion.deletedText)")
+        }
+        if !suggestion.insertedText.isEmpty {
+            changeParts.append("Insert: \(suggestion.insertedText)")
+        }
+        let changeSummary = changeParts.joined(separator: ". ")
+        guard !changeSummary.isEmpty else { return suggestion.paragraphText }
+
+        let before = slices.before.trimmingCharacters(in: .whitespaces)
+        let after = slices.after.trimmingCharacters(in: .whitespaces)
+        var segments: [String] = []
+        if !before.isEmpty { segments.append(before) }
+        segments.append(changeSummary)
+        if !after.isEmpty { segments.append(after) }
+        return segments.joined(separator: " — ")
+    }
+
+    nonisolated static func contextSlices(for suggestion: BetaSuggestionItem) -> (before: String, after: String) {
         guard !suggestion.paragraphText.isEmpty else { return ("", "") }
         let para = suggestion.paragraphText
         let total = para.utf16.count

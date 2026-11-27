@@ -109,9 +109,17 @@ nonisolated extension BetaComparisonEngine {
         }
 
         return rawList.compactMap { raw in
-            guard raw.deletedText != raw.insertedText else { return nil }
             let clampedStart = max(0, min(raw.startUTF16, sentText.utf16.count))
             let clampedEnd = max(clampedStart, min(raw.endUTF16, sentText.utf16.count))
+            let resolvedDeleted: String
+            if baselineMatches,
+               let sentSlice = sliceUTF16Range(in: sentText, range: clampedStart ..< clampedEnd),
+               normalizeForComparison(sentSlice) == normalizeForComparison(raw.deletedText) {
+                resolvedDeleted = sentSlice
+            } else {
+                resolvedDeleted = raw.deletedText
+            }
+            guard resolvedDeleted != raw.insertedText else { return nil }
             return BetaSuggestionItem(
                 author: raw.author,
                 date: raw.date,
@@ -123,7 +131,7 @@ nonisolated extension BetaComparisonEngine {
                 paragraphUTF16Offset: context.utf16Offset,
                 editStartUTF16: clampedStart,
                 editEndUTF16: clampedEnd,
-                deletedText: raw.deletedText,
+                deletedText: resolvedDeleted,
                 insertedText: raw.insertedText,
                 localPrefix: sliceUTF16Prefix(
                     in: sentText,
@@ -236,6 +244,10 @@ nonisolated extension BetaComparisonEngine {
             var shifted = item
             shifted.startUTF16 = mappedRange.lowerBound
             shifted.endUTF16 = mappedRange.upperBound
+            if let sentSlice = sliceUTF16Range(in: sentText, range: mappedRange),
+               normalizeForComparison(sentSlice) == normalizeForComparison(item.deletedText) {
+                shifted.deletedText = sentSlice
+            }
             mappedTracked.append(shifted)
         }
         let untracked = baselineEdits.hunks.map { hunk in
@@ -258,6 +270,7 @@ nonisolated extension BetaComparisonEngine {
 nonisolated extension BetaComparisonEngine {
     private struct DiffToken: Equatable {
         let text: String
+        let compareKey: String
         let utf16Start: Int
         let utf16Length: Int
         let isWhitespace: Bool
@@ -370,6 +383,11 @@ nonisolated extension BetaComparisonEngine {
         }
     }
 
+    private static func isWordCharacter(_ character: Character) -> Bool {
+        character.isLetter || character.isNumber
+            || character == "'" || character == "’" || character == "‘"
+    }
+
     private static func tokenizeWords(_ text: String) -> [DiffToken] {
         var tokens: [DiffToken] = []
         var index = text.startIndex
@@ -383,10 +401,12 @@ nonisolated extension BetaComparisonEngine {
                 while index < text.endIndex, text[index].isWhitespace {
                     index = text.index(after: index)
                 }
-            } else if first.isLetter || first.isNumber || first == "'" || first == "’" {
+            } else if isCJKIdeographOrKana(first) {
+                index = text.index(after: index)
+            } else if isWordCharacter(first) {
                 while index < text.endIndex {
                     let current = text[index]
-                    if current.isLetter || current.isNumber || current == "'" || current == "’" {
+                    if isWordCharacter(current), !isCJKIdeographOrKana(current) {
                         index = text.index(after: index)
                     } else {
                         break
@@ -398,7 +418,13 @@ nonisolated extension BetaComparisonEngine {
             let slice = String(text[start ..< index])
             let len = slice.utf16.count
             tokens.append(
-                DiffToken(text: slice, utf16Start: utf16Offset, utf16Length: len, isWhitespace: isSpace)
+                DiffToken(
+                    text: slice,
+                    compareKey: normalizeForComparison(slice),
+                    utf16Start: utf16Offset,
+                    utf16Length: len,
+                    isWhitespace: isSpace
+                )
             )
             utf16Offset += len
         }
@@ -409,14 +435,14 @@ nonisolated extension BetaComparisonEngine {
         var prefixLen = 0
         while prefixLen < sent.count,
               prefixLen < target.count,
-              sent[prefixLen].text == target[prefixLen].text {
+              sent[prefixLen].compareKey == target[prefixLen].compareKey {
             prefixLen += 1
         }
         var sentEnd = sent.count
         var targetEnd = target.count
         while sentEnd > prefixLen,
               targetEnd > prefixLen,
-              sent[sentEnd - 1].text == target[targetEnd - 1].text {
+              sent[sentEnd - 1].compareKey == target[targetEnd - 1].compareKey {
             sentEnd -= 1
             targetEnd -= 1
         }
@@ -426,37 +452,105 @@ nonisolated extension BetaComparisonEngine {
         }
         let rows = sentEnd - prefixLen
         let cols = targetEnd - prefixLen
-        if rows > 0, cols > 0, rows * cols <= 250_000 {
-            var table = Array(repeating: Array(repeating: 0, count: cols + 1), count: rows + 1)
-            for row in stride(from: rows - 1, through: 0, by: -1) {
-                for col in stride(from: cols - 1, through: 0, by: -1) {
-                    if sent[prefixLen + row].text == target[prefixLen + col].text {
-                        table[row][col] = table[row + 1][col + 1] + 1
-                    } else {
-                        table[row][col] = max(table[row + 1][col], table[row][col + 1])
-                    }
-                }
-            }
-            var row = 0
-            var col = 0
-            while row < rows, col < cols {
-                if sent[prefixLen + row].text == target[prefixLen + col].text {
-                    matches.append(
-                        TokenMatch(sentIndex: prefixLen + row, targetIndex: prefixLen + col)
+        if rows > 0, cols > 0 {
+            if rows * cols <= 250_000 {
+                matches.append(
+                    contentsOf: dpTokenLCS(
+                        sent: sent,
+                        target: target,
+                        prefixLen: prefixLen,
+                        rows: rows,
+                        cols: cols
                     )
-                    row += 1
-                    col += 1
-                } else if table[row + 1][col] >= table[row][col + 1] {
-                    row += 1
-                } else {
-                    col += 1
-                }
+                )
+            } else {
+                matches.append(
+                    contentsOf: myersTokenLCS(
+                        sent: sent,
+                        target: target,
+                        prefixLen: prefixLen,
+                        sentEnd: sentEnd,
+                        targetEnd: targetEnd
+                    )
+                )
             }
         }
         for offset in 0 ..< (sent.count - sentEnd) {
             matches.append(
                 TokenMatch(sentIndex: sentEnd + offset, targetIndex: targetEnd + offset)
             )
+        }
+        return matches
+    }
+
+    private static func dpTokenLCS(
+        sent: [DiffToken],
+        target: [DiffToken],
+        prefixLen: Int,
+        rows: Int,
+        cols: Int
+    ) -> [TokenMatch] {
+        var table = Array(repeating: Array(repeating: 0, count: cols + 1), count: rows + 1)
+        for row in stride(from: rows - 1, through: 0, by: -1) {
+            for col in stride(from: cols - 1, through: 0, by: -1) {
+                if sent[prefixLen + row].compareKey == target[prefixLen + col].compareKey {
+                    table[row][col] = table[row + 1][col + 1] + 1
+                } else {
+                    table[row][col] = max(table[row + 1][col], table[row][col + 1])
+                }
+            }
+        }
+        var matches: [TokenMatch] = []
+        var row = 0
+        var col = 0
+        while row < rows, col < cols {
+            if sent[prefixLen + row].compareKey == target[prefixLen + col].compareKey {
+                matches.append(TokenMatch(sentIndex: prefixLen + row, targetIndex: prefixLen + col))
+                row += 1
+                col += 1
+            } else if table[row + 1][col] >= table[row][col + 1] {
+                row += 1
+            } else {
+                col += 1
+            }
+        }
+        return matches
+    }
+
+    private static func myersTokenLCS(
+        sent: [DiffToken],
+        target: [DiffToken],
+        prefixLen: Int,
+        sentEnd: Int,
+        targetEnd: Int
+    ) -> [TokenMatch] {
+        // Large unmatched spans use Swift's Myers diff rather than collapsing the middle.
+        let sentKeys = sent[prefixLen ..< sentEnd].map(\.compareKey)
+        let targetKeys = target[prefixLen ..< targetEnd].map(\.compareKey)
+        let diff = targetKeys.difference(from: sentKeys)
+        var removed: Set<Int> = []
+        var inserted: Set<Int> = []
+        for change in diff {
+            switch change {
+            case let .remove(offset, _, _): removed.insert(offset)
+            case let .insert(offset, _, _): inserted.insert(offset)
+            }
+        }
+        let rows = sentKeys.count
+        let cols = targetKeys.count
+        var matches: [TokenMatch] = []
+        var row = 0
+        var col = 0
+        while row < rows, col < cols {
+            if removed.contains(row) {
+                row += 1
+            } else if inserted.contains(col) {
+                col += 1
+            } else {
+                matches.append(TokenMatch(sentIndex: prefixLen + row, targetIndex: prefixLen + col))
+                row += 1
+                col += 1
+            }
         }
         return matches
     }

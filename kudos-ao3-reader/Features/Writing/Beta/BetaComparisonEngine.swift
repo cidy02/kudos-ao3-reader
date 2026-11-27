@@ -299,9 +299,23 @@ nonisolated enum BetaComparisonEngine {
 
     private static func wordBag(_ text: String) -> [String: Int] {
         var counts: [String: Int] = [:]
-        for token in text.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }) {
-            counts[String(token), default: 0] += 1
+        var currentWord = ""
+        func flushWord() {
+            guard !currentWord.isEmpty else { return }
+            counts[currentWord, default: 0] += 1
+            currentWord.removeAll(keepingCapacity: true)
         }
+        for character in text.lowercased() {
+            if isCJKIdeographOrKana(character) {
+                flushWord()
+                counts[String(character), default: 0] += 1
+            } else if character.isLetter || character.isNumber {
+                currentWord.append(character)
+            } else {
+                flushWord()
+            }
+        }
+        flushWord()
         return counts
     }
 
@@ -320,8 +334,44 @@ nonisolated enum BetaComparisonEngine {
 
     // MARK: - Shared helpers
 
+    /// Folds NBSP and curly apostrophes/quotes into ASCII equivalents 1-to-1 in UTF-16 so
+    /// Word/Google Docs smart-quote curling does not manufacture diffs while preserving all offsets.
     static func normalizeForComparison(_ text: String) -> String {
-        text.replacingOccurrences(of: "\u{00A0}", with: " ")
+        var needsNormalization = false
+        for unit in text.utf16 {
+            if unit == 0x00A0 || unit == 0x2018 || unit == 0x2019 || unit == 0x201C || unit == 0x201D {
+                needsNormalization = true
+                break
+            }
+        }
+        guard needsNormalization else { return text }
+        var units = Array(text.utf16)
+        for idx in units.indices {
+            switch units[idx] {
+            case 0x00A0: units[idx] = 0x0020
+            case 0x2018, 0x2019: units[idx] = 0x0027
+            case 0x201C, 0x201D: units[idx] = 0x0022
+            default: break
+            }
+        }
+        return String(decoding: units, as: UTF16.self)
+    }
+
+    static func isCJKIdeographOrKana(_ character: Character) -> Bool {
+        guard let scalar = character.unicodeScalars.first else { return false }
+        switch scalar.value {
+        case 0x3040 ... 0x309F, // Hiragana
+             0x30A0 ... 0x30FF, // Katakana
+             0x31F0 ... 0x31FF, // Katakana Phonetic Extensions
+             0x3400 ... 0x4DBF, // CJK Unified Ideographs Extension A
+             0x4E00 ... 0x9FFF, // CJK Unified Ideographs
+             0xF900 ... 0xFAFF, // CJK Compatibility Ideographs
+             0xFF66 ... 0xFF9F, // Halfwidth Katakana
+             0x20000 ... 0x2FA1F: // CJK Extensions B–F & Compatibility Supplement
+            return true
+        default:
+            return false
+        }
     }
 
     static func firstTrackedAuthor(in paragraph: BetaDOCXParagraph) -> String? {
@@ -367,7 +417,7 @@ nonisolated enum BetaComparisonEngine {
     ) -> Int {
         guard sentCount > 0 else { return 0 }
         if let preceding = alignment.last(where: { $0.returnedIndex < retIdx }) {
-            return min(preceding.sentIndex + 1, sentCount)
+            return min(preceding.sentIndex + 1, sentCount - 1)
         }
         return 0
     }

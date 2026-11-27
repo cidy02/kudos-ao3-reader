@@ -14,6 +14,89 @@ private nonisolated final class BetaTestClock: @unchecked Sendable {
     }
 }
 
+@MainActor
+private final class FakeBetaSourceBridge: DraftSourceBridge {
+    var text: String
+    var isFrozen = false
+    var caretOffsetUTF16 = 0
+    var canUndo = false
+    var canRedo = false
+    var onEdit: (@MainActor () -> Void)?
+    var replaceCallCount = 0
+
+    init(text: String) {
+        self.text = text
+    }
+
+    func commitComposition() {}
+    func setCaretOffsetUTF16(_ offset: Int) { caretOffsetUTF16 = offset }
+    func replaceForModeHandoff(_ value: String, caretOffset: Int?) {
+        text = value
+        if let caretOffset { caretOffsetUTF16 = caretOffset }
+    }
+    func restore(_ value: String) { text = value }
+
+    @discardableResult
+    func replaceText(in range: NSRange, with value: String) -> Bool {
+        replaceCallCount += 1
+        guard !isFrozen else { return false }
+        let nsText = text as NSString
+        guard range.location >= 0, range.location + range.length <= nsText.length else {
+            return false
+        }
+        text = nsText.replacingCharacters(in: range, with: value)
+        caretOffsetUTF16 = range.location + (value as NSString).length
+        return true
+    }
+
+    func focus() {}
+    func undo() {}
+    func redo() {}
+}
+
+@MainActor
+private final class FakeBetaRichTransport: RichEditorBridgeTransport {
+    var onEvent: (@MainActor (RichEditorEvent) -> Void)?
+    var onProcessTerminated: (@MainActor () -> Void)?
+    var html: String
+    var commands: [RichEditorCommandArgs] = []
+    var commandApplied = true
+
+    init(html: String) {
+        self.html = html
+    }
+
+    func configure(_ args: RichEditorConfigureArgs) async throws -> RichEditorConfigureResult {
+        RichEditorConfigureResult(bridgeVersion: 1, schemaVersion: 1, bundleVersion: "test")
+    }
+    func load(_ args: RichEditorLoadArgs) async throws -> RichEditorLoadResult {
+        html = args.html
+        return RichEditorLoadResult(revision: args.revision, loss: .empty, timing: .zero)
+    }
+    func activate(_ args: RichEditorActivateArgs) async throws -> RichEditorActivateResult {
+        RichEditorActivateResult(caretFound: true)
+    }
+    func freeze() async throws -> RichEditorFreezeResult { RichEditorFreezeResult(revision: 0) }
+    func snapshot(_ args: RichEditorSnapshotArgs) async throws -> RichEditorSnapshotResult {
+        RichEditorSnapshotResult(revision: 0, html: html, caretOffset: nil, words: 0, selection: nil)
+    }
+    func command(_ args: RichEditorCommandArgs) async throws -> RichEditorCommandResult {
+        commands.append(args)
+        return RichEditorCommandResult(applied: commandApplied)
+    }
+    func lint(_ args: RichEditorLintArgs) async throws -> RichEditorLintResult {
+        RichEditorLintResult(loss: .empty)
+    }
+    func setTheme(_ theme: RichEditorTheme) async throws {}
+    func setAppearance(_ appearance: RichEditorAppearance) async throws {}
+    func dispose() async throws {}
+    func verifySwitch(_ args: RichEditorSwitchCheckArgs) async throws -> RichEditorSwitchCheckResult {
+        RichEditorSwitchCheckResult(ok: true, candidateHtml: args.html, reason: nil)
+    }
+    func focusWebView() {}
+    func resetAfterTermination() {}
+}
+
 /// Unit tests for plain-text ↔ HTML UTF-16 offset mapping (entities, inline tags, emoji),
 /// unplaceable suggestion detection, store persistence, destructive snapshots, comments
 /// becoming 576d notes, PDF HTML sanitization, and ••• menu wiring.
@@ -166,7 +249,7 @@ struct BetaPlacementAndStoreTests {
         let rewrittenHTML = "<p>A completely different scene now.</p>"
         #expect(BetaComparisonEngine.place(missingSuggestion, in: rewrittenHTML) == .notFound)
 
-        // 3. Whole-paragraph addition cannot be placed into an existing text run.
+        // 3. Whole-paragraph addition is copy-and-paste only (excluded from auto-accept).
         let addedRet = """
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -182,8 +265,25 @@ struct BetaPlacementAndStoreTests {
             betaName: "Lark"
         )
         let addedSuggestion = try #require(addedCmp.suggestions.first)
-        #expect(BetaComparisonEngine.place(addedSuggestion, in: sentPlain) == .wholeParagraphAddition)
+        #expect(addedSuggestion.isWholeParagraphAddition)
+        #expect(addedSuggestion.state == .pending)
         #expect(addedSuggestion.copyableText == "Brand new paragraph from Lark.")
+        let copyRecord = BetaCopyRecord(
+            id: UUID(),
+            betaName: "Lark",
+            format: .docx,
+            sentAt: Date(timeIntervalSince1970: 1_763_650_800),
+            sentHTML: sentPlain,
+            returnedAt: Date(timeIntervalSince1970: 1_763_650_900),
+            status: .cameBack,
+            hasSnapshottedBeforeAccept: false,
+            suggestions: [addedSuggestion],
+            comments: [],
+            updatedAt: Date(timeIntervalSince1970: 1_763_650_900),
+            updatedBy: "test"
+        )
+        #expect(copyRecord.acceptablePendingSuggestions.isEmpty)
+        #expect(copyRecord.pasteOnlyPendingSuggestions.map(\.id) == [addedSuggestion.id])
 
         // 4. Crossing a <br /> line break fails placement.
         let brHTML = "<p>Line one<br />Line two</p>"
@@ -352,6 +452,317 @@ struct BetaPlacementAndStoreTests {
         #expect(model.allVisibleActionIDs.contains(.sendToBeta))
         wiring.actions().dispatch(.sendToBeta)
         #expect(fired)
+
+        // VoiceOver summary includes the surrounding sentence around the edit (and added-paragraph label).
+        let inlineSuggestion = BetaSuggestionItem(
+            author: "Lark",
+            isTracked: true,
+            paragraphIndex: 0,
+            paragraphText: "The harbour was silent at slack water.",
+            paragraphPrefix: "",
+            paragraphSuffix: "",
+            paragraphUTF16Offset: 0,
+            editStartUTF16: 16,
+            editEndUTF16: 22,
+            deletedText: "silent",
+            insertedText: "dead quiet",
+            localPrefix: "The harbour was ",
+            localSuffix: " at slack water."
+        )
+        let spoken = BetaSuggestionCardView.accessibilityText(for: inlineSuggestion)
+        #expect(spoken.contains("The harbour was"))
+        #expect(spoken.contains("Delete: silent"))
+        #expect(spoken.contains("Insert: dead quiet"))
+        #expect(spoken.contains("at slack water."))
+
+        let addedParagraph = BetaSuggestionItem(
+            author: "Lark",
+            isTracked: false,
+            paragraphIndex: 0,
+            paragraphText: "",
+            paragraphPrefix: "",
+            paragraphSuffix: "",
+            paragraphUTF16Offset: 0,
+            editStartUTF16: 0,
+            editEndUTF16: 0,
+            deletedText: "",
+            insertedText: "A fresh paragraph.",
+            localPrefix: "",
+            localSuffix: "",
+            isWholeParagraphAddition: true
+        )
+        #expect(BetaSuggestionCardView.accessibilityText(for: addedParagraph) == "Added paragraph: A fresh paragraph.")
+    }
+
+    // MARK: - Accept / Accept All, Finding 10 range verification, and Import ordering/dedup
+
+    @MainActor
+    @Test func wholeParagraphAdditionNeverMarksUnplaceableAndAcceptAllSkipsIt() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("beta-accept-all-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let clock = BetaTestClock(Date(timeIntervalSince1970: 1_763_650_800))
+        let store = WritingDocumentStore(root: root, deviceID: "test-device", now: { clock.now })
+        let work = try await store.createWork(title: "Harbour")
+        let chapter = try await store.addChapter(workID: work.id, title: "Ch 1")
+        let sentHTML = "<p>The old harbour wall stood above the water.</p>"
+        _ = try await store.saveChapter(workID: work.id, chapter: chapter, bodyHTML: sentHTML)
+
+        var copy = try await store.recordBetaCopy(
+            workID: work.id,
+            chapterID: chapter.id,
+            betaName: "Lark",
+            format: .docx,
+            sentHTML: sentHTML
+        )
+        let returnedXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:r><w:t xml:space="preserve">The </w:t></w:r>
+              <w:del w:id="1" w:author="Lark"><w:r><w:delText>old</w:delText></w:r></w:del>
+              <w:ins w:id="2" w:author="Lark"><w:r><w:t>stone</w:t></w:r></w:ins>
+              <w:r><w:t xml:space="preserve"> harbour wall stood above the water.</w:t></w:r>
+            </w:p>
+            <w:p><w:r><w:t>Brand new paragraph from Lark.</w:t></w:r></w:p>
+          </w:body>
+        </w:document>
+        """
+        let cmp = BetaComparisonEngine.compare(
+            sentHTML: sentHTML,
+            returned: try BetaDOCXReader.parse(documentXML: Data(returnedXML.utf8)),
+            betaName: "Lark"
+        )
+        #expect(cmp.suggestions.count == 2)
+        copy.returnedAt = clock.now
+        copy.suggestions = cmp.suggestions
+        copy.refreshStatusFromItems()
+        copy = try await store.updateBetaCopy(workID: work.id, chapterID: chapter.id, copy: copy)
+
+        let source = FakeBetaSourceBridge(text: sentHTML)
+        let session = DraftSession(initialText: sentHTML, fieldVariant: .content, source: source)
+
+        let addedID = try #require(copy.suggestions.first(where: \.isWholeParagraphAddition)?.id)
+        let directOutcome = await BetaReviewActions.acceptSuggestion(
+            suggestionID: addedID,
+            in: &copy,
+            workID: work.id,
+            chapterID: chapter.id,
+            store: store,
+            session: session
+        )
+        #expect(directOutcome == .skippedManualPaste)
+        #expect(copy.suggestions.first { $0.id == addedID }?.state == .pending)
+        #expect(source.text == sentHTML)
+        #expect(source.replaceCallCount == 0)
+
+        let bulk = await BetaReviewActions.acceptAll(
+            in: &copy,
+            workID: work.id,
+            chapterID: chapter.id,
+            store: store,
+            session: session
+        )
+        #expect(bulk.appliedCount == 1)
+        #expect(bulk.skippedManualPasteCount == 1)
+        #expect(bulk.unplaceableCount == 0)
+        #expect(bulk.manualPasteNotice == "1 added paragraph was skipped — copy and paste it where it goes.")
+        #expect(source.text == "<p>The stone harbour wall stood above the water.</p>")
+        #expect(copy.suggestions.first { !$0.isWholeParagraphAddition }?.state == .accepted)
+        #expect(copy.suggestions.first { $0.id == addedID }?.state == .pending)
+        #expect(try await store.listVersions(workID: work.id, chapterID: chapter.id).count == 1)
+    }
+
+    @MainActor
+    @Test func verifiedReplaceTextRequiresDecodedSliceToEqualDeletedTextInHTMLAndRichModes() async throws {
+        let html = "<p>Ines &amp; Marta saw old ribs.</p>"
+        let ampStart = try utf16Range(of: "Ines &amp; Marta", in: html)
+        let ampRange = RichEditorTextRange(from: ampStart.lowerBound, to: ampStart.upperBound)
+        #expect(BetaComparisonEngine.rangeMatchesDeletedText("Ines & Marta", at: ampRange, in: html))
+        #expect(!BetaComparisonEngine.rangeMatchesDeletedText("wrong words", at: ampRange, in: html))
+
+        // Leading-space deletions (e.g. " old") must preserve leading whitespace when decoding.
+        let leadingSpace = try utf16Range(of: " old", in: html)
+        let leadingRange = RichEditorTextRange(from: leadingSpace.lowerBound, to: leadingSpace.upperBound)
+        #expect(BetaComparisonEngine.rangeMatchesDeletedText(" old", at: leadingRange, in: html))
+
+        // HTML (source) mode: mismatch refuses without touching source; match applies cleanly.
+        let source = FakeBetaSourceBridge(text: html)
+        let htmlSession = DraftSession(initialText: html, fieldVariant: .content, source: source)
+
+        let badHTMLApplied = await BetaReviewActions.verifiedReplaceText(
+            in: ampRange,
+            expectingDeletedText: "something else",
+            with: "replacement",
+            in: htmlSession
+        )
+        #expect(!badHTMLApplied)
+        #expect(source.replaceCallCount == 0)
+        #expect(source.text == html)
+
+        let goodHTMLApplied = await BetaReviewActions.verifiedReplaceText(
+            in: ampRange,
+            expectingDeletedText: "Ines & Marta",
+            with: "Ines and Marta",
+            in: htmlSession
+        )
+        #expect(goodHTMLApplied)
+        #expect(source.replaceCallCount == 1)
+        #expect(source.text == "<p>Ines and Marta saw old ribs.</p>")
+
+        // Rich Text mode: mismatch refuses before sending replaceText; match sends command.
+        let richSource = FakeBetaSourceBridge(text: html)
+        let transport = FakeBetaRichTransport(html: html)
+        let richSession = DraftSession(
+            initialText: html,
+            fieldVariant: .content,
+            source: richSource,
+            richTransport: transport
+        )
+        richSession.state = .richOwned
+
+        let badRichApplied = await BetaReviewActions.verifiedReplaceText(
+            in: ampRange,
+            expectingDeletedText: "stale text",
+            with: "replacement",
+            in: richSession
+        )
+        #expect(!badRichApplied)
+        #expect(transport.commands.isEmpty)
+
+        let goodRichApplied = await BetaReviewActions.verifiedReplaceText(
+            in: ampRange,
+            expectingDeletedText: "Ines & Marta",
+            with: "Ines and Marta",
+            in: richSession
+        )
+        #expect(goodRichApplied)
+        #expect(transport.commands.count == 1)
+        #expect(transport.commands.first?.name == "replaceText")
+    }
+
+    @MainActor
+    @Test func importWritesBetaRecordBeforeNotesAndSkipsLinkedCommentsOnRetry() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("beta-import-order-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let clock = BetaTestClock(Date(timeIntervalSince1970: 1_763_650_800))
+        let store = WritingDocumentStore(root: root, deviceID: "test-device", now: { clock.now })
+        let bridge = ChapterEditorDocumentBridge(store: store)
+        let sentHTML = "<p>Ines counted the ribs because the number would not stay still.</p>"
+        let snapshot = try #require(await bridge.open(
+            target: .local(workID: nil, chapterID: nil),
+            initialPayload: ChapterEditorChapterPayload(
+                workTitle: "What the Tide Keeps",
+                chapterTitle: "Slack Water",
+                summary: "",
+                notesBefore: "",
+                notesAfter: "",
+                bodyHTML: sentHTML,
+                ao3ChapterID: nil,
+                status: .local
+            )
+        ))
+        let workID = snapshot.work.id
+        let chapterID = snapshot.activeChapter.id
+
+        let documentXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:r><w:t xml:space="preserve">Ines counted the ribs because </w:t></w:r>
+              <w:commentRangeStart w:id="7"/>
+              <w:r><w:t>the number would not stay still</w:t></w:r>
+              <w:commentRangeEnd w:id="7"/>
+              <w:r><w:commentReference w:id="7"/></w:r>
+              <w:r><w:t>.</w:t></w:r>
+            </w:p>
+          </w:body>
+        </w:document>
+        """
+        let commentsXML = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:comment w:id="7" w:author="Lark">
+            <w:p><w:r><w:t>Keep this line.</w:t></w:r></w:p>
+          </w:comment>
+        </w:comments>
+        """
+        let docxData = try MiniZip.archiveData([
+            (name: "word/document.xml", data: Data(documentXML.utf8)),
+            (name: "word/comments.xml", data: Data(commentsXML.utf8)),
+        ])
+
+        // If betas.json persistence throws (unknown copy id), zero notes may be written.
+        let unrecordedCopy = BetaCopyRecord(
+            id: UUID(),
+            betaName: "Lark",
+            format: .docx,
+            sentAt: clock.now,
+            sentHTML: sentHTML,
+            returnedAt: nil,
+            status: .waiting,
+            hasSnapshottedBeforeAccept: false,
+            suggestions: [],
+            comments: [],
+            updatedAt: clock.now,
+            updatedBy: "test-device"
+        )
+        await #expect(throws: WritingDocumentError.self) {
+            _ = try await BetaReviewActions.importReturnedDOCX(
+                docxData: docxData,
+                into: unrecordedCopy,
+                workID: workID,
+                chapterID: chapterID,
+                documentBridge: bridge,
+                liveHTML: sentHTML,
+                now: clock.now
+            )
+        }
+        #expect(try await store.listAnnotations(workID: workID, chapterID: chapterID).isEmpty)
+
+        // Normal import writes betas.json first, then links one note.
+        let recorded = try await store.recordBetaCopy(
+            workID: workID,
+            chapterID: chapterID,
+            betaName: "Lark",
+            format: .docx,
+            sentHTML: sentHTML
+        )
+        let firstImport = try await BetaReviewActions.importReturnedDOCX(
+            docxData: docxData,
+            into: recorded,
+            workID: workID,
+            chapterID: chapterID,
+            documentBridge: bridge,
+            liveHTML: sentHTML,
+            now: clock.now
+        )
+        #expect(firstImport.addedAnnotations)
+        #expect(firstImport.copy.status == .cameBack)
+        let notesAfterFirst = try await store.listAnnotations(workID: workID, chapterID: chapterID)
+        #expect(notesAfterFirst.count == 1)
+        let firstNoteID = try #require(notesAfterFirst.first?.id)
+        #expect(firstImport.copy.comments.first?.annotationID == firstNoteID)
+
+        // Retrying import for the same copy skips sourceCommentIDs already linked to a note.
+        let retryImport = try await BetaReviewActions.importReturnedDOCX(
+            docxData: docxData,
+            into: firstImport.copy,
+            workID: workID,
+            chapterID: chapterID,
+            documentBridge: bridge,
+            liveHTML: sentHTML,
+            now: clock.now
+        )
+        #expect(!retryImport.addedAnnotations)
+        let notesAfterRetry = try await store.listAnnotations(workID: workID, chapterID: chapterID)
+        #expect(notesAfterRetry.count == 1)
+        #expect(retryImport.copy.comments.first?.annotationID == firstNoteID)
     }
 
     // MARK: - Helpers

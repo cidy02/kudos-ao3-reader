@@ -124,6 +124,53 @@ nonisolated enum BetaHTMLTextMapper {
         return scanner.scan()
     }
 
+    /// Decodes HTML character references in a single raw text run without collapsing
+    /// or trimming whitespace (used to verify an HTML replacement slice against `deletedText`).
+    static func decodeEntities(in slice: String) -> String {
+        guard slice.contains("&") else { return slice }
+        let units = Array(slice.utf16)
+        var output: [UInt16] = []
+        output.reserveCapacity(units.count)
+        var cursor = 0
+        while cursor < units.count {
+            if units[cursor] == 0x26, let entity = decodeEntity(in: units, at: cursor) {
+                output.append(contentsOf: entity.decoded.utf16)
+                cursor = entity.nextIndex
+            } else {
+                output.append(units[cursor])
+                cursor += 1
+            }
+        }
+        return String(decoding: output, as: UTF16.self)
+    }
+
+    fileprivate static func decodeEntity(
+        in units: [UInt16],
+        at start: Int
+    ) -> (decoded: String, nextIndex: Int)? {
+        let maxEnd = min(units.count, start + 36)
+        var cursor = start + 1
+        while cursor < maxEnd {
+            let unit = units[cursor]
+            if unit == 0x3B { // ';'
+                let raw = String(decoding: units[start ... cursor], as: UTF16.self)
+                if let decoded = resolveEntity(raw) {
+                    return (decoded, cursor + 1)
+                }
+                return nil
+            }
+            if unit == 0x26 || unit == 0x3C || isASCIIWhitespace(unit) {
+                return nil
+            }
+            cursor += 1
+        }
+        return nil
+    }
+
+    fileprivate static func isASCIIWhitespace(_ unit: UInt16) -> Bool {
+        unit == 0x20 || unit == 0x09 || unit == 0x0A || unit == 0x0D || unit == 0x0C
+    }
+
     private struct HTMLMapScanner {
         let units: [UInt16]
         var plainUnits: [UInt16] = []
@@ -300,23 +347,7 @@ nonisolated enum BetaHTMLTextMapper {
         }
 
         private func decodeEntity(at start: Int) -> (decoded: String, nextIndex: Int)? {
-            let maxEnd = min(units.count, start + 36)
-            var cursor = start + 1
-            while cursor < maxEnd {
-                let unit = units[cursor]
-                if unit == 0x3B { // ';'
-                    let raw = String(decoding: units[start ... cursor], as: UTF16.self)
-                    if let decoded = BetaHTMLTextMapper.resolveEntity(raw) {
-                        return (decoded, cursor + 1)
-                    }
-                    return nil
-                }
-                if unit == 0x26 || unit == 0x3C || isASCIIWhitespace(unit) {
-                    return nil
-                }
-                cursor += 1
-            }
-            return nil
+            BetaHTMLTextMapper.decodeEntity(in: units, at: start)
         }
 
         private func startsComment(at start: Int) -> Bool {
@@ -385,7 +416,7 @@ nonisolated enum BetaHTMLTextMapper {
         }
 
         private func isASCIIWhitespace(_ unit: UInt16) -> Bool {
-            unit == 0x20 || unit == 0x09 || unit == 0x0A || unit == 0x0D || unit == 0x0C
+            BetaHTMLTextMapper.isASCIIWhitespace(unit)
         }
 
         private func isASCIIAlphaNum(_ unit: UInt16) -> Bool {

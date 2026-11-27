@@ -1,138 +1,35 @@
 import Foundation
 
-// MARK: - Parsed .docx model
-
-nonisolated struct BetaDOCXSegment: Equatable, Hashable, Sendable {
-    enum Kind: Equatable, Hashable, Sendable {
-        case unchanged
-        case insertion(author: String?, date: Date?, revisionID: String?)
-        case deletion(author: String?, date: Date?, revisionID: String?)
-    }
-
-    var kind: Kind
-    var text: String
-}
-
-nonisolated struct BetaDOCXParagraph: Equatable, Hashable, Sendable {
-    var segments: [BetaDOCXSegment]
-
-    /// Text with deletions kept and insertions dropped (what was sent before tracked edits).
-    var baselineText: String {
-        var result = ""
-        for segment in segments {
-            switch segment.kind {
-            case .unchanged, .deletion:
-                result.append(segment.text)
-            case .insertion:
-                break
-            }
-        }
-        return result
-    }
-
-    /// Text with insertions kept and deletions dropped (the beta's proposed paragraph).
-    var finalText: String {
-        var result = ""
-        for segment in segments {
-            switch segment.kind {
-            case .unchanged, .insertion:
-                result.append(segment.text)
-            case .deletion:
-                break
-            }
-        }
-        return result
-    }
-
-    var hasTrackedChanges: Bool {
-        segments.contains { segment in
-            switch segment.kind {
-            case .unchanged: false
-            case .insertion, .deletion: !segment.text.isEmpty
-            }
-        }
-    }
-}
-
-nonisolated struct BetaDOCXComment: Equatable, Hashable, Sendable {
-    var id: String
-    var author: String?
-    var date: Date?
-    var initials: String?
-    var text: String
-    var paragraphIndex: Int
-    var baselineStartUTF16: Int
-    var baselineEndUTF16: Int
-    var quote: String
-}
-
-nonisolated struct BetaDOCXDocument: Equatable, Sendable {
-    var paragraphs: [BetaDOCXParagraph]
-    var comments: [BetaDOCXComment]
-}
-
 // MARK: - OOXML (.docx) reader for Word and Google Docs
 
-/// Reads paragraphs, runs, tracked insertions (`w:ins`), tracked deletions (`w:del` /
-/// `w:delText`), and comments (`word/comments.xml` + `commentRangeStart`/`End`) from a
-/// `.docx` archive produced by Microsoft Word or Google Docs.
+/// Reads paragraphs, runs, tracked insertions (`w:ins` / `w:moveTo`), tracked deletions
+/// (`w:del` / `w:delText` / `w:moveFrom`), and comments (`word/comments.xml` +
+/// `word/commentsExtended.xml` + `commentRangeStart`/`End`) from a Word or Google Docs `.docx`.
 nonisolated enum BetaDOCXReader {
-    static func read(docxData: Data) throws -> BetaDOCXDocument {
-        let zip: MiniZip
-        do {
-            zip = try MiniZip(data: docxData, limits: .epub)
-        } catch {
-            throw BetaReadingError.invalidDOCX(error.localizedDescription)
-        }
-        guard let documentXML = entryData(named: "word/document.xml", in: zip) else {
-            throw BetaReadingError.missingDocumentXML
-        }
-        let commentsXML = entryData(named: "word/comments.xml", in: zip)
-        return try parse(documentXML: documentXML, commentsXML: commentsXML)
-    }
-
-    static func parse(documentXML: Data, commentsXML: Data? = nil) throws -> BetaDOCXDocument {
-        let parsedCommentsByID: [String: ParsedCommentMeta]
-        if let commentsXML {
-            parsedCommentsByID = try parseCommentsXML(commentsXML)
-        } else {
-            parsedCommentsByID = [:]
-        }
+    static func parse(
+        documentXML: Data,
+        commentsXML: Data? = nil,
+        commentsExtendedXML: Data? = nil
+    ) throws -> BetaDOCXDocument {
+        let parsedCommentsByID = try commentsXML.map(parseCommentsXML) ?? [:]
+        let parentParaByPara = try commentsExtendedXML.map(parseCommentsExtendedXML) ?? [:]
 
         let delegate = DocumentXMLDelegate()
-        let parser = XMLParser(data: documentXML)
-        parser.shouldProcessNamespaces = true
-        parser.shouldReportNamespacePrefixes = false
-        parser.shouldResolveExternalEntities = false
-        parser.delegate = delegate
-
-        guard parser.parse() else {
-            let reason = delegate.parseError?.localizedDescription
-                ?? parser.parserError?.localizedDescription
-                ?? "Malformed document.xml"
-            throw BetaReadingError.xmlParseFailed(reason)
-        }
+        try runXMLParser(data: documentXML, delegate: delegate, fallbackError: "Malformed document.xml")
 
         let comments = resolveComments(
             ranges: delegate.commentRanges,
-            metadataByID: parsedCommentsByID
+            metadataByID: parsedCommentsByID,
+            parentParaIDByParaID: parentParaByPara
         )
         return BetaDOCXDocument(paragraphs: delegate.paragraphs, comments: comments)
     }
 
-    private static func entryData(named target: String, in zip: MiniZip) -> Data? {
-        if let direct = zip.data(named: target) {
-            return direct
-        }
-        let lower = target.lowercased()
-        guard let matched = zip.names.first(where: { $0.lowercased() == lower }) else {
-            return nil
-        }
-        return zip.data(named: matched)
-    }
-
-    private static func parseCommentsXML(_ data: Data) throws -> [String: ParsedCommentMeta] {
-        let delegate = CommentsXMLDelegate()
+    private static func runXMLParser(
+        data: Data,
+        delegate: BetaXMLParserDelegate,
+        fallbackError: String
+    ) throws {
         let parser = XMLParser(data: data)
         parser.shouldProcessNamespaces = true
         parser.shouldReportNamespacePrefixes = false
@@ -140,52 +37,148 @@ nonisolated enum BetaDOCXReader {
         parser.delegate = delegate
 
         guard parser.parse() else {
+            if let betaError = delegate.parseError as? BetaReadingError {
+                throw betaError
+            }
             let reason = delegate.parseError?.localizedDescription
                 ?? parser.parserError?.localizedDescription
-                ?? "Malformed comments.xml"
+                ?? fallbackError
             throw BetaReadingError.xmlParseFailed(reason)
         }
+    }
+
+    private static func parseCommentsXML(_ data: Data) throws -> [String: ParsedCommentMeta] {
+        let delegate = CommentsXMLDelegate()
+        try runXMLParser(data: data, delegate: delegate, fallbackError: "Malformed comments.xml")
         return delegate.commentsByID
+    }
+
+    private static func parseCommentsExtendedXML(_ data: Data) throws -> [String: String] {
+        let delegate = CommentsExtendedXMLDelegate()
+        try runXMLParser(data: data, delegate: delegate, fallbackError: "Malformed commentsExtended.xml")
+        return delegate.parentParaIDByParaID
     }
 
     private static func resolveComments(
         ranges: [CommentRangeTracker],
-        metadataByID: [String: ParsedCommentMeta]
+        metadataByID: [String: ParsedCommentMeta],
+        parentParaIDByParaID: [String: String]
     ) -> [BetaDOCXComment] {
-        var resolved: [BetaDOCXComment] = []
-        var seenIDs: Set<String> = []
-        for range in ranges {
-            guard seenIDs.insert(range.id).inserted,
-                  let meta = metadataByID[range.id]
-            else { continue }
+        var rangeByID: [String: CommentRangeTracker] = [:]
+        for range in ranges where rangeByID[range.id] == nil {
+            rangeByID[range.id] = range
+        }
+        let parentCommentIDByID = buildParentCommentMap(
+            metadataByID: metadataByID,
+            parentParaIDByParaID: parentParaIDByParaID
+        )
+
+        var resolved: [(comment: BetaDOCXComment, depth: Int, order: Int)] = []
+        for meta in metadataByID.values {
             let trimmedBody = meta.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmedBody.isEmpty else { continue }
-            let quote = range.quotedBaselineText.isEmpty
-                ? range.quotedInsertedText
-                : range.quotedBaselineText
-            resolved.append(
-                BetaDOCXComment(
-                    id: range.id,
+
+            let bodyText = formattedCommentBody(
+                trimmedBody,
+                parentID: parentCommentIDByID[meta.id],
+                metadataByID: metadataByID
+            )
+            let anchor = resolvedCommentAnchor(
+                for: meta.id,
+                rangeByID: rangeByID,
+                parentCommentIDByID: parentCommentIDByID
+            )
+            resolved.append((
+                comment: BetaDOCXComment(
+                    id: meta.id,
                     author: meta.author,
                     date: meta.date,
                     initials: meta.initials,
-                    text: trimmedBody,
-                    paragraphIndex: range.startParagraphIndex,
-                    baselineStartUTF16: range.baselineStartUTF16,
-                    baselineEndUTF16: range.baselineEndUTF16,
-                    quote: quote.trimmingCharacters(in: .newlines)
-                )
-            )
+                    text: bodyText,
+                    paragraphIndex: anchor.range?.startParagraphIndex ?? 0,
+                    baselineStartUTF16: anchor.range?.baselineStartUTF16 ?? 0,
+                    baselineEndUTF16: anchor.range?.baselineEndUTF16 ?? 0,
+                    quote: anchor.quote
+                ),
+                depth: anchor.depth,
+                order: meta.orderIndex
+            ))
         }
+
         return resolved.sorted { lhs, rhs in
-            if lhs.paragraphIndex != rhs.paragraphIndex {
-                return lhs.paragraphIndex < rhs.paragraphIndex
+            let lKey = (
+                lhs.comment.paragraphIndex, lhs.comment.baselineStartUTF16, lhs.depth, lhs.order, lhs.comment.id
+            )
+            let rKey = (
+                rhs.comment.paragraphIndex, rhs.comment.baselineStartUTF16, rhs.depth, rhs.order, rhs.comment.id
+            )
+            return lKey < rKey
+        }.map(\.comment)
+    }
+
+    private static func buildParentCommentMap(
+        metadataByID: [String: ParsedCommentMeta],
+        parentParaIDByParaID: [String: String]
+    ) -> [String: String] {
+        guard !parentParaIDByParaID.isEmpty else { return [:] }
+        var commentIDByParaID: [String: String] = [:]
+        for meta in metadataByID.values {
+            for paraID in meta.paraIDs {
+                commentIDByParaID[paraID] = meta.id
             }
-            if lhs.baselineStartUTF16 != rhs.baselineStartUTF16 {
-                return lhs.baselineStartUTF16 < rhs.baselineStartUTF16
-            }
-            return lhs.id < rhs.id
         }
+        var parentByID: [String: String] = [:]
+        for meta in metadataByID.values {
+            for paraID in meta.paraIDs.reversed() {
+                if let parentPara = parentParaIDByParaID[paraID],
+                   let parentID = commentIDByParaID[parentPara],
+                   parentID != meta.id {
+                    parentByID[meta.id] = parentID
+                    break
+                }
+            }
+        }
+        return parentByID
+    }
+
+    private static func resolvedCommentAnchor(
+        for id: String,
+        rangeByID: [String: CommentRangeTracker],
+        parentCommentIDByID: [String: String]
+    ) -> (range: CommentRangeTracker?, quote: String, depth: Int) {
+        var cursor: String? = id
+        var visited: Set<String> = []
+        var depth = 0
+        while let current = cursor, visited.insert(current).inserted {
+            if let found = rangeByID[current] {
+                let raw = found.quotedBaselineText.isEmpty ? found.quotedInsertedText : found.quotedBaselineText
+                return (found, raw.trimmingCharacters(in: .newlines), depth)
+            }
+            cursor = parentCommentIDByID[current]
+            depth += 1
+        }
+        return (nil, "", depth)
+    }
+
+    private static func formattedCommentBody(
+        _ body: String,
+        parentID: String?,
+        metadataByID: [String: ParsedCommentMeta]
+    ) -> String {
+        guard let parentID, let parent = metadataByID[parentID] else { return body }
+        let parentOneLine = parent.text
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard !parentOneLine.isEmpty else { return body }
+        let preview = parentOneLine.count > 80
+            ? String(parentOneLine.prefix(80)) + "…"
+            : parentOneLine
+        if let parentAuthor = parent.author, !parentAuthor.isEmpty {
+            return "Reply to \(parentAuthor) (“\(preview)”): \(body)"
+        }
+        return "Reply to “\(preview)”: \(body)"
     }
 
     fileprivate static func attributeValue(
@@ -231,6 +224,8 @@ private nonisolated struct ParsedCommentMeta {
     let date: Date?
     let initials: String?
     let text: String
+    let paraIDs: [String]
+    let orderIndex: Int
 }
 
 private nonisolated struct CommentRangeTracker {
@@ -240,6 +235,8 @@ private nonisolated struct CommentRangeTracker {
     var baselineEndUTF16: Int
     var quotedBaselineText: String
     var quotedInsertedText: String
+    var lastBaselineParagraphIndex: Int?
+    var lastInsertedParagraphIndex: Int?
     var isOpen: Bool
 }
 
@@ -255,18 +252,54 @@ private nonisolated struct ActiveRevision {
     let revisionID: String?
 }
 
-private nonisolated final class CommentsXMLDelegate: NSObject, XMLParserDelegate {
+private nonisolated class BetaXMLParserDelegate: NSObject, XMLParserDelegate {
+    var parseError: Error?
+
+    func parser(_ parser: XMLParser, foundInternalEntityDeclarationWithName name: String, value: String?) {
+        parseError = BetaReadingError.xmlParseFailed("XML entity declarations are not supported.")
+        parser.abortParsing()
+    }
+
+    func parser(_ parser: XMLParser, parseErrorOccurred parseError: Error) {
+        if self.parseError == nil { self.parseError = parseError }
+    }
+}
+
+private nonisolated final class CommentsExtendedXMLDelegate: BetaXMLParserDelegate {
+    var parentParaIDByParaID: [String: String] = [:]
+
+    func parser(
+        _ parser: XMLParser,
+        didStartElement elementName: String,
+        namespaceURI: String?,
+        qualifiedName qName: String?,
+        attributes attributeDict: [String: String] = [:]
+    ) {
+        guard elementName == "commentEx" else { return }
+        guard let paraID = BetaDOCXReader.attributeValue("paraId", in: attributeDict)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              let parentParaID = BetaDOCXReader.attributeValue("paraIdParent", in: attributeDict)?
+                  .trimmingCharacters(in: .whitespacesAndNewlines),
+              !paraID.isEmpty,
+              !parentParaID.isEmpty
+        else { return }
+        parentParaIDByParaID[paraID.uppercased()] = parentParaID.uppercased()
+    }
+}
+
+private nonisolated final class CommentsXMLDelegate: BetaXMLParserDelegate {
     private static let ignoredElements: Set<String> = [
-        "pPr", "rPr", "instrText", "drawing", "pict", "Fallback",
+        "pPr", "rPr", "instrText", "drawing", "pict", "Fallback", "delInstrText",
     ]
 
     var commentsByID: [String: ParsedCommentMeta] = [:]
-    var parseError: Error?
 
     private var currentID: String?
     private var currentAuthor: String?
     private var currentDate: Date?
     private var currentInitials: String?
+    private var currentParaIDs: [String] = []
+    private var nextOrderIndex = 0
     private var paragraphTexts: [String] = []
     private var currentParagraph = ""
     private var inParagraph = false
@@ -290,25 +323,18 @@ private nonisolated final class CommentsXMLDelegate: NSObject, XMLParserDelegate
             ignoredDepth = 1
             return
         }
-        switch elementName {
+        handleStartElement(elementName, attributes: attributeDict)
+    }
+
+    private func handleStartElement(_ name: String, attributes: [String: String]) {
+        switch name {
         case "comment":
-            currentID = BetaDOCXReader.attributeValue("id", in: attributeDict)
-            currentAuthor = BetaDOCXReader.normalizedAuthor(
-                BetaDOCXReader.attributeValue("author", in: attributeDict)
-            )
-            currentDate = BetaDOCXReader.parseOOXMLDate(
-                BetaDOCXReader.attributeValue("date", in: attributeDict)
-            )
-            currentInitials = BetaDOCXReader.normalizedAuthor(
-                BetaDOCXReader.attributeValue("initials", in: attributeDict)
-            )
-            paragraphTexts = []
-            currentParagraph = ""
+            startComment(attributes: attributes)
         case "p":
-            if currentID != nil {
-                inParagraph = true
-                currentParagraph = ""
-            }
+            guard currentID != nil else { return }
+            inParagraph = true
+            currentParagraph = ""
+            recordParaID(from: attributes)
         case "r":
             if inParagraph { inRun = true }
         case "t":
@@ -327,10 +353,26 @@ private nonisolated final class CommentsXMLDelegate: NSObject, XMLParserDelegate
         }
     }
 
+    private func startComment(attributes: [String: String]) {
+        currentID = BetaDOCXReader.attributeValue("id", in: attributes)
+        currentAuthor = BetaDOCXReader.normalizedAuthor(BetaDOCXReader.attributeValue("author", in: attributes))
+        currentDate = BetaDOCXReader.parseOOXMLDate(BetaDOCXReader.attributeValue("date", in: attributes))
+        currentInitials = BetaDOCXReader.normalizedAuthor(BetaDOCXReader.attributeValue("initials", in: attributes))
+        currentParaIDs = []
+        paragraphTexts = []
+        currentParagraph = ""
+    }
+
+    private func recordParaID(from attributes: [String: String]) {
+        guard let paraID = BetaDOCXReader.attributeValue("paraId", in: attributes)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !paraID.isEmpty
+        else { return }
+        currentParaIDs.append(paraID.uppercased())
+    }
+
     func parser(_ parser: XMLParser, foundCharacters string: String) {
-        if collectingText, ignoredDepth == 0 {
-            textBuffer.append(string)
-        }
+        if collectingText, ignoredDepth == 0 { textBuffer.append(string) }
     }
 
     func parser(
@@ -350,51 +392,51 @@ private nonisolated final class CommentsXMLDelegate: NSObject, XMLParserDelegate
                 textBuffer = ""
                 collectingText = false
             }
-        case "r":
-            inRun = false
+        case "r": inRun = false
         case "p":
             if inParagraph {
                 paragraphTexts.append(currentParagraph)
                 currentParagraph = ""
                 inParagraph = false
             }
-        case "comment":
-            if let commentID = currentID {
-                let joined = paragraphTexts
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-                    .joined(separator: "\n")
-                commentsByID[commentID] = ParsedCommentMeta(
-                    id: commentID,
-                    author: currentAuthor,
-                    date: currentDate,
-                    initials: currentInitials,
-                    text: joined
-                )
-            }
-            currentID = nil
-            currentAuthor = nil
-            currentDate = nil
-            currentInitials = nil
-            paragraphTexts = []
-        default:
-            break
+        case "comment": finishComment()
+        default: break
         }
     }
 
-    func parser(_ parser: XMLParser, parseErrorOccurred parseError: Error) {
-        self.parseError = parseError
+    private func finishComment() {
+        if let commentID = currentID {
+            let joined = paragraphTexts
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n")
+            commentsByID[commentID] = ParsedCommentMeta(
+                id: commentID,
+                author: currentAuthor,
+                date: currentDate,
+                initials: currentInitials,
+                text: joined,
+                paraIDs: currentParaIDs,
+                orderIndex: nextOrderIndex
+            )
+            nextOrderIndex += 1
+        }
+        currentID = nil
+        currentAuthor = nil
+        currentDate = nil
+        currentInitials = nil
+        currentParaIDs = []
+        paragraphTexts = []
     }
 }
 
-private nonisolated final class DocumentXMLDelegate: NSObject, XMLParserDelegate {
+private nonisolated final class DocumentXMLDelegate: BetaXMLParserDelegate {
     private static let ignoredElements: Set<String> = [
-        "pPr", "rPr", "instrText", "drawing", "pict", "Fallback", "fldSimple", "delInstrText",
+        "pPr", "rPr", "instrText", "drawing", "pict", "Fallback", "delInstrText",
     ]
 
     var paragraphs: [BetaDOCXParagraph] = []
     var commentRanges: [CommentRangeTracker] = []
-    var parseError: Error?
 
     private var ignoredDepth = 0
     private var inParagraph = false
@@ -444,51 +486,35 @@ private nonisolated final class DocumentXMLDelegate: NSObject, XMLParserDelegate
         handleEndElement(elementName)
     }
 
-    func parser(_ parser: XMLParser, parseErrorOccurred parseError: Error) {
-        self.parseError = parseError
-    }
-
     // MARK: - Element handlers
 
     private func handleStartElement(_ name: String, attributes: [String: String]) {
         switch name {
-        case "p":
-            startParagraph()
-        case "ins":
-            revisionStack.append(makeRevision(kind: .insertion, attributes: attributes))
-        case "del":
-            revisionStack.append(makeRevision(kind: .deletion, attributes: attributes))
-        case "r":
-            if inParagraph { inRun = true }
+        case "p": startParagraph()
+        case "ins", "moveTo": revisionStack.append(makeRevision(kind: .insertion, attributes: attributes))
+        case "del", "moveFrom": revisionStack.append(makeRevision(kind: .deletion, attributes: attributes))
+        case "r": if inParagraph { inRun = true }
         case "t", "delText":
             if inRun {
                 collectingText = true
                 textBuffer = ""
             }
-        case "br", "cr":
-            if inRun { emitText("\n") }
-        case "tab":
-            if inRun { emitText("\t") }
-        case "noBreakHyphen":
-            if inRun { emitText("-") }
+        case "br", "cr": if inRun { emitText("\n") }
+        case "tab": if inRun { emitText("\t") }
+        case "noBreakHyphen": if inRun { emitText("-") }
         case "commentRangeStart", "commentRangeEnd", "commentReference":
             handleCommentMarkerElement(name, attributes: attributes)
-        default:
-            break
+        default: break
         }
     }
 
     private func handleCommentMarkerElement(_ name: String, attributes: [String: String]) {
         guard let commentID = BetaDOCXReader.attributeValue("id", in: attributes) else { return }
         switch name {
-        case "commentRangeStart":
-            openCommentRange(id: commentID)
-        case "commentRangeEnd":
-            closeCommentRange(id: commentID)
-        case "commentReference":
-            registerPointCommentIfNeeded(id: commentID)
-        default:
-            break
+        case "commentRangeStart": openCommentRange(id: commentID)
+        case "commentRangeEnd": closeCommentRange(id: commentID)
+        case "commentReference": registerPointCommentIfNeeded(id: commentID)
+        default: break
         }
     }
 
@@ -500,16 +526,11 @@ private nonisolated final class DocumentXMLDelegate: NSObject, XMLParserDelegate
                 textBuffer = ""
                 collectingText = false
             }
-        case "r":
-            inRun = false
-        case "ins", "del":
-            if !revisionStack.isEmpty {
-                revisionStack.removeLast()
-            }
-        case "p":
-            finishParagraph()
-        default:
-            break
+        case "r": inRun = false
+        case "ins", "del", "moveTo", "moveFrom":
+            if !revisionStack.isEmpty { revisionStack.removeLast() }
+        case "p": finishParagraph()
+        default: break
         }
     }
 
@@ -535,18 +556,11 @@ private nonisolated final class DocumentXMLDelegate: NSObject, XMLParserDelegate
         textBuffer = ""
     }
 
-    private func makeRevision(
-        kind: ActiveRevisionKind,
-        attributes: [String: String]
-    ) -> ActiveRevision {
+    private func makeRevision(kind: ActiveRevisionKind, attributes: [String: String]) -> ActiveRevision {
         ActiveRevision(
             kind: kind,
-            author: BetaDOCXReader.normalizedAuthor(
-                BetaDOCXReader.attributeValue("author", in: attributes)
-            ),
-            date: BetaDOCXReader.parseOOXMLDate(
-                BetaDOCXReader.attributeValue("date", in: attributes)
-            ),
+            author: BetaDOCXReader.normalizedAuthor(BetaDOCXReader.attributeValue("author", in: attributes)),
+            date: BetaDOCXReader.parseOOXMLDate(BetaDOCXReader.attributeValue("date", in: attributes)),
             revisionID: BetaDOCXReader.attributeValue("id", in: attributes)
         )
     }
@@ -559,18 +573,10 @@ private nonisolated final class DocumentXMLDelegate: NSObject, XMLParserDelegate
             return nil
         }
         if let deletion = revisionStack.last(where: { $0.kind == .deletion }) {
-            return .deletion(
-                author: deletion.author,
-                date: deletion.date,
-                revisionID: deletion.revisionID
-            )
+            return .deletion(author: deletion.author, date: deletion.date, revisionID: deletion.revisionID)
         }
         if let insertion = revisionStack.last(where: { $0.kind == .insertion }) {
-            return .insertion(
-                author: insertion.author,
-                date: insertion.date,
-                revisionID: insertion.revisionID
-            )
+            return .insertion(author: insertion.author, date: insertion.date, revisionID: insertion.revisionID)
         }
         return .unchanged
     }
@@ -578,8 +584,7 @@ private nonisolated final class DocumentXMLDelegate: NSObject, XMLParserDelegate
     private func emitText(_ text: String) {
         guard inParagraph, !text.isEmpty, let kind = resolvedSegmentKind() else { return }
 
-        if let lastIndex = currentSegments.indices.last,
-           canMerge(currentSegments[lastIndex].kind, with: kind) {
+        if let lastIndex = currentSegments.indices.last, canMerge(currentSegments[lastIndex].kind, with: kind) {
             currentSegments[lastIndex].text.append(text)
         } else {
             currentSegments.append(BetaDOCXSegment(kind: kind, text: text))
@@ -588,18 +593,50 @@ private nonisolated final class DocumentXMLDelegate: NSObject, XMLParserDelegate
         let currentParagraphIndex = paragraphs.count
         switch kind {
         case .unchanged, .deletion:
-            let utf16Length = text.utf16.count
-            currentBaselineUTF16 += utf16Length
-            for idx in commentRanges.indices where commentRanges[idx].isOpen
-                && commentRanges[idx].startParagraphIndex == currentParagraphIndex {
-                commentRanges[idx].quotedBaselineText.append(text)
+            let segmentStartUTF16 = currentBaselineUTF16
+            currentBaselineUTF16 += text.utf16.count
+            appendBaselineCommentQuotes(
+                text: text,
+                paragraphIndex: currentParagraphIndex,
+                segmentStartUTF16: segmentStartUTF16
+            )
+        case .insertion:
+            appendInsertedCommentQuotes(text: text, paragraphIndex: currentParagraphIndex)
+        }
+    }
+
+    private func appendBaselineCommentQuotes(text: String, paragraphIndex: Int, segmentStartUTF16: Int) {
+        for idx in commentRanges.indices where commentRanges[idx].isOpen {
+            if let lastPara = commentRanges[idx].lastBaselineParagraphIndex {
+                if lastPara != paragraphIndex {
+                    commentRanges[idx].quotedBaselineText.append("\n")
+                }
+            } else if commentRanges[idx].startParagraphIndex != paragraphIndex {
+                // Range started at the end of a prior paragraph; anchor where quoted text begins.
+                commentRanges[idx].startParagraphIndex = paragraphIndex
+                commentRanges[idx].baselineStartUTF16 = segmentStartUTF16
+            }
+            commentRanges[idx].quotedBaselineText.append(text)
+            commentRanges[idx].lastBaselineParagraphIndex = paragraphIndex
+            if commentRanges[idx].startParagraphIndex == paragraphIndex {
                 commentRanges[idx].baselineEndUTF16 = currentBaselineUTF16
             }
-        case .insertion:
-            for idx in commentRanges.indices where commentRanges[idx].isOpen
-                && commentRanges[idx].startParagraphIndex == currentParagraphIndex {
-                commentRanges[idx].quotedInsertedText.append(text)
+        }
+    }
+
+    private func appendInsertedCommentQuotes(text: String, paragraphIndex: Int) {
+        for idx in commentRanges.indices where commentRanges[idx].isOpen {
+            if let lastPara = commentRanges[idx].lastInsertedParagraphIndex {
+                if lastPara != paragraphIndex {
+                    commentRanges[idx].quotedInsertedText.append("\n")
+                }
+            } else if commentRanges[idx].lastBaselineParagraphIndex == nil,
+                      commentRanges[idx].startParagraphIndex != paragraphIndex {
+                commentRanges[idx].startParagraphIndex = paragraphIndex
+                commentRanges[idx].baselineStartUTF16 = currentBaselineUTF16
             }
+            commentRanges[idx].quotedInsertedText.append(text)
+            commentRanges[idx].lastInsertedParagraphIndex = paragraphIndex
         }
     }
 
@@ -647,14 +684,8 @@ private nonisolated final class DocumentXMLDelegate: NSObject, XMLParserDelegate
         addCommentTracker(id: id, paragraphIndex: paragraphIndex, baselineStart: offset, isOpen: false)
     }
 
-    private func addCommentTracker(
-        id: String,
-        paragraphIndex: Int,
-        baselineStart: Int,
-        isOpen: Bool
-    ) {
-        let index = commentRanges.count
-        commentIndexByID[id] = index
+    private func addCommentTracker(id: String, paragraphIndex: Int, baselineStart: Int, isOpen: Bool) {
+        commentIndexByID[id] = commentRanges.count
         commentRanges.append(
             CommentRangeTracker(
                 id: id,
@@ -663,6 +694,8 @@ private nonisolated final class DocumentXMLDelegate: NSObject, XMLParserDelegate
                 baselineEndUTF16: baselineStart,
                 quotedBaselineText: "",
                 quotedInsertedText: "",
+                lastBaselineParagraphIndex: nil,
+                lastInsertedParagraphIndex: nil,
                 isOpen: isOpen
             )
         )
