@@ -191,6 +191,17 @@ Short list, all of it scar tissue. Antigravity (agy/Gemini) also gets these inje
    another lane may own that file right now.
 8. **Say what you could not verify.** An honest gap is worth more than a confident wrong claim, and the
    orchestrator checks anyway.
+9. **Swift traps that broke gates more than once** (the full list, with evidence, is the orchestrator's lessons
+   playbook): a ternary mixing `.secondaryInk` (a `ShapeStyle`) with a `Color` doesn't compile, so wrap both sides in
+   `AnyShapeStyle`; in a `switch`, either every case uses `return` or none does (`return switch …` after a `guard`);
+   call a memberwise init in property order; under the project's MainActor default isolation, never call a
+   main-actor init in a default argument; two files with the same name in one target collide even in different
+   folders.
+10. **Never refetch AO3 because a screen was shown** (owner, 2026-11-26: the Writing tab reloaded on every visit).
+    Load once, then only on pull to refresh, after a write, a sign-in or sign-out, or past a freshness window
+    (`WritingView.isStale`); never blank data already on screen while reloading.
+11. **In parallel lanes, name types for your feature** (`StudioDocumentsRecentCard`, not `RecentCard`): two lanes
+    declared the same type and only the merge found it.
 
 ## Future Agent Checklist (before writing any code)
 
