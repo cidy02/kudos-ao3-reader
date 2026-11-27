@@ -23,6 +23,9 @@ struct WritingView: View {
     @State private var draftsError: String?
     @State private var isLoadingDrafts = false
     @State private var draftsReload = 0
+    /// Bumped when the tab is shown and what it loaded is stale; switching tabs alone never refetches AO3.
+    @State private var tabVisits = 0
+    @State private var lastAutoLoad: Date?
     @State private var editingWorkID: Int?
     @State private var postingPseudName: String?
     @State private var showingLogin = false
@@ -177,6 +180,16 @@ struct WritingView: View {
                 }
             }
             #endif
+            .onChange(of: router.selection, initial: true) { _, selection in
+                // Drafts and stats are AO3 pages (stats is one of its heavier ones): fetch them on the first visit,
+                // then only when they're stale, on pull to refresh, after a write, or after signing in or out.
+                guard selection == .writing, Self.isStale(lastAutoLoad, now: Date()) else { return }
+                lastAutoLoad = Date()
+                tabVisits += 1
+            }
+            // a sign-in or sign-out while another tab is showing loads nothing (activate needs the tab), so the next
+            // visit must
+            .onChange(of: auth.sessionGeneration) { _, _ in lastAutoLoad = nil }
             .task(id: activationKey) { await activate() }
             .task(id: statsActivationKey) { await loadStats() }
             .onChange(of: auth.username, initial: true) { _, _ in syncProfileModel() }
@@ -193,7 +206,7 @@ struct WritingView: View {
     }
 
     private var activationKey: String {
-        "\(router.selection == .writing)|\(auth.sessionGeneration)|\(auth.username ?? "")|\(draftsReload)"
+        "\(tabVisits)|\(auth.sessionGeneration)|\(auth.username ?? "")|\(draftsReload)"
     }
 
     @ViewBuilder
@@ -549,7 +562,7 @@ struct WritingView: View {
 
 private extension WritingView {
     var statsActivationKey: String {
-        "\(router.selection == .writing)|\(auth.sessionGeneration)|\(auth.username ?? "")|\(statsReload)"
+        "\(tabVisits)|\(auth.sessionGeneration)|\(auth.username ?? "")|\(statsReload)"
     }
 
     @ViewBuilder
@@ -589,6 +602,14 @@ private extension WritingView {
         }
     }
 
+    /// How long drafts and stats loaded from AO3 count as fresh when the tab is shown again.
+    static let freshFor: TimeInterval = 15 * 60
+
+    static func isStale(_ lastLoad: Date?, now: Date) -> Bool {
+        guard let lastLoad else { return true }
+        return now.timeIntervalSince(lastLoad) >= freshFor || now < lastLoad
+    }
+
     func loadStats() async {
         guard router.selection == .writing, auth.isLoggedIn else {
             stats = nil
@@ -599,8 +620,7 @@ private extension WritingView {
         let requestID = UUID()
         activeStatsRequestID = requestID
         isLoadingStats = true
-        statsError = nil
-        stats = nil
+        statsError = nil // the last stats stay on screen while new ones load
         defer {
             if activeStatsRequestID == requestID { isLoadingStats = false }
         }
