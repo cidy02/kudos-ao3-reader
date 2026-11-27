@@ -62,10 +62,12 @@ extension StudioWorkFilesView {
                 chapterRowLabel(chapter)
             }
             .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(
                 "\(chapter.displayTitle), \(chapter.badge.label(deviceName: ThisDevice.name)), \(chapter.metaLine)"
             )
             .accessibilityHint("Opens chapter in the editor")
+            .accessibilityAddTraits(.isButton)
 
             Menu {
                 chapterMenuItems(chapter, canMoveUp: canMoveUp, canMoveDown: canMoveDown)

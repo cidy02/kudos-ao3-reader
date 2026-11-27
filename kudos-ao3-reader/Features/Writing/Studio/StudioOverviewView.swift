@@ -41,6 +41,44 @@ nonisolated enum StudioOverviewCopy {
         if change == 0 { return "0" }
         return change.formatted(.number.sign(strategy: .always()))
     }
+
+    /// Recent-strip meta. `editedFallback` is the GMT calendar date for an AO3
+    /// `dateUpdated` (`WorkStat.date` is midnight GMT, so a local `shortDate`
+    /// of that instant is the previous evening west of UTC). A nil fallback is
+    /// a real local timestamp and can say `yesterday`.
+    static func recentMetaLine(
+        subtitle: String,
+        editedAt: Date?,
+        editedFallback: String?,
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String {
+        let fallback = editedFallback?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let datePart: String?
+        if let fallback, !fallback.isEmpty {
+            datePart = fallback
+        } else if let editedAt {
+            datePart = StudioDateCopy.shortDate(editedAt, now: now, calendar: calendar, locale: locale)
+        } else {
+            datePart = nil
+        }
+        guard let datePart else { return subtitle }
+        if subtitle.isEmpty { return datePart }
+        return "\(subtitle) · \(datePart)"
+    }
+}
+
+extension StudioOverviewCopy {
+    /// Comments glance for the rows on this page. The inbox heading's unread
+    /// total includes gifts and news the glance does not show.
+    @MainActor
+    static func commentsGlanceSubtitle(items: [AO3InboxItem]) -> String {
+        commentsSubtitle(
+            awaitingReplyCount: StudioCommentsBoard.needsReplyCount(items),
+            unreadCount: StudioCommentsBoard.unreadCount(items)
+        )
+    }
 }
 
 struct StudioOverviewView: View {
@@ -210,19 +248,12 @@ struct StudioOverviewView: View {
         return inboxModel.items.filter { StudioCommentsBoard.isOnYourWork($0) && $0.isUnread }
     }
 
-    private var awaitingReplyCount: Int {
-        StudioCommentsBoard.needsReplyCount(inboxModel.items)
-    }
-
     private var commentsSubtitle: String? {
         switch inboxModel.phase {
         case .idle, .loading, .failed:
             return nil
         case .loaded, .paginationFailed:
-            return StudioOverviewCopy.commentsSubtitle(
-                awaitingReplyCount: awaitingReplyCount,
-                unreadCount: inboxModel.unreadCount
-            )
+            return StudioOverviewCopy.commentsGlanceSubtitle(items: inboxModel.items)
         }
     }
 

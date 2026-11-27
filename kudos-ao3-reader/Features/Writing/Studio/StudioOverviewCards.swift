@@ -588,14 +588,12 @@ struct StudioRecentPaperCard: View {
     }
 
     private var metaLine: String {
-        if let editedAt = entry.editedAt {
-            let short = StudioDateCopy.shortDate(editedAt, now: now)
-            return "\(entry.subtitle) · \(short)"
-        }
-        if let fallback = entry.editedFallback {
-            return "\(entry.subtitle) · \(fallback)"
-        }
-        return entry.subtitle
+        StudioOverviewCopy.recentMetaLine(
+            subtitle: entry.subtitle,
+            editedAt: entry.editedAt,
+            editedFallback: entry.editedFallback,
+            now: now
+        )
     }
 }
 

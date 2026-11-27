@@ -175,6 +175,57 @@ struct StudioOverviewBoardCopyTests {
         #expect(StudioOverviewCopy.statsGlanceValue(total: 380, change: 0) == "0")
         #expect(StudioOverviewCopy.statsGlanceValue(total: 380, change: nil) == "380")
     }
+
+    @Test func recentPaperMetaKeepsTheAO3CalendarDate() {
+        let parsed = WorkStat.date(from: "2026-10-20")
+        #expect(parsed != nil)
+        var pacific = Calendar(identifier: .gregorian)
+        pacific.timeZone = TimeZone(secondsFromGMT: -7 * 3_600) ?? .gmt
+        let now = StudioBoardCopyFixtures.utcDate(2026, 10, 31, hour: 18)
+        let meta = StudioOverviewCopy.recentMetaLine(
+            subtitle: "2,170 words",
+            editedAt: parsed,
+            editedFallback: "Oct 20",
+            now: now,
+            calendar: pacific,
+            locale: StudioBoardCopyFixtures.enUS
+        )
+        #expect(meta == "2,170 words · Oct 20")
+
+        let yesterday = StudioBoardCopyFixtures.utcDate(2026, 10, 30, hour: 23, minute: 10)
+        #expect(
+            StudioOverviewCopy.recentMetaLine(
+                subtitle: "640 words",
+                editedAt: yesterday,
+                editedFallback: nil,
+                now: StudioBoardCopyFixtures.utcDate(2026, 10, 31, hour: 10),
+                calendar: StudioBoardCopyFixtures.utcCalendar,
+                locale: StudioBoardCopyFixtures.enUS
+            ) == "640 words · yesterday"
+        )
+    }
+
+    @Test func commentsGlanceCountsWorkCommentsOnThisPage() {
+        let needsReply = StudioOverviewCopy.commentsGlanceSubtitle(items: [
+            StudioBoardCopyFixtures.makeInboxItem(id: 1, workID: 10, isUnread: false, isReplied: false),
+            StudioBoardCopyFixtures.makeInboxItem(id: 2, workID: nil, isUnread: true, isReplied: false),
+            StudioBoardCopyFixtures.makeInboxItem(
+                id: 3, workID: 12, isUnread: true, isReplied: false, isUnavailable: true
+            )
+        ])
+        #expect(needsReply == "1 needs a reply")
+
+        let unread = StudioOverviewCopy.commentsGlanceSubtitle(items: [
+            StudioBoardCopyFixtures.makeInboxItem(id: 2, workID: nil, isUnread: true, isReplied: false),
+            StudioBoardCopyFixtures.makeInboxItem(id: 4, workID: 11, isUnread: true, isReplied: true)
+        ])
+        #expect(unread == "1 unread")
+
+        let caughtUp = StudioOverviewCopy.commentsGlanceSubtitle(items: [
+            StudioBoardCopyFixtures.makeInboxItem(id: 2, workID: nil, isUnread: true, isReplied: false)
+        ])
+        #expect(caughtUp == "All caught up")
+    }
 }
 
 /// Regression tests for `Studio-Documents`, `Studio-Files`, and `Studio-Work-Files` copy.
