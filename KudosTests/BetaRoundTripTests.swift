@@ -290,7 +290,7 @@ struct BetaRoundTripTests {
 
         #expect(!second.isTracked)
         #expect(second.author == "Lark")
-        #expect(second.deletedText == "old ")
+        #expect(second.deletedText == " old", "the word with the space before it; \"old \" would be as right")
         #expect(second.insertedText.isEmpty)
     }
 
