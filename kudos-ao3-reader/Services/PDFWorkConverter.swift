@@ -43,10 +43,11 @@ nonisolated enum PDFWorkConverter {
         }
 
         let pages = try pageBlocks(of: document, path: url.path)
-        let cleaned = withoutRunningHeadersAndFooters(pages)
+        let cleaned = PDFParagraphRepair.withoutRunningHeadersAndFooters(pages)
+        let repaired = PDFParagraphRepair.joinBrokenParagraphs(cleaned)
 
-        let chapters = (outlineChapters(of: document, pageLines: cleaned)
-            ?? textHeuristicChapters(pageLines: cleaned, fallbackTitle: fallbackTitle))
+        let chapters = (outlineChapters(of: document, pageLines: repaired)
+            ?? textHeuristicChapters(pageLines: repaired, fallbackTitle: fallbackTitle))
             .map(withoutEchoedTitle)
         guard !chapters.isEmpty else { throw ImportedDocumentConverter.ConversionError.noReadableText }
 
@@ -201,39 +202,6 @@ nonisolated enum PDFWorkConverter {
         else { return chapter }
         bodyLines.removeFirst()
         return .init(title: chapter.title, bodyXHTML: bodyLines.joined(separator: "\n"))
-    }
-
-    /// Drops page numbers and running headers/footers.
-    ///
-    /// These are the difference between a readable conversion and one with a stray
-    /// title line every few paragraphs. A line is dropped when it appears at the
-    /// top or bottom of many pages, or is bare digits — frequency is the signal,
-    /// because a running header repeats by definition and prose does not.
-    private static func withoutRunningHeadersAndFooters(_ pages: [[String]]) -> [[String]] {
-        guard pages.count >= 4 else { return pages }
-
-        var edgeCounts: [String: Int] = [:]
-        for page in pages {
-            let meaningful = page.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-            guard !meaningful.isEmpty else { continue }
-            for candidate in Set([meaningful.first, meaningful.last].compactMap(\.self)) {
-                edgeCounts[candidate, default: 0] += 1
-            }
-        }
-
-        // Repeating on a third of the pages is a header, not a coincidence.
-        let threshold = max(3, pages.count / 3)
-        let repeated = Set(edgeCounts.filter { $0.value >= threshold }.keys)
-
-        return pages.map { page in
-            page.filter { line in
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                if trimmed.isEmpty { return true }
-                if repeated.contains(trimmed) { return false }
-                // Bare page numbers, with or without decoration ("- 12 -", "12.").
-                return trimmed.range(of: #"^[\-–—\s]*\d{1,4}[.\-–—\s]*$"#, options: .regularExpression) == nil
-            }
-        }
     }
 
     // MARK: - OCR
@@ -438,9 +406,12 @@ nonisolated enum PDFWorkConverter {
         pageLines: [[String]],
         fallbackTitle: String
     ) -> [EPUBBuilder.Chapter] {
-        // Blocks already carry a blank line between paragraphs, which is exactly the
-        // shape the plain-text converter expects, so joining them is enough.
-        let text = pageLines.flatMap { $0 + [""] }.joined(separator: "\n")
+        // Each block is already a complete paragraph (repaired across page breaks),
+        // so separate blocks with a blank line for `PlainTextWorkConverter`.
+        let text = pageLines
+            .flatMap(\.self)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n\n")
         guard let result = try? PlainTextWorkConverter.convert(
             text: text,
             fallbackTitle: fallbackTitle
