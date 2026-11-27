@@ -21,14 +21,14 @@ enum SettingsRoute: Hashable, CaseIterable {
     /// pushed from the Privacy and About pages rather than from a hub row.
     case privacy
 
-    /// The hub row's label and the pushed page's title.
+    /// The hub row's label (board `Settings`).
     var title: String {
         switch self {
         case .appearance: "Appearance"
         case .font: "Font"
         case .reader: "Reader"
         case .listening: "Listening"
-        case .downloads: "Storage"
+        case .downloads: "Downloads"
         case .preservation: "Preservation"
         case .readingQueues: "Reading Queues"
         case .library: "Library"
@@ -37,12 +37,21 @@ enum SettingsRoute: Hashable, CaseIterable {
         case .importFiles: "Import"
         case .account: "AO3 Account"
         case .privacySettings: "Privacy"
-        case .about: "About"
-        case .privacy: "Privacy and local data"
+        case .about: "About Kudos"
+        case .privacy: "Privacy and Local Data"
         }
     }
 
-    /// Coloured icon tile SF Symbol name (spec board 47, rule I-7).
+    /// The pushed page's navigation title (e.g. `Downloads` hub row pushes `Storage`).
+    var pageTitle: String {
+        switch self {
+        case .downloads: "Storage"
+        case .about: "About"
+        default: title
+        }
+    }
+
+    /// Coloured icon tile SF Symbol name (board `Settings`, rule I-7).
     var iconTileSystemImage: String {
         switch self {
         case .appearance: "circle.lefthalf.filled"
@@ -54,12 +63,12 @@ enum SettingsRoute: Hashable, CaseIterable {
         case .readingQueues: "list.bullet"
         case .library: "books.vertical"
         case .backup: "arrow.up.to.line"
-        case .syncFolder: "arrow.triangle.2.circlepath"
-        case .importFiles: "square.and.arrow.down"
-        case .account: "person.crop.circle"
-        case .privacySettings: "hand.raised"
+        case .syncFolder: "cloud"
+        case .importFiles: "arrow.down.doc"
+        case .account: "person"
+        case .privacySettings: "eye"
         case .about: "info.circle"
-        case .privacy: "hand.raised"
+        case .privacy: "shield"
         }
     }
 
@@ -92,11 +101,12 @@ enum SettingsRoute: Hashable, CaseIterable {
         return Color(hex: iconTileHex) ?? .gray
     }
 
-    /// Checks if this route matches a search query against title, current value, or keywords.
+    /// Checks if this route matches a search query against title, page title, current value, or keywords.
     func matches(query: String, currentValue: String) -> Bool {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return true }
-        if title.localizedCaseInsensitiveContains(trimmed) {
+        if title.localizedCaseInsensitiveContains(trimmed)
+            || pageTitle.localizedCaseInsensitiveContains(trimmed) {
             return true
         }
         if !currentValue.isEmpty && currentValue.localizedCaseInsensitiveContains(trimmed) {
@@ -109,30 +119,30 @@ enum SettingsRoute: Hashable, CaseIterable {
         switch self {
         case .appearance: ["theme", "dark", "light", "sepia", "oled", "accent", "color", "colour", "mode",
                            "symbols", "rating", "warnings", "list", "cover", "covers", "art"]
-        case .font: ["typeface", "serif", "sans", "size", "custom font", "text"]
+        case .font: ["typeface", "serif", "sans", "size", "custom font", "text", "reading fonts"]
         case .reader: ["paged", "scrolled", "spread", "awake", "page jump", "reading"]
         case .listening: ["tts", "speech", "voice", "kokoro", "audio", "read aloud", "speed", "pitch", "pronunciation"]
-        case .downloads: ["downloads", "offline", "storage", "keep", "subscribe", "space", "disk"]
-        case .preservation: ["availability", "archive", "check", "missing", "works"]
+        case .downloads: ["downloads", "offline", "storage", "keep", "subscribe", "space", "disk",
+                          "epubs", "preserve series", "availability"]
+        case .preservation: ["availability", "archive", "check", "missing", "works", "still on ao3"]
         case .readingQueues: ["queue", "order", "auto-preserve", "series"]
-        case .library: ["delete", "confirm", "zero counts", "stats", "shelves", "series", "weekly", "check"]
+        case .library: ["delete", "confirm", "zero counts", "stats", "shelves", "edit shelves",
+                        "symbols", "recently deleted", "90 days", "series", "weekly", "check"]
         case .backup: ["export", "import", "archive", "kudosbackup", "restore"]
         case .syncFolder: ["sync", "icloud", "folder", "devices", "tombstone", "pair"]
         case .importFiles: ["epub", "files", "document", "html", "txt", "import"]
-        case .account: ["ao3", "login", "sign in", "username", "session", "password"]
+        case .account: ["ao3", "login", "sign in", "username", "session", "password", "preferences", "logged in"]
         case .privacySettings: ["mature", "explicit", "blur", "hide", "face id", "biometric", "lock"]
-        case .about: ["version", "kudos", "bug", "report", "license", "source", "github"]
+        case .about: ["version", "kudos", "bug", "report", "feedback", "license", "source", "github"]
         case .privacy: ["local data", "clear cache", "history", "positions"]
         }
     }
 
-    /// The hub's groups in 1ab's order (REDESIGN_DECISIONS.md, "Settings (1ab)").
+    /// The hub's groups in board `Settings` order.
     /// The hub draws from this table, so a test that reads it reads the page.
     ///
-    /// "Library" is not in the decisions table: it holds the two Library toggles
-    /// (confirm before deleting, show zero counts) the old page carried, and a
-    /// reorganisation cannot drop them. Listening is iOS only — its section is
-    /// the Readium read-aloud player's, which macOS does not have.
+    /// Listening is iOS only — its section is the Readium read-aloud player's,
+    /// which macOS does not have.
     static let hubGroups: [SettingsHubGroup] = {
         var reading: [SettingsRoute] = [.appearance, .font, .reader]
         #if os(iOS)
@@ -140,9 +150,9 @@ enum SettingsRoute: Hashable, CaseIterable {
         #endif
         return [
             SettingsHubGroup(title: "Reading", routes: reading),
-            SettingsHubGroup(title: "Downloads & Storage", routes: [.downloads, .preservation, .readingQueues]),
-            SettingsHubGroup(title: "Library & Sync", routes: [.library, .backup, .syncFolder, .importFiles]),
-            SettingsHubGroup(title: "Account & Privacy", routes: [.account, .privacySettings]),
+            SettingsHubGroup(title: "Downloads & storage", routes: [.downloads, .preservation, .readingQueues]),
+            SettingsHubGroup(title: "Library & sync", routes: [.library, .backup, .syncFolder, .importFiles]),
+            SettingsHubGroup(title: "Account & privacy", routes: [.account, .privacySettings]),
             SettingsHubGroup(title: "About", routes: [.about])
         ]
     }()
@@ -196,9 +206,13 @@ enum SettingsHubValue {
         case .syncFolder: syncFolder(inputs.folderSync)
         case .account: account(inputs.auth)
         case .privacySettings: privacy(hidesMature: inputs.hidesMature, mode: inputs.matureMode)
-        case .about: Changelog.currentVersion
+        case .about: aboutVersion(Changelog.currentVersion)
         case .preservation, .library, .backup, .importFiles, .privacy: ""
         }
+    }
+
+    static func aboutVersion(_ version: String) -> String {
+        "Version \(version)"
     }
 
     static func listening(engineID: String, voiceID: String, voiceName: String) -> String {

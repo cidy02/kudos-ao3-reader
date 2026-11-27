@@ -4,6 +4,17 @@ import SwiftUI
 // Settings › Account & Privacy (AO3 Account, Privacy) and Settings › About.
 // Sections moved as-is from the old single Settings page.
 
+/// Copy helpers for Settings › AO3 Account (`Settings-Account`).
+enum SettingsAccountCopy {
+    static func loggedInTitle(username: String) -> String {
+        "Logged in as \(username)"
+    }
+
+    static func sessionSubtitle(deviceName: String) -> String {
+        "Session stored on this \(deviceName) only"
+    }
+}
+
 struct SettingsAccountPage: View {
     @State private var showAO3Login = false
 
@@ -48,7 +59,14 @@ struct SettingsPrivacyPage: View {
     var body: some View {
         SettingsPageForm(route: .privacySettings) {
             Section {
-                Toggle("Hide mature content", isOn: $hideMatureContent).accentFill()
+                Toggle(isOn: $hideMatureContent) {
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#E07000") ?? .orange, systemImage: "eye.slash")
+                        Text("Hide mature content")
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .accentFill()
                 if hideMatureContent {
                     Picker("When locked", selection: $matureMode) {
                         ForEach(MaturePrivacyMode.allCases) { Text($0.title).tag($0) }
@@ -56,14 +74,17 @@ struct SettingsPrivacyPage: View {
                     .pickerStyle(.segmented)
                     .accentFill()
 
-                    Toggle("Require Face ID to reveal", isOn: $requireBiometric).accentFill()
-                }
-                NavigationLink(value: SettingsRoute.privacy) {
-                    HStack(spacing: 12) {
-                        SettingsIconTile(color: Color(hex: "#3A3A3C") ?? .gray, systemImage: "hand.raised")
-                        Text("Privacy & Local Data")
+                    Toggle(isOn: $requireBiometric) {
+                        HStack(spacing: 12) {
+                            SettingsIconTile(color: Color(hex: "#2F8F3A") ?? .green, systemImage: "faceid")
+                            Text("Require Face ID to reveal")
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
+                    .accentFill()
                 }
+            } header: {
+                Text("Mature works")
             } footer: {
                 Text(hideMatureContent
                     ? (matureMode == .hide
@@ -72,6 +93,17 @@ struct SettingsPrivacyPage: View {
                         : "Kudos blurs Mature and Explicit works in your Library, History, and "
                         + "Favorites until you tap to reveal them.")
                     : "You see Mature and Explicit works normally.")
+            }
+
+            Section {
+                NavigationLink(value: SettingsRoute.privacy) {
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#1E63C8") ?? .blue, systemImage: "shield")
+                        Text("Privacy and Local Data")
+                    }
+                }
+            } header: {
+                Text("Privacy")
             }
 
             Section {
@@ -195,8 +227,8 @@ private struct AboutSettingsSection: View {
 
             NavigationLink(value: SettingsRoute.privacy) {
                 HStack(spacing: 12) {
-                    SettingsIconTile(color: Color(hex: "#3A3A3C") ?? .gray, systemImage: "hand.raised")
-                    Text("Privacy and local data")
+                    SettingsIconTile(color: Color(hex: "#1E63C8") ?? .blue, systemImage: "shield")
+                    Text("Privacy and Local Data")
                 }
             }
 
@@ -237,6 +269,7 @@ private struct AO3AccountSettingsSection: View {
     var onLogIn: () -> Void
 
     @Environment(AO3AuthService.self) private var auth
+    @Environment(ThemeManager.self) private var themeManager
     @State private var confirmingLogOut = false
 
     var body: some View {
@@ -247,22 +280,45 @@ private struct AO3AccountSettingsSection: View {
                 SkeletonListRow(width: 96, trailingWidth: 120)
 
             case let .signedIn(username):
-                LabeledContent {
-                    Text(username)
+                let identity = themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: username))
+                let initial = username.first.map { String($0).uppercased() } ?? "?"
+                let title = SettingsAccountCopy.loggedInTitle(username: username)
+                let subtitle = SettingsAccountCopy.sessionSubtitle(deviceName: ThisDevice.name)
+
+                HStack(spacing: 12) {
+                    Text(initial)
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundStyle(identity.labelOnAccent)
+                        .frame(width: 36, height: 36)
+                        .background(identity.accent, in: Circle())
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(subtitle)
+                            .font(.footnote)
+                            .foregroundStyle(.secondaryInk)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.vertical, 2)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(title)
+                .accessibilityValue(subtitle)
+
+                NavigationLink {
+                    AO3PreferencesView()
                 } label: {
                     HStack(spacing: 12) {
-                        SettingsIconTile(color: Color(hex: "#821019") ?? .red, systemImage: "person.crop.circle")
-                        Text("Signed In")
+                        SettingsIconTile(color: Color(hex: "#8E8E93") ?? .gray, systemImage: "slider.horizontal.3")
+                        Text("AO3 Preferences")
                     }
                 }
 
-                Button(role: .destructive) {
+                Button("Log Out", role: .destructive) {
                     confirmingLogOut = true
-                } label: {
-                    HStack(spacing: 12) {
-                        SettingsIconTile(color: Color(hex: "#D70015") ?? .red, systemImage: "rectangle.portrait.and.arrow.right")
-                        Text("Log Out")
-                    }
                 }
                 .logOutConfirmation(isPresented: $confirmingLogOut) { Task { await auth.logout() } }
 
@@ -274,6 +330,8 @@ private struct AO3AccountSettingsSection: View {
                     }
                 }
             }
+        } header: {
+            Text("AO3")
         } footer: {
             if let notice = auth.noticeMessage {
                 Text(notice)

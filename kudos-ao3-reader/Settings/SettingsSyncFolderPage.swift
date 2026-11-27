@@ -19,19 +19,24 @@ struct SettingsSyncFolderPage: View {
 
     var body: some View {
         SettingsPageForm(route: .syncFolder) {
-            TombstoneTrustSettingsSection()
-
             FolderSyncSettingsSection(
-                persistenceStatus: persistenceStatus,
                 folderStatus: folderSyncStatus,
                 isPreparing: isPreparingPersistence,
                 isSyncing: isFolderSyncing,
                 onChooseFolder: { isChoosingFolder = true },
                 onSyncNow: startFolderSyncNow,
                 onDisconnect: disconnectSyncFolder,
-                onRetryPreparation: preparePersistenceForSync,
                 onToggleAutoSync: setAutoSyncEnabled,
                 onShowSyncDetails: { showingSyncDetails = true }
+            )
+
+            TombstoneTrustSettingsSection()
+
+            FolderSyncMetadataSection(
+                persistenceStatus: persistenceStatus,
+                isPreparing: isPreparingPersistence,
+                isSyncing: isFolderSyncing,
+                onRetryPreparation: preparePersistenceForSync
             )
         }
         .onAppear {
@@ -117,115 +122,219 @@ struct SettingsSyncFolderPage: View {
     }
 }
 
+/// Pure copy helpers for the Sync folder card (`Settings-Backup-Sync`).
+enum SyncFolderDisplayCopy {
+    static let footerText =
+        "Kudos keeps a copy of your library in this folder. Other devices that use the same folder stay in step."
+
+    static func folderHeading(_ sync: FolderSyncSnapshot) -> String {
+        let name = sync.folderDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return "Sync Folder" }
+        if sync.folderPath.contains("com~apple~CloudDocs") {
+            return "iCloud Drive › \(name)"
+        }
+        return name
+    }
+
+    static func isUpToDate(_ sync: FolderSyncSnapshot, isSyncing: Bool = false) -> Bool {
+        !isSyncing && sync.isConnected && sync.lastError.isEmpty && !sync.isDirty && sync.lastSyncAt != nil
+    }
+
+    static func statusLine(
+        _ sync: FolderSyncSnapshot,
+        isSyncing: Bool = false,
+        now: Date = Date()
+    ) -> String {
+        if isSyncing { return "Syncing library…" }
+        if !sync.lastError.isEmpty { return sync.lastError }
+        guard let date = sync.lastSyncAt else { return "Not synced yet" }
+        let age = relativeSyncAge(from: date, to: now)
+        if sync.isDirty {
+            return "Changes pending · synced \(age)"
+        }
+        return "Up to date · synced \(age)"
+    }
+
+    static func relativeSyncAge(from date: Date, to now: Date) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(date)))
+        if seconds < 60 { return "just now" }
+        if seconds < 3600 { return "\(seconds / 60) min ago" }
+        if seconds < 86_400 {
+            let hours = seconds / 3600
+            return "\(hours) \(hours == 1 ? "hr" : "hrs") ago"
+        }
+        return WorkStat.displayDate(date, time: .shortened)
+    }
+
+    static func pendingLabel(isDirty: Bool) -> String {
+        isDirty ? "Pending" : "0 pending"
+    }
+}
+
 struct FolderSyncSettingsSection: View {
-    let persistenceStatus: PersistenceStatusSnapshot
     let folderStatus: FolderSyncSnapshot
     let isPreparing: Bool
     let isSyncing: Bool
     let onChooseFolder: () -> Void
     let onSyncNow: () -> Void
     let onDisconnect: () -> Void
-    let onRetryPreparation: () -> Void
     let onToggleAutoSync: (Bool) -> Void
     let onShowSyncDetails: () -> Void
 
-    var body: some View {
-        Section {
+    private var statusStyle: AnyShapeStyle {
+        if !folderStatus.lastError.isEmpty {
+            return AnyShapeStyle(.red)
+        }
+        if SyncFolderDisplayCopy.isUpToDate(folderStatus, isSyncing: isSyncing) {
+            return AnyShapeStyle(.green)
+        }
+        return AnyShapeStyle(.secondaryInk)
+    }
+
+    private var connectedHeaderRow: some View {
+        let heading = SyncFolderDisplayCopy.folderHeading(folderStatus)
+        let status = SyncFolderDisplayCopy.statusLine(folderStatus, isSyncing: isSyncing)
+        return HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.blue.opacity(0.15))
+                Image(systemName: "cloud")
+                    .font(.title3)
+                    .foregroundStyle(.blue)
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            }
+            .frame(width: 40, height: 40)
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(heading)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(status)
+                    .font(.footnote)
+                    .foregroundStyle(statusStyle)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(heading)
+        .accessibilityValue(status)
+    }
+
+    @ViewBuilder
+    private var connectedActionRows: some View {
+        Toggle(isOn: Binding(
+            get: { folderStatus.autoSyncEnabled },
+            set: onToggleAutoSync
+        )) {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.body)
+                    .foregroundStyle(.secondaryInk)
+                    .frame(width: 22)
+                    .accessibilityHidden(true)
+                Text("Auto Sync")
+            }
+        }
+        .accentFill()
+
+        Button(action: onSyncNow) {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.body)
+                    .foregroundStyle(.accentInk)
+                    .frame(width: 22)
+                    .accessibilityHidden(true)
+                Text("Sync Now")
+                    .foregroundStyle(.accentInk)
+            }
+        }
+        .disabled(isSyncing || isPreparing)
+        .accessibilityLabel("Sync Now")
+
+        Button(action: onShowSyncDetails) {
             LabeledContent {
-                Text(persistenceStatus.migrationState.title)
+                HStack(spacing: 6) {
+                    Text(SyncFolderDisplayCopy.pendingLabel(isDirty: folderStatus.isDirty))
+                        .foregroundStyle(.secondaryInk)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
             } label: {
                 HStack(spacing: 12) {
-                    SettingsIconTile(color: Color(hex: "#64D2FF") ?? .cyan, systemImage: "externaldrive")
-                    Text("Metadata")
+                    Image(systemName: "list.bullet")
+                        .font(.body)
+                        .foregroundStyle(.secondaryInk)
+                        .frame(width: 22)
+                        .accessibilityHidden(true)
+                    Text("Sync Details")
+                        .foregroundStyle(.primary)
                 }
             }
+        }
+        .accessibilityLabel("Sync Details")
+        .accessibilityValue(SyncFolderDisplayCopy.pendingLabel(isDirty: folderStatus.isDirty))
 
+        Button(action: onChooseFolder) {
+            LabeledContent {
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "folder")
+                        .font(.body)
+                        .foregroundStyle(.secondaryInk)
+                        .frame(width: 22)
+                        .accessibilityHidden(true)
+                    Text("Change Folder")
+                        .foregroundStyle(.primary)
+                }
+            }
+        }
+        .disabled(isSyncing || isPreparing)
+        .accessibilityLabel("Change Folder")
+
+        Button(role: .destructive, action: onDisconnect) {
+            HStack(spacing: 12) {
+                Image(systemName: "xmark.circle")
+                    .font(.body)
+                    .foregroundStyle(.red)
+                    .frame(width: 22)
+                    .accessibilityHidden(true)
+                Text("Disconnect")
+                    .foregroundStyle(.red)
+            }
+        }
+        .disabled(isSyncing)
+        .accessibilityLabel("Disconnect")
+    }
+
+    var body: some View {
+        Section {
             if folderStatus.isConnected {
-                LabeledContent {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(folderStatus.folderDisplayName)
-                        if !folderStatus.folderPath.isEmpty {
-                            Text(folderStatus.folderPath)
-                                .font(.caption2)
-                                .foregroundStyle(.secondaryInk)
-                                .lineLimit(1)
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 12) {
-                        SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "folder")
-                        Text("Folder")
-                    }
-                }
-
-                Toggle(isOn: Binding(
-                    get: { folderStatus.autoSyncEnabled },
-                    set: onToggleAutoSync
-                )) {
-                    HStack(spacing: 12) {
-                        SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "arrow.triangle.2.circlepath.circle")
-                        Text("Auto Sync")
-                    }
-                }
-                .accentFill()
-
-                Button(action: onSyncNow) {
-                    HStack(spacing: 12) {
-                        SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "arrow.triangle.2.circlepath")
-                        Text("Sync Now")
-                    }
-                }
-                .disabled(isSyncing || isPreparing)
-
-                Button(action: onChooseFolder) {
-                    HStack(spacing: 12) {
-                        SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "folder.badge.gearshape")
-                        Text("Change Folder")
-                    }
-                }
-                .disabled(isSyncing || isPreparing)
-
-                Button(action: onShowSyncDetails) {
-                    HStack(spacing: 12) {
-                        SettingsIconTile(color: Color(hex: "#6C6C70") ?? .gray, systemImage: "list.bullet.rectangle")
-                        Text("Sync Details")
-                    }
-                }
-
-                Button(role: .destructive, action: onDisconnect) {
-                    HStack(spacing: 12) {
-                        SettingsIconTile(color: Color(hex: "#D70015") ?? .red, systemImage: "xmark.circle")
-                        Text("Disconnect")
-                    }
-                }
-                .disabled(isSyncing)
+                connectedHeaderRow
+                connectedActionRows
             } else {
                 Button(action: onChooseFolder) {
                     HStack(spacing: 12) {
-                        SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "folder.badge.plus")
+                        Image(systemName: "folder.badge.plus")
+                            .font(.body)
+                            .foregroundStyle(.accentInk)
+                            .frame(width: 22)
+                            .accessibilityHidden(true)
                         Text("Choose Sync Folder")
+                            .foregroundStyle(.accentInk)
                     }
                 }
                 .disabled(isSyncing || isPreparing)
+                .accessibilityLabel("Choose Sync Folder")
             }
-
-            if let date = persistenceStatus.lastMigrationAttempt {
-                LabeledContent("Last Checked", value: WorkStat.displayDate(date, time: .shortened))
-            }
-
-            if let date = folderStatus.lastSyncAt {
-                LabeledContent("Last Synced", value: WorkStat.displayDate(date, time: .shortened))
-            }
-
-            Button(action: onRetryPreparation) {
-                HStack(spacing: 12) {
-                    SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "arrow.clockwise")
-                    Text(
-                        persistenceStatus.migrationState == .completed ? "Check Metadata" : "Retry Metadata Prep"
-                    )
-                }
-            }
-            .disabled(isPreparing || isSyncing)
 
             if isPreparing || isSyncing {
                 HStack(spacing: 12) {
@@ -234,18 +343,42 @@ struct FolderSyncSettingsSection: View {
                         .foregroundStyle(.secondaryInk)
                 }
             }
-
-            if !folderStatus.lastError.isEmpty {
-                Text(folderStatus.lastError)
-                    .font(.caption)
-                    .foregroundStyle(.secondaryInk)
-            }
+        } header: {
+            Text("Sync folder")
         } footer: {
-            Text("Kudos stores your library data, including reading history, in the folder you "
-                + "choose using the same kind of file as a backup. If the folder is in iCloud "
-                + "Drive, Apple shares changes through your personal iCloud account; changes may "
-                + "not appear immediately, and Kudos still works offline. Turning off Auto Sync "
-                + "stops automatic updates, but Sync Now still works.")
+            Text(SyncFolderDisplayCopy.footerText)
+        }
+    }
+}
+
+private struct FolderSyncMetadataSection: View {
+    let persistenceStatus: PersistenceStatusSnapshot
+    let isPreparing: Bool
+    let isSyncing: Bool
+    let onRetryPreparation: () -> Void
+
+    var body: some View {
+        Section {
+            LabeledContent("Metadata", value: persistenceStatus.migrationState.title)
+            if let date = persistenceStatus.lastMigrationAttempt {
+                LabeledContent("Last Checked", value: WorkStat.displayDate(date, time: .shortened))
+            }
+            Button(action: onRetryPreparation) {
+                HStack(spacing: 12) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.body)
+                        .foregroundStyle(.accentInk)
+                        .frame(width: 22)
+                        .accessibilityHidden(true)
+                    Text(
+                        persistenceStatus.migrationState == .completed ? "Check Metadata" : "Retry Metadata Prep"
+                    )
+                    .foregroundStyle(.accentInk)
+                }
+            }
+            .disabled(isPreparing || isSyncing)
+        } header: {
+            Text("Library metadata")
         }
     }
 }

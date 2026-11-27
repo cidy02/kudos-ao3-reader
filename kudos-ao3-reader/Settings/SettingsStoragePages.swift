@@ -24,31 +24,37 @@ struct SettingsDownloadsPage: View {
 
     private var lastAvailabilityRun: Date? { works.compactMap(\.lastAvailabilityCheck).max() }
 
+    /// Board `Settings-Storage`: "Up to N works" when auto-preserve is on, "Ask first" when off.
+    static func preserveSeriesValue(autoPreserve: Bool, seriesLimit: Int) -> String {
+        autoPreserve ? "Up to \(seriesLimit) works" : "Ask first"
+    }
+
+    /// Board `Settings-Storage`: "Last run Oct 20".
+    static func lastRunValue(for date: Date) -> String {
+        "Last run \(date.formatted(.dateTime.month(.abbreviated).day()))"
+    }
+
     var body: some View {
         SettingsPageForm(route: .downloads) {
             Section {
                 StorageSummaryRow()
             }
             Section {
-                Toggle("Keep works you read", isOn: $keepsWorksYouRead).accentFill()
-            } footer: {
-                Text("When this is on, every work you open stays downloaded, as if you tapped "
-                    + "Download. When it's off, finishing a work removes its copy unless you "
-                    + "downloaded, favorited, or queued it. It stays in your history, and you "
-                    + "can download it again.")
-            }
-            Section {
                 Toggle("Download on subscribe", isOn: $downloadOnSubscribe).accentFill()
+                Toggle("Keep works you read", isOn: $keepsWorksYouRead).accentFill()
                 NavigationLink(value: SettingsRoute.readingQueues) {
                     LabeledContent(
                         "Preserve series",
-                        value: SettingsHubValue.readingQueues(autoPreserve: autoPreserveSeries, seriesLimit: seriesLimit)
+                        value: Self.preserveSeriesValue(autoPreserve: autoPreserveSeries, seriesLimit: seriesLimit)
                     )
                 }
+            } header: {
+                Text("Downloads")
             } footer: {
                 Text("When you subscribe to a work already in your Library, Kudos downloads it "
-                    + "if no copy is stored. Privacy and Local Data shows what uses space and "
-                    + "lets you remove individual downloads.")
+                    + "if no copy is stored. Keep works you read keeps every work you open "
+                    + "downloaded; when it's off, finishing a work removes its copy unless you "
+                    + "downloaded, favorited, or queued it.")
             }
             Section {
                 Toggle("Show zero counts", isOn: $showsZeroStats).accentFill()
@@ -60,12 +66,24 @@ struct SettingsDownloadsPage: View {
                 Button {
                     showingAvailabilitySweep = true
                 } label: {
-                    LabeledContent("Check Availability") {
-                        if let date = lastAvailabilityRun {
-                            Text("Last run \(date.formatted(.dateTime.month(.abbreviated).day()))")
+                    LabeledContent {
+                        HStack(spacing: 6) {
+                            if let date = lastAvailabilityRun {
+                                Text(Self.lastRunValue(for: date))
+                                    .foregroundStyle(.secondaryInk)
+                            }
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                                .accessibilityHidden(true)
                         }
+                    } label: {
+                        Text("Check Availability")
+                            .foregroundStyle(.accentInk)
                     }
                 }
+                .accessibilityLabel("Check Availability")
+                .accessibilityValue(lastAvailabilityRun.map { Self.lastRunValue(for: $0) } ?? "")
             } header: {
                 Text("AO3")
             }
@@ -77,7 +95,19 @@ struct SettingsDownloadsPage: View {
 }
 
 struct SettingsPreservationPage: View {
+    @Query private var works: [SavedWork]
     @State private var showingAvailabilitySweep = false
+
+    static let sectionHeader = "Works that leave AO3"
+    static let checkAvailabilityTitle = "Check what’s still on AO3"
+    static let footerText = "Kudos never deletes a work because AO3 lost it."
+
+    /// Board `Settings-Preservation`: "Last: Oct 20".
+    static func lastCheckedLabel(for date: Date) -> String {
+        "Last: \(date.formatted(.dateTime.month(.abbreviated).day()))"
+    }
+
+    private var lastAvailabilityRun: Date? { works.compactMap(\.lastAvailabilityCheck).max() }
 
     var body: some View {
         SettingsPageForm(route: .preservation) {
@@ -85,18 +115,36 @@ struct SettingsPreservationPage: View {
                 Button {
                     showingAvailabilitySweep = true
                 } label: {
-                    HStack(spacing: 12) {
-                        SettingsIconTile(color: Color(hex: "#30B0C7") ?? .teal, systemImage: "arrow.triangle.2.circlepath")
-                        Text("Check Availability…")
+                    LabeledContent {
+                        HStack(spacing: 6) {
+                            if let date = lastAvailabilityRun {
+                                Text(Self.lastCheckedLabel(for: date))
+                                    .foregroundStyle(.secondaryInk)
+                            }
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                                .accessibilityHidden(true)
+                        }
+                    } label: {
+                        HStack(spacing: 12) {
+                            SettingsIconTile(color: Color(hex: "#1E63C8") ?? .blue, systemImage: "globe")
+                            Text(Self.checkAvailabilityTitle)
+                                .foregroundStyle(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
+                .accessibilityLabel(Self.checkAvailabilityTitle)
+                .accessibilityValue(lastAvailabilityRun.map { Self.lastCheckedLabel(for: $0) } ?? "")
+            } header: {
+                Text(Self.sectionHeader)
             } footer: {
                 // Deliberately a button, never a background task: it is one AO3
                 // request per work and AO3 offers no "what changed" feed, so the
-                // user decides when that cost is worth paying.
-                Text("Checks which saved works are still on AO3 and marks missing ones as the "
-                    + "last copy you have. Kudos checks one work at a time and waits between "
-                    + "checks, so start it when you have time.")
+                // user decides when that cost is worth paying (`AvailabilitySweepView`
+                // explains the wait before starting).
+                Text(Self.footerText)
             }
         }
         .sheet(isPresented: $showingAvailabilitySweep) {
@@ -109,12 +157,142 @@ struct SettingsPreservationPage: View {
 }
 
 struct SettingsLibraryPage: View {
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(PrivacyGate.self) private var gate
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var works: [SavedWork]
+    @Query(filter: #Predicate<WorkCollection> { !$0.isPendingDeletion }) private var collections: [WorkCollection]
+    @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }) private var readingQueues: [ReadingQueue]
+
+    @AppStorage(LibraryPageArrangement.storageKey) private var pageArrangement = LibraryPageArrangement.default
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @AppStorage(SavedSeriesWeeklyCheck.enabledKey) private var checksSavedSeriesWeekly = true
 
+    @State private var showingEditShelves = false
+
+    static let workListsFooter = "Row puts the four symbols under the title. Grid keeps them in a square beside it."
+
+    /// Board `Settings-Library`: "6 shown".
+    static func shelvesShownLabel(count: Int) -> String {
+        "\(count) shown"
+    }
+
+    private func passesPrivacy(_ work: SavedWork) -> Bool {
+        !gate.isHidden(work, enabled: hideMature, mode: matureMode)
+    }
+
+    private var allWorksCount: Int {
+        works.filter { !$0.isQueueOnlyWork && passesPrivacy($0) }.count
+    }
+
+    private var shelfCounts: [LibraryShelfID: Int] {
+        Dictionary(uniqueKeysWithValues: LibraryShelfID.allCases.map { ($0, shelfCount($0)) })
+    }
+
+    private func shelfCount(_ shelf: LibraryShelfID) -> Int {
+        switch shelf {
+        case .favourites: LibrarySectionKind.favorites.works(from: works, visible: passesPrivacy).count
+        case .collections: collections.count
+        case .downloaded: LibrarySectionKind.downloaded.works(from: works, visible: passesPrivacy).count
+        case .wantToRead: LibrarySectionKind.savedForLater.works(from: works, visible: passesPrivacy).count
+        case .readingNow: LibrarySectionKind.readingNow.works(from: works, visible: passesPrivacy).count
+        case .finished: LibrarySectionKind.finished.works(from: works, visible: passesPrivacy).count
+        case .queues: readingQueues.filter(\.isUserQueue).count
+        case .history: LibrarySectionKind.history.works(from: works, visible: passesPrivacy).count
+        case .imported:
+            works.filter {
+                LibraryShelfID.isImported(origin: $0.origin, isQueueOnly: $0.isQueueOnlyWork) && passesPrivacy($0)
+            }.count
+        }
+    }
+
+    private var symbolsPicker: some View {
+        Picker("Symbols", selection: $symbolPlacement) {
+            Text("Row").tag(WorkSymbolPlacement.underTitle)
+            Text("Grid").tag(WorkSymbolPlacement.beside)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .accentFill()
+    }
+
+    private var shelvesSection: some View {
+        Section {
+            Button {
+                showingEditShelves = true
+            } label: {
+                LabeledContent {
+                    HStack(spacing: 6) {
+                        Text(Self.shelvesShownLabel(count: pageArrangement.sections.count))
+                            .foregroundStyle(.secondaryInk)
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#C25E00") ?? .orange, systemImage: "books.vertical")
+                        Text("Edit Shelves")
+                            .foregroundStyle(.primary)
+                    }
+                }
+            }
+            .accessibilityLabel("Edit Shelves")
+            .accessibilityValue(Self.shelvesShownLabel(count: pageArrangement.sections.count))
+        } header: {
+            Text("Shelves")
+        }
+    }
+
     var body: some View {
         SettingsPageForm(route: .library) {
+            shelvesSection
+
+            Section {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Symbols")
+                            .fixedSize(horizontal: false, vertical: true)
+                        symbolsPicker
+                    }
+                } else {
+                    LabeledContent("Symbols") {
+                        symbolsPicker
+                            .fixedSize()
+                    }
+                }
+            } header: {
+                Text("Work lists")
+            } footer: {
+                Text(Self.workListsFooter)
+            }
+            .onChange(of: symbolPlacement) { _, _ in
+                NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+            }
+
+            Section {
+                LabeledContent {
+                    Text(PreservedWorkService.recoveryWindowText)
+                        .foregroundStyle(.secondaryInk)
+                } label: {
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#8E8E93") ?? .gray, systemImage: "trash")
+                        Text("Keep deleted works for")
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Keep deleted works for")
+                .accessibilityValue(PreservedWorkService.recoveryWindowText)
+            } header: {
+                Text("Recently Deleted")
+            }
+
             Section {
                 Toggle("Confirm before deleting", isOn: $confirmBeforeDelete).accentFill()
                 Toggle("Show zero counts", isOn: $showsZeroStats).accentFill()
@@ -137,6 +315,18 @@ struct SettingsLibraryPage: View {
                     """
                 )
             }
+        }
+        .sheet(isPresented: $showingEditShelves) {
+            LibraryEditShelvesSheet(
+                arrangement: $pageArrangement,
+                counts: shelfCounts,
+                allWorksCount: allWorksCount
+            )
+            .environment(themeManager)
+            .accentTint(themeManager.effectiveTint, on: themeManager.appTheme)
+        }
+        .onChange(of: pageArrangement) { _, _ in
+            NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
         }
     }
 }
