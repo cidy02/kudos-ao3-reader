@@ -52,7 +52,7 @@ nonisolated struct StudioNewWorkRequiredItem: Identifiable, Equatable, Hashable,
     let value: String
     let isComplete: Bool
     /// Replaces `kind.postButtonPhrase` when the field is filled but AO3 will still reject it.
-    let buttonPhrase: String? = nil
+    var buttonPhrase: String? = nil
 
     var id: StudioNewWorkRequiredFieldKind { kind }
     var label: String { kind.label }
