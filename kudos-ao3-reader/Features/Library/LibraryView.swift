@@ -494,28 +494,25 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     }
 
     private var onAO3Panel: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let routes = LibraryAO3Route.allCases
+        return VStack(alignment: .leading, spacing: 4) {
             SectionRuleHeader(title: "On AO3")
-                .padding(.horizontal, SubjectMetrics.accountGutter)
 
             VStack(spacing: 0) {
-                ForEach(Array(LibraryAO3Route.allCases.enumerated()), id: \.element) { index, route in
-                    if index > 0 { SubjectRowSeparator() }
+                ForEach(Array(routes.enumerated()), id: \.element) { index, route in
                     Button {
                         path.append(route)
                     } label: {
-                        AccountNavCardLabel(
+                        LibraryAO3Row(
                             title: route.title,
                             systemImage: route.systemImage,
-                            count: cachedAO3Count(route)
+                            count: cachedAO3Count(route),
+                            showsSeparator: index < routes.count - 1
                         )
-                        .padding(.horizontal, 14)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .subjectPanel()
-            .padding(.horizontal, CardListMetrics.sideMargin)
         }
     }
 
@@ -670,11 +667,11 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     .font(.subheadline)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
             .contentShape(Rectangle())
         }
@@ -1026,12 +1023,15 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// Board 01: "Read ×2 · Oct 24" under a finished favourite — the finish count and the date of
-    /// the latest finish, both from the reading log. Nil when the log has no finish for the work.
+    /// Board 01: "Read Aug 2" for a single finish, "Read ×2 · Oct 24" for rereads.
+    /// Returns nil for an in-progress favourite so live reading progress displays instead.
     private func rereadFooter(_ work: SavedWork) -> String? {
+        if !work.isFinished, (work.readingProgress ?? 0) > 0 { return nil }
         let finishes = finishingSessions.filter { $0.workID == work.id }
-        guard let last = finishes.map(\.endedAt).max() else { return nil }
-        return "Read ×\(finishes.count) · \(last.formatted(.dateTime.month(.abbreviated).day()))"
+        return LibraryFavouriteCardCopy.footer(
+            finishCount: finishes.count,
+            lastFinishedAt: finishes.map(\.endedAt).max()
+        )
     }
 
     private func progress(_ kind: LibrarySectionKind, _ work: SavedWork) -> Double? {

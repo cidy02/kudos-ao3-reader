@@ -116,7 +116,15 @@ struct LibraryCatalogueListView: View {
     private var list: some View {
         List {
             Section {
-                Text(LibraryPageArrangement.workCountPhrase(items.count) + " · newest first")
+                Text(LibraryShelfHeaderCopy.tallyLine(
+                    visibleCount: items.count,
+                    totalCount: items.count,
+                    orderDescription: "newest first",
+                    arrangement: .list,
+                    hasActiveFilters: false,
+                    isSelecting: isSelecting,
+                    selectedCount: selectedWorks.count
+                ))
                     .font(.subheadline)
                     .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
@@ -152,7 +160,15 @@ struct LibraryCatalogueListView: View {
     private var grid: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text(LibraryPageArrangement.workCountPhrase(items.count) + " · newest first")
+                Text(LibraryShelfHeaderCopy.tallyLine(
+                    visibleCount: items.count,
+                    totalCount: items.count,
+                    orderDescription: "newest first",
+                    arrangement: .grid,
+                    hasActiveFilters: false,
+                    isSelecting: isSelecting,
+                    selectedCount: selectedWorks.count
+                ))
                     .font(.subheadline)
                     .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)

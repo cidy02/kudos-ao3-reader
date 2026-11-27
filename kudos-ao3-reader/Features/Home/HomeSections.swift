@@ -123,3 +123,24 @@ enum HomeSubscriptionsCopy {
             : "You have no work or series subscriptions yet. When you subscribe on AO3, updates appear here."
     }
 }
+
+/// Board copy and visible limits for Home (`Home-Launchpad` / `HomeSections`).
+enum HomeBoardCopy {
+    static let alsoReadingTitle = "Also Reading"
+    static let queuesTitle = "Queues"
+    static let queuesActionTitle = "Organise"
+    static let pinnedCollectionCardLimit = 4
+    static let subscriptionVisibleRowLimit = 4
+
+    static func subscriptionsNewCountText(_ count: Int) -> String {
+        "\(count) new"
+    }
+
+    static func moreUpdatesLabel(_ count: Int) -> String {
+        count == 1 ? "1 more update" : "\(count) more updates"
+    }
+
+    static func moreQueuesLabel(_ count: Int) -> String {
+        count == 1 ? "1 more queue" : "\(count) more queues"
+    }
+}

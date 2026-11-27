@@ -15,9 +15,6 @@ struct LibraryFilterPanel: View {
     let works: [SavedWork]
     /// The user's own tag names, for the "Your Tags" facet.
     let userTagNames: [String]
-    @State private var gridWidth: CGFloat = .infinity
-    /// A one-word category label ("Other", "Multi") at the current Dynamic Type size.
-    @ScaledMetric(relativeTo: .subheadline) private var labelWidth: CGFloat = 38
     #if DEBUG
     @State private var debugFandomPicker = false
     #endif
@@ -61,16 +58,17 @@ struct LibraryFilterPanel: View {
     }
 
     private func groupLabel(_ text: String) -> some View {
-        SubjectFieldLabel(text: text, style: .formGroup)
+        Text(text)
+            .font(.footnote)
+            .foregroundStyle(.secondaryInk)
+            .textCase(nil)
     }
 
-    /// The six AO3 categories are a 3×2 grid, falling back to one column at accessibility sizes.
-    /// Two across when the panel is too narrow for three (a narrow inspector): a label
-    /// never breaks inside a word (T-562c N6).
+    /// Two columns per `Library-Filters` board, falling back to one column at accessibility sizes.
     private var categoryColumns: [GridItem] {
         dynamicTypeSize.isAccessibilitySize
             ? [GridItem(.flexible())]
-            : Array(repeating: GridItem(.flexible()), count: Self.categoryColumnCount(gridWidth: gridWidth, labelWidth: labelWidth))
+            : Array(repeating: GridItem(.flexible()), count: 2)
     }
 
     /// A dense card's fixed parts (padding, 22 pt symbol, indicator, spacing) around a one-word label.
@@ -103,7 +101,7 @@ struct LibraryFilterPanel: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 12) {
                     tile
-                    Text("Sort By")
+                    Text("Sort by")
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                         .accessibilityHidden(true)
@@ -119,7 +117,7 @@ struct LibraryFilterPanel: View {
     }
 
     private var sortPicker: some View {
-        Picker("Sort By", selection: $filters.sort) {
+        Picker("Sort by", selection: $filters.sort) {
             ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
         }
     }
@@ -153,44 +151,58 @@ struct LibraryFilterPanel: View {
 
                 // MARK: Categories
                 Section {
-                    LazyVGrid(columns: categoryColumns, spacing: 8) {
-                        ForEach(AO3SearchFilters.Category.allCases) { category in
-                            FilterSymbolChipCard(
-                                title: category.title,
-                                symbol: WorkSymbolTile.category([category.title], dark: isDark),
-                                state: categoryState(category),
-                                dense: !dynamicTypeSize.isAccessibilitySize,
-                                sitsOnBackdrop: true
-                            ) {
-                                cycle(category)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Categories")
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .accessibilityAddTraits(.isHeader)
+
+                        LazyVGrid(columns: categoryColumns, spacing: 8) {
+                            ForEach(AO3SearchFilters.Category.allCases) { category in
+                                FilterSymbolChipCard(
+                                    title: category.title,
+                                    symbol: WorkSymbolTile.category([category.title], dark: isDark),
+                                    state: categoryState(category),
+                                    dense: false,
+                                    sitsOnBackdrop: false
+                                ) {
+                                    cycle(category)
+                                }
                             }
                         }
                     }
-                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
-                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                    .listRowBackground(Color.clear)
-                } header: {
-                    groupLabel("Categories")
+                    .padding(.vertical, 4)
                 }
 
                 // MARK: Warnings
                 Section {
-                    // The same short titles as the AO3 filter sheet; VoiceOver reads AO3's full name.
-                    LazyVGrid(columns: warningColumns, spacing: 8) {
-                        warningCard(.noWarnings, title: "No Warnings Apply")
-                        warningCard(.chooseNotTo, title: "Creator Chose Not To Use")
-                        warningCard(.violence, title: "Graphic Violence")
-                        warningCard(.death, title: "Major Character Death")
-                        warningCard(.nonCon, title: "Rape/Non-Con")
-                        warningCard(.underage, title: "Underage Sex")
+                    // `Library-Filters` board groups warnings into Overall (2) and Content (4);
+                    // VoiceOver still reads AO3's full warning name.
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Warnings")
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .accessibilityAddTraits(.isHeader)
+
+                        warningSubgroupLabel("Overall")
+                        LazyVGrid(columns: warningColumns, spacing: 8) {
+                            warningCard(.noWarnings, title: "No Warnings Apply")
+                            warningCard(.chooseNotTo, title: "Creator Chose Not To Use")
+                        }
+
+                        warningSubgroupLabel("Content")
+                            .padding(.top, 2)
+                        LazyVGrid(columns: warningColumns, spacing: 8) {
+                            warningCard(.violence, title: "Graphic Violence")
+                            warningCard(.death, title: "Major Character Death")
+                            warningCard(.nonCon, title: "Rape/Non-Con")
+                            warningCard(.underage, title: "Underage Sex")
+                        }
                     }
-                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                    .listRowBackground(Color.clear)
-                } header: {
-                    groupLabel("Warnings")
+                    .padding(.vertical, 4)
                 }
 
-                // MARK: Tags and Creators
+                // MARK: Tags and creators
                 Section {
                     if !userTagNames.isEmpty {
                         LibraryMultiSelectField(
@@ -222,13 +234,14 @@ struct LibraryFilterPanel: View {
                     LibraryMultiSelectField(
                         title: "Exclude Tags",
                         options: distinct(\.workTags),
-                        selection: $filters.excludeTags
+                        selection: $filters.excludeTags,
+                        isExcluded: true
                     )
                 } header: {
-                    groupLabel("Tags and Creators")
+                    groupLabel("Tags and creators")
                 }
 
-                // MARK: Length and Status
+                // MARK: Length and status
                 Section {
                     HStack(spacing: 12) {
                         SettingsIconTile(
@@ -246,7 +259,7 @@ struct LibraryFilterPanel: View {
                                 systemImage: "globe"
                             )
                             Picker("Language", selection: $filters.language) {
-                                Text("Any Language").tag("")
+                                Text("Any").tag("")
                                 ForEach(languageOptions, id: \.self) { Text($0).tag($0) }
                             }
                         }
@@ -254,7 +267,7 @@ struct LibraryFilterPanel: View {
 
                     FilterLengthSection(wordsFrom: $filters.wordsFrom, wordsTo: $filters.wordsTo)
                 } header: {
-                    groupLabel("Length and Status")
+                    groupLabel("Length and status")
                 }
 
                 // MARK: Reset row
@@ -284,6 +297,15 @@ struct LibraryFilterPanel: View {
 
     // MARK: - Symbol card helper
 
+    private func warningSubgroupLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .textCase(.uppercase)
+            .tracking(0.5)
+            .foregroundStyle(.secondaryInk)
+            .accessibilityAddTraits(.isHeader)
+    }
+
     private func warningCard(_ warning: AO3SearchFilters.Warning, title: String) -> some View {
         let symbol: WorkSymbolTile = switch warning {
         case .noWarnings:
@@ -298,7 +320,7 @@ struct LibraryFilterPanel: View {
             fullTitle: warning.title,
             symbol: symbol,
             state: warningState(warning),
-            sitsOnBackdrop: true
+            sitsOnBackdrop: false
         ) {
             cycle(warning)
         }
@@ -495,17 +517,7 @@ struct LibraryFilterPanel: View {
             ))
         }
 
-        let wf = filters.wordsFrom.trimmingCharacters(in: .whitespaces)
-        let wt = filters.wordsTo.trimmingCharacters(in: .whitespaces)
-        if !wf.isEmpty || !wt.isEmpty {
-            let label: String
-            if !wf.isEmpty && !wt.isEmpty {
-                label = "\(wf)–\(wt) words"
-            } else if !wf.isEmpty {
-                label = "≥ \(wf) words"
-            } else {
-                label = "≤ \(wt) words"
-            }
+        if let label = Self.wordRangeActiveLabel(from: filters.wordsFrom, to: filters.wordsTo) {
             items.append(ActiveFilterItem(
                 id: "words",
                 label: label,
@@ -519,35 +531,102 @@ struct LibraryFilterPanel: View {
 
         return items
     }
+
+    /// Formats the active word-range chip compactly per `Library-Filters` ("10k–150k words").
+    static func wordRangeActiveLabel(from: String, to: String) -> String? {
+        let wf = from.trimmingCharacters(in: .whitespaces)
+        let wt = to.trimmingCharacters(in: .whitespaces)
+        guard !wf.isEmpty || !wt.isEmpty else { return nil }
+        let compactFrom = compactWordBound(wf)
+        let compactTo = compactWordBound(wt)
+        if !wf.isEmpty && !wt.isEmpty {
+            return "\(compactFrom)–\(compactTo) words"
+        } else if !wf.isEmpty {
+            return "≥ \(compactFrom) words"
+        } else {
+            return "≤ \(compactTo) words"
+        }
+    }
+
+    private static func compactWordBound(_ raw: String) -> String {
+        guard let value = FilterTextMatching.bound(raw) else { return raw }
+        return value.compactCount.lowercased()
+    }
 }
 
 // MARK: - Multi-select facet field
 
 /// A filter row that opens a searchable, multi-select list of the given options
 /// (drawn from the library, not AO3). Cross-platform: the picker is a sheet on
-/// every platform. Shows "Any" or the selection count on the row.
+/// every platform. Shows "Add" when empty, or selected tag pills inline (`Library-Filters` board).
 private struct LibraryMultiSelectField: View {
     let title: String
     let options: [String]
     @Binding var selection: Set<String>
+    var isExcluded: Bool = false
+    @Environment(ThemeManager.self) private var theme
     @State private var showPicker = false
+
+    private var sortedSelection: [String] {
+        selection.sorted()
+    }
+
+    private var pillForeground: Color {
+        isExcluded ? theme.appTheme.excludeColor : theme.appTheme.includeColor
+    }
+
+    private var pillBackground: Color {
+        isExcluded
+            ? theme.appTheme.excludeColor.opacity(0.08)
+            : theme.appTheme.includeColor.opacity(0.12)
+    }
 
     var body: some View {
         Button {
             showPicker = true
         } label: {
-            HStack {
-                Text(title).foregroundStyle(.primary)
-                Spacer()
-                Text(selection.isEmpty ? "Any" : "\(selection.count) selected")
-                    .foregroundStyle(.secondaryInk)
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Text(title)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 8)
+                    if selection.isEmpty {
+                        Text("Add")
+                            .foregroundStyle(.secondaryInk)
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+
+                if !sortedSelection.isEmpty {
+                    FlowLayout(spacing: 6, rowSpacing: 6) {
+                        ForEach(sortedSelection, id: \.self) { tag in
+                            HStack(spacing: 4) {
+                                Image(systemName: isExcluded ? "minus" : "checkmark")
+                                    .font(.caption2.weight(.bold))
+                                Text(tag)
+                                    .font(.footnote.weight(.semibold))
+                                    .strikethrough(isExcluded, color: pillForeground)
+                            }
+                            .foregroundStyle(pillForeground)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(pillBackground, in: Capsule())
+                        }
+                    }
+                }
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            sortedSelection.isEmpty
+                ? "\(title), Add"
+                : "\(title), \(sortedSelection.joined(separator: ", "))"
+        )
+        .accessibilityHint("Opens \(title) filter options")
         .sheet(isPresented: $showPicker) {
             LibraryOptionPicker(title: title, options: options, selection: $selection)
         }

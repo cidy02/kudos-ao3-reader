@@ -1,6 +1,47 @@
 import SwiftData
 import SwiftUI
 
+/// One Settings hub section after search. `showsReportBug` is separate from
+/// `routes` because Report a Bug is not a `SettingsRoute`: searching its own
+/// title must still show the row when the About route does not match.
+struct SettingsHubSearchSection: Equatable {
+    var title: String
+    var routes: [SettingsRoute]
+    var showsReportBug: Bool
+}
+
+/// Search for the Settings hub, including the Report a Bug row.
+enum SettingsHubFilter {
+    static func reportBugMatches(_ query: String) -> Bool {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        return ["Report a Bug", "bug", "report", "feedback", "about"].contains {
+            $0.localizedCaseInsensitiveContains(trimmed)
+        }
+    }
+
+    static func sections(
+        matching query: String,
+        valueFor: (SettingsRoute) -> String
+    ) -> [SettingsHubSearchSection] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let showsBug = reportBugMatches(trimmed)
+        if trimmed.isEmpty {
+            return SettingsRoute.hubGroups.map {
+                SettingsHubSearchSection(title: $0.title, routes: $0.routes, showsReportBug: $0.routes.contains(.about))
+            }
+        }
+        return SettingsRoute.hubGroups.compactMap { group in
+            let matching = group.routes.filter { route in
+                route.matches(query: trimmed, currentValue: valueFor(route))
+            }
+            let showsReportBug = group.routes.contains(.about) && showsBug
+            guard !matching.isEmpty || showsReportBug else { return nil }
+            return SettingsHubSearchSection(title: group.title, routes: matching, showsReportBug: showsReportBug)
+        }
+    }
+}
+
 /// Account → Settings, artboard **1ab**: a short hub of grouped value rows, each
 /// pushing the page that holds its controls (`SettingsRoute.hubGroups`).
 ///
@@ -31,6 +72,7 @@ struct SettingsHubView: View {
     @State private var folderSyncStatus = FolderSyncService.snapshot()
     @State private var searchText = ""
     @State private var showingWritingGoalSheet = false
+    @State private var showingBugReport = false
     @State private var startWritingDocument: StudioLocalDocumentTarget?
     @State private var isStartingWriting = false
     @State private var startWritingError: String?
@@ -38,17 +80,10 @@ struct SettingsHubView: View {
     static let hubFooterText = "Changes here affect Kudos, not your AO3 account"
     static let hubFooterAccessibilityValue = "These settings are stored on this device only and are never sent to AO3."
 
-    private var filteredGroups: [SettingsHubGroup] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if query.isEmpty {
-            return SettingsRoute.hubGroups
-        }
+    private var filteredSections: [SettingsHubSearchSection] {
         let currentInputs = inputs
-        return SettingsRoute.hubGroups.compactMap { group in
-            let matching = group.routes.filter { route in
-                route.matches(query: query, currentValue: SettingsHubValue.row(route, currentInputs))
-            }
-            return matching.isEmpty ? nil : SettingsHubGroup(title: group.title, routes: matching)
+        return SettingsHubFilter.sections(matching: searchText) { route in
+            SettingsHubValue.row(route, currentInputs)
         }
     }
 
@@ -76,18 +111,30 @@ struct SettingsHubView: View {
     var body: some View {
         let inputs = self.inputs
         List {
-            ForEach(filteredGroups) { group in
+            ForEach(filteredSections, id: \.title) { section in
                 Section {
-                    ForEach(group.routes, id: \.self) { route in
+                    ForEach(section.routes, id: \.self) { route in
                         let value = SettingsHubValue.row(route, inputs)
                         NavigationLink(value: route) {
                             SettingsHubRow(route: route, value: value)
                         }
                     }
+                    if section.showsReportBug {
+                        Button {
+                            showingBugReport = true
+                        } label: {
+                            SettingsHubActionRow(
+                                title: "Report a Bug",
+                                color: Color(hex: "#FF3B30") ?? .red,
+                                systemImage: "ladybug"
+                            )
+                        }
+                        .accessibilityLabel("Report a Bug")
+                    }
                 } header: {
-                    Text(group.title)
+                    Text(section.title)
                 } footer: {
-                    if group.id == SettingsRoute.hubGroups.first?.id {
+                    if section.title == SettingsRoute.hubGroups.first?.title {
                         Text(Self.hubFooterText)
                             .accessibilityLabel(Self.hubFooterText)
                             .accessibilityValue(Self.hubFooterAccessibilityValue)
@@ -167,6 +214,11 @@ struct SettingsHubView: View {
         .sheet(isPresented: $showingWritingGoalSheet) {
             StudioWritingGoalSheet()
         }
+        .sheet(isPresented: $showingBugReport) {
+            BugReportView()
+                .environment(themeManager)
+                .accentTint(themeManager.effectiveTint, on: themeManager.appTheme)
+        }
         .navigationDestination(item: $startWritingDocument) { target in
             LocalChapterEditorScreen(
                 workID: target.workID,
@@ -187,7 +239,7 @@ struct SettingsHubView: View {
         }
         .overlay {
             let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if filteredGroups.isEmpty && !showsWritingSection && !query.isEmpty {
+            if filteredSections.isEmpty && !showsWritingSection && !query.isEmpty {
                 ContentUnavailableView.search(text: query)
             }
         }
@@ -327,6 +379,44 @@ struct SettingsHubRow: View {
     }
 }
 
+/// A grouped Settings hub action row with a 29 pt icon tile and disclosure chevron.
+private struct SettingsHubActionRow: View {
+    let title: String
+    let color: Color
+    let systemImage: String
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            HStack(alignment: .top, spacing: 12) {
+                SettingsIconTile(color: color, systemImage: systemImage)
+                Text(title)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+        } else {
+            HStack(spacing: 12) {
+                SettingsIconTile(color: color, systemImage: systemImage)
+                Text(title)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+}
+
 /// The page each `SettingsRoute` pushes. The host registers this once
 /// (`.navigationDestination(for: SettingsRoute.self)`), so a new page is a new
 /// case here and nowhere else.
@@ -378,7 +468,7 @@ struct SettingsPageForm<Content: View>: View {
         }
         .formStyle(.grouped)
         .appThemedScroll()
-        .navigationTitle(route.title)
+        .navigationTitle(route.pageTitle)
         #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif

@@ -21,6 +21,9 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
     /// Wins over `itemCount` when a section's count is not a bare number,
     /// such as Downloaded's "98 · 2.1 GB".
     private let countText: String?
+    /// Optional subtle symbol beside the header count (e.g. `pin.fill` on Home's pinned collections).
+    private let headerSymbol: String?
+    private let headerSymbolLabel: String?
     /// Between cards side by side on a shelf.
     private let cardSpacing: CGFloat
     private let cardWidth: CGFloat
@@ -37,6 +40,8 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         hasItems: Bool,
         itemCount: Int? = nil,
         countText: String? = nil,
+        headerSymbol: String? = nil,
+        headerSymbolLabel: String? = nil,
         cardSpacing: CGFloat = CarouselCardMetrics.compactGridColumnSpacing,
         cardWidth: CGFloat = CarouselCardMetrics.width,
         visibleCount: Int? = nil,
@@ -49,6 +54,8 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         self.hasItems = hasItems
         self.itemCount = itemCount
         self.countText = countText
+        self.headerSymbol = headerSymbol
+        self.headerSymbolLabel = headerSymbolLabel
         self.cardSpacing = cardSpacing
         self.cardWidth = cardWidth
         self.visibleCount = visibleCount
@@ -102,6 +109,8 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
             title: title,
             count: itemCount,
             countText: countText,
+            trailingSymbol: headerSymbol,
+            trailingSymbolLabel: headerSymbolLabel,
             actionTitle: decision.headerLinkLabel,
             onSeeAll: hasItems && decision.headerLinkLabel != nil ? onSeeAll : nil
         )
@@ -112,7 +121,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
 /// Trailing "+N more" tile that closes a carousel shelf when works remain hidden (T-483).
 ///
 /// Per the See All rule and spec (boards 00, 01, 56):
-/// 16 pt corner radius (I-7), 96 pt wide, secondary surface fill, app accent ink,
+/// 16 pt corner radius (I-7), 96 pt wide, shelf tile surface fill, app accent ink,
 /// opening the shelf's category page.
 struct CarouselMoreTile: View {
     let count: Int
@@ -121,6 +130,18 @@ struct CarouselMoreTile: View {
     let action: () -> Void
 
     @Environment(\.uniformWorkCardHeight) private var uniformHeight
+    @Environment(ThemeManager.self) private var themeManager: ThemeManager?
+
+    private var tileFill: Color {
+        if let themeManager {
+            return themeManager.appTheme.shelfTileSurface
+        }
+        #if os(iOS)
+        return Color(uiColor: .systemGroupedBackground)
+        #else
+        return Color(nsColor: .underPageBackgroundColor)
+        #endif
+    }
 
     var body: some View {
         Button(action: action) {
@@ -138,11 +159,7 @@ struct CarouselMoreTile: View {
             .frame(minHeight: uniformHeight ?? 166)
             .background {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    #if os(iOS)
-                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
-                    #else
-                    .fill(Color(nsColor: .controlBackgroundColor))
-                    #endif
+                    .fill(tileFill)
             }
         }
         .buttonStyle(.cardPress)
@@ -158,12 +175,24 @@ struct ListMoreRow: View {
     let count: Int
     var sectionTitle: String? = nil
     var leadingInset: CGFloat = 16
+    /// Optional custom copy (e.g. "5 more updates", "2 more queues"). Nil falls back to "\(count) more".
+    var label: String? = nil
     let action: () -> Void
+
+    private var displayText: String {
+        label ?? "\(count) more"
+    }
+
+    private var spokenLabel: String {
+        if let label { return label }
+        if let sectionTitle { return "\(count) more in \(sectionTitle)" }
+        return "\(count) more"
+    }
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Text("\(count) more")
+                Text(displayText)
                     .font(.subheadline.weight(.semibold))
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.semibold))
@@ -175,7 +204,7 @@ struct ListMoreRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.cardPress)
-        .accessibilityLabel(sectionTitle != nil ? "\(count) more in \(sectionTitle!)" : "\(count) more")
+        .accessibilityLabel(spokenLabel)
     }
 }
 

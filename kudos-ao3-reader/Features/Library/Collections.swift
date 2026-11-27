@@ -46,7 +46,7 @@ struct CollectionCard: View {
     private var tileHeight: CGFloat { cardSize.width * 140 / 150 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9 * scale) {
+        VStack(alignment: .leading, spacing: 8 * scale) {
             // T-461: the collection's own card with the newest works tilted behind it.
             // An empty collection is its own card alone.
             StackedWorkCover(
@@ -58,21 +58,36 @@ struct CollectionCard: View {
                 backs: Array(previewWorks.prefix(CoverStackLayout.maxBacks)),
                 size: CGSize(width: cardSize.width, height: tileHeight)
             )
-            VStack(alignment: .leading, spacing: 2 * scale) {
-                Text(collection.name)
-                    .font(.system(size: 15 * scale, weight: .semibold))
-                    .lineLimit(2)
-                    .foregroundStyle(.primary)
+            VStack(alignment: .leading, spacing: 1 * scale) {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(collection.name)
+                        .font(.system(size: 15 * scale, weight: .semibold))
+                        .lineLimit(2)
+                        .foregroundStyle(.primary)
+                    if collection.showsOnHome {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 11 * scale))
+                            .foregroundStyle(.secondaryInk)
+                            .accessibilityHidden(true)
+                    }
+                }
                 Text("\(workCount) work\(workCount == 1 ? "" : "s")")
-                    .font(.system(size: 12 * scale))
+                    .font(.system(size: 13 * scale))
                     .foregroundStyle(.secondaryInk)
                     .lineLimit(1)
             }
         }
         .frame(width: cardSize.width, alignment: .leading)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(collection.name), \(workCount) work\(workCount == 1 ? "" : "s")")
+        .accessibilityLabel(accessibilityText)
         .accessibilityHint("Opens collection.")
+    }
+
+    private var accessibilityText: String {
+        let countText = "\(workCount) work\(workCount == 1 ? "" : "s")"
+        return collection.showsOnHome
+            ? "\(collection.name), \(countText), pinned to Home"
+            : "\(collection.name), \(countText)"
     }
 }
 

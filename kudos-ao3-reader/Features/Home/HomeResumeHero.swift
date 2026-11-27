@@ -247,6 +247,14 @@ struct ResumeCardModel {
         return text.isEmpty ? nil : text
     }
 
+    /// Formats raw AO3 ISO dates ("2026-10-21") via `WorkStat.displayDate`,
+    /// leaving pre-formatted short dates ("Oct 21") unchanged.
+    var updatedCaption: String? {
+        let trimmed = updated.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return "Updated \(WorkStat.displayDate(trimmed))"
+    }
+
     func chapterBarLayout(lengths: ChapterLengths?) -> ChapterBarLayout {
         ChapterBarModel.layout(
             chapters: chapters,
@@ -603,8 +611,9 @@ extension WorkResumeCard {
         VStack(alignment: .leading, spacing: 2) {
             if let fandom = model.primaryFandom {
                 fandomRow(fandom)
-                Capsule().fill(Color.white.opacity(0.9)).frame(width: 16, height: 2)
-                    .padding(.vertical, 2)
+                Capsule().fill(Color.white.opacity(0.9)).frame(width: 14, height: 2)
+                    .padding(.top, 2)
+                    .padding(.bottom, 3)
             }
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 if dynamicTypeSize.isAccessibilitySize {
@@ -722,7 +731,7 @@ extension WorkResumeCard {
                 showsZeroStats: showsZeroStats,
                 zeroCountsRequireWords: true
             )
-            let text = figures.visible.joined(separator: "  ·  ")
+            let text = figures.visible.joined(separator: " · ")
             if !text.isEmpty { return text }
         }
         return model.figureLine
@@ -772,11 +781,15 @@ extension WorkResumeCard {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(wrappingCaption(shown.displayedChapterName + " · " + model.postedLabel))
                         Spacer(minLength: 4)
-                        if !model.updated.isEmpty { Text(wrappingCaption("Updated \(model.updated)")) }
+                        if let updatedCaption = model.updatedCaption {
+                            Text(wrappingCaption(updatedCaption))
+                        }
                     }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(wrappingCaption(shown.displayedChapterName + " · " + model.postedLabel))
-                        if !model.updated.isEmpty { Text(wrappingCaption("Updated \(model.updated)")) }
+                        if let updatedCaption = model.updatedCaption {
+                            Text(wrappingCaption(updatedCaption))
+                        }
                     }
                 }
                 .font(.caption)
@@ -872,7 +885,7 @@ extension WorkResumeCard {
             categories: model.categories,
             warnings: model.warnings,
             completion: model.completion,
-            tileSize: 24,
+            tileSize: 22,
             announcesToVoiceOver: true,
             arrangement: .strip
         )
@@ -1158,7 +1171,7 @@ struct HomeResumeComposition<Hero: View, Next: View>: View {
     private var compactContent: some View {
         VStack(
             alignment: .leading,
-            spacing: nextSectionTitle == nil ? 11 : SubjectMetrics.sectionSpacing
+            spacing: nextSectionTitle == nil ? 11 : 18
         ) {
             hero().padding(.horizontal, 16)
             if hasNext {

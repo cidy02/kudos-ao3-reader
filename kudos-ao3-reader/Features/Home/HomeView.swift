@@ -10,8 +10,9 @@ import AppKit
 
 /// The Home tab: a personal launchpad. Tapping a local work opens the reader;
 /// long-press opens its management actions, including Work Details.
-/// Sections, in order: weekly stats, Resume, Reading Now, New Chapters, Reading
-/// Queues, collections flagged Show on Home, then Subscriptions.
+/// Phone sections, in order: weekly stats, Resume with Also Reading, Subscriptions,
+/// New Chapters, Queues, then collections flagged Show on Home. Open and Book Duo
+/// keep Resume and Also Reading leading, and New Chapters, Queues, Subscriptions trailing.
 struct HomeView: View { // swiftlint:disable:this type_body_length
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
@@ -274,13 +275,13 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                                     .duoScrollAnchor("stats")
                                 resumeSection
                                     .duoScrollAnchor("resume")
+                                subscriptionsSection
+                                    .duoScrollAnchor("subscriptions")
                                 newChaptersSection
                                     .duoScrollAnchor("chapters")
                                 readingQueuesSection
                                     .duoScrollAnchor("queues")
                                 pinnedCollectionShelves
-                                subscriptionsSection
-                                    .duoScrollAnchor("subscriptions")
                             }
                             #if os(iOS)
                             .task { await mailDriver.refreshIfNeeded() }
@@ -298,8 +299,8 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 } else {
                     TabDashboardShell(
                         sectionTitles: [
-                            "Reading Now", "New Chapters", "Reading Queues",
-                            "Subscriptions"
+                            HomeBoardCopy.alsoReadingTitle, "Subscriptions", "New Chapters",
+                            HomeBoardCopy.queuesTitle
                         ],
                         showsResumeHero: true
                     )
@@ -574,9 +575,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         .frame(minWidth: onRail ? 18 : 15, minHeight: onRail ? 18 : 15)
                         .background(.accentFill, in: Capsule())
                         .overlay {
-                            if onRail {
-                                Capsule().strokeBorder(themeManager.appTheme.contentBackdrop, lineWidth: 2)
-                            }
+                            Capsule().strokeBorder(themeManager.appTheme.contentBackdrop, lineWidth: 2)
                         }
                         .offset(x: onRail ? 3 : 7, y: onRail ? -3 : -6)
                         .accessibilityHidden(true)
@@ -669,7 +668,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
 
             if !carouselWorks.isEmpty {
                 WorkCarouselSection(
-                    title: "Reading Now",
+                    title: HomeBoardCopy.alsoReadingTitle,
                     hasItems: true,
                     itemCount: counts.sectionCount,
                     visibleCount: counts.visibleCount,
@@ -784,7 +783,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 let counts = HomeReadingNowCount.shelfCounts(total: readingNow.count)
                 HomeResumeComposition(
                     hasNext: !carouselWorks.isEmpty,
-                    nextSectionTitle: "Reading Now",
+                    nextSectionTitle: HomeBoardCopy.alsoReadingTitle,
                     nextSectionCount: counts.sectionCount,
                     nextSectionVisibleCount: counts.visibleCount,
                     onSeeAll: { router.showLibrarySection(.readingNow, from: "Home") }
@@ -809,7 +808,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     private var newChaptersSection: some View {
         let sectionWorks = recentlyUpdated
         let visibleWorks = Array(sectionWorks.prefix(3))
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 4) {
             SectionRuleHeader(
                 title: "New Chapters",
                 count: sectionWorks.count,
@@ -848,6 +847,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                             count: sectionWorks.count - 3,
                             sectionTitle: "New Chapters",
                             leadingInset: newChapterRowInset,
+                            label: HomeBoardCopy.moreUpdatesLabel(sectionWorks.count - 3),
                             action: { path.append(HomeSectionKind.recentlyUpdated) }
                         )
                     }
@@ -869,13 +869,13 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             )
             : nil
 
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 4) {
             SectionRuleHeader(
-                title: "Reading Queues",
-                count: customQueues.count,
+                title: HomeBoardCopy.queuesTitle,
+                count: nil,
                 actionTitle: customQueues.isEmpty && duoLayout.hidesHomeSecondaryToolbarActions
                     ? "New Queue"
-                    : (customQueues.count > 3 ? "See All" : "Organise"),
+                    : HomeBoardCopy.queuesActionTitle,
                 onSeeAll: !customQueues.isEmpty
                     ? { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
                     : (duoLayout.hidesHomeSecondaryToolbarActions
@@ -896,7 +896,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     ForEach(Array(visibleQueues.enumerated()), id: \.element.id) { index, queue in
                         if index > 0 {
                             Divider()
-                                .padding(.leading, 80)
+                                .padding(.horizontal, 16)
                         }
                         HomeQueueRow(
                             queue: queue,
@@ -908,11 +908,12 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
 
                     if customQueues.count > 3 {
                         Divider()
-                            .padding(.leading, 80)
+                            .padding(.horizontal, 16)
                         ListMoreRow(
                             count: customQueues.count - 3,
-                            sectionTitle: "Reading Queues",
+                            sectionTitle: HomeBoardCopy.queuesTitle,
                             leadingInset: 80,
+                            label: HomeBoardCopy.moreQueuesLabel(customQueues.count - 3),
                             action: { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
                         )
                     }
@@ -934,17 +935,19 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         let totalCount = showSkeleton
             ? nil
             : HomeSubscriptionsCount.itemCount(shown: visibleEntries.count, recorded: subscriptionsListCount)
-        let visibleRows = Array(visibleEntries.prefix(2))
+        let limit = HomeBoardCopy.subscriptionVisibleRowLimit
+        let visibleRows = Array(visibleEntries.prefix(limit))
         // Owner, canvas 2026-11-08: "update this section to look like subscriptions do
         // now" — when Kudos knows what changed, the newest updates in Waiting's own rows.
         let updates = recentSubscriptionUpdates
-        let updateRows = Array(updates.prefix(2))
+        let updateRows = Array(updates.prefix(limit))
 
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 4) {
             SectionRuleHeader(
                 title: "Subscriptions",
-                count: updates.isEmpty ? totalCount : updates.count,
-                actionTitle: (updates.isEmpty ? visibleEntries.count : updates.count) > 2
+                count: updates.isEmpty ? totalCount : nil,
+                countText: updates.isEmpty ? nil : HomeBoardCopy.subscriptionsNewCountText(updates.count),
+                actionTitle: (updates.isEmpty ? visibleEntries.count : updates.count) > limit
                     ? "See All"
                     : (!followedTags.isEmpty && updates.isEmpty && visibleEntries.isEmpty ? "Tags" : nil),
                 onSeeAll: visibleEntries.isEmpty && updates.isEmpty && followedTags.isEmpty
@@ -972,6 +975,8 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                             position: index + 1,
                             showsPosition: false,
                             isFirst: index == 0,
+                            // The last shown row ends the rail. A further update is the
+                            // "more updates" row below, not another sitting.
                             isLast: index == updateRows.count - 1
                         )
                         .padding(.horizontal, 16)
@@ -982,6 +987,18 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         ) {
                             openHomeSubscriptionUpdate(update)
                         }
+                    }
+
+                    if updates.count > limit {
+                        Divider()
+                            .padding(.leading, newChapterRowInset)
+                        ListMoreRow(
+                            count: updates.count - limit,
+                            sectionTitle: "Subscriptions",
+                            leadingInset: newChapterRowInset,
+                            label: HomeBoardCopy.moreUpdatesLabel(updates.count - limit),
+                            action: { path.append(SubscriptionsRoute(tab: .waiting)) }
+                        )
                     }
                 }
                 .dashboardLeadingRegion()
@@ -1013,11 +1030,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         subscriptionRow(entry)
                     }
 
-                    if visibleEntries.count > 2 {
+                    if visibleEntries.count > limit {
                         Divider()
                             .padding(.leading, newChapterRowInset)
                         ListMoreRow(
-                            count: visibleEntries.count - 2,
+                            count: visibleEntries.count - limit,
                             sectionTitle: "Subscriptions",
                             leadingInset: newChapterRowInset,
                             action: { path.append(SubscriptionsRoute(tab: .following)) }
@@ -1524,7 +1541,7 @@ private struct HomeNewChapterRow: View {
             categories: rowCategories,
             warnings: rowWarnings,
             completion: rowCompletion,
-            tileSize: 24,
+            tileSize: arrangement == .row ? 18 : 24,
             announcesToVoiceOver: true,
             arrangement: arrangement,
             backed: true
@@ -1580,7 +1597,7 @@ private struct HomeNewChapterRow: View {
             WorkPlusBadge(count: newCount)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.vertical, 11)
     }
 }
 
@@ -1739,7 +1756,7 @@ private struct HomeQueueRow: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.vertical, 11)
         .modifier(QueueCardMenu(queue: queue))
         .task(id: ChapterLengthCache.taskKey(for: state.upNextWork)) {
             guard let upNextWork = state.upNextWork else { upNextLengths = nil; return }
@@ -1774,13 +1791,6 @@ private struct HomeQueueRow: View {
                     .multilineTextAlignment(.leading)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
-                // Two lines before it truncates: the offline count is the last fact.
-                Text(ReadingQueueFacts.planFacts(for: state.queuedWorks))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                    .fixedSize(horizontal: false, vertical: true)
-
                 if let work = state.upNextWork {
                     Text(dynamicTypeSize.isAccessibilitySize
                         ? AccessibilitySoftBreak.opportunities(in: work.title)
@@ -1801,7 +1811,7 @@ private struct HomeQueueRow: View {
                         .frame(maxWidth: .infinity)
 
                         Text("\(state.leftCount) to go")
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                             .fixedSize(horizontal: false, vertical: dynamicTypeSize.isAccessibilitySize)

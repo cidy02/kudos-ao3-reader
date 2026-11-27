@@ -13,7 +13,7 @@ enum StorageBreakdown {
 
         var title: String {
             switch kind {
-            case .works: "Downloads"
+            case .works: "EPUBs"
             case .originals: "Original files"
             case .other: "Fonts, cache"
             }
@@ -87,23 +87,24 @@ struct StorageSummaryRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.secondary.opacity(0.18))
             .clipShape(Capsule())
         }
-        .frame(height: 8)
+        .frame(height: 10)
         .accessibilityHidden(true)
     }
 
     /// One line when it fits, otherwise one item per line (never truncated).
     private func legend(_ segments: [StorageBreakdown.Segment]) -> some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) { legendItems(segments) }
+            HStack(spacing: 14) { legendItems(segments) }
             VStack(alignment: .leading, spacing: 4) { legendItems(segments) }
         }
     }
 
     private func legendItems(_ segments: [StorageBreakdown.Segment]) -> some View {
         ForEach(segments) { segment in
-            HStack(spacing: 4) {
+            HStack(spacing: 5) {
                 Circle().fill(color(segment.kind)).frame(width: 8, height: 8)
                 Text("\(segment.title) \(LocalStorageFootprint.formatted(bytes: segment.bytes))")
                     .font(.caption)

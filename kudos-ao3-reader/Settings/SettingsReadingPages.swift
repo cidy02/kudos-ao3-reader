@@ -48,7 +48,7 @@ struct SettingsAppearancePage: View {
                         .foregroundStyle(.secondaryInk)
                 }
                 ThemePreviewTilePicker(selection: appThemeBinding)
-                Toggle("Match App & Reader Theme", isOn: matchThemeBinding).accentFill()
+                Toggle("Match app and reader theme", isOn: matchThemeBinding).accentFill()
                 if !themeManager.matchAppAndReader {
                     Text("Reader Theme")
                         .font(.subheadline)
@@ -158,11 +158,13 @@ struct SettingsAppearancePage: View {
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.footnote.weight(.semibold))
-                            .foregroundStyle(Color.secondary.opacity(0.6))
+                            .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Customize Theme")
             }
             #endif
         }
@@ -400,7 +402,7 @@ private struct AccentColourPicker: View {
                 ) == .orderedSame {
                     Text("Default")
                         .font(.subheadline)
-                        .foregroundStyle(Color(hex: "#8E8E93") ?? .secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
             .accessibilityHidden(true)

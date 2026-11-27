@@ -134,11 +134,17 @@ struct WorkPlusBadge: View {
 
 /// The ledger's full stat line. Wraps so a long line keeps every figure.
 struct WorkLedgerStatsLine: View {
+    static let separator = " · "
+
     var figures: WorkStat.LedgerFigures
+
+    static func formattedText(_ figures: WorkStat.LedgerFigures) -> String {
+        figures.visible.joined(separator: separator)
+    }
 
     var body: some View {
         if !figures.visible.isEmpty {
-            Text(figures.visible.joined(separator: "  ·  "))
+            Text(Self.formattedText(figures))
                 .font(.caption)
                 .foregroundStyle(.secondaryInk)
                 .lineLimit(nil)
