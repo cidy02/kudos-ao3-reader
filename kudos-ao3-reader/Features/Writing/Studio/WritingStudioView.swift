@@ -187,6 +187,9 @@ struct WritingStudioView: View {
                 if DebugLaunchRoute.takeSheet("importwork") {
                     showingImport = true
                 }
+                if DebugLaunchRoute.takePush("newdocument") {
+                    startNewLocalDocument()
+                }
             }
             #endif
             .task(id: localActivationKey) { await reloadLocalState() }

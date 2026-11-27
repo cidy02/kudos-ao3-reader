@@ -217,12 +217,14 @@ struct ChapterEditorScreen: View {
         // the Lock Screen widget's "what you're writing" (T-576e)
         .onAppear {
             KudosWidgetBridge.noteEditing(work: workTitle, chapter: chapterTitle)
+            #if DEBUG
             // screenshot routes for the posting sheets (simulator taps don't reach sheets on iOS 27)
             if DebugLaunchRoute.takeSheet("studiopostchapter") {
                 openPostSheet(.postChapter(workID: 1001, chapterID: nil))
             } else if DebugLaunchRoute.takeSheet("studiopostnew") {
                 openPostSheet(.postNewWork(existingDraftWorkID: nil))
             }
+            #endif
         }
         .onDisappear { KudosWidgetBridge.noteEditing(work: workTitle, chapter: chapterTitle) }
         .onDisappear {
