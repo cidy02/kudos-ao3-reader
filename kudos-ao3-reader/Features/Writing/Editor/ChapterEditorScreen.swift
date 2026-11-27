@@ -64,6 +64,7 @@ struct ChapterEditorScreen: View {
     @State var tkDescriptionText = ""
     @State var latestAnnotationHTML = ""
     @State var showingDeleteConfirmation = false
+    @State var showingBetaReadingSheet = false
     @State var showingWhatChanged = false
     @State var showingWorkDetailsDestination = false
     @State var showingEditTagsDestination = false
@@ -255,6 +256,9 @@ struct ChapterEditorScreen: View {
         .sheet(item: $activeAnnotationSheet) { sheet in
             annotationSheetView(for: sheet)
         }
+        .sheet(isPresented: $showingBetaReadingSheet) {
+            betaReadingSheetView
+        }
         .navigationDestination(isPresented: $showingWorkDetailsDestination) {
             if let workID = ao3Actions?.ao3WorkID {
                 WritingWorkDestination(workID: workID)
@@ -364,6 +368,7 @@ extension ChapterEditorScreen {
             canOpenWorkDetails: canOpenWorkDetails,
             canEditTags: ao3Actions?.canEditTags == true && ao3Actions?.ao3WorkID != nil,
             canCopyAsAO3HTML: true,
+            canSendToBeta: true,
             availableExportFormats: [],
             canDeleteChapter: canDeleteChapter,
             savedVersionCount: documentBridge.versionCount > 0 ? documentBridge.versionCount : nil,

@@ -620,7 +620,7 @@ export class Editor {
    */
   private replaceText(from: number | null, to: number | null, text: string): Command | null {
     if (from === null || to === null || !Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from) return null;
-    if (text.length > 10_000 || (!text && to === from)) return null;
+    if (text.length > 510_000 || (!text && to === from)) return null; // a whole rewritten scene fits (the content limit)
     return (state, dispatch) => {
       const source = this.textForOffsets();
       if (to > source.length) return false;

@@ -58,6 +58,7 @@ nonisolated struct ChapterEditorMenuCapabilities: Equatable, Hashable, Sendable 
     var canOpenWorkDetails: Bool = false
     var canEditTags: Bool = false
     var canCopyAsAO3HTML: Bool = true
+    var canSendToBeta: Bool = false
     var availableExportFormats: [EditorExportFormat] = []
     var canDeleteChapter: Bool = false
     var savedVersionCount: Int?
@@ -66,7 +67,7 @@ nonisolated struct ChapterEditorMenuCapabilities: Equatable, Hashable, Sendable 
 
     /// Exact set of implemented actions shown in `EditorMoreMenu`.
     /// Unimplemented actions (Share, Compare with Posted, Discard Changes, Export As formats
-    /// without an exporter, Send to a Beta, Print, Version History, Writing Tools) are excluded.
+    /// without an exporter, Print, Version History, Writing Tools) are excluded.
     var visibleActions: Set<EditorMoreMenuActionID> {
         var actions: Set<EditorMoreMenuActionID> = []
         if canPostOrUpdate { actions.insert(.postOrUpdate) }
@@ -77,6 +78,7 @@ nonisolated struct ChapterEditorMenuCapabilities: Equatable, Hashable, Sendable 
         if canOpenWorkDetails { actions.insert(.workDetails) }
         if canEditTags { actions.insert(.editTags) }
         if canCopyAsAO3HTML { actions.insert(.copyAsAO3HTML) }
+        if canSendToBeta { actions.insert(.sendToBeta) }
         if canAddNote { actions.insert(.addNote) }
         if canFormat { actions.insert(.format) }
         if canDeleteChapter { actions.insert(.deleteChapter) }
@@ -110,6 +112,7 @@ struct ChapterEditorMoreMenuHandlers {
     var editTags: () -> Void = {}
     var exportFormat: (EditorExportFormat) -> Void = { _ in }
     var copyAsAO3HTML: () -> Void = {}
+    var sendToBeta: () -> Void = {}
     var addNote: () -> Void = {}
     var format: () -> Void = {}
     var deleteChapter: () -> Void = {}
@@ -145,6 +148,7 @@ struct ChapterEditorMoreMenuWiring {
             }
         }
         if visible.contains(.copyAsAO3HTML) { actions.onCopyAsAO3HTML = handlers.copyAsAO3HTML }
+        if visible.contains(.sendToBeta) { actions.onSendToBeta = handlers.sendToBeta }
         if visible.contains(.addNote) { actions.onAddNote = handlers.addNote }
         if visible.contains(.format) { actions.onFormat = handlers.format }
         if visible.contains(.deleteChapter) { actions.onDeleteChapter = handlers.deleteChapter }
