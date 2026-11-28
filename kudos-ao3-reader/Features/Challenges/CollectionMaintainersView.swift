@@ -14,15 +14,17 @@ struct CollectionMaintainersView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 17
     @ScaledMetric(relativeTo: .subheadline) private var buttonLabelSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .footnote) private var subSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 12
     @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .subheadline) private var loadingSize: CGFloat = 14
     @ScaledMetric(relativeTo: .footnote) private var failureBodySize: CGFloat = 13
 
     @State private var participants: [AO3CollectionParticipant] = []
     @State private var phase: Phase = .idle
+    @State private var showingInviteSheet: Bool = false
     @State private var inviteUsername: String = ""
     @State private var inviteRole: AO3CollectionParticipantRole = .moderator
     @State private var isInviting: Bool = false
@@ -57,6 +59,18 @@ struct CollectionMaintainersView: View {
         participants.filter { $0.role == .moderator }
     }
 
+    private var invitedParticipants: [AO3CollectionParticipant] {
+        participants.filter { $0.role == .invited }
+    }
+
+    private var members: [AO3CollectionParticipant] {
+        participants.filter { $0.role == .member }
+    }
+
+    private var maintainerRoster: [AO3CollectionParticipant] {
+        owners + moderators + invitedParticipants
+    }
+
     private var totalMaintainersCount: Int {
         owners.count + moderators.count
     }
@@ -74,7 +88,28 @@ struct CollectionMaintainersView: View {
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 12, gutter: selfGuttered)
+                contextCard.pageBodyRow(top: 12, gutter: gutter)
+                if phase == .loaded {
+                    ChallengeBoardStatStrip(cells: statCells, surface: .list)
+                        .pageBodyRow(top: 14, gutter: gutter)
+                }
+            }
+
+            if let inviteSuccessNotice {
+                Section {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle")
+                            .foregroundStyle(palette.accent)
+                        Text(inviteSuccessNotice)
+                            .font(.system(size: subSize, weight: .medium))
+                            .foregroundStyle(palette.accent)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .subjectPanel()
+                    .pageBodyRow(top: 8, gutter: gutter)
+                }
             }
 
             switch phase {
@@ -93,7 +128,21 @@ struct CollectionMaintainersView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Maintainers", palette: palette)
+        .subjectScreenWash(title: "Maintainers", palette: palette, role: .content)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    inviteErrorMessage = nil
+                    showingInviteSheet = true
+                } label: {
+                    Label("Invite", systemImage: "plus")
+                }
+                .accessibilityLabel("Invite")
+            }
+        }
+        .sheet(isPresented: $showingInviteSheet) {
+            inviteSheet
+        }
         .task { await loadMaintainersIfNeeded() }
         .refreshable { await loadMaintainers() }
         .alert("Cannot Step Down", isPresented: $showLastOwnerAlert) {
@@ -119,54 +168,87 @@ struct CollectionMaintainersView: View {
             .screenTint(palette)
     }
 
-    // MARK: - Header
+    // MARK: - Header (`AO3-Collection-Maintainers.dc.html`)
 
     private var effectiveTitle: String {
         collectionTitle.isEmpty ? collectionSlug : collectionTitle
     }
 
-    private var subtitleText: String {
-        let countString = totalMaintainersCount == 1 ? "1 person" : "\(totalMaintainersCount) people"
-        return "\(effectiveTitle) · \(countString)"
+    private var contextCard: some View {
+        ChallengeBoardContextCard(
+            systemImage: "archivebox",
+            kicker: ChallengesBoardCopy.maintainersKicker,
+            title: effectiveTitle,
+            meta: ChallengesBoardCopy.maintainersContextMeta(
+                isOwner: isCurrentUserOwner,
+                isModerator: currentParticipant?.role == .moderator,
+                maintainerCount: totalMaintainersCount
+            ),
+            palette: palette,
+            surface: .list
+        )
     }
 
-    private var header: some View {
-        SubjectPageFact(subtitleText, gutter: SubjectMetrics.accountGutter)
+    private var statCells: [ChallengeBoardStatStrip.Cell] {
+        var cells = [
+            ChallengeBoardStatStrip.Cell(value: totalMaintainersCount.formatted(), label: "Maintainers"),
+            ChallengeBoardStatStrip.Cell(value: members.count.formatted(), label: "Members")
+        ]
+        if !invitedParticipants.isEmpty {
+            cells.append(
+                ChallengeBoardStatStrip.Cell(
+                    value: invitedParticipants.count.formatted(),
+                    label: "Invited",
+                    tint: ChallengeBoardColors.warningInk(for: theme.appTheme)
+                )
+            )
+        }
+        return cells
     }
 
-    // MARK: - Content Sections
+    // MARK: - Content Sections (`AO3-Collection-Maintainers.dc.html`)
 
     @ViewBuilder
     private var contentSections: some View {
-        if !owners.isEmpty {
+        if !maintainerRoster.isEmpty {
             Section {
-                SectionRuleHeader(title: "Owners")
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
-                ownersPanel.pageBodyRow(top: 8, gutter: gutter)
+                ChallengeBoardListSectionHeader(
+                    title: ChallengesBoardCopy.maintainersSectionTitle,
+                    count: maintainerRoster.count
+                )
+                .pageBodyRow(top: 18, gutter: gutter)
+
+                ForEach(Array(maintainerRoster.enumerated()), id: \.element.id) { index, participant in
+                    VStack(spacing: 0) {
+                        if index > 0 { SubjectRowSeparator(inset: 48) }
+                        maintainerRow(for: participant)
+                    }
+                    .pageBodyRow(top: 0, gutter: gutter)
+                }
             }
         }
 
-        if !moderators.isEmpty {
+        if !members.isEmpty {
             Section {
-                SectionRuleHeader(title: "Moderators")
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
-                moderatorsPanel.pageBodyRow(top: 8, gutter: gutter)
+                ChallengeBoardListSectionHeader(
+                    title: ChallengesBoardCopy.maintainersMembersSectionTitle,
+                    count: members.count
+                )
+                .pageBodyRow(top: 18, gutter: gutter)
+
+                ForEach(Array(members.enumerated()), id: \.element.id) { index, member in
+                    VStack(spacing: 0) {
+                        if index > 0 { SubjectRowSeparator(inset: 48) }
+                        memberRow(member)
+                    }
+                    .pageBodyRow(top: 0, gutter: gutter)
+                }
             }
         }
 
         Section {
-            SectionRuleHeader(title: "Invitations")
-                .padding(.bottom, 8)
-                .pageBodyRow(top: 18, gutter: selfGuttered)
-        }
-        Section {
-            invitationRows
-            invitationsFootnote.pageBodyRow(top: 8, gutter: gutter)
-        }
-
-        Section {
-            SectionRuleHeader(title: "Leave")
-                .pageBodyRow(top: 18, gutter: selfGuttered)
+            ChallengeBoardListSectionHeader(title: "Leave")
+                .pageBodyRow(top: 18, gutter: gutter)
             leavePanel.pageBodyRow(top: 8, gutter: gutter)
             if let leaveErrorMessage {
                 errorNotice(leaveErrorMessage).pageBodyRow(top: 8, gutter: gutter)
@@ -174,114 +256,134 @@ struct CollectionMaintainersView: View {
         }
     }
 
-    // MARK: - Panels
+    // MARK: - Rows & Invite Sheet
 
-    private var ownersPanel: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(owners.enumerated()), id: \.element.id) { index, owner in
-                if index > 0 {
-                    SubjectRowSeparator()
-                }
-                maintainerRow(
-                    participant: owner,
-                    roleText: "Owner",
-                    subtitleText: isCurrentAuthor(owner.pseud) ? "You · created the collection" : nil
-                )
-            }
-        }
-        .subjectPanel()
-    }
-
-    private var moderatorsPanel: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(moderators.enumerated()), id: \.element.id) { index, moderator in
-                if index > 0 {
-                    SubjectRowSeparator()
-                }
-                maintainerRow(
-                    participant: moderator,
-                    roleText: "Moderator",
-                    subtitleText: "Can approve works, cannot delete the collection"
-                )
-            }
-        }
-        .subjectPanel()
-    }
-
-    private func maintainerRow(
-        participant: AO3CollectionParticipant,
-        roleText: String,
-        subtitleText: String?
-    ) -> some View {
+    private func maintainerRow(for participant: AO3CollectionParticipant) -> some View {
         // The role under the name at the accessibility sizes: beside it, a name of one word
         // broke in the middle ("AO3_Reade / r").
         let large = dynamicTypeSize.isAccessibilitySize
-        return HStack(spacing: 11) {
-            avatarCircle(for: participant.pseud)
+        let avatarColor = theme.appTheme.subjectPalette(hue: CoverArt.hue(for: participant.pseud)).accent
+        let subtitle: String?
+        let isWarningMeta: Bool
+        switch participant.role {
+        case .owner:
+            subtitle = isCurrentAuthor(participant.pseud) ? ChallengesBoardCopy.maintainerOwnerSelfSubtitle : nil
+            isWarningMeta = false
+        case .moderator:
+            subtitle = ChallengesBoardCopy.maintainerModeratorSubtitle
+            isWarningMeta = false
+        case .invited:
+            subtitle = ChallengesBoardCopy.maintainerInvitedMeta
+            isWarningMeta = true
+        case .member, .none:
+            subtitle = nil
+            isWarningMeta = false
+        }
+
+        return HStack(alignment: large ? .top : .center, spacing: 12) {
+            ChallengeBoardAvatar(
+                text: ChallengesBoardCopy.personInitial(for: participant.pseud),
+                color: avatarColor,
+                shapeKind: .circle(size: 36)
+            )
+            .padding(.top, large ? 2 : 0)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(participant.pseud)
-                    .font(.system(size: rowTitleSize))
+                    .font(.system(size: rowTitleSize, weight: .semibold))
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if let subtitleText {
-                    Text(subtitleText)
-                        .font(.system(size: captionSize))
-                        .foregroundStyle(.secondaryInk)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(
+                            size: isWarningMeta ? captionSize : subSize,
+                            weight: isWarningMeta ? .semibold : .regular
+                        ))
+                        .foregroundStyle(
+                            isWarningMeta
+                                ? AnyShapeStyle(ChallengeBoardColors.warningInk(for: theme.appTheme))
+                                : AnyShapeStyle(.secondaryInk)
+                        )
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if large { roleBadge(roleText).padding(.top, 4) }
+                if large { roleBadge(for: participant.role).padding(.top, 4) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if !large { roleBadge(roleText) }
+            if !large { roleBadge(for: participant.role) }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
+        .padding(.vertical, 10)
     }
 
-    private func roleBadge(_ roleText: String) -> some View {
-        Text(roleText.uppercased())
-            .font(.system(size: 10.5, weight: .semibold))
-            .lineLimit(1)
-            .fixedSize()
-            .tracking(10.5 * 0.04)
-            .foregroundStyle(Color.secondary.opacity(0.85))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule()
-                    .fill(theme.appTheme.glassFill(0.08))
-                    .overlay(
-                        Capsule()
-                            .strokeBorder(theme.appTheme.glassStroke(0.12), lineWidth: 0.5)
-                    )
+    private func memberRow(_ participant: AO3CollectionParticipant) -> some View {
+        let avatarColor = theme.appTheme.subjectPalette(hue: CoverArt.hue(for: participant.pseud)).accent
+        return HStack(spacing: 12) {
+            ChallengeBoardAvatar(
+                text: ChallengesBoardCopy.personInitial(for: participant.pseud),
+                color: avatarColor,
+                shapeKind: .circle(size: 36)
             )
+
+            Text(participant.pseud)
+                .font(.system(size: rowTitleSize, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 10)
     }
 
-    private func avatarCircle(for pseud: String) -> some View {
-        let initial = String(pseud.prefix(1)).uppercased()
-        let theme = theme.appTheme
-        return ZStack {
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            palette.accent.opacity(0.35),
-                            theme.cardBackdrop.opacity(0.8)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(Circle().strokeBorder(theme.glassStroke(0.16), lineWidth: 0.5))
-
-            Text(initial)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(palette.accentOnFill)
+    @ViewBuilder
+    private func roleBadge(for role: AO3CollectionParticipantRole) -> some View {
+        switch role {
+        case .owner:
+            ChallengeBoardBadge(text: "Owner", style: .accentFill)
+        case .moderator:
+            let info = ChallengeBoardColors.infoBadge(for: theme.appTheme)
+            ChallengeBoardBadge(
+                text: "Moderator",
+                style: .tinted(foreground: info.foreground, background: info.background)
+            )
+        case .invited:
+            ChallengeBoardBadge(text: "Invited", style: .neutral)
+        case .member, .none:
+            EmptyView()
         }
-        .frame(width: 32, height: 32)
+    }
+
+    private var inviteSheet: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ChallengeBoardSectionHeader(title: "Invite a maintainer")
+                        .padding(.bottom, 6)
+                        .pageBodyRow(top: 14, gutter: selfGuttered)
+                }
+                Section {
+                    invitationRows
+                    invitationsFootnote.pageBodyRow(top: 8, gutter: gutter)
+                }
+            }
+            .cardList()
+            .environment(\.defaultMinListRowHeight, 0)
+            .subjectScreenWash(title: "Invite", palette: palette, role: .grouped)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        showingInviteSheet = false
+                    } label: {
+                        #if os(iOS)
+                        Image(systemName: "xmark")
+                        #else
+                        Text("Close")
+                        #endif
+                    }
+                    .accessibilityLabel("Close")
+                }
+            }
+        }
+        .screenTint(palette)
     }
 
     /// One `List` row per field. The card was one row holding a bare `Picker`,
@@ -480,6 +582,7 @@ struct CollectionMaintainersView: View {
             try await auth.inviteMaintainer(slug: collectionSlug, byline: username)
             inviteSuccessNotice = "Invitation sent to \(username)."
             inviteUsername = ""
+            showingInviteSheet = false
             await loadMaintainers()
         } catch {
             inviteErrorMessage = UserFacingError.message(for: error)

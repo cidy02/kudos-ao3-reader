@@ -34,17 +34,16 @@ struct ChallengeSettingsEditView: View {
     /// Not private: the options menu in `ChallengeSettingsEditSections.swift` takes the app colour from it.
     @Environment(ThemeManager.self) var theme
     @Environment(AppRouter.self) private var router
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .subheadline) private var toggleTitleSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .footnote) private var saveButtonSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .body) private var actionRowSize: CGFloat = 16
     @ScaledMetric(relativeTo: .footnote) private var instructionsFontSize: CGFloat = 14
     @ScaledMetric(relativeTo: .footnote) private var loadingSize: CGFloat = 14
     @ScaledMetric(relativeTo: .footnote) var optionValueSize: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) private var errorBodySize: CGFloat = 12.5
-    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 12
 
     @State var form: AO3ChallengeSettingsForm?
     /// The collection's own edit form (Basics, moderation switches), and the
@@ -94,7 +93,7 @@ struct ChallengeSettingsEditView: View {
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 12, gutter: selfGuttered)
+                contextCard.pageBodyRow(top: 12, gutter: gutter)
             }
 
             if let saveNotice {
@@ -127,8 +126,19 @@ struct ChallengeSettingsEditView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Challenge Settings", palette: palette)
-        .safeAreaBar(edge: .bottom, spacing: 0) { bottomActionBar }
+        .subjectScreenWash(title: "Challenge Settings", palette: palette, role: .grouped)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                ChallengeBoardConfirmToolbarButton(
+                    title: "Save",
+                    isBusy: isSaving,
+                    isDisabled: !AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner)
+                        || !Self.canStartSave(isSaving: isSaving, hasForm: form != nil)
+                ) {
+                    saveTapped()
+                }
+            }
+        }
         .task(id: auth.sessionGeneration) { await load() }
         .refreshable { await load() }
         .alert("Reveal now?", isPresented: $confirmReveal) {
@@ -143,81 +153,109 @@ struct ChallengeSettingsEditView: View {
             .screenTint(palette)
     }
 
-    // MARK: - Header
+    // MARK: - Header (`Challenge-Settings.dc.html`)
 
-    private var header: some View {
-        let base = signUpTotal.map { "\(effectiveTitle) · \(AO3ChallengeCountText.plural($0, "sign-up"))" }
-            ?? effectiveTitle
-        return SubjectPageFact("\(base) · \(settings.kind.displayName)", gutter: SubjectMetrics.accountGutter)
+    private var contextCard: some View {
+        let baseMeta = ChallengesBoardCopy.challengeSettingsContextMeta(
+            closeDateText: settings.signupsCloseAt.dateText,
+            worksDueDateText: settings.worksDueAt.dateText
+        )
+        let metaParts: [String?] = [
+            baseMeta.isEmpty ? nil : baseMeta,
+            signUpTotal.map { "\($0.formatted()) signed up" }
+        ]
+        return ChallengeBoardContextCard(
+            systemImage: settings.kind == .promptMeme ? "bubble.left" : "gift",
+            kicker: ChallengesBoardCopy.challengeSettingsKicker(
+                kind: settings.kind,
+                isModerated: collectionForm?.isModerated
+            ),
+            title: effectiveTitle,
+            meta: metaParts.compactMap { $0 }.joined(separator: " · "),
+            palette: palette,
+            surface: .form
+        )
     }
 
-    // MARK: - Content Sections
+    // MARK: - Content Sections (`Challenge-Settings.dc.html`: Schedule, Sign-ups, Matching, then Basics/Moderation/At AO3)
 
     @ViewBuilder
     private var contentSections: some View {
         Section {
-            SectionRuleHeader(title: "Basics")
-                .padding(.bottom, 8)
-                .pageBodyRow(top: 18, gutter: selfGuttered)
-        }
-        Section {
-            basicsRows
-            instructionsCard.pageBodyRow(top: 12, gutter: gutter)
-        }
-
-        Section {
-            SectionRuleHeader(title: "Schedule")
+            ChallengeBoardSectionHeader(title: "Schedule")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
             ForEach(scheduleErrors, id: \.self) { message in
                 errorCard(message).pageBodyRow(top: 6, gutter: gutter)
             }
-            schedulePanel.pageBodyRow(top: 8, gutter: gutter)
-            scheduleFootnote.pageBodyRow(top: 8, gutter: gutter)
+            schedulePanel.pageBodyRow(top: 6, gutter: gutter)
+            scheduleFootnote.pageBodyRow(top: 6, gutter: gutter)
         }
 
         Section {
-            SectionRuleHeader(title: "Sign-Up Limits")
+            ChallengeBoardSectionHeader(title: "Sign-ups")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
             ForEach(limitsErrors, id: \.self) { message in
                 errorCard(message).pageBodyRow(top: 6, gutter: gutter)
             }
-            limitsPanel.pageBodyRow(top: 8, gutter: gutter)
-            SubjectFieldLabel(text: "Request Restrictions", style: .formGroup)
-                .pageBodyRow(top: 12, gutter: gutter)
-            requestRestrictionTogglesPanel.pageBodyRow(top: 8, gutter: gutter)
-            if restrictionControlsLocked {
-                restrictionLockNote.pageBodyRow(top: 8, gutter: gutter)
-            }
+            limitsPanel.pageBodyRow(top: 6, gutter: gutter)
         }
 
         if !tagSetLinks.isEmpty {
             Section {
-                SectionRuleHeader(title: tagSetLinks.count == 1 ? "Tag Set" : "Tag Sets")
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
-                tagSetsPanel.pageBodyRow(top: 8, gutter: gutter)
+                ForEach(Array(tagSetLinks.enumerated()), id: \.element.id) { index, link in
+                    SubjectFormRow(
+                        label: tagSetLinks.count == 1 ? "Tag set" : link.title,
+                        value: tagSetLinks.count == 1 ? link.title : "",
+                        showsDisclosure: true
+                    )
+                    .subjectRowNavigation(accessibilityLabel: "Tag set, \(link.title)") {
+                        TagSetView(tagSetID: link.id, tagSetTitle: link.title, isModerator: true)
+                    }
+                    .panelSegment(index, of: tagSetLinks.count, gutter: gutter)
+                }
             }
         }
 
         Section {
-            SectionRuleHeader(title: "Matching")
+            ChallengeBoardSectionHeader(title: "Request restrictions")
+                .pageBodyRow(top: 14, gutter: selfGuttered)
+            requestRestrictionTogglesPanel.pageBodyRow(top: 6, gutter: gutter)
+            if restrictionControlsLocked {
+                restrictionLockNote.pageBodyRow(top: 6, gutter: gutter)
+            }
+        }
+
+        Section {
+            ChallengeBoardSectionHeader(title: "Matching")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
             matchSettingsPanels
-            SubjectFieldLabel(text: "Request Fandoms", style: .formGroup)
-                .pageBodyRow(top: 12, gutter: gutter)
-            matchingPanel.pageBodyRow(top: 8, gutter: gutter)
-            matchingFootnote.pageBodyRow(top: 8, gutter: gutter)
+            ChallengeBoardSectionHeader(title: "Request fandoms")
+                .pageBodyRow(top: 12, gutter: selfGuttered)
+            matchingPanel.pageBodyRow(top: 6, gutter: gutter)
+            generateMatchesPanel.pageBodyRow(top: 10, gutter: gutter)
+            matchingFootnote.pageBodyRow(top: 6, gutter: gutter)
         }
 
         Section {
-            SectionRuleHeader(title: "Anonymity and Moderation")
+            ChallengeBoardSectionHeader(title: "Basics")
+                .padding(.bottom, 6)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
-            moderationPanel.pageBodyRow(top: 8, gutter: gutter)
+        }
+        Section {
+            basicsRows
+            instructionsCard.pageBodyRow(top: 10, gutter: gutter)
         }
 
         Section {
-            SectionRuleHeader(title: "At AO3")
+            ChallengeBoardSectionHeader(title: "Anonymity and moderation")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
-            atAO3Panel.pageBodyRow(top: 8, gutter: gutter)
+            moderationPanel.pageBodyRow(top: 6, gutter: gutter)
+        }
+
+        Section {
+            ChallengeBoardSectionHeader(title: "At AO3")
+                .pageBodyRow(top: 18, gutter: selfGuttered)
+            atAO3Panel.pageBodyRow(top: 6, gutter: gutter)
         }
     }
 
@@ -235,7 +273,9 @@ struct ChallengeSettingsEditView: View {
     /// different field, shown in the rows above.
     private var instructionsCard: some View {
         VStack(alignment: .leading, spacing: 7) {
-            SubjectFieldLabel(text: "Sign-Up Instructions", style: .formGroup)
+            Text("Sign-up instructions")
+                .font(.footnote)
+                .foregroundStyle(.secondaryInk)
 
             ZStack(alignment: .topLeading) {
                 if instructionsBinding.wrappedValue.isEmpty {
@@ -254,7 +294,7 @@ struct ChallengeSettingsEditView: View {
             }
         }
         .padding(14)
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     // MARK: - Schedule
@@ -270,30 +310,46 @@ struct ChallengeSettingsEditView: View {
     /// them as UTC. A missing date says so; it is never filled in with today.
     private func dateRow(label: String, keyPath: WritableKeyPath<AO3ChallengeSettings, AO3ChallengeInstant>) -> some View {
         let instant = settings[keyPath: keyPath]
-        return SubjectFormRow(label: label, arrangement: .control) {
-            if !settings.scheduleIsEditable {
-                Text(instant.wireString.isEmpty ? "Not set" : instant.wireString)
-                    .font(.system(size: bodySize))
-                    .foregroundStyle(.secondaryInk)
-            } else if let wallClock = instant.wallClock {
-                DatePicker("", selection: Binding(
-                    get: { wallClock },
-                    set: { form?.settings[keyPath: keyPath].wallClock = $0 }
-                ), displayedComponents: [.date, .hourAndMinute])
-                .labelsHidden()
-                .datePickerStyle(.compact)
-                .environment(\.timeZone, TimeZone(secondsFromGMT: 0)!).accentFill()
-            } else {
-                // Unreadable text is shown as AO3 sent it and posted back unchanged.
-                Text(instant.wireString.isEmpty ? "Not set" : instant.wireString)
-                    .font(.system(size: bodySize))
-                    .foregroundStyle(.secondaryInk)
-                if instant.wireString.isEmpty {
-                    Button("Set") { form?.settings[keyPath: keyPath].wallClock = Date() }
-                        .font(.system(size: bodySize, weight: .semibold))
-                        .foregroundStyle(theme.accentInk)
-                        .buttonStyle(.plain)
+        let status = instant.instant.map { ChallengesBoardCopy.scheduleStatusMeta(for: $0) }
+        return VStack(alignment: .leading, spacing: 2) {
+            SubjectFormRow(label: label, arrangement: .control) {
+                if !settings.scheduleIsEditable {
+                    Text(instant.wireString.isEmpty ? "Not set" : instant.wireString)
+                        .font(.system(size: bodySize))
+                        .foregroundStyle(.secondaryInk)
+                } else if let wallClock = instant.wallClock {
+                    DatePicker("", selection: Binding(
+                        get: { wallClock },
+                        set: { form?.settings[keyPath: keyPath].wallClock = $0 }
+                    ), displayedComponents: [.date, .hourAndMinute])
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+                    .environment(\.timeZone, TimeZone(secondsFromGMT: 0)!)
+                    .accentFill()
+                } else {
+                    // Unreadable text is shown as AO3 sent it and posted back unchanged.
+                    Text(instant.wireString.isEmpty ? "Not set" : instant.wireString)
+                        .font(.system(size: bodySize))
+                        .foregroundStyle(.secondaryInk)
+                    if instant.wireString.isEmpty {
+                        Button("Set") { form?.settings[keyPath: keyPath].wallClock = Date() }
+                            .font(.system(size: bodySize, weight: .semibold))
+                            .foregroundStyle(theme.accentInk)
+                            .buttonStyle(.plain)
+                    }
                 }
+            }
+
+            if let status {
+                Text(status.text)
+                    .font(.system(size: captionSize, weight: .semibold))
+                    .foregroundStyle(
+                        status.isDone
+                            ? theme.appTheme.statusSuccessColor
+                            : ChallengeBoardColors.warningInk(for: theme.appTheme)
+                    )
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 8)
             }
         }
     }
@@ -326,22 +382,21 @@ struct ChallengeSettingsEditView: View {
             }
             SubjectRowSeparator()
             SubjectFormRow(
-                label: "Time Zone",
+                label: "Time zone",
                 value: settings.scheduleIsEditable ? settings.timeZoneName : "Unavailable"
             )
         }
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     private var scheduleFootnote: some View {
-        Text(settings.scheduleIsEditable
-            ? "Dates use the challenge’s time zone shown on AO3. After a reveal happens, you can't "
-                + "move it to an earlier time in Kudos."
-            : "Kudos couldn't read the challenge's time zone. Dates are view-only and won't be saved.")
-            .font(.system(size: captionSize))
-            .foregroundStyle(Color.secondary.opacity(0.7))
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 4)
+        ChallengeBoardSectionFooter(
+            text: settings.scheduleIsEditable
+                ? "Dates use the challenge’s time zone shown on AO3. After a reveal happens, you can't "
+                    + "move it to an earlier time in Kudos."
+                : "Kudos couldn't read the challenge's time zone. Dates are view-only and won't be saved.",
+            horizontalInset: 16
+        )
     }
 
     // MARK: - Sign-up limits
@@ -371,17 +426,21 @@ struct ChallengeSettingsEditView: View {
         }
     }
 
-    /// 1cf's "Requests · 1 to 3" / "Offers · 2 to 5": AO3's required and allowed
-    /// counts as one range row each.
+    /// `Challenge-Settings.dc.html`: Sign-up open (read-only status), Requests per person, Offers per person.
     private var limitsPanel: some View {
         VStack(spacing: 0) {
-            rangeRow("Requests", required: \.requestsRequired, allowed: \.requestsAllowed)
+            SubjectFormRow(
+                label: "Sign-up open",
+                value: settings.signupOpen ? "Open" : "Closed"
+            )
+            SubjectRowSeparator()
+            rangeRow("Requests per person", required: \.requestsRequired, allowed: \.requestsAllowed)
             if settings.kind == .giftExchange {
                 SubjectRowSeparator()
-                rangeRow("Offers", required: \.offersRequired, allowed: \.offersAllowed)
+                rangeRow("Offers per person", required: \.offersRequired, allowed: \.offersAllowed)
             }
         }
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     private func rangeRow(
@@ -390,11 +449,11 @@ struct ChallengeSettingsEditView: View {
         allowed: WritableKeyPath<AO3ChallengeSignUpLimits, Int>
     ) -> some View {
         SubjectFormRow(label: label, arrangement: .control) {
-            countMenu("\(label) Required", required)
-            Text("to")
+            countMenu("\(label) required", required)
+            Text("–")
                 .font(.system(size: bodySize))
                 .foregroundStyle(.secondaryInk)
-            countMenu("\(label) Allowed", allowed)
+            countMenu("\(label) allowed", allowed)
         }
     }
 
@@ -416,28 +475,28 @@ struct ChallengeSettingsEditView: View {
 
     private var requestRestrictionTogglesPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "URL Allowed in a Request", arrangement: .control) {
+            SubjectFormRow(label: "URL allowed in a request", arrangement: .control) {
                 Toggle("", isOn: requestRestrictionToggleBinding(\.urlAllowed))
                     .labelsHidden()
                     .tint(palette.tint)
                     .disabled(!restrictionIsEditable("url_allowed"))
             }
             SubjectRowSeparator()
-            SubjectFormRow(label: "Description Required", arrangement: .control) {
+            SubjectFormRow(label: "Description required", arrangement: .control) {
                 Toggle("", isOn: requestRestrictionToggleBinding(\.descriptionRequired))
                     .labelsHidden()
                     .tint(palette.tint)
                     .disabled(!restrictionIsEditable("description_required"))
             }
             SubjectRowSeparator()
-            SubjectFormRow(label: "Optional Tags Allowed", arrangement: .control) {
+            SubjectFormRow(label: "Optional tags allowed", arrangement: .control) {
                 Toggle("", isOn: requestRestrictionToggleBinding(\.optionalTagsAllowed))
                     .labelsHidden()
                     .tint(palette.tint)
                     .disabled(!restrictionIsEditable("optional_tags_allowed"))
             }
         }
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     private func restrictionIsEditable(_ field: String) -> Bool {
@@ -451,43 +510,10 @@ struct ChallengeSettingsEditView: View {
     }
 
     private var restrictionLockNote: some View {
-        Text("Prompts have been added so these settings can no longer be changed.")
-            .font(.system(size: captionSize))
-            .foregroundStyle(Color.secondary.opacity(0.7))
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 4)
-    }
-
-    // MARK: - Tag sets
-
-    /// The only route to artboard 1ch: `TagSetView` is addressed by a numeric id
-    /// that AO3 publishes on the **collection profile** page, not on the
-    /// collection show page. The fetch lives on the two challenge screens rather
-    /// than on `AO3CollectionDetailView` deliberately — a tag set only means
-    /// anything in a challenge context, and hanging the request off collection
-    /// detail would spend an extra AO3 request on every collection anyone opens,
-    /// the majority of which have no challenge at all.
-    /// `docs/AO3_NETWORKING_POLICY.md` treats request politeness as a product
-    /// requirement, so the cost sits on the screens that use it.
-    ///
-    /// `isModerator: true` here: this is the maintainer's edit form, only
-    /// reachable by someone AO3 already let load `challengeSettings` for the
-    /// collection, so "moderator" is the honest kicker. 1by, the owners' read
-    /// view, passes `true` for the same reason.
-    ///
-    /// Editing the tag set's own fields stays on 1ch — `AO3TagSetSave` is the
-    /// only tag-set write in the Services layer and it belongs to that screen.
-    private var tagSetsPanel: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(tagSetLinks.enumerated()), id: \.element.id) { index, link in
-                if index > 0 { SubjectRowSeparator() }
-                SubjectFormRow(label: link.title, showsDisclosure: true) { EmptyView() }
-                    .subjectRowNavigation(accessibilityLabel: link.title) {
-                        TagSetView(tagSetID: link.id, tagSetTitle: link.title, isModerator: true)
-                    }
-            }
-        }
-        .subjectPanel()
+        ChallengeBoardSectionFooter(
+            text: "Prompts have been added so these settings can no longer be changed.",
+            horizontalInset: 16
+        )
     }
 
     // MARK: - Matching
@@ -498,7 +524,7 @@ struct ChallengeSettingsEditView: View {
     private var matchingPanel: some View {
         VStack(spacing: 0) {
             stepperRow(
-                label: "Fandoms Required per Request",
+                label: "Fandoms required per request",
                 value: settings.requestRestriction.fandomRequired,
                 range: 0...10,
                 isDisabled: !restrictionIsEditable("fandom_num_required")
@@ -507,7 +533,7 @@ struct ChallengeSettingsEditView: View {
             }
             SubjectRowSeparator()
             stepperRow(
-                label: "Fandoms Allowed per Request",
+                label: "Fandoms allowed per request",
                 value: settings.requestRestriction.fandomAllowed,
                 range: 0...10,
                 isDisabled: !restrictionIsEditable("fandom_num_allowed")
@@ -518,7 +544,7 @@ struct ChallengeSettingsEditView: View {
             // The spec's caption; the caption is the toggle's own label.
             Toggle(isOn: requestRestrictionToggleBinding(\.allowAnyFandom)) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Allow Any Fandom")
+                    Text("Allow any fandom")
                         .font(.system(size: toggleTitleSize))
                         .foregroundStyle(.primary)
                     Text("Choosing “any” can match you with anything in the tag set.")
@@ -533,17 +559,33 @@ struct ChallengeSettingsEditView: View {
             .padding(.vertical, 11)
             .disabled(!restrictionIsEditable("allow_any_fandom"))
         }
-        .subjectPanel()
+        .challengeBoardCard()
+    }
+
+    private var generateMatchesPanel: some View {
+        Button {
+            router.open(settings.matchingOpenOnAO3)
+        } label: {
+            Text(ChallengesBoardCopy.challengeSettingsGenerateMatchesLabel)
+                .font(.system(size: actionRowSize, weight: .semibold))
+                .foregroundStyle(theme.accentInk)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 13)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(ChallengesBoardCopy.challengeSettingsGenerateMatchesLabel)
+        .accessibilityHint("Opens AO3")
+        .challengeBoardCard()
     }
 
     private var matchingFootnote: some View {
-        Text("AO3 does the matching. Save these settings here, then use Open on AO3 to run or rerun "
-            + "the match. If potential matches already exist, your changes take effect after you "
-            + "regenerate them on AO3.")
-            .font(.system(size: captionSize))
-            .foregroundStyle(Color.secondary.opacity(0.7))
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 4)
+        ChallengeBoardSectionFooter(
+            text: "AO3 does the matching. Save these settings here, then use Generate Potential Matches "
+                + "to run or rerun the match on AO3.",
+            horizontalInset: 16
+        )
     }
 
     // MARK: - At AO3
@@ -559,47 +601,11 @@ struct ChallengeSettingsEditView: View {
 
     private var atAO3Panel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Run Matching", value: "Opens AO3", showsDisclosure: true) {
-                router.open(settings.matchingOpenOnAO3)
-            }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Delete Challenge", value: "Opens AO3", showsDisclosure: true) {
+            SubjectFormRow(label: "Delete challenge", value: "Opens AO3", showsDisclosure: true, isDestructive: true) {
                 router.open(deleteChallengeURL)
             }
         }
-        .subjectPanel()
-    }
-
-    // MARK: - Bottom action bar
-
-    private var bottomActionBar: some View {
-        Button {
-            saveTapped()
-        } label: {
-            HStack(spacing: 6) {
-                if isSaving {
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(theme.onEffectiveTint)
-                }
-                Text("Save Changes")
-                    .font(.system(size: saveButtonSize, weight: .semibold))
-                    .foregroundStyle(theme.onEffectiveTint)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: 44)
-            .background(
-                SubjectMetrics.controlShape(dynamicTypeSize)
-                    .fill(theme.effectiveTint)
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(
-            !AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner)
-                || !Self.canStartSave(isSaving: isSaving, hasForm: form != nil)
-        )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .challengeBoardCard()
     }
 
     // MARK: - State Cards
@@ -633,7 +639,7 @@ struct ChallengeSettingsEditView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(16)
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     private func noticeCard(_ text: String) -> some View {
@@ -646,20 +652,20 @@ struct ChallengeSettingsEditView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     private func errorCard(_ text: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle")
-                .foregroundStyle(Color.red)
+                .foregroundStyle(theme.appTheme.errorColor)
             Text(text)
                 .font(.system(size: errorBodySize))
-                .foregroundStyle(Color.red)
+                .foregroundStyle(theme.appTheme.errorColor)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     // MARK: - Loading & Saving

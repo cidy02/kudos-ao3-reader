@@ -13,7 +13,6 @@ struct AO3CollectionsList: View {
     @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 12.5
     @ScaledMetric(relativeTo: .footnote) private var actionSize: CGFloat = 13
-    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
 
     @State private var collections: [AO3Collection] = []
     @State private var phase: Phase = .idle
@@ -81,7 +80,7 @@ struct AO3CollectionsList: View {
         Group {
             if auth.isLoggedIn { signedInContent } else { signedOutPrompt }
         }
-        .navigationTitle("Collections")
+        .navigationTitle(ChallengesBoardCopy.collectionsTitle)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -91,6 +90,7 @@ struct AO3CollectionsList: View {
                     FilterButton(
                         filtersActive: filters.hasActiveFilters,
                         showingFilters: $showingFilters,
+                        filterHelp: ChallengesBoardCopy.collectionsFilterHelp,
                         onClearFilters: { filters = AO3CollectionsFilter() }
                     )
                 }
@@ -100,6 +100,7 @@ struct AO3CollectionsList: View {
                     NavigationLink(value: AO3CollectionFormDestination(slug: nil)) {
                         Label("New Collection", systemImage: "plus")
                     }
+                    .accessibilityLabel("New Collection")
                 }
             }
         }
@@ -123,7 +124,9 @@ struct AO3CollectionsList: View {
         .task {
             if DebugLaunchRoute.takeSheet("colsfilter") { showingFilters = true }
             if DebugLaunchRoute.takeSheet("colitems") {
-                yourItems = AO3CollectionItemsDestination(slug: nil, title: "Your items")
+                yourItems = AO3CollectionItemsDestination(
+                    slug: nil, title: ChallengesBoardCopy.collectionsYourItemsPillTitle
+                )
             }
         }
         #endif
@@ -222,11 +225,15 @@ struct AO3CollectionsList: View {
     private var collectionsList: some View {
         List {
             Section {
-                SubjectPageFact(tallyLine, gutter: SubjectMetrics.accountGutter)
-                    .pageBodyRow(top: 12, gutter: 0)
+                Text(headerSubtitleLine)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 4)
+                    .pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
                 scopeRail.pageBodyRow(top: 10, gutter: 0)
                 if !filters.summaryLabels.isEmpty {
-                    filterRail.pageBodyRow(top: 12, gutter: 0)
+                    filterRail.pageBodyRow(top: 10, gutter: 0)
                 }
                 if showPagination, SearchPaginationBar.showsTopPager(rowCount: visibleCollections.count) {
                     paginationBar.pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
@@ -235,28 +242,25 @@ struct AO3CollectionsList: View {
 
             if visibleCollections.isEmpty {
                 Section {
-                    emptyCard.pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+                    emptyCard.pageBodyRow(top: 16, gutter: SubjectMetrics.accountGutter)
                 }
             } else {
-                Section {
-                    ForEach(visibleCollections) { collection in
-                        collectionRow(collection)
-                    }
-                }
+                groupedCollectionSections
             }
 
             if showPagination {
                 Section {
-                    paginationBar.pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+                    paginationBar.pageBodyRow(top: 16, gutter: SubjectMetrics.accountGutter)
                 }
             }
 
             Section {
-                sourceFooter.pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+                sourceFooter.pageBodyRow(top: 16, gutter: SubjectMetrics.accountGutter)
             }
         }
         .cardList()
-        .subjectScreenWash(palette: palette)
+        .environment(\.defaultMinListRowHeight, 0)
+        .subjectScreenWash(palette: palette, role: .grouped)
         .refreshable {
             if filters.needsWholeIndex {
                 wholeIndexLoadGeneration = AO3CollectionSessionReload.nextLoadGeneration(
@@ -274,14 +278,53 @@ struct AO3CollectionsList: View {
         }
     }
 
-    private func collectionRow(_ collection: AO3Collection) -> some View {
-        AO3CollectionCard(collection: collection)
-            .cardNavigation(
+    @ViewBuilder
+    private var groupedCollectionSections: some View {
+        if filters.sort == .asReturned {
+            let maintained = visibleCollections.filter(\.viewerIsOwner)
+            let member = visibleCollections.filter { !$0.viewerIsOwner }
+            if !maintained.isEmpty {
+                collectionGroupSection(
+                    title: ChallengesBoardCopy.collectionsMaintainSectionTitle,
+                    collections: maintained
+                )
+            }
+            if !member.isEmpty {
+                collectionGroupSection(
+                    title: ChallengesBoardCopy.collectionsMemberSectionTitle,
+                    collections: member
+                )
+            }
+        } else {
+            collectionGroupSection(
+                title: ChallengesBoardCopy.collectionsTitle,
+                collections: visibleCollections
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func collectionGroupSection(title: String, collections groupRows: [AO3Collection]) -> some View {
+        let keyed = PanelSegment.keyed(groupRows, id: \.id)
+        Section {
+            ChallengeBoardSectionHeader(title: title)
+                .padding(.bottom, 6)
+                .pageBodyRow(top: 16, gutter: 0)
+            ForEach(keyed, id: \.key) { row in
+                collectionRow(row.element, offset: row.offset, count: keyed.count)
+            }
+        }
+    }
+
+    private func collectionRow(_ collection: AO3Collection, offset: Int, count: Int) -> some View {
+        let detail = ChallengesBoardCopy.collectionsRowDetail(for: collection)
+        return AO3CollectionCard(collection: collection)
+            .subjectRowNavigation(
                 to: AO3CollectionDestination(
                     slug: collection.name,
                     title: collection.title
                 ),
-                accessibilityLabel: collection.title
+                accessibilityLabel: "\(collection.title), \(detail)"
             )
             .contextMenu {
                 NavigationLink(value: editDestination(for: collection)) {
@@ -299,7 +342,7 @@ struct AO3CollectionsList: View {
                 }
                 .tint(.gray)
             }
-            .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+            .panelSegment(offset, of: count, gutter: SubjectMetrics.accountGutter)
     }
 
     private func editDestination(for collection: AO3Collection) -> AO3CollectionFormDestination {
@@ -310,20 +353,28 @@ struct AO3CollectionsList: View {
         AO3CollectionItemsDestination(slug: collection.name, title: collection.title)
     }
 
-    /// 1r's two scopes. "Collections" is this list. "Your items" is AO3's
-    /// account-wide collection-items page, not a sum the app builds itself.
-    /// Nothing caches a pending-item count, so the pill has no badge.
+    /// Two scopes: "Collections" is this list; "Your Items" is AO3's
+    /// account-wide collection-items page.
     private var scopeRail: some View {
-        // One line cut "Your items".
-        AccessibilityChipRail(horizontalPadding: 16) {
-            SubjectChip(text: "Collections", style: .pill(isSelected: true), palette: palette)
+        // One line cut "Your Items" at AX5.
+        AccessibilityChipRail(horizontalPadding: SubjectMetrics.accountGutter) {
+            ChallengeBoardChipLabel(
+                text: ChallengesBoardCopy.collectionsTitle,
+                isSelected: true
+            )
+            .accessibilityAddTraits(.isSelected)
             Button {
-                yourItems = AO3CollectionItemsDestination(slug: nil, title: "Your items")
+                yourItems = AO3CollectionItemsDestination(
+                    slug: nil, title: ChallengesBoardCopy.collectionsYourItemsPillTitle
+                )
             } label: {
-                SubjectChip(text: "Your items", style: .pill(isSelected: false), palette: palette)
+                ChallengeBoardChipLabel(
+                    text: ChallengesBoardCopy.collectionsYourItemsPillTitle,
+                    isSelected: false
+                )
             }
             .buttonStyle(.plain)
-            .minimumHitTarget(28)
+            .accessibilityLabel(ChallengesBoardCopy.collectionsYourItemsPillTitle)
         }
     }
 
@@ -348,10 +399,10 @@ struct AO3CollectionsList: View {
 
     private var emptyCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(displayedCollections.isEmpty ? "No collections" : "No collections match")
+            Text(ChallengesBoardCopy.collectionsEmptyTitle(hasLoadedCollections: !displayedCollections.isEmpty))
                 .font(.system(size: stateTitleSize, weight: .semibold))
                 .fixedSize(horizontal: false, vertical: true)
-            Text(emptyDetail)
+            Text(ChallengesBoardCopy.collectionsEmptyDetail(totalLoadedCount: displayedCollections.count))
                 .font(.system(size: bodySize))
                 .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
@@ -363,26 +414,16 @@ struct AO3CollectionsList: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .subjectPanel()
-    }
-
-    private var emptyDetail: String {
-        if displayedCollections.isEmpty {
-            return "Collections you create or maintain on AO3 show up here."
-        }
-        let count = displayedCollections.count
-        return "\(count) collection\(count == 1 ? "" : "s") are hidden by the current filters."
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .challengeBoardCard()
     }
 
     private var sourceFooter: some View {
-        Text("These are your AO3 collections. Collections you make in Kudos are in Library.")
-            .font(.system(size: captionSize))
-            .foregroundStyle(.secondary.opacity(0.7))
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
+        ChallengeBoardSectionFooter(
+            text: "These are your AO3 collections. Collections you make in Kudos are in Library.",
+            horizontalInset: 16
+        )
     }
 
     private var palette: SubjectPalette {
@@ -506,21 +547,15 @@ struct AO3CollectionsList: View {
 
 // Out of the struct body only for its length; `private` state is file-scoped.
 extension AO3CollectionsList {
-    /// Counts what is on screen, not what was fetched — a tally that ignored the
-    /// filters would contradict the rows under it.
-    private var tallyLine: String {
-        let shown = visibleCollections.count
-        var line = "\(shown) collection\(shown == 1 ? "" : "s")"
-        if shown != displayedCollections.count {
-            line += " · \(displayedCollections.count) in all"
-        }
-        if showPagination {
-            line += " · page \(currentPage) of \(totalPages)"
-        }
-        if filters.needsWholeIndex, hasCurrentWholeIndex, let note = wholeIndexPartialNote {
-            line += " · \(note)"
-        }
-        return line
+    private var headerSubtitleLine: String {
+        ChallengesBoardCopy.collectionsHeaderLine(
+            shown: visibleCollections.count,
+            total: displayedCollections.count,
+            isFiltered: filters.hasActiveFilters,
+            currentPage: currentPage,
+            totalPages: showPagination ? totalPages : 1,
+            partialNote: filters.needsWholeIndex && hasCurrentWholeIndex ? wholeIndexPartialNote : nil
+        )
     }
 
     /// Loads every collections-index page strictly in sequence. The surrounding
@@ -632,18 +667,16 @@ extension AO3CollectionsList {
     }
 }
 
-/// One collection on the list. The hue is the collection's own, from its title,
-/// the way a queue carries a colour. Approval queues and "works of yours" are
-/// not on AO3's collection blurb, so they are not drawn.
+/// One collection row matching `AO3-Collections.dc.html`: 40×40 rounded-10 colored
+/// monogram tile, 16 pt semibold title, 13 pt detail line, and trailing disclosure chevron.
 struct AO3CollectionCard: View {
     let collection: AO3Collection
 
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    @ScaledMetric(relativeTo: .title3) private var titleSize: CGFloat = 19
-    @ScaledMetric(relativeTo: .footnote) private var summarySize: CGFloat = 12.5
-    @ScaledMetric(relativeTo: .caption) private var metaSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .body) private var titleSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .footnote) private var detailSize: CGFloat = 13
 
     private var palette: SubjectPalette {
         theme.appTheme.subjectPalette(
@@ -651,138 +684,46 @@ struct AO3CollectionCard: View {
         )
     }
 
-    private var eyebrow: String {
-        AO3CollectionCardCopy.eyebrow(
-            viewerIsOwner: collection.viewerIsOwner,
-            maintainerNames: collection.maintainerNames,
-            byline: collection.byline
-        )
-    }
-
-    private var metaFacts: [String] {
-        AO3CollectionCardCopy.metaFacts(
-            worksCount: collection.worksCount,
-            bookmarksCount: collection.bookmarksCount,
-            isModerated: collection.isModerated,
-            isClosed: collection.isClosed,
-            challengeName: collection.challengeKind?.displayName
-        )
-    }
-
-    private var statusLabels: [String] {
-        AO3CollectionCardCopy.statusLabels(
-            isUnrevealed: collection.isUnrevealed,
-            isAnonymous: collection.isAnonymous
-        )
+    private var detailText: String {
+        ChallengesBoardCopy.collectionsRowDetail(for: collection)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            header
-            if showsByline {
-                AO3AuthorBylineView(
-                    names: collection.maintainerNames,
-                    identities: collection.maintainerIdentities,
-                    fallbackText: collection.byline,
-                    includesBy: !collection.maintainerNames.isEmpty,
-                    font: .caption,
-                    compact: true
-                )
-            }
-            if !collection.summary.isEmpty {
-                Text(collection.summary)
-                    .font(.system(size: summarySize))
-                    .foregroundStyle(.secondaryInk)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if !metaFacts.isEmpty || !collection.updatedAtText.isEmpty {
-                metaRow
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .subjectCard(palette: palette)
-    }
+        HStack(alignment: dynamicTypeSize.isAccessibilitySize ? .top : .center, spacing: 12) {
+            ChallengeBoardAvatar(
+                text: ChallengesBoardCopy.collectionInitial(
+                    title: collection.title,
+                    fallbackSlug: collection.name
+                ),
+                color: palette.accent,
+                shapeKind: .roundedSquare(size: 40, radius: 10)
+            )
+            .padding(.top, dynamicTypeSize.isAccessibilitySize ? 2 : 0)
 
-    /// The eyebrow already names a single maintainer. The byline stays when it
-    /// adds someone — you own it, so the maintainers are a second fact, or
-    /// there is more than one name.
-    private var showsByline: Bool {
-        guard !collection.byline.isEmpty || !collection.maintainerNames.isEmpty else { return false }
-        if collection.viewerIsOwner { return true }
-        return collection.maintainerNames.count > 1
-    }
-
-    private var header: some View {
-        HStack(alignment: .top, spacing: 11) {
-            tile
-            VStack(alignment: .leading, spacing: 4) {
-                eyebrowRow
+            VStack(alignment: .leading, spacing: 2) {
                 Text(collection.title)
                     .font(.system(size: titleSize, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(detailText)
+                    .font(.system(size: detailSize))
+                    .foregroundStyle(.secondaryInk)
+                    .monospacedDigit()
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(theme.accentInk)
-                .padding(.top, 4)
+                .foregroundStyle(.tertiary)
+                .padding(.top, dynamicTypeSize.isAccessibilitySize ? 4 : 0)
                 .accessibilityHidden(true)
         }
-    }
-
-    @ViewBuilder
-    private var eyebrowRow: some View {
-        if !eyebrow.isEmpty || !statusLabels.isEmpty {
-            // Wraps rather than squeezes: in one row at the largest text, "You own" became
-            // "YO…" and the chips broke letter by letter (A69 #13).
-            FlowLayout(spacing: 6, rowSpacing: 6) {
-                if !eyebrow.isEmpty {
-                    SubjectKicker(
-                        text: eyebrow,
-                        palette: palette,
-                        ruleWidth: 22,
-                        ruleSpacing: 5
-                    )
-                }
-                ForEach(statusLabels, id: \.self) { label in
-                    SubjectChip(text: label, style: .neutral, palette: palette)
-                }
-            }
-        }
-    }
-
-    private var tile: some View {
-        Image(systemName: "archivebox")
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(palette.accent)
-            .frame(width: 38, height: 38)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(palette.chipFill)
-            )
-            .accessibilityHidden(true)
-    }
-
-    private var metaRow: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            if !metaFacts.isEmpty {
-                Text(metaFacts.joined(separator: " · "))
-                    .font(.system(size: metaSize))
-                    .foregroundStyle(.secondaryInk)
-                    .monospacedDigit()
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 8)
-            if !collection.updatedAtText.isEmpty {
-                Text(WorkStat.displayDate(collection.updatedAtText))
-                    .font(.system(size: metaSize))
-                    .foregroundStyle(.secondaryInk)
-                    .monospacedDigit()
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
     }
 }

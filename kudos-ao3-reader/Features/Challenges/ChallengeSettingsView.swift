@@ -17,8 +17,9 @@ struct ChallengeSettingsView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
 
-    @ScaledMetric(relativeTo: .body) private var typeTitleSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .caption) private var typeSubtitleSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .largeTitle) private var hubTitleSize: CGFloat = 30
+    @ScaledMetric(relativeTo: .subheadline) private var hubSubtitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var hubKickerSize: CGFloat = 13
     @ScaledMetric(relativeTo: .subheadline) private var loadingSize: CGFloat = 14
     @ScaledMetric(relativeTo: .headline) private var failureTitleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .footnote) private var failureBodySize: CGFloat = 13
@@ -29,8 +30,8 @@ struct ChallengeSettingsView: View {
     @State private var signUpTotal: Int?
     @State private var matchedCount: Int?
     @State private var unmatchedCount: Int?
-    @State private var defaultsCount: Int?
     @State private var phase: Phase = .idle
+    @State private var showingCollectionSettings = false
     #if DEBUG
     @State private var debugPresented: DebugPresented?
     #endif
@@ -58,15 +59,14 @@ struct ChallengeSettingsView: View {
     private var settings: AO3ChallengeSettings {
         settingsForm?.settings ?? AO3ChallengeSettings(
             collectionSlug: collectionSlug,
-            kind: .giftExchange
+            kind: challengeKind ?? .giftExchange
         )
     }
 
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 12, gutter: selfGuttered)
-                introCard.pageBodyRow(top: 8, gutter: gutter)
+                hubHeader.pageBodyRow(top: 12, gutter: gutter)
             }
 
             switch phase {
@@ -85,7 +85,40 @@ struct ChallengeSettingsView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Challenge", palette: palette)
+        .subjectScreenWash(title: "", palette: palette, role: .grouped)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    if AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner) {
+                        Button {
+                            showingCollectionSettings = true
+                        } label: {
+                            Label("Collection Settings", systemImage: "slider.horizontal.3")
+                        }
+                    }
+                    if !isPromptMeme {
+                        Button {
+                            openExternalURL(settings.matchingOpenOnAO3)
+                        } label: {
+                            Label("Run Matching on AO3", systemImage: "safari")
+                        }
+                    }
+                    if let url = AO3CollectionURL.show(slug: collectionSlug) {
+                        Button {
+                            openExternalURL(url)
+                        } label: {
+                            Label("Open on AO3", systemImage: "arrow.up.right.square")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .accessibilityLabel("More")
+            }
+        }
+        .navigationDestination(isPresented: $showingCollectionSettings) {
+            AO3CollectionFormView(slug: collectionSlug)
+        }
         .task { await loadSettingsIfNeeded() }
         #if DEBUG
         .task {
@@ -115,168 +148,233 @@ struct ChallengeSettingsView: View {
             .screenTint(palette)
     }
 
-    // MARK: - Header & Intro
+    // MARK: - Header (`Challenge.dc.html`)
 
-    private var header: some View {
-        SubjectPageFact("\(effectiveTitle) · \(settings.kind.displayName)", gutter: SubjectMetrics.accountGutter)
+    private var hubHeader: some View {
+        let subtitle = ChallengesBoardCopy.challengeHubSubtitle(
+            signupOpen: settings.signupOpen,
+            closeDateText: settings.signupsCloseAt.dateText,
+            signUpTotal: isPromptMeme ? nil : signUpTotal,
+            isLoaded: phase == .loaded
+        )
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(ChallengesBoardCopy.challengeKindName(settings.kind))
+                .font(.system(size: hubKickerSize))
+                .foregroundStyle(.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(effectiveTitle)
+                .font(.system(size: hubTitleSize, weight: .bold))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+
+            if !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.system(size: hubSubtitleSize))
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 4)
     }
 
-    private var introCard: some View {
-        Text("An AO3 challenge belongs to a collection and has its own sign-ups, assignments and "
-            + "deadlines. This page shows its settings in the same order as AO3.")
-            .font(.system(size: typeSubtitleSize))
-            .foregroundStyle(Color.secondary.opacity(0.7))
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 4)
+    // MARK: - Hub Rows (`Challenge.dc.html`)
+
+    private struct HubRowEntry {
+        let id: String
+        let systemImage: String
+        let title: String
+        let detail: String?
+        let destination: () -> AnyView
+
+        init<Destination: View>(
+            id: String,
+            systemImage: String,
+            title: String,
+            detail: String? = nil,
+            @ViewBuilder destination: @escaping () -> Destination
+        ) {
+            self.id = id
+            self.systemImage = systemImage
+            self.title = title
+            self.detail = detail
+            self.destination = { AnyView(destination()) }
+        }
+    }
+
+    private var hubEntries: [HubRowEntry] {
+        var entries: [HubRowEntry] = [
+            HubRowEntry(id: "items", systemImage: "doc.text", title: "Items") {
+                AO3CollectionItemsView(slug: collectionSlug, title: effectiveTitle)
+            }
+        ]
+
+        if isPromptMeme {
+            entries.append(
+                HubRowEntry(id: "prompts", systemImage: "bubble.left", title: "Prompts", detail: "Claim and fill") {
+                    PromptMemeView(
+                        collectionSlug: collectionSlug,
+                        collectionTitle: effectiveTitle,
+                        viewerIsOwner: viewerIsOwner,
+                        challengeKind: challengeKind
+                    )
+                }
+            )
+        } else {
+            entries.append(
+                HubRowEntry(
+                    id: "signups",
+                    systemImage: "person",
+                    title: "Sign-ups",
+                    detail: phase == .loaded ? (signUpTotal.map { $0.formatted() } ?? "Couldn't load") : nil
+                ) {
+                    ChallengeSignUpsView(
+                        collectionSlug: collectionSlug,
+                        collectionTitle: effectiveTitle,
+                        challengeKind: challengeKind
+                    )
+                }
+            )
+            entries.append(
+                HubRowEntry(
+                    id: "assignments",
+                    systemImage: "envelope",
+                    title: "Assignments",
+                    detail: phase == .loaded ? assignmentsSummaryText : nil
+                ) {
+                    assignmentsView
+                }
+            )
+        }
+
+        if let firstTagSet = tagSetLinks.first {
+            let tagDetail = tagSetLinks.count == 1 ? firstTagSet.title : "\(tagSetLinks.count) tag sets"
+            entries.append(
+                HubRowEntry(
+                    id: "tagset",
+                    systemImage: "tag",
+                    title: "Prompts and tag set",
+                    detail: tagDetail
+                ) {
+                    TagSetView(tagSetID: firstTagSet.id, tagSetTitle: firstTagSet.title, isModerator: true)
+                }
+            )
+        }
+
+        entries.append(
+            HubRowEntry(
+                id: "moderation",
+                systemImage: "shield",
+                title: "Moderation",
+                detail: settings.isAnonymous ? "Anonymous" : nil
+            ) {
+                CollectionModerationView(
+                    collectionSlug: collectionSlug,
+                    collectionTitle: effectiveTitle,
+                    viewerIsOwner: viewerIsOwner
+                )
+            }
+        )
+
+        entries.append(
+            HubRowEntry(id: "maintainers", systemImage: "person.2", title: "Maintainers") {
+                CollectionMaintainersView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
+            }
+        )
+
+        if AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner) {
+            entries.append(
+                HubRowEntry(id: "settings", systemImage: "slider.horizontal.3", title: "Challenge settings") {
+                    ChallengeSettingsEditView(
+                        collectionSlug: collectionSlug,
+                        collectionTitle: effectiveTitle,
+                        viewerIsOwner: viewerIsOwner,
+                        challengeKind: challengeKind
+                    )
+                }
+            )
+        }
+
+        return entries
     }
 
     // MARK: - Content Sections
 
     @ViewBuilder
     private var contentSections: some View {
-        // Only collection owners reach this read (AO3CollectionDetailView), and
-        // the edit form (1cf) is theirs as well.
-        if AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner) {
-            Section {
-                SubjectFormRow(label: "Edit Settings", showsDisclosure: true) { EmptyView() }
-                    .subjectRowNavigation(accessibilityLabel: "Edit Settings") {
-                        ChallengeSettingsEditView(
-                            collectionSlug: collectionSlug,
-                            collectionTitle: effectiveTitle,
-                            viewerIsOwner: viewerIsOwner,
-                            challengeKind: challengeKind
-                        )
-                    }
-                    .subjectPanel()
-                    .pageBodyRow(top: 14, gutter: gutter)
+        let entries = hubEntries
+        Section {
+            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                let a11yParts: [String?] = [entry.title, entry.detail]
+                let a11y = a11yParts.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+                ChallengeBoardHubRow(
+                    systemImage: entry.systemImage,
+                    title: entry.title,
+                    detail: entry.detail
+                )
+                .subjectRowNavigation(accessibilityLabel: a11y) {
+                    entry.destination()
+                }
+                .panelSegment(index, of: entries.count, gutter: gutter)
             }
         }
 
         Section {
-            SectionRuleHeader(title: "Type")
+            ChallengeBoardSectionHeader(title: "Schedule")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
-            typePanel.pageBodyRow(top: 8, gutter: gutter)
+            datesPanel.pageBodyRow(top: 6, gutter: gutter)
+            datesFootnote.pageBodyRow(top: 6, gutter: gutter)
         }
 
         Section {
-            SectionRuleHeader(title: "Dates")
-                .pageBodyRow(top: 18, gutter: selfGuttered)
-            datesPanel.pageBodyRow(top: 8, gutter: gutter)
-            datesFootnote.pageBodyRow(top: 8, gutter: gutter)
+            ChallengeBoardSectionHeader(
+                title: isPromptMeme ? "Prompt requirements" : "Sign-up requirements"
+            )
+            .pageBodyRow(top: 18, gutter: selfGuttered)
+            requirementsPanel.pageBodyRow(top: 6, gutter: gutter)
         }
 
-        Section {
-            SectionRuleHeader(title: isPromptMeme ? "Prompt Requirements" : "Sign-Up Requirements")
-                .pageBodyRow(top: 18, gutter: selfGuttered)
-            requirementsPanel.pageBodyRow(top: 8, gutter: gutter)
-        }
-
-        if !tagSetLinks.isEmpty {
+        if tagSetLinks.count > 1 {
             Section {
-                SectionRuleHeader(title: tagSetLinks.count == 1 ? "Tag Set" : "Tag Sets")
+                ChallengeBoardSectionHeader(title: "Tag sets")
+                    .padding(.bottom, 6)
                     .pageBodyRow(top: 18, gutter: selfGuttered)
-                tagSetsPanel.pageBodyRow(top: 8, gutter: gutter)
+                ForEach(Array(tagSetLinks.enumerated()), id: \.element.id) { index, link in
+                    SubjectFormRow(label: link.title, showsDisclosure: true) { EmptyView() }
+                        .subjectRowNavigation(accessibilityLabel: link.title) {
+                            TagSetView(tagSetID: link.id, tagSetTitle: link.title, isModerator: true)
+                        }
+                        .panelSegment(index, of: tagSetLinks.count, gutter: gutter)
+                }
             }
         }
 
-        // Prompt Meme replaces the whole lower half (the spec's second layout):
-        // no sign-up matching, no assignments, nothing to run on AO3.
         if isPromptMeme {
             Section {
-                SectionRuleHeader(title: "Prompts")
-                    .padding(.bottom, 8)
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
-            }
-            Section {
-                promptsRows
-                promptsFootnote.pageBodyRow(top: 8, gutter: gutter)
+                promptsFootnote.pageBodyRow(top: 10, gutter: gutter)
             }
         } else {
             Section {
-                SectionRuleHeader(title: "Assignments")
+                ChallengeBoardSectionHeader(title: "At AO3")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
-                assignmentsPanel.pageBodyRow(top: 8, gutter: gutter)
-                assignmentsFootnote.pageBodyRow(top: 8, gutter: gutter)
-            }
-
-            Section {
-                SectionRuleHeader(title: "At AO3")
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
-                escapeHatchPanel.pageBodyRow(top: 8, gutter: gutter)
+                escapeHatchPanel.pageBodyRow(top: 6, gutter: gutter)
+                assignmentsFootnote.pageBodyRow(top: 6, gutter: gutter)
             }
         }
     }
 
     private var isPromptMeme: Bool { settings.kind == .promptMeme }
 
-    /// Two `List` rows so only the first pushes.
-    @ViewBuilder
-    private var promptsRows: some View {
-        SubjectFormRow(label: "Prompts", value: "Claim and fill", showsDisclosure: true)
-            .subjectRowNavigation(accessibilityLabel: "Prompts") {
-                PromptMemeView(
-                    collectionSlug: collectionSlug, collectionTitle: effectiveTitle, viewerIsOwner: viewerIsOwner,
-                    challengeKind: challengeKind
-                )
-            }
-            .panelSegment(0, of: 2, gutter: gutter)
-        SubjectFormRow(label: "Prompts Posted Anonymously", value: settings.isAnonymous ? "Yes" : "No")
-            .panelSegment(1, of: 2, gutter: gutter)
-    }
-
     private var promptsFootnote: some View {
-        Text("A Prompt Meme has no matching or assignments. People post prompts and others claim them.")
-            .font(.system(size: typeSubtitleSize))
-            .foregroundStyle(Color.secondary.opacity(0.7))
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 4)
+        ChallengeBoardSectionFooter(
+            text: "A prompt meme has no matching or assignments. People post prompts and others claim them.",
+            horizontalInset: 16
+        )
     }
 
     // MARK: - Panels
-
-    private var typePanel: some View {
-        VStack(spacing: 0) {
-            typeRow(
-                title: "Gift Exchange",
-                subtitle: "Sign-ups are matched into assignments",
-                isSelected: settings.kind == .giftExchange
-            )
-
-            SubjectRowSeparator()
-
-            typeRow(
-                title: "Prompt Meme",
-                subtitle: "Prompts are claimed freely",
-                isSelected: settings.kind == .promptMeme
-            )
-        }
-        .subjectPanel()
-    }
-
-    private func typeRow(title: String, subtitle: String, isSelected: Bool) -> some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: typeTitleSize))
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text(subtitle)
-                    .font(.system(size: typeSubtitleSize))
-                    .foregroundStyle(.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            if isSelected {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(palette.accent)
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-    }
 
     private var datesPanel: some View {
         VStack(spacing: 0) {
@@ -316,16 +414,15 @@ struct ChallengeSettingsView: View {
                 value: formatDate(settings.authorsRevealAt)
             )
         }
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     private var datesFootnote: some View {
-        Text("AO3 doesn't close the collection when a deadline passes. You close it yourself "
-            + "with the Closed setting.")
-            .font(.system(size: typeSubtitleSize))
-            .foregroundStyle(Color.secondary.opacity(0.7))
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 4)
+        ChallengeBoardSectionFooter(
+            text: "AO3 doesn't close the collection when a deadline passes. You close it yourself "
+                + "with the Closed setting.",
+            horizontalInset: 16
+        )
     }
 
     /// The request restriction's own ranges. A prompt meme's prompts are its
@@ -338,8 +435,22 @@ struct ChallengeSettingsView: View {
         return VStack(spacing: 0) {
             if isPromptMeme {
                 SubjectFormRow(
-                    label: "Prompts per Sign-Up",
-                    value: "\(limits.requestsRequired) to \(limits.requestsAllowed)"
+                    label: "Prompts per sign-up",
+                    value: ChallengesBoardCopy.countRange(limits.requestsRequired, limits.requestsAllowed)
+                )
+
+                SubjectRowSeparator()
+            } else {
+                SubjectFormRow(
+                    label: "Requests per person",
+                    value: ChallengesBoardCopy.countRange(limits.requestsRequired, limits.requestsAllowed)
+                )
+
+                SubjectRowSeparator()
+
+                SubjectFormRow(
+                    label: "Offers per person",
+                    value: ChallengesBoardCopy.countRange(limits.offersRequired, limits.offersAllowed)
                 )
 
                 SubjectRowSeparator()
@@ -347,33 +458,33 @@ struct ChallengeSettingsView: View {
 
             SubjectFormRow(
                 label: "Fandoms per \(noun)",
-                value: "\(restriction.fandomRequired) to \(restriction.fandomAllowed)"
+                value: ChallengesBoardCopy.countRange(restriction.fandomRequired, restriction.fandomAllowed)
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
                 label: "Relationships per \(noun)",
-                value: "\(restriction.relationshipRequired) to \(restriction.relationshipAllowed)"
+                value: ChallengesBoardCopy.countRange(restriction.relationshipRequired, restriction.relationshipAllowed)
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
                 label: "Characters per \(noun)",
-                value: "\(restriction.characterRequired) to \(restriction.characterAllowed)"
+                value: ChallengesBoardCopy.countRange(restriction.characterRequired, restriction.characterAllowed)
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Additional Tags",
+                label: "Additional tags",
                 value: restriction.optionalTagsAllowed ? "Optional" : "Not allowed"
             )
 
             SubjectRowSeparator()
 
-            SubjectFormRow(label: "Allow Any Prompt", arrangement: .control) {
+            SubjectFormRow(label: "Allow any prompt", arrangement: .control) {
                 Toggle("", isOn: .constant(restriction.allowsAnyTag))
                     .labelsHidden()
                     .disabled(true)
@@ -383,7 +494,7 @@ struct ChallengeSettingsView: View {
             if !isPromptMeme {
                 SubjectRowSeparator()
 
-                SubjectFormRow(label: "Require a Fandom Match", arrangement: .control) {
+                SubjectFormRow(label: "Require a fandom match", arrangement: .control) {
                     Toggle("", isOn: .constant(!restriction.allowAnyFandom))
                         .labelsHidden()
                         .disabled(true)
@@ -391,84 +502,15 @@ struct ChallengeSettingsView: View {
                 }
             }
         }
-        .subjectPanel()
-    }
-
-    /// The only route to artboard 1ch: `TagSetView` is addressed by a numeric id
-    /// that AO3 publishes on the **collection profile** page, not on the
-    /// collection show page. The fetch lives here rather than on
-    /// `AO3CollectionDetailView` deliberately — a tag set only means anything in
-    /// a challenge context, and hanging the request off collection detail would
-    /// spend an extra AO3 request on every collection anyone opens, the majority
-    /// of which have no challenge at all. `docs/AO3_NETWORKING_POLICY.md` treats
-    /// request politeness as a product requirement, so the cost sits on the two
-    /// screens that use it.
-    ///
-    /// `isModerator: true`, as on 1cf: only a collection owner reaches this read
-    /// (AO3 prints the Challenge Settings link for owners alone and refuses the
-    /// edit page this screen loads to everyone else, otwarchive Q5), so the
-    /// viewer runs the challenge the tag set belongs to.
-    private var tagSetsPanel: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(tagSetLinks.enumerated()), id: \.element.id) { index, link in
-                if index > 0 { SubjectRowSeparator() }
-                SubjectFormRow(label: link.title, showsDisclosure: true) { EmptyView() }
-                    .subjectRowNavigation(accessibilityLabel: link.title) {
-                        TagSetView(tagSetID: link.id, tagSetTitle: link.title, isModerator: true)
-                    }
-            }
-        }
-        .subjectPanel()
-    }
-
-    private var assignmentsPanel: some View {
-        VStack(spacing: 0) {
-            SubjectFormRow(
-                label: "Sign-Ups",
-                value: signUpTotal.map(String.init) ?? "Couldn't load",
-                showsDisclosure: true
-            )
-            .subjectRowNavigation(accessibilityLabel: "Sign-Ups") {
-                ChallengeSignUpsView(
-                    collectionSlug: collectionSlug,
-                    collectionTitle: effectiveTitle,
-                    challengeKind: challengeKind
-                )
-            }
-            .buttonStyle(.plain)
-
-            SubjectRowSeparator()
-
-            SubjectFormRow(
-                label: "Assignments",
-                value: assignmentsSummaryText,
-                showsDisclosure: true
-            )
-            .subjectRowNavigation(accessibilityLabel: "Assignments") { assignmentsView }
-            .buttonStyle(.plain)
-
-            SubjectRowSeparator()
-
-            // Defaults and pinch hits are listed on the same AO3 assignments page.
-            SubjectFormRow(
-                label: "Defaults and pinch hits",
-                value: defaultsCount.map(String.init) ?? "Couldn't load",
-                showsDisclosure: true
-            )
-            .subjectRowNavigation(accessibilityLabel: "Defaults and pinch hits") { assignmentsView }
-            .buttonStyle(.plain)
-
-        }
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     private var assignmentsFootnote: some View {
-        Text("AO3 matches participants. In Kudos, you can view sign-ups and assignments and ask for "
-            + "a pinch hitter, but you can't run the match.")
-            .font(.system(size: typeSubtitleSize))
-            .foregroundStyle(Color.secondary.opacity(0.7))
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 4)
+        ChallengeBoardSectionFooter(
+            text: "AO3 matches participants. In Kudos, you can view sign-ups and assignments and ask for "
+                + "a pinch hitter, but you can't run the match.",
+            horizontalInset: 16
+        )
     }
 
     private var escapeHatchPanel: some View {
@@ -481,7 +523,7 @@ struct ChallengeSettingsView: View {
                 openExternalURL(settings.matchingOpenOnAO3)
             }
         }
-        .subjectPanel()
+        .challengeBoardCard()
     }
 }
 
@@ -520,7 +562,7 @@ private extension ChallengeSettingsView {
         }
         .frame(maxWidth: .infinity)
         .padding(16)
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     // MARK: - Helpers & Actions
@@ -578,11 +620,6 @@ private extension ChallengeSettingsView {
             let defaults = try? await assignmentRows([.defaults])
             matchedCount = sent?.count
             unmatchedCount = defaults?.count
-            if let sent, let defaults {
-                defaultsCount = defaults.count + sent.filter(\.isCovered).count
-            } else {
-                defaultsCount = nil
-            }
 
             phase = .loaded
         } catch {
@@ -620,9 +657,9 @@ extension ChallengeSettingsView {
     }
 
     private var assignmentsSummaryText: String {
-        guard let matchedCount, let unmatchedCount else { return "Couldn't load" }
-        // Every list empty means nothing has been sent, not that nobody matched.
-        if matchedCount == 0, unmatchedCount == 0 { return "None sent yet" }
-        return "\(matchedCount) matched, \(unmatchedCount) unmatched"
+        ChallengesBoardCopy.challengeAssignmentsSummary(
+            matched: matchedCount,
+            unmatched: unmatchedCount
+        )
     }
 }

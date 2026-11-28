@@ -44,17 +44,15 @@ struct TagSetView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
     @Environment(AppRouter.self) private var router
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .subheadline) private var buttonLabelSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 16
     @ScaledMetric(relativeTo: .subheadline) private var loadingSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .footnote) private var editorSize: CGFloat = 13
-    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var editorSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) private var noticeSize: CGFloat = 13
-    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
-    @ScaledMetric(relativeTo: .caption) private var fieldLabelSize: CGFloat = 11
-    @ScaledMetric(relativeTo: .caption) private var pillLabelSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .footnote) private var subSize: CGFloat = 13
 
     @State private var tagSet: AO3TagSet?
     @State private var phase: Phase = .idle
@@ -103,7 +101,11 @@ struct TagSetView: View {
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 12, gutter: selfGuttered)
+                contextCard.pageBodyRow(top: 12, gutter: gutter)
+                if let tagSet {
+                    ChallengeBoardStatStrip(cells: statCells(for: tagSet), surface: .form)
+                        .pageBodyRow(top: 14, gutter: gutter)
+                }
             }
 
             switch phase {
@@ -122,7 +124,20 @@ struct TagSetView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Tag Set", palette: palette)
+        .subjectScreenWash(title: "Tag Set", palette: palette, role: .grouped)
+        .toolbar {
+            if tagSet != nil {
+                ToolbarItem(placement: .confirmationAction) {
+                    ChallengeBoardConfirmToolbarButton(
+                        title: "Save",
+                        isBusy: isSavingFields,
+                        isDisabled: isSavingFields
+                    ) {
+                        Task { await saveTagFields() }
+                    }
+                }
+            }
+        }
         .task { await loadTagSetIfNeeded() }
         #if DEBUG
         .task { if DebugLaunchRoute.takePush("tagseteditor") { debugTagEditor = true } }
@@ -132,55 +147,131 @@ struct TagSetView: View {
             .screenTint(palette)
     }
 
-    // MARK: - Header
+    // MARK: - Header (`Prompt-Tags.dc.html`)
 
-    private var header: some View {
-        let role = isModerator ? "moderator" : "owner"
-        return SubjectPageFact(
-            "\(effectiveTitle) · \(totalTagCount.compactCount) tags · \(role)",
-            gutter: SubjectMetrics.accountGutter
+    private var contextCard: some View {
+        let desc = tagSet?.description.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let meta = desc.isEmpty
+            ? ChallengesBoardCopy.plural(totalTagCount, singular: "tag")
+            : desc
+        return ChallengeBoardContextCard(
+            systemImage: "tag",
+            kicker: ChallengesBoardCopy.tagSetKicker,
+            title: effectiveTitle,
+            meta: meta,
+            palette: palette,
+            surface: .form
         )
     }
 
-    // MARK: - Content Sections
+    private func statCells(for tagSet: AO3TagSet) -> [ChallengeBoardStatStrip.Cell] {
+        let toReview = reviewQueue.filter { $0.state == .unreviewed }.count
+        return [
+            ChallengeBoardStatStrip.Cell(value: tagSet.fandomCount.formatted(), label: "Fandoms"),
+            ChallengeBoardStatStrip.Cell(value: tagSet.characterCount.formatted(), label: "Characters"),
+            ChallengeBoardStatStrip.Cell(value: tagSet.relationshipCount.formatted(), label: "Relationships"),
+            ChallengeBoardStatStrip.Cell(
+                value: toReview.formatted(),
+                label: "To review",
+                tint: toReview > 0 ? ChallengeBoardColors.warningInk(for: theme.appTheme) : nil
+            )
+        ]
+    }
+
+    // MARK: - Content Sections (`Prompt-Tags.dc.html`)
 
     @ViewBuilder
     private var contentSections: some View {
+        saveFieldsFeedback
+
         Section {
-            SectionRuleHeader(title: "Ownership")
+            ChallengeBoardSectionHeader(title: "Fandoms")
+                .padding(.bottom, 6)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
-            ownershipPanel.pageBodyRow(top: 8, gutter: gutter)
+            allowedTagsRow(
+                tagTypeLabel: "Fandoms",
+                rawNames: fandomTagnames,
+                totalCount: tagSet?.fandomCount ?? 0,
+                limit: 4
+            )
+            .panelSegment(0, of: 1, gutter: gutter)
         }
 
         Section {
-            SectionRuleHeader(title: "Tags", count: totalTagCount)
+            ChallengeBoardSectionHeader(title: "Characters")
+                .padding(.bottom, 6)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
-            tagCountsPanel.pageBodyRow(top: 8, gutter: gutter)
+            allowedTagsRow(
+                tagTypeLabel: "Characters",
+                rawNames: characterTagnames,
+                totalCount: tagSet?.characterCount ?? 0,
+                limit: 3
+            )
+            .panelSegment(0, of: 2, gutter: gutter)
+            SubjectFormRow(label: ChallengesBoardCopy.tagSetLetNominateLabel, arrangement: .control) {
+                Toggle("", isOn: .constant(tagSet?.isNominated ?? false))
+                    .labelsHidden()
+                    .disabled(true)
+                    .accentFill()
+            }
+            .panelSegment(1, of: 2, gutter: gutter)
         }
 
         Section {
-            SectionRuleHeader(title: "Nominations")
+            ChallengeBoardSectionHeader(title: "Relationships")
+                .padding(.bottom, 6)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
-            nominationsPanel.pageBodyRow(top: 8, gutter: gutter)
+            allowedTagsRow(
+                tagTypeLabel: "Relationships",
+                rawNames: relationshipTagnames,
+                totalCount: tagSet?.relationshipCount ?? 0,
+                limit: 3,
+                isTinted: true
+            )
+            .panelSegment(0, of: 1, gutter: gutter)
         }
 
         Section {
-            SectionRuleHeader(title: "Review")
+            ChallengeBoardSectionHeader(title: "Additional tags")
+                .padding(.bottom, 6)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
-            reviewCountsPanel.pageBodyRow(top: 8, gutter: gutter)
+            allowedTagsRow(
+                tagTypeLabel: "Additional tags",
+                rawNames: freeformTagnames,
+                totalCount: tagSet?.freeformCount ?? 0,
+                limit: 3
+            )
+            .panelSegment(0, of: 1, gutter: gutter)
+        }
+
+        Section {
+            ChallengeBoardSectionHeader(title: ChallengesBoardCopy.tagSetNominationsHeader)
+                .pageBodyRow(top: 18, gutter: selfGuttered)
 
             if let queueErrorMessage {
-                errorCard(queueErrorMessage).pageBodyRow(top: 8, gutter: gutter)
+                errorCard(queueErrorMessage).pageBodyRow(top: 6, gutter: gutter)
             }
 
-            reviewQueueList.pageBodyRow(top: 8, gutter: gutter)
-            reviewFootnote.pageBodyRow(top: 8, gutter: gutter)
+            reviewQueueList.pageBodyRow(top: 6, gutter: gutter)
+            reviewFootnote.pageBodyRow(top: 6, gutter: gutter)
         }
 
         Section {
-            SectionRuleHeader(title: "At AO3")
+            ChallengeBoardSectionHeader(title: "Ownership")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
-            atAO3Panel.pageBodyRow(top: 8, gutter: gutter)
+            ownershipPanel.pageBodyRow(top: 6, gutter: gutter)
+        }
+
+        Section {
+            ChallengeBoardSectionHeader(title: "Nomination limits")
+                .pageBodyRow(top: 18, gutter: selfGuttered)
+            nominationsPanel.pageBodyRow(top: 6, gutter: gutter)
+        }
+
+        Section {
+            ChallengeBoardSectionHeader(title: "At AO3")
+                .pageBodyRow(top: 18, gutter: selfGuttered)
+            atAO3Panel.pageBodyRow(top: 6, gutter: gutter)
         }
     }
 
@@ -192,242 +283,199 @@ struct TagSetView: View {
 
             SubjectRowSeparator()
 
-            SubjectFormRow(label: "Visible to Everyone", arrangement: .control) {
+            SubjectFormRow(label: "Visible to everyone", arrangement: .control) {
                 Toggle("", isOn: .constant(tagSet?.isVisible ?? true))
                     .labelsHidden()
                     .disabled(true)
                     .accentFill()
             }
         }
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     // MARK: - Tags
 
-    private var tagCountsPanel: some View {
-        VStack(spacing: 0) {
-            tagCountRow("Fandoms", count: tagSet?.fandomCount ?? 0)
+    private func allowedTagsRow(
+        tagTypeLabel: String,
+        rawNames: String,
+        totalCount: Int,
+        limit: Int,
+        isTinted: Bool = false
+    ) -> some View {
+        let parsed = ChallengesBoardCopy.tagSetParsedNames(rawNames)
+        let preview = ChallengesBoardCopy.cappedTagPreview(parsed, limit: limit)
+        let extraCount = max(preview.extra, max(0, totalCount - preview.shown.count))
 
-            SubjectRowSeparator()
-
-            tagCountRow("Characters", count: tagSet?.characterCount ?? 0)
-
-            SubjectRowSeparator()
-
-            tagCountRow("Relationships", count: tagSet?.relationshipCount ?? 0)
-
-            SubjectRowSeparator()
-
-            tagCountRow("Additional Tags", count: tagSet?.freeformCount ?? 0)
-        }
-        .subjectPanel()
-    }
-
-    private func tagCountRow(_ label: String, count: Int) -> some View {
-        SubjectFormRow(label: label, value: "\(count)", showsDisclosure: true)
-            .subjectRowNavigation(accessibilityLabel: "\(label), add tags") {
-                tagEditorScreen
+        return SubjectFormRow(label: "Allowed", arrangement: .control, showsDisclosure: true) {
+            if preview.shown.isEmpty {
+                Text(totalCount > 0 ? totalCount.formatted() : "None")
+                    .font(.system(size: bodySize))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondaryInk)
+            } else {
+                FlowLayout(spacing: 6, rowSpacing: 6) {
+                    ForEach(Array(preview.shown.enumerated()), id: \.offset) { _, name in
+                        ChallengeBoardTagPill(text: name, isTinted: isTinted)
+                    }
+                    if extraCount > 0 {
+                        ChallengeBoardTagPill(text: "+\(extraCount)", isTinted: false)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
             }
+        }
+        .subjectRowNavigation(accessibilityLabel: "\(tagTypeLabel), allowed tags, \(totalCount)") {
+            tagEditorScreen
+        }
     }
 
     private var tagEditorScreen: some View {
         List {
             Section {
-                SubjectPageFact(effectiveTitle, gutter: SubjectMetrics.accountGutter)
-                    .pageBodyRow(top: 12, gutter: selfGuttered)
-
+                ChallengeBoardSectionHeader(title: "Fandom tags to add")
+                    .pageBodyRow(top: 14, gutter: selfGuttered)
                 tagFieldEditor(
-                    title: "Fandom Tags to Add",
                     placeholder: "Comma-separated fandom names…",
                     text: $fandomTagnames
-                ).pageBodyRow(top: 14, gutter: gutter)
+                ).pageBodyRow(top: 6, gutter: gutter)
 
+                ChallengeBoardSectionHeader(title: "Character tags to add")
+                    .pageBodyRow(top: 14, gutter: selfGuttered)
                 tagFieldEditor(
-                    title: "Character Tags to Add",
                     placeholder: "Comma-separated character names…",
                     text: $characterTagnames
-                ).pageBodyRow(top: 8, gutter: gutter)
+                ).pageBodyRow(top: 6, gutter: gutter)
 
+                ChallengeBoardSectionHeader(title: "Relationship tags to add")
+                    .pageBodyRow(top: 14, gutter: selfGuttered)
                 tagFieldEditor(
-                    title: "Relationship Tags to Add",
                     placeholder: "Comma-separated relationships…",
                     text: $relationshipTagnames
-                ).pageBodyRow(top: 8, gutter: gutter)
+                ).pageBodyRow(top: 6, gutter: gutter)
 
+                ChallengeBoardSectionHeader(title: "Additional tags to add")
+                    .pageBodyRow(top: 14, gutter: selfGuttered)
                 tagFieldEditor(
-                    title: "Additional Tags to Add",
                     placeholder: "Comma-separated additional tags…",
                     text: $freeformTagnames
-                ).pageBodyRow(top: 8, gutter: gutter)
+                ).pageBodyRow(top: 6, gutter: gutter)
 
                 tagFieldsFootnote.pageBodyRow(top: 8, gutter: gutter)
-                saveFieldsFeedback
-                saveFieldsButton.pageBodyRow(top: 8, gutter: gutter)
             }
+            saveFieldsFeedback
         }
         .cardList()
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Add Tags", palette: palette)
+        .subjectScreenWash(title: "Add Tags", palette: palette, role: .grouped)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                ChallengeBoardConfirmToolbarButton(
+                    title: "Save",
+                    isBusy: isSavingFields,
+                    isDisabled: isSavingFields || tagSet == nil
+                ) {
+                    Task { await saveTagFields() }
+                }
+            }
+        }
         .screenTint(palette)
     }
 
-    private func tagFieldEditor(title: String, placeholder: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            SubjectFieldLabel(text: title, style: .formGroup)
-
-            ZStack(alignment: .topLeading) {
-                if text.wrappedValue.isEmpty {
-                    Text(placeholder)
-                        .font(.system(size: editorSize))
-                        .foregroundStyle(.secondary.opacity(0.6))
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 8)
-                }
-
-                TextEditor(text: text)
+    private func tagFieldEditor(placeholder: String, text: Binding<String>) -> some View {
+        ZStack(alignment: .topLeading) {
+            if text.wrappedValue.isEmpty {
+                Text(placeholder)
                     .font(.system(size: editorSize))
-                    .frame(minHeight: 60)
-                    .scrollContentBackground(.hidden)
-                    .background(Color.clear)
+                    .foregroundStyle(.secondary.opacity(0.6))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 8)
             }
+
+            TextEditor(text: text)
+                .font(.system(size: editorSize))
+                .frame(minHeight: 60)
+                .scrollContentBackground(.hidden)
+                .background(Color.clear)
         }
         .padding(14)
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     /// The spec's review caption (C2-8).
     private var reviewFootnote: some View {
-        Text("Before you approve a nominated character or relationship, it must be linked to a fandom. "
-            + "The review list groups nominations by fandom.")
-            .font(.system(size: captionSize))
-            .foregroundStyle(Color.secondary.opacity(0.7))
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 4)
+        ChallengeBoardSectionFooter(
+            text: "Before you approve a nominated character or relationship, it must be linked to a fandom. "
+                + "Associate nominations on AO3 to approve them.",
+            horizontalInset: 16
+        )
     }
 
     private var tagFieldsFootnote: some View {
-        Text("Enter each tag type as its own comma-separated list, as on AO3. If AO3 rejects a tag, "
-            + "Kudos shows which list it came from.")
-            .font(.system(size: captionSize))
-            .foregroundStyle(Color.secondary.opacity(0.7))
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 4)
+        ChallengeBoardSectionFooter(
+            text: "Enter each tag type as its own comma-separated list, as on AO3. If AO3 rejects a tag, "
+                + "Kudos shows which list it came from.",
+            horizontalInset: 16
+        )
     }
 
     @ViewBuilder
     private var saveFieldsFeedback: some View {
         if let saveFieldsError {
-            errorCard(saveFieldsError).pageBodyRow(top: 8, gutter: gutter)
+            Section {
+                errorCard(saveFieldsError).pageBodyRow(top: 8, gutter: gutter)
+            }
         }
         if let saveFieldsNotice {
-            noticeCard(saveFieldsNotice).pageBodyRow(top: 8, gutter: gutter)
-        }
-    }
-
-    private var saveFieldsButton: some View {
-        Button {
-            Task { await saveTagFields() }
-        } label: {
-            HStack(spacing: 6) {
-                if isSavingFields {
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(theme.onEffectiveTint)
-                }
-                Text("Save tags")
-                    .font(.system(size: buttonLabelSize, weight: .semibold))
-                    .foregroundStyle(theme.onEffectiveTint)
-                    .fixedSize(horizontal: false, vertical: true)
+            Section {
+                noticeCard(saveFieldsNotice).pageBodyRow(top: 8, gutter: gutter)
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 44)
-            .background(
-                Capsule()
-                    .fill(theme.effectiveTint)
-            )
         }
-        .buttonStyle(.plain)
-        .disabled(isSavingFields)
     }
 
     // MARK: - Nominations
 
     private var nominationsPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Nominations Open", arrangement: .control) {
-                Toggle("", isOn: .constant(tagSet?.isNominated ?? false))
-                    .labelsHidden()
-                    .disabled(true)
-                    .accentFill()
-            }
-
-            SubjectRowSeparator()
-
             SubjectFormRow(
-                label: "Fandoms per Person",
+                label: "Fandoms per person",
                 value: "\(tagSet?.fandomNominationLimit ?? 0)"
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Characters per Person",
+                label: "Characters per person",
                 value: "\(tagSet?.characterNominationLimit ?? 0)"
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Relationships per Person",
+                label: "Relationships per person",
                 value: "\(tagSet?.relationshipNominationLimit ?? 0)"
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Additional Tags per Person",
+                label: "Additional tags per person",
                 value: "\(tagSet?.freeformNominationLimit ?? 0)"
             )
         }
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     // MARK: - Review
 
-    private var reviewCountsPanel: some View {
-        VStack(spacing: 0) {
-            SubjectFormRow(
-                label: "Awaiting Review",
-                value: "\(reviewQueue.filter { $0.state == .unreviewed }.count)"
-            )
-
-            SubjectRowSeparator()
-
-            SubjectFormRow(
-                label: "Approved",
-                value: "\(reviewQueue.filter { $0.state == .approved }.count)"
-            )
-
-            SubjectRowSeparator()
-
-            SubjectFormRow(
-                label: "Rejected",
-                value: "\(reviewQueue.filter { $0.state == .rejected }.count)"
-            )
-        }
-        .subjectPanel()
-    }
-
-    /// `parentTagName` groups, sorted alphabetically with the fandom-less bucket
-    /// last — a nomination without one is the exception, not the common case.
-    private var groupedQueue: [(fandom: String, nominations: [AO3TagNomination])] {
-        let groups = Dictionary(grouping: reviewQueue, by: \.parentTagName)
-        return groups.keys
-            .sorted { lhs, rhs in
-                if lhs.isEmpty != rhs.isEmpty { return rhs.isEmpty }
-                return lhs.localizedStandardCompare(rhs) == .orderedAscending
+    private var orderedReviewQueue: [AO3TagNomination] {
+        reviewQueue.sorted { lhs, rhs in
+            if lhs.parentTagName.isEmpty != rhs.parentTagName.isEmpty {
+                return rhs.parentTagName.isEmpty
             }
-            .map { (fandom: $0, nominations: groups[$0] ?? []) }
+            let parentCmp = lhs.parentTagName.localizedStandardCompare(rhs.parentTagName)
+            if parentCmp != .orderedSame { return parentCmp == .orderedAscending }
+            return lhs.tagName.localizedStandardCompare(rhs.tagName) == .orderedAscending
+        }
     }
 
     @ViewBuilder
@@ -435,42 +483,32 @@ struct TagSetView: View {
         if reviewQueue.isEmpty {
             emptyQueueCard
         } else {
-            VStack(spacing: 9) {
-                ForEach(groupedQueue, id: \.fandom) { group in
-                    fandomGroupPanel(fandom: group.fandom, nominations: group.nominations)
+            VStack(spacing: 0) {
+                ForEach(Array(orderedReviewQueue.enumerated()), id: \.element.id) { index, nomination in
+                    if index > 0 { SubjectRowSeparator() }
+                    nominationRow(nomination)
                 }
             }
+            .challengeBoardCard()
         }
-    }
-
-    private func fandomGroupPanel(fandom: String, nominations: [AO3TagNomination]) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(fandom.isEmpty ? "No fandom listed" : fandom)
-                .font(.system(size: fieldLabelSize, weight: .bold))
-                .tracking(11 * 0.07)
-                .textCase(.uppercase)
-                .foregroundStyle(palette.accent)
-                .padding(.horizontal, 14)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
-
-            ForEach(Array(nominations.enumerated()), id: \.element.id) { index, nomination in
-                if index > 0 { SubjectRowSeparator() }
-                nominationRow(nomination)
-            }
-        }
-        .subjectPanel()
     }
 
     private func nominationRow(_ nomination: AO3TagNomination) -> some View {
-        HStack(spacing: 10) {
+        let subtitle = ChallengesBoardCopy.tagSetNominationSubtitle(
+            field: nomination.field,
+            parentTagName: nomination.parentTagName
+        )
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 10))
+        return layout {
             VStack(alignment: .leading, spacing: 2) {
                 Text(nomination.tagName)
-                    .font(.system(size: rowTitleSize, weight: .medium))
+                    .font(.system(size: rowTitleSize))
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(fieldLabel(nomination.field))
-                    .font(.system(size: fieldLabelSize))
+                Text(subtitle)
+                    .font(.system(size: subSize))
                     .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -478,84 +516,58 @@ struct TagSetView: View {
 
             switch nomination.state {
             case .unreviewed:
-                rejectButton(for: nomination)
+                let warn = ChallengeBoardColors.warningBadge(for: theme.appTheme)
+                HStack(spacing: 8) {
+                    ChallengeBoardBadge(
+                        text: ChallengesBoardCopy.tagSetNewBadge,
+                        style: .tinted(foreground: warn.foreground, background: warn.background)
+                    )
+                    rejectButton(for: nomination)
+                }
             case .approved:
-                stateBadge("Approved", color: .green)
+                let ok = ChallengeBoardColors.successBadge(for: theme.appTheme)
+                ChallengeBoardBadge(
+                    text: "Approved",
+                    style: .tinted(foreground: ok.foreground, background: ok.background)
+                )
             case .rejected:
-                stateBadge("Rejected", color: .red)
+                let bad = ChallengeBoardColors.destructiveBadge(for: theme.appTheme)
+                ChallengeBoardBadge(
+                    text: "Rejected",
+                    style: .tinted(foreground: bad.foreground, background: bad.background)
+                )
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-    }
-
-    private func fieldLabel(_ field: AO3TagSetField) -> String {
-        switch field {
-        case .fandom: "Fandom"
-        case .character: "Character"
-        case .relationship: "Relationship"
-        case .freeform: "Additional tag"
-        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
     }
 
     private func rejectButton(for nomination: AO3TagNomination) -> some View {
-        let isInFlight = nominationInFlight == nomination.id
-        return Button {
+        ChallengeBoardInlineActionButton(
+            title: "Reject",
+            role: .destructive,
+            isBusy: nominationInFlight == nomination.id,
+            isDisabled: nominationInFlight != nil
+        ) {
             Task { await reject(nomination) }
-        } label: {
-            HStack(spacing: 4) {
-                if isInFlight {
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(Color.red)
-                }
-                Text("Reject")
-                    .font(.system(size: pillLabelSize, weight: .semibold))
-                    .foregroundStyle(Color.red)
-                    .lineLimit(1)
-                    .fixedSize()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                Capsule()
-                    .fill(Color.red.opacity(0.12))
-                    .overlay(Capsule().strokeBorder(Color.red.opacity(0.32), lineWidth: 0.5))
-            )
         }
-        .buttonStyle(.plain)
-        .disabled(nominationInFlight != nil)
-    }
-
-    private func stateBadge(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.system(size: fieldLabelSize, weight: .semibold))
-            .lineLimit(1)
-            .fixedSize()
-            .foregroundStyle(color)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule()
-                    .fill(color.opacity(0.12))
-            )
     }
 
     private var emptyQueueCard: some View {
         VStack(spacing: 6) {
-            Text("No nominations yet")
+            Text(ChallengesBoardCopy.tagSetEmptyNominationsTitle)
                 .font(.system(size: stateTitleSize, weight: .semibold))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("Nothing has been nominated to this tag set.")
+            Text(ChallengesBoardCopy.tagSetEmptyNominationsBody)
                 .font(.system(size: bodySize))
                 .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
         .padding(16)
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     // MARK: - At AO3
@@ -563,7 +575,7 @@ struct TagSetView: View {
     private var atAO3Panel: some View {
         VStack(spacing: 0) {
             SubjectFormRow(
-                label: "Associate Nominations",
+                label: "Associate nominations",
                 value: "Opens AO3",
                 showsDisclosure: true
             ) {
@@ -573,7 +585,7 @@ struct TagSetView: View {
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Delete Tag Set",
+                label: "Delete tag set",
                 value: "Opens AO3",
                 showsDisclosure: true,
                 isDestructive: true
@@ -581,7 +593,7 @@ struct TagSetView: View {
                 router.open(AO3ChallengeURL.tagSetEdit(tagSetID))
             }
         }
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     // MARK: - State Cards
@@ -618,7 +630,7 @@ struct TagSetView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(16)
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     private func noticeCard(_ text: String) -> some View {
@@ -632,21 +644,21 @@ struct TagSetView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     private func errorCard(_ text: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle")
-                .foregroundStyle(Color.red)
+                .foregroundStyle(theme.appTheme.errorColor)
             Text(text)
                 .font(.system(size: bodySize))
-                .foregroundStyle(Color.red)
+                .foregroundStyle(theme.appTheme.errorColor)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     // MARK: - Actions

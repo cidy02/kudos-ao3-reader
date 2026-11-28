@@ -35,13 +35,13 @@ struct PromptMemeView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    @ScaledMetric(relativeTo: .headline) private var cardTitleSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .body) private var promptBodySize: CGFloat = 14.5
-    @ScaledMetric(relativeTo: .subheadline) private var buttonLabelSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .body) private var cardTitleSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .subheadline) private var promptBodySize: CGFloat = 14
     @ScaledMetric(relativeTo: .subheadline) private var loadingSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) private var failureBodySize: CGFloat = 13
-    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .footnote) private var subSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 12
 
     @State private var prompts: [AO3PromptMemePrompt] = []
     @State private var currentPage: Int = 1
@@ -53,11 +53,20 @@ struct PromptMemeView: View {
     @State private var phase: Phase = .idle
     @State private var promptInFlight: Int?
     @State private var actionErrorMessage: String?
+    @State private var showingNewPrompt = false
 
     enum PromptFilter: String, CaseIterable, Hashable, Sendable {
         case all = "All"
         case unclaimed = "Unclaimed"
         case yours = "Yours"
+
+        var chipTitle: String {
+            switch self {
+            case .all: "All"
+            case .unclaimed: "Unclaimed"
+            case .yours: ChallengesBoardCopy.promptMemeClaimedByMeChipLabel
+            }
+        }
     }
 
     private enum Phase: Equatable {
@@ -68,7 +77,6 @@ struct PromptMemeView: View {
     }
 
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
-    private var selfGuttered: CGFloat { 0 }
 
     private var palette: SubjectPalette {
         theme.appTheme.subjectPalette(hue: CoverArt.workHue(fandoms: [], title: effectiveTitle))
@@ -78,8 +86,14 @@ struct PromptMemeView: View {
         collectionTitle.isEmpty ? collectionSlug : collectionTitle
     }
 
-    private var unclaimedCount: Int {
-        prompts.filter { !$0.isClaimed }.count
+    private var yoursCount: Int {
+        let loggedInName = auth.username ?? ""
+        return prompts.filter { prompt in
+            if prompt.claimedByCurrentUser { return true }
+            return AO3ChallengeSignUpMatching.owns(
+                byline: prompt.displayedOwner ?? "", login: loggedInName
+            )
+        }.count
     }
 
     private var filteredPrompts: [AO3PromptMemePrompt] {
@@ -104,15 +118,27 @@ struct PromptMemeView: View {
 
     var body: some View {
         promptList
-            .safeAreaBar(edge: .bottom, spacing: 0) {
-                if auth.isLoggedIn { newPromptBar }
+            .toolbar {
+                if auth.isLoggedIn {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            showingNewPrompt = true
+                        } label: {
+                            Label(ChallengesBoardCopy.promptMemeNewPromptLabel, systemImage: "plus")
+                        }
+                        .accessibilityLabel(ChallengesBoardCopy.promptMemeNewPromptLabel)
+                    }
+                }
             }
-        .task { await loadPromptsIfNeeded() }
-        .refreshable {
-            // A refresh is the reader's way to try for a date that did not load.
-            scheduleAttempted = false
-            await loadPrompts(page: 1)
-        }
+            .navigationDestination(isPresented: $showingNewPrompt) {
+                ChallengeSignUpView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
+            }
+            .task { await loadPromptsIfNeeded() }
+            .refreshable {
+                // A refresh is the reader's way to try for a date that did not load.
+                scheduleAttempted = false
+                await loadPrompts(page: 1)
+            }
             .screenTint(palette)
     }
 
@@ -134,8 +160,12 @@ struct PromptMemeView: View {
     private var promptRows: some View {
         List {
             Section {
-                header.pageBodyRow(top: 12, gutter: selfGuttered).id(Self.headerRowID)
-                filterSegment.pageBodyRow(top: 10, gutter: gutter)
+                contextCard.pageBodyRow(top: 12, gutter: gutter).id(Self.headerRowID)
+                if phase == .loaded, !prompts.isEmpty {
+                    ChallengeBoardStatStrip(cells: statCells, surface: .list)
+                        .pageBodyRow(top: 14, gutter: gutter)
+                }
+                filterChipRail.pageBodyRow(top: 14, gutter: 0)
             }
 
             if let actionErrorMessage {
@@ -178,51 +208,54 @@ struct PromptMemeView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Prompts", palette: palette)
+        .subjectScreenWash(title: "Prompts", palette: palette, role: .content)
     }
 
-    /// The spec's bottom-bar "New prompt": AO3's sign-up form for this meme.
-    private var newPromptBar: some View {
-        NavigationLink {
-            ChallengeSignUpView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
-        } label: {
-            Text("New prompt")
-                .font(.system(size: buttonLabelSize, weight: .semibold))
-                .foregroundStyle(theme.onEffectiveTint)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 44)
-                .background(SubjectMetrics.controlShape(dynamicTypeSize).fill(theme.effectiveTint))
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-    }
+    // MARK: - Header & Filter (`Prompt-Meme.dc.html`)
 
-    // MARK: - Header & Filter
-
-    /// The counts are this page's, so a multi-page meme says which page.
-    private var subtitleText: String {
-        var line = AO3ChallengeCountText.plural(prompts.count, "prompt") + " · \(unclaimedCount) unclaimed"
-        if let page = AO3ChallengeCountText.pageQualifier(page: currentPage, totalPages: totalPages) {
-            line += " \(page)"
-        }
-        if !closeDateText.isEmpty {
-            line += " · \(closeDateText)"
-        }
-        return [effectiveTitle, line].filter { !$0.isEmpty }.joined(separator: " · ")
-    }
-
-    private var header: some View {
-        SubjectPageFact(subtitleText, gutter: SubjectMetrics.accountGutter)
-    }
-
-    private var filterSegment: some View {
-        SubjectSegmentedControl(
-            options: PromptFilter.allCases,
-            title: \.rawValue,
-            selection: $filterSelection
+    private var contextCard: some View {
+        let metaParts: [String?] = [
+            closeDateText.isEmpty ? nil : closeDateText,
+            AO3ChallengeCountText.pageQualifier(page: currentPage, totalPages: totalPages)
+        ]
+        let meta = metaParts.compactMap { $0 }.joined(separator: " · ")
+        return ChallengeBoardContextCard(
+            systemImage: "bubble.left",
+            kicker: ChallengesBoardCopy.promptMemeContextKicker(fandoms: prompts.map(\.fandoms)),
+            title: effectiveTitle,
+            meta: meta.isEmpty ? nil : meta,
+            palette: palette,
+            surface: .list
         )
+    }
+
+    private var statCells: [ChallengeBoardStatStrip.Cell] {
+        let claimed = prompts.filter(\.isClaimed).count
+        return [
+            ChallengeBoardStatStrip.Cell(value: prompts.count.formatted(), label: "Prompts"),
+            ChallengeBoardStatStrip.Cell(value: claimed.formatted(), label: "Claimed"),
+            ChallengeBoardStatStrip.Cell(
+                value: yoursCount.formatted(),
+                label: "Yours",
+                tint: yoursCount > 0 ? theme.accentInk : nil
+            )
+        ]
+    }
+
+    private var filterChipRail: some View {
+        AccessibilityChipRail(horizontalPadding: gutter) {
+            ForEach(PromptFilter.allCases, id: \.self) { option in
+                let selected = filterSelection == option
+                Button {
+                    filterSelection = option
+                } label: {
+                    ChallengeBoardChipLabel(text: option.chipTitle, isSelected: selected)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(option.chipTitle)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
     }
 
     // MARK: - Content Sections
@@ -230,16 +263,19 @@ struct PromptMemeView: View {
     @ViewBuilder
     private var contentSections: some View {
         Section {
-            SectionRuleHeader(title: filterSelection.rawValue, count: filteredPrompts.count)
-                .pageBodyRow(top: 18, gutter: selfGuttered)
-
             if filteredPrompts.isEmpty {
-                emptyFilteredCard.pageBodyRow(top: 8, gutter: gutter)
+                emptyFilteredCard.pageBodyRow(top: 10, gutter: gutter)
             } else {
-                promptsList.pageBodyRow(top: 8, gutter: gutter)
+                ForEach(Array(filteredPrompts.enumerated()), id: \.element.id) { index, prompt in
+                    VStack(spacing: 0) {
+                        if index > 0 { SubjectRowSeparator(inset: dynamicTypeSize.isAccessibilitySize ? 0 : 56) }
+                        promptRow(prompt)
+                    }
+                    .pageBodyRow(top: 0, gutter: gutter)
+                }
             }
 
-            footnoteText.pageBodyRow(top: 8, gutter: gutter)
+            footnoteText.pageBodyRow(top: 10, gutter: gutter)
         }
 
         if totalPages > 1 {
@@ -249,154 +285,138 @@ struct PromptMemeView: View {
         }
     }
 
-    // MARK: - Prompt Cards
+    // MARK: - Prompt Rows (`Prompt-Meme.dc.html`)
 
-    private var promptsList: some View {
-        VStack(spacing: 9) {
-            ForEach(filteredPrompts) { prompt in
-                promptCard(prompt)
+    private func promptRow(_ prompt: AO3PromptMemePrompt) -> some View {
+        let heading = prompt.title.isEmpty ? prompt.promptText : prompt.title
+        let showBody = !prompt.title.isEmpty && !prompt.promptText.isEmpty
+        let byline = ChallengesBoardCopy.promptMemeByline(
+            isAnonymous: prompt.isAnonymous,
+            owner: prompt.displayedOwner
+        )
+        let chips = ChallengesBoardCopy.promptMemeTagChips(
+            fandoms: prompt.fandoms,
+            tagSummary: prompt.tagSummary,
+            limit: 4
+        )
+        let status = ChallengesBoardCopy.promptMemeStatusMeta(
+            claimedByCurrentUser: prompt.claimedByCurrentUser,
+            claimantCount: prompt.claimantCount
+        )
+        let rowLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+
+        return rowLayout {
+            if !dynamicTypeSize.isAccessibilitySize {
+                ChallengeBoardAvatar(
+                    text: nil,
+                    systemImage: "bubble.left.fill",
+                    color: palette.accent,
+                    shapeKind: .roundedSquare(size: 44, radius: 10)
+                )
+                .padding(.top, 2)
             }
-        }
-    }
 
-    private func promptCard(_ prompt: AO3PromptMemePrompt) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // The spec's kicker is the fandom; a multi-fandom prompt adds "+N".
-            HStack(spacing: 7) {
-                if let fandom = prompt.fandoms.first {
-                    Text(FandomDisplayName.bareTitle(fandom).uppercased())
-                        .font(.system(size: 9, weight: .bold))
-                        .tracking(9 * 0.11)
-                        .foregroundStyle(palette.accent)
-                        .lineLimit(1)
-                    if prompt.fandoms.count > 1 {
-                        Text("+\(prompt.fandoms.count - 1)")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(palette.accent.opacity(0.6))
-                    }
-                }
-
-                Text(prompt.isClaimed ? "claimed" : "unclaimed")
-                    .font(.system(size: 9, weight: .semibold))
-                    .tracking(9 * 0.05)
-                    .foregroundStyle(Color.secondary.opacity(0.6))
-            }
-
-            if !prompt.title.isEmpty {
-                Text(prompt.title)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(heading)
                     .font(.system(size: cardTitleSize, weight: .semibold))
                     .foregroundStyle(.primary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
-            }
 
-            Text(prompt.promptText)
-                .font(.system(size: promptBodySize))
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if !prompt.tagSummary.isEmpty {
-                Text(prompt.tagSummary)
-                    .font(.system(size: captionSize))
-                    .foregroundStyle(Color.secondary.opacity(0.65))
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                Text(byline)
+                    .font(.system(size: subSize))
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
+
+                if showBody {
+                    Text(prompt.promptText)
+                        .font(.system(size: promptBodySize))
+                        .foregroundStyle(.primary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                }
+
+                if !chips.isEmpty {
+                    FlowLayout(spacing: 4, rowSpacing: 4) {
+                        ForEach(chips) { chip in
+                            ChallengeBoardTagPill(text: chip.label, isTinted: chip.isTinted)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+
+                Text(status.text)
+                    .font(.system(size: captionSize, weight: status.isAccent ? .semibold : .regular))
+                    .foregroundStyle(status.isAccent ? AnyShapeStyle(theme.accentInk) : AnyShapeStyle(.secondaryInk))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 1)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(prompt.isAnonymous ? "Posted anonymously" : (prompt.displayedOwner ?? "Unknown poster"))
-                .font(.system(size: captionSize))
-                .foregroundStyle(.secondaryInk)
-                .fixedSize(horizontal: false, vertical: true)
-
-            promptActionRow(prompt)
+            promptTrailingControl(prompt)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .subjectPanel()
+        .padding(.vertical, 10)
     }
 
     @ViewBuilder
-    private func promptActionRow(_ prompt: AO3PromptMemePrompt) -> some View {
+    private func promptTrailingControl(_ prompt: AO3PromptMemePrompt) -> some View {
         let isInFlight = promptInFlight == prompt.id
-
-        HStack {
-            if prompt.claimedByCurrentUser {
-                Text("Claimed by you")
-                    .font(.system(size: bodySize, weight: .medium))
-                    .foregroundStyle(palette.accent)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Spacer()
-
-                promptActionButton(title: "Release", isProminent: false, isInFlight: isInFlight) {
+        if prompt.claimedByCurrentUser {
+            VStack(alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing, spacing: 6) {
+                ChallengeBoardBadge(text: "Claimed", style: .accentFill)
+                ChallengeBoardInlineActionButton(
+                    title: "Release",
+                    role: .secondary,
+                    isBusy: isInFlight,
+                    isDisabled: promptInFlight != nil
+                ) {
                     Task { await release(prompt) }
                 }
-            } else if prompt.canClaim {
-                // AO3 printed Claim for this viewer; a prompt meme takes several claims.
-                Spacer()
-
-                promptActionButton(title: "Claim", isProminent: true, isInFlight: isInFlight) {
-                    Task { await claim(prompt) }
-                }
-            } else if prompt.isClaimed {
-                Spacer()
-
-                promptActionButton(title: "Fill it", systemImage: "safari", isProminent: false, isInFlight: false) {
-                    router.open(AO3ChallengeURL.promptMeme(slug: collectionSlug))
-                }
             }
-        }
-        .padding(.top, 2)
-    }
-
-    private func promptActionButton(
-        title: String,
-        systemImage: String? = nil,
-        isProminent: Bool,
-        isInFlight: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                if isInFlight {
-                    ProgressView()
-                        .controlSize(.small)
-                        .accentFill()
-                } else if let systemImage {
-                    Image(systemName: systemImage)
-                        .font(.system(size: 11, weight: .semibold))
-                }
-                Text(title)
-                    .font(.system(size: bodySize, weight: .semibold))
-                    .lineLimit(1)
-                    .fixedSize()
+        } else if prompt.canClaim {
+            ChallengeBoardInlineActionButton(
+                title: "Claim",
+                role: .softAccent,
+                isBusy: isInFlight,
+                isDisabled: promptInFlight != nil
+            ) {
+                Task { await claim(prompt) }
             }
-            .foregroundStyle(isProminent ? theme.onEffectiveTint : theme.accentInk)
-            .padding(.horizontal, 14)
-            .frame(height: 34)
-            .background(
-                Capsule().fill(isProminent ? theme.effectiveTint : theme.effectiveTint.opacity(0.14))
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(isInFlight || promptInFlight != nil)
-        .layoutFreeHitTarget {
-            if !isInFlight, promptInFlight == nil { action() }
+        } else if prompt.isClaimed {
+            ChallengeBoardInlineActionButton(
+                title: "Fill it",
+                systemImage: "safari",
+                role: .secondary
+            ) {
+                router.open(AO3ChallengeURL.promptMeme(slug: collectionSlug))
+            }
         }
     }
 
     private var emptyFilteredCard: some View {
         VStack(spacing: 6) {
-            Text(filterSelection == .all ? "No prompts yet" : "No \(filterSelection.rawValue.lowercased()) prompts")
-                .font(.system(size: cardTitleSize, weight: .semibold))
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                ChallengesBoardCopy.promptMemeEmptyTitle(
+                    filterName: filterSelection.chipTitle,
+                    isAllFilter: filterSelection == .all
+                )
+            )
+            .font(.system(size: cardTitleSize, weight: .semibold))
+            .foregroundStyle(.primary)
+            .fixedSize(horizontal: false, vertical: true)
 
-            Text(filterSelection == .all
-                ? "Prompts will appear here once someone posts one."
-                : "No prompts on this page match the \"\(filterSelection.rawValue)\" filter.")
-                .font(.system(size: bodySize))
-                .foregroundStyle(.secondaryInk)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                ChallengesBoardCopy.promptMemeEmptyBody(
+                    filterName: filterSelection.chipTitle,
+                    isAllFilter: filterSelection == .all
+                )
+            )
+            .font(.system(size: bodySize))
+            .foregroundStyle(.secondaryInk)
+            .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
         .padding(16)
@@ -514,7 +534,7 @@ private extension PromptMemeView {
                     slug: collectionSlug, request: settingsRequest, kind: challengeKind
                 ),
                 let closeDate = form.settings.signupsCloseAt.dateText {
-                closeDateText = "open until \(closeDate)"
+                closeDateText = ChallengesBoardCopy.promptMemeOpenUntil(closeDate)
             }
         }
 

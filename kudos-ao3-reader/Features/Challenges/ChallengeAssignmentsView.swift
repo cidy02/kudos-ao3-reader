@@ -24,13 +24,13 @@ struct ChallengeAssignmentsView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 14.5
+    @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 17
     @ScaledMetric(relativeTo: .headline) private var cardTitleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .subheadline) private var buttonLabelSize: CGFloat = 14
     @ScaledMetric(relativeTo: .subheadline) private var loadingSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) private var failureBodySize: CGFloat = 13
-    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .footnote) private var captionSize: CGFloat = 13
     @ScaledMetric(relativeTo: .caption) private var pillLabelSize: CGFloat = 12
 
     @State private var matched: [AO3ChallengeAssignment] = []
@@ -76,7 +76,6 @@ struct ChallengeAssignmentsView: View {
     }
 
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
-    private var selfGuttered: CGFloat { 0 }
 
     private var palette: SubjectPalette {
         theme.appTheme.subjectPalette(hue: CoverArt.workHue(fandoms: [], title: effectiveTitle))
@@ -87,8 +86,12 @@ struct ChallengeAssignmentsView: View {
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 12, gutter: selfGuttered)
-                segmentStrip.pageBodyRow(top: 10, gutter: gutter)
+                contextCard.pageBodyRow(top: 12, gutter: gutter)
+                if phase == .loaded, !statCells.isEmpty {
+                    ChallengeBoardStatStrip(cells: statCells, surface: .list)
+                        .pageBodyRow(top: 14, gutter: gutter)
+                }
+                segmentStrip.pageBodyRow(top: 14, gutter: gutter)
             }
 
             switch phase {
@@ -103,7 +106,7 @@ struct ChallengeAssignmentsView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Assignments", palette: palette)
+        .subjectScreenWash(title: "Assignments", palette: palette, role: .content)
         .safeAreaBar(edge: .bottom, spacing: 0) {
             if auth.isLoggedIn, phase == .loaded,
                AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner) {
@@ -140,22 +143,55 @@ struct ChallengeAssignmentsView: View {
             .screenTint(palette)
     }
 
-    // MARK: - Header
+    // MARK: - Header (`Challenge-Assignments.dc.html`)
 
-    private var header: some View {
-        SubjectPageFact(subtitleLine, gutter: SubjectMetrics.accountGutter)
+    private var earliestSentDateText: String? {
+        matched.compactMap(\.sentAt).min().map { WorkStat.displayDate($0) }
     }
 
-    private var subtitleLine: String {
-        var parts: [String] = [effectiveTitle]
-        if phase == .loaded {
-            if loadErrors[.matched] == nil { parts.append("\(matched.count) matched") }
-            if loadErrors[.unmatched] == nil { parts.append("\(unmatched.count) unmatched") }
+    private var contextCard: some View {
+        let meta = ChallengesBoardCopy.assignmentsContextMeta(
+            sentDateText: earliestSentDateText,
+            dueDateText: worksDueAt?.dateText
+        )
+        return ChallengeBoardContextCard(
+            systemImage: "gift",
+            kicker: ChallengesBoardCopy.challengeSettingsKicker(
+                kind: challengeKind ?? .giftExchange,
+                isModerated: nil
+            ),
+            title: effectiveTitle,
+            meta: meta.isEmpty ? nil : meta,
+            palette: palette,
+            surface: .list
+        )
+    }
+
+    private var statCells: [ChallengeBoardStatStrip.Cell] {
+        var cells: [ChallengeBoardStatStrip.Cell] = []
+        if loadErrors[.matched] == nil {
+            cells.append(ChallengeBoardStatStrip.Cell(value: matched.count.formatted(), label: "Assigned"))
+            let posted = matched.filter(\.isFulfilled).count
+            cells.append(ChallengeBoardStatStrip.Cell(value: posted.formatted(), label: "Posted"))
         }
-        if let due = worksDueAt?.dateText {
-            parts.append("works due \(due)")
+        if loadErrors[.unmatched] == nil {
+            cells.append(
+                ChallengeBoardStatStrip.Cell(
+                    value: unmatched.count.formatted(),
+                    label: "Defaulted",
+                    tint: unmatched.isEmpty ? nil : theme.appTheme.errorColor
+                )
+            )
         }
-        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
+        if let dueInstant = worksDueAt?.instant {
+            cells.append(
+                ChallengeBoardStatStrip.Cell(
+                    value: ChallengesBoardCopy.daysUntilText(target: dueInstant),
+                    label: "To go"
+                )
+            )
+        }
+        return cells
     }
 
     private var segmentStrip: some View {
@@ -183,16 +219,36 @@ struct ChallengeAssignmentsView: View {
         }
     }
 
+    @ViewBuilder
     private var matchedSection: some View {
-        Section {
-            SectionRuleHeader(title: "Matched", count: matched.count)
-                .pageBodyRow(top: 18, gutter: selfGuttered)
-            if let error = loadErrors[.matched] {
+        if let error = loadErrors[.matched] {
+            Section {
+                ChallengeBoardListSectionHeader(title: "Assigned")
+                    .pageBodyRow(top: 18, gutter: gutter)
                 failureCard(error, title: "Couldn't load matched assignments").pageBodyRow(top: 8, gutter: gutter)
-            } else if matched.isEmpty {
-                emptyCard("No matched assignments yet.").pageBodyRow(top: 8, gutter: gutter)
-            } else {
-                assignmentRows(matched).pageBodyRow(top: 8, gutter: gutter)
+            }
+        } else if matched.isEmpty {
+            Section {
+                ChallengeBoardListSectionHeader(title: "Assigned", count: 0)
+                    .pageBodyRow(top: 18, gutter: gutter)
+                emptyCard(ChallengesBoardCopy.assignmentsEmptyMatched).pageBodyRow(top: 8, gutter: gutter)
+            }
+        } else {
+            let posted = matched.filter(\.isFulfilled)
+            let open = matched.filter { !$0.isFulfilled }
+            if !open.isEmpty {
+                Section {
+                    ChallengeBoardListSectionHeader(title: "Assigned", count: open.count)
+                        .pageBodyRow(top: 18, gutter: gutter)
+                    assignmentRows(open).pageBodyRow(top: 4, gutter: gutter)
+                }
+            }
+            if !posted.isEmpty {
+                Section {
+                    ChallengeBoardListSectionHeader(title: "Recently posted", count: posted.count)
+                        .pageBodyRow(top: 18, gutter: gutter)
+                    assignmentRows(posted).pageBodyRow(top: 4, gutter: gutter)
+                }
             }
         }
     }
@@ -203,33 +259,38 @@ struct ChallengeAssignmentsView: View {
 
     private var pinchHitsSection: some View {
         Section {
-            SectionRuleHeader(title: "Pinch Hits", count: pinchHitRows.count)
-                .pageBodyRow(top: 18, gutter: selfGuttered)
+            ChallengeBoardListSectionHeader(
+                title: ChallengesBoardCopy.assignmentsPinchHitsOpenHeader,
+                count: pinchHitRows.count
+            )
+            .pageBodyRow(top: 18, gutter: gutter)
             if let error = loadErrors[.pinchHits] ?? loadErrors[.unmatched] {
                 failureCard(error, title: "Couldn't load pinch hits").pageBodyRow(top: 8, gutter: gutter)
             } else if pinchHitRows.isEmpty {
-                emptyCard("No pinch hits open right now.").pageBodyRow(top: 8, gutter: gutter)
+                emptyCard(ChallengesBoardCopy.assignmentsEmptyPinchHits).pageBodyRow(top: 8, gutter: gutter)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(pinchHitRows.enumerated()), id: \.element.id) { index, row in
-                        if index > 0 { SubjectRowSeparator() }
+                        if index > 0 { SubjectRowSeparator(inset: dynamicTypeSize.isAccessibilitySize ? 0 : 46) }
                         pinchHitRow(row)
                     }
                 }
-                .subjectPanel()
-                .pageBodyRow(top: 8, gutter: gutter)
+                .pageBodyRow(top: 4, gutter: gutter)
             }
         }
     }
 
     private var unmatchedSection: some View {
         Section {
-            SectionRuleHeader(title: "Unmatched Sign-Ups", count: unmatched.count)
-                .pageBodyRow(top: 18, gutter: selfGuttered)
+            ChallengeBoardListSectionHeader(
+                title: ChallengesBoardCopy.assignmentsPinchHitsOpenHeader,
+                count: unmatched.count
+            )
+            .pageBodyRow(top: 18, gutter: gutter)
             if let error = loadErrors[.unmatched] {
                 failureCard(error, title: "Couldn't load defaults").pageBodyRow(top: 8, gutter: gutter)
             } else if unmatched.isEmpty {
-                emptyCard("No defaulted assignments are waiting for a pinch hitter.")
+                emptyCard(ChallengesBoardCopy.assignmentsEmptyUnmatched)
                     .pageBodyRow(top: 8, gutter: gutter)
             } else {
                 unmatchedCards.pageBodyRow(top: 8, gutter: gutter)
@@ -242,17 +303,23 @@ struct ChallengeAssignmentsView: View {
     private func assignmentRows(_ rows: [AO3ChallengeAssignment]) -> some View {
         VStack(spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.element.id) { index, assignment in
-                if index > 0 { SubjectRowSeparator() }
+                if index > 0 { SubjectRowSeparator(inset: dynamicTypeSize.isAccessibilitySize ? 0 : 46) }
                 assignmentRow(assignment)
             }
         }
-        .subjectPanel()
     }
 
     private func assignmentRow(_ assignment: AO3ChallengeAssignment) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("\(displayName(assignment.requestPseud)) → \(giverDisplay(for: assignment))")
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+        return layout {
+            if !dynamicTypeSize.isAccessibilitySize {
+                ChallengeBoardCoverTile(seed: "\(assignment.requestPseud)-\(assignment.id)")
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(giverDisplay(for: assignment)) for \(displayName(assignment.requestPseud))")
                     .font(.system(size: rowTitleSize, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
@@ -270,8 +337,7 @@ struct ChallengeAssignmentsView: View {
 
             statusBadge(for: assignment)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)
     }
 
     private func displayName(_ pseud: String) -> String {
@@ -289,27 +355,23 @@ struct ChallengeAssignmentsView: View {
     @ViewBuilder
     private func statusBadge(for assignment: AO3ChallengeAssignment) -> some View {
         switch assignment.badge(dueAt: worksDueAt?.instant) {
-        case .delivered: badge("Delivered", color: .green)
-        case .late: badge("Late", color: .secondary)
-        case .defaulted: badge("Defaulted", color: .orange)
-        case nil: EmptyView()
-        }
-    }
-
-    private func badge(_ text: String, color: Color) -> some View {
-        Text(text.uppercased())
-            .font(.system(size: 9, weight: .bold))
-            .lineLimit(1)
-            .fixedSize()
-            .tracking(0.6)
-            .foregroundStyle(color)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(color.opacity(0.16))
-                    .overlay(Capsule().strokeBorder(color.opacity(0.34), lineWidth: 0.5))
+        case .delivered:
+            let ok = ChallengeBoardColors.successBadge(for: theme.appTheme)
+            ChallengeBoardBadge(
+                text: "Delivered",
+                style: .tinted(foreground: ok.foreground, background: ok.background)
             )
+        case .late:
+            ChallengeBoardBadge(text: "Late", style: .neutral)
+        case .defaulted:
+            let warn = ChallengeBoardColors.warningBadge(for: theme.appTheme)
+            ChallengeBoardBadge(
+                text: "Defaulted",
+                style: .tinted(foreground: warn.foreground, background: warn.background)
+            )
+        case nil:
+            EmptyView()
+        }
     }
 
     /// "Assigned <date> · due <date>", each half dropped when its date is
@@ -328,30 +390,14 @@ struct ChallengeAssignmentsView: View {
     }
 
     private func claimButton(for assignment: AO3ChallengeAssignment) -> some View {
-        let isInFlight = itemInFlight == assignment.id
-        return Button {
+        ChallengeBoardInlineActionButton(
+            title: "Claim",
+            role: .softAccent,
+            isBusy: itemInFlight == assignment.id,
+            isDisabled: itemInFlight != nil
+        ) {
             pendingWrite = PendingWrite(kind: .claimPinchHit, assignment: assignment)
-        } label: {
-            HStack(spacing: 4) {
-                if isInFlight {
-                    ProgressView().controlSize(.small).accentFill()
-                }
-                Text("Claim")
-                    .font(.system(size: pillLabelSize, weight: .semibold))
-                    .lineLimit(1)
-                    .fixedSize()
-            }
-            .foregroundStyle(theme.accentInk)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule()
-                    .fill(theme.effectiveTint.opacity(0.16))
-                    .overlay(Capsule().strokeBorder(theme.effectiveTint.opacity(0.32), lineWidth: 0.5))
-            )
         }
-        .buttonStyle(.plain)
-        .disabled(itemInFlight != nil)
     }
 
     // MARK: - Unmatched cards
@@ -594,43 +640,46 @@ extension ChallengeAssignmentsView {
         .subjectPanel()
     }
 
-    /// The spec's "Pinch hit #1 · open / Requested by …" and "Pinch hit #2 ·
-    /// claimed / Claimed by … · due …".
+    /// `Challenge-Assignments.dc.html`: open pinch hits show `"For <recipient>"`
+    /// with a Claim pill; claimed pinch hits show `AO3PinchHitRow.detail(dueText:)`.
     private func pinchHitRow(_ row: AO3PinchHitRow) -> some View {
-        HStack(alignment: .center, spacing: 11) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 7) {
-                    Text("Pinch hit #\(row.number)")
-                        .font(.system(size: cardTitleSize, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(row.isOpen ? "OPEN" : "CLAIMED")
-                        .font(.system(size: 8.5, weight: .bold))
-                        .lineLimit(1)
-                        .fixedSize()
-                        .tracking(8.5 * 0.07)
-                        .foregroundStyle(row.isOpen ? palette.accent : Color.secondary.opacity(0.7))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(
-                            Capsule()
-                                .fill(row.isOpen ? palette.accent.opacity(0.18) : Color.secondary.opacity(0.12))
-                        )
-                }
-                Text(row.detail(dueText: worksDueAt?.dateText))
-                    .font(.system(size: captionSize))
-                    .foregroundStyle(Color.secondary.opacity(0.85))
-                    .fixedSize(horizontal: false, vertical: true)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+        return layout {
+            if !dynamicTypeSize.isAccessibilitySize {
+                ChallengeBoardCoverTile(seed: "\(row.assignment.requestPseud)-\(row.number)")
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(
+                    row.isOpen
+                        ? ChallengesBoardCopy.assignmentsPinchHitOpenTitle(recipient: row.assignment.requestPseud)
+                        : "Pinch hit #\(row.number)"
+                )
+                .font(.system(size: rowTitleSize, weight: .semibold))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+
+                Text(
+                    row.isOpen
+                        ? ChallengesBoardCopy.assignmentsPinchHitOpenSubtitle(dueDateText: worksDueAt?.dateText)
+                        : row.detail(dueText: worksDueAt?.dateText)
+                )
+                .font(.system(size: captionSize))
+                .foregroundStyle(.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if row.isOpen, auth.isLoggedIn,
                AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner) {
                 claimButton(for: row.assignment)
+            } else if !row.isOpen {
+                ChallengeBoardBadge(text: "Claimed", style: .neutral)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
+        .padding(.vertical, 10)
     }
 
     /// Runs a confirmed write, then reloads: both writes move the assignment
