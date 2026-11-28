@@ -73,19 +73,28 @@ extension ReadingQueueService {
         let normalizedPreservation = EPUBPreservationStatus.allCases.filter { $0 != .notPreserved }.map(\.rawValue)
         let resolvedMetadata = MetadataSyncStatus.allCases.filter { $0 != .unknown }.map(\.rawValue)
         let preserved = EPUBPreservationStatus.preserved.rawValue
-        let candidates = FetchDescriptor<SavedWork>(predicate: #Predicate {
-            $0.isQueuedForLater && (
-                $0.hasEPUB || $0.epubPreservationStatusRaw == preserved
-                    || !normalizedPreservation.contains($0.epubPreservationStatusRaw)
-                    || (!resolvedMetadata.contains($0.metadataSyncStatusRaw) && !$0.ao3Unavailable)
-                    || ($0.ao3WorkID == nil && $0.sourceURL != "")
-                    || ($0.ao3SeriesID == nil && $0.seriesURL != "")
-            )
-        })
+        // One predicate per repair reason: a single OR of all six doesn't type-check in reasonable time.
+        let candidateQueries: [FetchDescriptor<SavedWork>] = [
+            FetchDescriptor(predicate: #Predicate { $0.isQueuedForLater && $0.hasEPUB }),
+            FetchDescriptor(predicate: #Predicate { $0.isQueuedForLater && $0.epubPreservationStatusRaw == preserved }),
+            FetchDescriptor(predicate: #Predicate {
+                $0.isQueuedForLater && !normalizedPreservation.contains($0.epubPreservationStatusRaw)
+            }),
+            FetchDescriptor(predicate: #Predicate {
+                $0.isQueuedForLater && !resolvedMetadata.contains($0.metadataSyncStatusRaw) && !$0.ao3Unavailable
+            }),
+            FetchDescriptor(predicate: #Predicate { $0.isQueuedForLater && $0.ao3WorkID == nil && $0.sourceURL != "" }),
+            FetchDescriptor(predicate: #Predicate { $0.isQueuedForLater && $0.ao3SeriesID == nil && $0.seriesURL != "" })
+        ]
+        var candidates: [SavedWork]? = []
+        for query in candidateQueries {
+            guard let rows = try? context.fetch(query) else { candidates = nil; break }
+            candidates?.append(contentsOf: rows)
+        }
         // The earlier passes repaired missing endpoints and flag mismatches. This
         // pass needs no membership graph. EPUB claims still need a disk check,
         // because a file can disappear without changing any SwiftData field.
-        let works = (try? context.fetch(candidates)) ?? (try? context.fetch(flaggedDescriptor)) ?? []
+        let works = candidates ?? (try? context.fetch(flaggedDescriptor)) ?? []
         for work in works where seen.insert(work.id).inserted {
             normalize(work, hasMembership: true, fileExists: fileExists)
             countRepair()
