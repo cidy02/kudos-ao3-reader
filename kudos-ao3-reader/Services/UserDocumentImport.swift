@@ -92,7 +92,10 @@ enum UserDocumentImport {
         let outcome = try await importUserEPUB(
             staged, downloadedAt: downloadedAt, importSource: importSource, into: context
         )
-        preserveOriginal(at: source, for: outcome.work, format: format)
+        // Only a fresh import's EPUB came from this conversion; a duplicate keeps its older EPUB, so its record
+        // must not claim the current converter (that hid Rebuild for it).
+        let fromThisConversion = if case .imported = outcome { true } else { false }
+        preserveOriginal(at: source, for: outcome.work, format: format, epubFromThisConversion: fromThisConversion)
         Log.library.info(
             "Imported “\(outcome.work.title)” converted from \(format.rawValue, privacy: .public)"
         )
@@ -105,7 +108,9 @@ enum UserDocumentImport {
     /// fail to import because its archival copy could not be written (a full disk,
     /// a revoked sandbox URL). The EPUB is what the reader needs; the original is
     /// insurance, so a failure is logged and swallowed rather than thrown.
-    private static func preserveOriginal(at source: URL, for work: SavedWork, format: ImportedFileFormat) {
+    private static func preserveOriginal(
+        at source: URL, for work: SavedWork, format: ImportedFileFormat, epubFromThisConversion: Bool
+    ) {
         let fileExtension = source.pathExtension.isEmpty ? format.rawValue : source.pathExtension
         let destination = Storage.originalDocumentURL(for: work.id, fileExtension: fileExtension)
         do {
@@ -120,6 +125,7 @@ enum UserDocumentImport {
             // Written only on success: a record without its original is a promise the
             // app cannot keep.
             WorkConversionRecord(
+                converterVersion: epubFromThisConversion ? ImportedDocumentConverter.converterVersion : 0,
                 format: format.rawValue,
                 originalFileName: source.lastPathComponent
             ).write(for: work.id)
