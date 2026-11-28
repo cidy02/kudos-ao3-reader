@@ -191,6 +191,7 @@ private struct EPUBImportNoticeSummary {
     var imported = 0
     var restored = 0
     var duplicates = 0
+    var updatedOriginals = 0
     /// How many files were converted to EPUB on the way in, by source format, so
     /// the notice can say what happened rather than silently changing the file.
     var converted: [ImportedFileFormat: Int] = [:]
@@ -209,6 +210,9 @@ private struct EPUBImportNoticeSummary {
         }
         if duplicates > 0 {
             parts.append("Skipped \(duplicates.formatted()) duplicate\(duplicates == 1 ? "" : "s").")
+        }
+        if updatedOriginals > 0 {
+            parts.append("Updated \(updatedOriginals.formatted()) original file\(updatedOriginals == 1 ? "" : "s").")
         }
         if failures.isEmpty {
             return parts.isEmpty ? "No files were selected." : parts.joined(separator: " ")
@@ -239,10 +243,10 @@ private struct EPUBImportNoticeSummary {
         case .restored:
             restored += 1
         case .duplicate:
-            duplicates += 1
+            if format == nil { duplicates += 1 } else { updatedOriginals += 1 }
         }
-        // A duplicate is not counted as a conversion: nothing new was stored, so
-        // claiming "the original was kept" would be a lie.
+        // Only fresh imports are included in the conversion count. A duplicate
+        // can update the original while leaving the reading copy in place.
         if let format, case .imported = outcome {
             converted[format, default: 0] += 1
         }

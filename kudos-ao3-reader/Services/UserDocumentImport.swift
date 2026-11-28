@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import OSLog
 import SwiftData
@@ -46,6 +47,8 @@ enum UserDocumentImport {
         _ url: URL,
         downloadedAt: Date = Date(),
         importSource: WorkImportSource = .fileImport,
+        originalsDirectory: URL? = nil,
+        verifyAvailability: Bool = true,
         into context: ModelContext
     ) async throws -> (outcome: UserEPUBImportOutcome, convertedFrom: ImportedFileFormat?) {
         guard url.isFileURL else { throw UserEPUBImportError.notLocalFile }
@@ -53,86 +56,169 @@ enum UserDocumentImport {
         // it materializes fails with an opaque error instead of waiting.
         try await waitForUbiquitousDownload(of: url)
 
-        // Sniffing, unzipping and re-serializing a whole work is heavy, so it runs
-        // off the main actor — the same reason `importEPUB` detaches its metadata
-        // read. Only SwiftData work happens back here.
+        let format = await Task.detached(priority: .userInitiated) {
+            ImportedFileFormat.detect(at: url)
+        }.value
+        if format == .epub {
+            let outcome = try await importUserEPUB(
+                url, downloadedAt: downloadedAt, importSource: importSource,
+                verifyAvailability: verifyAvailability, into: context
+            )
+            return (outcome, nil)
+        }
+        guard format.isConvertible else { throw ImportedDocumentConverter.ConversionError.notYetSupported(format) }
+
+        let directory = originalsDirectory ?? Storage.originalsDirectory
+        let stagedSource = try await Task.detached(priority: .userInitiated) {
+            try StagedOriginal.copySource(url, into: directory)
+        }.value
+        let stagingDirectory = stagedSource.deletingLastPathComponent().deletingLastPathComponent()
+        let original = StagedOriginal(source: stagedSource, stagingDirectory: stagingDirectory, directory: directory)
+        defer { original.discardStaging() }
+
+        // Convert the archived bytes so that an edit to the picked file cannot
+        // leave the reader's EPUB and the original representing different inputs.
         let conversion = try await Task.detached(priority: .userInitiated) {
-            try ImportedDocumentConverter.convert(fileAt: url)
+            try ImportedDocumentConverter.convert(fileAt: stagedSource)
         }.value
 
         switch conversion {
         case .alreadyEPUB:
             let imported = try await importUserEPUB(
-                url, downloadedAt: downloadedAt, importSource: importSource, into: context
+                stagedSource, downloadedAt: downloadedAt, importSource: importSource,
+                verifyAvailability: verifyAvailability, into: context
             )
             return (imported, nil)
         case let .converted(data, format):
-            let outcome = try await importConverted(
-                data, from: url, format: format, downloadedAt: downloadedAt,
-                importSource: importSource, into: context
+            let stagedEPUB = Storage.tempDownloadURL(suggestedName: "\(UUID().uuidString).epub")
+            defer { try? FileManager.default.removeItem(at: stagedEPUB) }
+            try data.write(to: stagedEPUB, options: .atomic)
+            let outcome = try await importUserEPUB(
+                stagedEPUB, downloadedAt: downloadedAt, importSource: importSource,
+                original: (original, format), verifyAvailability: verifyAvailability, into: context
+            )
+            Log.library.info(
+                "Imported “\(outcome.work.title)” converted from \(format.rawValue, privacy: .public)"
             )
             return (outcome, format)
         }
     }
 
-    /// Writes converted EPUB bytes to a temp file, imports that, then preserves
-    /// the original alongside the work.
-    private static func importConverted(
-        _ epub: Data,
-        from source: URL,
-        format: ImportedFileFormat,
-        downloadedAt: Date,
-        importSource: WorkImportSource,
-        into context: ModelContext
-    ) async throws -> UserEPUBImportOutcome {
-        let staged = Storage.tempDownloadURL(suggestedName: "\(UUID().uuidString).epub")
-        try epub.write(to: staged, options: .atomic)
-        defer { try? FileManager.default.removeItem(at: staged) }
+    /// An import owns one hidden staging directory on the Originals volume.
+    /// The final names are installed synchronously before any model is changed.
+    @MainActor
+    final class StagedOriginal {
+        let source: URL
+        let stagingDirectory: URL
+        let directory: URL
+        private var needsRecovery = false
 
-        let outcome = try await importUserEPUB(
-            staged, downloadedAt: downloadedAt, importSource: importSource, into: context
-        )
-        // Only a fresh import's EPUB came from this conversion; a duplicate keeps its older EPUB, so its record
-        // must not claim the current converter (that hid Rebuild for it).
-        let fromThisConversion = if case .imported = outcome { true } else { false }
-        preserveOriginal(at: source, for: outcome.work, format: format, epubFromThisConversion: fromThisConversion)
-        Log.library.info(
-            "Imported “\(outcome.work.title)” converted from \(format.rawValue, privacy: .public)"
-        )
-        return outcome
-    }
+        init(source: URL, stagingDirectory: URL, directory: URL) {
+            self.source = source
+            self.stagingDirectory = stagingDirectory
+            self.directory = directory
+        }
 
-    /// Keeps the exact bytes the user handed us next to the work.
-    ///
-    /// Best-effort by design: a converted work that reads correctly should not
-    /// fail to import because its archival copy could not be written (a full disk,
-    /// a revoked sandbox URL). The EPUB is what the reader needs; the original is
-    /// insurance, so a failure is logged and swallowed rather than thrown.
-    private static func preserveOriginal(
-        at source: URL, for work: SavedWork, format: ImportedFileFormat, epubFromThisConversion: Bool
-    ) {
-        let fileExtension = source.pathExtension.isEmpty ? format.rawValue : source.pathExtension
-        let destination = Storage.originalDocumentURL(for: work.id, fileExtension: fileExtension)
-        do {
-            // Replace rather than skip: re-importing a corrected copy of the same
-            // work should update the archived original too.
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
+        nonisolated static func copySource(_ source: URL, into directory: URL) throws -> URL {
+            let manager = FileManager.default
+            let staging = directory.appendingPathComponent(".import-\(UUID().uuidString)", isDirectory: true)
+            let sourceDirectory = staging.appendingPathComponent("Source", isDirectory: true)
+            let copy = sourceDirectory.appendingPathComponent(source.lastPathComponent)
+            do {
+                try manager.createDirectory(at: sourceDirectory, withIntermediateDirectories: true)
+                try manager.copyItem(at: source.resolvingSymlinksInPath(), to: copy)
+                return copy
+            } catch {
+                try? manager.removeItem(at: staging)
+                throw Self.preservationError(error)
             }
-            try FileManager.default.copyItem(at: source, to: destination)
-            // Records which converter produced this work, so a later version can
-            // rebuild it from these bytes instead of the user deleting and re-importing.
-            // Written only on success: a record without its original is a promise the
-            // app cannot keep.
-            WorkConversionRecord(
-                converterVersion: epubFromThisConversion ? ImportedDocumentConverter.converterVersion : 0,
+        }
+
+        func discardStaging() {
+            if !needsRecovery { try? FileManager.default.removeItem(at: stagingDirectory) }
+        }
+
+        func install(
+            for workID: UUID,
+            format: ImportedFileFormat,
+            replacesEPUB: Bool,
+            save: () throws -> UserEPUBImportOutcome
+        ) throws -> UserEPUBImportOutcome {
+            let manager = FileManager.default
+            let fileExtension = source.pathExtension.isEmpty ? format.rawValue : source.pathExtension
+            let destination = Storage.originalDocumentURL(for: workID, fileExtension: fileExtension, in: directory)
+            let sidecar = WorkConversionRecord.url(for: workID, in: directory)
+            let previousOriginals = Storage.originalDocuments(for: workID, in: directory)
+            let record = WorkConversionRecord(
+                converterVersion: replacesEPUB ? ImportedDocumentConverter.converterVersion : 0,
                 format: format.rawValue,
                 originalFileName: source.lastPathComponent
-            ).write(for: work.id)
-        } catch {
-            Log.library.error(
-                "Couldn't preserve the original import: \(error.localizedDescription, privacy: .public)"
             )
+
+            var undo: [() throws -> Void] = []
+            var saved = false
+            defer {
+                if !saved {
+                    for restore in undo.reversed() {
+                        do { try restore() } catch {
+                            needsRecovery = true
+                            Log.library.error(
+                                "Couldn't roll back original import: \(error.localizedDescription, privacy: .private)"
+                            )
+                        }
+                    }
+                }
+            }
+            do {
+                let stagedRecord = stagingDirectory.appendingPathComponent("record")
+                try JSONEncoder().encode(record).write(to: stagedRecord)
+                try installFile(source, at: destination, backupName: "original-backup", undo: &undo)
+                try installFile(stagedRecord, at: sidecar, backupName: "record-backup", undo: &undo)
+                for (index, previous) in previousOriginals.enumerated() {
+                    guard previous.lastPathComponent.caseInsensitiveCompare(destination.lastPathComponent)
+                        != .orderedSame else { continue }
+                    let backup = stagingDirectory.appendingPathComponent("original-backup-\(index)")
+                    try manager.moveItem(at: previous, to: backup)
+                    undo.append { try Self.rename(backup, to: previous) }
+                }
+            } catch {
+                throw Self.preservationError(error)
+            }
+            let outcome = try save()
+            saved = true
+            return outcome
+        }
+
+        private func installFile(
+            _ staged: URL, at destination: URL, backupName: String, undo: inout [() throws -> Void]
+        ) throws {
+            let manager = FileManager.default
+            let backup = stagingDirectory.appendingPathComponent(backupName)
+            let existed = manager.fileExists(atPath: destination.path)
+            // Keep the previous file reachable until the atomic rename succeeds,
+            // and retain a link to its bytes until SwiftData commits.
+            if existed { try manager.linkItem(at: destination, to: backup) }
+            try Self.rename(staged, to: destination)
+            undo.append {
+                if existed {
+                    try Self.rename(backup, to: destination)
+                } else {
+                    try manager.removeItem(at: destination)
+                }
+            }
+        }
+
+        private static func rename(_ source: URL, to destination: URL) throws {
+            guard Darwin.rename(source.path, destination.path) == 0 else {
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+            }
+        }
+
+        private nonisolated static func preservationError(_ error: Error) -> UserEPUBImportError {
+            Log.library.error(
+                "Couldn't preserve the original import: \(error.localizedDescription, privacy: .private)"
+            )
+            return .couldNotKeepOriginal
         }
     }
 }

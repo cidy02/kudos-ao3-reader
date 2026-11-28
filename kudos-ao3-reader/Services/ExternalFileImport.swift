@@ -72,11 +72,12 @@ final class ExternalFileImport {
         guard pendingImport?.url == selection.url, !isImporting else { return }
         pendingImport = nil
         isImporting = true
+        var imported = false
         defer {
             isImporting = false
-            // iOS copies an opened document into Documents/Inbox and leaves it
-            // there forever otherwise; the importer now owns its durable copy.
-            removeInboxCopy(at: selection.url)
+            // After a successful import Kudos owns a durable copy. On failure,
+            // keep the Inbox file so the offered retry still has its input.
+            if imported { removeInboxCopy(at: selection.url) }
         }
 
         let scoped = selection.url.startAccessingSecurityScopedResource()
@@ -85,6 +86,7 @@ final class ExternalFileImport {
             let result = try await UserDocumentImport.perform(
                 selection.url, downloadedAt: selection.downloadedAt, importSource: .shareSheet, into: context
             )
+            imported = true
             notice = successNotice(for: result, fileName: selection.url.lastPathComponent)
         } catch {
             let fileName = selection.url.lastPathComponent
@@ -130,7 +132,9 @@ final class ExternalFileImport {
         case .duplicate:
             return Notice(
                 title: "Already in Your Library",
-                message: "“\(work.title)” is already saved, so nothing was added.",
+                message: result.convertedFrom == nil
+                    ? "“\(work.title)” is already saved, so nothing was added."
+                    : "“\(work.title)” is already saved. Its original file was updated.",
                 workID: work.id
             )
         }
@@ -139,8 +143,13 @@ final class ExternalFileImport {
     /// Deletes the system's inbox copy, but only if the URL really is inside our
     /// own container — never a file the user still owns somewhere else.
     private func removeInboxCopy(at url: URL) {
-        let path = url.standardizedFileURL.path
-        guard path.contains("/Documents/Inbox/") else { return }
+        guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return
+        }
+        let inbox = documents.appendingPathComponent("Inbox", isDirectory: true)
+        let parent = url.deletingLastPathComponent()
+        guard parent.resolvingSymlinksInPath().standardizedFileURL.path
+            == inbox.resolvingSymlinksInPath().standardizedFileURL.path else { return }
         try? FileManager.default.removeItem(at: url)
     }
 }

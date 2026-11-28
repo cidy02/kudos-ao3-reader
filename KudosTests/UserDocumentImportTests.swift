@@ -29,12 +29,20 @@ struct UserDocumentImportTests {
         return url
     }
 
+    private func makeOriginalsDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("import-originals-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
     /// Removes everything an import leaves in the app's permanent storage.
     private func cleanUp(_ work: SavedWork) {
         try? FileManager.default.removeItem(at: work.fileURL)
         if let original = Storage.existingOriginalDocumentURL(for: work.id) {
             try? FileManager.default.removeItem(at: original)
         }
+        WorkConversionRecord.delete(for: work.id)
     }
 
     private static let ao3HTML = """
@@ -101,6 +109,70 @@ struct UserDocumentImportTests {
         #expect(archived == Data(Self.ao3HTML.utf8))
     }
 
+    @Test func failureToStageTheOriginalLeavesNoWorkOrStaging() async throws {
+        let context = try makeContext()
+        let source = try write(Self.ao3HTML, "html")
+        let directory = try makeOriginalsDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: source)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let blockedDirectory = directory.appendingPathComponent("Originals")
+        try Data("blocking file".utf8).write(to: blockedDirectory)
+
+        await #expect(throws: UserEPUBImportError.couldNotKeepOriginal) {
+            _ = try await UserDocumentImport.perform(source, originalsDirectory: blockedDirectory, into: context)
+        }
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).isEmpty)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == ["Originals"])
+        #expect(try Data(contentsOf: source) == Data(Self.ao3HTML.utf8))
+    }
+
+    @Test func theFinalOriginalAndRecordAreOnDiskBeforeTheWorkIsSaved() async throws {
+        let context = try makeContext()
+        let source = try write(Self.ao3HTML, "html")
+        let directory = try makeOriginalsDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: source)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let probe = OriginalFilesAtFirstSave()
+        let observer = NotificationCenter.default.addObserver(
+            forName: ModelContext.willSave, object: context, queue: nil
+        ) { _ in
+            MainActor.assumeIsolated { probe.capture(in: directory) }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        let work = try await UserDocumentImport.perform(source, originalsDirectory: directory, into: context)
+            .outcome.work
+        defer { cleanUp(work) }
+        let original = Storage.originalDocumentURL(for: work.id, fileExtension: "html", in: directory)
+        let sidecar = WorkConversionRecord.url(for: work.id, in: directory)
+        let files = try #require(probe.files)
+        #expect(files[original.lastPathComponent] == Data(Self.ao3HTML.utf8))
+        let recordBytes = try #require(files[sidecar.lastPathComponent])
+        let record = try JSONDecoder().decode(WorkConversionRecord.self, from: recordBytes)
+        #expect(record.converterVersion == ImportedDocumentConverter.converterVersion)
+        #expect(Set(try FileManager.default.contentsOfDirectory(atPath: directory.path))
+            == Set([original.lastPathComponent, sidecar.lastPathComponent]))
+    }
+
+    @MainActor
+    private final class OriginalFilesAtFirstSave {
+        private(set) var files: [String: Data]?
+
+        func capture(in directory: URL) {
+            guard files == nil else { return }
+            files = [:]
+            for url in (try? FileManager.default.contentsOfDirectory(
+                at: directory, includingPropertiesForKeys: nil, options: .skipsHiddenFiles
+            )) ?? [] {
+                files?[url.lastPathComponent] = try? Data(contentsOf: url)
+            }
+        }
+    }
+
     @Test func plainTextImportSplitsChaptersAndKeepsItsOriginal() async throws {
         let context = try makeContext()
         let text = """
@@ -157,7 +229,7 @@ struct UserDocumentImportTests {
         let source = try write(html, "html")
         defer { try? FileManager.default.removeItem(at: source) }
 
-        let result = try await UserDocumentImport.perform(source, into: context)
+        let result = try await UserDocumentImport.perform(source, verifyAvailability: false, into: context)
         let work = result.outcome.work
         defer { cleanUp(work) }
 
@@ -227,5 +299,106 @@ struct UserDocumentImportTests {
         }
         #expect(duplicate.id == first.outcome.work.id)
         #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
+    }
+
+    @Test func aDuplicateReplacesTheOriginalEvenWhenItsExtensionChanges() async throws {
+        let context = try makeContext()
+        let revised = Self.ao3HTML.replacingOccurrences(of: "Body one.", with: "Body new.")
+        let originalSource = try write(Self.ao3HTML, "html")
+        let revisedSource = try write(revised, "htm")
+        let directory = try makeOriginalsDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: originalSource)
+            try? FileManager.default.removeItem(at: revisedSource)
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let first = try await UserDocumentImport.perform(originalSource, originalsDirectory: directory, into: context)
+        let work = first.outcome.work
+        defer { cleanUp(work) }
+        let readingCopy = try Data(contentsOf: work.fileURL)
+        let second = try await UserDocumentImport.perform(revisedSource, originalsDirectory: directory, into: context)
+        guard case let .duplicate(duplicate) = second.outcome else {
+            Issue.record("Expected a duplicate, got \(second.outcome)")
+            cleanUp(second.outcome.work)
+            return
+        }
+
+        #expect(duplicate.id == work.id)
+        let original = try #require(Storage.existingOriginalDocumentURL(for: work.id, in: directory))
+        #expect(original.pathExtension == "htm")
+        #expect(try Data(contentsOf: original) == Data(revised.utf8))
+        let previous = Storage.originalDocumentURL(for: work.id, fileExtension: "html", in: directory)
+        #expect(!FileManager.default.fileExists(atPath: previous.path))
+        #expect(try Data(contentsOf: work.fileURL) == readingCopy)
+        let sidecar = WorkConversionRecord.url(for: work.id, in: directory)
+        let record = try JSONDecoder().decode(WorkConversionRecord.self, from: Data(contentsOf: sidecar))
+        #expect(record.originalFileName == revisedSource.lastPathComponent)
+        #expect(record.converterVersion == 0)
+    }
+
+    @Test func failureToInstallTheRecordRestoresThePreviousOriginal() async throws {
+        let context = try makeContext()
+        let source = try write(Self.ao3HTML, "html")
+        let directory = try makeOriginalsDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: source)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let work = try await UserDocumentImport.perform(source, originalsDirectory: directory, into: context)
+            .outcome.work
+        defer { cleanUp(work) }
+        let original = try #require(Storage.existingOriginalDocumentURL(for: work.id, in: directory))
+        let sidecar = WorkConversionRecord.url(for: work.id, in: directory)
+        try FileManager.default.removeItem(at: sidecar)
+        try FileManager.default.createDirectory(at: sidecar, withIntermediateDirectories: false)
+        let revised = Self.ao3HTML.replacingOccurrences(of: "Body one.", with: "Body new.")
+        try Data(revised.utf8).write(to: source)
+
+        await #expect(throws: UserEPUBImportError.couldNotKeepOriginal) {
+            _ = try await UserDocumentImport.perform(source, originalsDirectory: directory, into: context)
+        }
+        #expect(try Data(contentsOf: original) == Data(Self.ao3HTML.utf8))
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
+        #expect(Set(try FileManager.default.contentsOfDirectory(atPath: directory.path))
+            == Set([original.lastPathComponent, sidecar.lastPathComponent]))
+    }
+
+    @Test func missingOriginalStatusUsesTheRecordOrLegacyConvertedEPUB() async throws {
+        let context = try makeContext()
+        let source = try write(Self.ao3HTML, "html")
+        defer { try? FileManager.default.removeItem(at: source) }
+        let work = try await UserDocumentImport.perform(source, into: context).outcome.work
+        defer { cleanUp(work) }
+        let original = try #require(Storage.existingOriginalDocumentURL(for: work.id))
+        let whenPresent = await WorkProvenanceSections.shouldShowMissingOriginal(for: work)
+        #expect(!whenPresent)
+
+        try FileManager.default.removeItem(at: original)
+        let whenOnlyTheRecordRemains = await WorkProvenanceSections.shouldShowMissingOriginal(for: work)
+        #expect(whenOnlyTheRecordRemains)
+
+        WorkConversionRecord.delete(for: work.id)
+        let whenOnlyTheConvertedEPUBRemains = await WorkProvenanceSections.shouldShowMissingOriginal(for: work)
+        #expect(whenOnlyTheConvertedEPUBRemains)
+    }
+
+    @Test func missingOriginalStatusSkipsPlainEPUBImportsAndAO3Downloads() async throws {
+        let sample = try EPUBTests.sampleEPUB
+        let context = try makeContext()
+        let imported = try await UserDocumentImport.perform(sample, verifyAvailability: false, into: context)
+            .outcome.work
+        defer { cleanUp(imported) }
+        #expect(imported.importSource == .fileImport)
+        let forPlainEPUB = await WorkProvenanceSections.shouldShowMissingOriginal(for: imported)
+        #expect(!forPlainEPUB)
+
+        let download = SavedWork(title: "Downloaded from AO3", author: "Writer")
+        download.ao3WorkID = 42
+        download.recordImportSource(.browse)
+        defer { cleanUp(download) }
+        try FileManager.default.copyItem(at: sample, to: download.fileURL)
+        let forDownload = await WorkProvenanceSections.shouldShowMissingOriginal(for: download)
+        #expect(!forDownload)
     }
 }

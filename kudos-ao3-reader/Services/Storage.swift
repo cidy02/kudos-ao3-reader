@@ -94,25 +94,29 @@ nonisolated enum Storage {
     /// found without a database lookup. `fileExtension` is sanitized: only
     /// alphanumerics survive, so an attacker-supplied name cannot escape the
     /// directory or add path components.
-    static func originalDocumentURL(for id: UUID, fileExtension: String) -> URL {
+    static func originalDocumentURL(for id: UUID, fileExtension: String, in directory: URL? = nil) -> URL {
         // Alphanumerics, not letters only: stripping digits turned "azw3" into "azw"
         // and "7z" into "z", so two unrelated originals could land on one name.
         let cleaned = fileExtension.lowercased().filter { $0.isLetter || $0.isNumber }
         let suffix = cleaned.isEmpty ? "bin" : String(cleaned.prefix(12))
-        return originalsDirectory.appendingPathComponent("\(id.uuidString).\(suffix)")
+        return (directory ?? originalsDirectory).appendingPathComponent("\(id.uuidString).\(suffix)")
     }
 
     /// Any preserved original for this work, whatever its extension. Used by
     /// deletion (to avoid orphans) and, later, by the provenance UI.
-    static func existingOriginalDocumentURL(for id: UUID) -> URL? {
-        let prefix = id.uuidString
-        return originalDirectoryContents().first {
-            // The conversion record sidecar shares this prefix and is *not* the
-            // original; returning it would make re-conversion try to convert its own
-            // bookkeeping.
-            $0.lastPathComponent.hasPrefix(prefix)
-                && !$0.lastPathComponent.hasSuffix(conversionRecordSuffix)
-        }
+    static func existingOriginalDocumentURL(for id: UUID, in directory: URL? = nil) -> URL? {
+        originalDirectoryContents(in: directory).first { isOriginalDocument($0, for: id) }
+    }
+
+    /// An older re-import under a different extension could leave both copies.
+    static func originalDocuments(for id: UUID, in directory: URL) -> [URL] {
+        originalDirectoryContents(in: directory).filter { isOriginalDocument($0, for: id) }
+    }
+
+    private static func isOriginalDocument(_ url: URL, for id: UUID) -> Bool {
+        // The conversion record shares the prefix. Return only the source document.
+        let name = url.lastPathComponent
+        return name.hasPrefix(id.uuidString) && !name.hasSuffix(conversionRecordSuffix)
     }
 
     /// Snapshot the first original per work for a bulk lookup. Keep directory
@@ -132,8 +136,10 @@ nonisolated enum Storage {
         return originals
     }
 
-    private static func originalDirectoryContents() -> [URL] {
-        (try? FileManager.default.contentsOfDirectory(at: originalsDirectory, includingPropertiesForKeys: nil)) ?? []
+    private static func originalDirectoryContents(in directory: URL? = nil) -> [URL] {
+        (try? FileManager.default.contentsOfDirectory(
+            at: directory ?? originalsDirectory, includingPropertiesForKeys: nil
+        )) ?? []
     }
 
     /// Suffix of the per-work conversion record written next to a preserved original.

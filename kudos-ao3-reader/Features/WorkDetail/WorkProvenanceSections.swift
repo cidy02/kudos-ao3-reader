@@ -18,6 +18,7 @@ import SwiftUI
 struct WorkProvenanceSections: View {
     let work: SavedWork
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.modelContext) private var context
 
     @ScaledMetric(relativeTo: .subheadline) private var rowContentSize: CGFloat = 14.5
@@ -27,22 +28,39 @@ struct WorkProvenanceSections: View {
     @State private var rebuilt = false
     @State private var confirmingRedundantRebuild = false
     @State private var previewingOriginal: URL?
+    @State private var missingOriginalWorkID: UUID?
+
+    private struct OriginalProbe: Equatable {
+        let fileURL: URL
+        let epubDigest: String
+        let hasEPUB: Bool
+        let hasOriginal: Bool
+    }
 
     /// Lives in My copy (1a) only. The Library/Later/Favorite badges this used to
     /// repeat are the sheet's own strip and Status group; the preservation
     /// explanation, which nothing else says, moves under Origin.
     var body: some View {
-        originSection
-        if candidate != nil { conversionSection }
+        let candidate = WorkReconversion.candidate(for: work)
+        let probe = OriginalProbe(
+            fileURL: work.fileURL, epubDigest: work.epubDigest, hasEPUB: work.hasEPUB, hasOriginal: candidate != nil
+        )
+        originSection(probe: probe)
+        conversionSection(candidate)
     }
 
-    private var candidate: WorkReconversion.Candidate? {
-        WorkReconversion.candidate(for: work)
+    static func shouldShowMissingOriginal(for work: SavedWork) async -> Bool {
+        if Storage.existingOriginalDocumentURL(for: work.id) != nil { return false }
+        if WorkConversionRecord.read(for: work.id) != nil { return true }
+        let url = work.fileURL
+        return await Task.detached(priority: .utility) {
+            WorkReconversion.hasConvertedPackage(at: url)
+        }.value
     }
 
     // MARK: - Sections
 
-    private var originSection: some View {
+    private func originSection(probe: OriginalProbe) -> some View {
         Group {
             MyCopyGroupHeader(title: "Origin")
             VStack(alignment: .leading, spacing: 8) {
@@ -77,11 +95,44 @@ struct WorkProvenanceSections: View {
             }
             .font(.system(size: rowContentSize))
             .myCopyRow()
+            .task(id: probe) {
+                if probe.hasOriginal {
+                    missingOriginalWorkID = nil
+                    return
+                }
+                let workID = work.id
+                let shouldShow = await Self.shouldShowMissingOriginal(for: work)
+                if !Task.isCancelled { missingOriginalWorkID = shouldShow ? workID : nil }
+            }
+        }
+    }
+
+    private var missingOriginalSection: some View {
+        let rowLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
+        return Group {
+            MyCopyGroupHeader(title: "Conversion")
+            VStack(alignment: .leading, spacing: 10) {
+                rowLayout {
+                    Text("Original file")
+                    Text("Not on this device")
+                        .foregroundStyle(.secondaryInk)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityElement(children: .combine)
+                Text("Import the file again to keep its original and rebuild it with the current converter.")
+                    .font(.caption)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.system(size: rowContentSize))
+            .myCopyRow()
         }
     }
 
     @ViewBuilder
-    private var conversionSection: some View {
+    private func conversionSection(_ candidate: WorkReconversion.Candidate?) -> some View {
         if let candidate {
             Group {
                 MyCopyGroupHeader(title: "Conversion")
@@ -178,6 +229,8 @@ struct WorkProvenanceSections: View {
                     Text(rebuildError ?? "")
                 }
             }
+        } else if missingOriginalWorkID == work.id {
+            missingOriginalSection
         }
     }
 

@@ -4,9 +4,8 @@ import OSLog
 /// What a converted import was made from, and by which version of the converter.
 ///
 /// Written beside the preserved original, as `Originals/<work-uuid>.conversion.json`.
-/// Deliberately a sidecar file rather than a `SavedWork` field: the record is only
-/// ever useful when the original file is present, so the two belong together — and it
-/// keeps this out of `Models.swift`/`KudosBackup.swift`, which T-155 owns.
+/// The sidecar travels alongside the original. It also identifies the conversion
+/// when the original has yet to arrive on this device.
 ///
 /// The point is re-conversion. This session improved the PDF converter four times;
 /// each improvement left already-imported works stale, and the only remedy was to
@@ -43,8 +42,8 @@ nonisolated struct WorkConversionRecord: Codable, Equatable, Sendable {
 
     // MARK: - Storage
 
-    static func url(for workID: UUID) -> URL {
-        Storage.originalsDirectory
+    static func url(for workID: UUID, in directory: URL? = nil) -> URL {
+        (directory ?? Storage.originalsDirectory)
             .appendingPathComponent(workID.uuidString + Storage.conversionRecordSuffix)
     }
 
