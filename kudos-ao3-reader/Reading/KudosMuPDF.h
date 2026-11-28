@@ -2,6 +2,22 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// One extracted paragraph block together with its inline italic and bold runs.
+///
+/// Ranges are UTF-16 `NSRange` values wrapped in `NSValue`, indexing into `text`.
+@interface KudosPDFBlock : NSObject
+
+@property (nonatomic, copy, readonly) NSString *text;
+@property (nonatomic, copy, readonly) NSArray<NSValue *> *italicRanges;
+@property (nonatomic, copy, readonly) NSArray<NSValue *> *boldRanges;
+
+- (instancetype)initWithText:(NSString *)text
+                italicRanges:(NSArray<NSValue *> *)italicRanges
+                  boldRanges:(NSArray<NSValue *> *)boldRanges NS_DESIGNATED_INITIALIZER;
+- (instancetype)init NS_UNAVAILABLE;
+
+@end
+
 /// Thin Objective-C shim over MuPDF's structured-text API.
 ///
 /// Objective-C rather than a Swift module map on purpose: the app target is a
@@ -27,6 +43,15 @@ NS_ASSUME_NONNULL_BEGIN
 /// Returns nil when the document cannot be opened, so the caller can fall back.
 + (nullable NSArray<NSArray<NSString *> *> *)paragraphsPerPageForPDFAtPath:(NSString *)path
     NS_SWIFT_NAME(paragraphsPerPage(forPDFAtPath:));
+
+/// One entry per page, each holding that page's paragraph blocks with UTF-16
+/// italic and bold runs.
+///
+/// Follows the same block, line-join, and drawn scene-break rules as
+/// `paragraphsPerPage(forPDFAtPath:)`; scene-break `* * *` blocks carry no styling.
+/// Returns nil when the document cannot be opened, so the caller can fall back.
++ (nullable NSArray<NSArray<KudosPDFBlock *> *> *)styledParagraphsPerPageForPDFAtPath:(NSString *)path
+    NS_SWIFT_NAME(styledParagraphsPerPage(forPDFAtPath:));
 
 /// One entry per page, each holding that page's *lines* — not paragraphs.
 ///

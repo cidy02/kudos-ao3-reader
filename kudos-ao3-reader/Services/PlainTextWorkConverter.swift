@@ -49,6 +49,47 @@ nonisolated enum PlainTextWorkConverter {
         )
     }
 
+    /// Splits already-repaired styled paragraph blocks into chapters using the same
+    /// heading rules as `convert(text:fallbackTitle:)`. Headings become plain chapter
+    /// titles (no inline styling); body blocks keep their italic and bold runs.
+    static func convert(blocks: [PDFStyledBlock], fallbackTitle: String) throws -> HTMLWorkConverter.Result {
+        var chapters: [EPUBBuilder.Chapter] = []
+        var currentTitle = ""
+        var currentBlocks: [PDFStyledBlock] = []
+
+        func flush() {
+            let body = HTMLWorkSanitizer.styledParagraphs(from: currentBlocks)
+            guard !body.isEmpty else {
+                currentBlocks = []
+                return
+            }
+            let index = chapters.count + 1
+            let title = currentTitle.isEmpty
+                ? (chapters.isEmpty ? fallbackTitle : "Chapter \(index)")
+                : currentTitle
+            chapters.append(EPUBBuilder.Chapter(title: title, bodyXHTML: body))
+            currentBlocks = []
+        }
+
+        for block in blocks {
+            let trimmed = block.trimmed()
+            guard !trimmed.text.isEmpty else { continue }
+            if isChapterHeading(trimmed.text) {
+                flush()
+                currentTitle = headingTitle(trimmed.text)
+            } else {
+                currentBlocks.append(trimmed)
+            }
+        }
+        flush()
+
+        guard !chapters.isEmpty else { throw EPUBBuilder.BuildError.noChapters }
+        return HTMLWorkConverter.Result(
+            metadata: EPUBBuilder.Metadata(title: fallbackTitle),
+            chapters: chapters
+        )
+    }
+
     // MARK: - Splitting
 
     private static func chapters(in text: String, fallbackTitle: String) -> [EPUBBuilder.Chapter] {
