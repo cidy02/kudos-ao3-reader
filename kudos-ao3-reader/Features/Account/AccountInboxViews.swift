@@ -325,7 +325,7 @@ struct AccountInboxItemRow: View {
     /// Unread dot, name line (+ small markers + time), "on Work · Chapter N",
     /// two-line excerpt. A read row keeps the dot's column so names align.
     private var rowBody: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: 10) {
             Circle()
                 .fill(.accentFill)
                 .opacity(item.isUnread ? 1 : 0)
@@ -338,7 +338,7 @@ struct AccountInboxItemRow: View {
                     Text(subjectLine)
                         .font(.subheadline)
                         .foregroundStyle(.primary.opacity(0.8))
-                        .lineLimit(2)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                 }
                 if !item.excerpt.isEmpty {
                     Text(item.excerpt)
@@ -441,7 +441,7 @@ struct AccountInboxItemRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 bylineWho
                 Spacer(minLength: 4)
                 bylineWhen
@@ -452,7 +452,7 @@ struct AccountInboxItemRow: View {
     @ViewBuilder
     private var bylineWho: some View {
         Text(item.commenterName)
-            .font(.body.weight(item.isUnread ? .semibold : .regular))
+            .font(.callout.weight(item.isUnread ? .semibold : .regular))
             .lineLimit(1)
         CommentParticipantBadge(role: item.participantRole(
             workAuthors: workAuthors,
@@ -680,6 +680,12 @@ struct AccountInboxCommentListRow: View {
         item.isUnread ? .markRead : .markUnread
     }
 
+    /// Board `Inbox`: short swipe action labels ("Read" / "Unread") matching the
+    /// 74 pt trailing swipe buttons.
+    static func readSwipeTitle(isUnread: Bool) -> String {
+        isUnread ? "Read" : "Unread"
+    }
+
     private var canToggleReadState: Bool {
         model.canPerformItemAction(readAction, item: item)
     }
@@ -707,24 +713,21 @@ struct AccountInboxCommentListRow: View {
             onDeleteFromInbox: { model.startItemAction(.delete, item: item, auth: auth) }
         )
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            // Full swipe stays off. Marking read posts to AO3, and a flick
-            // must not be the thing that sends it. Same gate as the overflow,
-            // and absent in Select mode: that write clears the whole selection.
-            if !isSelecting && canToggleReadState && !isPerformingAction {
-                Button(action: toggleReadState) {
-                    Label(
-                        item.isUnread ? "Mark Read" : "Mark Unread",
-                        systemImage: item.isUnread ? "envelope.open" : "envelope.badge"
-                    )
-                }
-                .tint(screenTint ?? themeManager.effectiveTint)
-            }
-            // The row's destructive action is its trailing swipe, as on every
-            // other list (pass2-11). It asks first.
+            // Board `Inbox`: Delete sits at the outer trailing edge, Read/Unread
+            // beside it. Full swipe stays off and Delete still asks first.
             if !isSelecting && model.canPerformItemAction(.delete, item: item) && !isPerformingAction {
                 Button(role: .destructive) { confirmDelete = true } label: {
                     Label("Delete", systemImage: "trash")
                 }
+            }
+            if !isSelecting && canToggleReadState && !isPerformingAction {
+                Button(action: toggleReadState) {
+                    Label(
+                        Self.readSwipeTitle(isUnread: item.isUnread),
+                        systemImage: item.isUnread ? "envelope.open" : "envelope.badge"
+                    )
+                }
+                .tint(screenTint ?? themeManager.effectiveTint)
             }
         }
         // Reply is the leading swipe; the long-press menu holds it too.

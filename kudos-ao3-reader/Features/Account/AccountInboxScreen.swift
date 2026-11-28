@@ -1,5 +1,39 @@
 import SwiftUI
 
+/// Pure copy and filter-state rules for `AccountInboxScreen` (`Inbox` board).
+nonisolated enum AccountInboxCopy {
+    static func isFilterActive(
+        currentValues: [String: String],
+        filterForm: AO3InboxFilterForm?
+    ) -> Bool {
+        if let selected = AO3InboxPill.selected(in: currentValues), selected != .all {
+            return true
+        }
+        if currentValues[AO3InboxPill.readField] == "true" {
+            return true
+        }
+        if let dateField = filterForm?.fields.first(where: { $0.name == "filters[date]" }),
+           let selected = currentValues[dateField.name],
+           selected != "desc" {
+            return true
+        }
+        return false
+    }
+
+    static func filterAccessibilityLabel(
+        currentValues: [String: String],
+        filterForm: AO3InboxFilterForm?
+    ) -> String {
+        if let selected = AO3InboxPill.selected(in: currentValues), selected != .all {
+            return "Filter, on: \(selected.title)"
+        }
+        if isFilterActive(currentValues: currentValues, filterForm: filterForm) {
+            return "Filter, active"
+        }
+        return "Filter"
+    }
+}
+
 /// Artboard 1l: the Inbox as its own pushed screen.
 ///
 /// It used to render inline under the Account hub's Activity scope, which meant
@@ -33,9 +67,9 @@ struct AccountInboxScreen: View {
     var body: some View {
         List {
             Section {
-                if let tally {
-                    SubjectPageFact(tally, gutter: SubjectMetrics.accountGutter)
-                        .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
+                if let tallyParts {
+                    inboxTallyRow(tallyParts)
+                        .listRowInsets(EdgeInsets(top: 10, leading: 0, bottom: 10, trailing: 0))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                 }
@@ -128,6 +162,10 @@ struct AccountInboxScreen: View {
     /// page 1); "More Filters…" opens the full sheet.
     private var filterMenu: some View {
         let selected = AO3InboxPill.selected(in: model.currentFilterValues)
+        let filterActive = AccountInboxCopy.isFilterActive(
+            currentValues: model.currentFilterValues,
+            filterForm: model.filterForm
+        )
         return Menu {
             if !availablePills.isEmpty {
                 Picker("Show", selection: Binding(
@@ -144,23 +182,57 @@ struct AccountInboxScreen: View {
                 Label("More Filters…", systemImage: "slider.horizontal.3")
             }
         } label: {
-            Label("Inbox Filters", systemImage: "line.3.horizontal.decrease")
+            Label(
+                AccountInboxCopy.filterAccessibilityLabel(
+                    currentValues: model.currentFilterValues,
+                    filterForm: model.filterForm
+                ),
+                systemImage: "line.3.horizontal.decrease"
+            )
         }
+        .tint(filterActive ? theme.effectiveTint : Color.primary)
         .labelStyle(.iconOnly)
     }
 
-    /// 1l heads the page with what is waiting rather than only what it is.
-    /// Awaiting reply counts the loaded page. The heading has no such total —
-    /// see `AO3InboxTally.headerLine`.
-    private var tally: String? {
+    /// 1l / Board 40 summary line: total, unread and awaiting-reply counts with the
+    /// active filter name highlighted in accent ink ("… · showing Unread").
+    private var tallyParts: (base: String, filterTitle: String?, spoken: String)? {
         guard let total = model.totalComments else { return nil }
-        return AO3InboxTally.summaryLine(
+        let awaiting = AO3InboxTally.awaitingReplyCount(model.items)
+        let showing = AO3InboxPill.selected(in: model.currentFilterValues)
+        let base = AO3InboxTally.headerLine(
             total: total,
             unread: model.unreadCount,
-            awaitingOnPage: AO3InboxTally.awaitingReplyCount(model.items),
-            totalPages: model.totalPages,
-            showing: AO3InboxPill.selected(in: model.currentFilterValues)
+            awaitingOnPage: awaiting,
+            totalPages: model.totalPages
         )
+        let spoken = AO3InboxTally.summaryLine(
+            total: total,
+            unread: model.unreadCount,
+            awaitingOnPage: awaiting,
+            totalPages: model.totalPages,
+            showing: showing
+        )
+        let filterTitle = showing.flatMap { $0 == .all ? nil : $0.title }
+        return (base: base, filterTitle: filterTitle, spoken: spoken)
+    }
+
+    private func inboxTallyRow(_ parts: (base: String, filterTitle: String?, spoken: String)) -> some View {
+        Group {
+            if let filterTitle = parts.filterTitle {
+                Text(parts.base)
+                    + Text(" · showing ")
+                    + Text(filterTitle).foregroundStyle(theme.accentInk)
+            } else {
+                Text(parts.base)
+            }
+        }
+        .font(.subheadline)
+        .foregroundStyle(.secondaryInk)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, SubjectMetrics.accountGutter)
+        .accessibilityLabel(parts.spoken)
     }
 
     /// Comments stay on screen through a failed page turn. An empty first load

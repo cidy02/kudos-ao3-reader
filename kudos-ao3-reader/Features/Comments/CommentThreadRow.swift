@@ -284,37 +284,25 @@ struct FlattenedReply: Identifiable, Equatable {
 struct CommentParticipantBadge: View {
     let role: AO3CommentParticipantRole
 
-    private var isEmphasized: Bool { role == .author || role == .me }
+    @Environment(\.accentFill) private var accentFill
 
-    /// `person` — the same symbol the app uses for a work's author everywhere
-    /// else (Home cards, the Work Details hero, the Comments info card), so the
-    /// badge reads as *that* author rather than as a generic role chip. Only the
-    /// author gets one: `Me` and `Guest` say what they mean on their own, and a
-    /// symbol on each would just be more furniture in the byline.
-    private var symbol: String? {
-        role == .author ? "person" : nil
-    }
+    private var isEmphasized: Bool { role == .author || role == .me }
 
     var body: some View {
         if role != .user {
-            HStack(spacing: 3) {
-                if let symbol {
-                    Image(systemName: symbol)
-                        .imageScale(.small)
-                }
-                Text(role.rawValue)
-            }
-            .font(.caption2.weight(isEmphasized ? .semibold : .regular))
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(isEmphasized ? AnyShapeStyle(.accentFill) : AnyShapeStyle(.quaternary), in: Capsule())
-            .foregroundStyle(isEmphasized ? AnyShapeStyle(.white) : AnyShapeStyle(.secondaryInk))
-            .fixedSize()
-            .layoutPriority(1)
-            // One element, one announcement — without this VoiceOver reads the
-            // symbol and the word as two separate items.
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilityLabel)
+            Text(role.rawValue)
+                .font(.caption2.weight(isEmphasized ? .semibold : .regular))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(isEmphasized ? AnyShapeStyle(.accentFill) : AnyShapeStyle(.quaternary), in: Capsule())
+                .foregroundStyle(
+                    isEmphasized
+                        ? AnyShapeStyle(ThemeManager.label(on: accentFill))
+                        : AnyShapeStyle(.secondaryInk)
+                )
+                .fixedSize()
+                .layoutPriority(1)
+                .accessibilityLabel(accessibilityLabel)
         }
     }
 
@@ -809,6 +797,15 @@ struct CommentConversationRow: View {
     var onToggleCollapse: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(ThemeManager.self) private var theme
+
+    private var controlRowLeadingIndent: CGFloat {
+        dynamicTypeSize.isAccessibilitySize
+            ? 0
+            : CommentThreadGeometry.avatarSize(forDepth: 0)
+                + CommentThreadGeometry.avatarContentSpacing(forDepth: 0)
+    }
 
     var body: some View {
         content
@@ -845,11 +842,18 @@ struct CommentConversationRow: View {
             expandRepliesButton(
                 count: hiddenCount,
                 verb: showsVerb ? "more" : nil,
+                accentInk: theme.accentInk,
                 reduceMotion: reduceMotion,
                 action: onExpand
             )
+            .padding(.leading, controlRowLeadingIndent)
         case let .continueThread(_, hiddenCount):
-            continueThreadButton(count: hiddenCount, action: onContinueThread)
+            continueThreadButton(
+                count: hiddenCount,
+                accentInk: theme.accentInk,
+                action: onContinueThread
+            )
+            .padding(.leading, controlRowLeadingIndent)
         }
     }
 }
@@ -860,13 +864,15 @@ struct CommentConversationRow: View {
 /// A *navigation*, not a disclosure, so it says where it goes and carries a
 /// chevron rather than the expander's "show more" affordance — the two sit in the
 /// same slot in the same list and must not be mistaken for each other.
-private func continueThreadButton(count: Int, action: @escaping () -> Void) -> some View {
+private func continueThreadButton(
+    count: Int, accentInk: Color, action: @escaping () -> Void
+) -> some View {
     let countText = count == 1 ? "1 deeper reply" : "\(count) deeper replies"
     return Button(action: action) {
         HStack(spacing: 7) {
             Text("Continue thread")
                 .fontWeight(.medium)
-                .foregroundStyle(.tint)
+                .foregroundStyle(accentInk)
             Text("·")
                 .foregroundStyle(.tertiary)
             Text(countText)
@@ -874,7 +880,7 @@ private func continueThreadButton(count: Int, action: @escaping () -> Void) -> s
                 .foregroundStyle(.secondaryInk)
             Image(systemName: "chevron.right")
                 .imageScale(.small)
-                .foregroundStyle(.tint)
+                .foregroundStyle(accentInk)
         }
         .font(.caption)
         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
@@ -1045,12 +1051,13 @@ private struct CommentRowChrome: ViewModifier {
         .accessibilityHidden(true)
     }
 
-    /// The full-width hairline between two top-level conversations, centred in
-    /// the air above this root (1f: `rgba(255,255,255,.12)`, edge to edge).
+    /// The inset hairline between two top-level conversations, centred in the
+    /// air above this root (`CommentThread`: `margin: 18px 16px 6px`, 0.5 pt).
     private var conversationRule: some View {
         Rectangle()
             .fill(theme.appTheme.glassStroke(0.12))
             .frame(height: 0.5)
+            .padding(.horizontal, CommentThreadGeometry.sideMargin)
             .padding(.top, CommentThreadGeometry.conversationGap)
     }
 }
@@ -1059,7 +1066,7 @@ private struct CommentRowChrome: ViewModifier {
 
 /// One comment's content: avatar column, then byline, body and actions. Carries
 /// no position information — the enclosing `CommentConversationRow` owns the
-/// indent and rails; depth only steps the avatar and name size down.
+/// indent and rails; depth only steps the avatar size down.
 private struct CommentPostRow: View {
     let comment: AO3Comment
     let workAuthors: [String]
@@ -1085,17 +1092,8 @@ private struct CommentPostRow: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.commentThreadHandlers) private var handlers
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .subheadline) private var rootNameSize: CGFloat = 14
-
-    /// 1f's byline steps down with depth (14 / 13.5 / 13), scaled with Dynamic
-    /// Type from the root's size so the three keep their proportions.
-    private var nameSize: CGFloat {
-        switch depth {
-        case ...0: rootNameSize
-        case 1: rootNameSize * 13.5 / 14
-        default: rootNameSize * 13 / 14
-        }
-    }
+    /// `CommentThread`: 15 pt semibold at every depth, scaled with `.subheadline`.
+    @ScaledMetric(relativeTo: .subheadline) private var nameSize: CGFloat = 15
 
     private var participantRole: AO3CommentParticipantRole {
         .resolve(
@@ -1156,7 +1154,7 @@ private struct CommentPostRow: View {
                 .foregroundStyle(.secondaryInk)
                 .frame(minHeight: CommentThreadGeometry.avatarSize(forDepth: depth), alignment: .center)
         } else {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 // Owner, 2026-09-28: the name lines up with the avatar in every
                 // row. The byline is exactly the avatar's height and centres what
                 // it holds, so a collapse pill or chapter badge can no longer
@@ -1229,7 +1227,7 @@ private struct CommentPostRow: View {
             // sizes.
             Text("Replying to you".uppercased())
                 .font(.caption2.weight(.semibold))
-                .tracking(0.7)
+                .tracking(0.4)
                 .foregroundStyle(theme.accentInk)
                 // Two: at the accessibility sizes one line cut it to "REPLYING TO…".
                 .lineLimit(2)
@@ -1370,14 +1368,9 @@ private struct CommentPostRow: View {
                 font: .system(size: nameSize),
                 compact: true,
                 emphasized: true,
-                // Only the work's own author. Accenting every commenter spent the
-                // app's loudest colour on its most repeated element, so the tint
-                // marked "a person" rather than "worth reading first" — and the
-                // author's reply, which is the thing people scan a comment section
-                // for, looked like everything else. `.me` keeps plain text too: it
-                // already carries a badge, and highlighting your own name tells you
-                // nothing you don't know.
-                tinted: participantRole == .author,
+                // Board `CommentThread`: every commenter name renders in primary ink;
+                // the filled Author / Me pill beside it carries the role accent.
+                tinted: false,
                 // The 28pt hit box is top-aligned and grows downward, so it would
                 // show as a gap between the byline and the prose beneath it — and a
                 // guest's name has no such box, so registered and guest bylines
@@ -1393,11 +1386,11 @@ private struct CommentPostRow: View {
                 // Beside the name when both fit. At the largest sizes the Author pill took the
                 // room and the name was cut to "Caly…": then the pill goes under the name.
                 ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) { name; badge }
+                    HStack(alignment: .firstTextBaseline, spacing: 7) { name; badge }
                     VStack(alignment: .leading, spacing: 4) { name; badge }
                 }
             } else {
-                HStack(alignment: .firstTextBaseline, spacing: 6) { name; badge }
+                HStack(alignment: .firstTextBaseline, spacing: 7) { name; badge }
             }
         }
         // The rail conveys "this is a reply, and to whom" only visually and is
@@ -1488,7 +1481,7 @@ private struct CommentPostRow: View {
                 Button { handlers.onReply(comment) } label: {
                     // "↩ Reply" set tight, as board 21 draws it (an inherited label style drew the
                     // arrow alone, and the default title-and-icon gap left them far apart).
-                    HStack(spacing: 4) {
+                    HStack(spacing: 5) {
                         Image(systemName: "arrowshape.turn.up.left")
                         Text("Reply")
                     }
@@ -1500,7 +1493,7 @@ private struct CommentPostRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
-                .foregroundStyle(.tint)
+                .foregroundStyle(theme.accentInk)
                 .accessibilityLabel("Reply to \(comment.author)")
                 .padding(.leading, -10)
             }
@@ -1514,6 +1507,7 @@ private struct CommentPostRow: View {
             // its whole height — the lone button in a tall empty gap.
             .fixedSize(horizontal: true, vertical: true)
             .buttonStyle(.borderless)
+            .padding(.trailing, -12)
             .accessibilityLabel("More actions for \(comment.author)'s comment")
         }
         .padding(.vertical, -overlap)
@@ -1544,6 +1538,16 @@ struct CommentMenuItems: View {
     let showsReply: Bool
     let handlers: CommentThreadHandlers
 
+    /// Board `Comment-Menu`: reply count shown beside/under "Show Thread" ("2 replies"),
+    /// counting cutoff placeholders by the comments they stand for.
+    static func showThreadSubtitle(for comment: AO3Comment) -> String? {
+        let replies = CommentConversationBuilder.representedCount(
+            of: CommentThreadGeometry.flattenedReplies(from: comment)
+        )
+        guard replies > 0 else { return nil }
+        return replies == 1 ? "1 reply" : "\(replies) replies"
+    }
+
     var muteItem: MuteDescriptor? {
         guard handlers.onMute != nil,
               let target = comment.muteTargetRoute(
@@ -1556,6 +1560,12 @@ struct CommentMenuItems: View {
             systemImage: "speaker.slash",
             target: target
         )
+    }
+
+    private var showsSecondarySection: Bool {
+        (handlers.onMute != nil && muteItem != nil)
+            || comment.editPath != nil
+            || comment.deletePath != nil
     }
 
     var body: some View {
@@ -1581,35 +1591,49 @@ struct CommentMenuItems: View {
             }
         }
 
-        if comment.threadPath != nil {
-            Button { handlers.onFocusThread(comment.id) } label: {
-                Label("Show Thread", systemImage: "bubble.left.and.bubble.right")
+        Section {
+            if comment.threadPath != nil {
+                let replySubtitle = Self.showThreadSubtitle(for: comment)
+                Button { handlers.onFocusThread(comment.id) } label: {
+                    if let replySubtitle {
+                        Text("Show Thread")
+                        Text(replySubtitle)
+                        Image(systemName: "bubble.left.and.bubble.right")
+                    } else {
+                        Label("Show Thread", systemImage: "bubble.left.and.bubble.right")
+                    }
+                }
+            }
+            if let parentID = comment.parentCommentID {
+                Button { handlers.onFocusThread(parentID) } label: {
+                    Label("Parent Thread", systemImage: "arrowshape.turn.up.backward")
+                }
+            }
+            if handlers.chapterSpineIndex(comment) != nil,
+               let chapter = comment.storyChapterPosition {
+                Button { handlers.onGoToChapter(comment) } label: {
+                    Label("Go to Chapter \(chapter)", systemImage: "book")
+                }
             }
         }
-        if let parentID = comment.parentCommentID {
-            Button { handlers.onFocusThread(parentID) } label: {
-                Label("Parent Thread", systemImage: "arrowshape.turn.up.backward")
-            }
-        }
-        if handlers.chapterSpineIndex(comment) != nil,
-           let chapter = comment.storyChapterPosition {
-            Button { handlers.onGoToChapter(comment) } label: {
-                Label("Go to Chapter \(chapter)", systemImage: "book")
-            }
-        }
-        if let onMute = handlers.onMute, let item = muteItem {
-            Button { onMute(item.target) } label: {
-                Label(item.title, systemImage: item.systemImage)
-            }
-        }
-        if comment.editPath != nil {
-            Button { handlers.onEdit(comment) } label: {
-                Label("Edit Comment", systemImage: "pencil")
-            }
-        }
-        if comment.deletePath != nil {
-            Button(role: .destructive) { handlers.onDelete(comment) } label: {
-                Label("Delete Comment", systemImage: "trash")
+
+        if showsSecondarySection {
+            Section {
+                if let onMute = handlers.onMute, let item = muteItem {
+                    Button { onMute(item.target) } label: {
+                        Label(item.title, systemImage: item.systemImage)
+                    }
+                }
+                if comment.editPath != nil {
+                    Button { handlers.onEdit(comment) } label: {
+                        Label("Edit Comment", systemImage: "pencil")
+                    }
+                }
+                if comment.deletePath != nil {
+                    Button(role: .destructive) { handlers.onDelete(comment) } label: {
+                        Label("Delete Comment", systemImage: "trash")
+                    }
+                }
             }
         }
     }
@@ -1737,23 +1761,26 @@ private extension View {
 /// replies"). A free function can't read `@Environment` itself, so the caller
 /// passes its own `\.accessibilityReduceMotion` through explicitly.
 private func expandRepliesButton(
-    count: Int, verb: String?, reduceMotion: Bool, action: @escaping () -> Void
+    count: Int, verb: String?, accentInk: Color, reduceMotion: Bool, action: @escaping () -> Void
 ) -> some View {
     // One reply is "1 reply": it said "Show 1 replies".
     let noun = count == 1 ? "reply" : "replies"
+    let labelText = verb.map { "Show \(count) \($0) \(noun)" } ?? "Show \(count) \(noun)"
     return Button {
         withAnimationUnlessReduced(.easeInOut(duration: 0.2), reduceMotion: reduceMotion, action)
     } label: {
-        Label(
-            verb.map { "Show \(count) \($0) \(noun)" } ?? "Show \(count) \(noun)",
-            systemImage: "bubble.left.and.bubble.right"
-        )
+        HStack(spacing: 6) {
+            Image(systemName: "bubble.left.and.bubble.right")
+            Text(labelText)
+        }
         .font(.caption.weight(.medium))
+        .foregroundStyle(accentInk)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(minHeight: 44)
         .contentShape(Rectangle())
     }
     .buttonStyle(.borderless)
+    .accessibilityLabel(labelText)
     .accessibilityHint(
         verb == nil ? "Expands nested replies for this comment" : "Reveals more replies for this comment"
     )

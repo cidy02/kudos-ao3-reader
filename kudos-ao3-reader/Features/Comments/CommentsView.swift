@@ -195,7 +195,7 @@ struct CommentsView: View {
         return ScrollViewReader { proxy in
             List {
                 Section {
-                    compactWorkRow.pageBodyRow(top: 14, gutter: gutter)
+                    compactWorkRow.pageBodyRow(top: 8, gutter: gutter)
                     if model.page != nil {
                         metaLine(figures).pageBodyRow(top: 10, gutter: gutter)
                     }
@@ -699,7 +699,7 @@ struct CommentsView: View {
                 coverArtPreference: saved?.coverArtPreferenceRaw,
                 showsInitial: !concealed
             )
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(model.workContext.title)
                     .font(.headline)
                     .foregroundStyle(Color.primary)
@@ -715,6 +715,7 @@ struct CommentsView: View {
                 .padding(.top, dynamicTypeSize.isAccessibilitySize ? 4 : 0)
                 .accessibilityHidden(true)
         }
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder
@@ -726,7 +727,7 @@ struct CommentsView: View {
                         names: model.workAuthors,
                         identities: model.workAuthorIdentities,
                         includesBy: false,
-                        font: .subheadline,
+                        font: .footnote,
                         compact: true,
                         expandsHitTarget: false,
                         onOpenRoute: openAuthor
@@ -734,7 +735,7 @@ struct CommentsView: View {
                 }
                 if let selectedChapterFact {
                     Text(selectedChapterFact)
-                        .font(.subheadline)
+                        .font(.footnote)
                         .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -746,7 +747,7 @@ struct CommentsView: View {
                         names: model.workAuthors,
                         identities: model.workAuthorIdentities,
                         includesBy: false,
-                        font: .subheadline,
+                        font: .footnote,
                         compact: true,
                         expandsHitTarget: false,
                         onOpenRoute: openAuthor
@@ -754,12 +755,12 @@ struct CommentsView: View {
                 }
                 if hasByline, selectedChapterFact != nil {
                     Text("·")
-                        .font(.subheadline)
+                        .font(.footnote)
                         .foregroundStyle(.secondaryInk)
                 }
                 if let selectedChapterFact {
                     Text(selectedChapterFact)
-                        .font(.subheadline)
+                        .font(.footnote)
                         .foregroundStyle(.secondaryInk)
                         .lineLimit(1)
                 }
@@ -924,7 +925,9 @@ struct CommentsView: View {
                     text: chapterPillTitle,
                     style: .pill(isSelected: model.scope == .byChapter),
                     systemImage: "book",
-                    trailingImage: "chevron.down"
+                    trailingImage: "chevron.down",
+                    fontWeight: model.scope == .byChapter ? .semibold : nil,
+                    horizontalPadding: 12
                 )
             }
             .buttonStyle(.plain)
@@ -960,7 +963,8 @@ struct CommentsView: View {
                 text: model.newestFirst ? "Newest" : "Oldest",
                 style: .pill(isSelected: false),
                 systemImage: "arrow.up.arrow.down",
-                trailingImage: "chevron.down"
+                trailingImage: "chevron.down",
+                horizontalPadding: 12
             )
         }
         .buttonStyle(.plain)
@@ -1285,14 +1289,14 @@ struct CommentsView: View {
         } label: {
             HStack(spacing: 10) {
                 Text(title)
-                    .font(.system(size: 16, weight: .regular))
+                    .font(.callout)
                     .foregroundStyle(.secondaryInk)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "arrow.up")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(theme.onEffectiveTint)
                     .frame(width: 38, height: 38)
                     .background(Circle().fill(theme.effectiveTint))
             }
@@ -1696,7 +1700,7 @@ struct CommentComposerSheet: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .subheadline) private var editorTextSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .callout) private var editorTextSize: CGFloat = 16
     @ScaledMetric(relativeTo: .caption) private var identitySize: CGFloat = 11.5
     @ScaledMetric(relativeTo: .footnote) private var quoteBodySize: CGFloat = 12.5
     @ScaledMetric(relativeTo: .caption) private var quoteAuthorSize: CGFloat = 11
@@ -1737,17 +1741,20 @@ struct CommentComposerSheet: View {
         return "Post"
     }
 
+    /// Board `Comment-Thread` sheet header title: "Reply to <author>", or Title Case
+    /// "Edit Comment" / "New Comment" for the non-reply composer modes.
+    static func title(isEdit: Bool, parentAuthor: String?) -> String {
+        if isEdit { return "Edit Comment" }
+        guard let parentAuthor else { return "New Comment" }
+        return "Reply to \(parentAuthor)"
+    }
+
     private var remainingCharacters: Int {
         Self.remainingCharacters(for: model.composerText)
     }
 
-    /// Spec 1ba's header title. "Reply to <name>" rather than a bare "Reply":
-    /// the sheet is a medium detent over a thread, and which comment is being
-    /// answered is the thing the reader most needs restated.
     private var composerTitle: String {
-        if isEdit { return "Edit comment" }
-        guard let parent = model.composerParent else { return "New comment" }
-        return "Reply to \(parent.author)"
+        Self.title(isEdit: isEdit, parentAuthor: model.composerParent?.author)
     }
 
     /// The same hue the list behind this sheet washes in — taken from the
@@ -1792,6 +1799,7 @@ struct CommentComposerSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
+                .padding(.bottom, 4)
             }
             .navigationTitle(composerTitle)
             #if !os(macOS)
@@ -1837,7 +1845,7 @@ struct CommentComposerSheet: View {
                             ? "arrow.down.right.and.arrow.up.left"
                             : "arrow.up.left.and.arrow.down.right")
                     }
-                    .accessibilityLabel(detent == .large ? "Collapse" : "Expand")
+                    .accessibilityLabel(detent == .large ? "Collapse" : "Expand to full screen")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     postButton
@@ -1869,9 +1877,9 @@ struct CommentComposerSheet: View {
                 editorFocused = true
             }
         }
-        // Sheet surface, not `subjectScreenWash` (which applies the pushed-page chrome).
-        // Applied under the presentation modifiers so those stay outermost.
-        .appScreenSurface(.grouped)
+        // Board `Comment-Thread`: plain content ground so the rounded textarea and
+        // formatting tiles lift off it in Light, Dark, OLED and Sepia.
+        .appScreenSurface(.content)
         // Two numbers, not two layouts (spec 1be): `.medium` is the artboard's
         // 462pt of sheet, and the system re-lays it out at the shorter height on
         // its own once the keyboard is up. A literal `.height(462)` would be one
@@ -1914,30 +1922,32 @@ struct CommentComposerSheet: View {
         }
     }
 
-    /// The field, taking every point the sheet has left between the quoted
-    /// parent and the identity line. No card and no focus hairline, unlike the
-    /// pre-redesign composer: the sheet *is* the field here, so a bordered box
-    /// inside it was a second frame around the same thing.
+    /// The field (`Comment-Thread`: 16 pt rounded surface on `shelfTileSurface`, 12 pt inner padding).
     private var editor: some View {
         TextEditor(text: $model.composerText, selection: $selection)
             .font(.system(size: editorTextSize))
             .lineSpacing(3)
             .scrollContentBackground(.hidden)
-            .padding(.horizontal, 12)
-            .padding(.top, 10)
+            .padding(8)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .overlay(alignment: .topLeading) {
                 if model.composerText.isEmpty {
-                    // Offset past `TextEditor`'s own internal text inset, so the
-                    // placeholder sits exactly where the first character will.
+                    // Offset past `TextEditor`'s internal text inset + container padding
+                    // so the placeholder sits exactly where the first character will.
                     Text(isReply ? "Write your reply…" : "Share your thoughts…")
                         .font(.system(size: editorTextSize))
                         .foregroundStyle(.secondaryInk)
-                        .padding(.horizontal, 17)
-                        .padding(.top, 18)
+                        .padding(.horizontal, 13)
+                        .padding(.top, 16)
                         .allowsHitTesting(false)
                 }
             }
+            .background(
+                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                    .fill(theme.appTheme.shelfTileSurface)
+            )
+            .padding(.horizontal, SubjectMetrics.gutter)
+            .padding(.top, 10)
             .focused($editorFocused)
             .disabled(model.submissionGuard.phase.isBusy)
             .accessibilityLabel(isEdit ? "Edit comment text" : "Comment text")
