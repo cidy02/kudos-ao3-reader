@@ -685,6 +685,136 @@ struct ReadingLogTests {
         #expect(home.finishedCount == 3)
     }
 
+    /// A streak longer than several lookback windows (7, 14, 28 … days) still counts every day, and stops at the gap.
+    @Test func boundedStreakCrossesManyLookbackWindows() throws {
+        let context = try context()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "America/Los_Angeles"))
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 8, hour: 12)))
+        let work = SavedWork(title: "Daily", author: "A")
+        context.insert(work)
+        for back in 0..<40 {
+            let start = try #require(calendar.date(byAdding: .day, value: -back, to: now))
+            context.insert(ReadingSession(
+                workID: work.id, startedAt: start, endedAt: start.addingTimeInterval(300), durationSeconds: 300,
+                startProgress: nil, endingProgress: 0, wordCount: 0, chapterCountAtVisit: 0, didFinish: false
+            ))
+        }
+        // A day off, then older reading that must not join the streak.
+        let older = try #require(calendar.date(byAdding: .day, value: -45, to: now))
+        context.insert(ReadingSession(
+            workID: work.id, startedAt: older, endedAt: older.addingTimeInterval(300), durationSeconds: 300,
+            startProgress: nil, endingProgress: 0, wordCount: 0, chapterCountAtVisit: 0, didFinish: false
+        ))
+        try context.save()
+        let bounded = try ReadingLogService.streak(through: now, isToday: true, calendar: calendar, in: context)
+        let facts = ReadingLogService.facts(from: try context.fetch(FetchDescriptor<ReadingSession>()), works: [work])
+        #expect(bounded == 40)
+        #expect(bounded == ReadingHistoryTimeline.streak(through: now, isToday: true, facts: facts, calendar: calendar))
+    }
+
+    @Test func homeStatsMatchFullLogAfterSessionSaves() throws {
+        let context = try context()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        calendar.firstWeekday = 2
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 4, hour: 12)))
+        let week = try #require(calendar.dateInterval(of: .weekOfYear, for: now))
+        let workID = UUID()
+        let start = week.start
+        let current = ReadingSession(
+            workID: workID, startedAt: start, endedAt: start.addingTimeInterval(120), durationSeconds: 120
+        )
+        let previous = ReadingSession(
+            workID: workID, startedAt: start.addingTimeInterval(-600), endedAt: start, durationSeconds: 600
+        )
+        context.insert(previous)
+        context.insert(current)
+        try context.save()
+
+        func fullStats() throws -> HomeReadingStats {
+            let all = try context.fetch(FetchDescriptor<ReadingSession>(
+                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+            ))
+            return HomeReadingStats.calculate(
+                facts: ReadingLogService.facts(from: all, works: []), now: now, calendar: calendar
+            )
+        }
+
+        let initial = try HomeReadingStats.calculate(in: context, now: now, calendar: calendar)
+        let initialFull = try fullStats()
+        #expect(initial == initialFull)
+        #expect(initial.streakDays == 2)
+
+        // The same rows can change figures without changing their modification dates.
+        current.durationSeconds = 600
+        current.didFinish = true
+        context.delete(previous)
+        try context.save()
+        let refreshed = try HomeReadingStats.calculate(in: context, now: now, calendar: calendar)
+        let refreshedFull = try fullStats()
+        #expect(refreshed == refreshedFull)
+        #expect(refreshed == HomeReadingStats(durationSeconds: 600, finishedCount: 1, streakDays: 1))
+    }
+
+    @Test func historyPeriodsAndOffTimelineRowsMatchFullLog() throws {
+        let context = try context()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        calendar.firstWeekday = 2
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 5, hour: 12)))
+        let active = SavedWork(title: "Reread", author: "A")
+        let older = SavedWork(title: "Read last year", author: "B")
+        let abandoned = SavedWork(title: "Abandoned", author: "C")
+        let unlogged = SavedWork(title: "No sessions", author: "D")
+        let excluded = SavedWork(title: "Outside the filter", author: "E")
+        let works = [active, older, abandoned, unlogged]
+        for work in works + [excluded] { context.insert(work) }
+
+        func insert(_ work: SavedWork, daysAgo: Int, finished: Bool = false) throws {
+            let start = try #require(calendar.date(byAdding: .day, value: -daysAgo, to: now))
+            context.insert(ReadingSession(
+                workID: work.id, startedAt: start, endedAt: start.addingTimeInterval(300), durationSeconds: 300,
+                endingProgress: finished ? 1 : 0.5, wordCount: 4_000, chapterCountAtVisit: 4, didFinish: finished
+            ))
+        }
+
+        try insert(active, daysAgo: 5, finished: true)
+        try insert(active, daysAgo: 1)
+        try insert(older, daysAgo: 400)
+        try insert(abandoned, daysAgo: 60)
+        try insert(abandoned, daysAgo: 31)
+        try insert(excluded, daysAgo: 0)
+        try context.save()
+
+        let visibleIDs = Set(works.map(\.id))
+        let all = try context.fetch(FetchDescriptor<ReadingSession>())
+        let fullFacts = ReadingLogService.facts(
+            from: all.filter { visibleIDs.contains($0.workID) }, works: works
+        )
+        for scope in ReadingHistoryScope.allCases {
+            let previous = try #require(calendar.date(byAdding: scope.component, value: -1, to: now))
+            for anchor in [now, previous] {
+                let full = ReadingHistoryTimeline.make(
+                    scope: scope, containing: anchor, facts: fullFacts, now: now, calendar: calendar
+                )
+                let bounded = try ReadingHistoryTimeline.make(
+                    scope: scope, containing: anchor, works: works, in: context, now: now, calendar: calendar
+                )
+                #expect(bounded == full)
+            }
+        }
+
+        let offTimeline = try ReadingHistoryTimeline.OffTimeline.load(
+            visibleWorkIDs: visibleIDs, abandonedWorkIDs: [abandoned.id], in: context
+        )
+        let fullSummaries = ReadingLogService.summaries(in: context)
+        let fullUnlogged = visibleIDs.filter { $0 != abandoned.id && fullSummaries[$0] == nil }
+        #expect(offTimeline.unloggedWorkIDs == fullUnlogged)
+        #expect(offTimeline.unloggedWorkIDs == [unlogged.id])
+        #expect(offTimeline.summaries == fullSummaries.filter { $0.key == abandoned.id })
+    }
+
     @Test func tagCountsCountEachTagOncePerWorkWithASession() throws {
         let firstID = UUID()
         let secondID = UUID()

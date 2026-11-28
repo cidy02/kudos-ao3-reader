@@ -270,6 +270,89 @@ struct WhatFitsTests {
         #expect(plan.startAndFinish.map(\.work.title) == ["LiveWork"])
     }
 
+    @Test func sharedSmartPassKeepsTheExactFitsAndManualEncounterTies() throws {
+        let context = try makeContext()
+        let manual = ReadingQueueService.createQueue(named: "Manual", in: context)
+        let firstTie = makeWork(in: context, title: "Z Exact", words: 10_000)
+        firstTie.readiumLocator = #"{"href":"c1.xhtml","locations":{"totalProgression":0.7}}"#
+        let secondTie = makeWork(in: context, title: "A Exact", words: 6_000)
+        secondTie.chapters = "5/10"
+        secondTie.lastSpineIndex = 4
+        let offline = makeWork(in: context, title: "Offline", words: 3_000)
+        let download = makeWork(in: context, title: "Download", words: 2_000, hasEPUB: false)
+        let longer = makeWork(in: context, title: "Longer", words: 3_200)
+        let hidden = makeWork(in: context, title: "A Hidden", words: 1_000)
+        hidden.rating = "Explicit"
+        let works = [firstTie, secondTie, offline, download, longer, hidden]
+        for work in works { work.isSaved = true }
+        for work in [firstTie, secondTie, offline, longer] {
+            ReadingQueueService.add(work, to: manual, in: context)
+            work.hasEPUB = true
+        }
+        let document = SmartQueueDocument(
+            match: .all,
+            rules: [.init(id: UUID(), kind: .length, lengthComparison: .atLeast, words: 1)],
+            sort: .title,
+            limit: 5
+        )
+        let json = try #require(SmartQueueRules.encode(document))
+        let smart = ReadingQueueService.createQueue(named: "Smart", smartRulesJSON: json, in: context)
+        manual.sortOrder = 0
+        smart.sortOrder = 1
+        let visible: (SavedWork) -> Bool = { $0.rating != "Explicit" }
+        let legacySmartIDs = document.matching(works.filter(visible).map(SmartQueueWorkFacts.init(work:))).map(\.id)
+        let legacyManualIDs = ReadingQueueService.orderedMemberships(in: manual).compactMap { $0.work?.id }
+        let legacyOrder = [firstTie, secondTie, offline, download]
+        let offlineURLs = Set([firstTie.fileURL, secondTie.fileURL, offline.fileURL])
+        var diskChecks: [URL] = []
+        var visibilityChecks: [UUID: Int] = [:]
+
+        let plan = WhatFitsPlanner.plan(
+            queues: [smart, manual],
+            bucket: .fifteenMinutes,
+            isVisible: { work in
+                visibilityChecks[work.id, default: 0] += 1
+                return visible(work)
+            },
+            fileExists: { url in
+                diskChecks.append(url)
+                return offlineURLs.contains(url)
+            },
+            libraryWorks: works
+        )
+
+        #expect(plan.queueCount == 2)
+        #expect(plan.finishInThisSitting.map(\.id) == [firstTie.id, secondTie.id])
+        #expect(plan.startAndFinish.map(\.id) == [offline.id, download.id])
+        #expect(plan.allEntries.map(\.minutesLeft) == legacyOrder.compactMap { ReadingQueueFacts.minutesLeft(for: $0) })
+        let names = legacyOrder.map { work in
+            let queues: [String?] = [
+                legacyManualIDs.contains(work.id) ? manual.displayName : nil,
+                legacySmartIDs.contains(work.id) ? smart.displayName : nil
+            ]
+            return queues.compactMap { $0 }
+        }
+        #expect(plan.allEntries.map(\.queueNames) == names)
+        #expect(plan.allEntries.map(\.isOffline) == [true, true, true, false])
+        #expect(plan.hasAnyVisibleWorks && plan.hasAnyUnfinishedWorks && plan.hasAnyWordCounts)
+        #expect(plan.hasHiddenMatureFits)
+        #expect(plan.nextFittingBucket?.bucket == nil)
+        #expect(Set(diskChecks) == offlineURLs)
+        #expect(diskChecks.count == offlineURLs.count)
+        #expect(visibilityChecks.count == works.count)
+        #expect(visibilityChecks.values.allSatisfy { $0 == 1 })
+
+        let fallback = WhatFitsPlanner.plan(
+            queues: [smart, manual],
+            bucket: .fifteenMinutes,
+            isVisible: { $0.id == longer.id },
+            libraryWorks: works
+        )
+        #expect(fallback.isEmpty)
+        #expect(fallback.nextFittingBucket?.bucket == .thirtyMinutes)
+        #expect(fallback.nextFittingBucket?.count == 1)
+    }
+
     private func makeContext() throws -> ModelContext {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,

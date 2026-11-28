@@ -1,3 +1,5 @@
+import Combine
+import Dispatch
 import Foundation
 import OSLog
 import SwiftData
@@ -59,8 +61,6 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     private var readingQueues: [ReadingQueue]
     @Query(filter: #Predicate<WorkCollection> { $0.showsOnHome && !$0.isPendingDeletion })
     private var homeCollections: [WorkCollection]
-    @Query(sort: \ReadingSession.startedAt, order: .reverse)
-    private var readingSessions: [ReadingSession]
     @Query(sort: \FollowedTag.followedAt)
     private var followedTags: [FollowedTag]
     @Query private var tagAliases: [TagAlias]
@@ -194,19 +194,10 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         hasSectionCache = true
     }
 
-    private var homeStatsRevision: String {
-        let newest = readingSessions.map(\.lastModifiedAt).max()?.timeIntervalSince1970 ?? 0
-        return HomeReadingStats.revisionKey(
-            sessionCount: readingSessions.count,
-            newestModified: newest,
-            now: Date(),
-            calendar: .current
-        )
-    }
-
     private func updateReadingStats() {
-        let facts = ReadingLogService.facts(from: readingSessions, works: works)
-        readingStats = HomeReadingStats.calculate(facts: facts)
+        if let next = try? HomeReadingStats.calculate(in: context) {
+            readingStats = next
+        }
     }
 
     private var accountInspectorGeometry: DuoInspectorSplitGeometry? {
@@ -373,10 +364,17 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 .task(id: homeSectionsRevision) {
                     await Task.yield()
                     rebuildHomeSectionCache()
+                }
+                .task(id: Calendar.current.startOfDay(for: Date())) {
                     updateReadingStats()
                 }
-                .task(id: homeStatsRevision) {
-                    updateReadingStats()
+                .onReceive(
+                    NotificationCenter.default.publisher(for: ModelContext.didSave)
+                        .receive(on: DispatchQueue.main)
+                ) { notification in
+                    if ReadingLogService.saveAffectsSessions(notification) {
+                        updateReadingStats()
+                    }
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {

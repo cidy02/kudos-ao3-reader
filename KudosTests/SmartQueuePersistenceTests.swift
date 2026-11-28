@@ -670,4 +670,48 @@ extension PersistenceGateSuites.SmartQueuePersistenceTests {
         let visible = snapshot.matching(queue) { !$0.isAdult }
         #expect(visible.map(\.title) == ["Visible A", "Visible B"])
     }
+
+    @Test func indexedSnapshotMatchesReferenceFandomLengthAndRatingFilter() throws {
+        let mature = work("A", words: 1_000)
+        mature.rating = "Explicit"
+        let first = work("Same title", words: 2_000)
+        let second = work("Same title", words: 2_000)
+        let long = work("Long", words: 5_000)
+        let unknown = work("Unknown", words: 0)
+        let other = work("Other fandom", words: 1_500)
+        let works = [mature, second, first, long, unknown, other]
+        for work in works {
+            work.dateAdded = .distantPast
+            work.workFandoms = [" HP "]
+        }
+        other.workFandoms = ["Other"]
+        first.workFandoms = ["harry potter", "HP"]
+        let aliases = TagAliasResolver(entries: [.init(name: "HP", canonicalName: "Harry Potter", kind: .fandom)])
+        let snapshot = ReadingQueueService.SmartLibrarySnapshot(works: works, aliases: aliases)
+        let visibility: (SavedWork) -> Bool = { $0.rating != "Explicit" }
+        let facts = works.map(SmartQueueWorkFacts.init(work:))
+        let visibleFacts = works.filter(visibility).map(SmartQueueWorkFacts.init(work:))
+        let queue = ReadingQueue(name: "Indexed", kind: .smart, sortOrder: 0)
+        let rules: [SmartQueueDocument.Rule] = [
+            .init(id: UUID(), kind: .fandom, fandom: "Harry Potter"),
+            .init(id: UUID(), kind: .length, lengthComparison: .under, words: 5_000)
+        ]
+        for match in SmartQueueDocument.Match.allCases {
+            for sort in SmartQueueDocument.Sort.allCases {
+                let limits: [Int?] = [2, nil, 0]
+                for limit in limits {
+                    let document = SmartQueueDocument(match: match, rules: rules, sort: sort, limit: limit)
+                    queue.smartRulesJSON = try #require(SmartQueueRules.encode(document))
+                    let expected = document.matching(visibleFacts, aliases: aliases).map(\.id)
+                    let unrestricted = document.matching(facts, aliases: aliases).map(\.id)
+                    let hidden = unrestricted.filter { $0 == mature.id }
+
+                    #expect(ReadingQueueService.orderedWorks(in: queue, snapshot: snapshot).map(\.id) == unrestricted)
+                    let shown = ReadingQueueService.orderedWorks(in: queue, snapshot: snapshot, where: visibility)
+                    #expect(shown.map(\.id) == expected)
+                    #expect(snapshot.matchingForWhatFits(queue, where: visibility).map(\.id) == expected + hidden)
+                }
+            }
+        }
+    }
 }

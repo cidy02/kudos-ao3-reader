@@ -149,46 +149,6 @@ enum ReadingQueueService {
             }
     }
 
-    /// Pre-fetched library slice for evaluating one or more smart queues without
-    /// repeating `FetchDescriptor<SavedWork>()` or `TagAliasStore.resolver(in:)`.
-    @MainActor
-    struct SmartLibrarySnapshot {
-        let eligible: [SavedWork]
-        let facts: [SmartQueueWorkFacts]
-        let byID: [UUID: SavedWork]
-        let aliases: TagAliasResolver
-
-        init(works: [SavedWork], aliases: TagAliasResolver = .empty) {
-            let filtered = works.filter { !$0.isPendingDeletion && !$0.isQueueOnlyWork }
-            eligible = filtered
-            facts = filtered.map(SmartQueueWorkFacts.init(work:))
-            byID = Dictionary(filtered.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            self.aliases = aliases
-        }
-
-        init(in context: ModelContext) {
-            let library = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
-            self.init(works: library, aliases: TagAliasStore.resolver(in: context))
-        }
-
-        /// Evaluates `queue`'s rules against this snapshot. `include`, when given,
-        /// runs before `document.limit` so hidden works cannot consume limit slots.
-        func matching(
-            _ queue: ReadingQueue,
-            where include: ((SavedWork) -> Bool)? = nil
-        ) -> [SavedWork] {
-            guard queue.kind == .smart,
-                  let document = SmartQueueRules.decode(queue.smartRulesJSON)
-            else { return [] }
-            let candidateFacts: [SmartQueueWorkFacts] = if let include {
-                zip(eligible, facts).compactMap { work, fact in include(work) ? fact : nil }
-            } else {
-                facts
-            }
-            return document.matching(candidateFacts, aliases: aliases).compactMap { byID[$0.id] }
-        }
-    }
-
     /// `include` (smart queues only) runs before the rules' limit; pass the Hide
     /// Mature check wherever the result is counted or acted on.
     static func orderedWorks(in queue: ReadingQueue, where include: ((SavedWork) -> Bool)? = nil) -> [SavedWork] {
@@ -607,71 +567,6 @@ enum ReadingQueueService {
             return MembershipAddition(work: work, state: membership.state, origin: membership.origin)
         }
         appendMemberships(additions, to: queue, in: context)
-    }
-
-    static func normalizeAllQueuedWorks(in context: ModelContext) {
-        let memberships = (try? context.fetch(FetchDescriptor<ReadingQueueMembership>())) ?? []
-        for membership in memberships where membership.queue == nil || membership.work == nil {
-            membership.queue?.memberships.removeAll { $0.id == membership.id }
-            membership.work?.queueMemberships.removeAll { $0.id == membership.id }
-            context.delete(membership)
-        }
-
-        // Only walk works that participate in queues (or still claim queue flags).
-        // A full-library `fileExists` pass was hitching launch and tab switches on
-        // large libraries — non-queued works don't need EPUB preservation reconcile here.
-        var seen = Set<UUID>()
-        for membership in memberships {
-            guard let work = membership.work, seen.insert(work.id).inserted else { continue }
-            normalize(work)
-        }
-        // Catch stale `isQueuedForLater` rows that lost their memberships without a prior
-        // normalize (orphaned flag) — still a tiny set vs the whole library.
-        let staleDescriptor = FetchDescriptor<SavedWork>(
-            predicate: #Predicate { $0.isQueuedForLater }
-        )
-        let flagged = (try? context.fetch(staleDescriptor)) ?? []
-        for work in flagged where seen.insert(work.id).inserted {
-            normalize(work)
-        }
-        context.saveBestEffort(reason: "Saving queue normalization failed")
-    }
-
-    static func normalize(_ work: SavedWork) {
-        if work.ao3WorkID == nil {
-            work.ao3WorkID = WorkTags.ao3WorkID(from: work.sourceURL)
-        }
-        if work.ao3SeriesID == nil {
-            work.ao3SeriesID = ao3SeriesID(from: work.seriesURL)
-        }
-
-        let hasMembership = work.queueMemberships.contains { $0.queue != nil }
-        work.isQueuedForLater = hasMembership
-
-        let hasFile = FileManager.default.fileExists(atPath: work.fileURL.path)
-        if !hasFile {
-            work.hasEPUB = false
-            if work.epubPreservationStatus == .preserved {
-                work.epubPreservationStatus = .missingFile
-            }
-        }
-
-        if hasMembership {
-            if work.hasEPUB, hasFile {
-                if work.epubPreservationStatus != .preserving {
-                    work.epubPreservationStatus = .preserved
-                }
-                if work.preservedAt == nil { work.preservedAt = Date() }
-            } else if work.epubPreservationStatus == .notPreserved {
-                work.epubPreservationStatus = .queued
-            }
-            if work.metadataSyncStatus == .unknown, work.needsAO3Refresh {
-                work.metadataSyncStatus = .pending
-            }
-        } else if work.epubPreservationStatus != .notPreserved {
-            work.epubPreservationStatus = .notPreserved
-            work.preservedAt = nil
-        }
     }
 
     @discardableResult

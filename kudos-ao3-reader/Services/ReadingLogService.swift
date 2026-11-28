@@ -621,6 +621,10 @@ enum ReadingLogService {
 
     // MARK: Queries
 
+    static func saveAffectsSessions(_ notification: Notification) -> Bool {
+        WorkIdentityBatch.save(notification, affects: [Schema.entityName(for: ReadingSession.self)])
+    }
+
     static func sessions(in context: ModelContext, interval: DateInterval) -> [ReadingSession] {
         (try? context.fetch(weeklySessionDescriptor(in: interval))) ?? []
     }
@@ -648,10 +652,9 @@ enum ReadingLogService {
     /// the predicate within the store's parameter limit when a year spans many works.
     static func history(for workIDs: Set<UUID>, in context: ModelContext) throws -> [ReadingSession] {
         let ids = Array(workIDs)
-        let batchSize = 400
         var sessions: [ReadingSession] = []
-        for offset in stride(from: 0, to: ids.count, by: batchSize) {
-            let batch = Array(ids[offset..<min(offset + batchSize, ids.count)])
+        for offset in stride(from: 0, to: ids.count, by: workIDBatchSize) {
+            let batch = Array(ids[offset..<min(offset + workIDBatchSize, ids.count)])
             let descriptor = FetchDescriptor<ReadingSession>(predicate: #Predicate {
                 batch.contains($0.workID)
             })
@@ -660,8 +663,35 @@ enum ReadingLogService {
         return sessions
     }
 
-    /// Only walks back through occupied days and the first gap. A week per fetch
-    /// avoids materializing the log when a streak reaches into earlier periods.
+    private static let workIDBatchSize = 400
+
+    /// Lifetime membership for History's off-timeline rows. Once a work has a
+    /// matching sitting, leave it out of subsequent fetches in that batch.
+    static func loggedWorkIDs(in context: ModelContext, among workIDs: Set<UUID>) throws -> Set<UUID> {
+        let ids = Array(workIDs)
+        var logged: Set<UUID> = []
+        for offset in stride(from: 0, to: ids.count, by: workIDBatchSize) {
+            var remaining = Set(ids[offset..<min(offset + workIDBatchSize, ids.count)])
+            while !remaining.isEmpty {
+                let candidates = Array(remaining)
+                var descriptor = FetchDescriptor<ReadingSession>(predicate: #Predicate {
+                    candidates.contains($0.workID)
+                })
+                descriptor.propertiesToFetch = [\.workID]
+                descriptor.fetchLimit = workIDBatchSize
+                let rows = try context.fetch(descriptor)
+                let found = Set(rows.map(\.workID))
+                logged.formUnion(found)
+                guard rows.count >= workIDBatchSize else { break }
+                remaining.subtract(found)
+            }
+        }
+        return logged
+    }
+
+    /// Only walks back through occupied days and the first gap. Windows double (7, 14, 28 … days) so a long streak
+    /// costs log(days) fetches: without an index on `startedAt` each fetch scans the table, and a week per fetch made
+    /// a years-long streak at 50k works take minutes (T-568 benchmark, `home_weekly_stats_bounded`).
     static func streak(
         through lastDay: Date,
         isToday: Bool,
@@ -672,10 +702,12 @@ enum ReadingLogService {
         if visibleWorkIDs?.isEmpty == true { return 0 }
         var window: DateInterval?
         var readingDays: Set<Date> = []
+        var span = 7
         return try ReadingHistoryTimeline.streak(through: lastDay, isToday: isToday, calendar: calendar) { day in
             if window.map({ $0.start <= day && day < $0.end }) != true {
                 guard let end = calendar.dateInterval(of: .day, for: day)?.end else { return false }
-                let first = calendar.date(byAdding: .day, value: -6, to: day) ?? day
+                let first = calendar.date(byAdding: .day, value: -(span - 1), to: day) ?? day
+                span *= 2
                 let interval = DateInterval(start: calendar.startOfDay(for: first), end: end)
                 let rows = try sessions(startingIn: interval, in: context)
                 readingDays = Set(rows.lazy.filter { visibleWorkIDs?.contains($0.workID) ?? true }
@@ -690,9 +722,12 @@ enum ReadingLogService {
     ///
     /// List screens can use this instead of issuing one query per work.
     static func summaries(in context: ModelContext) -> [UUID: WorkReadingSummary] {
-        let all = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        summaries(from: (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? [])
+    }
+
+    static func summaries(from sessions: [ReadingSession]) -> [UUID: WorkReadingSummary] {
         var summaries: [UUID: WorkReadingSummary] = [:]
-        for session in all {
+        for session in sessions {
             var summary = summaries[session.workID] ?? WorkReadingSummary()
             summary.totalSeconds += session.durationSeconds
             summary.visitCount += 1

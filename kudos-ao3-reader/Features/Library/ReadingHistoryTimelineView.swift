@@ -1,4 +1,7 @@
 import Charts
+import Combine
+import Dispatch
+import Foundation
 import SwiftData
 import SwiftUI
 
@@ -28,8 +31,9 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
     /// The section page's header rows (kicker, title, tally, filter chips).
     let header: () -> Header
     /// The page's ordinary row, for works the timeline cannot place.
-    let offTimelineRow: (SavedWork) -> OffTimelineRow
+    let offTimelineRow: (SavedWork, WorkReadingSummary?) -> OffTimelineRow
 
+    @Environment(\.modelContext) private var context
     @Environment(ThemeManager.self) private var themeManager
     @Environment(PrivacyGate.self) private var gate
     @Environment(\.calendar) private var calendar
@@ -39,9 +43,60 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
     @AppStorage("library.history.scope") private var scope: ReadingHistoryScope = .week
     /// Any moment in the period on screen; the arrows step it a period at a time.
     @State private var anchor = Date()
-    @Query private var sessions: [ReadingSession]
+    @State private var sessionRevision = 0
+    @State private var loadedTimeline: LoadedTimeline?
+    @State private var loadedOffTimeline: (filter: OffTimelineFilter, value: ReadingHistoryTimeline.OffTimeline)?
 
     @ScaledMetric(relativeTo: .caption) private var timeColumnWidth: CGFloat = 54
+
+    private nonisolated struct TimelineWindow: Equatable {
+        let scope: ReadingHistoryScope
+        let period: DateInterval
+        let workIDs: Set<UUID>
+    }
+
+    private nonisolated struct TimelineRequest: Equatable {
+        let window: TimelineWindow
+        let calendar: Calendar
+        let day: Date
+        let sessionRevision: Int
+    }
+
+    private nonisolated struct OffTimelineFilter: Equatable {
+        let workIDs: Set<UUID>
+        let abandonedIDs: Set<UUID>
+    }
+
+    private nonisolated struct OffTimelineRequest: Equatable {
+        let filter: OffTimelineFilter
+        let sessionRevision: Int
+    }
+
+    private struct LoadedTimeline {
+        let window: TimelineWindow
+        let value: ReadingHistoryTimeline
+        let workInputs: [TimelineWorkInput]
+    }
+
+    /// Live fallbacks and chapter-credit inputs for the works on the rail.
+    private nonisolated struct TimelineWorkInput: Equatable {
+        let title: String
+        let fandom: String?
+        let chapterCount: Int
+        let chapterWordCountsJSON: String
+        let wordCount: Int
+        let wordUnit: SavedWork.WordUnit
+
+        @MainActor
+        init(_ work: SavedWork) {
+            title = work.title
+            fandom = work.workFandoms.first { !$0.isEmpty }
+            chapterCount = work.postedChapterCount
+            chapterWordCountsJSON = work.chapterWordCountsJSON
+            wordCount = work.wordCount
+            wordUnit = work.wordUnit
+        }
+    }
 
     /// Written out so the two builders take `@ViewBuilder` closures and the three
     /// bindings arrive as bindings.
@@ -53,7 +108,7 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
         pendingRemoval: Binding<PendingLibraryRemoval?>,
         onSelect: @escaping (SavedWork) -> Void,
         @ViewBuilder header: @escaping () -> Header,
-        @ViewBuilder offTimelineRow: @escaping (SavedWork) -> OffTimelineRow
+        @ViewBuilder offTimelineRow: @escaping (SavedWork, WorkReadingSummary?) -> OffTimelineRow
     ) {
         self.works = works
         self.isSelecting = isSelecting
@@ -66,22 +121,69 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
     }
 
     var body: some View {
-        // Bound once: the log fetch, the facts and the timeline are the whole
-        // page, and reading them through properties would rebuild them per row.
+        let now = Date()
+        let reference = anchor
         let byID = Dictionary(works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let shown = sessions.filter { byID[$0.workID] != nil }
-        let timeline = ReadingHistoryTimeline.make(
-            scope: scope,
-            containing: anchor,
-            facts: ReadingLogService.facts(from: shown, works: works),
-            calendar: calendar
+        let window = TimelineWindow(
+            scope: scope, period: ReadingHistoryTimeline.interval(for: scope, containing: reference, calendar: calendar),
+            workIDs: Set(byID.keys)
         )
-        let logged = Set(shown.map(\.workID))
-        let abandoned = works.filter { ReadingLogService.isAbandoned(work: $0) }
-        let abandonedIDs = Set(abandoned.map(\.id))
-        let unlogged = works.filter { !logged.contains($0.id) && !abandonedIDs.contains($0.id) }
+        let timelineRequest = TimelineRequest(
+            window: window, calendar: calendar, day: calendar.startOfDay(for: now), sessionRevision: sessionRevision
+        )
+        // Only draw a snapshot for the selected period and currently visible works.
+        let current = loadedTimeline?.window == window ? loadedTimeline?.value : nil
+        let timeline = current ?? ReadingHistoryTimeline.make(
+            scope: scope, containing: reference, facts: [], now: now, calendar: calendar
+        )
+        let workInputs = current.map { timelineWorkInputs($0, byID: byID) }
+        let abandoned = works.filter { ReadingLogService.isAbandoned(work: $0, now: now) }
+        let offTimelineFilter = OffTimelineFilter(workIDs: window.workIDs, abandonedIDs: Set(abandoned.map(\.id)))
+        let offTimelineRequest = OffTimelineRequest(filter: offTimelineFilter, sessionRevision: sessionRevision)
+        let offTimeline = loadedOffTimeline?.filter == offTimelineFilter ? loadedOffTimeline?.value : nil
+        let unlogged = works.filter { offTimeline?.unloggedWorkIDs.contains($0.id) == true }
 
-        return List {
+        return historyList(
+            timeline, byID: byID, abandoned: abandoned, unlogged: unlogged,
+            summaries: offTimeline?.summaries ?? [:], hasLoadedPeriod: current != nil
+        )
+        .task(id: timelineRequest) {
+            guard !Task.isCancelled else { return }
+            loadTimeline(window: window, reference: reference, now: now, byID: byID)
+        }
+        .task(id: offTimelineRequest) {
+            guard !Task.isCancelled else { return }
+            if let value = try? ReadingHistoryTimeline.OffTimeline.load(
+                visibleWorkIDs: offTimelineFilter.workIDs,
+                abandonedWorkIDs: offTimelineFilter.abandonedIDs,
+                in: context
+            ) {
+                loadedOffTimeline = (offTimelineFilter, value)
+            }
+        }
+        .onChange(of: workInputs) { _, inputs in
+            guard let inputs, let loadedTimeline, inputs != loadedTimeline.workInputs else { return }
+            loadTimeline(window: window, reference: reference, now: now, byID: byID)
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: ModelContext.didSave)
+                .receive(on: DispatchQueue.main)
+        ) { notification in
+            if ReadingLogService.saveAffectsSessions(notification) {
+                sessionRevision &+= 1
+            }
+        }
+    }
+
+    private func historyList(
+        _ timeline: ReadingHistoryTimeline,
+        byID: [UUID: SavedWork],
+        abandoned: [SavedWork],
+        unlogged: [SavedWork],
+        summaries: [UUID: WorkReadingSummary],
+        hasLoadedPeriod: Bool
+    ) -> some View {
+        List {
             header()
 
             Section {
@@ -101,7 +203,7 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
                 }
             }
 
-            if timeline.days.isEmpty {
+            if hasLoadedPeriod, timeline.days.isEmpty {
                 Section {
                     Text("Nothing read \(periodNoun(timeline)).")
                         .font(.subheadline)
@@ -129,7 +231,8 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
             // grouped list showed and the rail cannot place, kept rather than lost.
             offTimelineSection(
                 "Abandoned", works: abandoned,
-                note: "In progress, untouched for \(Int(ReadingLogService.defaultAbandonedThreshold / 86_400)) days"
+                note: "In progress, untouched for \(Int(ReadingLogService.defaultAbandonedThreshold / 86_400)) days",
+                summaries: summaries
             )
             offTimelineSection(
                 "No reading time recorded", works: unlogged,
@@ -137,6 +240,23 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
             )
         }
         .cardList()
+    }
+
+    private func loadTimeline(window: TimelineWindow, reference: Date, now: Date, byID: [UUID: SavedWork]) {
+        let loaded = try? ReadingHistoryTimeline.make(
+            scope: window.scope, containing: reference, works: works, in: context, now: now, calendar: calendar
+        )
+        if loaded == nil, loadedTimeline?.window == window { return }
+        let value = loaded ?? ReadingHistoryTimeline.make(
+            scope: window.scope, containing: reference, facts: [], now: now, calendar: calendar
+        )
+        loadedTimeline = LoadedTimeline(window: window, value: value, workInputs: timelineWorkInputs(value, byID: byID))
+    }
+
+    private func timelineWorkInputs(_ timeline: ReadingHistoryTimeline, byID: [UUID: SavedWork]) -> [TimelineWorkInput] {
+        timeline.mostRead.compactMap { entry in
+            byID[entry.workID].map { TimelineWorkInput($0) }
+        }
     }
 
     // MARK: Summary
@@ -449,11 +569,13 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
     // MARK: Off the timeline
 
     @ViewBuilder
-    private func offTimelineSection(_ title: String, works: [SavedWork], note: String) -> some View {
+    private func offTimelineSection(
+        _ title: String, works: [SavedWork], note: String, summaries: [UUID: WorkReadingSummary] = [:]
+    ) -> some View {
         if !works.isEmpty {
             Section {
                 ForEach(works) { work in
-                    offTimelineRow(work)
+                    offTimelineRow(work, summaries[work.id])
                 }
             } header: {
                 SectionRuleHeader(title: title, count: works.count, note: note)

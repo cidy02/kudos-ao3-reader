@@ -73,8 +73,7 @@ struct LibrarySectionListView: View {
     /// `visibleItems` is read many times per render, so a fetch inside it would run
     /// many times per frame; a `@Query` is resolved once by SwiftUI and reused, and
     /// this one is a small slice of the log rather than all of it.
-    @Query(filter: #Predicate<ReadingSession> { $0.didFinish })
-    private var finishingSessions: [ReadingSession]
+    @Query private var finishingSessions: [ReadingSession]
 
     /// Seeded from the dashboard's own selection so tapping a carousel's "see all"
     /// chevron mid-selection doesn't strand the works you'd already picked — without
@@ -87,6 +86,10 @@ struct LibrarySectionListView: View {
     ) {
         self.kind = kind
         self.originKicker = originKicker
+        let needsFinishingSessions = kind == .favorites
+        _finishingSessions = Query(filter: #Predicate<ReadingSession> {
+            needsFinishingSessions && $0.didFinish
+        })
         // History is its own rows. Resolving it would write a key the page never draws.
         let resolved: WorkListArrangement = kind == .history
             ? .list
@@ -672,9 +675,7 @@ struct LibrarySectionListView: View {
     /// Fandom / Flat strip. Selection, the swipes and their asks stay this page's,
     /// and works the rail cannot place on a day keep this page's own row.
     private var historyTimeline: some View {
-        // One fetch for every off-rail row's facts strip, not one per row.
-        let summaries = ReadingLogService.summaries(in: context)
-        return ReadingHistoryTimelineList(
+        ReadingHistoryTimelineList(
             works: visibleItems,
             isSelecting: isSelecting,
             selection: $selection,
@@ -685,8 +686,8 @@ struct LibrarySectionListView: View {
                 selection = [work.id]
             },
             header: { subjectHeaderSection },
-            offTimelineRow: { work in
-                row(work, summary: summaries[work.id]).cardRow(
+            offTimelineRow: { work, summary in
+                row(work, summary: summary).cardRow(
                     isSelected: isSelecting && selection.contains(work.id),
                     chrome: .plain
                 )
@@ -717,17 +718,15 @@ struct LibrarySectionListView: View {
         // fetches the session table. Reading either through its property inside the
         // builder would repeat that work per section.
         //
-        // The session fetch is gated on the two sections that draw log facts —
-        // History (1ah) and Favorites' Works scope (1aj). The others never draw the
-        // strip, and fetching the whole log on every render of Downloaded to throw
-        // it away would be the most expensive thing this screen does.
+        // Favorites' Works scope (1aj) draws log facts here. History draws them
+        // in its timeline, and reaches this list only when its filters hide every row.
         //
         // This is the *footer* source, which needs each work's total time and so
         // needs every session. The Rereads chip does not: it counts finishes, which
         // the `finishingSessions` query already holds, and it runs inside
         // `visibleItems` where a fetch would run many times per frame.
         let groups = groupedItems
-        let summaries = kind == .history || showsFavoriteWorks
+        let summaries = showsFavoriteWorks
             ? ReadingLogService.summaries(in: context)
             : [:]
         let byID = Dictionary(visibleItems.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
