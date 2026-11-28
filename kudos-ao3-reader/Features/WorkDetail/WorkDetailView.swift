@@ -417,7 +417,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 categories: displayCategories,
                 warnings: displayWarnings,
                 completion: displayCompletionStatus,
-                tileSize: 24,
+                tileSize: 22,
                 announcesToVoiceOver: true,
                 arrangement: .strip
             )
@@ -700,7 +700,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                             onSubscribeSuccess: downloadIfSubscribedWithoutEPUB,
                             shareURL: ao3URL,
                             hasGivenKudos: localWork?.hasGivenKudos ?? false,
-                            showsTopRow: false
+                            showsTopRow: false,
+                            commentCount: displayComments
                         )
                     } else if let sourceURL = ao3URL {
                         Button {
@@ -954,11 +955,17 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         localWork?.seriesPosition ?? remote?.seriesPosition ?? 0
     }
 
-    /// AO3's part count for this work's series, once the reader has opened the series page (T-519).
-    var displaySeriesPartCount: Int? {
+    /// Cached AO3 series metadata (part count, word count, completion), populated
+    /// once the reader has opened the series page (T-519) — zero extra network traffic.
+    var displaySeriesSnapshot: SavedSeriesSnapshot? {
         guard let id = localWork?.ao3SeriesID ?? ReadingQueueService.ao3SeriesID(from: displaySeriesURL),
               let saved = SavedSeriesStore.series(for: id, in: context) else { return nil }
-        return saved.snapshot.effectivePartCount
+        return saved.snapshot
+    }
+
+    /// AO3's part count for this work's series, once the reader has opened the series page (T-519).
+    var displaySeriesPartCount: Int? {
+        displaySeriesSnapshot?.effectivePartCount
     }
 
     var displaySeriesURL: String {

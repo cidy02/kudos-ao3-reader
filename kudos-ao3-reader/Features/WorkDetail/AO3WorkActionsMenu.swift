@@ -20,6 +20,7 @@ struct AO3WorkActionsMenu: View {
     var shareURL: URL? = nil
     var hasGivenKudos: Bool = false
     var showsTopRow: Bool = true
+    var commentCount: Int? = nil
 
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
@@ -40,7 +41,13 @@ struct AO3WorkActionsMenu: View {
                 actions.startViewingComments(context: workContext,
                                              initialChapterPosition: commentsInitialChapterPosition)
             } label: {
-                Label("Comments", systemImage: "bubble.left.and.bubble.right")
+                if let commentCount {
+                    Text("Comments")
+                    Text(commentCount.formatted())
+                    Image(systemName: "bubble.left.and.bubble.right")
+                } else {
+                    Label("Comments", systemImage: "bubble.left.and.bubble.right")
+                }
             }
 
             Button { actions.markForLater(workID: workID, auth: auth) } label: {
