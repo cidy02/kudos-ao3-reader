@@ -104,6 +104,103 @@ struct SyncedSettingsTests {
         }
     }
 
+    /// The owner's report, at the first launch after this fix ships: an older build already watched other settings
+    /// (so the clock's watching marker exists) but not the gates; hiding was turned off there; the folder's copy still
+    /// says on. The gate is first watched now, stamped as this device's edit, and the older copy loses.
+    @Test func aGateTurnedOffBeforeTheUpdateStaysOffAtTheFirstLaunchAfterIt() {
+        let defaults = freshDefaults()
+        defaults.set(18.0, forKey: "readerFontPt")
+        SyncedSettingsClock.noteLocalChanges(keys: ["readerFontPt"], in: defaults)
+        defaults.set(false, forKey: "hideMatureContent")
+        var stale = folderCopy(of: defaults, fontPt: 18)
+        stale.hideMatureContent = true
+
+        stale.apply(to: defaults, fromSync: true, archiveDate: Date(timeIntervalSinceNow: -3_600))
+
+        #expect(defaults.bool(forKey: "hideMatureContent") == false)
+    }
+
+    @Test func aNewerRealStampFromAnotherDeviceStillTightensAGateTurnedOffHere() throws {
+        let defaults = freshDefaults()
+        defaults.set(true, forKey: "confirmBeforeDelete")
+        defaults.set(true, forKey: "hideMatureContent")
+        defaults.set(true, forKey: "requireBiometricToReveal")
+        defaults.set(MaturePrivacyMode.hide.rawValue, forKey: "matureContentMode")
+        _ = KudosBackupSettings.capture(defaults: defaults)
+
+        defaults.set(false, forKey: "confirmBeforeDelete")
+        defaults.set(false, forKey: "hideMatureContent")
+        defaults.set(false, forKey: "requireBiometricToReveal")
+        defaults.set(MaturePrivacyMode.obscure.rawValue, forKey: "matureContentMode")
+        SyncedSettingsClock.noteLocalChanges(keys: KudosBackupSettings.privacyGateKeys, in: defaults, now: t0)
+
+        var older = KudosBackupSettings.capture(defaults: freshDefaults())
+        older.confirmBeforeDelete = true
+        older.hideMatureContent = true
+        older.requireBiometricToReveal = true
+        older.matureContentMode = MaturePrivacyMode.hide.rawValue
+        let before = t0.addingTimeInterval(-60)
+        older.modifiedAt = Dictionary(uniqueKeysWithValues: KudosBackupSettings.privacyGateKeys.map { ($0, before) })
+        try throughJSON(older).apply(to: defaults, fromSync: true, archiveDate: before)
+        #expect(defaults.bool(forKey: "confirmBeforeDelete") == false)
+        #expect(defaults.bool(forKey: "hideMatureContent") == false)
+        #expect(defaults.bool(forKey: "requireBiometricToReveal") == false)
+        #expect(defaults.string(forKey: "matureContentMode") == MaturePrivacyMode.obscure.rawValue)
+
+        var newer = older
+        let after = t0.addingTimeInterval(60)
+        newer.modifiedAt = Dictionary(uniqueKeysWithValues: KudosBackupSettings.privacyGateKeys.map { ($0, after) })
+        try throughJSON(newer).apply(to: defaults, fromSync: true, archiveDate: after)
+        #expect(defaults.bool(forKey: "confirmBeforeDelete") == true)
+        #expect(defaults.bool(forKey: "hideMatureContent") == true)
+        #expect(defaults.bool(forKey: "requireBiometricToReveal") == true)
+        #expect(defaults.string(forKey: "matureContentMode") == MaturePrivacyMode.hide.rawValue)
+        let observed = KudosBackupSettings.observedKeys(in: defaults)
+        #expect(!SyncedSettingsClock.stampChanges(keys: observed.keys, mapKeys: observed.maps, in: defaults))
+    }
+
+    @Test func privacyGatesNeverTravelAsExtrasOrGetResetOrAcceptUnknownMode() throws {
+        let defaults = freshDefaults()
+        defaults.set(true, forKey: "confirmBeforeDelete")
+        defaults.set(true, forKey: "hideMatureContent")
+        defaults.set(true, forKey: "requireBiometricToReveal")
+        defaults.set(MaturePrivacyMode.hide.rawValue, forKey: "matureContentMode")
+        let captured = KudosBackupSettings.capture(defaults: defaults)
+        for key in KudosBackupSettings.privacyGateKeys {
+            #expect(captured.extras?[key] == nil, "\(key)")
+        }
+
+        let later = t0.addingTimeInterval(600)
+        var hostile = KudosBackupSettings.capture(defaults: freshDefaults())
+        hostile.confirmBeforeDelete = false
+        hostile.hideMatureContent = false
+        hostile.requireBiometricToReveal = false
+        hostile.matureContentMode = "none"
+        hostile.modifiedAt = Dictionary(uniqueKeysWithValues: KudosBackupSettings.privacyGateKeys.map { ($0, later) })
+
+        let extrasPayload: [String: KudosBackupSettingValue] = [
+            "confirmBeforeDelete": .bool(false),
+            "hideMatureContent": .bool(false),
+            "requireBiometricToReveal": .bool(false),
+            "matureContentMode": .string(MaturePrivacyMode.obscure.rawValue)
+        ]
+        for extras in [extrasPayload, nil] as [[String: KudosBackupSettingValue]?] {
+            hostile.extras = extras
+            for fromSync in [true, false] {
+                try throughJSON(hostile).apply(to: defaults, fromSync: fromSync, archiveDate: later)
+                #expect(defaults.bool(forKey: "confirmBeforeDelete") == true)
+                #expect(defaults.bool(forKey: "hideMatureContent") == true)
+                #expect(defaults.bool(forKey: "requireBiometricToReveal") == true)
+                #expect(defaults.string(forKey: "matureContentMode") == MaturePrivacyMode.hide.rawValue)
+            }
+        }
+
+        let blurDefaults = freshDefaults()
+        blurDefaults.set(MaturePrivacyMode.obscure.rawValue, forKey: "matureContentMode")
+        try throughJSON(hostile).apply(to: blurDefaults, fromSync: true, archiveDate: later)
+        #expect(blurDefaults.string(forKey: "matureContentMode") == MaturePrivacyMode.obscure.rawValue)
+    }
+
     @Test func aSettingNobodyChangedHereTakesTheFoldersValue() {
         let defaults = freshDefaults()
         defaults.set(18.0, forKey: "readerFontPt")
