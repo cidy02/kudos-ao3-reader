@@ -106,17 +106,34 @@ nonisolated enum Storage {
     /// deletion (to avoid orphans) and, later, by the provenance UI.
     static func existingOriginalDocumentURL(for id: UUID) -> URL? {
         let prefix = id.uuidString
-        let contents = try? FileManager.default.contentsOfDirectory(
-            at: originalsDirectory,
-            includingPropertiesForKeys: nil
-        )
-        return contents?.first {
+        return originalDirectoryContents().first {
             // The conversion record sidecar shares this prefix and is *not* the
             // original; returning it would make re-conversion try to convert its own
             // bookkeeping.
             $0.lastPathComponent.hasPrefix(prefix)
                 && !$0.lastPathComponent.hasSuffix(conversionRecordSuffix)
         }
+    }
+
+    /// Snapshot the first original per work for a bulk lookup. Keep directory
+    /// enumeration order and the single lookup's case-sensitive UUID prefix
+    /// match, including older filenames that use more than just an extension.
+    static func existingOriginalDocumentURLs() -> [UUID: URL] {
+        var originals: [UUID: URL] = [:]
+        for url in originalDirectoryContents() {
+            let name = url.lastPathComponent
+            let prefix = String(name.prefix(36))
+            guard !name.hasSuffix(conversionRecordSuffix),
+                  let id = UUID(uuidString: prefix), id.uuidString == prefix,
+                  originals[id] == nil
+            else { continue }
+            originals[id] = url
+        }
+        return originals
+    }
+
+    private static func originalDirectoryContents() -> [URL] {
+        (try? FileManager.default.contentsOfDirectory(at: originalsDirectory, includingPropertiesForKeys: nil)) ?? []
     }
 
     /// Suffix of the per-work conversion record written next to a preserved original.

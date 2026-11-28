@@ -116,7 +116,8 @@ extension KudosBackupService {
 
         var assets: [KudosBackupExportPlan.Asset] = []
         var seenNames = Set<String>()
-        for work in works.sorted(by: { $0.id.uuidString < $1.id.uuidString }) where work.hasEPUB {
+        let orderedWorks = works.sorted(by: { $0.id.uuidString < $1.id.uuidString })
+        for work in orderedWorks where work.hasEPUB {
             let entryName = "Works/\(work.id.uuidString).epub"
             guard seenNames.insert(entryName).inserted else { continue }
             assets.append(.init(entryName: entryName, fileURL: work.fileURL))
@@ -158,8 +159,9 @@ extension KudosBackupService {
         // from disk like every other asset, so a 200 MB PDF never has to be
         // resident — the reader's `.backup` limits (1 GB per entry, 64 GB
         // total) already cover anything a document import can produce.
-        for work in works.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
-            guard let original = Storage.existingOriginalDocumentURL(for: work.id) else { continue }
+        let originals = works.isEmpty ? [:] : Storage.existingOriginalDocumentURLs()
+        for work in orderedWorks {
+            guard let original = originals[work.id] else { continue }
             let entryName = "Originals/\(original.lastPathComponent)"
             if seenNames.insert(entryName).inserted {
                 assets.append(.init(entryName: entryName, fileURL: original))

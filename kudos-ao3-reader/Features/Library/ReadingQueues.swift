@@ -656,26 +656,26 @@ struct AddToQueueView: View {
             return
         }
         if isMember(queue) {
-            for work in works {
-                ReadingQueueService.removeFromQueue(work, from: queue, in: context)
-            }
+            ReadingQueueService.removeFromQueue(works, from: queue, in: context)
             return
         }
         let nonMembers = works.filter { work in !work.queueMemberships.contains { $0.queue?.id == queue.id } }
         let resolvedOrigin = origin ?? ReadingQueueMembershipOrigin(kind: .manual)
         workingQueueIDs.insert(queue.id)
         Task {
-            for work in nonMembers {
-                _ = await ReadingQueueService.addAndPreserve(
-                    work,
-                    to: queue,
-                    state: entryState,
-                    origin: resolvedOrigin,
-                    in: context
-                )
-            }
+            await addWorks(nonMembers, to: queue, origin: resolvedOrigin)
             UserDefaults.standard.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
             workingQueueIDs.remove(queue.id)
+        }
+    }
+
+    private func addWorks(_ works: [SavedWork], to queue: ReadingQueue, origin: ReadingQueueMembershipOrigin) async {
+        guard KeepOffline.queueKeeps(queue.keepsWorksOffline) else {
+            ReadingQueueService.append(works, to: queue, state: entryState, origin: origin, in: context)
+            return
+        }
+        for work in works {
+            _ = await ReadingQueueService.addAndPreserve(work, to: queue, state: entryState, origin: origin, in: context)
         }
     }
 
@@ -727,15 +727,7 @@ struct AddToQueueView: View {
         let resolvedOrigin = origin ?? ReadingQueueMembershipOrigin(kind: .manual)
         workingQueueIDs.insert(queue.id)
         Task {
-            for work in works {
-                _ = await ReadingQueueService.addAndPreserve(
-                    work,
-                    to: queue,
-                    state: entryState,
-                    origin: resolvedOrigin,
-                    in: context
-                )
-            }
+            await addWorks(works, to: queue, origin: resolvedOrigin)
             UserDefaults.standard.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
             workingQueueIDs.remove(queue.id)
         }
