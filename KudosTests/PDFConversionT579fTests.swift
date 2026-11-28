@@ -9,7 +9,7 @@ import Testing
 /// - stacked edge chrome (browser print header + footer) stripped without touching story refrains,
 /// - echoed chapter headings after decorative dividers not splitting stub chapters,
 /// - unnumbered visually-styled chapter headings splitting on the plain-text path,
-/// - multi-sentence prose subtitles rejected as chapter headings while titles with abbreviations stay valid,
+/// - multi-sentence prose subtitles rejected while short capitalized titles and abbreviations stay valid,
 /// - bottom-margin page numbers drawn before body text not stealing mid-page horizontal rules.
 struct PDFConversionT579fTests {
     private enum PDFTestError: Error { case contextUnavailable }
@@ -188,15 +188,11 @@ struct PDFConversionT579fTests {
 
     // MARK: - Prose that reads as a heading
 
-    @Test func multiSentenceProseSubtitleDoesNotStartAChapterWhileTitlesWithAbbreviationsDo() throws {
+    @Test func shortCapitalizedMultiSentenceSubtitlesStayHeadings() throws {
         let notHeadings = [
             "Part one: get in. Part two: get out.",
             "Chapter five: she never came back. Nobody looked.",
-            "Chapter 2: Who are you? Tell me.",
-            "Chapter 3: Wait! Don't go.",
-            "1. Get in. Get out.",
-            "Chapter 1: \"Stop.\" She didn't.",
-            "Epilogue: She left. Nobody followed."
+            "Chapter 4: She ran from the house. He ran away too."
         ]
         for line in notHeadings {
             #expect(!PlainTextWorkConverter.isChapterHeading(line), "expected prose, not heading: \(line)")
@@ -211,13 +207,24 @@ struct PDFConversionT579fTests {
             "Chapter 6: S.H.I.E.L.D. Protocol",
             "Chapter 7: Pretty please?",
             "Chapter 8: Ten Years Later.",
-            "1. Mr. Darcy's Letter"
+            "Chapter 9: Mr. Smith Goes to Town With Dr. Watson Again",
+            "1. Mr. Darcy's Letter",
+            "Chapter 1: \"Stop.\" She didn't.",
+            "Chapter 2: Who are you? Tell me.",
+            "Chapter 3: Wait! Don't go.",
+            "Chapter 4: She ran from the house. He ran too.",
+            "Chapter 7: Run. Hide.",
+            "1. Get in. Get out."
         ]
         for line in validHeadings {
             #expect(PlainTextWorkConverter.isChapterHeading(line), "expected valid heading: \(line)")
             #expect(PDFParagraphRepair.isExplicitChapterHeading(line), "expected valid heading: \(line)")
         }
         #expect(PDFParagraphRepair.isExplicitChapterHeading("Epilogue: Ten Years Later"))
+        #expect(PDFParagraphRepair.isExplicitChapterHeading("Epilogue: She left. Nobody followed."))
+        #expect(!PlainTextWorkConverter.isChapterHeading("Epilogue: She left. Nobody followed."))
+        #expect(!PDFParagraphRepair.isExplicitChapterHeading("Epilogue: she left. Nobody followed."))
+        #expect(!PDFParagraphRepair.isExplicitChapterHeading("Epilogue: She ran from the house. He ran away too."))
         #expect(PDFParagraphRepair.isExplicitChapterHeading("*Chapter 6*: Pretty please?"))
 
         let text = """
@@ -227,16 +234,25 @@ struct PDFConversionT579fTests {
 
         Chapter five: she never came back. Nobody looked.
 
+        Chapter 4: She ran from the house. He ran away too.
+
         Part Two — The Return
 
         The bells struck midnight over the empty harbor.
+
+        Chapter 7: Run. Hide.
+
+        Nobody spoke until dawn.
         """
         let converted = try PlainTextWorkConverter.convert(text: text, fallbackTitle: "Test")
-        try #require(converted.chapters.count == 2)
+        try #require(converted.chapters.count == 3)
         #expect(converted.chapters[0].title == "Chapter 3: Mr. Smith Goes to Town")
         #expect(converted.chapters[0].bodyXHTML.contains("Part one: get in. Part two: get out."))
         #expect(converted.chapters[0].bodyXHTML.contains("Chapter five: she never came back. Nobody looked."))
+        #expect(converted.chapters[0].bodyXHTML.contains("Chapter 4: She ran from the house. He ran away too."))
         #expect(converted.chapters[1].title == "Part Two — The Return")
+        #expect(converted.chapters[2].title == "Chapter 7: Run. Hide.")
+        #expect(converted.chapters[2].bodyXHTML.contains("Nobody spoke until dawn."))
     }
 
     // MARK: - Page-number stream drawn before body text
