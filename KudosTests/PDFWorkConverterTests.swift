@@ -328,7 +328,11 @@ struct PDFWorkConverterTests {
                 "",
                 "The second scene opens on the morning after the storm."
             ],
-            ["The next chapter starts on a new page."]
+            [
+                "The next chapter starts on a new page, long after the rain had stopped and the carriage",
+                "had crossed the bridge into a town that was only beginning to wake. (Enough text that the",
+                "document has a real text layer: under 200 characters it is OCR'd, LESSONS T3.)"
+            ]
         ])
         defer { try? FileManager.default.removeItem(at: url) }
         let plain = try convert(url)
@@ -342,7 +346,7 @@ struct PDFWorkConverterTests {
         let outlined = try addingOutline(to: url, titles: ["Door", "Next"])
         defer { try? FileManager.default.removeItem(at: outlined) }
         let marked = try convert(outlined)
-        #expect(marked.chapters.map(\.title) == ["Door", "Next"])
+        try #require(marked.chapters.map(\.title) == ["Door", "Next"])
         let chapter = marked.chapters[0].bodyXHTML
         let first = try #require(chapter.range(of: "door closing behind her"))
         let rule = try #require(chapter.range(of: "* * *"))
