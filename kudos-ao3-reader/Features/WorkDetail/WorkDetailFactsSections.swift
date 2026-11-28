@@ -126,7 +126,7 @@ extension WorkDetailView {
                             collectionCount: work.activeCollections.count
                         ))
                     }
-                    .padding(.bottom, 14)
+                    .padding(.bottom, 10)
                     .pageBodyRow(top: 2)
                 }
             }

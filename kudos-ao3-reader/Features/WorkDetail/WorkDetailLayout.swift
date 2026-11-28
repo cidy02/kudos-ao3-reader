@@ -83,7 +83,7 @@ extension WorkDetailView {
                 case .identity: heroSection
                 case .status: statusSection(error: singleColumn ? loadError ?? seriesLoadError : loadError)
                 case .stats: statsSection
-                case .summary: summarySection
+                case .summary: summarySection(top: singleColumn ? 14 : 20)
                 case .tags: tagSections
                 case .series:
                     seriesSection

@@ -58,7 +58,7 @@ extension WorkDetailView {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(groups, id: \.title) { tagRow($0) }
                     }
-                    .padding(.bottom, 14)
+                    .padding(.bottom, 12)
                     .pageBodyRow(top: 2)
                 }
             }
@@ -113,23 +113,19 @@ extension WorkDetailView {
                 // Space above the card, as its own row: padding on the segment
                 // would stretch the card's row background into it.
                 Color.clear
-                    .frame(height: 24)
+                    .frame(height: 14)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                     .accessibilityHidden(true)
 
-                SubjectFormRow(
-                    label: "Comments",
-                    value: displayComments.map { $0.formatted() } ?? "",
-                    showsDisclosure: true
-                )
-                .subjectRowNavigation(
-                    to: AO3CommentsRoute(workID: id, context: commentsWorkContext),
-                    accessibilityLabel: "Comments"
-                )
-                .accessibilityHint("Comments load only when you open them")
-                .panelSegment(0, of: 1, gutter: SubjectMetrics.gutter)
+                WorkDetailCommentsRow(count: displayComments)
+                    .subjectRowNavigation(
+                        to: AO3CommentsRoute(workID: id, context: commentsWorkContext),
+                        accessibilityLabel: WorkDetailCommentsRow.accessibilityLabel(count: displayComments)
+                    )
+                    .accessibilityHint("Comments load only when you open them")
+                    .panelSegment(0, of: 1, gutter: SubjectMetrics.gutter)
             }
         }
     }
@@ -391,24 +387,24 @@ extension WorkDetailView {
         Group {
             myCopyHeader("Activity")
             myCopyValueRow("Added", WorkStat.displayDate(work.dateAdded, time: .shortened))
+            let downloadedText = work.downloadedAt.map { WorkStat.displayDate($0) } ?? "Not recorded"
             Button { showingDownloadedDateEditor = true } label: {
                 HStack(spacing: 10) {
                     Text("Downloaded")
                         .font(.system(size: myCopyRowTitleSize))
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    myCopyValue(
-                        work.downloadedAt.map { WorkStat.displayDate($0) }
-                            ?? "Not recorded"
-                    )
+                    myCopyValue(downloadedText)
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Edit downloaded date")
+            .accessibilityValue(downloadedText)
             .myCopyRow()
             myCopyValueRow(
                 "Last opened",
@@ -616,5 +612,75 @@ enum WorkDetailTagLink {
             text += link
         }
         return text
+    }
+}
+
+/// Work Detail's Comments row (`iPhone-WorkDetail`, `WorkDetail-Proposed`,
+/// `WD-E-Mix`): leading accent speech-bubble icon, 17pt label and count,
+/// trailing chevron, 52pt minimum height, stacking the count under the label
+/// at accessibility sizes.
+struct WorkDetailCommentsRow: View {
+    let count: Int?
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    static func countText(_ count: Int?) -> String? {
+        count.map { $0.formatted() }
+    }
+
+    static func accessibilityLabel(count: Int?) -> String {
+        guard let text = countText(count) else { return "Comments" }
+        return "Comments, \(text)"
+    }
+
+    var body: some View {
+        let countLabel = Self.countText(count)
+        HStack(spacing: 10) {
+            Image(systemName: "bubble.left")
+                .font(.title3)
+                .foregroundStyle(.accentInk)
+                .accessibilityHidden(true)
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 2) {
+                    commentsTitle
+                    if let countLabel {
+                        commentsCount(countLabel)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                commentsTitle
+                Spacer(minLength: 0)
+                if let countLabel {
+                    commentsCount(countLabel)
+                }
+            }
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.secondary.opacity(0.7))
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(minHeight: 52)
+        .contentShape(Rectangle())
+    }
+
+    /// The row is pushed by a background link that already speaks
+    /// `accessibilityLabel(count:)`. Leaving these texts in the tree makes
+    /// VoiceOver read the count twice.
+    private var commentsTitle: some View {
+        Text("Comments")
+            .font(.body)
+            .foregroundStyle(.primary)
+            .accessibilityHidden(true)
+    }
+
+    private func commentsCount(_ text: String) -> some View {
+        Text(text)
+            .font(.body)
+            .monospacedDigit()
+            .foregroundStyle(.secondaryInk)
+            .accessibilityHidden(true)
     }
 }

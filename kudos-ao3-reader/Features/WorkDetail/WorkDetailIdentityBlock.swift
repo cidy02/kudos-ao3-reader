@@ -22,8 +22,6 @@ struct WorkDetailIdentityHeader: View {
     let fandoms: [String]
     let palette: SubjectPalette
 
-    @ScaledMetric(relativeTo: .subheadline) private var bylineSize: CGFloat = 15.5
-
     /// The fandom the kicker names. Blank entries are skipped rather than
     /// printed as an empty accent line.
     private var namedFandoms: [String] {
@@ -45,7 +43,7 @@ struct WorkDetailIdentityHeader: View {
                 names: authors,
                 identities: identities,
                 includesBy: false,
-                font: .system(size: bylineSize),
+                font: .body,
                 expandsHitTarget: false
             )
         }

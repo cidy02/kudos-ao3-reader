@@ -26,15 +26,49 @@ enum WorkDetailDisclosure {
         return parts.isEmpty ? "No AO3 tags" : parts.joined(separator: " · ")
     }
 
-    /// The series' size comes only from AO3's own count, saved when the reader opened the series page
-    /// (T-519): the works downloaded here would understate a longer series. Without it, "Part N" alone.
+    /// Collapsed Series line. T-511 keeps it to the title and the part: the device
+    /// must not invent a length, and a word count here is clipped by the one-line
+    /// digest. T-519 adds "of M" only from AO3's own count, saved when the reader
+    /// opened the series page. Length and completion belong on the expanded row.
     static func seriesDigest(title: String, position: Int, partCount: Int? = nil) -> String {
-        position > 0 ? "\(title) · \(seriesPartLabel(position: position, partCount: partCount).lowercased())" : title
+        guard position > 0 else { return title }
+        return "\(title) · \(seriesPartLabel(position: position, partCount: partCount).lowercased())"
+    }
+
+    /// The expanded series row (`iPhone-WorkDetail`): "Part 2 of 3 · 141k words · in progress".
+    /// Words and completion come from the cached series page, and are omitted when that
+    /// page has not been opened — a missing snapshot is not "in progress".
+    static func seriesSubtitle(
+        position: Int, partCount: Int?, wordCount: Int? = nil, isComplete: Bool? = nil
+    ) -> String? {
+        let parts: [String?] = [
+            position > 0 ? seriesPartLabel(position: position, partCount: partCount) : nil,
+            wordCount.flatMap { $0 > 0 ? seriesWordsLabel($0) : nil },
+            isComplete.map { $0 ? "complete" : "in progress" }
+        ]
+        let joined = parts.compactMap { $0 }.joined(separator: " · ")
+        return joined.isEmpty ? nil : joined
+    }
+
+    static func seriesWordsLabel(_ wordCount: Int) -> String {
+        guard wordCount != 1 else { return "1 word" }
+        return "\(wordCount.compactCount.lowercased()) words"
     }
 
     static func seriesPartLabel(position: Int, partCount: Int?) -> String {
         if let partCount, partCount >= position { return "Part \(position) of \(partCount)" }
         return "Part \(position)"
+    }
+
+    /// Menu subtitle once a work is already in a queue. Zero hides it, and the
+    /// words are `queueLabel` ("In 3 Queues"), not an unqualified "In 3".
+    static func menuQueueDetail(count: Int) -> String? {
+        count > 0 ? WorkDetailPresentation.queueLabel(count: count) : nil
+    }
+
+    /// Menu subtitle once a work is already in a collection. Same rule as queues.
+    static func menuCollectionDetail(count: Int) -> String? {
+        count > 0 ? WorkDetailPresentation.collectionLabel(count: count) : nil
     }
 }
 
@@ -69,6 +103,7 @@ struct WorkDetailDisclosureHeader: View {
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                         .accessibilityHidden(true)
                 }
+                .padding(.vertical, 8)
                 .frame(minHeight: 52)
                 .contentShape(Rectangle())
             }
@@ -94,43 +129,53 @@ extension WorkDetailView {
     /// them on the work page, and the EPUB carries them in the reader), so the
     /// link opens the work on AO3, where they are, rather than pretending to
     /// show something this screen does not have.
-    @ViewBuilder
     var summarySection: some View {
+        summarySection(top: 14)
+    }
+
+    @ViewBuilder
+    func summarySection(top: CGFloat) -> some View {
         // Bound once per render: a local work's summary strips HTML on read.
         let summary = displaySummary
         if !summary.isEmpty {
             Section {
                 SectionRuleHeader(title: "Summary")
                     .accessibilityAddTraits(.isHeader)
-                    .pageBodyRow(top: 24, gutter: 0)
+                    .pageBodyRow(top: top, gutter: 0)
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(summary)
                         .font(.body)
                         .fixedSize(horizontal: false, vertical: true)
                         .lineLimit(summaryExpanded ? nil : 3)
                         .background(alignment: .top) { summaryTruncationProbes(summary) }
-                    HStack(spacing: 8) {
-                        if summaryTruncates {
-                            Button(summaryExpanded ? "Less" : "More") {
-                                withAnimationUnlessReduced(reduceMotion: reduceMotion) { summaryExpanded.toggle() }
-                            }
-                            .buttonStyle(.plain)
-                            .minimumHitTarget()
-                            .accessibilityHint("Expands or collapses the work summary")
-                        }
-                        if let id = ao3WorkID {
+                    if summaryTruncates || ao3WorkID != nil {
+                        HStack(spacing: 6) {
                             if summaryTruncates {
-                                Text("·").foregroundStyle(.secondaryInk).accessibilityHidden(true)
+                                let toggleSummary = {
+                                    withAnimationUnlessReduced(reduceMotion: reduceMotion) {
+                                        summaryExpanded.toggle()
+                                    }
+                                }
+                                Button(summaryExpanded ? "Less" : "More", action: toggleSummary)
+                                    .buttonStyle(.plain)
+                                    .layoutFreeHitTarget(action: toggleSummary)
+                                    .accessibilityHint("Expands or collapses the work summary")
                             }
-                            Button("Notes") { router.open(AO3Client.workURL(workID: id)) }
-                                .buttonStyle(.plain)
-                                .minimumHitTarget()
-                                .accessibilityHint("Opens this work on AO3, where the author's notes are")
+                            if let id = ao3WorkID {
+                                if summaryTruncates {
+                                    Text("·").foregroundStyle(.secondaryInk).accessibilityHidden(true)
+                                }
+                                let openNotes = { router.open(AO3Client.workURL(workID: id)) }
+                                Button("Notes", action: openNotes)
+                                    .buttonStyle(.plain)
+                                    .layoutFreeHitTarget(action: openNotes)
+                                    .accessibilityHint("Opens this work on AO3, where the author's notes are")
+                            }
                         }
+                        .font(.body)
+                        .foregroundStyle(.accentInk)
                     }
-                    .font(.body)
-                    .foregroundStyle(.accentInk)
                 }
                 .pageBodyRow(top: 6)
             }
@@ -183,17 +228,31 @@ extension WorkDetailView {
             .disabled(working)
         }
 
+        let queueDetail = WorkDetailDisclosure.menuQueueDetail(
+            count: localWork?.activeQueueMemberships.count ?? 0
+        )
         Button {
             withLocalWork { _ in showingAddToQueue = true }
         } label: {
-            Label("Add to Queue", systemImage: "list.bullet.rectangle")
+            Text("Add to Queue")
+            if let queueDetail {
+                Text(queueDetail)
+            }
+            Image(systemName: "list.bullet.rectangle")
         }
         .disabled(working)
 
+        let collectionDetail = WorkDetailDisclosure.menuCollectionDetail(
+            count: localWork?.activeCollections.count ?? 0
+        )
         Button {
             withLocalWork { _ in showingAddToCollection = true }
         } label: {
-            Label("Add to Collection", systemImage: "square.stack")
+            Text("Add to Collection")
+            if let collectionDetail {
+                Text(collectionDetail)
+            }
+            Image(systemName: "square.stack")
         }
         .disabled(working)
 
@@ -309,12 +368,14 @@ extension WorkDetailView {
     var seriesSection: some View {
         if !displaySeriesTitle.isEmpty {
             let rows = seriesRows
+            let snapshot = displaySeriesSnapshot
             Section {
                 WorkDetailDisclosureHeader(
                     title: "Series",
                     digest: WorkDetailDisclosure.seriesDigest(
-                        title: displaySeriesTitle, position: displaySeriesPosition,
-                        partCount: displaySeriesPartCount
+                        title: displaySeriesTitle,
+                        position: displaySeriesPosition,
+                        partCount: snapshot?.effectivePartCount
                     ),
                     isExpanded: $seriesExpanded
                 )
@@ -332,6 +393,13 @@ extension WorkDetailView {
                             .foregroundStyle(.secondaryInk)
                             .pageBodyRow(top: 8)
                     }
+
+                    Color.clear
+                        .frame(height: 12)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .accessibilityHidden(true)
                 }
             }
         }
@@ -364,7 +432,8 @@ extension WorkDetailView {
                     if queuingSeries { ProgressView().accentFill() }
                 }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 12)
+                .padding(.vertical, 11)
+                .frame(minHeight: 44)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -377,7 +446,8 @@ extension WorkDetailView {
                     .foregroundStyle(.accentInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 11)
+                    .frame(minHeight: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -385,13 +455,18 @@ extension WorkDetailView {
     }
 
     private func seriesHeaderLine(opens: Bool) -> some View {
-        HStack(spacing: 8) {
+        let snapshot = displaySeriesSnapshot
+        let subtitle = WorkDetailDisclosure.seriesSubtitle(
+            position: displaySeriesPosition,
+            partCount: snapshot?.effectivePartCount,
+            wordCount: snapshot?.wordCount,
+            isComplete: snapshot?.isComplete
+        )
+        return HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 0) {
                 Text(displaySeriesTitle).font(.body)
-                if displaySeriesPosition > 0 {
-                    Text(WorkDetailDisclosure.seriesPartLabel(
-                        position: displaySeriesPosition, partCount: displaySeriesPartCount
-                    ))
+                if let subtitle {
+                    Text(subtitle)
                         .font(.footnote)
                         .foregroundStyle(.secondaryInk)
                 }
@@ -400,7 +475,8 @@ extension WorkDetailView {
             if opens { seriesChevron }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
+        .frame(minHeight: 52)
         .contentShape(Rectangle())
     }
 
@@ -449,7 +525,7 @@ extension WorkDetailView {
             Text(title)
                 .font(.body.weight(isCurrent ? .semibold : .regular))
                 .foregroundStyle(dimmed ? AnyShapeStyle(.secondaryInk) : AnyShapeStyle(.primary))
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if isCurrent {
                 Text("This work")
@@ -461,6 +537,7 @@ extension WorkDetailView {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
+        .frame(minHeight: 44)
         .contentShape(Rectangle())
     }
 }
