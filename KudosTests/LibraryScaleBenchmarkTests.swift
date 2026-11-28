@@ -41,6 +41,7 @@ extension PersistenceGateSuites {
                 }
                 try await measureImport(fixture, report)
                 try await measureRemoteSave(fixture, report)
+                try await measureHighRows(fixture, report)
                 try await Self.waitForIdlePersistenceGate()
                 try withLocalTombstoneSigning {
                     try measurePermanentDelete(fixture, report)
@@ -339,7 +340,7 @@ extension PersistenceGateSuites {
 }
 
 @MainActor
-private final class LibraryScaleBenchmarkFixture {
+final class LibraryScaleBenchmarkFixture {
     static let historyEnd = Date(timeIntervalSince1970: 1_767_225_600)
 
     let library: Int
@@ -470,6 +471,12 @@ private final class LibraryScaleBenchmarkFixture {
         work.isComplete = true
         work.isFinished = finished
         work.isSaved = true
+        work.isFavorite = ordinal.isMultiple(of: 17)
+        work.lastReadDate = date.addingTimeInterval(91 * 86_400)
+        if ordinal.isMultiple(of: 13), chapters > 1 {
+            work.knownChapterCount = chapters - 1
+            work.lastUpdateCheck = Self.historyEnd
+        }
         work.rating = ordinal.isMultiple(of: 5) ? "Teen And Up Audiences" : "General Audiences"
         work.workFandoms = [fandom]
         work.workFreeforms = (0..<(4 + ordinal % 36)).map { offset in
@@ -479,6 +486,7 @@ private final class LibraryScaleBenchmarkFixture {
         work.workTagsFetched = true
         work.hasEPUB = ordinal.isMultiple(of: 5)
         if work.hasEPUB {
+            work.chapterWordCounts = Array(repeating: words / chapters, count: chapters)
             try original.write(to: originalURL(for: workID), options: .withoutOverwriting)
             let file = worksDirectory.appendingPathComponent(work.effectiveAssetIdentifier)
             try epub.write(to: file, options: .withoutOverwriting)
@@ -583,7 +591,7 @@ private final class LibraryScaleBenchmarkFixture {
 }
 
 @MainActor
-private final class LibraryScaleBenchmarkReport {
+final class LibraryScaleBenchmarkReport {
     private nonisolated struct Sample: Encodable {
         let name: String
         let library: Int
@@ -615,7 +623,7 @@ private final class LibraryScaleBenchmarkReport {
     }
 }
 
-private func benchmarkSeconds(since start: ContinuousClock.Instant) -> Double {
+func benchmarkSeconds(since start: ContinuousClock.Instant) -> Double {
     let duration = start.duration(to: ContinuousClock.now).components
     return Double(duration.seconds) + Double(duration.attoseconds) / 1e18
 }
