@@ -22,11 +22,17 @@ struct FollowedTagsListView: View {
     @State private var editingTag: FollowedTag?
     @State private var pendingUnfollow: FollowedTag?
 
-    @ScaledMetric(relativeTo: .headline) private var rowTitleSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .footnote) private var rowSubtitleSize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .headline) private var rowTitleSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .footnote) private var rowSubtitleSize: CGFloat = 13
+
+    private static let tagTileGreen = Color(red: 0x25 / 255, green: 0x66 / 255, blue: 0x3C / 255)
 
     private var activePalette: SubjectPalette {
         palette ?? theme.scopePalette
+    }
+
+    private var tagKickerInk: Color {
+        theme.appTheme.accentInk(for: Self.tagTileGreen)
     }
 
     private var latestCheckDate: Date? {
@@ -54,9 +60,10 @@ struct FollowedTagsListView: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                 }
-            } else if showsStandaloneHeader {
+            } else if showsStandaloneHeader, !followedTags.isEmpty {
                 Section {
-                    headerCard
+                    SubjectPageFact(summaryLine, gutter: SubjectMetrics.accountGutter)
+                        .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 }
@@ -116,40 +123,11 @@ struct FollowedTagsListView: View {
     }
 
     private var summaryLine: String {
-        var parts = ["\(followedTags.count) of \(FollowedTag.maxFollowedCount) tags"]
-        if let latestCheckDate {
-            parts.append("Checked \(latestCheckDate.formatted(.relative(presentation: .named)))")
-        }
-        if isAtLimit {
-            parts.append("Limit reached")
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private var headerCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("\(followedTags.count) followed")
-                    .font(.title2.bold())
-                    .foregroundStyle(.primary)
-                Text("of \(FollowedTag.maxFollowedCount)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondaryInk)
-                Spacer(minLength: 0)
-            }
-            if let latestCheckDate {
-                Text("Last checked \(latestCheckDate.formatted(.relative(presentation: .named)))")
-                    .font(.footnote)
-                    .foregroundStyle(.secondaryInk)
-            } else if !followedTags.isEmpty {
-                Text("Checked at most every 6 hours while Home or Subscriptions is open")
-                    .font(.footnote)
-                    .foregroundStyle(.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(.vertical, 6)
-        .accessibilityElement(children: .combine)
+        FollowedTagsBoardCopy.subtitle(
+            count: followedTags.count,
+            latestCheckDate: latestCheckDate,
+            isAtLimit: isAtLimit
+        )
     }
 
     private var capNoticeBanner: some View {
@@ -261,35 +239,52 @@ struct FollowedTagsListView: View {
 
     @ViewBuilder
     private func tagRowLabel(_ tag: FollowedTag, unread: Int) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 4) {
-                    tagTitleBlock(tag)
-                    if unread > 0 {
-                        unreadBadge(unread)
+        let isBusy = unread >= FollowedTagFeedEvaluator.maxFeedEntries
+        let subtitle = FollowedTagsBoardCopy.rowSubtitle(
+            unreadCount: unread,
+            isBusy: isBusy,
+            lastSeenDate: tag.lastSeenPublishedAt,
+            lastCheckedAt: tag.lastCheckedAt,
+            completeOnly: tag.completeOnly,
+            hideExplicit: tag.hideExplicit,
+            showOnHome: tag.showOnHome
+        )
+        let rowLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+
+        rowLayout {
+            Image(systemName: "tag")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(Self.tagTileGreen, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 4) {
+                        tagTitleBlock(tag)
+                        if unread > 0 {
+                            unreadBadge(unread, isBusy: isBusy)
+                        }
+                    }
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        tagTitleBlock(tag)
+                        Spacer(minLength: 4)
+                        if unread > 0 {
+                            unreadBadge(unread, isBusy: isBusy)
+                        }
                     }
                 }
-            } else {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    tagTitleBlock(tag)
-                    Spacer(minLength: 4)
-                    if unread > 0 {
-                        unreadBadge(unread)
-                    }
-                }
-            }
 
-            Text(tag.settingsSummary)
-                .font(.system(size: rowSubtitleSize))
-                .foregroundStyle(.secondaryInk)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if let checked = tag.lastCheckedAt {
-                Text("Checked \(checked.formatted(.relative(presentation: .named)))")
-                    .font(.caption2)
+                Text(subtitle)
+                    .font(.system(size: rowSubtitleSize))
                     .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
     }
@@ -297,9 +292,9 @@ struct FollowedTagsListView: View {
     private func tagTitleBlock(_ tag: FollowedTag) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             if let category = tag.displayCategory {
-                Text(category.uppercased())
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondaryInk)
+                Text(category)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(tagKickerInk)
             }
             Text(
                 dynamicTypeSize.isAccessibilitySize
@@ -313,27 +308,95 @@ struct FollowedTagsListView: View {
         }
     }
 
-    private func unreadBadge(_ unread: Int) -> some View {
-        let label = unread >= FollowedTagFeedEvaluator.maxFeedEntries
-            ? "\(unread)+ new"
-            : "\(unread) new"
-        return Text(label)
-            .font(.caption2.bold())
-            .foregroundStyle(.white)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Color(red: 0x25 / 255, green: 0x66 / 255, blue: 0x3C / 255), in: Capsule())
+    @ViewBuilder
+    private func unreadBadge(_ unread: Int, isBusy: Bool) -> some View {
+        if let label = FollowedTagsBoardCopy.badgeLabel(unreadCount: unread, isBusy: isBusy) {
+            UpdateMarker(
+                text: label,
+                isConfirmed: true,
+                spokenLabel: "\(label) new works"
+            )
+        }
     }
 
     private func rowAccessibilityLabel(_ tag: FollowedTag, unread: Int) -> String {
+        let isBusy = unread >= FollowedTagFeedEvaluator.maxFeedEntries
+        let subtitle = FollowedTagsBoardCopy.rowSubtitle(
+            unreadCount: unread,
+            isBusy: isBusy,
+            lastSeenDate: tag.lastSeenPublishedAt,
+            lastCheckedAt: tag.lastCheckedAt,
+            completeOnly: tag.completeOnly,
+            hideExplicit: tag.hideExplicit,
+            showOnHome: tag.showOnHome
+        )
         var parts = [tag.name]
         if let category = tag.displayCategory {
             parts.append(category)
         }
-        if unread > 0 {
-            parts.append("\(unread) new")
-        }
-        parts.append(tag.settingsSummary)
+        parts.append(subtitle)
         return parts.joined(separator: ", ")
+    }
+}
+
+/// Pure board-copy formatting for `FollowedTagsListView` (`Subscriptions-Tags.dc.html`).
+enum FollowedTagsBoardCopy {
+    static func subtitle(
+        count: Int,
+        latestCheckDate: Date?,
+        isAtLimit: Bool = false
+    ) -> String {
+        subtitle(
+            count: count,
+            checkedRelativeText: latestCheckDate?.formatted(.relative(presentation: .named)),
+            isAtLimit: isAtLimit
+        )
+    }
+
+    static func subtitle(
+        count: Int,
+        checkedRelativeText: String?,
+        isAtLimit: Bool = false
+    ) -> String {
+        let countText = count == 1
+            ? "1 tag followed in Kudos"
+            : "\(count) tags followed in Kudos"
+        var parts = [countText]
+        if let checkedRelativeText, !checkedRelativeText.isEmpty {
+            parts.append("checked \(checkedRelativeText)")
+        }
+        if isAtLimit {
+            parts.append("limit reached")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    static func rowSubtitle(
+        unreadCount: Int,
+        isBusy: Bool,
+        lastSeenDate: Date?,
+        lastCheckedAt: Date?,
+        completeOnly: Bool,
+        hideExplicit: Bool,
+        showOnHome: Bool
+    ) -> String {
+        var parts: [String] = []
+        if unreadCount > 0 {
+            let countLabel = isBusy ? "\(unreadCount)+" : "\(unreadCount)"
+            parts.append("\(countLabel) new")
+        } else if let since = lastSeenDate ?? lastCheckedAt {
+            parts.append("Nothing new since \(WorkStat.displayDate(since))")
+        } else {
+            parts.append("Not checked yet")
+        }
+        if completeOnly { parts.append("Complete only") }
+        if hideExplicit { parts.append("Hide Explicit") }
+        if showOnHome { parts.append("on Home") }
+        return parts.joined(separator: " · ")
+    }
+
+    static func badgeLabel(unreadCount: Int, isBusy: Bool) -> String? {
+        guard unreadCount > 0 else { return nil }
+        return isBusy ? "\(unreadCount)+" : "\(unreadCount)"
     }
 }
