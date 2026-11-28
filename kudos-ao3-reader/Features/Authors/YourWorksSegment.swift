@@ -31,7 +31,7 @@ struct YourWorksSegmentControl: View {
     let onSelectTab: (AO3AuthorProfileTab) -> Void
     let onSelectDrafts: () -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -47,7 +47,7 @@ struct YourWorksSegmentControl: View {
             }
         }
         .padding(2)
-        .background(Color(.systemFill), in: Capsule())
+        .background(themeManager.appTheme.glassFill(), in: SubjectMetrics.controlShape(dynamicTypeSize))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Your Works Sections")
     }
@@ -87,22 +87,18 @@ struct YourWorksSegmentControl: View {
             Text(title)
                 .font(.subheadline.weight(isSelected ? .semibold : .regular))
                 .foregroundStyle(isSelected ? AnyShapeStyle(Color.primary) : AnyShapeStyle(.secondaryInk))
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, 4)
                 .frame(maxWidth: .infinity)
-                .frame(minHeight: 30)
+                .frame(minHeight: 32)
                 .background {
                     if isSelected {
-                        Capsule()
-                            .fill(colorScheme == .dark ? Color(.secondarySystemFill) : Color.white)
-                            .shadow(
-                                color: Color.black.opacity(colorScheme == .dark ? 0 : 0.12),
-                                radius: 3,
-                                x: 0,
-                                y: 1
-                            )
+                        SubjectMetrics.controlShape(dynamicTypeSize)
+                            .fill(themeManager.appTheme.cardSurface)
                     }
                 }
-                .contentShape(Capsule())
+                .contentShape(SubjectMetrics.controlShape(dynamicTypeSize))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)

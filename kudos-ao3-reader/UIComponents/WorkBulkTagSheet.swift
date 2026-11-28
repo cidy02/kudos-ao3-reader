@@ -74,27 +74,30 @@ struct WorkBulkTagSheet: View {
     }
 
     private func row(for tag: Tag) -> some View {
-        let coverage = coverage(of: tag)
+        let tagged = works.count(where: { $0.tags.contains(where: { $0.id == tag.id }) })
+        let coverage = coverage(tagged: tagged)
+        let detail = BrowseBoardCopy.tagCoverage(tagged: tagged, selected: works.count)
         return Button {
             toggle(tag, coverage: coverage)
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: symbol(for: coverage))
                     .foregroundStyle(coverage == .none ? AnyShapeStyle(.secondaryInk) : AnyShapeStyle(.tint))
-                Text(tag.name)
-                    .foregroundStyle(.primary)
-                Spacer(minLength: 8)
-                if coverage == .some {
-                    Text("some")
-                        .font(.caption)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(tag.name)
+                        .foregroundStyle(.primary)
+                    Text(detail)
+                        .font(.footnote)
                         .foregroundStyle(.secondaryInk)
                 }
+                .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(tag.name)
-        .accessibilityValue(accessibilityValue(for: coverage))
+        .accessibilityValue(detail)
     }
 
     private func symbol(for coverage: Coverage) -> String {
@@ -105,16 +108,7 @@ struct WorkBulkTagSheet: View {
         }
     }
 
-    private func accessibilityValue(for coverage: Coverage) -> String {
-        switch coverage {
-        case .all: "on every selected work"
-        case .some: "on some selected works"
-        case .none: "not applied"
-        }
-    }
-
-    private func coverage(of tag: Tag) -> Coverage {
-        let tagged = works.filter { $0.tags.contains(where: { $0.id == tag.id }) }.count
+    private func coverage(tagged: Int) -> Coverage {
         if tagged == 0 { return .none }
         return tagged == works.count ? .all : .some
     }

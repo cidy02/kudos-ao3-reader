@@ -30,7 +30,7 @@ struct LinkedWorkLandingView: View {
                     ContentUnavailableView {
                         Label("Log In to AO3", systemImage: "lock")
                     } description: {
-                        Text("This work may be available only to logged-in AO3 readers.")
+                        Text(BrowseBoardCopy.restrictedWorkMessage)
                     } actions: {
                         Button("Log In to AO3") {
                             router.requestLinkedWorkLogin(sessionGeneration: auth.sessionGeneration)

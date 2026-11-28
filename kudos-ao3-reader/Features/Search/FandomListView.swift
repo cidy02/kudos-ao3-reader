@@ -16,6 +16,7 @@ struct FandomListView: View {
     /// The other half of the Browse zoom pair — set by BrowseView on the stack.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Environment(PrivacyGate.self) private var gate
@@ -297,9 +298,9 @@ struct FandomListView: View {
             // Board 14: the field is always visible, not hidden in the pull-down drawer.
             #if os(iOS)
             .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
-                        prompt: "Search \(category.name)")
+                        prompt: "Search fandoms")
             #else
-            .searchable(text: $query, prompt: "Search \(category.name)")
+            .searchable(text: $query, prompt: "Search fandoms")
             #endif
             // Top right, like every other filtered list (owner, 2026-10-01).
             .toolbar {
@@ -414,7 +415,11 @@ struct FandomListView: View {
     }
 
     private var filterStateLine: some View {
-        HStack(spacing: 4) {
+        let stacks = dynamicTypeSize.isAccessibilitySize
+        let layout = stacks
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(spacing: 4))
+        return layout {
             Text(FandomFilterState.text(
                 groupsVariants: groupsVariants,
                 sort: sort,
@@ -428,9 +433,12 @@ struct FandomListView: View {
                 sort: sort,
                 options: filterOptions
             ) {
-                Text("·")
-                    .font(.footnote)
-                    .foregroundStyle(.secondaryInk)
+                if !stacks {
+                    Text("·")
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                        .accessibilityHidden(true)
+                }
                 Button("Reset") {
                     resetToDefaults()
                 }
@@ -439,7 +447,7 @@ struct FandomListView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, SubjectMetrics.gutter + 4)
         .padding(.vertical, 4)
         .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
         .listRowBackground(Color.clear)
@@ -998,7 +1006,7 @@ private struct FandomListRow: View {
                             Image(systemName: "star.fill")
                                 .font(.system(size: starSize))
                                 .foregroundStyle(Color.subjectFavoriteGold)
-                                .accessibilityLabel("Favorite")
+                                .accessibilityLabel("Favourite")
                         }
                     }
 
@@ -1033,7 +1041,8 @@ private struct FandomListRow: View {
             }
             .padding(.leading, FandomFamilyBlock.leadingInset)
             .padding(.trailing, FandomFamilyBlock.trailingInset)
-            .padding(.vertical, 8)
+            .padding(.vertical, 6)
+            .frame(minHeight: 56)
 
             Rectangle()
                 .fill(Color.primary.opacity(0.12))

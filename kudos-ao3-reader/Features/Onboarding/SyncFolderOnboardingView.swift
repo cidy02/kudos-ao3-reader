@@ -19,7 +19,7 @@ struct SyncFolderOnboardingView: View {
     @State private var connectionError: String?
 
     var body: some View {
-        OnboardingScaffold {
+        OnboardingScaffold(introSpacing: 30, topInset: 44, bottomInset: 8) {
             header
             introPoints
         } footer: {
@@ -35,20 +35,21 @@ struct SyncFolderOnboardingView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "folder.badge.gearshape")
-                .font(.system(size: 52))
-                .foregroundStyle(.tint)
-                .frame(width: 108, height: 108)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        VStack(spacing: 18) {
+            Image(systemName: "icloud.and.arrow.down")
+                .font(.system(size: 36))
+                .foregroundStyle(.accentInk)
+                .frame(width: 64, height: 64)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius))
                 .accessibilityHidden(true)
 
-            VStack(spacing: 8) {
+            VStack(spacing: 6) {
                 Text("Protect Your Library")
-                    .font(.largeTitle.bold())
+                    .font(.title.weight(.heavy))
+                    .accessibilityAddTraits(.isHeader)
                     .multilineTextAlignment(.center)
-                Text("Optional. You can set this up anytime in Settings")
-                    .font(.subheadline.weight(.medium))
+                Text("Optional. You can set this up any time in Settings.")
+                    .font(.subheadline)
                     .foregroundStyle(.secondaryInk)
                     .multilineTextAlignment(.center)
             }
@@ -57,26 +58,16 @@ struct SyncFolderOnboardingView: View {
 
     private var introPoints: some View {
         VStack(alignment: .leading, spacing: 22) {
-            OnboardingPointRow(
-                symbol: "folder", title: "Choose a Folder",
-                message: "Choose where Kudos keeps another copy of your library. If the folder "
-                    + "is in iCloud Drive, Apple can keep it up to date on your devices."
-            )
-            OnboardingPointRow(
-                symbol: "wifi.slash", title: "Works Fully Offline",
-                message: "You can use Kudos without an internet connection. If you skip this, "
-                    + "you can choose a folder later in Settings."
-            )
-            OnboardingPointRow(
-                symbol: "doc.text.magnifyingglass", title: "Changes May Take Time",
-                message: "Kudos saves the same kind of file as a backup in your folder. Updates "
-                    + "aren't instant."
-            )
-            OnboardingPointRow(
-                symbol: "ipad.and.iphone", title: "Using More Than One Device?",
-                message: "To let another device remove items from your library, pair it in Settings "
-                    + "→ Sync Folder → Deletion signing. Pairing takes a few seconds."
-            )
+            point("folder", title: "Choose a folder",
+                  message: "Kudos keeps a second copy of your library there. In iCloud Drive, "
+                    + "Apple keeps it on your other devices too.")
+            point("wifi.slash", title: "Works offline",
+                  message: "You can use Kudos without an internet connection. If you skip this, "
+                    + "you can choose a folder later in Settings.")
+            point("doc.text.magnifyingglass", title: "Changes take a moment",
+                  message: "Kudos saves the same kind of file as a backup. Updates are not instant.")
+            point("ipad.and.iphone", title: "More than one device?",
+                  message: "Point each one at the same folder. Pair devices in Settings to trust their deletions.")
             if let connectionError {
                 OnboardingPointRow(
                     symbol: "exclamationmark.triangle", title: "Couldn't Connect", message: connectionError
@@ -85,17 +76,19 @@ struct SyncFolderOnboardingView: View {
         }
     }
 
-    private var footer: some View {
-        VStack(spacing: 14) {
-            dontRemindToggle
-                .font(.subheadline)
-                .accentFill()
+    private func point(_ symbol: String, title: String, message: String) -> some View {
+        OnboardingPointRow(symbol: symbol, title: title, message: message,
+                           iconWidth: 30, horizontalSpacing: 14, messageFont: .footnote)
+    }
 
+    private var footer: some View {
+        VStack(spacing: 12) {
             Button {
                 choosingFolder = true
             } label: {
                 if isConnecting {
                     ProgressView().frame(maxWidth: .infinity).accentFill()
+                        .accessibilityLabel("Connecting sync folder")
                 } else {
                     chooseFolderTitle
                 }
@@ -105,8 +98,13 @@ struct SyncFolderOnboardingView: View {
             .disabled(isConnecting)
 
             notNowButton
-                .font(.subheadline.weight(.medium))
+                .font(.body)
+                .foregroundStyle(.accentInk)
                 .disabled(isConnecting)
+
+            dontRemindToggle
+                .font(.footnote)
+                .accentFill()
         }
     }
 
@@ -127,12 +125,12 @@ struct SyncFolderOnboardingView: View {
     private var dontRemindToggle: some View {
         if dynamicTypeSize.isAccessibilitySize {
             Toggle(isOn: $dontRemindAgain) {
-                Text("Don't remind me again")
+                Text("Don’t Remind Me Again")
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
             }
         } else {
-            Toggle("Don't remind me again", isOn: $dontRemindAgain)
+            Toggle("Don’t Remind Me Again", isOn: $dontRemindAgain)
         }
     }
 

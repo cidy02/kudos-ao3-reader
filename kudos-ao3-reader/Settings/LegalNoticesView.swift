@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Full offline legal text reachable from About: the bundled GPL-3.0 license
+/// Full offline legal text reachable from About: the bundled AGPL-3.0 licence
 /// and the third-party notices for every pinned Swift package. Both source
 /// files ship in the app bundle (`kudos-ao3-reader/Legal/`) so they read
 /// without network access. Presented as a push destination from `AboutView`,
@@ -14,7 +14,7 @@ struct LegalNoticesView: View {
 
         var title: String {
             switch self {
-            case .gpl: return "GNU GPL v3.0"
+            case .gpl: return "GNU AGPL v3.0"
             case .thirdParty: return "Third-Party Notices"
             }
         }

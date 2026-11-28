@@ -49,6 +49,7 @@ struct AO3WorkActionsMenu: View {
                 }
                 Image(systemName: "bubble.left.and.bubble.right")
             }
+            .accessibilityLabel(WorkDetailCommentsRow.accessibilityLabel(count: commentCount))
 
             Button { actions.markForLater(workID: workID, auth: auth) } label: {
                 Label("Mark for Later", systemImage: "clock.badge")
@@ -110,7 +111,7 @@ struct AO3WorkActionsTopRow: View {
             .tint(isBookmarked ? accentFill : Color.primary)
             .accessibilityLabel(
                 isBookmarked
-                    ? "Edit Bookmark on AO3" : "Bookmark on AO3"
+                    ? "Edit Bookmark" : "Bookmark"
             )
             .accessibilityAddTraits(
                 isBookmarked ? [.isSelected] : []

@@ -218,7 +218,7 @@ extension WorkDetailView {
 
             let favLabels = WorkActionLabels.favorite(isFavorite: localWork?.isFavorite ?? false)
             Button(action: toggleFavorite) {
-                Label(favLabels.title, systemImage: favLabels.systemImage)
+                Label(localWork?.isFavorite == true ? "Unfavourite" : "Favourite", systemImage: favLabels.systemImage)
             }
 
             let finishedLabels = WorkActionLabels.finished(isFinished: localWork?.isFinished ?? false)

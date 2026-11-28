@@ -1,3 +1,4 @@
+import Foundation
 import SwiftData
 import SwiftUI
 
@@ -32,6 +33,9 @@ struct SettingsAccountPage: View {
 
 /// Mature-content privacy, and the way on to Privacy and local data (1ac).
 struct SettingsPrivacyPage: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(ThemeManager.self) private var themeManager
     @AppStorage("hideMatureContent") private var hideMatureContent = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @AppStorage("requireBiometricToReveal") private var requireBiometric = false
@@ -40,8 +44,8 @@ struct SettingsPrivacyPage: View {
     // confirmations as Privacy and local data (`LocalDataClearDialogs`).
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion })
     private var works: [SavedWork]
-    @State private var footprint = LocalStorageFootprint()
-    @State private var hasMeasured = false
+    @State private var cacheBytes: Int64?
+    @State private var downloadMeasurement: (urls: [URL], bytes: Int64?)?
     @State private var confirmClearHistory = false
     @State private var confirmClearDownloads = false
     @State private var confirmClearPositions = false
@@ -53,95 +57,50 @@ struct SettingsPrivacyPage: View {
     private var positionedWorks: [SavedWork] { LocalDataClearing.selectReadingPositions(from: works) }
 
     private var cacheLabel: String {
-        hasMeasured ? LocalStorageFootprint.formatted(bytes: footprint.cacheBytes) : "—"
+        cacheBytes.map { LocalStorageFootprint.formatted(bytes: $0) } ?? "—"
     }
 
     var body: some View {
-        SettingsPageForm(route: .privacySettings) {
-            Section {
-                Toggle(isOn: $hideMatureContent) {
-                    HStack(spacing: 12) {
-                        SettingsIconTile(color: Color(hex: "#E07000") ?? .orange, systemImage: "eye.slash")
-                        Text("Hide mature content")
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .accentFill()
-                if hideMatureContent {
-                    Picker("When locked", selection: $matureMode) {
-                        ForEach(MaturePrivacyMode.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .accentFill()
-
-                    Toggle(isOn: $requireBiometric) {
-                        HStack(spacing: 12) {
-                            SettingsIconTile(color: Color(hex: "#2F8F3A") ?? .green, systemImage: "faceid")
-                            Text("Require Face ID to reveal")
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    .accentFill()
-                }
-            } header: {
-                Text("Mature works")
-            } footer: {
-                Text(hideMatureContent
-                    ? (matureMode == .hide
-                        ? "Kudos hides Mature and Explicit works from your Library, History, and "
-                        + "Favorites until you reveal them."
-                        : "Kudos blurs Mature and Explicit works in your Library, History, and "
-                        + "Favorites until you tap to reveal them.")
-                    : "You see Mature and Explicit works normally.")
-            }
-
-            Section {
+        let downloadURLs = freeableDownloads.map(\.fileURL)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                privacyPanel
+                localDataPanel(downloadURLs: downloadURLs)
                 NavigationLink(value: SettingsRoute.privacy) {
-                    HStack(spacing: 12) {
-                        SettingsIconTile(color: Color(hex: "#1E63C8") ?? .blue, systemImage: "shield")
-                        Text("Privacy and Local Data")
+                    HStack(spacing: 10) {
+                        Image(systemName: "shield")
+                            .foregroundStyle(.accentInk)
+                            .accessibilityHidden(true)
+                        Text("Privacy and Local Data").foregroundStyle(.primary)
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondaryInk)
+                            .accessibilityHidden(true)
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .frame(minHeight: 46)
+                    .contentShape(Rectangle())
                 }
-            } header: {
-                Text("Privacy")
+                .buttonStyle(.plain)
+                .background(themeManager.appTheme.cardSurface, in: cardShape)
             }
-
-            Section {
-                dataRow(
-                    title: "Browse cache",  // what it clears: saved fandom lists
-                    detail: cacheLabel,
-                    button: browseCacheCleared ? "Cleared" : "Clear",
-                    disabled: browseCacheCleared
-                ) { confirmClearBrowseCache = true }
-                dataRow(
-                    title: "Reading history",
-                    detail: Self.workCount(freedHistory.count),
-                    button: "Clear…",
-                    disabled: freedHistory.isEmpty
-                ) { confirmClearHistory = true }
-                dataRow(
-                    title: "Reading positions",
-                    detail: Self.workCount(positionedWorks.count),
-                    button: "Clear…",
-                    disabled: positionedWorks.isEmpty
-                ) { confirmClearPositions = true }
-                dataRow(
-                    title: "Downloads of finished works",
-                    detail: Self.workCount(freeableDownloads.count),
-                    button: "Free…",
-                    disabled: freeableDownloads.isEmpty
-                ) { confirmClearDownloads = true }
-            } header: {
-                Text("Data on this \(ThisDevice.name)")
-            } footer: {
-                Text("Kudos keeps your reading on this device. Your AO3 sign-in stays in the "
-                    + "Keychain and is never in a backup. Privacy and Local Data lists everything "
-                    + "stored here.")
-            }
+            .padding(.horizontal, SubjectMetrics.gutter)
+            .padding(.vertical, 8)
         }
-        .task {
-            guard !hasMeasured else { return }
-            await measure()
+        .appScreenSurface(.grouped)
+        .navigationTitle(SettingsRoute.privacySettings.pageTitle)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .task { await measureCache() }
+        .task(id: downloadURLs) {
+            let bytes = await Task.detached(priority: .utility) {
+                Self.allocatedBytes(for: downloadURLs)
+            }.value
+            guard !Task.isCancelled else { return }
+            downloadMeasurement = (downloadURLs, bytes)
         }
         .modifier(LocalDataClearDialogs(
             works: works,
@@ -151,16 +110,142 @@ struct SettingsPrivacyPage: View {
             confirmBrowseCache: $confirmClearBrowseCache,
             browseCacheCleared: $browseCacheCleared,
             cacheLabel: cacheLabel,
-            onMeasure: { Task { await measure() } }
+            onMeasure: { Task { await measureCache() } }
         ))
     }
 
     nonisolated static func workCount(_ count: Int) -> String { "\(count) work\(count == 1 ? "" : "s")" }
 
-    private func measure() async {
-        let readingCopies = works.filter { $0.hasEPUB && !$0.isDownloaded }.map(\.fileURL)
-        footprint = await LocalDataFootprintScanner.measure(readingCopies: readingCopies)
-        hasMeasured = true
+    private var hideModePicker: some View {
+        Picker("How to hide", selection: $matureMode) {
+            ForEach(MaturePrivacyMode.allCases) { mode in
+                Text(SystemPrivacyBoardCopy.modeTitle(mode)).tag(mode)
+            }
+        }
+        .accessibilityLabel("How to hide")
+        .accentFill()
+    }
+
+    private var privacyPanel: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            panelHeader("Mature and Explicit works")
+            VStack(spacing: 0) {
+                Toggle(isOn: $hideMatureContent) {
+                    HStack(spacing: 10) {
+                        WorkSymbolTileView(symbol: .rating("Explicit", dark: colorScheme == .dark))
+                            .accessibilityHidden(true)
+                        Text("Hide mature content")
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .toggleStyle(.switch)
+                .accentFill()
+                .padding(.horizontal, 16)
+                .frame(minHeight: 46)
+
+                if hideMatureContent {
+                    SubjectRowSeparator(inset: 0)
+                    if dynamicTypeSize.isAccessibilitySize {
+                        hideModePicker.pickerStyle(.menu)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                    } else {
+                        hideModePicker.pickerStyle(.segmented)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                    }
+                    SubjectRowSeparator(inset: 0)
+                    Toggle(isOn: $requireBiometric) {
+                        Text(SystemPrivacyBoardCopy.authenticationTitle)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .toggleStyle(.switch)
+                    .accentFill()
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 46)
+                }
+            }
+            .background(themeManager.appTheme.cardSurface, in: cardShape)
+            panelFooter(hideMatureContent
+                ? "Applies to your Library, Home and history."
+                : "You see Mature and Explicit works normally.")
+        }
+    }
+
+    private func localDataPanel(downloadURLs: [URL]) -> some View {
+        let downloadBytes = downloadMeasurement?.urls == downloadURLs ? downloadMeasurement?.bytes : nil
+        return VStack(alignment: .leading, spacing: 6) {
+            panelHeader("Data on this \(ThisDevice.name)")
+            VStack(spacing: 0) {
+                dataRow(
+                    title: "Browse cache",
+                    detail: cacheLabel,
+                    button: browseCacheCleared ? "Cleared" : "Clear",
+                    disabled: browseCacheCleared
+                ) { confirmClearBrowseCache = true }
+                SubjectRowSeparator(inset: 0)
+                dataRow(
+                    title: "Reading history",
+                    detail: Self.workCount(freedHistory.count),
+                    button: "Clear…",
+                    disabled: freedHistory.isEmpty
+                ) { confirmClearHistory = true }
+                SubjectRowSeparator(inset: 0)
+                dataRow(
+                    title: "Reading positions",
+                    detail: Self.workCount(positionedWorks.count),
+                    button: "Clear…",
+                    disabled: positionedWorks.isEmpty
+                ) { confirmClearPositions = true }
+                SubjectRowSeparator(inset: 0)
+                dataRow(
+                    title: "Downloads of finished works",
+                    detail: SystemPrivacyBoardCopy.downloadDetail(count: downloadURLs.count, bytes: downloadBytes),
+                    button: "Free…",
+                    disabled: downloadURLs.isEmpty
+                ) { confirmClearDownloads = true }
+            }
+            .background(themeManager.appTheme.cardSurface, in: cardShape)
+            panelFooter("Kudos keeps your reading on this device. Your AO3 sign-in stays in the "
+                + "Keychain and is never in a backup.")
+        }
+    }
+
+    private var cardShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+    }
+
+    private func panelHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.footnote)
+            .foregroundStyle(.secondaryInk)
+            .padding(.horizontal, 16)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private func panelFooter(_ detail: String) -> some View {
+        Text(detail)
+            .font(.footnote)
+            .foregroundStyle(.secondaryInk)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 16)
+    }
+
+    private func measureCache() async {
+        cacheBytes = await Task.detached(priority: .utility) {
+            Self.allocatedBytes(for: [FandomCatalogCache.defaultFileURL]) ?? 0
+        }.value
+    }
+
+    private nonisolated static func allocatedBytes(for urls: [URL]) -> Int64? {
+        var bytes: Int64 = 0
+        for url in urls {
+            guard let info = try? url.resourceValues(forKeys: [.totalFileAllocatedSizeKey, .fileSizeKey]),
+                  let size = info.totalFileAllocatedSize ?? info.fileSize
+            else { return nil }
+            bytes += Int64(size)
+        }
+        return bytes
     }
 
     /// Title and measured detail on the left, the inline destructive button on the
@@ -169,18 +254,52 @@ struct SettingsPrivacyPage: View {
     private func dataRow(
         title: String, detail: String, button: String, disabled: Bool, action: @escaping () -> Void
     ) -> some View {
-        LabeledContent {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 8))
+        return layout {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .monospacedDigit()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
             Button(button, role: .destructive, action: action)
                 .buttonStyle(.bordered)
                 .buttonBorderShape(.capsule)
                 .controlSize(.small)
                 .disabled(disabled)
-                .accessibilityLabel("\(button.replacingOccurrences(of: "…", with: "")) \(title)")
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                Text(detail).font(.footnote).foregroundStyle(.secondaryInk).monospacedDigit()
-            }
+                .accessibilityLabel("\(button) \(title)")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
+        .frame(minHeight: 52)
+    }
+}
+
+enum SystemPrivacyBoardCopy {
+    static var authenticationTitle: String {
+        #if os(iOS)
+        "Require Face ID to reveal"
+        #else
+        "Require authentication to reveal"
+        #endif
+    }
+
+    static func downloadDetail(count: Int, bytes: Int64?) -> String {
+        let works = SettingsPrivacyPage.workCount(count)
+        guard let bytes, count > 0 else { return works }
+        return "\(works) · \(LocalStorageFootprint.formatted(bytes: bytes))"
+    }
+
+    static func modeTitle(_ mode: MaturePrivacyMode) -> String {
+        switch mode {
+        case .obscure: "Blur"
+        case .hide: "Hide Completely"
         }
     }
 }

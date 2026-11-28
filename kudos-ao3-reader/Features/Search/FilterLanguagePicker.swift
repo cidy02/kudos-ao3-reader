@@ -69,7 +69,7 @@ struct FilterLanguagePicker: View {
 
     private var languageList: some View {
         List {
-            Group {
+            Section {
                 ForEach(Self.matching(query)) { language in
                     Button {
                         selection = language
@@ -77,11 +77,13 @@ struct FilterLanguagePicker: View {
                         HStack {
                             Text(language.title)
                                 .foregroundStyle(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
                             Spacer()
                             if language == selection {
                                 Image(systemName: "checkmark")
                                     .font(.body.weight(.semibold))
                                     .foregroundStyle(.tint)
+                                    .accessibilityHidden(true)
                             }
                         }
                         .contentShape(Rectangle())
@@ -89,6 +91,8 @@ struct FilterLanguagePicker: View {
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(language == selection ? .isSelected : [])
                 }
+            } header: {
+                Text("All languages").textCase(nil)
             }
             .appThemedRows()
         }
