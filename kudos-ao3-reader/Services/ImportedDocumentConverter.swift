@@ -43,7 +43,12 @@ nonisolated enum ImportedDocumentConverter {
     ///       existing scanner fills in rating, fandom, status, words and chapters for
     ///       converted works. Ratings are mapped to AO3's spelling (FFN's "M" →
     ///       "Mature"), which is what the rating lookup matches against.
-    static let converterVersion = 9
+    /// - 10 — the PDF rework (T-579b–f, waves 59–65): MuPDF styled text with italics and bold, paragraphs
+    ///       joined across page breaks only, drawn and gap scene breaks, verse line breaks, page chrome and
+    ///       margin page numbers dropped, visual chapter headings, "Preface" front matter, and prose no
+    ///       longer read as a heading (`.txt` imports share the heading rules). Not bumped when it landed,
+    ///       so the reader's Rebuild pill and Work Details treated every converted work as current.
+    static let converterVersion = 10
 
     enum ConversionError: LocalizedError, Equatable {
         /// A format a later task in this series will handle.

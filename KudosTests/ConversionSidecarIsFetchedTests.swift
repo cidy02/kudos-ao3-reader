@@ -95,5 +95,52 @@ struct ConversionSidecarIsFetchedTests {
 
         #expect(FileManager.default.fileExists(atPath: localRecord.path))
     }
+
+    @Test func thePlaceholderKeepsTheOriginalPendingUntilItsBytesArrive() async throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("OriginalPlaceholder-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let remoteContainer = try container()
+        let work = SavedWork(title: "Converted on another device", author: "Writer")
+        work.hasEPUB = false
+        remoteContainer.mainContext.insert(work)
+        try remoteContainer.mainContext.save()
+        let contents = try KudosBackupService.makeContents(
+            works: [work], bookmarks: [], fonts: [], readingQueues: [],
+            defaults: try testDefaults("placeholder-remote")
+        )
+        let syncDirectory = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
+        let originalsDirectory = syncDirectory.appendingPathComponent(FolderSyncService.originalsSubdirectoryName)
+        try FileManager.default.createDirectory(at: originalsDirectory, withIntermediateDirectories: true)
+        let manifestURL = syncDirectory.appendingPathComponent(FolderSyncService.manifestFileName)
+        try contents.manifestData().write(to: manifestURL)
+        let name = "\(work.id.uuidString.lowercased()).pdf"
+        let placeholder = originalsDirectory.appendingPathComponent(".\(name).icloud")
+        try Data("placeholder metadata".utf8).write(to: placeholder)
+
+        let localContainer = try container()
+        let context = localContainer.mainContext
+        let defaults = try testDefaults("placeholder-local")
+        defer { FolderSyncService.disconnect(defaults: defaults) }
+        try FolderSyncService.connect(to: folder, defaults: defaults)
+        let local = Storage.originalDocumentURL(for: work.id, fileExtension: "pdf")
+        defer { try? FileManager.default.removeItem(at: local) }
+
+        let first = try await FolderSyncService.syncDown(in: context, defaults: defaults)
+        #expect(first.didReadRemoteFile)
+        #expect(!FileManager.default.fileExists(atPath: local.path))
+
+        // Simulate iCloud materializing the original without rewriting the manifest.
+        let bytes = Data("%PDF-1.7 the original file".utf8)
+        try bytes.write(to: originalsDirectory.appendingPathComponent(name))
+        try FileManager.default.removeItem(at: placeholder)
+        let second = try await FolderSyncService.syncDown(in: context, defaults: defaults)
+        #expect(!second.skippedUnchanged)
+        #expect(try Data(contentsOf: local) == bytes)
+
+        let third = try await FolderSyncService.syncDown(in: context, defaults: defaults)
+        #expect(third.skippedUnchanged)
+    }
 }
 }

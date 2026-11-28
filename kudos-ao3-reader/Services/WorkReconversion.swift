@@ -44,6 +44,24 @@ enum WorkReconversion {
         return Candidate(work: work, record: record, originalURL: original)
     }
 
+    /// Early conversions may have neither the original nor a conversion record.
+    /// Their EPUB still has the package layout and manifest IDs that Kudos's
+    /// converter wrote. The arrival source alone also describes ordinary EPUBs.
+    nonisolated static func hasConvertedPackage(at url: URL) -> Bool {
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe),
+              let zip = try? MiniZip(data: data),
+              let container = zip.data(named: "META-INF/container.xml"),
+              EPUBDocument.rootfilePath(from: container) == "OEBPS/content.opf",
+              zip.uncompressedSize(named: "OEBPS/nav.xhtml") != nil,
+              zip.uncompressedSize(named: "OEBPS/chapter-1.xhtml") != nil,
+              let package = zip.data(named: "OEBPS/content.opf"),
+              let xml = String(data: package, encoding: .utf8)
+        else { return false }
+        return xml.contains("unique-identifier=\"bookid\"")
+            && xml.contains("<item id=\"nav\" href=\"nav.xhtml\"")
+            && xml.contains("<item id=\"chapter-1\" href=\"chapter-1.xhtml\"")
+    }
+
     /// Every work in the library whose EPUB an improved converter would now produce
     /// differently.
     static func staleWorks(in context: ModelContext) -> [Candidate] {

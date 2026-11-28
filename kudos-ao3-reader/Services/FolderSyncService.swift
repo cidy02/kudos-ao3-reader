@@ -140,7 +140,8 @@ enum FolderSyncService {
     private static let lastErrorKey = "folderSyncLastError"
     private static let dirtyFlagKey = "hasPendingFolderSyncChanges"
     private static let autoSyncEnabledKey = "folderSyncAutoSyncEnabled"
-    private static let lastRestoredRemoteStampKey = "folderSyncLastRestoredRemoteStamp"
+    // Re-read the folder once after upgrading from a build that skipped original placeholders.
+    private static let lastRestoredRemoteStampKey = "folderSyncLastRestoredRemoteStampWithOriginalPlaceholders"
     private static let lastRestoredLegacyStampKey = "folderSyncLastRestoredLegacyStamp"
     /// Set when a sync-down couldn't fetch every asset the remote manifest
     /// references (typically not-yet-uploaded iCloud files). While set, the
@@ -902,10 +903,10 @@ nonisolated private func readChangedRemoteAssets(
         isDirectory: true
     )
     let manifestWorkIDs = Set(manifest.works.map { $0.id.uuidString.lowercased() })
-    let remoteOriginals = (
-        try? FileManager.default.contentsOfDirectory(atPath: originalsDirectory.path)
-    ) ?? []
-    for name in remoteOriginals where !name.hasPrefix(".") {
+    let remoteOriginals = Set(
+        (try? FileManager.default.contentsOfDirectory(atPath: originalsDirectory.path)) ?? []
+    )
+    for name in Set(remoteOriginals.compactMap(remoteAssetName)) {
         let base = (name as NSString).deletingPathExtension
         let workIDText = base.hasSuffix(".conversion")
             ? String(base.dropLast(".conversion".count))
@@ -926,8 +927,9 @@ nonisolated private func readChangedRemoteAssets(
             : Storage.existingOriginalDocumentURL(for: workID)
         if let localURL, FileManager.default.fileExists(atPath: localURL.path) { continue }
         let remoteURL = originalsDirectory.appendingPathComponent(name)
-        guard remoteAssetExists(remoteURL) else { continue }
-        requestDownloadIfNeeded(remoteURL)
+        // The listing already saw the file or its placeholder. A failed read
+        // can be a handoff between the two, so let the next pass retry it.
+        requestDownloadIfNeeded(remoteURL, knownPlaceholder: remoteOriginals.contains(".\(name).icloud"))
         if let data = try? coordinatedReadData(from: remoteURL) {
             selection.originalFiles[name] = data
         } else {
@@ -935,6 +937,15 @@ nonisolated private func readChangedRemoteAssets(
         }
     }
     return selection
+}
+
+/// Maps a legacy iCloud placeholder to the asset it represents. Other hidden
+/// entries, including temporary files, are not assets.
+nonisolated private func remoteAssetName(_ name: String) -> String? {
+    guard name.hasPrefix(".") else { return name }
+    guard name.hasSuffix(".icloud") else { return nil }
+    let realName = String(name.dropFirst().dropLast(".icloud".count))
+    return realName.isEmpty || realName.hasPrefix(".") ? nil : realName
 }
 
 /// Whether a remote asset exists in any form — as a materialized file or as a
@@ -1083,19 +1094,19 @@ nonisolated private func removeOrphans(in directory: URL, keeping expected: Set<
     let foldedExpected = Set(expected.map { $0.lowercased() })
     guard let names = try? fileManager.contentsOfDirectory(atPath: directory.path) else { return }
     for name in names {
-        // Map iCloud placeholder names (".X.icloud") back to their real name so
-        // a not-yet-downloaded file is never mistaken for an orphan.
-        var realName = name
-        if realName.hasPrefix("."), realName.hasSuffix(".icloud") {
-            realName = String(realName.dropFirst().dropLast(".icloud".count))
-        }
-        guard !realName.hasPrefix(".") else { continue } // other hidden/system files
+        guard let realName = remoteAssetName(name) else { continue }
         guard !foldedExpected.contains(realName.lowercased()) else { continue }
         try? fileManager.removeItem(at: directory.appendingPathComponent(name))
     }
 }
 
-nonisolated private func requestDownloadIfNeeded(_ url: URL) {
+nonisolated private func requestDownloadIfNeeded(_ url: URL, knownPlaceholder: Bool = false) {
+    if knownPlaceholder {
+        // Resource values for the real name can be unavailable until iCloud
+        // materializes it, even though the placeholder is already listed.
+        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+        return
+    }
     let keys: Set<URLResourceKey> = [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey]
     guard let values = try? url.resourceValues(forKeys: keys),
           values.isUbiquitousItem == true,

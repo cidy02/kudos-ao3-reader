@@ -204,12 +204,13 @@ enum UserEPUBImportOutcome {
     }
 }
 
-enum UserEPUBImportError: LocalizedError {
+nonisolated enum UserEPUBImportError: LocalizedError, Equatable {
     case notLocalFile
     case invalidExtension
     /// A `.fileImporter`-selected file lives in iCloud Drive and wasn't fully
     /// downloaded within the wait window — see `waitForUbiquitousDownload(of:)`.
     case iCloudDownloadTimedOut
+    case couldNotKeepOriginal
 
     var errorDescription: String? {
         switch self {
@@ -220,6 +221,9 @@ enum UserEPUBImportError: LocalizedError {
         case .iCloudDownloadTimedOut:
             "This file is still downloading from iCloud Drive. Wait for it to finish "
                 + "downloading in the Files app, then try importing again."
+        case .couldNotKeepOriginal:
+            "Kudos couldn't keep a copy of the original file, so it didn't import it. "
+                + "Check free space and try again."
         }
     }
 }
@@ -316,6 +320,8 @@ func importUserEPUB(
     _ url: URL,
     downloadedAt: Date = Date(),
     importSource: WorkImportSource = .fileImport,
+    original: (archive: UserDocumentImport.StagedOriginal, format: ImportedFileFormat)? = nil,
+    verifyAvailability: Bool = true,
     into context: ModelContext
 ) async throws -> UserEPUBImportOutcome {
     guard url.isFileURL else { throw UserEPUBImportError.notLocalFile }
@@ -327,59 +333,70 @@ func importUserEPUB(
         try UserEPUBInspection.inspect(url)
     }.value
 
-    if let duplicate = existingWork(matching: inspection, sourceFile: url, in: context) {
-        // A duplicate sitting in Recently Deleted is revived, not reported as "already
-        // in your library" — without this the import would silently land in a record
-        // still scheduled for permanent deletion.
-        let revivedFromRecentlyDeleted = duplicate.isPendingDeletion
-        if revivedFromRecentlyDeleted {
-            PreservedWorkService.restore(duplicate, in: context)
-        }
-        let hadEmptyFandoms = duplicate.workFandoms.isEmpty
-        let hadZeroWords = duplicate.wordCount == 0
-        applyUserImportMetadata(inspection, to: duplicate, fillOnly: true)
-        if duplicate.downloadedAt == nil { duplicate.downloadedAt = downloadedAt }
-        if !duplicate.hasEPUB {
-            try copyImportedEPUB(from: url, into: duplicate)
-            duplicate.hasEPUB = true
-            pinOrRefreshDuplicateCover(duplicate, hadEmptyFandoms: hadEmptyFandoms, hadZeroWords: hadZeroWords)
-            duplicate.markModified()
-            WorkSearchIndex.reindex(duplicate)
-            try? context.save()
-            Task { await WorkAvailability.verify(duplicate, in: context) }
-            return .restored(duplicate)
-        }
-        pinOrRefreshDuplicateCover(duplicate, hadEmptyFandoms: hadEmptyFandoms, hadZeroWords: hadZeroWords)
-        duplicate.markModified()
-        WorkSearchIndex.reindex(duplicate)
-        try? context.save()
-        return revivedFromRecentlyDeleted ? .restored(duplicate) : .duplicate(duplicate)
-    }
-
-    let fallbackTitle = url.deletingPathExtension().lastPathComponent
-    let work = SavedWork(
-        title: inspection.title.isEmpty ? fallbackTitle : inspection.title,
+    let duplicate = existingWork(matching: inspection, sourceFile: url, in: context)
+    let work = duplicate ?? SavedWork(
+        title: inspection.title.isEmpty ? url.deletingPathExtension().lastPathComponent : inspection.title,
         author: inspection.author,
         summary: inspection.summary,
         sourceURL: inspection.sourceURL
     )
-    applyUserImportMetadata(inspection, to: work, fillOnly: false)
-    work.downloadedAt = downloadedAt
-    work.recordImportSource(importSource, at: downloadedAt)
-    work.ao3WorkID = WorkTags.ao3WorkID(from: work.sourceURL)
-    work.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: work.seriesURL)
-    work.markModified()
+    let isNew = duplicate == nil
+    let replacesEPUB = isNew || !work.hasEPUB
+    let revivedFromRecentlyDeleted = work.isPendingDeletion
 
-    try copyImportedEPUB(from: url, into: work)
+    let save = { () throws -> UserEPUBImportOutcome in
+        let destination = work.fileURL
+        let hadFile = FileManager.default.fileExists(atPath: destination.path)
+        var committed = false
+        defer {
+            if !committed, original != nil, replacesEPUB, !hadFile {
+                try? FileManager.default.removeItem(at: destination)
+            }
+        }
+        if replacesEPUB {
+            try copyImportedEPUB(from: url, into: work)
+            work.hasEPUB = true
+        }
+        let hadEmptyFandoms = work.workFandoms.isEmpty
+        let hadZeroWords = work.wordCount == 0
+        applyUserImportMetadata(inspection, to: work, fillOnly: !isNew)
+        if work.downloadedAt == nil { work.downloadedAt = downloadedAt }
 
-    context.insert(work)
-    work.pinCover(salt: 0, automatic: work.workFandoms.isEmpty || work.wordCount == 0)
-    WorkSearchIndex.reindex(work)
-    try? context.save()
-    Log.library.info("Imported user EPUB “\(work.title)”")
+        if isNew {
+            work.recordImportSource(importSource, at: downloadedAt)
+            work.ao3WorkID = WorkTags.ao3WorkID(from: work.sourceURL)
+            work.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: work.seriesURL)
+            context.insert(work)
+            work.pinCover(salt: 0, automatic: work.workFandoms.isEmpty || work.wordCount == 0)
+        } else {
+            if revivedFromRecentlyDeleted { PreservedWorkService.restore(work, in: context, save: false) }
+            pinOrRefreshDuplicateCover(work, hadEmptyFandoms: hadEmptyFandoms, hadZeroWords: hadZeroWords)
+        }
+        work.markModified()
+        WorkSearchIndex.reindex(work)
+        if original != nil {
+            do { try context.save() } catch {
+                context.rollback()
+                throw error
+            }
+        } else {
+            try? context.save()
+        }
+        committed = true
+        if isNew { return .imported(work) }
+        return replacesEPUB || revivedFromRecentlyDeleted ? .restored(work) : .duplicate(work)
+    }
 
-    Task { await WorkAvailability.verify(work, in: context) }
-    return .imported(work)
+    let outcome = if let original {
+        try original.archive.install(for: work.id, format: original.format, replacesEPUB: replacesEPUB, save: save)
+    } else {
+        try save()
+    }
+    if isNew { Log.library.info("Imported user EPUB “\(work.title)”") }
+    // As before this change: only a duplicate that got its EPUB back is checked against AO3. A new import
+    // isn't, so importing never adds AO3 requests.
+    if verifyAvailability, replacesEPUB, !isNew { Task { await WorkAvailability.verify(work, in: context) } }
+    return outcome
 }
 
 @MainActor
