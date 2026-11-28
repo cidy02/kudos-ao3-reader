@@ -153,7 +153,7 @@ struct ReadingInsightsView: View {
             // Main scrollable content
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(spacing: 14) {
+                    VStack(spacing: CardListMetrics.interCardSpacing) {
                         if scopeState.mayDisplayLoadedData(hideMature: hideMature, revealed: gate.revealAll) {
                             switch selectedTab {
                             case .overview:
@@ -167,8 +167,8 @@ struct ReadingInsightsView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
+                    .padding(.horizontal, SubjectMetrics.gutter)
+                    .padding(.top, 8)
                     .padding(.bottom, 32)
                 }
                 .appThemedScroll()
@@ -186,6 +186,7 @@ struct ReadingInsightsView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .wrappingInlineTitle("Reading Insights", isActive: dynamicTypeSize.isAccessibilitySize)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
@@ -344,110 +345,142 @@ struct ReadingInsightsView: View {
     // MARK: - Header View (`InsightsTop`)
 
     private var headerView: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
             // Tab segment pill (Overview / Taste / Habits / Library)
-            HStack(spacing: 0) {
-                ForEach(Tab.allCases) { tab in
-                    let isSelected = selectedTab == tab
-                    Button {
-                        selectedTab = tab
-                    } label: {
-                        Text(tab.title)
-                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                            .foregroundStyle(isSelected ? AnyShapeStyle(Color.primary) : AnyShapeStyle(.secondaryInk))
-                            .frame(maxWidth: .infinity)
-                            .frame(minHeight: 28)
-                            .background(
-                                isSelected ? theme.appTheme.cardSurface : Color.clear
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            .shadow(
-                                color: isSelected ? Color.black.opacity(0.08) : Color.clear,
-                                radius: 4,
-                                y: 1
-                            )
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    // Two-column grid at AX sizes so four scaled tab labels never crush.
+                    LazyVGrid(
+                        columns: [GridItem(.flexible(), spacing: 2), GridItem(.flexible(), spacing: 2)],
+                        spacing: 2
+                    ) {
+                        tabButtons
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(tab.title) tab")
-                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                } else {
+                    HStack(spacing: 0) {
+                        tabButtons
+                    }
                 }
             }
             .padding(2)
             .background(Color.primary.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .padding(.horizontal, 16)
+            .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+            .padding(.horizontal, SubjectMetrics.gutter)
             .padding(.top, 4)
 
             // Period selector strip (Period title, subtitle, Range picker, ‹, ›)
-            HStack(alignment: .center, spacing: 8) {
+            let periodLayout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                : AnyLayout(HStackLayout(alignment: .center, spacing: 8))
+            periodLayout {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(periodTitle)
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.title2.bold())
                         .foregroundStyle(.primary)
-                        .lineLimit(1)
+                        // Two lines at every size: the column shares the row with the Range menu and
+                        // both arrows, and "incl. hidden" at the end of the subtitle says the figures
+                        // count hidden works, so it must never be the part that truncates.
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
+                        .accessibilityAddTraits(.isHeader)
 
                     Text(periodSubtitle)
-                        .font(.system(size: 12))
+                        .font(.footnote)
                         .foregroundStyle(.secondaryInk)
-                        .lineLimit(2)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Range picker (Month / Year)
-                Menu {
-                    Picker("Range", selection: $range) {
-                        ForEach(RangeMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
+                HStack(spacing: 8) {
+                    // Range picker (Month / Year)
+                    Menu {
+                        Picker("Range", selection: $range) {
+                            ForEach(RangeMode.allCases) { mode in
+                                Text(mode.title).tag(mode)
+                            }
                         }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(range.title)
-                            .font(.system(size: 14, weight: .medium))
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 10, weight: .semibold))
-                    }
-                    .padding(.horizontal, 10)
-                    .frame(minHeight: 32)
-                    .background(Color.primary.opacity(0.08))
-                    .foregroundStyle(.primary)
-                    .clipShape(Capsule())
-                }
-
-                // Previous period button ‹
-                Button {
-                    previousPeriod()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 32, height: 32)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(range.title)
+                                .font(.subheadline.weight(.medium))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10, weight: .semibold))
+                                .accessibilityHidden(true)
+                        }
+                        .padding(.leading, 12)
+                        .padding(.trailing, 10)
+                        .frame(minHeight: 32)
                         .background(Color.primary.opacity(0.08))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Previous period")
+                        .foregroundStyle(.primary)
+                        .clipShape(SubjectMetrics.controlShape(dynamicTypeSize))
+                    }
+                    .accessibilityLabel("Period: \(range.title)")
 
-                // Next period button ›
-                Button {
-                    nextPeriod()
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(canGoNext ? Color.primary : Color.secondary.opacity(0.3))
-                        .frame(width: 32, height: 32)
-                        .background(canGoNext ? Color.primary.opacity(0.08) : Color.primary.opacity(0.04))
-                        .clipShape(Circle())
+                    // Previous period button ‹
+                    Button {
+                        previousPeriod()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 32, height: 32)
+                            .background(Color.primary.opacity(0.08))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Previous period")
+
+                    // Next period button ›
+                    Button {
+                        nextPeriod()
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(canGoNext ? AnyShapeStyle(Color.primary) : AnyShapeStyle(Color.secondary.opacity(0.3)))
+                            .frame(width: 32, height: 32)
+                            .background(canGoNext ? Color.primary.opacity(0.08) : Color.primary.opacity(0.04))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canGoNext)
+                    .accessibilityLabel("Next period")
                 }
-                .buttonStyle(.plain)
-                .disabled(!canGoNext)
-                .accessibilityLabel("Next period")
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 6)
+            .padding(.horizontal, SubjectMetrics.gutter)
+            .padding(.bottom, 4)
         }
         .background(theme.appTheme.cardBackdrop)
+    }
+
+    @ViewBuilder
+    private var tabButtons: some View {
+        ForEach(Tab.allCases) { tab in
+            let isSelected = selectedTab == tab
+            Button {
+                selectedTab = tab
+            } label: {
+                Text(tab.title)
+                    .font(.footnote.weight(isSelected ? .semibold : .regular))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 28)
+                    .padding(.horizontal, 4)
+                    .background(
+                        isSelected ? theme.appTheme.cardSurface : Color.clear
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .shadow(
+                        color: isSelected ? Color.black.opacity(0.10) : Color.clear,
+                        radius: 4,
+                        y: 1
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(tab.title)
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+        }
     }
 
     // MARK: - Overview Tab Content
@@ -489,16 +522,29 @@ struct ReadingInsightsView: View {
             medianSessionSeconds: insights.medianSessionSeconds,
             wordsPerHour: insights.wordsPerHour,
             charactersPerHour: insights.charactersPerHour,
-            hideReadingTime: hideReadingTime
+            hideReadingTime: hideReadingTime,
+            streakDateRange: InsightsBoardCopy.streakDateRangeLabel(
+                days: insights.dailyWords,
+                expectedLength: insights.longestStreakDays,
+                calendar: calendar
+            ),
+            biggestDayDate: insights.biggestDay?.date,
+            sittingsCount: insights.sittingBuckets.reduce(0) { $0 + $1.count }
         )
 
         LengthOfWhatYouReadCard(mix: insights.lengthMix)
 
         if !finishedWorksInPeriod.isEmpty {
+            // `uniquingKeysWith`: `uniqueKeysWithValues` traps on a repeated id, and this is only a label.
+            let rereadFinishCounts = Dictionary(
+                (habitsInsights?.rereads ?? []).map { ($0.id, $0.finishCount) },
+                uniquingKeysWith: { first, _ in first }
+            )
             FinishedInPeriodSection(
                 works: finishedWorksInPeriod,
                 discreetMode: discreetMode,
-                discreetMasker: discreetMasker
+                discreetMasker: discreetMasker,
+                rereadFinishCounts: rereadFinishCounts
             )
         } else {
             InsightsUnavailableCard(title: "Finished", explanation: "No works finished in this period.")
@@ -514,8 +560,9 @@ struct ReadingInsightsView: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "info.circle")
-                    .font(.system(size: 18))
+                    .font(.system(size: 19))
                     .foregroundStyle(.secondaryInk)
+                    .accessibilityHidden(true)
 
                 Text("How Reading Insights Are Counted")
                     .font(.subheadline)
@@ -526,16 +573,21 @@ struct ReadingInsightsView: View {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
-            .padding(14)
+            .padding(.horizontal, SubjectMetrics.gutter)
+            .padding(.vertical, 13)
+            .frame(minHeight: 48)
             .background(theme.appTheme.cardSurface)
             .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                     .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("How Reading Insights Are Counted")
     }
 
     // MARK: - Hidden Section
@@ -650,11 +702,13 @@ struct ReadingInsightsView: View {
     @ViewBuilder
     private var habitsContent: some View {
         if let habits = habitsInsights {
+            let isYear = range == .year
             HabitsTimeOfDayCard(
                 hourly: habits.hourlyDuration,
                 lateNightDuration: habits.lateNightDuration,
                 lateNightSharePercent: habits.lateNightSharePercent,
-                hideReadingTime: hideReadingTime
+                hideReadingTime: hideReadingTime,
+                isYear: isYear
             )
 
             HabitsCalendarCard(
@@ -668,19 +722,23 @@ struct ReadingInsightsView: View {
             HabitsSittingsCard(
                 sittings: habits.sittingBuckets,
                 typicalSeconds: habits.typicalSittingSeconds,
-                hideReadingTime: hideReadingTime
+                hideReadingTime: hideReadingTime,
+                chapterTiming: chapterTiming,
+                isYear: isYear
             )
-
-            HabitsChapterTimingCard(figure: chapterTiming)
-
-            InsightsUnavailableCard(title: "New Chapters", explanation: "Chapter posting and first-read dates are not available yet.")
 
             if habits.savedToOpenedMedianDays != nil || habits.openedToFinishedMedianDays != nil {
                 HabitsSavedToFinishedCard(
                     savedToOpenedDays: habits.savedToOpenedMedianDays,
                     openedToFinishedDays: habits.openedToFinishedMedianDays,
                     savedToOpenedCount: habits.savedToOpenedCount,
-                    openedToFinishedCount: habits.openedToFinishedCount
+                    openedToFinishedCount: habits.openedToFinishedCount,
+                    showsNewChaptersUnavailable: true
+                )
+            } else {
+                InsightsUnavailableCard(
+                    title: "New Chapters",
+                    explanation: "Chapter posting and first-read dates are not available yet."
                 )
             }
 
@@ -708,7 +766,8 @@ struct ReadingInsightsView: View {
                     reasons: habits.stopReasons,
                     commonTags: habits.commonStopTags,
                     discreetMode: discreetMode,
-                    discreetMasker: discreetMasker
+                    discreetMasker: discreetMasker,
+                    isYear: isYear
                 )
             }
         }
@@ -757,14 +816,17 @@ struct ReadingInsightsView: View {
                 )
             }
 
-            if let kudos = lib.kudosLeftPercent {
-                LibraryFeedbackCard(kudosLeftPercent: kudos)
-            }
-
-            InsightsUnavailableCard(title: "Bookmarked · Commented", explanation: "Your AO3 bookmark and comment actions are not recorded yet.")
-
-            if lib.favoriteWithoutKudosCount > 0 {
-                LibraryFavoritesWithoutKudosCard(count: lib.favoriteWithoutKudosCount)
+            if lib.kudosLeftPercent != nil || lib.favoriteWithoutKudosCount > 0 {
+                LibraryFeedbackCard(
+                    kudosLeftPercent: lib.kudosLeftPercent,
+                    finishedCount: stats.finishedWorks,
+                    favoriteWithoutKudosCount: lib.favoriteWithoutKudosCount
+                )
+            } else {
+                InsightsUnavailableCard(
+                    title: "Bookmarked · Commented",
+                    explanation: "Your AO3 bookmark and comment actions are not recorded yet."
+                )
             }
 
             if lib.seriesStartedCount > 0 {
@@ -824,22 +886,13 @@ struct ReadingInsightsView: View {
     }
 
     private var periodSubtitle: String {
-        switch range {
-        case .month:
-            let isCurrentMonth = calendar.isDate(referenceDate, equalTo: Date(), toGranularity: .month)
-            let endDay = isCurrentMonth
-                ? calendar.component(.day, from: Date())
-                : (calendar.range(of: .day, in: .month, for: referenceDate)?.count ?? 30)
-            let monthName = Self.shortMonthFormatter.string(from: referenceDate)
-            let prevDate = calendar.date(byAdding: .month, value: -1, to: referenceDate) ?? referenceDate
-            let prevMonthName = Self.shortMonthFormatter.string(from: prevDate)
-            return "1–\(endDay) \(monthName) · vs \(prevMonthName)\(scopeSuffix)"
-        case .year:
-            let yr = Self.yearFormatter.string(from: referenceDate)
-            let prevDate = calendar.date(byAdding: .year, value: -1, to: referenceDate) ?? referenceDate
-            let prevYr = Self.yearFormatter.string(from: prevDate)
-            return "\(yr) · vs \(prevYr)\(scopeSuffix)"
-        }
+        InsightsBoardCopy.periodSubtitle(
+            isYear: range == .year,
+            referenceDate: referenceDate,
+            now: Date(),
+            scopeSuffix: scopeSuffix,
+            calendar: calendar
+        )
     }
 
     /// Says on screen when the figures include hidden works.
@@ -848,13 +901,12 @@ struct ReadingInsightsView: View {
     }
 
     private var previousPeriodShortName: String {
-        let prevDate = calendar.date(byAdding: range.component, value: -1, to: referenceDate) ?? referenceDate
-        switch range {
-        case .month:
-            return Self.shortMonthFormatter.string(from: prevDate)
-        case .year:
-            return Self.yearFormatter.string(from: prevDate)
-        }
+        InsightsBoardCopy.previousComparisonLabel(
+            isYear: range == .year,
+            referenceDate: referenceDate,
+            now: Date(),
+            calendar: calendar
+        )
     }
 
     private var totalDaysElapsedInPeriod: Int {
@@ -1038,12 +1090,6 @@ struct ReadingInsightsView: View {
     private static let monthYearFormatter: DateFormatter = {
         let f = DateFormatter()
         f.setLocalizedDateFormatFromTemplate("LLLL y")
-        return f
-    }()
-
-    private static let shortMonthFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.setLocalizedDateFormatFromTemplate("LLL")
         return f
     }()
 
