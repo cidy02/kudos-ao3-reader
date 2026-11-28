@@ -10,10 +10,17 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, readonly) NSString *text;
 @property (nonatomic, copy, readonly) NSArray<NSValue *> *italicRanges;
 @property (nonatomic, copy, readonly) NSArray<NSValue *> *boldRanges;
+@property (nonatomic, readonly) BOOL isCentered;
+@property (nonatomic, readonly) BOOL isLargerThanBody;
 
 - (instancetype)initWithText:(NSString *)text
                 italicRanges:(NSArray<NSValue *> *)italicRanges
-                  boldRanges:(NSArray<NSValue *> *)boldRanges NS_DESIGNATED_INITIALIZER;
+                  boldRanges:(NSArray<NSValue *> *)boldRanges
+                  isCentered:(BOOL)isCentered
+            isLargerThanBody:(BOOL)isLargerThanBody NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithText:(NSString *)text
+                italicRanges:(NSArray<NSValue *> *)italicRanges
+                  boldRanges:(NSArray<NSValue *> *)boldRanges;
 - (instancetype)init NS_UNAVAILABLE;
 
 @end

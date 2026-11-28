@@ -46,14 +46,6 @@ nonisolated enum PDFWorkConverter {
         let cleaned = PDFParagraphRepair.withoutRunningHeadersAndFooters(pages)
         let repaired = PDFParagraphRepair.joinBrokenParagraphs(cleaned)
 
-        let chapters = (outlineChapters(of: document, pageBlocks: repaired)
-            ?? textHeuristicChapters(pageBlocks: repaired, fallbackTitle: fallbackTitle))
-            .map(withoutEchoedTitle)
-        guard !chapters.isEmpty else { throw ImportedDocumentConverter.ConversionError.noReadableText }
-
-        var work = metadata(of: document, fallbackTitle: fallbackTitle)
-        var finalChapters = chapters
-
         // calibre and FanFicFare open an exported fic with a metadata page, and it is
         // the only place a converted PDF can learn it came from fanfiction.net — which
         // is what the Library's origin badge reads.
@@ -64,7 +56,21 @@ nonisolated enum PDFWorkConverter {
         // value and produced junk like a rating of "MStatus: Complete".
         let rawFirstPage = KudosMuPDF.linesPerPage(forPDFAtPath: url.path)?.first
             ?? lines(of: document.page(at: 0)?.string ?? "")
-        if let front = CalibreMetadataPage.parse(lines: rawFirstPage) {
+        let front = CalibreMetadataPage.parse(lines: rawFirstPage)
+
+        let chapters = (outlineChapters(of: document, pageBlocks: repaired)
+            ?? textHeuristicChapters(
+                pageBlocks: repaired,
+                fallbackTitle: fallbackTitle,
+                firstPageIsMetadata: front != nil
+            ))
+            .map(withoutEchoedTitle)
+        guard !chapters.isEmpty else { throw ImportedDocumentConverter.ConversionError.noReadableText }
+
+        var work = metadata(of: document, fallbackTitle: fallbackTitle)
+        var finalChapters = chapters
+
+        if let front {
             work = front.merged(into: work)
             // Re-render the preface from the parsed fields: the raw block is a label
             // list that reads badly as prose, and every value in it is now metadata.
@@ -573,7 +579,8 @@ nonisolated enum PDFWorkConverter {
     /// there is only one place where "what looks like a chapter heading" is decided.
     private static func textHeuristicChapters(
         pageBlocks: [[PDFStyledBlock]],
-        fallbackTitle: String
+        fallbackTitle: String,
+        firstPageIsMetadata: Bool = false
     ) -> [EPUBBuilder.Chapter] {
         // `PlainTextWorkConverter` treats a `* * *` line as a chapter divider (right for .txt imports), which would turn
         // every scene break in a PDF without an outline into a new untitled chapter; a placeholder carries each break
@@ -583,9 +590,21 @@ nonisolated enum PDFWorkConverter {
             .flatMap(\.self)
             .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .map { $0.text == separator ? PDFStyledBlock(text: sceneBreakPlaceholder) : $0 }
+
+        if !blocks.contains(where: { PlainTextWorkConverter.isChapterHeading($0.text) }),
+           let visual = visualHeadingChapters(
+               pageBlocks: pageBlocks,
+               fallbackTitle: fallbackTitle,
+               firstPageIsMetadata: firstPageIsMetadata
+           ) {
+            return visual
+        }
+
         guard let result = try? PlainTextWorkConverter.convert(
             blocks: blocks,
-            fallbackTitle: fallbackTitle
+            fallbackTitle: fallbackTitle,
+            leadingTitle: prefaceTitle,
+            sceneBreakPlaceholder: sceneBreakPlaceholder
         ) else { return [] }
         let marker = "<p>\(sceneBreakPlaceholder)</p>"
         let restored = "<p>\(separator)</p>"
@@ -593,7 +612,7 @@ nonisolated enum PDFWorkConverter {
             let body = replacingInternalNewlinesWithBreaks(
                 $0.bodyXHTML.replacingOccurrences(of: marker, with: restored)
             )
-            return .init(title: $0.title, bodyXHTML: body)
+            return EPUBBuilder.Chapter(title: $0.title, bodyXHTML: body)
         }
     }
 
@@ -632,5 +651,139 @@ nonisolated enum PDFWorkConverter {
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
         )
+    }
+}
+
+// MARK: - Visual unnumbered chapter headings
+
+private extension PDFWorkConverter {
+    static let nonHeadingLabels: Set<String> = [
+        "the end", "end", "fin", "chapter list", "(back to chapter list)", "table of contents"
+    ]
+
+    /// Fallback for PDFs with no outline and no explicit numbered headings (`Chapter 1`, `Part One`, `1. Title`).
+    /// Splits on visually prominent chapter headings (bold centered or larger display headings) when at least
+    /// two chapters with body content are present, keeping any leading front matter as `"Preface"`.
+    static func visualHeadingChapters(
+        pageBlocks: [[PDFStyledBlock]],
+        fallbackTitle: String,
+        firstPageIsMetadata: Bool = false
+    ) -> [EPUBBuilder.Chapter]? {
+        let firstPageIsFrontMatter = firstPageIsMetadata
+            || (pageBlocks.first.map(isFrontMatterPage) ?? false)
+        let separator = PDFParagraphRepair.normalizedSeparator
+
+        var flattened: [(block: PDFStyledBlock, isHeading: Bool)] = []
+        var headingCount = 0
+        for (pageIndex, page) in pageBlocks.enumerated() {
+            let nonEmpty = page.map { $0.trimmed() }.filter { !$0.text.isEmpty }
+            for (blockIndex, block) in nonEmpty.enumerated() {
+                let isHeading = isVisualChapterHeading(
+                    block,
+                    pageIndex: pageIndex,
+                    blockIndex: blockIndex,
+                    firstPageIsFrontMatter: firstPageIsFrontMatter
+                )
+                if isHeading { headingCount += 1 }
+                flattened.append((block, isHeading))
+            }
+        }
+        guard headingCount >= 2 else { return nil }
+
+        var chapters: [EPUBBuilder.Chapter] = []
+        var currentTitle = ""
+        var currentBlocks: [PDFStyledBlock] = []
+        var firstChapterHadNoHeading = false
+        var recognizedChapterCount = 0
+
+        func flush() {
+            guard !currentBlocks.isEmpty else { return }
+            let body = replacingInternalNewlinesWithBreaks(
+                HTMLWorkSanitizer.styledParagraphs(from: currentBlocks)
+            )
+            guard !body.isEmpty else {
+                currentBlocks = []
+                return
+            }
+            if chapters.isEmpty, currentTitle.isEmpty {
+                firstChapterHadNoHeading = true
+            } else if !currentTitle.isEmpty {
+                recognizedChapterCount += 1
+            }
+            let title = currentTitle.isEmpty ? fallbackTitle : currentTitle
+            chapters.append(EPUBBuilder.Chapter(title: title, bodyXHTML: body))
+            currentBlocks = []
+        }
+
+        for (block, isHeading) in flattened {
+            if isHeading {
+                let nextTitle = normalizedSingleLine(block.text)
+                if !currentTitle.isEmpty,
+                   !currentBlocks.isEmpty,
+                   nextTitle.caseInsensitiveCompare(currentTitle) == .orderedSame,
+                   currentBlocks.allSatisfy({ $0.text == separator || PDFParagraphRepair.isSeparator($0.text) }) {
+                    currentBlocks.append(block)
+                    continue
+                }
+                flush()
+                currentTitle = nextTitle
+            } else {
+                currentBlocks.append(block)
+            }
+        }
+        flush()
+
+        guard recognizedChapterCount >= 2 else { return nil }
+        if firstChapterHadNoHeading, chapters.count > 1 {
+            chapters[0] = EPUBBuilder.Chapter(title: prefaceTitle, bodyXHTML: chapters[0].bodyXHTML)
+        }
+        return chapters
+    }
+
+    static func isFrontMatterPage(_ blocks: [PDFStyledBlock]) -> Bool {
+        let texts = blocks.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        guard !texts.isEmpty else { return false }
+        if CalibreMetadataPage.parse(lines: texts) != nil {
+            return true
+        }
+        if texts.count >= 2 {
+            let second = texts[1].lowercased()
+            if second.hasPrefix("by ") || second.hasPrefix("by:") {
+                return true
+            }
+        }
+        return false
+    }
+
+    static func isVisualChapterHeading(
+        _ block: PDFStyledBlock,
+        pageIndex: Int,
+        blockIndex: Int,
+        firstPageIsFrontMatter: Bool
+    ) -> Bool {
+        if pageIndex == 0, firstPageIsFrontMatter { return false }
+        let raw = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty,
+              !raw.contains("\n"),
+              raw.count <= maxOutlineTitleLength,
+              raw.contains(where: \.isLetter),
+              !PDFParagraphRepair.isSeparator(raw),
+              !AuthorNoteDetector.noteIndices(in: [raw]).contains(0)
+        else { return false }
+
+        let candidate = normalizedSingleLine(raw)
+        if looksLikeProseParagraph(candidate) { return false }
+        if let last = candidate.last, ".…,;:".contains(last) { return false }
+        let lowered = candidate.lowercased()
+        if lowered.hasPrefix("by ") || lowered.hasPrefix("by:") || nonHeadingLabels.contains(lowered) {
+            return false
+        }
+
+        let fullyBold = isFullyStyled(block.boldRanges, in: block.text)
+        let visuallyDistinct = (fullyBold && block.isCentered)
+            || (block.isLargerThanBody && (block.isCentered || fullyBold))
+        guard visuallyDistinct else { return false }
+
+        return blockIndex == 0 || (block.isLargerThanBody && block.isCentered)
     }
 }

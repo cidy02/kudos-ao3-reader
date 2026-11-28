@@ -8,14 +8,28 @@
 
 - (instancetype)initWithText:(NSString *)text
                 italicRanges:(NSArray<NSValue *> *)italicRanges
-                  boldRanges:(NSArray<NSValue *> *)boldRanges {
+                  boldRanges:(NSArray<NSValue *> *)boldRanges
+                  isCentered:(BOOL)isCentered
+            isLargerThanBody:(BOOL)isLargerThanBody {
     self = [super init];
     if (self != nil) {
         _text = [text copy];
         _italicRanges = [italicRanges copy];
         _boldRanges = [boldRanges copy];
+        _isCentered = isCentered;
+        _isLargerThanBody = isLargerThanBody;
     }
     return self;
+}
+
+- (instancetype)initWithText:(NSString *)text
+                italicRanges:(NSArray<NSValue *> *)italicRanges
+                  boldRanges:(NSArray<NSValue *> *)boldRanges {
+    return [self initWithText:text
+                 italicRanges:italicRanges
+                   boldRanges:boldRanges
+                   isCentered:NO
+             isLargerThanBody:NO];
 }
 
 @end
@@ -193,11 +207,15 @@ static NSArray<NSValue *> *KudosNormalizeRanges(NSString *text, NSArray<NSValue 
 
 static KudosPDFBlock *KudosMakePDFBlock(NSString *text,
                                         NSArray<NSValue *> *italicRaw,
-                                        NSArray<NSValue *> *boldRaw) {
+                                        NSArray<NSValue *> *boldRaw,
+                                        BOOL isCentered,
+                                        BOOL isLargerThanBody) {
     NSString *copy = [text copy];
     return [[KudosPDFBlock alloc] initWithText:copy
                                   italicRanges:KudosNormalizeRanges(copy, italicRaw)
-                                    boldRanges:KudosNormalizeRanges(copy, boldRaw)];
+                                    boldRanges:KudosNormalizeRanges(copy, boldRaw)
+                                    isCentered:isCentered
+                              isLargerThanBody:isLargerThanBody];
 }
 
 /// Appends one structured-text line's characters to `buffer`, optionally recording UTF-16
@@ -314,6 +332,12 @@ typedef struct {
     BOOL isEdgeBlankBlock;
 } KudosGapCandidate;
 
+typedef struct {
+    NSUInteger pageIndex;
+    NSUInteger entryIndex;
+    float lineHeight;
+} KudosSingleLineBlockInfo;
+
 static int KudosCompareRules(const void *va, const void *vb) {
     float ay = ((const KudosRule *)va)->y;
     float by = ((const KudosRule *)vb)->y;
@@ -413,41 +437,6 @@ static float KudosFirstWordWidth(fz_stext_line *line) {
     return inWord ? (maxX - minX) : 0.0f;
 }
 
-/// Typical prose line width on `page`, used to separate wrapped prose from deliberate
-/// short lines (verse/lyrics). Falls back to 65% of page width on poem-only pages where
-/// every line is short.
-static float KudosPageLineMeasure(fz_stext_page *page) {
-    float pageWidth = page->mediabox.x1 - page->mediabox.x0;
-    if (pageWidth < 1.0f) {
-        return 0.0f;
-    }
-    NSMutableData *widthsData = [NSMutableData data];
-    for (fz_stext_block *block = page->first_block; block != NULL; block = block->next) {
-        if (block->type != FZ_STEXT_BLOCK_TEXT || KudosIsBlockWhitespaceOnly(block)) {
-            continue;
-        }
-        for (fz_stext_line *line = block->u.t.first_line; line != NULL; line = line->next) {
-            if (KudosIsLineWhitespaceOnly(line)) {
-                continue;
-            }
-            float width = line->bbox.x1 - line->bbox.x0;
-            if (width > 0.0f) {
-                [widthsData appendBytes:&width length:sizeof(width)];
-            }
-        }
-    }
-    NSUInteger count = widthsData.length / sizeof(float);
-    if (count == 0) {
-        return pageWidth * 0.65f;
-    }
-    float *widths = widthsData.mutableBytes;
-    if (count > 1) {
-        qsort(widths, count, sizeof(float), KudosCompareFloat);
-    }
-    float p90 = widths[(NSUInteger)(0.9f * (float)(count - 1))];
-    return (p90 >= pageWidth * 0.45f) ? p90 : MAX(p90, pageWidth * 0.65f);
-}
-
 /// The page's top and bottom margin bands, shared by the header/footer and page-number rules so they agree.
 static const float KudosTopMarginBand = 0.065f;
 static const float KudosBottomMarginBand = 0.08f;
@@ -478,6 +467,72 @@ static BOOL KudosIsMarginPageNumberLine(fz_stext_line *line, fz_stext_page *page
         }
     }
     return digits >= 1 && digits <= 4 && others <= 6;
+}
+
+/// True when every line in `block` is whitespace-only or a margin page number.
+/// Skipped before scene-break rule emission so a bottom-margin page-number stream drawn
+/// ahead of the body (calibre `--pdf-page-numbers`) cannot emit mid-page `<hr>` rules at index 0.
+static BOOL KudosIsBlockSkippable(fz_stext_block *block, fz_stext_page *page) {
+    for (fz_stext_line *line = block->u.t.first_line; line != NULL; line = line->next) {
+        if (!KudosIsLineWhitespaceOnly(line) && !KudosIsMarginPageNumberLine(line, page)) {
+            return NO;
+        }
+    }
+    return YES;
+}
+
+/// Typical prose line width on `page`, used to separate wrapped prose from deliberate
+/// short lines (verse/lyrics). Falls back to 65% of page width on poem-only pages where
+/// every line is short.
+static float KudosPageLineMeasure(fz_stext_page *page) {
+    float pageWidth = page->mediabox.x1 - page->mediabox.x0;
+    if (pageWidth < 1.0f) {
+        return 0.0f;
+    }
+    NSMutableData *widthsData = [NSMutableData data];
+    for (fz_stext_block *block = page->first_block; block != NULL; block = block->next) {
+        if (block->type != FZ_STEXT_BLOCK_TEXT || KudosIsBlockSkippable(block, page)) {
+            continue;
+        }
+        for (fz_stext_line *line = block->u.t.first_line; line != NULL; line = line->next) {
+            if (KudosIsLineWhitespaceOnly(line) || KudosIsMarginPageNumberLine(line, page)) {
+                continue;
+            }
+            float width = line->bbox.x1 - line->bbox.x0;
+            if (width > 0.0f) {
+                [widthsData appendBytes:&width length:sizeof(width)];
+            }
+        }
+    }
+    NSUInteger count = widthsData.length / sizeof(float);
+    if (count == 0) {
+        return pageWidth * 0.65f;
+    }
+    float *widths = widthsData.mutableBytes;
+    if (count > 1) {
+        qsort(widths, count, sizeof(float), KudosCompareFloat);
+    }
+    float p90 = widths[(NSUInteger)(0.9f * (float)(count - 1))];
+    return (p90 >= pageWidth * 0.45f) ? p90 : MAX(p90, pageWidth * 0.65f);
+}
+
+/// True when a single line is visibly centered on `page` (narrower than full prose measure,
+/// inset from both page edges, with balanced left/right margins).
+static BOOL KudosIsLineCentered(fz_stext_line *line, fz_stext_page *page, float pageMeasure) {
+    float pageWidth = page->mediabox.x1 - page->mediabox.x0;
+    if (pageWidth < 1.0f || pageMeasure < 1.0f) {
+        return NO;
+    }
+    float lineWidth = line->bbox.x1 - line->bbox.x0;
+    if (lineWidth <= 0.0f || lineWidth >= pageMeasure * 0.85f) {
+        return NO;
+    }
+    float leftMargin = line->bbox.x0 - page->mediabox.x0;
+    float rightMargin = page->mediabox.x1 - line->bbox.x1;
+    if (leftMargin <= pageWidth * 0.10f || rightMargin <= pageWidth * 0.10f) {
+        return NO;
+    }
+    return fabsf(leftMargin - rightMargin) <= pageWidth * 0.08f;
 }
 
 /// Keeps a deliberate line break (`\n`) when a non-final line ends well short of the
@@ -686,6 +741,7 @@ static BOOL KudosHasTextInVerticalBand(fz_stext_page *page,
     NSMutableData *allGapsData = [NSMutableData data];
     NSMutableData *allLineHeightsData = [NSMutableData data];
     NSMutableData *gapCandidatesData = [NSMutableData data];
+    NSMutableData *singleLineBlocksData = [NSMutableData data];
     fz_document *doc = NULL;
 
     // MuPDF signals errors by longjmp, so every call that can throw sits inside
@@ -719,7 +775,7 @@ static BOOL KudosHasTextInVerticalBand(fz_stext_page *page,
                 fz_stext_block *firstBodyBlock = NULL;
                 fz_stext_block *lastBodyBlock = NULL;
                 for (fz_stext_block *block = stext->first_block; block != NULL; block = block->next) {
-                    if (block->type != FZ_STEXT_BLOCK_TEXT || KudosIsBlockWhitespaceOnly(block)) {
+                    if (block->type != FZ_STEXT_BLOCK_TEXT || KudosIsBlockSkippable(block, stext)) {
                         continue;
                     }
                     if (firstTextBlock == NULL) {
@@ -733,7 +789,7 @@ static BOOL KudosHasTextInVerticalBand(fz_stext_page *page,
                         lastBodyBlock = block;
                     }
                     for (fz_stext_line *line = block->u.t.first_line; line != NULL; line = line->next) {
-                        if (KudosIsLineWhitespaceOnly(line)) {
+                        if (KudosIsLineWhitespaceOnly(line) || KudosIsMarginPageNumberLine(line, stext)) {
                             continue;
                         }
                         float lh = line->bbox.y1 - line->bbox.y0;
@@ -752,15 +808,21 @@ static BOOL KudosHasTextInVerticalBand(fz_stext_page *page,
                     if (block->type != FZ_STEXT_BLOCK_TEXT) {
                         continue;
                     }
-                    if (KudosIsBlockWhitespaceOnly(block)) {
+                    if (KudosIsBlockSkippable(block, stext)) {
                         continue;
                     }
-                    // Rules above this block come first, in page order.
+                    // Rules above this block come first, in page order. A bottom-margin footer stream
+                    // drawn before the body must not pull mid-page rules ahead of the page's opening text.
+                    BOOL skipRulesBeforeEarlyFooter = (prevTextBlock == NULL
+                        && firstBodyBlock != NULL
+                        && KudosIsInBottomMargin(block, stext));
                     BOOL emittedRuleBeforeBlock = NO;
-                    while (nextRule < rules.count && rules[nextRule].floatValue < block->bbox.y0) {
-                        [entries addObject:KudosSceneBreakBlock()];
-                        nextRule++;
-                        emittedRuleBeforeBlock = YES;
+                    if (!skipRulesBeforeEarlyFooter) {
+                        while (nextRule < rules.count && rules[nextRule].floatValue < block->bbox.y0) {
+                            [entries addObject:KudosSceneBreakBlock()];
+                            nextRule++;
+                            emittedRuleBeforeBlock = YES;
+                        }
                     }
                     if (prevTextBlock != NULL && !emittedRuleBeforeBlock) {
                         float gap = block->bbox.y0 - prevTextBlock->bbox.y1;
@@ -801,19 +863,33 @@ static BOOL KudosHasTextInVerticalBand(fz_stext_page *page,
                     NSMutableArray<NSValue *> *italicRaw = [NSMutableArray array];
                     NSMutableArray<NSValue *> *boldRaw = [NSMutableArray array];
                     fz_stext_line *prevLine = NULL;
+                    fz_stext_line *segmentFirstLine = NULL;
+                    NSUInteger segmentLineCount = 0;
                     BOOL keptLine = NO;
                     for (fz_stext_line *line = block->u.t.first_line; line != NULL; line = line->next) {
                         if (KudosIsLineWhitespaceOnly(line) || KudosIsMarginPageNumberLine(line, stext)) {
                             continue;
                         }
                         keptLine = YES;
-                        if (nextRule < rules.count && rules[nextRule].floatValue < line->bbox.y0) {
+                        if (!skipRulesBeforeEarlyFooter && nextRule < rules.count && rules[nextRule].floatValue < line->bbox.y0) {
                             if (text.length > 0) {
-                                [entries addObject:KudosMakePDFBlock(text, italicRaw, boldRaw)];
+                                BOOL centered = (segmentLineCount == 1 && segmentFirstLine != NULL)
+                                    && KudosIsLineCentered(segmentFirstLine, stext, pageMeasure);
+                                NSUInteger entryIndex = entries.count;
+                                [entries addObject:KudosMakePDFBlock(text, italicRaw, boldRaw, centered, NO)];
+                                if (segmentLineCount == 1 && segmentFirstLine != NULL) {
+                                    float lh = segmentFirstLine->bbox.y1 - segmentFirstLine->bbox.y0;
+                                    if (lh > 2.0f) {
+                                        KudosSingleLineBlockInfo info = { (NSUInteger)index, entryIndex, lh };
+                                        [singleLineBlocksData appendBytes:&info length:sizeof(info)];
+                                    }
+                                }
                                 [text setString:@""];
                                 [italicRaw removeAllObjects];
                                 [boldRaw removeAllObjects];
                                 prevLine = NULL;
+                                segmentFirstLine = NULL;
+                                segmentLineCount = 0;
                             }
                             while (nextRule < rules.count && rules[nextRule].floatValue < line->bbox.y0) {
                                 [entries addObject:KudosSceneBreakBlock()];
@@ -824,11 +900,25 @@ static BOOL KudosHasTextInVerticalBand(fz_stext_page *page,
                             BOOL keepBreak = KudosShouldKeepLineBreak(prevLine, line, pageMeasure);
                             [text appendString:keepBreak ? @"\n" : @" "];
                         }
+                        if (segmentLineCount == 0) {
+                            segmentFirstLine = line;
+                        }
+                        segmentLineCount++;
                         KudosAppendLine(ctx, line, text, italicRaw, boldRaw);
                         prevLine = line;
                     }
                     if (text.length > 0) {
-                        [entries addObject:KudosMakePDFBlock(text, italicRaw, boldRaw)];
+                        BOOL centered = (segmentLineCount == 1 && segmentFirstLine != NULL)
+                            && KudosIsLineCentered(segmentFirstLine, stext, pageMeasure);
+                        NSUInteger entryIndex = entries.count;
+                        [entries addObject:KudosMakePDFBlock(text, italicRaw, boldRaw, centered, NO)];
+                        if (segmentLineCount == 1 && segmentFirstLine != NULL) {
+                            float lh = segmentFirstLine->bbox.y1 - segmentFirstLine->bbox.y0;
+                            if (lh > 2.0f) {
+                                KudosSingleLineBlockInfo info = { (NSUInteger)index, entryIndex, lh };
+                                [singleLineBlocksData appendBytes:&info length:sizeof(info)];
+                            }
+                        }
                     }
                     if (block == lastBodyBlock) {
                         lastBodyEndEntryIndex = entries.count;
@@ -924,20 +1014,41 @@ static BOOL KudosHasTextInVerticalBand(fz_stext_page *page,
 
     fz_drop_context(ctx);
 
+    NSUInteger lineHeightCount = allLineHeightsData.length / sizeof(float);
+    float docMedianLineHeight = 0.0f;
+    if (lineHeightCount > 0) {
+        float *allLineHeights = allLineHeightsData.mutableBytes;
+        qsort(allLineHeights, lineHeightCount, sizeof(float), KudosCompareFloat);
+        docMedianLineHeight = allLineHeights[lineHeightCount / 2];
+
+        // Tag single-line display headings clearly taller than body text before gap breaks shift indices.
+        NSUInteger singleCount = singleLineBlocksData.length / sizeof(KudosSingleLineBlockInfo);
+        const KudosSingleLineBlockInfo *singles = singleLineBlocksData.bytes;
+        for (NSUInteger i = 0; i < singleCount; i++) {
+            KudosSingleLineBlockInfo info = singles[i];
+            if (info.lineHeight >= docMedianLineHeight * 1.12f
+                && info.pageIndex < pages.count
+                && info.entryIndex < pages[info.pageIndex].count) {
+                KudosPDFBlock *existing = pages[info.pageIndex][info.entryIndex];
+                pages[info.pageIndex][info.entryIndex] =
+                    [[KudosPDFBlock alloc] initWithText:existing.text
+                                           italicRanges:existing.italicRanges
+                                             boldRanges:existing.boldRanges
+                                             isCentered:existing.isCentered
+                                       isLargerThanBody:YES];
+            }
+        }
+    }
+
     // Insert scene breaks for empty vertical gaps clearly larger than the document's
     // normal paragraph gap (and at least two line heights tall), plus standalone
     // centered blank-paragraph blocks at page edges.
     NSUInteger gapCount = allGapsData.length / sizeof(float);
-    NSUInteger lineHeightCount = allLineHeightsData.length / sizeof(float);
     NSUInteger candidateCount = gapCandidatesData.length / sizeof(KudosGapCandidate);
     if (gapCount >= 3 && lineHeightCount > 0 && candidateCount > 0) {
         float *allGaps = allGapsData.mutableBytes;
         qsort(allGaps, gapCount, sizeof(float), KudosCompareFloat);
         float docMedianGap = allGaps[gapCount / 2];
-
-        float *allLineHeights = allLineHeightsData.mutableBytes;
-        qsort(allLineHeights, lineHeightCount, sizeof(float), KudosCompareFloat);
-        float docMedianLineHeight = allLineHeights[lineHeightCount / 2];
 
         KudosGapCandidate *candidates = gapCandidatesData.mutableBytes;
         if (candidateCount > 1) {
