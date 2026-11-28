@@ -144,13 +144,16 @@ struct InsightsExclusionsView: View {
     @ViewBuilder
     private var fandomSection: some View {
         if !filteredFandoms.isEmpty {
-            Section("Fandoms") {
+            Section {
                 ForEach(filteredFandoms, id: \.self) { fandom in
                     let selected = isSelected(fandom, in: excludedFandoms)
                     exclusionToggleRow(title: fandom, subtitle: nil, isExcluded: selected) {
                         toggleName(fandom, in: &excludedFandoms, kind: .fandoms)
                     }
                 }
+            } header: {
+                Text("Fandoms")
+                    .textCase(nil)
             }
             .appThemedRows()
         }
@@ -159,7 +162,7 @@ struct InsightsExclusionsView: View {
     @ViewBuilder
     private var worksSection: some View {
         if !filteredWorks.isEmpty {
-            Section("Works") {
+            Section {
                 ForEach(filteredWorks) { item in
                     let selected = isSelected(item.id, in: excludedWorkIDs)
                     exclusionToggleRow(
@@ -170,6 +173,9 @@ struct InsightsExclusionsView: View {
                         toggleWorkID(item.id)
                     }
                 }
+            } header: {
+                Text("Works")
+                    .textCase(nil)
             }
             .appThemedRows()
         }
@@ -178,13 +184,16 @@ struct InsightsExclusionsView: View {
     @ViewBuilder
     private var tagsSection: some View {
         if !filteredTags.isEmpty {
-            Section("Tags & Ships") {
+            Section {
                 ForEach(filteredTags, id: \.self) { tag in
                     let selected = isSelected(tag, in: excludedTags)
                     exclusionToggleRow(title: tag, subtitle: nil, isExcluded: selected) {
                         toggleName(tag, in: &excludedTags, kind: .tags)
                     }
                 }
+            } header: {
+                Text("Tags & Ships")
+                    .textCase(nil)
             }
             .appThemedRows()
         }
@@ -214,6 +223,7 @@ struct InsightsExclusionsView: View {
                 Image(systemName: isExcluded ? "minus.circle.fill" : "circle")
                     .font(.system(size: 19))
                     .foregroundStyle(isExcluded ? theme.accentInk : Color.secondary.opacity(0.4))
+                    .accessibilityHidden(true)
             }
             .contentShape(Rectangle())
         }
