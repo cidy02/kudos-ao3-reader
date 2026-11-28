@@ -377,13 +377,16 @@ struct ReadingInsightsView: View {
                     Text(periodTitle)
                         .font(.title2.bold())
                         .foregroundStyle(.primary)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                        // Two lines at every size: the column shares the row with the Range menu and
+                        // both arrows, and "incl. hidden" at the end of the subtitle says the figures
+                        // count hidden works, so it must never be the part that truncates.
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
                         .accessibilityAddTraits(.isHeader)
 
                     Text(periodSubtitle)
                         .font(.footnote)
                         .foregroundStyle(.secondaryInk)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -532,8 +535,10 @@ struct ReadingInsightsView: View {
         LengthOfWhatYouReadCard(mix: insights.lengthMix)
 
         if !finishedWorksInPeriod.isEmpty {
+            // `uniquingKeysWith`: `uniqueKeysWithValues` traps on a repeated id, and this is only a label.
             let rereadFinishCounts = Dictionary(
-                uniqueKeysWithValues: (habitsInsights?.rereads ?? []).map { ($0.id, $0.finishCount) }
+                (habitsInsights?.rereads ?? []).map { ($0.id, $0.finishCount) },
+                uniquingKeysWith: { first, _ in first }
             )
             FinishedInPeriodSection(
                 works: finishedWorksInPeriod,

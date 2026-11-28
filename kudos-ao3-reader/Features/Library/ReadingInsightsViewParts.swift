@@ -405,7 +405,7 @@ nonisolated enum InsightsBoardCopy {
         let fandomPrefix = fandom.isEmpty
             ? ""
             : "\(discreetMode ? discreetMasker.fandom(fandom) : fandom) · "
-        return "\(fandomPrefix)\(ReadingInsights.compactWordsLabel(totalWordsAcrossReads)) words across reads"
+        return "\(fandomPrefix)\(compactWords(totalWordsAcrossReads)) words across reads"
     }
 
     /// `Insights-Habits` Stopped Reading header right: `"3 this month · 23 in all"`.
@@ -427,12 +427,20 @@ nonisolated enum InsightsBoardCopy {
     /// `Insights-Library` No Longer on AO3 subtitle: `"14 works · 1.1M words · 12 kept as your last copy"`.
     static func noLongerOnAO3Summary(count: Int, words: Int, lastCopies: Int) -> String {
         "\(countLabel(count, singular: "work", plural: "works")) · "
-            + "\(ReadingInsights.compactWordsLabel(words)) words · \(lastCopies) kept as your last copy"
+            + "\(compactWords(words)) words · \(lastCopies) kept as your last copy"
     }
 
     /// `Insights-Library` Authors row detail: `"9 read · 412k words · 7 finished"`.
     static func authorDetail(works: Int, words: Int, finished: Int) -> String {
-        "\(works) read · \(ReadingInsights.compactWordsLabel(words)) words · \(finished) finished"
+        "\(works) read · \(compactWords(words)) words · \(finished) finished"
+    }
+
+    /// The boards write `412k`, `87.5k` and `1.1M`; `compactWordsLabel` always keeps one decimal
+    /// (`412.0k`). Same rounding, trailing `.0` dropped; formats only.
+    static func compactWords(_ words: Int) -> String {
+        ReadingInsights.compactWordsLabel(words)
+            .replacingOccurrences(of: ".0k", with: "k")
+            .replacingOccurrences(of: ".0M", with: "M")
     }
 
     /// `Insights-Library` `"since July"` (same year) or `"since Jul 2025"` (earlier year).
@@ -2865,6 +2873,14 @@ struct HabitsCalendarCard: View {
         Self.isContiguousMonthGrid(days: days, isMonthPeriod: isMonthPeriod)
     }
 
+    /// Day cells only show a number, so VoiceOver gets the grid as one chart (as the board's role="img").
+    private var calendarAccessibilityLabel: String {
+        guard isMonthGrid, let first = days.first?.date else {
+            return "Reading days, each shaded by words read"
+        }
+        return "Calendar of \(first.formatted(.dateTime.month(.wide))) with each day shaded by words read"
+    }
+
     private var leadingBlankCount: Int {
         guard isMonthGrid, let firstDate = days.first?.date else { return 0 }
         // Calendar.weekday: 1 = Sun, 2 = Mon, ..., 7 = Sat -> Mon-first offset = (weekday + 5) % 7.
@@ -2952,6 +2968,8 @@ struct HabitsCalendarCard: View {
                     .accessibilityHidden(true)
                 }
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(calendarAccessibilityLabel)
 
             // Legend & Streak
             let footerLayout = dynamicTypeSize.isAccessibilitySize

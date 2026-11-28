@@ -901,7 +901,7 @@ struct HowInsightsAreCountedSheet: View {
                 "Where Everything Stands: Every library work lands in exactly one status, checked in order: Stopped, On Hold, Letting Chapters Stack, Finished, Caught Up, Reading, and Saved for Later.",
                 "Still reading?: Asks about a work partway through with unread posted chapters after your untouched threshold. A work is never marked stopped by itself.",
                 "Works in Progress and No Longer on AO3: WIPs are grouped as Active (within 6 months), Quiet (6–12 months), or Dormant (over a year). No Longer on AO3 counts confirmed last-copy and gone works only.",
-                "On Finished Works, Series and Authors: Kudos left is a lower bound (browser kudos are unseen until refreshed). Series uses fetched AO3 series part counts. Authors counts verified AO3 accounts and excludes orphan_account and anonymous works.",
+                "On Finished Works, Series and Authors: Kudos left is a lower bound (browser kudos are unseen until refreshed). Series uses fetched AO3 series part counts. Authors counts AO3 author accounts, not pseuds, and leaves out orphan_account and anonymous works.",
                 "How Finished Works Arrived and Found Early: Tracks where finished works came from (with each source’s finish rate) and finished works saved with under 500 kudos whose kudos have at least tripled since recording began."
             ]
         )

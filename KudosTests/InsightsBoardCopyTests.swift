@@ -349,8 +349,14 @@ struct InsightsBoardCopyTests {
 
         #expect(
             InsightsBoardCopy.authorDetail(works: 9, words: 412_000, finished: 7)
-                == "9 read · 412.0k words · 7 finished"
+                == "9 read · 412k words · 7 finished"
         )
+        // The boards write 412k, 87.5k and 1.1M: trailing ".0" goes, real decimals stay, small counts are untouched.
+        #expect(InsightsBoardCopy.compactWords(412_000) == "412k")
+        #expect(InsightsBoardCopy.compactWords(87_500) == "87.5k")
+        #expect(InsightsBoardCopy.compactWords(1_100_000) == "1.1M")
+        #expect(InsightsBoardCopy.compactWords(2_000_000) == "2M")
+        #expect(InsightsBoardCopy.compactWords(850) == "850")
 
         let jul2026 = date(year: 2026, month: 7, day: 15)
         let oct2026 = date(year: 2026, month: 10, day: 27)
@@ -368,16 +374,33 @@ struct InsightsBoardCopyTests {
         )
     }
 
-    @Test func howReadingInsightsAreCountedMatchesMetricsSpec() {
+    /// The sheet states numbers; each one is checked against the rule the code applies, so a change to
+    /// a rule fails here instead of leaving the sheet claiming the old figure.
+    @Test func howReadingInsightsAreCountedQuotesTheRulesTheCodeApplies() {
         #expect(HowInsightsAreCountedSheet.sheetTitle == "How Reading Insights Are Counted")
         let titles = HowInsightsAreCountedSheet.sections.map(\.title)
         #expect(titles == ["Device-Only Privacy", "Shared Rules", "Overview", "Taste", "Habits", "Library"])
         let allText = HowInsightsAreCountedSheet.sections.flatMap(\.paragraphs).joined(separator: " ")
-        #expect(allText.contains("4:00 to 4:00"))
-        #expect(allText.contains("15 seconds"))
-        #expect(allText.contains("5 minutes"))
-        #expect(allText.contains("70,000"))
-        #expect(allText.contains("20 measured chapters"))
-        #expect(allText.contains("lower bound"))
+
+        let boundary = ReadingInsights.dayBoundaryHour
+        #expect(allText.contains("\(boundary):00 to \(boundary):00"))
+
+        let mergeMinutes = Int(ReadingInsights.sittingMergeGapSeconds / 60)
+        #expect(allText.contains("under \(mergeMinutes) minutes apart"))
+
+        // Novels' worth: ÷ 70,000 to the nearest half, hidden under 35,000.
+        #expect(allText.contains("divided by 70,000"))
+        #expect(allText.contains("Hidden under 35,000 words"))
+        #expect(ReadingInsights.novelsWorth(words: 34_999) == nil)
+        #expect(ReadingInsights.novelsWorth(words: 35_000) == 0.5)
+        #expect(ReadingInsights.novelsWorth(words: 70_000) == 1.0)
+
+        // Skimmed / Peeked appear at 20 measured chapters of pace history, not before.
+        #expect(allText.contains("after 20 measured chapters"))
+        var timing = InsightsProvenance.ChapterTimingFigure()
+        timing.paceHistoryChapters = 19
+        #expect(!timing.canShowSkimAndPeek)
+        timing.paceHistoryChapters = 20
+        #expect(timing.canShowSkimAndPeek)
     }
 }
