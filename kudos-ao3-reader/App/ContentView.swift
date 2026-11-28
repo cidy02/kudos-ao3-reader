@@ -575,7 +575,7 @@ struct ContentView: View {
     #if os(iOS)
     private var readerSpeechAccessory: some View {
         let work = speechAccessoryWork
-        let concealed = work.map { privacyGate.isConcealed($0, enabled: hideMature) } ?? false
+        let concealed = speechMetadataIsConcealed
         let title = concealed || speech.sessionTitle.isEmpty ? "Reading Aloud" : speech.sessionTitle
         let subtitle = concealed ? nil : speech.accessorySubtitle
 
@@ -733,6 +733,11 @@ struct ContentView: View {
     private var speechAccessoryWork: SavedWork? {
         guard let workID = speech.sessionWorkID else { return nil }
         return savedWork(id: workID, in: modelContext)
+    }
+
+    /// Also hides the title from Now Playing on the Lock Screen (line `.onChange(of: speechMetadataIsConcealed)`).
+    private var speechMetadataIsConcealed: Bool {
+        speechAccessoryWork.map { privacyGate.isConcealed($0, enabled: hideMature) } ?? false
     }
 
     private func openSpeechReader() {
