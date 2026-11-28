@@ -252,9 +252,8 @@ extension CommentMarkup {
 
 // MARK: - Format bar
 
-/// The compact row artboards 1ba/1be pin to the bottom edge of the composer,
-/// directly above the keyboard: the six tags worth reaching for without opening
-/// anything, then the control that opens the full tray.
+/// The compact row artboard `Comment-Thread` pins to the bottom edge of the composer,
+/// directly above the keyboard: six formatting tiles, then the control that opens the full tray.
 ///
 /// Deliberately dumb — it holds the composer's two bindings and nothing else, so
 /// it can sit in a `safeAreaInset`, a toolbar, or the sheet body unchanged.
@@ -263,39 +262,55 @@ struct CommentFormatBar: View {
     @Binding var selection: TextSelection?
     var onOpenTray: () -> Void
 
-    @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    static let toolbarAccessibilityLabel = "Formatting"
+    static let moreFormattingLabel = "More formatting"
+
+    static func accessibilityLabel(for tag: CommentMarkupTag) -> String {
+        tag == .strike ? "Strikethrough" : tag.name
+    }
 
     var body: some View {
-        HStack(spacing: 2) {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // At AX sizes 7 equal-width tiles squeeze "Link" and single letters:
+                // keep full-width readable tiles in a horizontal scroll strip instead.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    buttonsRow(expandsToFill: false)
+                        .padding(.horizontal, SubjectMetrics.gutter)
+                }
+            } else {
+                buttonsRow(expandsToFill: true)
+                    .padding(.horizontal, SubjectMetrics.gutter)
+            }
+        }
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Self.toolbarAccessibilityLabel)
+    }
+
+    private func buttonsRow(expandsToFill: Bool) -> some View {
+        HStack(spacing: 6) {
             ForEach(CommentMarkupTag.quickBar) { tag in
                 Button {
                     apply(tag)
                 } label: {
-                    CommentFormatBarButtonFace(tag: tag)
+                    CommentFormatBarButtonFace(tag: tag, expandsToFill: expandsToFill)
                 }
                 .buttonStyle(.plain)
                 .layoutFreeHitTarget { apply(tag) }
-                .accessibilityLabel(tag.name)
+                .accessibilityLabel(Self.accessibilityLabel(for: tag))
             }
-
-            Spacer(minLength: 0)
 
             Button {
                 onOpenTray()
             } label: {
-                CommentFormatBarButtonFace(tag: nil)
+                CommentFormatBarButtonFace(tag: nil, expandsToFill: expandsToFill)
             }
             .buttonStyle(.plain)
             .layoutFreeHitTarget(action: onOpenTray)
-            .accessibilityLabel("More formatting")
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 52)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(theme.appTheme.glassStroke(0.10))
-                .frame(height: 0.5)
-                .accessibilityHidden(true)
+            .accessibilityLabel(Self.moreFormattingLabel)
         }
     }
 
@@ -304,34 +319,53 @@ struct CommentFormatBar: View {
     }
 }
 
-/// One transparent 1ba/1be toolbar face. The button and its 44pt hit area stay
-/// outside so this remains the single visual definition for all seven controls.
+/// One rounded formatting tile (`Comment-Thread`: 38 pt tall, 10 pt corner radius,
+/// `#F2F2F7` on Light / elevated card surface in Dark, OLED and Sepia).
 private struct CommentFormatBarButtonFace: View {
     var tag: CommentMarkupTag?
+    var expandsToFill: Bool = true
+
+    @Environment(ThemeManager.self) private var theme
+    @ScaledMetric(relativeTo: .callout) private var glyphSize: CGFloat = 16
 
     var body: some View {
         glyph
-            .foregroundStyle(.secondaryInk)
-            .frame(width: 34, height: 34)
-            .background(Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .foregroundStyle(Color.primary)
+            .padding(.horizontal, expandsToFill ? 4 : 12)
+            .frame(
+                minWidth: expandsToFill ? 0 : 44,
+                maxWidth: expandsToFill ? .infinity : nil,
+                minHeight: expandsToFill ? 38 : 44
+            )
+            .background(
+                theme.appTheme.shelfTileSurface,
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     @ViewBuilder
     private var glyph: some View {
         switch tag {
         case .bold:
-            Text("B").font(.system(size: 16, weight: .bold, design: .serif))
+            Text("B").font(.system(size: glyphSize, weight: .heavy))
         case .italic:
-            Text("I").font(.system(size: 16, design: .serif)).italic()
+            Text("I").font(.system(size: glyphSize, design: .serif)).italic()
         case .underline:
-            Text("U").font(.system(size: 16, design: .serif)).underline()
+            Text("U").font(.system(size: glyphSize, weight: .medium)).underline()
         case .strike:
-            Text("S").font(.system(size: 16, design: .serif)).strikethrough()
+            Text("S").font(.system(size: glyphSize, weight: .medium)).strikethrough()
+        case .link:
+            Text("Link")
+                .font(.system(size: glyphSize, weight: .medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        case .quote:
+            Text("“”").font(.system(size: glyphSize, weight: .medium))
         case let tag?:
-            Image(systemName: tag.symbol).font(.system(size: 18))
+            Image(systemName: tag.symbol).font(.system(size: glyphSize, weight: .medium))
         case nil:
-            Image(systemName: "ellipsis").font(.system(size: 18))
+            Image(systemName: "ellipsis").font(.system(size: glyphSize, weight: .medium))
         }
     }
 }

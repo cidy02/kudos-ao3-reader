@@ -408,9 +408,80 @@ nonisolated struct ReadingHistoryTimeline: Equatable, Sendable {
         return begun > 0 ? totalSeconds / Double(begun) : 0
     }
 
+    /// One tile in `History-Year`'s four-fact grid.
+    nonisolated struct YearFact: Equatable, Sendable, Identifiable {
+        let label: String
+        let value: String
+        var id: String { label }
+    }
+
     /// The busiest bucket, the earliest on a tie; `nil` when nothing was read.
     var peakBucket: Bucket? {
         buckets.filter { $0.seconds > 0 }.max { $0.seconds < $1.seconds }
+    }
+
+    /// History-Year's "Busiest month" fact ("June"), or nil when nothing was read.
+    func busiestMonthName(calendar: Calendar = .current) -> String? {
+        guard let peak = peakBucket else { return nil }
+        let name = Self.symbol(calendar.monthSymbols, calendar.component(.month, from: peak.start))
+        return name.isEmpty ? nil : name
+    }
+
+    /// Compact word figure matching `History-Year` ("4.1M", "118k", "850"):
+    /// lowercase `k` for thousands, uppercase `M` for millions.
+    static func compactWordCount(_ words: Int, locale: Locale = .autoupdatingCurrent) -> String {
+        let raw = max(0, words).formatted(
+            .number
+                .locale(locale)
+                .notation(.compactName)
+        )
+        if raw.hasSuffix("K") {
+            return String(raw.dropLast()) + "k"
+        }
+        return raw
+    }
+
+    /// The period summary line under the total duration:
+    /// - Week (board 02): "11 works · 2 finished · 9-day streak"
+    /// - Month (`History-Month`): "38 works · 9 finished · read on 24 of 28 days"
+    /// - Year (`History-Year`): "286 works · 74 finished · 4.1M words"
+    func summaryLine(locale: Locale = .autoupdatingCurrent) -> String {
+        var parts = [
+            "\(workCount) \(workCount == 1 ? "work" : "works")",
+            "\(finishedCount) finished"
+        ]
+        switch scope {
+        case .week:
+            if streakDays > 0 {
+                parts.append("\(streakDays)-day streak")
+            }
+        case .month:
+            let dayUnit = daysElapsed == 1 ? "day" : "days"
+            parts.append("read on \(daysRead) of \(daysElapsed) \(dayUnit)")
+        case .year:
+            if wordsRead > 0 {
+                parts.append("\(Self.compactWordCount(wordsRead, locale: locale)) words")
+            }
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// History-Year's four fact tiles in board order.
+    func yearFacts(
+        calendar: Calendar = .current,
+        locale: Locale = .autoupdatingCurrent
+    ) -> [YearFact] {
+        [
+            YearFact(label: "Busiest month", value: busiestMonthName(calendar: calendar) ?? "—"),
+            YearFact(label: "Most-read fandom", value: topFandom.map(FandomDisplayName.bareTitle) ?? "—"),
+            YearFact(
+                label: "Longest work finished",
+                value: longestFinishedWordCount > 0
+                    ? "\(Self.compactWordCount(longestFinishedWordCount, locale: locale)) words"
+                    : "—"
+            ),
+            YearFact(label: "Favourite time", value: favouriteTime?.title ?? "—")
+        ]
     }
 
     /// The chart as one sentence for VoiceOver ("This week: 4 hours 10 minutes,

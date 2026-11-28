@@ -33,6 +33,7 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(PrivacyGate.self) private var gate
     @Environment(\.calendar) private var calendar
+    @Environment(\.locale) private var locale
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("library.history.scope") private var scope: ReadingHistoryScope = .week
@@ -90,13 +91,13 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
                     timeline: timeline,
                     summary: timeline.chartSummary(periodName: spokenPeriodName(timeline), calendar: calendar)
                 )
-                .pageBodyRow(top: 14, gutter: SubjectMetrics.gutter)
+                .pageBodyRow(top: 22, gutter: SubjectMetrics.gutter)
                 if scope == .month {
                     mostRead(timeline, byID: byID)
                 }
                 if scope == .year, timeline.totalSeconds > 0 {
                     yearFacts(timeline)
-                        .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
+                        .pageBodyRow(top: 22, gutter: SubjectMetrics.gutter)
                 }
             }
 
@@ -141,7 +142,7 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
     // MARK: Summary
 
     private func periodSummary(_ timeline: ReadingHistoryTimeline) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 22) {
             SubjectSegmentedControl(
                 options: ReadingHistoryScope.allCases,
                 title: \.title,
@@ -156,7 +157,7 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
                         .font(.title.bold())
                         .monospacedDigit()
                         .contentTransition(.numericText())
-                    Text(summaryLine(timeline))
+                    Text(timeline.summaryLine(locale: locale))
                         .font(.footnote)
                         .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
@@ -170,26 +171,6 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
                 }
             }
         }
-    }
-
-    /// Board 02's "11 works · 2 finished · 9-day streak". Month adds how many of
-    /// its days had reading and Year how many words, as their boards do; a zero
-    /// streak or word count is left out rather than printed.
-    private func summaryLine(_ timeline: ReadingHistoryTimeline) -> String {
-        var parts = [
-            "\(timeline.workCount) \(timeline.workCount == 1 ? "work" : "works")",
-            "\(timeline.finishedCount) finished"
-        ]
-        if scope == .month {
-            parts.append("read on \(timeline.daysRead) of \(timeline.daysElapsed) days")
-        }
-        if scope == .year, timeline.wordsRead > 0 {
-            parts.append("\(timeline.wordsRead.formatted(.number.notation(.compactName))) words")
-        }
-        if timeline.streakDays > 0 {
-            parts.append("\(timeline.streakDays)-day streak")
-        }
-        return parts.joined(separator: " · ")
     }
 
     @ViewBuilder
@@ -243,38 +224,58 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
             .filter { entry in byID[entry.workID].map { !gate.isConcealed($0, enabled: hideMature) } ?? false }
             .prefix(3))
         if !entries.isEmpty {
-            SectionRuleHeader(title: "Most Read", count: entries.count)
+            SectionRuleHeader(title: "Most Read")
                 .pageBodyRow(top: 22, gutter: 0)
             ForEach(Array(entries.enumerated()), id: \.element.id) { rank, entry in
                 if let work = byID[entry.workID] {
-                    mostReadRow(entry, rank: rank + 1, work: work)
-                        .pageBodyRow(top: 10, gutter: SubjectMetrics.gutter)
+                    mostReadRow(entry, rank: rank + 1, work: work, showsSeparator: rank > 0)
+                        .pageBodyRow(top: rank == 0 ? 4 : 0, gutter: SubjectMetrics.gutter)
                 }
             }
         }
     }
 
     private func mostReadRow(
-        _ entry: ReadingHistoryTimeline.WorkTime, rank: Int, work: SavedWork
+        _ entry: ReadingHistoryTimeline.WorkTime, rank: Int, work: SavedWork, showsSeparator: Bool
     ) -> some View {
         let time = ReadingInsights.durationLabel(entry.seconds)
-        return HStack(spacing: 12) {
-            Text("\(rank)")
-                .font(.subheadline.bold())
-                .foregroundStyle(.secondaryInk)
-            VStack(alignment: .leading, spacing: 4) {
-                if !entry.fandom.isEmpty {
-                    SubjectKicker(text: FandomDisplayName.bareTitle(entry.fandom), palette: fandomPalette(work))
-                }
-                Text(entry.title)
-                    .font(.callout.weight(.semibold))
-                    .lineLimit(2)
+        return VStack(alignment: .leading, spacing: 0) {
+            if showsSeparator {
+                SubjectRowSeparator(inset: 0)
             }
-            Spacer(minLength: 8)
-            Text(time)
-                .font(.subheadline)
-                .monospacedDigit()
-                .foregroundStyle(.secondaryInk)
+            HStack(alignment: dynamicTypeSize.isAccessibilitySize ? .top : .center, spacing: 12) {
+                Text("\(rank)")
+                    .font(.subheadline.bold())
+                    .monospacedDigit()
+                    .foregroundStyle(.secondaryInk)
+                    .frame(minWidth: 18, alignment: .leading)
+                VStack(alignment: .leading, spacing: 1) {
+                    if !entry.fandom.isEmpty {
+                        Text(FandomDisplayName.bareTitle(entry.fandom).uppercased())
+                            .font(.caption.weight(.semibold))
+                            .tracking(0.6)
+                            .foregroundStyle(fandomPalette(work).accent)
+                            .lineLimit(1)
+                    }
+                    Text(entry.title)
+                        .font(.callout.weight(.semibold))
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                    if dynamicTypeSize.isAccessibilitySize {
+                        Text(time)
+                            .font(.subheadline)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondaryInk)
+                    }
+                }
+                Spacer(minLength: 8)
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Text(time)
+                        .font(.subheadline)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondaryInk)
+                }
+            }
+            .padding(.vertical, 9)
         }
         .contentShape(Rectangle())
         .subjectRowNavigation(
@@ -289,16 +290,10 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
             repeating: GridItem(.flexible(), spacing: 10, alignment: .leading),
             count: dynamicTypeSize.isAccessibilitySize ? 1 : 2
         )
-        let streak = timeline.longestStreakDays
-        let words = timeline.longestFinishedWordCount
         return LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
-            factCell("Longest streak", streak > 0 ? "\(streak) day\(streak == 1 ? "" : "s")" : "—")
-            factCell("Most-read fandom", timeline.topFandom.map(FandomDisplayName.bareTitle) ?? "—")
-            factCell(
-                "Longest work finished",
-                words > 0 ? "\(words.formatted(.number.notation(.compactName))) words" : "—"
-            )
-            factCell("Favourite time", timeline.favouriteTime?.title ?? "—")
+            ForEach(timeline.yearFacts(calendar: calendar, locale: locale)) { fact in
+                factCell(fact.label, fact.value)
+            }
         }
     }
 
@@ -308,13 +303,16 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
                 .font(.caption)
                 .foregroundStyle(.secondaryInk)
             Text(value)
-                .font(.headline)
+                .font(.headline.bold())
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .subjectCard(palette: themeManager.scopePalette)
+        .background(
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                .fill(themeManager.appTheme.shelfTileSurface)
+        )
         .accessibilityElement(children: .combine)
     }
 
@@ -525,6 +523,7 @@ private struct ReadingHistoryChart: View {
     @Environment(\.calendar) private var calendar
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var chartHeight: CGFloat = 112
+    @ScaledMetric(relativeTo: .body) private var yearChartHeight: CGFloat = 140
     @ScaledMetric(relativeTo: .footnote) private var monthCellHeight: CGFloat = 42
 
     var body: some View {
@@ -584,7 +583,7 @@ private struct ReadingHistoryChart: View {
         let leading = timeline.buckets.first.map {
             (calendar.component(.weekday, from: $0.start) - firstWeekday + 7) % 7
         } ?? 0
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 6) {
             LazyVGrid(columns: columns, spacing: 6) {
                 ForEach(0..<7, id: \.self) { offset in
                     let symbol = (firstWeekday - 1 + offset) % 7
@@ -661,7 +660,7 @@ private struct ReadingHistoryChart: View {
     private var yearChart: some View {
         let tint = themeManager.accentInk
         let latest = timeline.buckets.last { !$0.isFuture }?.start
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 6) {
             Chart {
                 ForEach(timeline.buckets) { bucket in
                     BarMark(
@@ -684,11 +683,24 @@ private struct ReadingHistoryChart: View {
             }
             .chartYAxis(.hidden)
             .chartXAxis {
-                AxisMarks(values: .stride(by: .month)) { _ in
-                    AxisValueLabel(format: .dateTime.month(.narrow), centered: true)
+                AxisMarks(values: .stride(by: .month)) { value in
+                    AxisValueLabel(centered: true) {
+                        if let date = value.as(Date.self) {
+                            let isLatest = latest.map {
+                                calendar.isDate(date, equalTo: $0, toGranularity: .month)
+                            } ?? false
+                            Text(date.formatted(.dateTime.month(.narrow)))
+                                .font(.caption2.weight(isLatest ? .bold : .regular))
+                                .foregroundStyle(
+                                    isLatest
+                                        ? AnyShapeStyle(themeManager.accentInk)
+                                        : AnyShapeStyle(.secondaryInk)
+                                )
+                        }
+                    }
                 }
             }
-            .frame(height: chartHeight)
+            .frame(height: yearChartHeight)
 
             HStack(spacing: 14) {
                 HStack(spacing: 4) {

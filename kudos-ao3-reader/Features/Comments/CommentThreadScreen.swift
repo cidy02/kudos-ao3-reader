@@ -38,19 +38,15 @@ struct CommentThreadScreen: View {
     var body: some View {
         ScrollViewReader { proxy in
             List {
-                SubjectPageFact(threadFactLine)
-                    .pageBodyRow(top: 12, gutter: 0)
-
                 if let root {
                     ForEach(Self.rows(for: root)) { row in
                         CommentConversationRow(
                             item: row.item,
                             workAuthors: model.workAuthors,
                             workAuthorIdentities: model.workAuthorIdentities,
-                            // Every comment here belongs to one thread, so the
-                            // chapter badge would repeat the same value down the
-                            // whole screen.
-                            showChapterBadge: false,
+                            // Board `Comment-Thread`: the root comment keeps its chapter chip;
+                            // `CommentConversationRow` already suppresses it on replies.
+                            showChapterBadge: true,
                             startsConversation: row.startsConversation,
                             depth: row.depth,
                             isLastSibling: row.isLastSibling,
@@ -89,6 +85,15 @@ struct CommentThreadScreen: View {
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             .environment(\.commentsContentWidth, width)
             .subjectScreenWash(title: "Thread", palette: palette, role: .content)
+            .toolbar {
+                if let parentID = root?.parentCommentID {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Parent Thread") {
+                            focus(parentID, proxy: proxy)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -99,23 +104,6 @@ struct CommentThreadScreen: View {
                 title: model.workContext.title
             )
         )
-    }
-
-    private var threadFactLine: String? {
-        let parts = [model.workContext.title, threadSubtitle ?? ""]
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    private var threadSubtitle: String? {
-        guard let root else { return nil }
-        return [root.chapterLabel, root.author]
-            .compactMap { value in
-                guard let value, !value.isEmpty else { return nil }
-                return value
-            }
-            .joined(separator: " · ")
     }
 
     /// The subtree, fully expanded.
