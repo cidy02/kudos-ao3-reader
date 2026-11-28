@@ -19,8 +19,10 @@ struct NewCollectionSheet: View {
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(ThemeManager.self) private var theme
 
+    @State private var draftID = UUID()
     @State private var name = ""
     @State private var collectionDescription = ""
     @State private var hue: Double?
@@ -30,10 +32,15 @@ struct NewCollectionSheet: View {
     @State private var saveFailed = false
     @State private var colorWellSession = CustomColorWellSession()
 
+    @ScaledMetric(relativeTo: .body) private var fieldLabelSize: CGFloat = 15
     @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
 
     private var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var previewTitle: String {
+        NewCollectionBoardCopy.previewTitle(for: name)
     }
 
     /// The sheet takes a wash in whichever swatch is tapped, as New queue does
@@ -46,28 +53,33 @@ struct NewCollectionSheet: View {
         NavigationStack {
             List {
                 Section {
-                    SubjectFieldLabel(text: "Collection", style: .formGroup)
-                        .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
-                    collectionPanel
+                    previewHeaderCard
+                        .pageBodyRow(top: 12, gutter: SubjectMetrics.gutter)
+                }
+
+                Section {
+                    SubjectFieldLabel(text: "Name", style: .formGroup)
+                        .pageBodyRow(top: 16, gutter: SubjectMetrics.gutter)
+                    namePanel
                         .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+                }
+
+                Section {
+                    SubjectFieldLabel(text: "Description", style: .formGroup)
+                        .pageBodyRow(top: 16, gutter: SubjectMetrics.gutter)
+                    descriptionPanel
+                        .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+                }
+
+                Section {
+                    appearanceAndBehaviourPanel
+                        .pageBodyRow(top: 16, gutter: SubjectMetrics.gutter)
                     footnote(hue == nil
                         ? "Kudos picks a colour from the collection name. Renaming it may change the colour."
                         : "Your chosen colour stays the same if you rename the collection.")
-                }
-
-                Section {
-                    SubjectFieldLabel(text: "Behaviour", style: .formGroup)
-                        .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
-                    behaviourPanel
-                        .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
                     // 1bk's two sentences, true since T-276: `KeepOffline`
                     // and `SavedWork.isKeptOffline`; `HomeCollectionShelves`.
                     footnote(Self.behaviourFootnote)
-                }
-
-                Section {
-                    footnote("This collection stays on this device. AO3 doesn't see it, and it isn't "
-                        + "shared with your other devices.")
                 }
             }
             .cardList()
@@ -77,24 +89,34 @@ struct NewCollectionSheet: View {
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
+                .wrappingInlineTitle(
+                    "New Collection",
+                    isActive: dynamicTypeSize.isAccessibilitySize
+                )
                 .subjectScreenWash(palette: palette)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") {
+                        ToolbarIconButton(
+                            title: "Cancel",
+                            systemImage: "xmark",
+                            tint: .primary
+                        ) {
                             colorWellSession.discard()
                             dismiss()
                         }
+                        .labelStyle(.iconOnly)
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Create", action: create)
+                            .sheetConfirmStyle()
                             .disabled(trimmedName.isEmpty)
                     }
                 }
                 .environment(\.customColorWellSession, colorWellSession)
         }
         // Outside the stack, as New queue: the Create button, the toggles and
-        // the caret take the swatch too.
-        .screenTint(palette)
+        // the caret take the app tint.
+        .screenTint(theme.scopePalette)
         // The same sheet chrome as New queue.
         #if os(iOS)
         .presentationDetents([.large])
@@ -108,38 +130,88 @@ struct NewCollectionSheet: View {
         }
     }
 
-    private var collectionPanel: some View {
-        VStack(spacing: 0) {
-            SubjectFormRow(label: "Name", arrangement: .control) {
-                TextField("Comfort reads", text: $name)
-                    .multilineTextAlignment(.trailing)
-            }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Description", arrangement: .control) {
-                TextField("Optional", text: $collectionDescription)
-                    .multilineTextAlignment(.trailing)
-            }
-            SubjectRowSeparator()
-            SubjectHueSwatchRow(selection: $hue, pickedHex: $colorHex)
-            // The row insets `SubjectFormRow` gives the labels above it, so the
-            // first swatch lines up under "Name" instead of touching the card.
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-        }
-        .subjectPanel()
+    private var raisedCardBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+        return shape
+            .fill(theme.appTheme.cardSurface)
+            .overlay(shape.strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5))
     }
 
-    private var behaviourPanel: some View {
-        VStack(spacing: 0) {
-            SubjectFormRow(label: "Keep Downloads", arrangement: .control) {
-                Toggle("Keep Downloads", isOn: $keepsWorksOffline).labelsHidden().accentFill()
+    private var previewHeaderCard: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+        return layout {
+            StackedWorkCover(
+                kind: .collection,
+                name: previewTitle,
+                identity: draftID,
+                hue: hue,
+                pickedHex: colorHex,
+                backs: [],
+                size: CGSize(width: 52, height: 64)
+            )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(NewCollectionBoardCopy.previewKicker)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(palette.accent)
+                Text(previewTitle)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(NewCollectionBoardCopy.previewMeta)
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .background(raisedCardBackground)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var namePanel: some View {
+        TextField("Collection name", text: $name)
+            .font(.system(size: fieldLabelSize))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(raisedCardBackground)
+            .accessibilityLabel("Collection name")
+    }
+
+    private var descriptionPanel: some View {
+        TextField("Optional", text: $collectionDescription, axis: .vertical)
+            .font(.system(size: fieldLabelSize))
+            .lineLimit(2...4)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(raisedCardBackground)
+            .accessibilityLabel("Description")
+    }
+
+    private var appearanceAndBehaviourPanel: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Colour")
+                    .font(.system(size: fieldLabelSize))
+                    .foregroundStyle(.primary)
+                SubjectHueSwatchRow(selection: $hue, pickedHex: $colorHex)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
             SubjectRowSeparator()
             SubjectFormRow(label: "Show on Home", arrangement: .control) {
                 Toggle("Show on Home", isOn: $showsOnHome).labelsHidden().accentFill()
             }
+            SubjectRowSeparator()
+            SubjectFormRow(label: "Keep downloads", arrangement: .control) {
+                Toggle("Keep downloads", isOn: $keepsWorksOffline).labelsHidden().accentFill()
+            }
         }
-        .subjectPanel()
+        .background(raisedCardBackground)
     }
 
     private func footnote(_ text: String) -> some View {
@@ -207,8 +279,8 @@ struct CollectionReorderSheet: View {
 
     @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
     @ScaledMetric(relativeTo: .footnote) private var positionSize: CGFloat = 13
-    @ScaledMetric(relativeTo: .subheadline) private var titleSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .caption) private var authorSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .subheadline) private var titleSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .footnote) private var authorSize: CGFloat = 13
 
     private var palette: SubjectPalette {
         themeManager.appTheme.subjectPalette(hue: collection.displayHue, pickedHex: collection.colorHex)
@@ -216,26 +288,56 @@ struct CollectionReorderSheet: View {
 
     private var gutter: CGFloat { SubjectMetrics.gutter }
 
-    /// 1bk draws only the way in ("Reorder works · 14 ›"); the reorder screen
-    /// itself is 1br's, which `SeriesReorderView` already builds — header block,
-    /// a "Reading order" group, rows carrying the position they will be saved
-    /// at, a note under them. This follows it, except that the group heading is
-    /// the `.formGroup` label 1br's tree draws rather than that view's rule.
-    ///
-    /// Titles and creators are shown exactly as before. Whether a mature work's
-    /// title belongs behind `PrivacyGate` here, as it is elsewhere, is an open
-    /// question for the owner — not decided by a restyle.
+    private var contextHeaderCard: some View {
+        let tileFill = themeManager.appTheme.carouselQueueTint(
+            hue: collection.displayHue,
+            pickedHex: collection.colorHex
+        )
+        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+        return layout {
+            Image(systemName: "square.stack")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(ThemeManager.label(on: tileFill))
+                .frame(width: 40, height: 40)
+                .background(tileFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(NewCollectionBoardCopy.reorderKicker(workCount: ordered.count))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(palette.accent)
+                Text(collection.name)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(NewCollectionBoardCopy.reorderMeta)
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .background(
+            shape
+                .fill(themeManager.appTheme.cardSurface)
+                .overlay(shape.strokeBorder(themeManager.appTheme.cardBorder, lineWidth: 0.5))
+        )
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Board `Collection-Reorder`: context card (kicker, title, drag hint) over
+    /// the reorderable rows card. Keeps each row's position number and its
+    /// accessibility-size stacking branch.
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    SubjectPageFact(collection.name, gutter: gutter)
-                        .pageBodyRow(top: 12, gutter: 0)
-                }
-
-                Section {
-                    SubjectFieldLabel(text: "Reading Order", style: .formGroup)
-                        .pageBodyRow(top: 18, gutter: gutter)
+                    contextHeaderCard
+                        .pageBodyRow(top: 12, gutter: gutter)
                 }
 
                 Section {
@@ -281,17 +383,28 @@ struct CollectionReorderSheet: View {
             .cardList()
             // Rows at their own padding, not the List minimum (L3-FORM-1).
             .environment(\.defaultMinListRowHeight, 0)
-            .navigationTitle("Reorder Works")
+            .navigationTitle("Reorder")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
+                .wrappingInlineTitle(
+                    "Reorder",
+                    isActive: dynamicTypeSize.isAccessibilitySize
+                )
                 .subjectScreenWash(palette: palette)
             #if os(iOS)
                 .environment(\.editMode, .constant(.active))
             #endif
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
+                        ToolbarIconButton(
+                            title: "Cancel",
+                            systemImage: "xmark",
+                            tint: .primary
+                        ) {
+                            dismiss()
+                        }
+                        .labelStyle(.iconOnly)
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") {
@@ -300,10 +413,11 @@ struct CollectionReorderSheet: View {
                             context.saveBestEffort(reason: "Saving collection order failed")
                             dismiss()
                         }
+                        .sheetConfirmStyle()
                     }
                 }
         }
-            .screenTint(palette)
+            .screenTint(themeManager.scopePalette)
     }
 
     /// The number is the position after dragging — what Done will write — as
@@ -340,5 +454,22 @@ struct CollectionReorderSheet: View {
         .accessibilityLabel(work.author.isEmpty
             ? "\(position). \(work.title)"
             : "\(position). \(work.title), \(work.author)")
+    }
+}
+
+/// Pure board-copy formatting for `NewCollectionSheet` (`Collection-New.dc.html`)
+/// and `CollectionReorderSheet` (`Collection-Reorder.dc.html`).
+enum NewCollectionBoardCopy {
+    static let previewKicker = "New collection"
+    static let previewMeta = "No works yet · only in Kudos"
+    static let reorderMeta = "Drag to set the reading order"
+
+    static func previewTitle(for rawName: String) -> String {
+        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Untitled collection" : trimmed
+    }
+
+    static func reorderKicker(workCount: Int) -> String {
+        "Collection · \(workCount) \(workCount == 1 ? "work" : "works")"
     }
 }

@@ -73,7 +73,7 @@ struct FollowTagSheet: View {
 
                 Section {
                     switchesCard
-                        .pageBodyRow(top: 4, gutter: gutter)
+                        .pageBodyRow(top: 14, gutter: gutter)
                     footnoteText(
                         "Switches filter this tag's Atom feed entries locally inside Kudos."
                     )
@@ -116,17 +116,27 @@ struct FollowTagSheet: View {
                     .accessibilityLabel("Cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isEditing ? "Save" : "Follow") {
+                    #if os(iOS)
+                    Button {
                         saveTag()
+                    } label: {
+                        Image(systemName: "checkmark")
                     }
                     .sheetConfirmStyle()
                     .disabled(isLimitReached)
                     .accessibilityLabel(isEditing ? "Save settings for \(tagName)" : "Follow \(tagName)")
+                    #else
+                    Button(isEditing ? "Save" : "Follow") {
+                        saveTag()
+                    }
+                    .disabled(isLimitReached)
+                    .accessibilityLabel(isEditing ? "Save settings for \(tagName)" : "Follow \(tagName)")
+                    #endif
                 }
             }
         }
         #if os(iOS)
-        .presentationDetents([.large])
+        .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         #endif
         .confirmationDialog(
@@ -154,46 +164,56 @@ struct FollowTagSheet: View {
         }
     }
 
+    private static let tagTileGreen = Color(red: 0x25 / 255, green: 0x66 / 255, blue: 0x3C / 255)
+
+    private var headerSubtitle: String {
+        FollowTagSheetCopy.subtitle(
+            category: effectiveCategory,
+            followedCount: followedTags.count,
+            maxCount: FollowedTag.maxFollowedCount,
+            lastCheckedAt: existingTag?.lastCheckedAt
+        )
+    }
+
     private var headerCard: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: isEditing ? "bell.fill" : "tag.fill")
-                .font(.title3)
-                .foregroundStyle(.accentInk)
-                .frame(width: 32, height: 32)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+        return layout {
+            Image(systemName: isEditing ? "bell.fill" : "tag")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(Self.tagTileGreen, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 4) {
-                if let category = effectiveCategory {
-                    Text(category.uppercased())
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondaryInk)
-                }
-
+            VStack(alignment: .leading, spacing: 2) {
                 Text(tagName)
-                    .font(.headline)
+                    .font(.title3.bold())
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if let existingTag, let checked = existingTag.lastCheckedAt {
-                    Text("Last checked \(checked.formatted(.relative(presentation: .named)))")
-                        .font(.caption)
-                        .foregroundStyle(.secondaryInk)
-                } else {
-                    Text("\(followedTags.count) of \(FollowedTag.maxFollowedCount) tags followed")
-                        .font(.caption)
-                        .foregroundStyle(.secondaryInk)
-                }
+                Text(headerSubtitle)
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(14)
-        .subjectPanel()
+        .padding(.horizontal, 4)
         .accessibilityElement(children: .combine)
+    }
+
+    private var raisedCardBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+        return shape
+            .fill(theme.appTheme.cardSurface)
+            .overlay(shape.strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5))
     }
 
     private var limitBanner: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("20 of 20 tags followed")
+            Text("\(FollowedTag.maxFollowedCount) of \(FollowedTag.maxFollowedCount) tags followed")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
             Text(
@@ -206,7 +226,7 @@ struct FollowTagSheet: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .subjectPanel()
+        .background(raisedCardBackground)
         .accessibilityElement(children: .combine)
     }
 
@@ -230,12 +250,12 @@ struct FollowTagSheet: View {
                     .accessibilityLabel("Hide works rated Explicit")
             }
         }
-        .subjectPanel()
+        .background(raisedCardBackground)
     }
 
     private var explainerCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("How Kudos learns what's new")
+            Text("How Kudos learns what’s new")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
             Text(
@@ -249,7 +269,7 @@ struct FollowTagSheet: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .subjectPanel()
+        .background(raisedCardBackground)
         .accessibilityElement(children: .combine)
     }
 
@@ -265,7 +285,7 @@ struct FollowTagSheet: View {
             }
             .accessibilityLabel("Unfollow \(tagName)")
         }
-        .subjectPanel()
+        .background(raisedCardBackground)
     }
 
     private func footnoteText(_ text: String) -> some View {
@@ -309,5 +329,41 @@ struct FollowTagSheet: View {
         }
         FollowedTagStore.unfollow(existingTag, in: context, updateStore: updateStore)
         dismiss()
+    }
+}
+
+/// Pure board-copy formatting for `FollowTagSheet` (`Subscriptions-Plan.dc.html`).
+enum FollowTagSheetCopy {
+    static func subtitle(
+        category: String?,
+        followedCount: Int,
+        maxCount: Int = FollowedTag.maxFollowedCount,
+        lastCheckedAt: Date?
+    ) -> String {
+        subtitle(
+            category: category,
+            followedCount: followedCount,
+            maxCount: maxCount,
+            lastCheckedRelativeText: lastCheckedAt?.formatted(.relative(presentation: .named))
+        )
+    }
+
+    static func subtitle(
+        category: String?,
+        followedCount: Int,
+        maxCount: Int = FollowedTag.maxFollowedCount,
+        lastCheckedRelativeText: String?
+    ) -> String {
+        var parts: [String] = []
+        if let category {
+            let trimmed = category.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { parts.append(trimmed) }
+        }
+        if let lastCheckedRelativeText, !lastCheckedRelativeText.isEmpty {
+            parts.append("Last checked \(lastCheckedRelativeText)")
+        } else {
+            parts.append("\(followedCount) of \(maxCount) tags followed")
+        }
+        return parts.joined(separator: " · ")
     }
 }

@@ -105,6 +105,7 @@ struct CollectionDetailView: View {
     @Environment(PrivacyGate.self) private var gate
     @Environment(DownloadQueue.self) private var downloadQueue
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) private var auth
     @Query(sort: \Tag.name) private var allTags: [Tag]
@@ -129,11 +130,28 @@ struct CollectionDetailView: View {
         themeManager.appTheme.subjectPalette(hue: collection.displayHue, pickedHex: collection.colorHex)
     }
 
+    private var knownTotalWordCount: Int? {
+        guard !works.isEmpty, works.allSatisfy({ $0.wordCount > 0 }) else { return nil }
+        return works.reduce(0) { $0 + $1.wordCount }
+    }
+
     private var tallyLine: String {
-        let count = works.count
-        var parts = ["\(count) \(count == 1 ? "work" : "works")"]
-        if KeepOffline.collectionKeeps(collection.keepsWorksOffline) { parts.append("kept offline") }
-        return parts.joined(separator: " · ")
+        CollectionBoardCopy.subtitle(
+            workCount: works.count,
+            totalWordCount: knownTotalWordCount,
+            hasCustomOrder: !collection.workOrderRaw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        )
+    }
+
+    /// Works whose cover art may peek behind the collection's stack — blurred or
+    /// hidden mature works stay off the stack, matching `CollectionCard`.
+    private var previewWorks: [SavedWork] {
+        works.filter { !gate.isConcealed($0, enabled: hideMature) }
+    }
+
+    private var trimmedDescription: String? {
+        let trimmed = collection.collectionDescription?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
     @State private var pendingRemoval: SavedWork?
     /// Filters scoped to this one collection, applied live to its works.
@@ -236,37 +254,39 @@ struct CollectionDetailView: View {
         .appThemedRows()
     }
 
+    private var showOnHomeBinding: Binding<Bool> {
+        Binding(
+            get: { collection.showsOnHome },
+            set: { newValue in
+                collection.showsOnHome = newValue
+                collection.markModified()
+                saveDetails(reason: "Saving collection behaviour failed")
+            }
+        )
+    }
+
+    private var keepDownloadsBinding: Binding<Bool> {
+        Binding(
+            get: { collection.keepsWorksOffline ?? false },
+            set: { newValue in
+                collection.keepsWorksOffline = newValue
+                collection.markModified()
+                saveDetails(reason: "Saving collection behaviour failed")
+                // T-276: on fetches the works still missing their EPUB,
+                // through the paced download queue. Only this tap starts it.
+                if newValue {
+                    downloadQueue.enqueue(KeepOffline.downloadItems(for: collection.works), into: context)
+                }
+            }
+        )
+    }
+
     private var detailsBehaviourSection: some View {
         Section {
-            Toggle(
-                "Keep Downloads",
-                isOn: Binding(
-                    get: { collection.keepsWorksOffline ?? false },
-                    set: { newValue in
-                        collection.keepsWorksOffline = newValue
-                        collection.markModified()
-                        saveDetails(reason: "Saving collection behaviour failed")
-                        // T-276: on fetches the works still missing their EPUB,
-                        // through the paced download queue. Only this tap starts it.
-                        if newValue {
-                            downloadQueue.enqueue(KeepOffline.downloadItems(for: collection.works), into: context)
-                        }
-                    }
-                )
-            )
-            .accentFill()
-            Toggle(
-                "Show on Home",
-                isOn: Binding(
-                    get: { collection.showsOnHome },
-                    set: { newValue in
-                        collection.showsOnHome = newValue
-                        collection.markModified()
-                        saveDetails(reason: "Saving collection behaviour failed")
-                    }
-                )
-            )
-            .accentFill()
+            Toggle("Show on Home", isOn: showOnHomeBinding)
+                .accentFill()
+            Toggle("Keep downloads", isOn: keepDownloadsBinding)
+                .accentFill()
         } header: {
             SubjectFieldLabel(text: "Behaviour", style: .formGroup)
         } footer: {
@@ -315,14 +335,68 @@ struct CollectionDetailView: View {
         if detailsSaveFailed { showingDetailsSaveAlert = true } else { showingDetails = false }
     }
 
+    /// Board `Collection`: 96×96 stacked collection cover beside the 28pt title and
+    /// reading-time / order subtitle. Stacks vertically at accessibility sizes.
+    private var collectionHeader: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 14))
+        return VStack(alignment: .leading, spacing: 10) {
+            layout {
+                StackedWorkCover(
+                    kind: .collection,
+                    name: collection.name,
+                    identity: collection.id,
+                    hue: collection.hue,
+                    pickedHex: collection.colorHex,
+                    backs: Array(previewWorks.prefix(CoverStackLayout.maxBacks)),
+                    size: CGSize(width: 96, height: 96)
+                )
+                SubjectPageHeading(
+                    title: collection.name,
+                    subtitle: tallyLine,
+                    palette: palette,
+                    size: .besideArtwork,
+                    gutter: 0
+                )
+            }
+            if let description = trimmedDescription {
+                Text(description)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, SubjectMetrics.gutter)
+    }
+
+    /// Board `Collection`: inline Show on Home and Keep downloads card directly
+    /// under the header, reusing the same write bindings as `detailsSheet`.
+    private var inlineBehaviourCard: some View {
+        VStack(spacing: 0) {
+            SubjectFormRow(label: "Show on Home", arrangement: .control) {
+                Toggle("Show on Home", isOn: showOnHomeBinding)
+                    .labelsHidden()
+                    .accentFill()
+            }
+            SubjectRowSeparator()
+            SubjectFormRow(label: "Keep downloads", arrangement: .control) {
+                Toggle("Keep downloads", isOn: keepDownloadsBinding)
+                    .labelsHidden()
+                    .accentFill()
+            }
+        }
+        .subjectPanel()
+    }
+
     /// Covers. Swipe-to-remove stays on the list; reorder is already a sheet.
     private var collectionGrid: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                SubjectPageHeading(
-                    title: collection.name, subtitle: tallyLine, palette: palette
-                )
-                .padding(.top, 20)
+            VStack(alignment: .leading, spacing: 12) {
+                collectionHeader
+                    .padding(.top, 16)
+                inlineBehaviourCard
+                    .padding(.horizontal, SubjectMetrics.gutter)
                 CarouselCardGrid {
                     ForEach(visibleWorks) { work in
                         NavigationLink(value: LocalWorkDestination.reader(work)) {
@@ -333,7 +407,8 @@ struct CollectionDetailView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
+                .padding(.horizontal, SubjectMetrics.gutter)
+                .padding(.bottom, 16)
             }
         }
         .refreshable {
@@ -349,6 +424,40 @@ struct CollectionDetailView: View {
             arrangementKey: WorkListKeys.collectionArrangement(collection.id),
             legacyDisplayModeKey: WorkListKeys.collectionDisplayMode
         )
+    }
+
+    @ViewBuilder
+    private var workRows: some View {
+        ForEach(visibleWorks) { work in
+            SensitiveWorkRow(
+                work: work,
+                openMode: .reader,
+                isSelecting: isSelecting,
+                isSelected: selection.contains(work.id),
+                onToggleSelection: { toggleSelection(work) },
+                presentation: .ledger,
+                showsFavoriteStar: true,
+                showsFullLedgerStats: true,
+                showsSummary: false
+            )
+            .swipeActions(edge: .trailing) {
+                if !isSelecting {
+                    Button(role: .destructive) {
+                        if confirmBeforeDelete {
+                            pendingRemoval = work
+                        } else {
+                            remove(work)
+                        }
+                    } label: {
+                        Label("Remove", systemImage: "minus.circle")
+                    }
+                }
+            }
+            .cardRow(
+                isSelected: isSelecting && selection.contains(work.id),
+                chrome: .plain
+            )
+        }
     }
 
     var body: some View {
@@ -370,49 +479,28 @@ struct CollectionDetailView: View {
             } else {
                 List {
                     Section {
-                        SubjectPageHeading(
-                            title: collection.name, subtitle: tallyLine, palette: palette
-                        )
-                            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+                        collectionHeader
+                            .listRowInsets(EdgeInsets(top: 16, leading: 0, bottom: 4, trailing: 0))
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
-                    }
-                    Section {
-                    ForEach(visibleWorks) { work in
-                        SensitiveWorkRow(
-                            work: work,
-                            openMode: .reader,
-                            isSelecting: isSelecting,
-                            isSelected: selection.contains(work.id),
-                            onToggleSelection: { toggleSelection(work) },
-                            presentation: .ledger,
-                            showsFavoriteStar: true,
-                            showsFullLedgerStats: true,
-                            showsSummary: false
-                        )
-                        .swipeActions(edge: .trailing) {
-                            if !isSelecting {
-                                Button(role: .destructive) {
-                                    if confirmBeforeDelete {
-                                        pendingRemoval = work
-                                    } else {
-                                        remove(work)
-                                    }
-                                } label: {
-                                    Label("Remove", systemImage: "minus.circle")
-                                }
-                            }
+                        if !isSelecting {
+                            inlineBehaviourCard
+                                .pageBodyRow(top: 12, gutter: SubjectMetrics.gutter)
                         }
-                        .cardRow(
-                            isSelected: isSelecting && selection.contains(work.id),
-                            chrome: .plain
-                        )
                     }
-                    } header: {
-                        SectionRuleHeader(title: "Works", count: visibleWorks.count)
-                            .textCase(nil)
-                            .listRowInsets(EdgeInsets())
-                            .padding(.bottom, 10)
+                    if filters.hasActiveFilters {
+                        Section {
+                            workRows
+                        } header: {
+                            SectionRuleHeader(title: "Works", count: visibleWorks.count)
+                                .textCase(nil)
+                                .listRowInsets(EdgeInsets())
+                                .padding(.bottom, 10)
+                        }
+                    } else {
+                        Section {
+                            workRows
+                        }
                     }
                 }
                 .cardList()
@@ -519,7 +607,7 @@ struct CollectionDetailView: View {
                                 } label: {
                                     Label(
                                         filters.hasActiveFilters ? "Clear Filters to Reorder"
-                                            : hidesMatureWorks ? "Show Mature to Reorder" : "Reorder",
+                                            : hidesMatureWorks ? "Show Mature to Reorder" : "Reorder Works",
                                         systemImage: "arrow.up.arrow.down"
                                     )
                                 }
@@ -661,6 +749,27 @@ struct CollectionDetailView: View {
         for work in selectedWorks {
             remove(work)
         }
+    }
+}
+
+/// Pure board-copy formatting for `CollectionDetailView` (`Collection.dc.html`).
+enum CollectionBoardCopy {
+    /// `"12 works · about 14 h · custom order"` — omits reading time when word counts
+    /// are unavailable and omits `"custom order"` until a custom order has been saved.
+    static func subtitle(
+        workCount: Int,
+        totalWordCount: Int?,
+        hasCustomOrder: Bool
+    ) -> String {
+        var parts = ["\(workCount) \(workCount == 1 ? "work" : "works")"]
+        if let totalWordCount,
+           let estimate = ReadingQueueFacts.readingTimeEstimate(wordCount: totalWordCount) {
+            parts.append(estimate)
+        }
+        if hasCustomOrder {
+            parts.append("custom order")
+        }
+        return parts.joined(separator: " · ")
     }
 }
 

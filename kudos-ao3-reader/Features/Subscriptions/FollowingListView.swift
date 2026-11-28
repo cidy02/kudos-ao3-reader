@@ -275,7 +275,8 @@ struct FollowingListView: View {
     private func seriesRow(_ item: AO3FollowedSeries) -> some View {
         let row = FollowedNameRow(
             title: item.title,
-            subtitle: item.creatorNames.isEmpty ? nil : item.creatorNames.joined(separator: ", ")
+            subtitle: item.creatorNames.isEmpty ? nil : item.creatorNames.joined(separator: ", "),
+            leadingStyle: .seriesTile
         )
         if let summary = item.navigationSummary {
             row.cardNavigation(to: summary, accessibilityLabel: item.title)
@@ -287,7 +288,11 @@ struct FollowingListView: View {
 
     @ViewBuilder
     private func authorRow(_ item: AO3FollowedAuthor) -> some View {
-        let row = FollowedNameRow(title: item.name, subtitle: nil)
+        let row = FollowedNameRow(
+            title: item.name,
+            subtitle: nil,
+            leadingStyle: .authorAvatar(name: item.name)
+        )
         if let route = item.route {
             row.cardNavigation(to: route, accessibilityLabel: item.name)
                 .accessibilityHint("Opens this author's profile")
@@ -356,23 +361,66 @@ struct FollowingListView: View {
 }
 
 private struct FollowedNameRow: View {
+    enum LeadingStyle {
+        case seriesTile
+        case authorAvatar(name: String)
+    }
+
     let title: String
     let subtitle: String?
+    var leadingStyle: LeadingStyle?
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private static let seriesBlue = Color(red: 0x1E / 255, green: 0x63 / 255, blue: 0xC8 / 255)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.headline)
-                .fixedSize(horizontal: false, vertical: true)
-            if let subtitle, !subtitle.isEmpty {
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondaryInk)
-                    .lineLimit(1)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+        return layout {
+            if let leadingStyle {
+                leadingView(for: leadingStyle)
+                    .accessibilityHidden(true)
             }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func leadingView(for style: LeadingStyle) -> some View {
+        switch style {
+        case .seriesTile:
+            Image(systemName: "text.alignleft")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(Self.seriesBlue, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        case let .authorAvatar(name):
+            let fill = Color(hue: CoverArt.hue(for: name), saturation: 0.45, brightness: 0.42)
+            let initial = name.trimmingCharacters(in: .whitespacesAndNewlines).first.map {
+                String($0).uppercased()
+            } ?? "?"
+            Text(initial)
+                .font(.headline)
+                .foregroundStyle(ThemeManager.label(on: fill))
+                .frame(width: 40, height: 40)
+                .background(fill, in: Circle())
+        }
     }
 }
 
@@ -383,7 +431,7 @@ private struct FollowingGroupHeader: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(title)
-                .font(.headline)
+                .font(.title3.bold())
                 .foregroundStyle(.primary)
             Text("\(count)")
                 .font(.caption.bold())

@@ -114,37 +114,59 @@ struct SubscriptionsView: View {
         )
     }
 
+    private func tabTitle(for tab: Tab) -> String {
+        SubscriptionsBoardCopy.tabTitle(for: tab, tagCount: followedTags.count)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if dynamicTypeSize.isAccessibilitySize {
                 AccessibilityChipRail(horizontalPadding: CardListMetrics.sideMargin) {
                     ForEach(Tab.allCases) { tab in
+                        let label = tabTitle(for: tab)
                         Button {
                             selectedTab = tab
                         } label: {
                             SubjectChip(
-                                text: tab.rawValue,
+                                text: label,
                                 style: .pill(isSelected: selectedTab == tab),
-                                palette: theme.scopePalette
+                                palette: theme.scopePalette,
+                                fontWeight: .semibold
                             )
                         }
                         .buttonStyle(.plain)
                         .minimumHitTarget(32)
-                        .accessibilityLabel(tab.rawValue)
+                        .accessibilityLabel(label)
                         .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
                     }
                 }
                 .padding(.vertical, 8)
             } else {
-                Picker("Subscription section", selection: $selectedTab) {
-                    ForEach(Tab.allCases) { tab in
-                        Text(tab.rawValue).tag(tab)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Tab.allCases) { tab in
+                            let label = tabTitle(for: tab)
+                            Button {
+                                selectedTab = tab
+                            } label: {
+                                SubjectChip(
+                                    text: label,
+                                    style: .pill(isSelected: selectedTab == tab),
+                                    palette: theme.scopePalette,
+                                    fontWeight: .semibold,
+                                    horizontalPadding: 13,
+                                    verticalPadding: 7
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .minimumHitTarget(34)
+                            .accessibilityLabel(label)
+                            .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
+                        }
                     }
+                    .padding(.horizontal, CardListMetrics.sideMargin)
                 }
-                .pickerStyle(.segmented)
-                .controlSize(.large)
-                .frame(minHeight: 44)
-                .padding(.horizontal, CardListMetrics.sideMargin)
+                .horizontalScrollViewport()
                 .padding(.vertical, 8)
             }
 
@@ -568,6 +590,20 @@ struct SubscriptionsView: View {
             await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration)
         } catch {
             listsMoreError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+}
+
+/// Board copy helpers for `SubscriptionsView` (`Subscriptions`, `Subscriptions-Tags`).
+enum SubscriptionsBoardCopy {
+    /// Appends the local followed-tag count to the Tags pill when non-zero (`"Tags 3"`).
+    /// AO3-backed tabs omit counts because page 1 does not give a total across pages.
+    static func tabTitle(for tab: SubscriptionsView.Tab, tagCount: Int) -> String {
+        switch tab {
+        case .tags where tagCount > 0:
+            return "\(tab.rawValue) \(tagCount)"
+        case .waiting, .following, .tags, .tidyUp:
+            return tab.rawValue
         }
     }
 }
