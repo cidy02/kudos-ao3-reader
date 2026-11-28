@@ -111,8 +111,17 @@ struct WhatFitsPlan {
 enum WhatFitsPlanner {
     private struct Candidate {
         let work: SavedWork
-        let queueNames: [String]
-        let encounterOrder: Int
+        var queueNames: [String] = []
+        private var seenQueueNames: Set<String> = []
+
+        init(work: SavedWork, queueName: String) {
+            self.work = work
+            addQueueName(queueName)
+        }
+
+        mutating func addQueueName(_ name: String) {
+            if seenQueueNames.insert(name).inserted { queueNames.append(name) }
+        }
     }
 
     private struct TimedCandidate {
@@ -159,11 +168,19 @@ enum WhatFitsPlanner {
         tagAliases: TagAliasResolver? = nil
     ) -> WhatFitsPlan {
         let activeQueues = orderedActiveQueues(from: queues)
+        var visibility: [ObjectIdentifier: Bool] = [:]
+        func visible(_ work: SavedWork) -> Bool {
+            let key = ObjectIdentifier(work)
+            if let cached = visibility[key] { return cached }
+            let result = isVisible(work)
+            visibility[key] = result
+            return result
+        }
         let candidates = deduplicatedCandidates(
             in: activeQueues,
             libraryWorks: libraryWorks,
             tagAliases: tagAliases,
-            isVisible: isVisible
+            isVisible: visible
         )
 
         var hasAnyVisibleWorks = false
@@ -171,11 +188,12 @@ enum WhatFitsPlanner {
         var hasAnyWordCounts = false
         var hasHiddenMatureFits = false
         var timedCandidates: [TimedCandidate] = []
+        var nonFittingMinutes: [Double] = []
 
-        for candidate in candidates {
+        for (encounterOrder, candidate) in candidates.enumerated() {
             let work = candidate.work
-            guard isVisible(work) else {
-                if !work.isFinished,
+            guard visible(work) else {
+                if !hasHiddenMatureFits, !work.isFinished,
                    let minutes = ReadingQueueFacts.minutesLeft(for: work),
                    bucket.fits(minutes: minutes) {
                     hasHiddenMatureFits = true
@@ -187,6 +205,10 @@ enum WhatFitsPlanner {
             hasAnyUnfinishedWorks = true
             guard let minutes = ReadingQueueFacts.minutesLeft(for: work) else { continue }
             hasAnyWordCounts = true
+            guard bucket.fits(minutes: minutes) else {
+                nonFittingMinutes.append(minutes)
+                continue
+            }
 
             let section: WhatFitsEntry.Section = work.hasStartedReading
                 ? .finishInThisSitting
@@ -198,12 +220,11 @@ enum WhatFitsPlanner {
                 section: section,
                 minutesLeft: minutes,
                 isOffline: isOffline,
-                encounterOrder: candidate.encounterOrder
+                encounterOrder: encounterOrder
             ))
         }
 
-        let matching = timedCandidates.filter { bucket.fits(minutes: $0.minutesLeft) }
-        let sorted = matching.sorted { lhs, rhs in
+        let sorted = timedCandidates.sorted { lhs, rhs in
             if lhs.isOffline != rhs.isOffline { return lhs.isOffline }
             if abs(lhs.minutesLeft - rhs.minutesLeft) > 1e-6 {
                 return lhs.minutesLeft < rhs.minutesLeft
@@ -211,29 +232,31 @@ enum WhatFitsPlanner {
             return lhs.encounterOrder < rhs.encounterOrder
         }
 
-        let entries = sorted.map {
-            WhatFitsEntry(
-                work: $0.work,
-                section: $0.section,
-                minutesLeft: $0.minutesLeft,
-                isOffline: $0.isOffline,
-                queueNames: $0.queueNames
+        var finishInThisSitting: [WhatFitsEntry] = []
+        var startAndFinish: [WhatFitsEntry] = []
+        for candidate in sorted {
+            let entry = WhatFitsEntry(
+                work: candidate.work,
+                section: candidate.section,
+                minutesLeft: candidate.minutesLeft,
+                isOffline: candidate.isOffline,
+                queueNames: candidate.queueNames
             )
+            switch entry.section {
+            case .finishInThisSitting: finishInThisSitting.append(entry)
+            case .startAndFinish: startAndFinish.append(entry)
+            }
         }
-        let finishInThisSitting = entries.filter { $0.section == .finishInThisSitting }
-        let startAndFinish = entries.filter { $0.section == .startAndFinish }
 
-        let nextFitting: (bucket: WhatFitsBucket, count: Int)?
-        if entries.isEmpty && !timedCandidates.isEmpty {
-            nextFitting = WhatFitsBucket.allCases
-                .filter { $0 != bucket }
-                .compactMap { candidateBucket -> (WhatFitsBucket, Int)? in
-                    let count = timedCandidates.count { candidateBucket.fits(minutes: $0.minutesLeft) }
-                    return count > 0 ? (candidateBucket, count) : nil
+        var nextFitting: (bucket: WhatFitsBucket, count: Int)? = nil
+        if sorted.isEmpty && !nonFittingMinutes.isEmpty {
+            for other in WhatFitsBucket.allCases where other != bucket {
+                let count = nonFittingMinutes.count { other.fits(minutes: $0) }
+                if count > 0 {
+                    nextFitting = (other, count)
+                    break
                 }
-                .first
-        } else {
-            nextFitting = nil
+            }
         }
 
         return WhatFitsPlan(
@@ -265,9 +288,8 @@ enum WhatFitsPlanner {
         tagAliases: TagAliasResolver?,
         isVisible: (SavedWork) -> Bool
     ) -> [Candidate] {
-        var orderedIDs: [UUID] = []
-        var workByID: [UUID: SavedWork] = [:]
-        var queueNamesByID: [UUID: [String]] = [:]
+        var candidates: [Candidate] = []
+        var indexByID: [UUID: Int] = [:]
 
         let hasSmartQueue = queues.contains { $0.kind == .smart }
         let smartSnapshot: ReadingQueueService.SmartLibrarySnapshot? = if hasSmartQueue {
@@ -286,41 +308,23 @@ enum WhatFitsPlanner {
         }
 
         for queue in queues {
-            // `orderedWorks` is the membership list for a manual queue and the
-            // computed matches for a smart one. A work is still counted once.
-            // A smart queue's limit counts visible works first (Hide Mature runs
-            // before the limit); its hidden matches follow so the planner can
-            // still say that mature works would fit.
             let queueWorks: [SavedWork] = if let smartSnapshot, queue.kind == .smart {
-                withoutActuallyEscaping(isVisible) { visible in
-                    ReadingQueueService.orderedWorks(in: queue, snapshot: smartSnapshot, where: visible)
-                } + smartSnapshot.matching(queue).filter { !isVisible($0) }
-            } else if let smartSnapshot {
-                ReadingQueueService.orderedWorks(in: queue, snapshot: smartSnapshot)
+                smartSnapshot.matchingForWhatFits(queue, where: isVisible)
             } else {
                 ReadingQueueService.orderedMemberships(in: queue).compactMap(\.work)
             }
+            let name = queue.displayName
             for work in queueWorks where !work.isPendingDeletion {
-                if workByID[work.id] == nil {
-                    orderedIDs.append(work.id)
-                    workByID[work.id] = work
-                }
-                var names = queueNamesByID[work.id, default: []]
-                let name = queue.displayName
-                if !names.contains(name) {
-                    names.append(name)
-                    queueNamesByID[work.id] = names
+                let id = work.id
+                if let index = indexByID[id] {
+                    candidates[index].addQueueName(name)
+                } else {
+                    indexByID[id] = candidates.count
+                    candidates.append(Candidate(work: work, queueName: name))
                 }
             }
         }
 
-        return orderedIDs.enumerated().compactMap { index, id in
-            guard let work = workByID[id] else { return nil }
-            return Candidate(
-                work: work,
-                queueNames: queueNamesByID[id, default: []],
-                encounterOrder: index
-            )
-        }
+        return candidates
     }
 }

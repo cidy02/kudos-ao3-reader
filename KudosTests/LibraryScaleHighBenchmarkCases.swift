@@ -236,8 +236,8 @@ extension PersistenceGateSuites.LibraryScaleBenchmarkTests {
         let works = try context.fetch(Self.liveWorks)
         let visible = Self.libraryVisibility()
         let aliases = TagAliasStore.resolver(in: context)
-        // Even with 100 displayed matches, each broad rule matches and sorts
-        // almost every eligible work before applying the limit.
+        // The broad rules match almost every eligible work, with a cap of 100
+        // displayed matches per queue.
         let smartQueues = try (0..<100).map { index in
             let rule = SmartQueueDocument.Rule(
                 id: fixture.id(for: 9_000_000 + index), kind: .length, lengthComparison: .atLeast, words: 1_000 + index
