@@ -84,12 +84,13 @@ struct AO3CollectionItemsView: View {
         _tab = State(initialValue: Self.startingTab(slug: slug, initialTab: initialTab))
     }
 
-    /// The spec's four pills. `rejectedByUser` is deliberately not one: AO3 keeps
-    /// it as a separate tab, but a creator who declined their own work has made a
-    /// decision rather than one waiting on them, and the spec draws four.
-    private static let tabs: [AO3CollectionItemTab] = [
-        .unreviewed, .invited, .rejected, .approved
-    ]
+    private var isAccountWide: Bool { slug == nil }
+
+    private var orderedTabs: [AO3CollectionItemTab] {
+        isAccountWide
+            ? [.invited, .unreviewed, .approved, .rejected]
+            : [.unreviewed, .invited, .approved, .rejected]
+    }
 
     /// Stored rows and drafts belong to one generation. A newer session renders
     /// neither, in the same body pass that observes the change.
@@ -130,9 +131,8 @@ struct AO3CollectionItemsView: View {
     var body: some View {
         List {
             Section {
-                SubjectPageFact(tallyLine, gutter: SubjectMetrics.accountGutter)
-                    .pageBodyRow(top: 12, gutter: 0)
-                tabStrip.pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+                pageHeader.pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+                tabStrip.pageBodyRow(top: 12, gutter: 0)
                 if sessionOwnsScreen, let submitError {
                     errorCard(submitError).pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
                 }
@@ -170,7 +170,12 @@ struct AO3CollectionItemsView: View {
             }
         }
         .cardList()
-        .subjectScreenWash(title: "Collection Items", palette: palette, role: .content)
+        .environment(\.defaultMinListRowHeight, 0)
+        .subjectScreenWash(
+            title: ChallengesBoardCopy.collectionItemsTitle(slug: slug),
+            palette: palette,
+            role: .content
+        )
         .toolbar {
             if pendingCount > 0 {
                 ToolbarItem(placement: .primaryAction) {
@@ -237,8 +242,33 @@ struct AO3CollectionItemsView: View {
 
     // MARK: Header
 
-    /// Spec 1s: "Your works in AO3 collections · 3 need a decision". The staged
-    /// count lives in the toolbar, not in this line.
+    private var pageHeader: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(ChallengesBoardCopy.collectionItemsTitle(slug: slug))
+                .font(.title.bold())
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+
+            Text(headerSubtitle)
+                .font(.subheadline)
+                .foregroundStyle(.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var headerSubtitle: String {
+        if isAccountWide {
+            return ChallengesBoardCopy.collectionItemsAccountSubtitle(
+                items: displayedItems,
+                currentPage: currentPage,
+                totalPages: sessionOwnsScreen ? totalPages : 1
+            )
+        }
+        return tallyLine
+    }
+
     private var tallyLine: String {
         let scope = slug == nil ? "Your works in AO3 collections" : title
         let decisions = AO3CollectionItemSubmission.decisionsNeeded(displayedItems)
@@ -256,42 +286,38 @@ struct AO3CollectionItemsView: View {
 
     private var tabStrip: some View {
         let resetIsDisabled = Self.resetIsDisabled(slug: slug, tab: tab)
-        return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(Self.tabs, id: \.self) { option in
-                    Button {
-                        tab = option
-                    } label: {
-                        SubjectChip(
-                            text: Self.tabTitle(option),
-                            style: .pill(isSelected: tab == option),
-                            palette: palette
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .minimumHitTarget(28)
+        return AccessibilityChipRail(horizontalPadding: SubjectMetrics.accountGutter) {
+            ForEach(orderedTabs, id: \.self) { option in
+                let selected = tab == option
+                let label = ChallengesBoardCopy.collectionItemsActiveChipLabel(
+                    tab: option,
+                    isAccountWide: isAccountWide,
+                    count: displayedItems.count,
+                    totalPages: totalPages,
+                    isSelected: selected
+                )
+                Button {
+                    tab = option
+                } label: {
+                    ChallengeBoardChipLabel(text: label, isSelected: selected)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(label)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+            if !resetIsDisabled {
                 Button {
                     let resetTab = Self.defaultTab(slug: slug)
                     if tab != resetTab {
                         tab = resetTab
                     }
                 } label: {
-                    SubjectChip(
-                        text: "Reset",
-                        style: .pill(isSelected: false),
-                        systemImage: "xmark"
-                    )
-                    .opacity(resetIsDisabled ? 0.45 : 0.7)
+                    ChallengeBoardChipLabel(text: "Reset", isSelected: false, systemImage: "xmark")
                 }
                 .buttonStyle(.plain)
-                .minimumHitTarget(28)
-                .disabled(resetIsDisabled)
                 .accessibilityLabel("Reset filters")
             }
-            .padding(.horizontal, 16)
         }
-        .horizontalScrollViewport()
     }
 
     private var paginationBar: some View {
@@ -302,16 +328,6 @@ struct AO3CollectionItemsView: View {
             palette: palette
         ) { page in
             Task { await load(page: page, replacing: false) }
-        }
-    }
-
-    private static func tabTitle(_ tab: AO3CollectionItemTab) -> String {
-        switch tab {
-        case .unreviewed: "Awaiting collection"
-        case .invited: "Awaiting you"
-        case .rejected: "Rejected"
-        case .rejectedByUser: "Declined"
-        case .approved: "Approved"
         }
     }
 
@@ -329,20 +345,31 @@ struct AO3CollectionItemsView: View {
             }
         } else {
             Section {
-                ForEach(displayedItems) { item in
-                    AO3CollectionItemCard(
-                        item: item,
-                        staging: $staging,
-                        palette: theme.appTheme.subjectPalette(hue: Self.cardHue(for: item))
-                    )
-                    .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+                ChallengeBoardListSectionHeader(
+                    title: ChallengesBoardCopy.collectionItemsTabTitle(tab, isAccountWide: isAccountWide),
+                    count: totalPages == 1 ? displayedItems.count : nil,
+                    countText: totalPages > 1 ? "\(displayedItems.count) on this page" : nil
+                )
+                .pageBodyRow(top: 16, gutter: SubjectMetrics.accountGutter)
+
+                ForEach(Array(displayedItems.enumerated()), id: \.element.id) { index, item in
+                    VStack(spacing: 0) {
+                        if index > 0 { SubjectRowSeparator(inset: 0) }
+                        AO3CollectionItemCard(
+                            item: item,
+                            staging: $staging,
+                            palette: theme.appTheme.subjectPalette(hue: Self.cardHue(for: item)),
+                            isAccountWide: isAccountWide
+                        )
+                    }
+                    .pageBodyRow(top: 0, gutter: SubjectMetrics.accountGutter)
                 }
             }
         }
     }
 
     private var emptyCard: some View {
-        Text("Nothing in this tab.")
+        Text(ChallengesBoardCopy.collectionItemsEmptyMessage(tab: tab, isAccountWide: isAccountWide))
             .font(.system(size: bodySize))
             .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
@@ -547,21 +574,35 @@ struct AO3CollectionItemsView: View {
     }
 }
 
-/// One item card — spec 1s's per-item layout.
+/// One item row aligned to `AO3-Collection-Items.dc.html` while preserving all
+/// editable AO3 staging controls on both account-wide and collection-scoped pages.
 struct AO3CollectionItemCard: View {
     let item: AO3CollectionItem
     @Binding var staging: AO3CollectionItemStaging
     let palette: SubjectPalette
+    var isAccountWide: Bool = false
 
+    @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    @ScaledMetric(relativeTo: .title3) private var titleSize: CGFloat = 19
+    @ScaledMetric(relativeTo: .body) private var titleSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .footnote) private var subtitleSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var kickerSize: CGFloat = 12
     @ScaledMetric(relativeTo: .body) private var settingsLabelSize: CGFloat = 13.5
-    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 12
     @ScaledMetric(relativeTo: .caption) private var actionSize: CGFloat = 12
-    @ScaledMetric(relativeTo: .caption2) private var roleSize: CGFloat = 10
+    @ScaledMetric(relativeTo: .caption2) private var roleSize: CGFloat = 10.5
 
     private var isRemoved: Bool { staging.isRemoved(item) }
+
+    /// Account-wide rows only allow creator approval and removal — matching
+    /// `AO3-Collection-Items.dc.html`'s compact approve/decline or "Waiting" presentation.
+    private var usesCompactAccountRow: Bool {
+        isAccountWide
+            && !item.moderatorApprovalIsEditable
+            && !item.unrevealedIsEditable
+            && !item.anonymousIsEditable
+    }
 
     /// Beside chips and a button that do not shrink, a row's words had a column a letter
     /// wide and the card ran off both sides of the screen at the accessibility sizes:
@@ -574,54 +615,127 @@ struct AO3CollectionItemCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            headerRow
-            Text(item.workTitle)
-                .font(.system(size: titleSize, weight: .semibold))
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                .fixedSize(horizontal: false, vertical: true)
-                .strikethrough(isRemoved)
-
-            if isRemoved {
-                removalNotice
-            } else {
-                settingsRows
+        HStack(alignment: .top, spacing: 12) {
+            if !dynamicTypeSize.isAccessibilitySize {
+                ChallengeBoardCoverTile(seed: item.workTitle)
+                    .padding(.top, 2)
             }
 
-            footerRow
+            VStack(alignment: .leading, spacing: 6) {
+                headerRow
+
+                Text(item.workTitle)
+                    .font(.system(size: titleSize, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .strikethrough(isRemoved)
+
+                if isAccountWide, let statusLine = ChallengesBoardCopy.collectionItemAccountStatusLine(for: item) {
+                    Text(statusLine)
+                        .font(.system(size: subtitleSize))
+                        .foregroundStyle(.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if isRemoved {
+                    removalNotice
+                } else if usesCompactAccountRow {
+                    compactAccountControls
+                } else {
+                    settingsRows
+                }
+
+                footerRow
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if usesCompactAccountRow, !isRemoved, !item.creatorApprovalIsEditable,
+               item.moderatorApproval == .unreviewed, !dynamicTypeSize.isAccessibilitySize {
+                ChallengeBoardBadge(text: "Waiting", style: .neutral)
+                    .padding(.top, 4)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .subjectCard(palette: palette)
+        .padding(.vertical, 12)
         .opacity(isRemoved ? 0.7 : 1)
     }
 
-    /// The collection is the eyebrow, with the item's role beside it.
+    /// The collection is the kicker, with optional role and staged-change dot beside it.
     private var headerRow: some View {
         row(spacing: 8) {
-            SubjectKicker(
-                text: item.collectionTitle,
-                palette: palette,
-                ruleWidth: SubjectMetrics.kickerRuleWidth,
-                ruleSpacing: 5,
-                // Whole at the accessibility sizes, on its own line there (Android the same).
-                lineLimit: dynamicTypeSize.isAccessibilitySize ? 3 : 1
+            Text(item.collectionTitle.uppercased())
+                .font(.system(size: kickerSize, weight: .semibold))
+                .tracking(0.6)
+                .foregroundStyle(palette.accent)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if !dynamicTypeSize.isAccessibilitySize {
+                Spacer(minLength: 6)
+            }
+
+            HStack(spacing: 6) {
+                if !item.role.isEmpty {
+                    Text(item.role)
+                        .font(.system(size: roleSize, weight: .semibold))
+                        .foregroundStyle(.secondaryInk)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+                if staging.hasChanges(for: item) {
+                    Circle()
+                        .fill(palette.accent)
+                        .frame(width: 7, height: 7)
+                        .accessibilityLabel("Has unsent changes")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var compactAccountControls: some View {
+        if item.creatorApprovalIsEditable {
+            let stagedApproval = staging.creatorApproval(for: item)
+            FlowLayout(spacing: 8, rowSpacing: 8) {
+                ChallengeBoardInlineActionButton(
+                    title: stagedApproval == .approved ? "Approved" : "Approve",
+                    role: .primary
+                ) {
+                    staging.setCreatorApproval(
+                        stagedApproval == .approved ? item.creatorApproval : .approved,
+                        for: item
+                    )
+                }
+
+                ChallengeBoardInlineActionButton(
+                    title: stagedApproval == .rejected ? "Declined" : "Decline",
+                    role: .secondary
+                ) {
+                    staging.setCreatorApproval(
+                        stagedApproval == .rejected ? item.creatorApproval : .rejected,
+                        for: item
+                    )
+                }
+            }
+            .padding(.top, 2)
+        } else if item.moderatorApproval == .unreviewed, dynamicTypeSize.isAccessibilitySize {
+            ChallengeBoardBadge(text: "Waiting", style: .neutral)
+                .padding(.top, 2)
+        } else if item.moderatorApproval != .unreviewed {
+            let modTitle = Self.approvalTitle(item.moderatorApproval)
+            ChallengeBoardBadge(
+                text: modTitle,
+                style: item.moderatorApproval == .approved
+                    ? .tinted(
+                        foreground: ChallengeBoardColors.successBadge(for: theme.appTheme).foreground,
+                        background: ChallengeBoardColors.successBadge(for: theme.appTheme).background
+                    )
+                    : .tinted(
+                        foreground: ChallengeBoardColors.destructiveBadge(for: theme.appTheme).foreground,
+                        background: ChallengeBoardColors.destructiveBadge(for: theme.appTheme).background
+                    )
             )
-            Spacer(minLength: 6)
-            if !item.role.isEmpty {
-                Text(item.role)
-                    .font(.system(size: roleSize, weight: .semibold))
-                    .foregroundStyle(.secondaryInk)
-                    .lineLimit(1)
-                    .fixedSize()
-            }
-            if staging.hasChanges(for: item) {
-                Circle()
-                    .fill(palette.accent)
-                    .frame(width: 7, height: 7)
-                    .accessibilityLabel("Has unsent changes")
-            }
+            .padding(.top, 2)
         }
     }
 
@@ -706,9 +820,9 @@ struct AO3CollectionItemCard: View {
     /// radius 8, with a down chevron when it opens a choice.
     private func approvalChip(_ value: AO3CollectionItemApproval, showsChevron: Bool) -> some View {
         let color: Color = switch value {
-        case .unreviewed: .orange
-        case .approved: .green
-        case .rejected: .red
+        case .unreviewed: ChallengeBoardColors.warningInk(for: theme.appTheme)
+        case .approved: theme.appTheme.statusSuccessColor
+        case .rejected: theme.appTheme.errorColor
         }
         return HStack(spacing: 5) {
             Text(Self.approvalTitle(value))
@@ -805,7 +919,7 @@ struct AO3CollectionItemCard: View {
                 .buttonStyle(.plain)
             }
             Spacer(minLength: 6)
-            if !item.itemDateText.isEmpty {
+            if !isAccountWide, !item.itemDateText.isEmpty {
                 Text(item.itemDateText)
                     .font(.system(size: captionSize))
                     .foregroundStyle(.secondaryInk)

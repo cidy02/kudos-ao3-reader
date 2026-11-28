@@ -56,14 +56,14 @@ extension ChallengeSettingsEditView {
         if let match = settings.matchSettings {
             VStack(spacing: 0) {
                 SubjectFormRow(
-                    label: "Match On",
+                    label: "Match on",
                     value: match.matchOn.isEmpty
                         ? "Nothing required"
                         : match.matchOn.map { AO3PotentialMatchSettings.label($0) }.joined(separator: ", ")
                 )
                 SubjectRowSeparator()
                 optionRow(
-                    "Requests That Must Match", value: match.numRequiredPrompts,
+                    "Requests that must match", value: match.numRequiredPrompts,
                     options: AO3PotentialMatchSettings.requestOptions
                 ) { form?.settings.matchSettings?.numRequiredPrompts = $0 }
                 ForEach(AO3PotentialMatchSettings.tagTypes, id: \.self) { type in
@@ -74,11 +74,11 @@ extension ChallengeSettingsEditView {
                     ) { form?.settings.matchSettings?.numRequired[type] = $0 }
                 }
             }
-            .subjectPanel()
-            .pageBodyRow(top: 8, gutter: gutter)
+            .challengeBoardCard()
+            .pageBodyRow(top: 6, gutter: gutter)
 
-            SubjectFieldLabel(text: "Count Optional Tags For", style: .formGroup)
-                .pageBodyRow(top: 12, gutter: gutter)
+            ChallengeBoardSectionHeader(title: "Count optional tags for")
+                .pageBodyRow(top: 12, gutter: 0)
             VStack(spacing: 0) {
                 ForEach(Array(AO3PotentialMatchSettings.tagTypes.enumerated()), id: \.offset) { index, type in
                     if index > 0 { SubjectRowSeparator() }
@@ -92,8 +92,8 @@ extension ChallengeSettingsEditView {
                     }
                 }
             }
-            .subjectPanel()
-            .pageBodyRow(top: 8, gutter: gutter)
+            .challengeBoardCard()
+            .pageBodyRow(top: 6, gutter: gutter)
         }
     }
 
@@ -138,16 +138,16 @@ extension ChallengeSettingsEditView {
     /// has its own "anonymous prompts" setting on the challenge form.
     var moderationPanel: some View {
         VStack(spacing: 0) {
-            collectionToggle("Anonymous Until Reveal", \.isAnonymous)
+            collectionToggle("Anonymous until reveal", \.isAnonymous)
             SubjectRowSeparator()
-            collectionToggle("Unrevealed Until Reveal", \.isUnrevealed)
+            collectionToggle("Unrevealed until reveal", \.isUnrevealed)
             SubjectRowSeparator()
-            collectionToggle("Moderated Sign-Ups", \.isModerated)
+            collectionToggle("Moderated sign-ups", \.isModerated)
             SubjectRowSeparator()
-            collectionToggle("Closed to New Sign-Ups", \.isClosed)
+            collectionToggle("Closed to new sign-ups", \.isClosed)
             if settings.kind == .promptMeme {
                 SubjectRowSeparator()
-                SubjectFormRow(label: "Prompts Posted Anonymously", arrangement: .control) {
+                SubjectFormRow(label: "Prompts posted anonymously", arrangement: .control) {
                     Toggle("", isOn: Binding(
                         get: { form?.settings.isAnonymous ?? false },
                         set: { form?.settings.isAnonymous = $0 }
@@ -157,7 +157,7 @@ extension ChallengeSettingsEditView {
                 }
             }
         }
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     private func collectionToggle(_ label: String, _ keyPath: WritableKeyPath<AO3CollectionForm, Bool>) -> some View {

@@ -40,11 +40,11 @@ struct AO3CollectionFormView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AppRouter.self) private var router
     @Environment(\.dismiss) private var dismiss
-    @ScaledMetric(relativeTo: .caption) private var groupNoteSize: CGFloat = 12
     @ScaledMetric(relativeTo: .caption) private var fieldErrorSize: CGFloat = 11.5
-    @ScaledMetric(relativeTo: .footnote) private var noticeCardSize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var noticeCardSize: CGFloat = 13
     @ScaledMetric(relativeTo: .headline) private var actionTitleSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .footnote) private var actionButtonSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .footnote) private var actionButtonSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .body) private var editorFontSize: CGFloat = 16
 
     @State private var form: AO3CollectionForm?
     /// The session `form` was loaded under, and its account. Save posts only
@@ -89,7 +89,20 @@ struct AO3CollectionFormView: View {
                 if form != nil { formBody } else { EmptyView() }
             }
         }
-        .subjectScreenWash(title: isNew ? "New Collection" : "Edit Collection", palette: palette)
+        .subjectScreenWash(title: isNew ? "New Collection" : "Edit Collection", palette: palette, role: .grouped)
+        .toolbar {
+            if form != nil {
+                ToolbarItem(placement: .confirmationAction) {
+                    ChallengeBoardConfirmToolbarButton(
+                        title: isNew ? "Create" : "Save",
+                        isBusy: phase == .saving,
+                        isDisabled: phase == .saving || !canSave
+                    ) {
+                        Task { await save() }
+                    }
+                }
+            }
+        }
         .task { if phase == .idle { await loadForm() } }
         .onDisappear { nameCheckTask?.cancel() }
         // 1bl: the alert says what AO3 actually does — including to other
@@ -122,6 +135,11 @@ struct AO3CollectionFormView: View {
             set: { form = $0 }
         )
         List {
+            Section {
+                previewCard(binding.wrappedValue)
+                    .pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
+            }
+
             if saveMessage != nil || !(form?.generalErrors.isEmpty ?? true) {
                 Section {
                     if let saveMessage {
@@ -135,73 +153,117 @@ struct AO3CollectionFormView: View {
                 }
             }
 
-            group("Header", note: nameNote) {
-                textRow("Display Title", text: binding.title,
-                        placeholder: "Required", errorKey: AO3CollectionParam.title)
-                SubjectRowSeparator()
+            group(
+                ChallengesBoardCopy.collectionFormNamesSection,
+                note: ChallengesBoardCopy.collectionFormNamesFooter(isLocked: form?.nameIsLocked == true)
+            ) {
                 nameRow(binding)
                 SubjectRowSeparator()
-                textRow("Parent Collection", text: binding.parentName,
+                textRow("Title", text: binding.title,
+                        placeholder: "Required", errorKey: AO3CollectionParam.title)
+            }
+
+            group(ChallengesBoardCopy.collectionFormAboutSection, note: nil) {
+                descriptionRow(binding.description)
+                SubjectRowSeparator()
+                textRow("Parent collection", text: binding.parentName,
                         placeholder: "None", errorKey: AO3CollectionParam.parentName)
                 SubjectRowSeparator()
-                textRow("Contact Email", text: binding.email,
-                        placeholder: "Optional", errorKey: AO3CollectionParam.email)
-                SubjectRowSeparator()
-                textRow("Tagline", text: binding.description,
-                        placeholder: "Optional", errorKey: AO3CollectionParam.description)
+                textRow("Contact email", text: binding.email,
+                        placeholder: ChallengesBoardCopy.collectionFormContactPlaceholder,
+                        errorKey: AO3CollectionParam.email)
             }
 
-            group("Images", note: nil) {
-                textRow("Header Image URL", text: binding.headerImageURL,
-                        placeholder: "Optional", errorKey: AO3CollectionParam.headerImageURL)
+            group(ChallengesBoardCopy.collectionFormSettingsSection, note: nil) {
+                ChallengeBoardToggleRow(
+                    title: "Moderated",
+                    subtitle: ChallengesBoardCopy.collectionFormModeratedSubtitle,
+                    isOn: binding.isModerated
+                )
                 SubjectRowSeparator()
-                textRow("Header Image Alt Text", text: binding.headerImageAlt,
-                        placeholder: "Optional", errorKey: nil)
+                ChallengeBoardToggleRow(
+                    title: "Closed",
+                    subtitle: ChallengesBoardCopy.collectionFormClosedSubtitle,
+                    isOn: binding.isClosed
+                )
                 SubjectRowSeparator()
-                textRow("Icon Alt Text", text: binding.iconAlt,
-                        placeholder: "Optional", errorKey: AO3CollectionParam.iconAlt)
+                ChallengeBoardToggleRow(
+                    title: "Unrevealed",
+                    subtitle: ChallengesBoardCopy.collectionFormUnrevealedSubtitle,
+                    isOn: binding.isUnrevealed
+                )
                 SubjectRowSeparator()
-                textRow("Icon Comment", text: binding.iconComment,
-                        placeholder: "Optional", errorKey: AO3CollectionParam.iconComment)
-            }
-
-            group("Preferences", note: preferencesNote) {
-                toggleRow("Closed to New Items", isOn: binding.isClosed)
-                SubjectRowSeparator()
-                toggleRow("Moderated", isOn: binding.isModerated)
-                SubjectRowSeparator()
-                toggleRow("Unrevealed", isOn: binding.isUnrevealed)
-                SubjectRowSeparator()
-                toggleRow("Anonymous", isOn: binding.isAnonymous)
+                ChallengeBoardToggleRow(
+                    title: "Anonymous",
+                    subtitle: ChallengesBoardCopy.collectionFormAnonymousSubtitle,
+                    isOn: binding.isAnonymous
+                )
                 SubjectRowSeparator()
                 // AO3's `email_notify` mails the contact email when an item is
                 // added (CollectionMailer#item_added_notification), not members.
-                toggleRow("Email New Items", isOn: binding.emailNotify)
+                ChallengeBoardToggleRow(
+                    title: "Email new items",
+                    subtitle: ChallengesBoardCopy.collectionFormEmailNotifySubtitle,
+                    isOn: binding.emailNotify
+                )
             }
 
             // AO3 prints the select only while it offers one; no field, no row.
             if !binding.wrappedValue.challengeOptions.isEmpty {
-                group("Challenge", note: nil) {
+                let options = binding.wrappedValue.challengeOptions
+                group(ChallengesBoardCopy.collectionFormTypeSection, note: nil) {
                     SubjectFormRow(
-                        label: "Set Up a Challenge",
+                        label: "Challenge",
                         arrangement: .control,
                         trailing: {
-                            Picker("Set Up a Challenge", selection: binding.challengeType) {
-                                ForEach(binding.wrappedValue.challengeOptions) { option in
-                                    // AO3's blank option may print no text.
-                                    Text(option.title.isEmpty ? "None" : option.title)
+                            if options.count <= 3 {
+                                SubjectSegmentedControl(
+                                    options: options.map(\.value),
+                                    title: { value in
+                                        let raw = options.first(where: { $0.value == value })?.title ?? ""
+                                        return ChallengesBoardCopy.collectionFormChallengeOptionTitle(
+                                            value: value,
+                                            rawTitle: raw
+                                        )
+                                    },
+                                    selection: binding.challengeType
+                                )
+                            } else {
+                                Picker("Challenge", selection: binding.challengeType) {
+                                    ForEach(options) { option in
+                                        Text(
+                                            ChallengesBoardCopy.collectionFormChallengeOptionTitle(
+                                                value: option.value,
+                                                rawTitle: option.title
+                                            )
+                                        )
                                         .tag(option.value)
+                                    }
                                 }
+                                .labelsHidden()
+                                .pickerStyle(.menu)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
                             }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
                         }
                     )
                 }
             }
 
-            group("Profile", note: nil) {
+            group(ChallengesBoardCopy.collectionFormImagesSection, note: nil) {
+                textRow("Header image URL", text: binding.headerImageURL,
+                        placeholder: "Optional", errorKey: AO3CollectionParam.headerImageURL)
+                SubjectRowSeparator()
+                textRow("Header image alt text", text: binding.headerImageAlt,
+                        placeholder: "Optional", errorKey: nil)
+                SubjectRowSeparator()
+                textRow("Icon alt text", text: binding.iconAlt,
+                        placeholder: "Optional", errorKey: AO3CollectionParam.iconAlt)
+                SubjectRowSeparator()
+                textRow("Icon comment", text: binding.iconComment,
+                        placeholder: "Optional", errorKey: AO3CollectionParam.iconComment)
+            }
+
+            group(ChallengesBoardCopy.collectionFormProfileSection, note: nil) {
                 textRow("Introduction", text: binding.introduction,
                         placeholder: "Optional", errorKey: AO3CollectionParam.intro, isMultiline: true)
                 SubjectRowSeparator()
@@ -213,17 +275,54 @@ struct AO3CollectionFormView: View {
             }
 
             Section {
-                saveButton.pageBodyRow(top: 18, gutter: SubjectMetrics.accountGutter)
                 if !isNew {
-                    openOnAO3Card.pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
+                    openOnAO3Card.pageBodyRow(top: 16, gutter: SubjectMetrics.accountGutter)
                 }
-            } footer: {
-                Text("Your changes are saved to AO3.")
+                ChallengeBoardSectionFooter(text: "Your changes are saved to AO3.", horizontalInset: 16)
+                    .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
             }
         }
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
+    }
+
+    private func previewCard(_ current: AO3CollectionForm) -> some View {
+        let trimmedTitle = current.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previewTitle = trimmedTitle.isEmpty
+            ? ChallengesBoardCopy.collectionFormUntitledPlaceholder
+            : trimmedTitle
+        let previewPalette = theme.appTheme.subjectPalette(
+            hue: CoverArt.workHue(fandoms: [], title: previewTitle)
+        )
+        return ChallengeBoardContextCard(
+            systemImage: "archivebox",
+            kicker: ChallengesBoardCopy.collectionFormPreviewKicker,
+            title: previewTitle,
+            meta: ChallengesBoardCopy.collectionFormPreviewURL(name: current.name),
+            palette: previewPalette,
+            surface: .form
+        )
+    }
+
+    private func descriptionRow(_ text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            TextField(
+                ChallengesBoardCopy.collectionFormDescriptionPlaceholder,
+                text: text,
+                axis: .vertical
+            )
+            .font(.system(size: editorFontSize))
+            .textFieldStyle(.plain)
+            .lineLimit(2...5)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .accessibilityLabel("Description")
+
+            if let message = form?.fieldErrors[AO3CollectionParam.description], !message.isEmpty {
+                fieldError(message)
+            }
+        }
     }
 
     private var palette: SubjectPalette {
@@ -245,18 +344,14 @@ struct AO3CollectionFormView: View {
         @ViewBuilder rows: () -> some View
     ) -> some View {
         Section {
-            SubjectFieldLabel(text: title, style: .formGroup)
-                .pageBodyRow(top: 18, gutter: SubjectMetrics.accountGutter)
+            ChallengeBoardSectionHeader(title: title)
+                .pageBodyRow(top: 20, gutter: 0)
             VStack(spacing: 0) { rows() }
-                .subjectPanel()
-                .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+                .challengeBoardCard()
+                .pageBodyRow(top: 6, gutter: SubjectMetrics.accountGutter)
             if let note {
-                Text(note)
-                    .font(.system(size: groupNoteSize))
-                    .foregroundStyle(.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+                ChallengeBoardSectionFooter(text: note, horizontalInset: 16)
+                    .pageBodyRow(top: 6, gutter: SubjectMetrics.accountGutter)
             }
         }
     }
@@ -293,7 +388,7 @@ struct AO3CollectionFormView: View {
     private func nameRow(_ binding: Binding<AO3CollectionForm>) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             SubjectFormRow(
-                label: "Collection Name",
+                label: "Name",
                 arrangement: .control,
                 isDisabled: form?.nameIsLocked == true,
                 trailing: {
@@ -324,79 +419,43 @@ struct AO3CollectionFormView: View {
         switch nameAvailability {
         case .available:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(theme.appTheme.statusSuccessColor)
                 .accessibilityLabel("Name is available")
         case .taken:
             Image(systemName: "xmark.circle.fill")
-                .foregroundStyle(.red)
+                .foregroundStyle(theme.appTheme.errorColor)
                 .accessibilityLabel("Name is taken")
         case .invalid:
             Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(ChallengeBoardColors.warningInk(for: theme.appTheme))
                 .accessibilityLabel("Name is not a valid collection name")
         case .unknown, nil:
             EmptyView()
         }
     }
 
-    private func toggleRow(_ label: String, isOn: Binding<Bool>) -> some View {
-        SubjectFormRow(
-            label: label,
-            arrangement: .control,
-            trailing: {
-                Toggle("", isOn: isOn)
-                    .labelsHidden()
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .accentFill()
-            }
-        )
-    }
-
     private func fieldError(_ message: String) -> some View {
         Text(message)
             .font(.system(size: fieldErrorSize))
-            .foregroundStyle(.red)
+            .foregroundStyle(theme.appTheme.errorColor)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 16)
             .padding(.bottom, 8)
     }
 
     private func noticeCard(_ message: String, isError: Bool) -> some View {
         Text(message)
             .font(.system(size: noticeCardSize))
-            .foregroundStyle(isError ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondaryInk))
+            .foregroundStyle(isError ? AnyShapeStyle(theme.appTheme.errorColor) : AnyShapeStyle(.secondaryInk))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .subjectPanel()
-    }
-
-    // MARK: Notes
-
-    private var nameNote: String {
-        "The collection name is part of its web address. Use letters, numbers and underscores. "
-            + "You can't change it after creating the collection."
-    }
-
-    private var preferencesNote: String {
-        "You can turn on any combination of these settings. Unrevealed shows each work as "
-            + "Mystery Work, Anonymous hides its creators, and new-item emails go to the contact email."
+            .challengeBoardCard()
     }
 
     // MARK: Actions
-
-    private var saveButton: some View {
-        Button {
-            Task { await save() }
-        } label: {
-            Text(isNew ? "Create Collection" : "Save Changes")
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.kudosPrimaryConfirm)
-        .disabled(phase == .saving || !canSave)
-    }
 
     /// AO3 rejects a nameless or titleless collection server-side and hands the
     /// whole form back, losing nothing but a round trip and the reader's patience.
@@ -412,7 +471,7 @@ struct AO3CollectionFormView: View {
     /// AO3's owner-only delete control.
     private var openOnAO3Card: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Collection Actions")
+            Text("Collection actions")
                 .font(.system(size: actionTitleSize, weight: .semibold))
             Text("Open AO3 to close this collection. Deleting the collection leaves its works on AO3.")
                 .font(.system(size: noticeCardSize))
@@ -422,8 +481,8 @@ struct AO3CollectionFormView: View {
                 Button("Open Collection Settings on AO3") {
                     router.open(AO3CollectionURL.edit(slug: slug))
                 }
-                    .buttonStyle(.borderless)
-                    .font(.system(size: actionButtonSize, weight: .semibold))
+                .buttonStyle(.borderless)
+                .font(.system(size: actionButtonSize, weight: .semibold))
                 if AO3CollectionDeleteDecision.canStart(
                     allowsDelete: form?.allowsDelete == true,
                     isDeleting: false,
@@ -432,16 +491,16 @@ struct AO3CollectionFormView: View {
                     Button("Delete Collection", role: .destructive) {
                         showingDeleteConfirmation = true
                     }
-                        .buttonStyle(.borderless)
-                        .font(.system(size: actionButtonSize, weight: .semibold))
-                        .disabled(phase == .saving || isDeleting)
+                    .buttonStyle(.borderless)
+                    .font(.system(size: actionButtonSize, weight: .semibold))
+                    .disabled(phase == .saving || isDeleting)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     // MARK: Loading and saving

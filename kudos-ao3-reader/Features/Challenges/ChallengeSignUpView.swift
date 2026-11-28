@@ -17,15 +17,14 @@ struct ChallengeSignUpView: View {
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .subheadline) private var rowTitleSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .footnote) private var buttonLabelSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .footnote) private var promptEditorSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .body) private var promptEditorSize: CGFloat = 16
     @ScaledMetric(relativeTo: .footnote) private var loadingSize: CGFloat = 14
     @ScaledMetric(relativeTo: .footnote) private var noticeTextSize: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) private var failureBodySize: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) private var errorTextSize: CGFloat = 12.5
-    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
-    @ScaledMetric(relativeTo: .caption) private var promptFootnoteSize: CGFloat = 10.5
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption) private var promptFootnoteSize: CGFloat = 11.5
 
     @State var form: AO3ChallengeSignUpForm?
     @State var phase: Phase = .idle
@@ -82,7 +81,7 @@ struct ChallengeSignUpView: View {
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 12, gutter: selfGuttered)
+                contextCard.pageBodyRow(top: 12, gutter: gutter)
             }
 
             if let notice = statusNotice {
@@ -115,8 +114,18 @@ struct ChallengeSignUpView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Your Sign-Up", palette: palette)
-        .safeAreaBar(edge: .bottom, spacing: 0) { bottomActionBar }
+        .subjectScreenWash(title: ChallengesBoardCopy.signUpTitle, palette: palette, role: .grouped)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                ChallengeBoardConfirmToolbarButton(
+                    title: "Submit",
+                    isBusy: isSubmitting,
+                    isDisabled: form == nil || isSubmitting
+                ) {
+                    Task { await submitSignUp() }
+                }
+            }
+        }
         .task { await loadSignUpIfNeeded() }
         #if DEBUG
         .task { await openPromptTagsIfRequested() }
@@ -170,25 +179,25 @@ struct ChallengeSignUpView: View {
         )
     }
 
-    // MARK: - Header
+    // MARK: - Header (`Challenge-SignUp.dc.html`)
 
-    private var header: some View {
-        SubjectPageFact(
-            [effectiveTitle, headerSubtitle].filter { !$0.isEmpty }.joined(separator: " · "),
-            gutter: SubjectMetrics.accountGutter
+    private var contextCard: some View {
+        ChallengeBoardContextCard(
+            systemImage: takesOffers ? "gift" : "bubble.left",
+            kicker: ChallengesBoardCopy.challengeKindName(takesOffers ? .giftExchange : .promptMeme),
+            title: effectiveTitle,
+            meta: ChallengesBoardCopy.signUpContextMeta(
+                limits: limits,
+                takesOffers: takesOffers,
+                requestCount: liveRequests.count,
+                offerCount: liveOffers.count
+            ),
+            palette: palette,
+            surface: .form
         )
     }
 
-    private var headerSubtitle: String {
-        func count(_ noun: String, _ live: Int, of allowed: Int?) -> String {
-            allowed.map { "\(noun) \(live) of \($0)" } ?? AO3ChallengeCountText.plural(live, noun.lowercased())
-        }
-        let requests = count("Request", liveRequests.count, of: limits?.requestsAllowed)
-        guard takesOffers else { return requests }
-        return requests + " · " + count("Offer", liveOffers.count, of: limits?.offersAllowed)
-    }
-
-    // MARK: - Content Sections
+    // MARK: - Content Sections (`Challenge-SignUp.dc.html`)
 
     @ViewBuilder
     private var contentSections: some View {
@@ -200,43 +209,69 @@ struct ChallengeSignUpView: View {
 
         ForEach(Array(liveRequests.enumerated()), id: \.element.id) { index, request in
             Section {
-                SectionRuleHeader(title: "Request \(index + 1)")
+                ChallengeBoardSectionHeader(title: "Request \(index + 1)")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 if let tagError = form?.fieldErrors[AO3ChallengeSignUpForm.errorKey(for: request)] {
-                    errorCard(tagError).pageBodyRow(top: 8, gutter: gutter)
+                    errorCard(tagError).pageBodyRow(top: 6, gutter: gutter)
                 }
                 requestPanel(position: index, prompt: request)
-                    .pageBodyRow(top: 8, gutter: gutter)
-                promptDescriptionCard(prompt: request)
-                    .pageBodyRow(top: 8, gutter: gutter)
+                    .pageBodyRow(top: 6, gutter: gutter)
+            }
+        }
+
+        if liveRequests.count < (limits?.requestsAllowed ?? .max) {
+            Section {
+                addPromptButtonCard(title: ChallengesBoardCopy.signUpAddRequestLabel) {
+                    addNewRequest()
+                }
+                .disabled(form == nil || isSubmitting)
+                .pageBodyRow(top: 12, gutter: gutter)
             }
         }
 
         Section {
-            requestsFootnote.pageBodyRow(top: 8, gutter: gutter)
+            requestsFootnote.pageBodyRow(top: 6, gutter: gutter)
         }
 
         if takesOffers {
-            Section {
-                SectionRuleHeader(title: "Offers")
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
-
-                let offerErrors = [form?.fieldErrors["offers"]].compactMap { $0 }
-                    + liveOffers.compactMap { form?.fieldErrors[AO3ChallengeSignUpForm.errorKey(for: $0)] }
-                ForEach(offerErrors, id: \.self) { offerError in
+            if let offerError = form?.fieldErrors["offers"] {
+                Section {
                     errorCard(offerError).pageBodyRow(top: 8, gutter: gutter)
                 }
+            }
 
-                offersPanel.pageBodyRow(top: 8, gutter: gutter)
-                offersFootnote.pageBodyRow(top: 8, gutter: gutter)
+            ForEach(Array(liveOffers.enumerated()), id: \.element.id) { index, offer in
+                Section {
+                    ChallengeBoardSectionHeader(title: "Offer \(index + 1)")
+                        .pageBodyRow(top: 18, gutter: selfGuttered)
+                    if let tagError = form?.fieldErrors[AO3ChallengeSignUpForm.errorKey(for: offer)] {
+                        errorCard(tagError).pageBodyRow(top: 6, gutter: gutter)
+                    }
+                    offerPanel(position: index, prompt: offer)
+                        .pageBodyRow(top: 6, gutter: gutter)
+                }
+            }
+
+            if liveOffers.count < (limits?.offersAllowed ?? .max) {
+                Section {
+                    addPromptButtonCard(title: ChallengesBoardCopy.signUpAddOfferLabel) {
+                        addNewOffer()
+                    }
+                    .disabled(form == nil || isSubmitting)
+                    .pageBodyRow(top: 12, gutter: gutter)
+                }
+            }
+
+            Section {
+                offersFootnote.pageBodyRow(top: 6, gutter: gutter)
             }
         }
 
-        if form?.signUpID != nil {
+        if !(auth.username?.isEmpty ?? true) || form?.signUpID != nil {
             Section {
-                SectionRuleHeader(title: "Withdraw")
+                ChallengeBoardSectionHeader(title: ChallengesBoardCopy.signUpYourSectionTitle)
                     .pageBodyRow(top: 18, gutter: selfGuttered)
-                withdrawPanel.pageBodyRow(top: 8, gutter: gutter)
+                yourSignUpPanel.pageBodyRow(top: 6, gutter: gutter)
             }
         }
     }
@@ -249,43 +284,45 @@ extension ChallengeSignUpView {
     func requestPanel(position: Int, prompt: AO3ChallengePrompt) -> some View {
         let editTags = { editingPrompt = EditingPrompt(promptID: prompt.id, kind: .request, position: position) }
         return VStack(spacing: 0) {
-            SubjectFormRow(
-                label: "Fandoms",
-                value: prompt.fandoms.isEmpty ? "None chosen" : prompt.fandoms.joined(separator: ", "),
-                showsDisclosure: true,
+            promptTagChipsRow(
+                label: "Fandom",
+                tags: prompt.fandoms,
+                includesAny: prompt.anyFandom,
+                placeholder: "None chosen",
+                isTinted: false,
                 action: editTags
             )
 
             SubjectRowSeparator()
 
-            SubjectFormRow(
-                label: "Relationships",
-                value: prompt.relationships.isEmpty
-                    ? "Optional"
-                    : "\(prompt.relationships.count) chosen",
-                showsDisclosure: true,
+            promptTagChipsRow(
+                label: "Relationship",
+                tags: prompt.relationships,
+                includesAny: prompt.anyRelationship,
+                placeholder: "Optional",
+                isTinted: true,
                 action: editTags
             )
 
             SubjectRowSeparator()
 
-            SubjectFormRow(
+            promptTagChipsRow(
                 label: "Characters",
-                value: prompt.characters.isEmpty
-                    ? "Optional"
-                    : "\(prompt.characters.count) chosen",
-                showsDisclosure: true,
+                tags: prompt.characters,
+                includesAny: prompt.anyCharacter,
+                placeholder: "Optional",
+                isTinted: false,
                 action: editTags
             )
 
             SubjectRowSeparator()
 
-            SubjectFormRow(
-                label: "Additional Tags",
-                value: prompt.freeforms.isEmpty
-                    ? "Optional"
-                    : "\(prompt.freeforms.count) chosen",
-                showsDisclosure: true,
+            promptTagChipsRow(
+                label: "Additional tags",
+                tags: prompt.freeforms,
+                includesAny: prompt.anyFreeform,
+                placeholder: "Optional",
+                isTinted: false,
                 action: editTags
             )
 
@@ -311,30 +348,114 @@ extension ChallengeSignUpView {
             .accessibilityHint("Any relationship matches, not only the ones chosen")
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
+
+            SubjectRowSeparator()
+
+            promptDescriptionSection(prompt: prompt)
         }
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
-    func promptDescriptionCard(prompt: AO3ChallengePrompt) -> some View {
+    func offerPanel(position: Int, prompt: AO3ChallengePrompt) -> some View {
+        let editTags = { editingPrompt = EditingPrompt(promptID: prompt.id, kind: .offer, position: position) }
+        return VStack(spacing: 0) {
+            promptTagChipsRow(
+                label: "Fandom",
+                tags: prompt.fandoms,
+                includesAny: prompt.anyFandom,
+                placeholder: "None chosen",
+                isTinted: false,
+                action: editTags
+            )
+
+            SubjectRowSeparator()
+
+            promptTagChipsRow(
+                label: "Relationship",
+                tags: prompt.relationships,
+                includesAny: prompt.anyRelationship,
+                placeholder: "Optional",
+                isTinted: true,
+                action: editTags
+            )
+
+            SubjectRowSeparator()
+
+            promptTagChipsRow(
+                label: "Characters",
+                tags: prompt.characters,
+                includesAny: prompt.anyCharacter,
+                placeholder: "Optional",
+                isTinted: false,
+                action: editTags
+            )
+
+            SubjectRowSeparator()
+
+            promptTagChipsRow(
+                label: "Additional tags",
+                tags: prompt.freeforms,
+                includesAny: prompt.anyFreeform,
+                placeholder: "Optional",
+                isTinted: false,
+                action: editTags
+            )
+        }
+        .challengeBoardCard()
+    }
+
+    private func promptTagChipsRow(
+        label: String,
+        tags: [String],
+        includesAny: Bool,
+        placeholder: String,
+        isTinted: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        let displayTags = tags + (includesAny ? ["Any"] : [])
+        return SubjectFormRow(
+            label: label,
+            arrangement: .control,
+            showsDisclosure: true,
+            action: action
+        ) {
+            if displayTags.isEmpty {
+                Text(placeholder)
+                    .font(.system(size: rowTitleSize))
+                    .foregroundStyle(.secondaryInk)
+            } else {
+                FlowLayout(spacing: 6, rowSpacing: 6) {
+                    ForEach(Array(displayTags.enumerated()), id: \.offset) { _, tag in
+                        ChallengeBoardTagPill(
+                            text: label == "Fandom" ? FandomDisplayName.bareTitle(tag) : tag,
+                            isTinted: isTinted && tag != "Any"
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
+            }
+        }
+    }
+
+    func promptDescriptionSection(prompt: AO3ChallengePrompt) -> some View {
         let binding = promptBinding(id: prompt.id, kind: prompt.kind).promptText
 
-        return VStack(alignment: .leading, spacing: 7) {
-            SubjectFieldLabel(text: "Prompt", style: .formGroup)
-
+        return VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .topLeading) {
                 if binding.wrappedValue.isEmpty {
                     Text("Describe what you would love to receive…")
-                        .font(.system(size: promptEditorSize, design: .serif))
+                        .font(.system(size: promptEditorSize))
                         .foregroundStyle(.secondary.opacity(0.6))
                         .padding(.horizontal, 4)
                         .padding(.vertical, 8)
                 }
 
                 TextEditor(text: binding)
-                    .font(.system(size: promptEditorSize, design: .serif))
-                    .frame(minHeight: 80)
+                    .font(.system(size: promptEditorSize))
+                    .frame(minHeight: 72)
                     .scrollContentBackground(.hidden)
                     .background(Color.clear)
+                    .accessibilityLabel("Prompt notes")
             }
 
             // One under the other at the accessibility sizes: beside the count the sentence was
@@ -354,8 +475,23 @@ extension ChallengeSignUpView {
                     .foregroundStyle(.secondary.opacity(0.8))
             }
         }
-        .padding(14)
-        .subjectPanel()
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    private func addPromptButtonCard(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: rowTitleSize, weight: .semibold))
+                .foregroundStyle(theme.accentInk)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 13)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .challengeBoardCard()
     }
 
     /// The spec's "3 to 5 fandoms and 1 to 3 relationships per request", from
@@ -379,159 +515,56 @@ extension ChallengeSignUpView {
             }
         }
         sentences.append("Kudos checks these limits before you submit your sign-up.")
-        return Text(sentences.joined(separator: " "))
-            .font(.system(size: captionSize))
-            .foregroundStyle(Color.secondary.opacity(0.7))
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 4)
+        return ChallengeBoardSectionFooter(text: sentences.joined(separator: " "), horizontalInset: 16)
     }
 
-    var offersPanel: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(liveOffers.enumerated()), id: \.element.id) { index, offer in
-                if index > 0 {
-                    SubjectRowSeparator()
-                }
+    var offersFootnote: some View {
+        ChallengeBoardSectionFooter(
+            text: "You can edit your sign-up until sign-ups close. After they close, you can only withdraw it.",
+            horizontalInset: 16
+        )
+    }
 
-                SubjectFormRow(
-                    label: "Offer \(index + 1)",
-                    value: offerSummary(offer),
-                    showsDisclosure: true
-                ) {
-                    editingPrompt = EditingPrompt(promptID: offer.id, kind: .offer, position: index)
+    var yourSignUpPanel: some View {
+        let username = auth.username?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return VStack(spacing: 0) {
+            if !username.isEmpty {
+                SubjectFormRow(label: "Pseud", value: username)
+                if form?.signUpID != nil {
+                    SubjectRowSeparator()
                 }
             }
-
-            if liveOffers.count < (limits?.offersAllowed ?? .max) {
-                if !liveOffers.isEmpty {
-                    SubjectRowSeparator()
-                }
-
+            if form?.signUpID != nil {
                 Button {
-                    addNewOffer()
+                    confirmWithdraw = true
                 } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "plus.circle")
+                    HStack(spacing: 10) {
+                        Image(systemName: "xmark.circle")
                             .font(.system(size: 15))
-                            .foregroundStyle(theme.accentInk)
+                            .foregroundStyle(theme.appTheme.errorColor)
+                            .frame(width: 20)
 
-                        Text("Add an Offer")
-                            .font(.system(size: rowTitleSize))
-                            .foregroundStyle(.primary)
+                        Text("Withdraw Sign-Up")
+                            .font(.system(size: rowTitleSize, weight: .semibold))
+                            .foregroundStyle(theme.appTheme.errorColor)
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                        Spacer()
-
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Color.secondary.opacity(0.42))
+                        if isWithdrawing {
+                            ProgressView()
+                                .controlSize(.small)
+                                .accentFill()
+                        }
                     }
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .disabled(isWithdrawing)
+                .accessibilityLabel("Withdraw Sign-Up")
             }
         }
-        .subjectPanel()
-    }
-
-    func offerSummary(_ offer: AO3ChallengePrompt) -> String {
-        let tagCount = offer.relationships.count + offer.characters.count + offer.freeforms.count
-        let fandomName = offer.fandoms.first.map(FandomDisplayName.bareTitle) ?? "Any Fandom"
-        if tagCount > 0 {
-            return "\(fandomName) · \(tagCount) \(tagCount == 1 ? "tag" : "tags")"
-        }
-        return fandomName
-    }
-
-    var offersFootnote: some View {
-        Text("You can edit your sign-up until sign-ups close. After they close, you can only withdraw it.")
-            .font(.system(size: captionSize))
-            .foregroundStyle(Color.secondary.opacity(0.7))
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 4)
-    }
-
-    var withdrawPanel: some View {
-        VStack(spacing: 0) {
-            Button {
-                confirmWithdraw = true
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "xmark.circle")
-                        .font(.system(size: 15))
-                        .foregroundStyle(Color.red)
-                        .frame(width: 20)
-
-                    Text("Withdraw Sign-Up")
-                        .font(.system(size: rowTitleSize))
-                        .foregroundStyle(Color.red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if isWithdrawing {
-                        ProgressView()
-                            .controlSize(.small)
-                            .accentFill()
-                    }
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(isWithdrawing)
-        }
-        .subjectPanel()
-    }
-
-    var bottomActionBar: some View {
-        HStack(spacing: 9) {
-            Button {
-                addNewRequest()
-            } label: {
-                Text("Add Request")
-                    .font(.system(size: buttonLabelSize, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 44)
-                    .background(
-                        SubjectMetrics.controlShape(dynamicTypeSize)
-                            .fill(theme.appTheme.glassFill(0.10))
-                            .overlay(
-                                SubjectMetrics.controlShape(dynamicTypeSize)
-                                    .strokeBorder(theme.appTheme.glassStroke(0.16), lineWidth: 0.5)
-                            )
-                    )
-            }
-            .buttonStyle(.plain)
-            // Without a form (still loading, or the load failed) both did nothing and looked live.
-            .disabled(form == nil || liveRequests.count >= (limits?.requestsAllowed ?? .max) || isSubmitting)
-
-            Button {
-                Task { await submitSignUp() }
-            } label: {
-                HStack(spacing: 6) {
-                    if isSubmitting {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(theme.onEffectiveTint)
-                    }
-                    Text("Submit Sign-Up")
-                        .font(.system(size: buttonLabelSize, weight: .semibold))
-                        .foregroundStyle(theme.onEffectiveTint)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 44)
-                .background(
-                    SubjectMetrics.controlShape(dynamicTypeSize)
-                        .fill(theme.effectiveTint)
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(form == nil || isSubmitting)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .challengeBoardCard()
     }
 
     func promptTagsEditor(_ editing: EditingPrompt) -> some View {
@@ -553,20 +586,20 @@ extension ChallengeSignUpView {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     func errorCard(_ text: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle")
-                .foregroundStyle(Color.red)
+                .foregroundStyle(theme.appTheme.errorColor)
             Text(text)
                 .font(.system(size: errorTextSize))
-                .foregroundStyle(Color.red)
+                .foregroundStyle(theme.appTheme.errorColor)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
-        .subjectPanel()
+        .challengeBoardCard()
     }
 
     var loadingRow: some View {
@@ -598,7 +631,7 @@ extension ChallengeSignUpView {
         }
         .frame(maxWidth: .infinity)
         .padding(16)
-        .subjectPanel()
+        .challengeBoardCard()
     }
 }
 

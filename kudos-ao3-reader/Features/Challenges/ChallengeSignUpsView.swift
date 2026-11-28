@@ -16,19 +16,23 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    @ScaledMetric(relativeTo: .headline) private var rowTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 17
     @ScaledMetric(relativeTo: .subheadline) private var buttonLabelSize: CGFloat = 14
     @ScaledMetric(relativeTo: .subheadline) private var loadingSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) private var loadMoreSize: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) private var failureBodySize: CGFloat = 13
-    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
-    @ScaledMetric(relativeTo: .caption) private var summarySize: CGFloat = 11
+    @ScaledMetric(relativeTo: .footnote) private var subSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 12
 
     @State private var pages = AO3LoadMorePages<AO3ChallengeSignUp>()
     @State private var filterSelection: SignUpFilter = .all
     @State private var phase: Phase = .idle
     @State private var closeDateText: String = ""
+    @State private var rawCloseDateText: String?
+    @State private var worksDueDateText: String?
+    @State private var closeDateInstant: Date?
+    @State private var signUpsAreOpen: Bool = false
     /// Every assignment the rows are joined to, read once per refresh. `nil`
     /// means the fetch failed, so match state is unknown rather than unmatched.
     @State private var assignments: [AO3ChallengeAssignment]?
@@ -53,7 +57,6 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
     }
 
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
-    private var selfGuttered: CGFloat { 0 }
 
     private var palette: SubjectPalette {
         theme.appTheme.subjectPalette(
@@ -97,8 +100,12 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 12, gutter: selfGuttered)
-                filterSegment.pageBodyRow(top: 10, gutter: gutter)
+                contextCard.pageBodyRow(top: 12, gutter: gutter)
+                if !statCells.isEmpty {
+                    ChallengeBoardStatStrip(cells: statCells, surface: .list)
+                        .pageBodyRow(top: 14, gutter: gutter)
+                }
+                filterChipRail.pageBodyRow(top: 14, gutter: 0)
             }
 
             switch phase {
@@ -117,7 +124,7 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Sign-Ups", palette: palette)
+        .subjectScreenWash(title: ChallengesBoardCopy.signUpsTitle, palette: palette, role: .content)
         .safeAreaBar(edge: .bottom, spacing: 0) { bottomActionBar }
         .task { await loadSignUpsIfNeeded() }
         #if DEBUG
@@ -140,29 +147,82 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
             .screenTint(palette)
     }
 
-    // MARK: - Header & Filter
+    // MARK: - Header & Filter (`Challenge-SignUps.dc.html`)
 
-    private var subtitleText: String {
-        var parts: [String] = [effectiveTitle]
-        if let signUpTotal {
-            parts.append(AO3ChallengeCountText.plural(signUpTotal, "sign-up"))
-        }
-        if !closeDateText.isEmpty {
-            parts.append(closeDateText)
-        }
-        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
-    }
-
-    private var header: some View {
-        SubjectPageFact(subtitleText, gutter: SubjectMetrics.accountGutter)
-    }
-
-    private var filterSegment: some View {
-        SubjectSegmentedControl(
-            options: SignUpFilter.allCases,
-            title: \.rawValue,
-            selection: $filterSelection
+    private var contextCard: some View {
+        let scheduleMeta = ChallengesBoardCopy.challengeSettingsContextMeta(
+            closeDateText: rawCloseDateText,
+            worksDueDateText: worksDueDateText
         )
+        let meta = scheduleMeta.isEmpty ? (closeDateText.isEmpty ? nil : closeDateText) : scheduleMeta
+        return ChallengeBoardContextCard(
+            systemImage: "gift",
+            kicker: ChallengesBoardCopy.challengeSettingsKicker(
+                kind: challengeKind ?? .giftExchange,
+                isModerated: nil
+            ),
+            title: effectiveTitle,
+            meta: meta,
+            palette: palette,
+            surface: .list
+        )
+    }
+
+    private var statCells: [ChallengeBoardStatStrip.Cell] {
+        var cells: [ChallengeBoardStatStrip.Cell] = []
+        if let total = signUpTotal {
+            cells.append(ChallengeBoardStatStrip.Cell(value: total.formatted(), label: "Sign-ups"))
+        } else if phase == .loaded, !pages.hasMore {
+            cells.append(ChallengeBoardStatStrip.Cell(value: signUps.count.formatted(), label: "Sign-ups"))
+        }
+        if let assignments, !assignments.isEmpty, !pages.hasMore {
+            let matchedCount = signUps.filter { matchState($0) == .matched }.count
+            let unmatchedCount = signUps.filter { matchState($0) == .unmatched }.count
+            cells.append(ChallengeBoardStatStrip.Cell(value: matchedCount.formatted(), label: "Matched"))
+            cells.append(
+                ChallengeBoardStatStrip.Cell(
+                    value: unmatchedCount.formatted(),
+                    label: "Unmatched",
+                    tint: unmatchedCount > 0 ? ChallengeBoardColors.warningInk(for: theme.appTheme) : nil
+                )
+            )
+        }
+        if signUpsAreOpen, let closeDateInstant {
+            cells.append(
+                ChallengeBoardStatStrip.Cell(
+                    value: ChallengesBoardCopy.daysUntilText(target: closeDateInstant),
+                    label: "Left"
+                )
+            )
+        }
+        return cells
+    }
+
+    private func chipLabel(for option: SignUpFilter) -> String {
+        guard option != .all, !pages.hasMore, let assignments, !assignments.isEmpty else {
+            return option.rawValue
+        }
+        let count = signUps.filter {
+            option == .matched ? matchState($0) == .matched : matchState($0) == .unmatched
+        }.count
+        return count > 0 ? "\(option.rawValue) \(count)" : option.rawValue
+    }
+
+    private var filterChipRail: some View {
+        AccessibilityChipRail(horizontalPadding: gutter) {
+            ForEach(SignUpFilter.allCases, id: \.self) { option in
+                let selected = filterSelection == option
+                let label = chipLabel(for: option)
+                Button {
+                    filterSelection = option
+                } label: {
+                    ChallengeBoardChipLabel(text: label, isSelected: selected)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(label)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
     }
 
     // MARK: - Content Sections
@@ -170,22 +230,18 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
     @ViewBuilder
     private var contentSections: some View {
         Section {
-            SectionRuleHeader(title: "Sign-Ups", count: filteredSignUps.count)
-                .padding(.bottom, 8)
-                .pageBodyRow(top: 18, gutter: selfGuttered)
-
             // A failed page (refresh or Load more) is reported above the rows
             // already loaded, which stay.
             if case let .failed(message) = phase {
-                note("Couldn't load sign-ups: \(message)").padding(.bottom, 8).pageBodyRow(top: 0, gutter: gutter)
+                note("Couldn't load sign-ups: \(message)").padding(.bottom, 8).pageBodyRow(top: 10, gutter: gutter)
             }
 
             if let matchNote {
-                note(matchNote).padding(.bottom, 8).pageBodyRow(top: 0, gutter: gutter)
+                note(matchNote).padding(.bottom, 8).pageBodyRow(top: 10, gutter: gutter)
             }
 
             if filteredSignUps.isEmpty {
-                emptyFilteredCard.pageBodyRow(top: 0, gutter: gutter)
+                emptyFilteredCard.pageBodyRow(top: 10, gutter: gutter)
             } else {
                 signUpRows
             }
@@ -203,76 +259,107 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
     /// One `List` row per sign-up: a row is one tap target, so a card holding
     /// every sign-up in a single row would push them all at once.
     private var signUpRows: some View {
-        let rows = PanelSegment.keyed(filteredSignUps, id: \.id)
-        return ForEach(rows, id: \.key) { row in
-            signUpRow(row.element)
-                .subjectRowNavigation(accessibilityLabel: row.element.pseud) {
-                    ChallengeSignUpDetailView(signUp: row.element, collectionTitle: effectiveTitle, palette: palette)
-                }
-                .panelSegment(row.offset, of: rows.count, gutter: gutter)
+        ForEach(Array(filteredSignUps.enumerated()), id: \.element.id) { index, signUp in
+            VStack(spacing: 0) {
+                if index > 0 { SubjectRowSeparator(inset: 48) }
+                signUpRow(signUp)
+            }
+            .subjectRowNavigation(accessibilityLabel: signUp.pseud) {
+                ChallengeSignUpDetailView(signUp: signUp, collectionTitle: effectiveTitle, palette: palette)
+            }
+            .pageBodyRow(top: 0, gutter: gutter)
         }
     }
 
     private func signUpRow(_ signUp: AO3ChallengeSignUp) -> some View {
-        HStack(alignment: .top, spacing: 11) {
+        let requestChips = ChallengesBoardCopy.signUpRequestChips(for: signUp, limit: 3)
+        let offerMeta = ChallengesBoardCopy.signUpOfferMeta(
+            offers: signUp.offers,
+            takesOffers: challengeKind != .promptMeme
+        )
+        let avatarColor = theme.appTheme.subjectPalette(hue: CoverArt.hue(for: signUp.pseud)).accent
+        let state = matchState(signUp)
+
+        return HStack(alignment: .top, spacing: 12) {
+            ChallengeBoardAvatar(
+                text: ChallengesBoardCopy.personInitial(for: signUp.pseud),
+                color: avatarColor,
+                shapeKind: .circle(size: 36)
+            )
+            .padding(.top, 2)
+
             VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .center, spacing: 7) {
-                    Text(signUp.pseud)
-                        .font(.system(size: rowTitleSize, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    matchedStatusBadge(matchState(signUp))
-                }
-
-                Text(AO3ChallengeCountText.plural(signUp.requests.count, "request")
-                    + " · " + AO3ChallengeCountText.plural(signUp.offers.count, "offer"))
-                    .font(.system(size: captionSize))
-                    .foregroundStyle(Color.secondary.opacity(0.85))
-                    .monospacedDigit()
+                Text(signUp.pseud)
+                    .font(.system(size: rowTitleSize, weight: .semibold))
+                    .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if !signUp.requestTagSummary.isEmpty {
-                    Text(signUp.requestTagSummary)
-                        .font(.system(size: summarySize))
-                        .foregroundStyle(Color.secondary.opacity(0.65))
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                if !requestChips.isEmpty {
+                    Text("Requests")
+                        .font(.system(size: subSize))
+                        .foregroundStyle(.secondaryInk)
+
+                    FlowLayout(spacing: 4, rowSpacing: 4) {
+                        ForEach(requestChips) { chip in
+                            ChallengeBoardTagPill(text: chip.label, isTinted: chip.isTinted)
+                        }
+                    }
+                    .padding(.top, 1)
+                }
+
+                if let offerMeta {
+                    Text(offerMeta.text)
+                        .font(.system(size: captionSize, weight: offerMeta.isWarning ? .semibold : .regular))
+                        .foregroundStyle(
+                            offerMeta.isWarning
+                                ? AnyShapeStyle(ChallengeBoardColors.warningInk(for: theme.appTheme))
+                                : AnyShapeStyle(.secondaryInk)
+                        )
                         .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 1)
+                }
+
+                if dynamicTypeSize.isAccessibilitySize, state != .unknown {
+                    matchedStatusBadge(state)
+                        .padding(.top, 2)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
+            if !dynamicTypeSize.isAccessibilitySize, state != .unknown {
+                matchedStatusBadge(state)
+                    .padding(.top, 3)
+            }
+
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.secondary.opacity(0.42))
-                .padding(.top, 4)
+                .foregroundStyle(.tertiary)
+                .padding(.top, 6)
+                .accessibilityHidden(true)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
+        .padding(.vertical, 10)
         .contentShape(Rectangle())
     }
 
     /// No chip at all when the state is unknown: a guess would be a false claim.
     @ViewBuilder
     private func matchedStatusBadge(_ state: AO3ChallengeSignUpMatching.State) -> some View {
-        if state != .unknown {
-            statusChip(isMatched: state == .matched)
-        }
-    }
-
-    private func statusChip(isMatched: Bool) -> some View {
-        Text(isMatched ? "MATCHED" : "UNMATCHED")
-            .font(.system(size: 8.5, weight: .bold))
-            .lineLimit(1)
-            .fixedSize()
-            .tracking(8.5 * 0.07)
-            .foregroundStyle(isMatched ? palette.accent : Color.secondary.opacity(0.7))
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(
-                Capsule()
-                    .fill(isMatched ? palette.accent.opacity(0.18) : Color.white.opacity(0.10))
+        switch state {
+        case .matched:
+            let info = ChallengeBoardColors.infoBadge(for: theme.appTheme)
+            ChallengeBoardBadge(
+                text: "Matched",
+                style: .tinted(foreground: info.foreground, background: info.background)
             )
+        case .unmatched:
+            let warn = ChallengeBoardColors.warningBadge(for: theme.appTheme)
+            ChallengeBoardBadge(
+                text: "Unmatched",
+                style: .tinted(foreground: warn.foreground, background: warn.background)
+            )
+        case .unknown:
+            EmptyView()
+        }
     }
 
     private func note(_ text: String) -> some View {
@@ -291,21 +378,27 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
     private var emptyFilteredCard: some View {
         let unknown = matchNote != nil && filterSelection != .all
         return VStack(spacing: 6) {
-            // All is not a filter: an empty All is simply no sign-ups yet.
-            Text(unknown ? "Match state unavailable"
-                : filterSelection == .all ? "No sign-ups yet"
-                : "No \(filterSelection.rawValue.lowercased()) sign-ups")
-                .font(.system(size: rowTitleSize, weight: .semibold))
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                ChallengesBoardCopy.signUpsEmptyTitle(
+                    filterName: filterSelection.rawValue,
+                    isAllFilter: filterSelection == .all,
+                    matchUnavailable: unknown
+                )
+            )
+            .font(.system(size: rowTitleSize, weight: .semibold))
+            .foregroundStyle(.primary)
+            .fixedSize(horizontal: false, vertical: true)
 
-            Text(unknown
-                ? "No sign-up can be shown as matched or unmatched without assignments."
-                : filterSelection == .all ? "Sign-ups will appear here as people join the challenge."
-                : "No sign-ups in this page match the \"\(filterSelection.rawValue)\" filter.")
-                .font(.system(size: bodySize))
-                .foregroundStyle(.secondaryInk)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                ChallengesBoardCopy.signUpsEmptyBody(
+                    filterName: filterSelection.rawValue,
+                    isAllFilter: filterSelection == .all,
+                    matchUnavailable: unknown
+                )
+            )
+            .font(.system(size: bodySize))
+            .foregroundStyle(.secondaryInk)
+            .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
         .padding(16)
@@ -486,12 +579,16 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
             slug: collectionSlug, request: request, kind: challengeKind
         )
         else { return }
+        signUpsAreOpen = form.settings.signupOpen
+        rawCloseDateText = form.settings.signupsCloseAt.dateText
+        worksDueDateText = form.settings.worksDueAt.dateText
+        closeDateInstant = form.settings.signupsCloseAt.instant
         if !form.settings.signupOpen {
-            closeDateText = "closed"
+            closeDateText = "Sign-ups closed"
         } else if let closeDate = form.settings.signupsCloseAt.dateText {
-            closeDateText = "open until \(closeDate)"
+            closeDateText = "Sign-ups open until \(closeDate)"
         } else {
-            closeDateText = "open"
+            closeDateText = "Sign-ups open"
         }
     }
 

@@ -27,10 +27,11 @@ struct AO3CollectionDetailView: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
+    @Environment(AppRouter.self) private var router
     @Environment(\.dismiss) private var dismiss
 
     @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) private var actionSize: CGFloat = 13
 
     @State private var show: AO3CollectionShow?
@@ -41,11 +42,12 @@ struct AO3CollectionDetailView: View {
     @State private var currentPages: [Segment: Int] = [:]
     @State private var totalPages: [Segment: Int] = [:]
     /// Which segments have already been fetched, so switching back to one does not
-    /// re-request it. Keyed by segment rather than a set of booleans so a fourth
+    /// re-request it. Keyed by segment rather than a set of booleans so a fifth
     /// segment cannot be added without deciding this.
     @State private var loaded: Set<Segment> = []
     @State private var phase: Phase = .idle
     @State private var expandAll = false
+    @State private var showingPrompts = false
     @State private var loadGeneration = 0
     @State private var loadedSessionGeneration: Int?
     @State private var pageLoadTask: Task<Void, Never>?
@@ -62,12 +64,14 @@ struct AO3CollectionDetailView: View {
         case works
         case bookmarks
         case people
+        case profile
 
         var title: String {
             switch self {
             case .works: "Works"
             case .bookmarks: "Bookmarks"
-            case .people: "People"
+            case .people: "Participants"
+            case .profile: "Profile"
             }
         }
     }
@@ -75,20 +79,20 @@ struct AO3CollectionDetailView: View {
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 20, gutter: 0)
-                if let show, !statCells(for: show).isEmpty {
-                    SubjectStatStrip(cells: statCells(for: show), palette: palette)
-                        .pageBodyRow(top: 12, gutter: SubjectMetrics.gutter)
+                contextCard.pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
+                if let show, !boardStatCells(for: show).isEmpty {
+                    ChallengeBoardStatStrip(cells: boardStatCells(for: show), surface: .list)
+                        .pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
                 }
-                segmentStrip.pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+                chipRail.pageBodyRow(top: 14, gutter: 0)
             }
 
             let manage = manageRows
             if !manage.isEmpty {
                 Section {
-                    SectionRuleHeader(title: "Manage")
-                        .padding(.bottom, 8)
-                        .pageBodyRow(top: 18, gutter: 0)
+                    ChallengeBoardListSectionHeader(title: "Manage")
+                        .padding(.bottom, 6)
+                        .pageBodyRow(top: 18, gutter: SubjectMetrics.accountGutter)
                 }
                 // One `List` row per screen, as segments of one card. The card
                 // was one `VStack` row, and a `List` row fires every
@@ -108,7 +112,7 @@ struct AO3CollectionDetailView: View {
                 Section { failureCard(message).pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter) }
             default:
                 segmentContent
-                if totalPage(for: segment) > 1 {
+                if segment != .profile, totalPage(for: segment) > 1 {
                     Section {
                         paginationBar(for: segment)
                             .pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
@@ -119,8 +123,15 @@ struct AO3CollectionDetailView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(palette: palette, role: .content)
-        .subjectOwnHeadingChrome(title: show?.collection.title ?? title)
+        .subjectScreenWash(title: show?.collection.title ?? title, palette: palette, role: .content)
+        .navigationDestination(isPresented: $showingPrompts) {
+            PromptMemeView(
+                collectionSlug: slug,
+                collectionTitle: show?.collection.title ?? title,
+                viewerIsOwner: show?.collection.viewerIsOwner ?? false,
+                challengeKind: show?.collection.challengeKind
+            )
+        }
         #if DEBUG
         // A shot's manage screen opens from the page, not from its row: at the largest
         // text the row is below the fold, and a `List` never builds a row it hasn't shown.
@@ -129,10 +140,23 @@ struct AO3CollectionDetailView: View {
         }
         #endif
         .toolbar {
-            // Its works are a works screen too: Show/Hide mature, like every other.
-            if hideMature {
-                ActionToolbar(items: [AnyView(WorkListMoreMenu { MatureRevealToggle() })])
-            }
+            ActionToolbar(items: [AnyView(
+                WorkListMoreMenu {
+                    if let url = show?.collection.url ?? AO3CollectionURL.show(slug: slug) {
+                        ShareLink(item: url) {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
+                        Button {
+                            router.open(url)
+                        } label: {
+                            Label("Open on AO3", systemImage: "safari")
+                        }
+                    }
+                    if hideMature {
+                        MatureRevealToggle()
+                    }
+                }
+            )])
         }
         .task(id: LoadID(
             segment: segment,
@@ -175,44 +199,67 @@ struct AO3CollectionDetailView: View {
 
     // MARK: Header
 
-    private var header: some View {
-        SubjectPageHeading(
-            title: show?.collection.title ?? title,
-            subtitle: subtitleLine,
-            palette: palette,
-            gutter: SubjectMetrics.accountGutter
-        )
+    private var contextSymbol: String {
+        switch show?.collection.challengeKind {
+        case .giftExchange: "gift"
+        case .promptMeme: "bubble.left"
+        case nil: "archivebox"
+        }
     }
 
-    /// Spec 1ci: "saltandsilver, meridian · Coastal fic, all fandoms" — the
-    /// maintainers and the collection's own one-line description.
-    private var subtitleLine: String {
-        guard let collection = show?.collection else { return "" }
-        var parts: [String] = []
-        if !collection.byline.isEmpty { parts.append(collection.byline) }
-        if !collection.summary.isEmpty { parts.append(collection.summary) }
-        return parts.joined(separator: " · ")
+    private var contextCard: some View {
+        let collection = show?.collection
+        return ChallengeBoardContextCard(
+            systemImage: contextSymbol,
+            kicker: collection.map { ChallengesBoardCopy.collectionPageKicker(for: $0) } ?? "Collection",
+            title: collection?.title ?? title,
+            meta: collection.map { ChallengesBoardCopy.collectionPageMeta(for: $0) },
+            palette: palette,
+            surface: .list
+        )
     }
 
     /// Works / Bookmarks. Each cell is dropped when AO3 gave no exact figure,
     /// rather than substituting the number of rows loaded from one page.
-    private func statCells(for show: AO3CollectionShow) -> [SubjectStatStrip.Cell] {
-        var cells: [SubjectStatStrip.Cell] = []
+    private func boardStatCells(for show: AO3CollectionShow) -> [ChallengeBoardStatStrip.Cell] {
+        var cells: [ChallengeBoardStatStrip.Cell] = []
         if let works = show.collection.worksCount {
-            cells.append(SubjectStatStrip.Cell(value: "\(works)", label: "Works"))
+            cells.append(ChallengeBoardStatStrip.Cell(value: works.formatted(), label: "Works"))
         }
         if let bookmarks = show.collection.bookmarksCount {
-            cells.append(SubjectStatStrip.Cell(value: "\(bookmarks)", label: "Bookmarks"))
+            cells.append(ChallengeBoardStatStrip.Cell(value: bookmarks.formatted(), label: "Bookmarks"))
         }
         return cells
     }
 
-    private var segmentStrip: some View {
-        SubjectSegmentedControl(
-            options: Segment.allCases,
-            title: \.title,
-            selection: $segment
-        )
+    private var chipRail: some View {
+        AccessibilityChipRail(horizontalPadding: SubjectMetrics.accountGutter) {
+            chipButton(for: .works)
+            chipButton(for: .bookmarks)
+            if show?.dashboard.promptsURL != nil {
+                Button {
+                    showingPrompts = true
+                } label: {
+                    ChallengeBoardChipLabel(text: "Prompts", isSelected: false)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Prompts")
+            }
+            chipButton(for: .people)
+            chipButton(for: .profile)
+        }
+    }
+
+    private func chipButton(for option: Segment) -> some View {
+        let selected = segment == option
+        return Button {
+            segment = option
+        } label: {
+            ChallengeBoardChipLabel(text: option.title, isSelected: selected)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(option.title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private var palette: SubjectPalette {
@@ -227,14 +274,15 @@ struct AO3CollectionDetailView: View {
     private var segmentContent: some View {
         switch segment {
         case .works:
-            workRows(works, segment: .works, emptyMessage: "This collection has no works yet.")
+            workRows(works, segment: .works, emptyMessage: ChallengesBoardCopy.collectionPageEmptyWorks)
         case .bookmarks:
             workRows(
                 bookmarks,
                 segment: .bookmarks,
-                emptyMessage: "This collection has no bookmarks yet."
+                emptyMessage: ChallengesBoardCopy.collectionPageEmptyBookmarks
             )
         case .people: peopleRows
+        case .profile: profileRows
         }
     }
 
@@ -248,8 +296,8 @@ struct AO3CollectionDetailView: View {
             }
         } else {
             Section {
-                SectionRuleHeader(title: "Recent", count: exactTotal(for: segment))
-                    .pageBodyRow(top: 18, gutter: 0)
+                ChallengeBoardListSectionHeader(title: "Recent", count: exactTotal(for: segment))
+                    .pageBodyRow(top: 18, gutter: SubjectMetrics.accountGutter)
                 ForEach(rows) { work in
                     EnrichingAO3WorkRow(
                         work: work, expandAll: expandAll, presentation: .searchLedger
@@ -265,28 +313,10 @@ struct AO3CollectionDetailView: View {
 
     /// The spec's card badge. Only Anonymous is derivable from the works page — AO3
     /// prints the byline as "Anonymous" and gives nothing else away.
-    ///
-    /// 1ci also draws a **Gift** badge. `AO3WorkSummary` carries no recipient, and
-    /// the collection's works page does not print one, so it is not here rather than
-    /// being guessed at. The gift recipient does reach the app through
-    /// `AO3CollectionItem.recipient` on the maintainer's items page (1s), which is a
-    /// different request and a different screen.
     @ViewBuilder
     private func collectionStateBadge(for work: AO3WorkSummary) -> some View {
         if isAnonymous(work) {
-            Text("ANON")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .lineLimit(1)
-                .fixedSize()
-                .tracking(0.6)
-                .foregroundStyle(palette.accentOnFill)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule()
-                        .fill(palette.chipFill)
-                        .overlay(Capsule().strokeBorder(palette.chipStroke, lineWidth: 0.5))
-                )
+            ChallengeBoardBadge(text: "Anonymous", style: .neutral)
                 .accessibilityLabel("Anonymous in this collection")
         }
     }
@@ -305,22 +335,56 @@ struct AO3CollectionDetailView: View {
     private var peopleRows: some View {
         if people.isEmpty {
             Section {
-                emptyCard("Nobody has joined this collection yet.")
+                emptyCard(ChallengesBoardCopy.collectionPageEmptyParticipants)
                     .pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
             }
         } else {
             Section {
-                SectionRuleHeader(
-                    title: "People",
+                ChallengeBoardListSectionHeader(
+                    title: ChallengesBoardCopy.collectionPageParticipantsTitle,
                     countText: Self.peopleCountLabel(
                         count: people.count,
                         currentPage: currentPage(for: .people),
                         totalPages: totalPage(for: .people)
                     )
                 )
-                    .pageBodyRow(top: 18, gutter: 0)
-                ForEach(people) { person in
-                    AO3CollectionPersonRow(person: person, palette: palette)
+                .pageBodyRow(top: 18, gutter: SubjectMetrics.accountGutter)
+                ForEach(Array(people.enumerated()), id: \.element.id) { index, person in
+                    VStack(spacing: 0) {
+                        if index > 0 { SubjectRowSeparator(inset: 48) }
+                        AO3CollectionPersonRow(person: person, palette: palette)
+                    }
+                    .pageBodyRow(top: 0, gutter: SubjectMetrics.accountGutter)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var profileRows: some View {
+        let blocks: [(title: String, body: String)] = [
+            ("Introduction", show?.introduction ?? ""),
+            ("FAQ", show?.faq ?? ""),
+            ("Rules", show?.rules ?? "")
+        ].filter { !$0.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+        if blocks.isEmpty {
+            Section {
+                emptyCard(ChallengesBoardCopy.collectionPageEmptyProfile)
+                    .pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+            }
+        } else {
+            ForEach(blocks, id: \.title) { block in
+                Section {
+                    ChallengeBoardListSectionHeader(title: block.title)
+                        .pageBodyRow(top: 18, gutter: SubjectMetrics.accountGutter)
+                    Text(block.body)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .subjectPanel()
                         .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
                 }
             }
@@ -446,6 +510,8 @@ struct AO3CollectionDetailView: View {
                 people = result.people
                 currentPages[.people] = result.currentPage
                 totalPages[.people] = result.totalPages
+            case .profile:
+                break
             }
             loaded.insert(requestedSegment)
             phase = .loaded
@@ -511,7 +577,7 @@ extension AO3CollectionDetailView {
         switch segment {
         case .works: show?.collection.worksCount
         case .bookmarks: show?.collection.bookmarksCount
-        case .people: nil
+        case .people, .profile: nil
         }
     }
 
@@ -528,6 +594,7 @@ extension AO3CollectionDetailView {
         case .works: works.isEmpty
         case .bookmarks: bookmarks.isEmpty
         case .people: people.isEmpty
+        case .profile: show == nil
         }
     }
 
@@ -543,40 +610,44 @@ extension AO3CollectionDetailView {
     }
 }
 
-/// One member of a collection — spec 1ci's People segment.
+/// One member of a collection matching `ListScreen.dc.html` rows (36×36 circular avatar,
+/// 17 pt semibold name, 13 pt secondary work count).
 struct AO3CollectionPersonRow: View {
     let person: AO3CollectionPerson
     let palette: SubjectPalette
 
-    @ScaledMetric(relativeTo: .body) private var nameSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .caption) private var countSize: CGFloat = 11
+    @Environment(ThemeManager.self) private var theme
+    @ScaledMetric(relativeTo: .body) private var nameSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .footnote) private var countSize: CGFloat = 13
 
     var body: some View {
+        let personColor = theme.appTheme.subjectPalette(hue: CoverArt.hue(for: person.identity.displayName)).accent
+        let worksText = ChallengesBoardCopy.collectionPersonWorksText(person.workCount)
         HStack(spacing: 12) {
-            Text(String(person.identity.displayName.prefix(1)).uppercased())
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(palette.accent)
-                .frame(width: 30, height: 30)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(palette.chipFill)
-                )
-                .accessibilityHidden(true)
+            ChallengeBoardAvatar(
+                text: ChallengesBoardCopy.personInitial(for: person.identity.displayName),
+                color: personColor,
+                shapeKind: .circle(size: 36)
+            )
 
-            Text(person.identity.displayName)
-                .font(.system(size: nameSize, weight: .medium))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if let count = person.workCount {
-                Text("\(count) work\(count == 1 ? "" : "s")")
-                    .font(.system(size: countSize, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondaryInk)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(person.identity.displayName)
+                    .font(.system(size: nameSize, weight: .semibold))
+                    .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                if let worksText {
+                    Text(worksText)
+                        .font(.system(size: countSize))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .subjectCard(palette: palette)
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .combine)
     }
 }
 

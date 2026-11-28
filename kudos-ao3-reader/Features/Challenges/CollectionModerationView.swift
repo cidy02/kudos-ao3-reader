@@ -21,13 +21,15 @@ struct CollectionModerationView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    @ScaledMetric(relativeTo: .headline) private var reviewTitleSize: CGFloat = 16
-    @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 14.5
+    @ScaledMetric(relativeTo: .body) private var reviewTitleSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 16
     @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .subheadline) private var loadingSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) private var failureBodySize: CGFloat = 13
-    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .footnote) private var subSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var kickerSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 12
     @ScaledMetric(relativeTo: .body) private var actionLabelSize: CGFloat = 15
 
     @State private var awaitingReview: [AO3CollectionItem] = []
@@ -46,6 +48,7 @@ struct CollectionModerationView: View {
     /// 1cd's Message creator: the work's comment composer, "for a fix rather
     /// than a refusal". It used to open the work in the browser instead.
     @State private var commentsRoute: AO3CommentsRoute?
+    @State private var itemsDestinationTab: AO3CollectionItemTab?
     @State private var participantToDecline: AO3CollectionParticipant?
     @State private var confirmReveal = false
     @State private var confirmUnanon = false
@@ -63,7 +66,6 @@ struct CollectionModerationView: View {
     }
 
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
-    private var selfGuttered: CGFloat { 0 }
 
     private var palette: SubjectPalette {
         theme.appTheme.subjectPalette(hue: CoverArt.workHue(fandoms: [], title: effectiveTitle))
@@ -81,7 +83,12 @@ struct CollectionModerationView: View {
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 12, gutter: selfGuttered)
+                contextCard.pageBodyRow(top: 12, gutter: gutter)
+                if phase == .loaded {
+                    ChallengeBoardStatStrip(cells: statCells, surface: .list)
+                        .pageBodyRow(top: 14, gutter: gutter)
+                }
+                statusChipRail.pageBodyRow(top: 14, gutter: 0)
             }
 
             switch phase {
@@ -100,7 +107,7 @@ struct CollectionModerationView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Moderation", palette: palette)
+        .subjectScreenWash(title: "Moderation", palette: palette, role: .content)
         .navigationDestination(item: $commentsRoute) { route in
             CommentsView(
                 workID: route.workID,
@@ -108,6 +115,9 @@ struct CollectionModerationView: View {
                 initialFocusesChapter: false,
                 initialComposes: route.composes
             )
+        }
+        .navigationDestination(item: $itemsDestinationTab) { tab in
+            AO3CollectionItemsView(slug: collectionSlug, title: effectiveTitle, initialTab: tab)
         }
         .task(id: auth.sessionGeneration) { await load() }
         .refreshable { await load() }
@@ -162,22 +172,66 @@ struct CollectionModerationView: View {
             .screenTint(palette)
     }
 
-    // MARK: - Header
+    // MARK: - Header (`AO3-Collection-Moderation.dc.html`)
 
-    private var subtitleText: String {
-        let workPhrase = CollectionModerationCopy.reviewTally(
-            count: awaitingReview.count, page: reviewPage, totalPages: reviewTotalPages
+    private var contextCard: some View {
+        ChallengeBoardContextCard(
+            systemImage: "archivebox",
+            kicker: ChallengesBoardCopy.moderationKicker,
+            title: effectiveTitle,
+            meta: ChallengesBoardCopy.moderationContextMeta(
+                viewerIsOwner: viewerIsOwner,
+                isUnrevealed: isUnrevealed,
+                isAnonymous: isAnonymous
+            ),
+            palette: palette,
+            surface: .list
         )
-        let requestPhrase = membershipRequests.count == 1
-            ? "1 membership request" : "\(membershipRequests.count) membership requests"
-        return "\(workPhrase) · \(requestPhrase)"
     }
 
-    private var header: some View {
-        SubjectPageFact(
-            [effectiveTitle, subtitleText].filter { !$0.isEmpty }.joined(separator: " · "),
-            gutter: SubjectMetrics.accountGutter
+    private var statCells: [ChallengeBoardStatStrip.Cell] {
+        let waitingValue = reviewTotalPages > 1
+            ? "\(awaitingReview.count.formatted())+"
+            : awaitingReview.count.formatted()
+        return [
+            ChallengeBoardStatStrip.Cell(
+                value: waitingValue,
+                label: "Waiting",
+                tint: awaitingReview.isEmpty ? nil : ChallengeBoardColors.warningInk(for: theme.appTheme)
+            ),
+            ChallengeBoardStatStrip.Cell(value: membershipRequests.count.formatted(), label: "Requests"),
+            ChallengeBoardStatStrip.Cell(value: maintainers.count.formatted(), label: "Maintainers")
+        ]
+    }
+
+    /// Board filter chips: Waiting (current queue) + Approved / Rejected (pushes
+    /// `AO3CollectionItemsView` on that tab per `REDESIGN_DECISIONS.md` 1cd without
+    /// inventing totals AO3 did not send).
+    private var statusChipRail: some View {
+        let waitingLabel = ChallengesBoardCopy.moderationWaitingChipLabel(
+            count: awaitingReview.count,
+            totalPages: reviewTotalPages
         )
+        return AccessibilityChipRail(horizontalPadding: gutter) {
+            ChallengeBoardChipLabel(text: waitingLabel, isSelected: true)
+                .accessibilityAddTraits(.isSelected)
+
+            Button {
+                itemsDestinationTab = .approved
+            } label: {
+                ChallengeBoardChipLabel(text: "Approved", isSelected: false)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Approved")
+
+            Button {
+                itemsDestinationTab = .rejected
+            } label: {
+                ChallengeBoardChipLabel(text: "Rejected", isSelected: false)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Rejected")
+        }
     }
 
     // MARK: - Content Sections
@@ -192,13 +246,16 @@ struct CollectionModerationView: View {
         }
 
         Section {
-            SectionRuleHeader(title: "Awaiting Review", count: awaitingReview.count)
-                .pageBodyRow(top: 18, gutter: selfGuttered)
-
             if awaitingReview.isEmpty {
-                emptyReviewCard.pageBodyRow(top: 8, gutter: gutter)
+                emptyReviewCard.pageBodyRow(top: 10, gutter: gutter)
             } else {
-                awaitingReviewList.pageBodyRow(top: 8, gutter: gutter)
+                ForEach(Array(awaitingReview.enumerated()), id: \.element.id) { index, item in
+                    VStack(spacing: 0) {
+                        if index > 0 { SubjectRowSeparator(inset: dynamicTypeSize.isAccessibilitySize ? 0 : 46) }
+                        awaitingReviewCard(item)
+                    }
+                    .pageBodyRow(top: 0, gutter: gutter)
+                }
             }
             if reviewTotalPages > 1 {
                 SearchPaginationBar(
@@ -209,26 +266,14 @@ struct CollectionModerationView: View {
                 ) { page in
                     Task { await loadReviewPage(page) }
                 }
-                .pageBodyRow(top: 4, gutter: gutter)
+                .pageBodyRow(top: 6, gutter: gutter)
             }
             reviewFootnote.pageBodyRow(top: 8, gutter: gutter)
         }
 
-        // Owner decision (REDESIGN_DECISIONS): the old Moderated Items screen's
-        // "recently decided" lives here. AO3 pages approved and rejected items
-        // with no totals, so this opens those lists rather than counting page one.
         Section {
-            SubjectFormRow(label: "Recently Decided", value: "Approved and Rejected", showsDisclosure: true)
-            .subjectRowNavigation(accessibilityLabel: "Recently Decided") {
-                AO3CollectionItemsView(slug: collectionSlug, title: effectiveTitle, initialTab: .approved)
-            }
-            .subjectPanel()
-            .pageBodyRow(top: 12, gutter: gutter)
-        }
-
-        Section {
-            SectionRuleHeader(title: "Membership Requests", count: membershipRequests.count)
-                .pageBodyRow(top: 18, gutter: selfGuttered)
+            ChallengeBoardListSectionHeader(title: "Membership requests", count: membershipRequests.count)
+                .pageBodyRow(top: 18, gutter: gutter)
 
             if membershipRequests.isEmpty {
                 emptyRequestsCard.pageBodyRow(top: 8, gutter: gutter)
@@ -238,9 +283,9 @@ struct CollectionModerationView: View {
         }
 
         Section {
-            SectionRuleHeader(title: "Maintainers")
-                .padding(.bottom, 8)
-                .pageBodyRow(top: 18, gutter: selfGuttered)
+            ChallengeBoardListSectionHeader(title: "Maintainers")
+                .padding(.bottom, 6)
+                .pageBodyRow(top: 18, gutter: gutter)
         }
         Section {
             maintainersRows
@@ -248,8 +293,8 @@ struct CollectionModerationView: View {
         }
 
         Section {
-            SectionRuleHeader(title: "Reveal and Anonymity")
-                .pageBodyRow(top: 18, gutter: selfGuttered)
+            ChallengeBoardListSectionHeader(title: "Reveal and anonymity")
+                .pageBodyRow(top: 18, gutter: gutter)
             revealInfoPanel.pageBodyRow(top: 8, gutter: gutter)
             if isUnrevealed || isAnonymous,
                AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner) {
@@ -277,28 +322,25 @@ struct CollectionModerationView: View {
             .padding(.horizontal, 4)
     }
 
-    // MARK: - Awaiting Review
+    // MARK: - Awaiting Review (`AO3-Collection-Moderation.dc.html`)
 
-    private var awaitingReviewList: some View {
-        VStack(spacing: 9) {
-            ForEach(awaitingReview) { item in
-                awaitingReviewCard(item)
-            }
-        }
-    }
-
-    /// Title, creator/submission line, and the three wrapping actions.
-    /// `AO3CollectionItem` carries no word count or tag summary, so none is
-    /// invented; the submission date is AO3's own `p.datetime` when printed.
+    /// Leading cover swatch, kicker, title, creator/submission line, and inline
+    /// Approve / Reject / Message creator pills. `AO3CollectionItem` carries no
+    /// word count, rating, or tag summary, so none is invented.
     private func awaitingReviewCard(_ item: AO3CollectionItem) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let isBookmark = item.itemType.localizedCaseInsensitiveContains("bookmark")
+        return HStack(alignment: .top, spacing: 12) {
+            if !dynamicTypeSize.isAccessibilitySize {
+                ChallengeBoardCoverTile(seed: item.workTitle)
+                    .padding(.top, 2)
+            }
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.itemType.uppercased())
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: kickerSize, weight: .semibold))
                     .lineLimit(1)
-                    .fixedSize()
-                    .tracking(9 * 0.11)
-                    .foregroundStyle(palette.accent)
+                    .tracking(0.6)
+                    .foregroundStyle(isBookmark ? AnyShapeStyle(.secondaryInk) : AnyShapeStyle(palette.accent))
 
                 Text(item.workTitle)
                     .font(.system(size: reviewTitleSize, weight: .semibold))
@@ -306,53 +348,51 @@ struct CollectionModerationView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(CollectionModerationCopy.byline(creator: item.creatorByline, dateText: item.itemDateText))
-                    .font(.system(size: captionSize))
+                    .font(.system(size: subSize))
                     .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
-            }
 
-            FlowLayout(spacing: 7, rowSpacing: 7) {
-                approveButton(for: item)
-                rejectButton(for: item)
-                messageCreatorButton(for: item)
+                FlowLayout(spacing: 8, rowSpacing: 8) {
+                    approveButton(for: item)
+                    rejectButton(for: item)
+                    messageCreatorButton(for: item)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 4)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .subjectPanel()
+        .padding(.vertical, 10)
     }
 
     private func approveButton(for item: AO3CollectionItem) -> some View {
-        let isCurrentInFlight = itemInFlight == item.id
-        let action: () -> Void = {
+        ChallengeBoardInlineActionButton(
+            title: "Approve",
+            role: .primary,
+            isBusy: itemInFlight == item.id,
+            isDisabled: itemInFlight != nil
+        ) {
             Task { await approveItem(item) }
         }
-        return moderationPill(
-            title: "Approve",
-            isProminent: true,
-            isInFlight: isCurrentInFlight,
-            isDisabled: itemInFlight != nil,
-            action: action
-        )
     }
 
     private func rejectButton(for item: AO3CollectionItem) -> some View {
-        let action: () -> Void = {
+        ChallengeBoardInlineActionButton(
+            title: "Reject",
+            role: .destructive,
+            isDisabled: itemInFlight != nil
+        ) {
             itemToReject = item
         }
-        return moderationPill(
-            title: "Reject",
-            isProminent: false,
-            isDisabled: itemInFlight != nil,
-            action: action
-        )
     }
 
     /// Opens the work itself, since AO3's own moderator queue offers no separate
     /// messaging endpoint — a comment on the work is the fix-it channel.
     private func messageCreatorButton(for item: AO3CollectionItem) -> some View {
-        let action: () -> Void = {
+        ChallengeBoardInlineActionButton(
+            title: "Message creator",
+            role: .secondary
+        ) {
             if let workID = item.workID ?? item.workURL.flatMap({ WorkTags.ao3WorkID(from: $0.absoluteString) }) {
                 commentsRoute = AO3CommentsRoute(
                     workID: workID,
@@ -361,84 +401,16 @@ struct CollectionModerationView: View {
                 )
             }
         }
-        return moderationPill(
-            title: "Message creator",
-            isProminent: false,
-            isDisabled: false,
-            action: action
-        )
-    }
-
-    @ViewBuilder
-    private func moderationPill(
-        title: String,
-        isProminent: Bool,
-        isInFlight: Bool = false,
-        isDisabled: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Group {
-            if isProminent {
-                moderationPillButton(
-                    title: title, isProminent: true, isInFlight: isInFlight, action: action
-                )
-                .prominentLabel()
-            } else {
-                moderationPillButton(
-                    title: title, isProminent: false, isInFlight: isInFlight, action: action
-                )
-                .foregroundStyle(.primary)
-            }
-        }
-        .disabled(isDisabled)
-        .layoutFreeHitTarget {
-            if !isDisabled { action() }
-        }
-    }
-
-    private func moderationPillButton(
-        title: String,
-        isProminent: Bool,
-        isInFlight: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                if isInFlight {
-                    ProgressView()
-                        .controlSize(.small)
-                        .accentFill()
-                }
-                Text(title)
-                    .font(.system(size: bodySize, weight: .semibold))
-                    .lineLimit(1)
-                    .fixedSize()
-            }
-            .foregroundStyle(isProminent ? ThemeManager.label(on: palette.tint) : Color.primary)
-            .padding(.horizontal, 14)
-            .frame(minHeight: 34)
-            .background(
-                Capsule()
-                    .fill(isProminent ? palette.tint : theme.appTheme.glassFill(0.10))
-                    .overlay(
-                        Capsule().strokeBorder(
-                            isProminent ? palette.tint : theme.appTheme.glassStroke(0.16),
-                            lineWidth: 0.5
-                        )
-                    )
-            )
-        }
-        .buttonStyle(.plain)
     }
 
     private var emptyReviewCard: some View {
         VStack(spacing: 6) {
-            Text("No works waiting for review")
+            Text(ChallengesBoardCopy.moderationEmptyReviewTitle)
                 .font(.system(size: stateTitleSize, weight: .semibold))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("All submissions to this collection have been reviewed.")
+            Text(ChallengesBoardCopy.moderationEmptyReviewBody)
                 .font(.system(size: bodySize))
                 .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
@@ -497,29 +469,24 @@ struct CollectionModerationView: View {
     }
 
     private func acceptButton(for participant: AO3CollectionParticipant) -> some View {
-        let isCurrentInFlight = participantInFlight == participant.id
-        let action: () -> Void = {
+        ChallengeBoardInlineActionButton(
+            title: "Accept",
+            role: .primary,
+            isBusy: participantInFlight == participant.id,
+            isDisabled: participantInFlight != nil
+        ) {
             Task { await acceptRequest(participant) }
         }
-        return moderationPill(
-            title: "Accept",
-            isProminent: true,
-            isInFlight: isCurrentInFlight,
-            isDisabled: participantInFlight != nil,
-            action: action
-        )
     }
 
     private func declineButton(for participant: AO3CollectionParticipant) -> some View {
-        let action: () -> Void = {
+        ChallengeBoardInlineActionButton(
+            title: "Decline",
+            role: .secondary,
+            isDisabled: participantInFlight != nil
+        ) {
             participantToDecline = participant
         }
-        return moderationPill(
-            title: "Decline",
-            isProminent: false,
-            isDisabled: participantInFlight != nil,
-            action: action
-        )
     }
 
     private var emptyRequestsCard: some View {
