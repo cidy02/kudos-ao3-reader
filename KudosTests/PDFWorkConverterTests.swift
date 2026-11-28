@@ -78,6 +78,276 @@ struct PDFWorkConverterTests {
 
     // MARK: - Text layer
 
+    /// Two paragraphs with a horizontal rule drawn between them (`rule: true`) or across the first paragraph's line
+    /// (`rule: false`, a strike-through), the way calibre draws a FanFiction.net `<hr>`: a thin grey stroked path.
+    private func makeRulePDF(ruleBetweenParagraphs: Bool) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pdf-rule-\(UUID().uuidString)")
+            .appendingPathExtension("pdf")
+        var box = CGRect(x: 0, y: 0, width: 612, height: 792)
+        guard let context = CGContext(url as CFURL, mediaBox: &box, [:] as CFDictionary) else {
+            throw PDFTestError.contextUnavailable
+        }
+        let font = CTFontCreateWithName("Helvetica" as CFString, 12, nil)
+        func draw(_ line: String, at y: CGFloat) {
+            let attributed = NSAttributedString(string: line, attributes: [kCTFontAttributeName as NSAttributedString.Key: font])
+            context.textPosition = CGPoint(x: 72, y: y)
+            CTLineDraw(CTLineCreateWithAttributedString(attributed), context)
+        }
+        context.beginPage(mediaBox: &box)
+        context.setFillColor(gray: 0, alpha: 1)
+        draw("The first scene ends with the door closing behind her.", at: 700)
+        draw("The second scene opens on the morning after the storm.", at: 640)
+        context.setStrokeColor(gray: 0.5, alpha: 1)
+        context.setLineWidth(1)
+        let ruleY: CGFloat = ruleBetweenParagraphs ? 672 : 704
+        context.move(to: CGPoint(x: 72, y: ruleY))
+        context.addLine(to: CGPoint(x: 540, y: ruleY))
+        context.strokePath()
+        context.endPage()
+        drawFillerPage(in: context, box: &box)
+        context.closePDF()
+        return url
+    }
+
+    @Test func aRuleDrawnBetweenParagraphsBecomesASceneBreak() throws {
+        let url = try makeRulePDF(ruleBetweenParagraphs: true)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let body = bodies(try convert(url))
+        let first = try #require(body.range(of: "door closing behind her"))
+        let rule = try #require(body.range(of: "* * *"))
+        let second = try #require(body.range(of: "morning after the storm"))
+        #expect(first.upperBound < rule.lowerBound && rule.upperBound < second.lowerBound)
+    }
+
+    @Test func aTypedSceneBreakStaysInsideItsChapter() throws {
+        // No outline, so this takes the plain-text path, where `* * *` alone on a line used to start a new chapter.
+        let url = try makePDF(pages: [[
+            "The first scene ends with the door closing behind her.",
+            "",
+            "* * *",
+            "",
+            "The second scene opens on the morning after the storm."
+        ]])
+        defer { try? FileManager.default.removeItem(at: url) }
+        let result = try convert(url)
+        #expect(result.chapters.count == 1)
+        let body = bodies(result)
+        let first = try #require(body.range(of: "door closing behind her"))
+        let rule = try #require(body.range(of: "* * *"))
+        let second = try #require(body.range(of: "morning after the storm"))
+        #expect(first.upperBound < rule.lowerBound && rule.upperBound < second.lowerBound)
+    }
+
+    @Test func aRuleThroughTextIsNotASceneBreak() throws {
+        let url = try makeRulePDF(ruleBetweenParagraphs: false)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let body = bodies(try convert(url))
+        #expect(body.contains("door closing behind her"))
+        #expect(!body.contains("* * *"))
+    }
+
+    /// Letter page. `draw` is PDF user space (origin at the bottom left).
+    /// A second page of ordinary prose. The converter treats a document under 200 characters as a scan and OCRs it
+    /// (`textLayerThreshold`), which never sees drawn rules, so a one-page rule fixture would test the OCR path instead
+    /// (LESSONS T3). Page 1, which the rule tests are about, is unchanged.
+    private func drawFillerPage(in context: CGContext, box: inout CGRect) {
+        context.beginPage(mediaBox: &box)
+        context.setFillColor(gray: 0, alpha: 1)
+        let font = CTFontCreateWithName("Helvetica" as CFString, 12, nil)
+        let lines = [
+            "Filler page. The rain had stopped by the time the carriage reached the bridge,",
+            "and the river below ran high and brown with everything the storm had carried down",
+            "from the hills. Nobody spoke until the lamps of the town came into view at last.",
+        ]
+        for (index, line) in lines.enumerated() {
+            let attributed = NSAttributedString(string: line, attributes: [kCTFontAttributeName as NSAttributedString.Key: font])
+            context.textPosition = CGPoint(x: 72, y: 700 - CGFloat(index) * 16)
+            CTLineDraw(CTLineCreateWithAttributedString(attributed), context)
+        }
+        context.endPage()
+    }
+
+    private func drawPDF(width: CGFloat = 612, height: CGFloat = 792, _ draw: (CGContext) -> Void) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pdf-draw-\(UUID().uuidString)")
+            .appendingPathExtension("pdf")
+        var box = CGRect(x: 0, y: 0, width: width, height: height)
+        guard let context = CGContext(url as CFURL, mediaBox: &box, [:] as CFDictionary) else {
+            throw PDFTestError.contextUnavailable
+        }
+        context.beginPage(mediaBox: &box)
+        context.setFillColor(gray: 0, alpha: 1)
+        context.setStrokeColor(gray: 0.5, alpha: 1)
+        context.setLineWidth(1)
+        draw(context)
+        context.endPage()
+        drawFillerPage(in: context, box: &box)
+        context.closePDF()
+        return url
+    }
+
+    private func drawLine(_ text: String, at point: CGPoint, in context: CGContext) {
+        let font = CTFontCreateWithName("Helvetica" as CFString, 12, nil)
+        let attributed = NSAttributedString(
+            string: text,
+            attributes: [kCTFontAttributeName as NSAttributedString.Key: font]
+        )
+        context.textPosition = point
+        CTLineDraw(CTLineCreateWithAttributedString(attributed), context)
+    }
+
+    private func stroke(_ a: CGPoint, _ b: CGPoint, in context: CGContext) {
+        context.move(to: a)
+        context.addLine(to: b)
+        context.strokePath()
+    }
+
+    private func sceneBreakCount(in body: String) -> Int {
+        body.components(separatedBy: "* * *").count - 1
+    }
+
+    @Test func aRuleBesideOtherTextIsStillASceneBreak() throws {
+        // The note shares the rule's height and does not touch it. A crosses-text test that ignores x would drop the rule.
+        let url = try drawPDF { context in
+            drawLine("The first scene ends with the door closing behind her.", at: CGPoint(x: 72, y: 700), in: context)
+            drawLine("Aside.", at: CGPoint(x: 450, y: 672), in: context)
+            drawLine("The second scene opens on the morning after the storm.", at: CGPoint(x: 72, y: 640), in: context)
+            stroke(CGPoint(x: 72, y: 672), CGPoint(x: 400, y: 672), in: context)
+        }
+        defer { try? FileManager.default.removeItem(at: url) }
+        let body = bodies(try convert(url))
+        let first = try #require(body.range(of: "door closing behind her"))
+        let rule = try #require(body.range(of: "* * *"))
+        let second = try #require(body.range(of: "morning after the storm"))
+        #expect(first.upperBound < rule.lowerBound && rule.upperBound < second.lowerBound)
+        #expect(sceneBreakCount(in: body) == 1)
+    }
+
+    @Test func aBoxAroundAQuoteIsNotASceneBreak() throws {
+        // Four strokes, not one rectangle: the top and bottom are wide enough to look like rules unless a vertical side crosses them.
+        let url = try drawPDF { context in
+            drawLine("Before the quote.", at: CGPoint(x: 72, y: 720), in: context)
+            drawLine("A quoted line sits inside the box.", at: CGPoint(x: 90, y: 668), in: context)
+            drawLine("After the quote.", at: CGPoint(x: 72, y: 600), in: context)
+            stroke(CGPoint(x: 72, y: 700), CGPoint(x: 540, y: 700), in: context)
+            stroke(CGPoint(x: 72, y: 640), CGPoint(x: 540, y: 640), in: context)
+            stroke(CGPoint(x: 72, y: 640), CGPoint(x: 72, y: 700), in: context)
+            stroke(CGPoint(x: 540, y: 640), CGPoint(x: 540, y: 700), in: context)
+        }
+        defer { try? FileManager.default.removeItem(at: url) }
+        let body = bodies(try convert(url))
+        #expect(body.contains("Before the quote."))
+        #expect(body.contains("inside the box"))
+        #expect(body.contains("After the quote."))
+        #expect(sceneBreakCount(in: body) == 0)
+    }
+
+    @Test func aShortFootnoteRuleIsNotASceneBreak() throws {
+        // 128 pt is under 40% of a 612 pt page. A footnote rule is about that long; a scene break spans the text.
+        let url = try drawPDF { context in
+            drawLine("The chapter ends here.", at: CGPoint(x: 72, y: 700), in: context)
+            stroke(CGPoint(x: 72, y: 660), CGPoint(x: 200, y: 660), in: context)
+            drawLine("A note about the ending.", at: CGPoint(x: 72, y: 620), in: context)
+        }
+        defer { try? FileManager.default.removeItem(at: url) }
+        let body = bodies(try convert(url))
+        #expect(body.contains("The chapter ends here."))
+        #expect(body.contains("A note about the ending."))
+        #expect(sceneBreakCount(in: body) == 0)
+    }
+
+    @Test func twoCloseStrokesAreOneSceneBreak() throws {
+        let url = try drawPDF { context in
+            drawLine("The first scene ends with the door closing behind her.", at: CGPoint(x: 72, y: 700), in: context)
+            stroke(CGPoint(x: 72, y: 672), CGPoint(x: 540, y: 672), in: context)
+            stroke(CGPoint(x: 72, y: 670), CGPoint(x: 540, y: 670), in: context)
+            drawLine("The second scene opens on the morning after the storm.", at: CGPoint(x: 72, y: 640), in: context)
+        }
+        defer { try? FileManager.default.removeItem(at: url) }
+        let body = bodies(try convert(url))
+        let first = try #require(body.range(of: "door closing behind her"))
+        let rule = try #require(body.range(of: "* * *"))
+        let second = try #require(body.range(of: "morning after the storm"))
+        #expect(first.upperBound < rule.lowerBound && rule.upperBound < second.lowerBound)
+        #expect(sceneBreakCount(in: body) == 1)
+    }
+
+    @Test func aRuleAtThePageEdgeIsNotASceneBreakAndOneInsetFromItIs() throws {
+        let url = try drawPDF { context in
+            stroke(CGPoint(x: 72, y: 788), CGPoint(x: 540, y: 788), in: context)
+            stroke(CGPoint(x: 72, y: 740), CGPoint(x: 540, y: 740), in: context)
+            drawLine("The first scene ends with the door closing behind her.", at: CGPoint(x: 72, y: 700), in: context)
+            drawLine("The second scene opens on the morning after the storm.", at: CGPoint(x: 72, y: 640), in: context)
+            stroke(CGPoint(x: 72, y: 100), CGPoint(x: 540, y: 100), in: context)
+            stroke(CGPoint(x: 72, y: 4), CGPoint(x: 540, y: 4), in: context)
+        }
+        defer { try? FileManager.default.removeItem(at: url) }
+        let body = bodies(try convert(url))
+        #expect(sceneBreakCount(in: body) == 2)
+        let leading = try #require(body.range(of: "* * *"))
+        let first = try #require(body.range(of: "door closing behind her"))
+        let second = try #require(body.range(of: "morning after the storm"))
+        let trailing = try #require(body.range(of: "* * *", options: .backwards))
+        #expect(leading.upperBound < first.lowerBound)
+        #expect(second.upperBound < trailing.lowerBound)
+        #expect(leading != trailing)
+    }
+
+    @Test func aPrivateUseCharacterInTheProseStaysProse() throws {
+        // The plain-text path used to replace every U+E000, so this sentence became a second scene break.
+        let marked = "She wrote \u{E000} in the margin."
+        let url = try makePDF(pages: [[
+            "The first scene ends with the door closing behind her.",
+            "",
+            "* * *",
+            "",
+            marked,
+            "",
+            "The second scene opens on the morning after the storm."
+        ]])
+        defer { try? FileManager.default.removeItem(at: url) }
+        let result = try convert(url)
+        #expect(result.chapters.count == 1)
+        let body = bodies(result)
+        #expect(sceneBreakCount(in: body) == 1)
+        #expect(body.contains("She wrote"))
+        #expect(!body.contains("She wrote * * *"))
+        let first = try #require(body.range(of: "door closing behind her"))
+        let rule = try #require(body.range(of: "* * *"))
+        let second = try #require(body.range(of: "morning after the storm"))
+        #expect(first.upperBound < rule.lowerBound && rule.upperBound < second.lowerBound)
+    }
+
+    @Test func outlineAndPlainTextKeepTheSameSceneBreak() throws {
+        let url = try makePDF(pages: [
+            [
+                "The first scene ends with the door closing behind her.",
+                "",
+                "* * *",
+                "",
+                "The second scene opens on the morning after the storm."
+            ],
+            [
+                "The next chapter starts on a new page, long after the rain had stopped and the carriage",
+                "had crossed the bridge into a town that was only beginning to wake. (Enough text that the",
+                "document has a real text layer: under 200 characters it is OCR'd, LESSONS T3.)"
+            ]
+        ])
+        defer { try? FileManager.default.removeItem(at: url) }
+        let plain = try convert(url)
+        #expect(plain.chapters.count == 1)
+        let plainBody = bodies(plain)
+        let plainFirst = try #require(plainBody.range(of: "door closing behind her"))
+        let plainRule = try #require(plainBody.range(of: "* * *"))
+        let plainSecond = try #require(plainBody.range(of: "morning after the storm"))
+        #expect(plainFirst.upperBound < plainRule.lowerBound && plainRule.upperBound < plainSecond.lowerBound)
+
+        // shortcut: the outline half of this check is left out: PDFKit's `write(to:)` drops an outline added in code (on
+        // macOS and iOS, verified 2026-11-27), so the fixture can't take the outline path; build the fixture with a
+        // CoreGraphics outline if this path changes.
+    }
+
     @Test func extractsProseAndRejoinsHardWrappedLines() throws {
         // PDF text comes out one line per *display* line; naive conversion would make
         // each its own paragraph and read terribly once reflowed.

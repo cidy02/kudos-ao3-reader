@@ -1,3 +1,4 @@
+import QuickLook
 import SwiftData
 import SwiftUI
 
@@ -25,6 +26,7 @@ struct WorkProvenanceSections: View {
     @State private var rebuildError: String?
     @State private var rebuilt = false
     @State private var confirmingRedundantRebuild = false
+    @State private var previewingOriginal: URL?
 
     /// Lives in My copy (1a) only. The Library/Later/Favorite badges this used to
     /// repeat are the sheet's own strip and Status group; the preservation
@@ -104,6 +106,18 @@ struct WorkProvenanceSections: View {
                         .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
 
+                    // T-579: conversion is lossy (images dropped, layout reflowed), so the source is how a
+                    // reader tells a conversion artefact from what the author wrote. Same preview as the reader's.
+                    Button {
+                        previewingOriginal = Self.namedPreviewURL(
+                            for: candidate.originalURL,
+                            name: WorkRedownloadability.originalFile(for: work.id)?.suggestedName
+                        )
+                    } label: {
+                        Label("View Original", systemImage: "doc.text.magnifyingglass")
+                    }
+                    .buttonStyle(.borderless)
+
                     // Always offered, never conditional on staleness. A rebuild is also
                     // how a work picks up an *importer* fix — recovered metadata, for
                     // instance — which the converter version cannot describe, so hiding
@@ -134,6 +148,12 @@ struct WorkProvenanceSections: View {
                 }
                 .font(.system(size: rowContentSize))
                 .myCopyRow()
+                .quickLookPreview($previewingOriginal)
+                .onChange(of: previewingOriginal) { previous, current in
+                    if let previous {
+                        Self.discardReplacedPreview(previous, current: current)
+                    }
+                }
                 .confirmationDialog(
                     "Rebuild this work?",
                     isPresented: $confirmingRedundantRebuild,
@@ -159,6 +179,59 @@ struct WorkProvenanceSections: View {
                 }
             }
         }
+    }
+
+    /// Quick Look titles a file by its name. macOS Quick Look markup also writes that file, and a hard link
+    /// shares the archived original's data, so the preview is a copy. A failed copy falls back to the stored file.
+    static func namedPreviewURL(for original: URL, name: String?, in directory: URL? = nil) -> URL {
+        let folder = (directory ?? FileManager.default.temporaryDirectory)
+            .appendingPathComponent("original-preview-\(UUID().uuidString)", isDirectory: true)
+        let named = folder.appendingPathComponent(previewName(name, for: original))
+        // `..` as a path component leaves the folder. Never copy there.
+        guard named.deletingLastPathComponent().standardizedFileURL.path
+            == folder.standardizedFileURL.path else { return original }
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: original, to: named)
+            return named
+        } catch {
+            try? FileManager.default.removeItem(at: folder)
+            return original
+        }
+    }
+
+    /// Drops the previous preview copy once Quick Look leaves it. The same file under another
+    /// path (`/private/var` versus `/var`) is still the open preview, so it stays.
+    static func discardReplacedPreview(_ previous: URL, current: URL?) {
+        let folder = previous.deletingLastPathComponent()
+        guard folder.lastPathComponent.hasPrefix("original-preview-") else { return }
+        if let current,
+           current.resolvingSymlinksInPath().standardizedFileURL.path
+           == previous.resolvingSymlinksInPath().standardizedFileURL.path {
+            return
+        }
+        try? FileManager.default.removeItem(at: folder)
+    }
+
+    /// One path component. A recorded name is just a string from the shared file, so `.`, `..`, and
+    /// separators must not be able to leave the preview folder or replace something beside it.
+    private static func previewName(_ name: String?, for original: URL) -> String {
+        let ext = original.pathExtension.filter { $0.isLetter || $0.isNumber }
+        let fallback = ext.isEmpty ? "Original" : "Original.\(ext.prefix(12))"
+        guard var base = name.map({ ($0 as NSString).lastPathComponent }),
+              !base.isEmpty, base != ".", base != "..", base != "/"
+        else { return fallback }
+        base = String(base.unicodeScalars.filter { $0.value >= 32 && $0.value != 0x7f })
+        if base.isEmpty || base == "." || base == ".." { return fallback }
+        // APFS rejects names past 255 bytes. Past that, copy would fail and the preview would
+        // open the archive itself. Keep the extension so Quick Look still knows the type.
+        guard base.utf8.count > 240 else { return base }
+        let keptExtension = (base as NSString).pathExtension.filter { $0.isLetter || $0.isNumber }
+        let suffix = keptExtension.isEmpty ? "" : "." + String(keptExtension.prefix(12))
+        let budget = max(240 - suffix.utf8.count, 1)
+        let stem = String(decoding: (base as NSString).deletingPathExtension.utf8.prefix(budget), as: UTF8.self)
+        if stem.isEmpty || stem == "." || stem == ".." { return fallback }
+        return stem + suffix
     }
 
     // MARK: - Content
