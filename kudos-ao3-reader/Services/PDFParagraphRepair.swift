@@ -1,5 +1,118 @@
 import Foundation
 
+/// A paragraph block together with UTF-16 ranges for inline italic and bold runs.
+nonisolated struct PDFStyledBlock: Equatable, Sendable {
+    var text: String
+    var italicRanges: [NSRange]
+    var boldRanges: [NSRange]
+
+    init(text: String, italicRanges: [NSRange] = [], boldRanges: [NSRange] = []) {
+        self.text = text
+        self.italicRanges = italicRanges
+        self.boldRanges = boldRanges
+    }
+
+    init(_ block: KudosPDFBlock) {
+        self.text = block.text
+        self.italicRanges = block.italicRanges.map(\.rangeValue)
+        self.boldRanges = block.boldRanges.map(\.rangeValue)
+    }
+
+    /// Trims leading and trailing whitespace/newlines while keeping all style ranges
+    /// aligned to the exact same characters.
+    func trimmed() -> PDFStyledBlock {
+        let scalars = text.unicodeScalars
+        var start = scalars.startIndex
+        while start < scalars.endIndex,
+              CharacterSet.whitespacesAndNewlines.contains(scalars[start]) {
+            start = scalars.index(after: start)
+        }
+        var end = scalars.endIndex
+        while end > start {
+            let prev = scalars.index(before: end)
+            if CharacterSet.whitespacesAndNewlines.contains(scalars[prev]) {
+                end = prev
+            } else {
+                break
+            }
+        }
+        guard start < end else { return PDFStyledBlock(text: "") }
+
+        let trimmedText = String(scalars[start..<end])
+        let leadingUTF16 = text.utf16.distance(from: text.utf16.startIndex, to: start)
+        let keptLength = trimmedText.utf16.count
+        return PDFStyledBlock(
+            text: trimmedText,
+            italicRanges: Self.shiftedAndClamped(italicRanges, by: -leadingUTF16, limit: keptLength),
+            boldRanges: Self.shiftedAndClamped(boldRanges, by: -leadingUTF16, limit: keptLength)
+        )
+    }
+
+    /// Joins `self` and `other` with one space, shifting `other`'s ranges past the join
+    /// and bridging adjacent runs separated only by that space.
+    func joinedWithSpace(to other: PDFStyledBlock) -> PDFStyledBlock {
+        let joinedText = text + " " + other.text
+        let offset = text.utf16.count + 1
+        let shiftedItalic = other.italicRanges.map {
+            NSRange(location: $0.location + offset, length: $0.length)
+        }
+        let shiftedBold = other.boldRanges.map {
+            NSRange(location: $0.location + offset, length: $0.length)
+        }
+        return PDFStyledBlock(
+            text: joinedText,
+            italicRanges: Self.mergedRanges(italicRanges + shiftedItalic, in: joinedText),
+            boldRanges: Self.mergedRanges(boldRanges + shiftedBold, in: joinedText)
+        )
+    }
+
+    /// Merges overlapping, adjacent, or single-space-separated UTF-16 ranges in `text`.
+    static func mergedRanges(_ ranges: [NSRange], in text: String) -> [NSRange] {
+        let units = Array(text.utf16)
+        let limit = units.count
+        guard limit > 0, !ranges.isEmpty else { return [] }
+
+        let sorted = ranges
+            .compactMap { range -> NSRange? in
+                guard range.length > 0, range.location < limit else { return nil }
+                let start = max(0, range.location)
+                let end = min(limit, range.location + range.length)
+                return end > start ? NSRange(location: start, length: end - start) : nil
+            }
+            .sorted { lhs, rhs in
+                lhs.location != rhs.location ? lhs.location < rhs.location : lhs.length < rhs.length
+            }
+
+        var merged: [NSRange] = []
+        for range in sorted {
+            if let prev = merged.last {
+                let prevEnd = prev.location + prev.length
+                let adjacent = range.location <= prevEnd
+                let singleSpace = !adjacent
+                    && range.location == prevEnd + 1
+                    && (units[prevEnd] == 0x0020 || units[prevEnd] == 0x00A0)
+                if adjacent || singleSpace {
+                    let newEnd = max(prevEnd, range.location + range.length)
+                    merged[merged.count - 1] = NSRange(location: prev.location, length: newEnd - prev.location)
+                    continue
+                }
+            }
+            merged.append(range)
+        }
+        return merged
+    }
+
+    private static func shiftedAndClamped(_ ranges: [NSRange], by delta: Int, limit: Int) -> [NSRange] {
+        guard limit > 0, !ranges.isEmpty else { return [] }
+        return ranges.compactMap { range in
+            guard range.length > 0 else { return nil }
+            let start = max(0, range.location + delta)
+            let end = min(limit, range.location + range.length + delta)
+            return end > start ? NSRange(location: start, length: end - start) : nil
+        }
+    }
+}
+
 /// Cleans per-page PDF paragraph blocks before chapter assembly.
 ///
 /// MuPDF extracts one array of paragraph blocks per page, so a paragraph that wraps
@@ -7,8 +120,8 @@ import Foundation
 /// into two blocks. Scene breaks that happen to land at a page edge were also caught
 /// by the running-header filter and deleted across the whole document.
 ///
-/// Every function here is pure (`[[String]]` → `[[String]]`) and preserves page
-/// count so `PDFWorkConverter.outlineChapters` can still slice by PDF page index.
+/// Every function here is pure and preserves page count so
+/// `PDFWorkConverter.outlineChapters` can still slice by PDF page index.
 nonisolated enum PDFParagraphRepair {
     /// Canonical rendering for every recognised scene break.
     static let normalizedSeparator = "* * *"
@@ -39,8 +152,12 @@ nonisolated enum PDFParagraphRepair {
 
     /// Runs the full cleanup pipeline: removes running headers, footers, and bare
     /// page numbers while sparing separators, then normalises separators and rejoins
-    /// paragraphs split within a page or across page breaks.
+    /// paragraphs split across page breaks.
     static func repair(_ pages: [[String]]) -> [[String]] {
+        repair(pages.map { $0.map { PDFStyledBlock(text: $0) } }).map { $0.map(\.text) }
+    }
+
+    static func repair(_ pages: [[PDFStyledBlock]]) -> [[PDFStyledBlock]] {
         joinBrokenParagraphs(withoutRunningHeadersAndFooters(pages))
     }
 
@@ -52,13 +169,18 @@ nonisolated enum PDFParagraphRepair {
     /// non-empty block of a page, never mid-page, and scene-break separators are
     /// never removed regardless of how often they land on a page edge.
     static func withoutRunningHeadersAndFooters(_ pages: [[String]]) -> [[String]] {
+        withoutRunningHeadersAndFooters(pages.map { $0.map { PDFStyledBlock(text: $0) } })
+            .map { $0.map(\.text) }
+    }
+
+    static func withoutRunningHeadersAndFooters(_ pages: [[PDFStyledBlock]]) -> [[PDFStyledBlock]] {
         guard pages.count >= 4 else { return pages }
 
         // Strip bare page numbers first so a running footer sitting directly above a
         // page number still sits at the page edge when frequencies are counted.
-        let withoutPageNumbers: [[String]] = pages.map { page in
-            page.filter { line in
-                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        let withoutPageNumbers: [[PDFStyledBlock]] = pages.map { page in
+            page.filter { block in
+                let trimmed = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if trimmed.isEmpty { return true }
                 return !isBarePageNumber(trimmed)
             }
@@ -67,8 +189,8 @@ nonisolated enum PDFParagraphRepair {
         var edgeCounts: [String: Int] = [:]
         for page in withoutPageNumbers {
             guard let edges = edgeIndices(of: page) else { continue }
-            let firstText = page[edges.first].trimmingCharacters(in: .whitespacesAndNewlines)
-            let lastText = page[edges.last].trimmingCharacters(in: .whitespacesAndNewlines)
+            let firstText = page[edges.first].text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let lastText = page[edges.last].text.trimmingCharacters(in: .whitespacesAndNewlines)
             var candidates: Set<String> = []
             if !isSeparator(firstText) { candidates.insert(firstText) }
             if !isSeparator(lastText) { candidates.insert(lastText) }
@@ -84,13 +206,13 @@ nonisolated enum PDFParagraphRepair {
 
         return withoutPageNumbers.map { page in
             guard let edges = edgeIndices(of: page) else { return page }
-            return page.enumerated().compactMap { index, line -> String? in
-                guard index == edges.first || index == edges.last else { return line }
-                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            return page.enumerated().compactMap { index, block -> PDFStyledBlock? in
+                guard index == edges.first || index == edges.last else { return block }
+                let trimmed = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !isSeparator(trimmed), repeated.contains(trimmed) {
                     return nil
                 }
-                return line
+                return block
             }
         }
     }
@@ -102,18 +224,23 @@ nonisolated enum PDFParagraphRepair {
     /// merged the author's own unpunctuated paragraphs ("…against Elsa's" / "She smiled…", 8 in the owner's PDF) and
     /// fixed one split in 3,476 blocks. Preserves page count for outline slicing.
     static func joinBrokenParagraphs(_ pages: [[String]]) -> [[String]] {
-        var result: [[String]] = Array(repeating: [], count: pages.count)
+        joinBrokenParagraphs(pages.map { $0.map { PDFStyledBlock(text: $0) } })
+            .map { $0.map(\.text) }
+    }
+
+    static func joinBrokenParagraphs(_ pages: [[PDFStyledBlock]]) -> [[PDFStyledBlock]] {
+        var result: [[PDFStyledBlock]] = Array(repeating: [], count: pages.count)
         var lastPageIndex: Int?
 
         for pageIndex in pages.indices {
             var placedOnThisPage = false
             for rawBlock in pages[pageIndex] {
-                let block = rawBlock.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !block.isEmpty else { continue }
+                let block = rawBlock.trimmed()
+                guard !block.text.isEmpty else { continue }
 
                 defer { placedOnThisPage = true }
-                if isSeparator(block) {
-                    result[pageIndex].append(normalizedSeparator)
+                if isSeparator(block.text) {
+                    result[pageIndex].append(PDFStyledBlock(text: normalizedSeparator))
                     lastPageIndex = pageIndex
                     continue
                 }
@@ -121,10 +248,11 @@ nonisolated enum PDFParagraphRepair {
                 if !placedOnThisPage,
                    let previousPage = lastPageIndex, previousPage < pageIndex,
                    let previousBlock = result[previousPage].last,
-                   shouldJoin(previousBlock, with: block) {
+                   shouldJoin(previousBlock.text, with: block.text) {
                     // Join with one space; hyphens stay untouched (stutters and
                     // cut-off speech like `y- your` and `Wha- really`).
-                    result[previousPage][result[previousPage].count - 1] = previousBlock + " " + block
+                    result[previousPage][result[previousPage].count - 1] =
+                        previousBlock.joinedWithSpace(to: block)
                     continue
                 }
 
@@ -184,9 +312,12 @@ nonisolated enum PDFParagraphRepair {
 
     // MARK: - Helpers
 
-    private static func edgeIndices(of page: [String]) -> (first: Int, last: Int)? {
-        guard let first = page.firstIndex(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
-              let last = page.lastIndex(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+    private static func edgeIndices(of page: [PDFStyledBlock]) -> (first: Int, last: Int)? {
+        let isNonEmpty: (PDFStyledBlock) -> Bool = {
+            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        guard let first = page.firstIndex(where: isNonEmpty),
+              let last = page.lastIndex(where: isNonEmpty)
         else { return nil }
         return (first, last)
     }

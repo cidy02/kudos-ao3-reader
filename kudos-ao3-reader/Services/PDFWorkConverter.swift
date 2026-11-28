@@ -46,8 +46,8 @@ nonisolated enum PDFWorkConverter {
         let cleaned = PDFParagraphRepair.withoutRunningHeadersAndFooters(pages)
         let repaired = PDFParagraphRepair.joinBrokenParagraphs(cleaned)
 
-        let chapters = (outlineChapters(of: document, pageLines: repaired)
-            ?? textHeuristicChapters(pageLines: repaired, fallbackTitle: fallbackTitle))
+        let chapters = (outlineChapters(of: document, pageBlocks: repaired)
+            ?? textHeuristicChapters(pageBlocks: repaired, fallbackTitle: fallbackTitle))
             .map(withoutEchoedTitle)
         guard !chapters.isEmpty else { throw ImportedDocumentConverter.ConversionError.noReadableText }
 
@@ -122,8 +122,8 @@ nonisolated enum PDFWorkConverter {
     ///
     /// PDFKit is still used for two things it is good at: document attributes, and
     /// rasterizing pages for the OCR fallback.
-    private static func pageBlocks(of document: PDFDocument, path: String) throws -> [[String]] {
-        guard let extracted = KudosMuPDF.paragraphsPerPage(forPDFAtPath: path), !extracted.isEmpty else {
+    private static func pageBlocks(of document: PDFDocument, path: String) throws -> [[PDFStyledBlock]] {
+        guard let extracted = KudosMuPDF.styledParagraphsPerPage(forPDFAtPath: path), !extracted.isEmpty else {
             // MuPDF could not open it at all. PDFKit already opened it (the caller
             // checked), so the document exists but has no text MuPDF can reach —
             // treat it as a scan and let OCR decide.
@@ -132,14 +132,14 @@ nonisolated enum PDFWorkConverter {
             guard !recognized.isEmpty else {
                 throw ImportedDocumentConverter.ConversionError.pdfHasNoExtractableText
             }
-            return recognized.map { ocrParagraphs($0) }
+            return recognized.map { ocrParagraphs($0).map { PDFStyledBlock(text: $0) } }
         }
 
-        let pages = extracted.map { page in
-            page.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
+        let pages: [[PDFStyledBlock]] = extracted.map { page in
+            page.map { PDFStyledBlock($0).trimmed() }
+                .filter { !$0.text.isEmpty }
         }
-        let totalCharacters = pages.reduce(0) { $0 + $1.reduce(0) { $0 + $1.count } }
+        let totalCharacters = pages.reduce(0) { $0 + $1.reduce(0) { $0 + $1.text.count } }
 
         guard totalCharacters >= textLayerThreshold else {
             Log.library.info("PDF has no usable text layer (\(totalCharacters) chars); trying OCR")
@@ -147,7 +147,7 @@ nonisolated enum PDFWorkConverter {
             guard !recognized.isEmpty else {
                 throw ImportedDocumentConverter.ConversionError.pdfHasNoExtractableText
             }
-            return recognized.map { ocrParagraphs($0) }
+            return recognized.map { ocrParagraphs($0).map { PDFStyledBlock(text: $0) } }
         }
 
         // A document can carry text on most pages and an image on one — a scanned
@@ -161,9 +161,9 @@ nonisolated enum PDFWorkConverter {
     /// Bounded by the same page budget as a full-document OCR, and the drop is logged
     /// rather than passed off as a complete conversion.
     private static func withOCRForEmptyPages(
-        _ pages: [[String]],
+        _ pages: [[PDFStyledBlock]],
         of document: PDFDocument
-    ) -> [[String]] {
+    ) -> [[PDFStyledBlock]] {
         let emptyPages = pages.indices.filter { pages[$0].isEmpty }
         guard !emptyPages.isEmpty else { return pages }
 
@@ -179,7 +179,7 @@ nonisolated enum PDFWorkConverter {
             let recognized = recognizeText(in: image)
             guard !recognized.isEmpty else { continue }
             Log.library.info("Recovered page \(index + 1) of the PDF by OCR")
-            filled[index] = ocrParagraphs(recognized)
+            filled[index] = ocrParagraphs(recognized).map { PDFStyledBlock(text: $0) }
         }
         return filled
     }
@@ -198,10 +198,16 @@ nonisolated enum PDFWorkConverter {
     private static func withoutEchoedTitle(_ chapter: EPUBBuilder.Chapter) -> EPUBBuilder.Chapter {
         var bodyLines = chapter.bodyXHTML.components(separatedBy: "\n")
         guard let first = bodyLines.first?.trimmingCharacters(in: .whitespaces),
-              first == "<p>\(EPUBBuilder.escaped(chapter.title))</p>"
+              first.hasPrefix("<p>"), first.hasSuffix("</p>")
         else { return chapter }
+        let inner = String(first.dropFirst(3).dropLast(4))
+            .replacingOccurrences(of: "<em>", with: "")
+            .replacingOccurrences(of: "</em>", with: "")
+            .replacingOccurrences(of: "<strong>", with: "")
+            .replacingOccurrences(of: "</strong>", with: "")
+        guard inner == EPUBBuilder.escaped(chapter.title) else { return chapter }
         bodyLines.removeFirst()
-        return .init(title: chapter.title, bodyXHTML: bodyLines.joined(separator: "\n"))
+        return EPUBBuilder.Chapter(title: chapter.title, bodyXHTML: bodyLines.joined(separator: "\n"))
     }
 
     // MARK: - OCR
@@ -349,7 +355,7 @@ nonisolated enum PDFWorkConverter {
     /// Word both write outlines, so this is the common case for a converted fic.
     private static func outlineChapters(
         of document: PDFDocument,
-        pageLines: [[String]]
+        pageBlocks: [[PDFStyledBlock]]
     ) -> [EPUBBuilder.Chapter]? {
         guard let root = document.outlineRoot, root.numberOfChildren > 1 else { return nil }
 
@@ -372,25 +378,25 @@ nonisolated enum PDFWorkConverter {
         // page of the work with no error and nothing in the log. Named "Preface"
         // because that is what AO3's own EPUB export calls the same page.
         if let first = marks.first, first.page > 0 {
-            let leading = pageLines[0..<min(first.page, pageLines.count)]
+            let leading = pageBlocks[0..<min(first.page, pageBlocks.count)]
                 .flatMap(\.self)
-                .filter { !$0.isEmpty }
-            let body = HTMLWorkSanitizer.paragraphs(from: leading)
+                .filter { !$0.text.isEmpty }
+            let body = HTMLWorkSanitizer.styledParagraphs(from: leading)
             if !body.isEmpty {
-                chapters.append(.init(title: prefaceTitle, bodyXHTML: body))
+                chapters.append(EPUBBuilder.Chapter(title: prefaceTitle, bodyXHTML: body))
             }
         }
 
         for (offset, mark) in marks.enumerated() {
-            let end = offset + 1 < marks.count ? marks[offset + 1].page : pageLines.count
-            guard mark.page < end, mark.page < pageLines.count else { continue }
+            let end = offset + 1 < marks.count ? marks[offset + 1].page : pageBlocks.count
+            guard mark.page < end, mark.page < pageBlocks.count else { continue }
             // Already paragraph blocks (see `pageBlocks`), so no further reflow.
-            let blocks = pageLines[mark.page..<min(end, pageLines.count)]
+            let blocks = pageBlocks[mark.page..<min(end, pageBlocks.count)]
                 .flatMap(\.self)
-                .filter { !$0.isEmpty }
-            let body = HTMLWorkSanitizer.paragraphs(from: blocks)
+                .filter { !$0.text.isEmpty }
+            let body = HTMLWorkSanitizer.styledParagraphs(from: blocks)
             guard !body.isEmpty else { continue }
-            chapters.append(.init(title: mark.title, bodyXHTML: body))
+            chapters.append(EPUBBuilder.Chapter(title: mark.title, bodyXHTML: body))
         }
         return chapters.isEmpty ? nil : chapters
     }
@@ -403,17 +409,14 @@ nonisolated enum PDFWorkConverter {
     /// chapter heuristics, so PDFs and `.txt` files split on the same rules and
     /// there is only one place where "what looks like a chapter heading" is decided.
     private static func textHeuristicChapters(
-        pageLines: [[String]],
+        pageBlocks: [[PDFStyledBlock]],
         fallbackTitle: String
     ) -> [EPUBBuilder.Chapter] {
-        // Each block is already a complete paragraph (repaired across page breaks),
-        // so separate blocks with a blank line for `PlainTextWorkConverter`.
-        let text = pageLines
+        let blocks = pageBlocks
             .flatMap(\.self)
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .joined(separator: "\n\n")
+            .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         guard let result = try? PlainTextWorkConverter.convert(
-            text: text,
+            blocks: blocks,
             fallbackTitle: fallbackTitle
         ) else { return [] }
         return result.chapters
