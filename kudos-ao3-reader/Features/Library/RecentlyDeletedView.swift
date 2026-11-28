@@ -300,7 +300,6 @@ struct RecentlyDeletedView: View {
                 Section {
                     SectionRuleHeader(title: "Deleted", count: deleted.count)
                         .pageBodyRow(top: 18, gutter: 0)
-                    sectionNote("Kept for \(Self.windowDays) days, then removed for good.")
                     ForEach(Array(deleted.enumerated()), id: \.element.id) { index, entry in
                         row(entry, showsSeparator: index < deleted.count - 1)
                     }
