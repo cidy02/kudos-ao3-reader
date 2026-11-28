@@ -177,6 +177,24 @@ struct HomeReadingStats: Equatable, Sendable {
         )
     }
 
+    /// Weekly minutes and finishes never read the word-attribution history.
+    /// The streak fetch follows occupied days across the week boundary as needed.
+    static func calculate(
+        in context: ModelContext,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) throws -> HomeReadingStats {
+        let sessions = try calendar.dateInterval(of: .weekOfYear, for: now).map {
+            try context.fetch(ReadingLogService.weeklySessionDescriptor(in: $0))
+        } ?? []
+        let streakDays = try ReadingLogService.streak(through: now, isToday: true, calendar: calendar, in: context)
+        return HomeReadingStats(
+            durationSeconds: sessions.reduce(0) { $0 + $1.durationSeconds },
+            finishedCount: Set(sessions.lazy.filter(\.didFinish).map(\.workID)).count,
+            streakDays: streakDays
+        )
+    }
+
     /// Library and Home Reading Insights visible work filter.
     /// Excludes queue-only works and concealed mature works (whether in Hide or Blur mode).
     static func insightsWorks(

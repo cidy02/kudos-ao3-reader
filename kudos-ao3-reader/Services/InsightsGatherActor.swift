@@ -131,6 +131,8 @@ actor InsightsGatherActor {
         )
         digestBuilder?.addSoftDeleted(softDeleted)
 
+        // The same reload includes lifetime rereads, series, authors and deleted-work
+        // classification, even when the overview is showing a single month.
         let sessions = try await fetchSessions(
             batchSize: batchSize,
             fetches: &localFetches,
