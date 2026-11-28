@@ -76,6 +76,7 @@ nonisolated struct KudosBackupContents {
     /// than keyed by UUID because each work has two of them and the extension
     /// is the only thing that says what the original actually is.
     let originalFiles: [String: Data]
+    let omittedOriginalTitles: [String]
     let zip: MiniZip?
     /// Set on the Settings directory-import path so `epubData`/`fontData`
     /// can pull one file at a time. Nil for ZIP and in-memory contents.
@@ -153,6 +154,7 @@ nonisolated struct KudosBackupContents {
         epubFiles: [UUID: Data] = [:],
         fontFiles: [String: Data] = [:],
         originalFiles: [String: Data] = [:],
+        omittedOriginalTitles: [String] = [],
         zip: MiniZip? = nil,
         directoryURL: URL? = nil
     ) {
@@ -160,6 +162,7 @@ nonisolated struct KudosBackupContents {
         self.epubFiles = epubFiles
         self.fontFiles = fontFiles
         self.originalFiles = originalFiles
+        self.omittedOriginalTitles = omittedOriginalTitles
         self.zip = zip
         self.directoryURL = directoryURL
         self.zipSource = zip.map(ZipSource.init)
@@ -208,6 +211,7 @@ nonisolated struct KudosBackupContents {
         fontFiles = fonts
         // Read lazily from the archive/directory, not held here.
         originalFiles = [:]
+        omittedOriginalTitles = []
         zip = nil
         directoryURL = nil
         zipSource = nil
@@ -383,6 +387,7 @@ nonisolated struct KudosBackupContents {
         fontFiles = [:]
         // Read lazily from the archive/directory, not held here.
         originalFiles = [:]
+        omittedOriginalTitles = []
         zip = parsed
         zipSource = source
         directoryURL = nil
@@ -3224,6 +3229,15 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     /// Imported originals written back — the documents converted works were
     /// made from, which backups did not carry at all until now.
     var restoredOriginals: Int = 0
+    var failedOriginalIDs: Set<UUID> = []
+
+    var failedOriginals: Int { failedOriginalIDs.count }
+
+    static func originalRestoreWarning(_ count: Int) -> String? {
+        guard count > 0 else { return nil }
+        let subject = count == 1 ? "original" : "originals"
+        return "\(count.formatted()) \(subject) couldn't be restored."
+    }
     var suppressedAnnotations: Int = 0
     var removedWorks: Int = 0
     var removedCollections: Int = 0
@@ -3274,6 +3288,7 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
 
     var conflictMessage: String {
         var parts: [String] = []
+        if let warning = Self.originalRestoreWarning(failedOriginals) { parts.append(warning) }
         if skippedInvalidEPUBs > 0 {
             parts.append("Skipped \(skippedInvalidEPUBs) invalid EPUB file"
                 + "\(skippedInvalidEPUBs == 1 ? "" : "s") to protect your existing copy.")
@@ -3396,19 +3411,18 @@ enum KudosBackupService {
             .filter { $0.kind != .smart }
             .flatMap(\.memberships)
             .compactMap(KudosBackupReadingQueueMembership.init)
-        // Imported originals: the exact file a converted work was made from,
-        // plus the record naming the converter that made it. `preserveOriginal`
-        // calls that copy "insurance"; leaving it out of backups meant it did
-        // not survive the one event it insures against.
         var originalFiles: [String: Data] = [:]
-        let originals = works.isEmpty ? [:] : Storage.existingOriginalDocumentURLs()
-        for work in works {
-            guard let original = originals[work.id] else { continue }
-            if let data = try? Data(contentsOf: original, options: .mappedIfSafe) {
-                originalFiles[original.lastPathComponent] = data
+        var omittedOriginalTitles: [String] = []
+        for source in originalExportSources(for: works) {
+            guard let original = source.original,
+                  (try? original.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+                  let data = try? Data(contentsOf: original, options: .mappedIfSafe)
+            else {
+                omittedOriginalTitles.append(source.title)
+                continue
             }
-            let record = WorkConversionRecord.url(for: work.id)
-            if let data = try? Data(contentsOf: record, options: .mappedIfSafe) {
+            originalFiles[original.lastPathComponent] = data
+            if let record = source.record, let data = try? Data(contentsOf: record, options: .mappedIfSafe) {
                 originalFiles[record.lastPathComponent] = data
             }
         }
@@ -3439,7 +3453,8 @@ enum KudosBackupService {
             manifest: manifest,
             epubFiles: epubFiles,
             fontFiles: fontFiles,
-            originalFiles: originalFiles
+            originalFiles: originalFiles,
+            omittedOriginalTitles: omittedOriginalTitles
         )
     }
 
@@ -5036,60 +5051,6 @@ enum KudosBackupService {
             restoredFonts += 1
         }
 
-        // Imported originals, remapped onto the work they actually landed on.
-        // A merge can bind an archived record to a local work with a different
-        // id, and an original filed under the archive's id would then belong to
-        // nothing.
-        var restoredOriginals = 0
-        for fileName in contents.originalFileNames {
-            guard KudosBackupContents.isSafeFileName(fileName),
-                  URL(fileURLWithPath: fileName).lastPathComponent == fileName
-            else { continue }
-            let base = (fileName as NSString).deletingPathExtension
-            let isRecord = base.hasSuffix(".conversion")
-            let archivedIDText = isRecord ? String(base.dropLast(".conversion".count)) : base
-            guard let archivedID = UUID(uuidString: archivedIDText),
-                  let work = restoredWorksByArchivedID[archivedID],
-                  let data = contents.originalData(named: fileName)
-            else { continue }
-
-            let destination = isRecord
-                ? WorkConversionRecord.url(for: work.id)
-                : Storage.originalDocumentURL(
-                    for: work.id,
-                    fileExtension: (fileName as NSString).pathExtension
-                )
-            // Never over one already here, and never BESIDE one either. A
-            // local original is the file the reader imported on this device;
-            // the archive's is at best the same bytes and at worst older.
-            //
-            // Asking only whether `destination` exists was not the same
-            // question: the destination takes its name from the LOCAL work and
-            // its extension from the ARCHIVED file, so a local `B.pdf` and an
-            // archived `A.html` remapped onto B produce `B.html`, which does
-            // not exist, and both then sit there. Nothing downstream can choose
-            // between them — `existingOriginalDocumentURL` returns whichever
-            // `contentsOfDirectory` lists first, and that is what reconversion
-            // reads, what permanent deletion removes, and what the next export
-            // carries. They need not agree. The sibling check in
-            // `FolderSyncService.readChangedRemoteAssets` already asks it this
-            // way.
-            let alreadyHere = isRecord
-                ? FileManager.default.fileExists(atPath: destination.path)
-                : Storage.existingOriginalDocumentURL(for: work.id) != nil
-            guard !alreadyHere else { continue }
-            do {
-                try FileManager.default.createDirectory(
-                    at: destination.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                try data.write(to: destination, options: .atomic)
-                if !isRecord { restoredOriginals += 1 }
-            } catch {
-                Log.library.notice("An imported original in this backup could not be written.")
-            }
-        }
-
         var removedWorks = 0
         var removedCollections = 0
         var removedQueues = 0
@@ -5146,6 +5107,9 @@ enum KudosBackupService {
         }
 
         try context.save()
+        let originals = restoreOriginalFiles(
+            from: contents, workIDsByArchivedID: restoredWorksByArchivedID.mapValues(\.id), fromSync: fromSync
+        )
         if mode != .replaceLibrary {
             var settings = contents.manifest.settings
             // M21 still holds for the font the reader is switched to: a built-in family this
@@ -5202,7 +5166,8 @@ enum KudosBackupService {
             worksMissingPromisedEPUB: worksMissingPromisedEPUB,
             recoveredMissingEPUBs: recoveredMissingEPUBs,
             reconciledCoverPins: reconciledCoverPins,
-            restoredOriginals: restoredOriginals,
+            restoredOriginals: originals.restored,
+            failedOriginalIDs: originals.failures,
             suppressedAnnotations: suppressedAnnotations,
             removedWorks: removedWorks,
             removedCollections: removedCollections,

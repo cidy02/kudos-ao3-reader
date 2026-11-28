@@ -61,7 +61,7 @@ struct SettingsBackupPage: View {
     @State private var pendingImport: PendingBackupImport?
     @State private var backupNotice: SettingsNotice?
     /// Assets `writeArchive` had to skip, carried to the export confirmation.
-    @State private var backupExportSkippedAssets = 0
+    @State private var backupExportResult: KudosBackupArchiveExportResult?
     /// Read for the Replace sheet's "pause sync" offer.
     @State private var folderSyncStatus = FolderSyncService.snapshot()
 
@@ -139,7 +139,7 @@ struct SettingsBackupPage: View {
                     title: "Backup Exported",
                     message: Self.exportSuccessMessage(
                         recordCount: works.count,
-                        missingAssets: backupExportSkippedAssets
+                        result: backupExportResult
                     )
                 )
             case let .failure(error):
@@ -192,14 +192,12 @@ struct SettingsBackupPage: View {
 
     /// What the archive actually contains, including what it does not.
     ///
-    /// A converted import keeps the exact file it came from
-    /// (`UserDocumentImport.preserveOriginal`), described there as "insurance".
-    /// Both exporters enumerate works and fonts only, so that insurance does
-    /// not survive the one event it exists for: migrating to a new phone and
-    /// erasing the old one. Saying so at export time is the difference between
-    /// a reader who can copy the files off and one who finds out afterwards.
-    private static func exportSuccessMessage(recordCount: Int, missingAssets: Int) -> String {
+    private static func exportSuccessMessage(recordCount: Int, result: KudosBackupArchiveExportResult?) -> String {
         var parts = ["\(recordCount.formatted()) Library works were included in the backup."]
+        if let result, let warning = KudosBackupOriginalFiles.exportWarning(for: result.omittedOriginalTitles) {
+            parts.append(warning)
+        }
+        let missingAssets = result?.skippedOtherAssetCount ?? 0
         if missingAssets > 0 {
             let subject = missingAssets == 1 ? "file was" : "files were"
             parts.append("\(missingAssets.formatted()) \(subject) unreadable and left out. "
@@ -271,8 +269,8 @@ struct SettingsBackupPage: View {
             }.value
             isPreparingBackupExport = false
             switch result {
-            case let .success(skipped):
-                backupExportSkippedAssets = skipped.count
+            case let .success(export):
+                backupExportResult = export
                 backupExportURL = destination
                 exportingBackup = true
             case let .failure(error):

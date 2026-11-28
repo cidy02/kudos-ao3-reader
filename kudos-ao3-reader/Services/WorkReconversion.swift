@@ -104,10 +104,7 @@ enum WorkReconversion {
         case .alreadyEPUB:
             // The original was an EPUB, so there is nothing for a new converter to do
             // differently. Record the version and stop rather than rewriting the file.
-            let updated = WorkConversionRecord(
-                format: candidate.record.format,
-                originalFileName: candidate.record.originalFileName
-            )
+            let updated = updatedRecord(for: candidate)
             updated.write(for: work.id)
             return updated
         case let .converted(data, _):
@@ -132,14 +129,19 @@ enum WorkReconversion {
         // the work still claimed its origin was unknown.
         await applyStoredEPUBMetadata(to: work, in: context)
 
-        let updated = WorkConversionRecord(
-            format: candidate.record.format,
-            originalFileName: candidate.record.originalFileName
-        )
+        let updated = updatedRecord(for: candidate)
         updated.write(for: work.id)
         Log.library.info(
             "Rebuilt “\(work.title)” with converter v\(ImportedDocumentConverter.converterVersion)"
         )
         return updated
+    }
+
+    private static func updatedRecord(for candidate: Candidate) -> WorkConversionRecord {
+        WorkConversionRecord(
+            format: candidate.record.format,
+            originalFileName: candidate.record.originalFileName,
+            convertedAt: candidate.record.convertedAt
+        )
     }
 }

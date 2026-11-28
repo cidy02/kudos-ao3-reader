@@ -136,6 +136,58 @@ struct OriginalsTravelInBackupsTests {
         #expect(WorkConversionRecord.read(for: work.id)?.originalFileName == "thesis.pdf")
     }
 
+    @Test func exportReportsAnUnreadableOriginalAndKeepsEveryReadableOne() async throws {
+        let context = try makeContext()
+        let readable = try [workWithOriginal(in: context), workWithOriginal(in: context)]
+        let unreadable = SavedWork(title: "Unreadable Original", author: "Writer")
+        context.insert(unreadable)
+        try context.save()
+        let works = readable + [unreadable]
+        defer { cleanUp(works.map(\.id)) }
+        let blocked = Storage.originalDocumentURL(for: unreadable.id, fileExtension: "pdf")
+        // A non-file where the original should be is unreadable on either OS,
+        // independent of the test host's permissions.
+        try FileManager.default.createDirectory(at: blocked, withIntermediateDirectories: true)
+        WorkConversionRecord(format: "pdf", originalFileName: "missing.pdf").write(for: unreadable.id)
+
+        let defaults = try testDefaults()
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("OriginalExport-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let plan = try KudosBackupService.makeExportPlan(
+            works: works, bookmarks: [], fonts: [], readingQueues: [], defaults: defaults
+        )
+        let archive = folder.appendingPathComponent("Export.kudosbackup")
+        let report = try KudosBackupService.writeArchive(plan, to: archive)
+        let fromArchive = try KudosBackupContents.read(from: archive)
+        let inMemory = try KudosBackupService.makeContents(
+            works: works, bookmarks: [], fonts: [], readingQueues: [], defaults: defaults
+        )
+        #expect(report.omittedOriginalTitles == [unreadable.title])
+        #expect(inMemory.omittedOriginalTitles == [unreadable.title])
+        #expect(fromArchive.originalFileNames.count == 4)
+        #expect(inMemory.originalFileNames == fromArchive.originalFileNames)
+        for work in readable {
+            let name = "\(work.id.uuidString).pdf"
+            #expect(fromArchive.originalData(named: name) == Self.originalBytes)
+            #expect(inMemory.originalData(named: name) == Self.originalBytes)
+        }
+
+        try FolderSyncService.connect(to: folder, defaults: defaults)
+        defer { FolderSyncService.disconnect(defaults: defaults) }
+        let synced = try await FolderSyncService.syncUp(in: context, defaults: defaults)
+        let status = FolderSyncService.snapshot(defaults: defaults)
+        #expect(synced.omittedOriginalTitles == [unreadable.title])
+        #expect(status.lastError.contains("1 original file couldn't be included"))
+        #expect(status.lastError.contains(unreadable.title))
+        let shared = try KudosBackupContents.read(
+            from: folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
+        )
+        #expect(shared.originalFileNames == inMemory.originalFileNames)
+    }
+
     /// A sync folder is a backup too, so it carries them as well — and a
     /// directory-form read of that folder finds them.
     @Test func aSyncFolderCarriesOriginals() async throws {
