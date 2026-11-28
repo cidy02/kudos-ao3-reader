@@ -203,9 +203,22 @@ extension View {
 struct AO3AuthorAvatar: View {
     let url: URL?
     let name: String
-    /// 72pt square on an author page; 1m's account header draws a 56pt circle.
+    /// 72pt on an author page; 64pt on the Account sheet.
     var size: CGFloat = 72
     var isCircular = false
+    /// When set, the fallback renders a solid identity-colour disc with a contrast-picked
+    /// initial (`Author.dc.html` / `Account-Sheet.dc.html`).
+    var identityHue: Double?
+
+    @Environment(ThemeManager.self) private var themeManager: ThemeManager?
+
+    private var activeTheme: ReaderTheme {
+        themeManager?.appTheme ?? .light
+    }
+
+    private var identityPalette: SubjectPalette? {
+        identityHue.map { activeTheme.subjectPalette(hue: $0) }
+    }
 
     var body: some View {
         Group {
@@ -223,16 +236,37 @@ struct AO3AuthorAvatar: View {
             }
         }
         .frame(width: size, height: size)
-        .background(.quaternary)
+        .background(
+            identityPalette.map { AnyShapeStyle($0.accent) } ?? AnyShapeStyle(.quaternary)
+        )
         .clipShape(isCircular ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 8, style: .continuous)))
+        .shadow(
+            color: identityPalette.map { activeTheme.isDarkFamily ? Color.clear : $0.accent.opacity(0.28) } ?? .clear,
+            radius: identityPalette == nil ? 0 : 9,
+            y: identityPalette == nil ? 0 : 6
+        )
         .accessibilityLabel("\(name) profile image")
     }
 
+    @ViewBuilder
     private var placeholder: some View {
-        Image(systemName: isCircular ? "person.crop.circle" : "person.crop.square")
-            .font(.system(size: size * 0.42, weight: .regular))
-            .foregroundStyle(.secondaryInk)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        if let palette = identityPalette, let initial = Self.initial(for: name) {
+            Text(initial)
+                .font(.system(size: size * 0.44, weight: .semibold))
+                .foregroundStyle(palette.labelOnAccent)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            Image(systemName: isCircular ? "person.crop.circle" : "person.crop.square")
+                .font(.system(size: size * 0.42, weight: .regular))
+                .foregroundStyle(.secondaryInk)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    static func initial(for name: String) -> String? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = trimmed.first else { return nil }
+        return String(first).uppercased()
     }
 }
 

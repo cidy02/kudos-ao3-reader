@@ -23,7 +23,6 @@ struct AccountProfileCard: View {
     /// because here it shares the line with a 56pt avatar.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .title2) private var nameSize: CGFloat = 27
-    @ScaledMetric(relativeTo: .footnote) private var signedOutBodySize: CGFloat = 13
 
     var body: some View {
         switch auth.status {
@@ -285,33 +284,17 @@ struct AccountProfileCard: View {
         .logOutConfirmation(isPresented: $confirmingLogOut) { Task { await auth.logout() } }
     }
 
-    /// T-470's signed-out account card. The invitation link stays inline text so
-    /// Log In remains the only primary action.
+    /// Account sheet signed-out card (`Account-Sheet.dc.html`). The invitation
+    /// link stays inline text so Log In remains the only primary action.
     private var signedOutCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 13) {
-                AO3AuthorAvatar(url: nil, name: "AO3 account", size: 52, isCircular: true)
-
-                Text("Bring your AO3 account along")
-                    .font(.title3.weight(.bold))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
-
-                Spacer(minLength: 0)
-            }
-
-            Text("Your bookmarks, history, subscriptions, inbox and works appear here. "
-                + "Your library works without an account.")
-                .font(.system(size: signedOutBodySize))
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 14) {
+            signedOutHeader
 
             Button(action: onLogin) {
-                HStack(spacing: 7) {
-                    Image(systemName: "person.badge.key")
-                    Text(auth.status == .signingIn ? "Logging In…" : "Log In to AO3")
-                }
-                .frame(maxWidth: .infinity)
+                Text(auth.status == .signingIn
+                    ? AccountSheetCopy.signedOutLoggingInTitle
+                    : AccountSheetCopy.signedOutLoginTitle)
+                    .frame(maxWidth: .infinity)
             }
             .buttonStyle(.kudosPrimaryConfirm)
             .disabled(auth.status == .signingIn)
@@ -319,14 +302,51 @@ struct AccountProfileCard: View {
             AO3InvitationRequestLink {
                 router.open(AO3InvitationRequest.url)
             }
+            .padding(.top, -4)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
-            Text("Your sign-in stays on this device. Kudos never sees your password.")
-                .font(.footnote)
+    @ViewBuilder
+    private var signedOutHeader: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            // Beside a 60 pt circle at AX5, the heading and subtitle squeeze into a
+            // narrow column; stack the avatar above so the copy spans the card.
+            VStack(alignment: .leading, spacing: 10) {
+                signedOutAvatar
+                signedOutHeaderCopy
+            }
+        } else {
+            HStack(alignment: .center, spacing: 14) {
+                signedOutAvatar
+                signedOutHeaderCopy
+            }
+        }
+    }
+
+    private var signedOutAvatar: some View {
+        Image(systemName: "person.fill")
+            .font(.system(size: 28, weight: .regular))
+            .foregroundStyle(.secondaryInk)
+            .frame(width: 60, height: 60)
+            .background(Color(.tertiarySystemFill), in: Circle())
+            .accessibilityHidden(true)
+    }
+
+    private var signedOutHeaderCopy: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(AccountSheetCopy.signedOutTitle)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+
+            Text(AccountSheetCopy.signedOutSubtitle(deviceName: ThisDevice.name))
+                .font(.subheadline)
                 .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 4)
     }
 }
 
