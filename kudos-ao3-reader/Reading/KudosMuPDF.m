@@ -451,6 +451,34 @@ static float KudosPageLineMeasure(fz_stext_page *page) {
 /// Keeps a deliberate line break (`\n`) when a non-final line ends well short of the
 /// typical line width (calibre's ~0.45–0.60 unwrap factor) and the next line's first
 /// word would still have fit on it.
+/// A line that is only a page number (digits, optionally with dashes, dots or spaces: `12`, `- 12 -`, `12.`) in the
+/// page's top or bottom margin. It is page chrome: dropped here rather than kept as a short verse line inside the
+/// block, where the converter's page-number filter (which looks at whole blocks) could not see it (T-579e round 2).
+static BOOL KudosIsMarginPageNumberLine(fz_stext_line *line, fz_stext_page *page) {
+    float pageHeight = page->mediabox.y1 - page->mediabox.y0;
+    if (pageHeight <= 0.0f) {
+        return NO;
+    }
+    BOOL inTop = line->bbox.y1 < page->mediabox.y0 + pageHeight * 0.10f;
+    BOOL inBottom = line->bbox.y0 > page->mediabox.y1 - pageHeight * 0.12f;
+    if (!inTop && !inBottom) {
+        return NO;
+    }
+    int digits = 0;
+    int others = 0;
+    for (fz_stext_char *ch = line->first_char; ch != NULL; ch = ch->next) {
+        int c = ch->c;
+        if (c >= '0' && c <= '9') {
+            digits++;
+        } else if (c == ' ' || c == '-' || c == '.' || c == 0x2013 || c == 0x2014 || c == 0x00A0) {
+            others++;
+        } else {
+            return NO;
+        }
+    }
+    return digits >= 1 && digits <= 4 && others <= 6;
+}
+
 static BOOL KudosShouldKeepLineBreak(fz_stext_line *prevLine, fz_stext_line *nextLine, float measure) {
     if (prevLine == NULL || nextLine == NULL || measure < 1.0f) {
         return NO;
@@ -770,7 +798,7 @@ static BOOL KudosHasTextInVerticalBand(fz_stext_page *page,
                     NSMutableArray<NSValue *> *boldRaw = [NSMutableArray array];
                     fz_stext_line *prevLine = NULL;
                     for (fz_stext_line *line = block->u.t.first_line; line != NULL; line = line->next) {
-                        if (KudosIsLineWhitespaceOnly(line)) {
+                        if (KudosIsLineWhitespaceOnly(line) || KudosIsMarginPageNumberLine(line, stext)) {
                             continue;
                         }
                         if (nextRule < rules.count && rules[nextRule].floatValue < line->bbox.y0) {

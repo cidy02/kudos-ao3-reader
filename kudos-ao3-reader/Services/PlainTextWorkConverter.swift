@@ -19,7 +19,7 @@ nonisolated enum PlainTextWorkConverter {
     private static let chapterHeadingPatterns = [
         #"^chapter\s+(\d+|[ivxlcdm]+|\#(spelledNumbers))\s*([:.\-–—]\s*.{0,80})?$"#,
         #"^ch\.?\s*\d+\s*([:.\-–—]\s*.{0,80})?$"#,
-        #"^part\s+(\d+|[ivxlcdm]+)\s*([:.\-–—]\s*.{0,80})?$"#,
+        #"^part\s+(\d+|[ivxlcdm]+|\#(spelledNumbers))\s*([:.\-–—]\s*.{0,80})?$"#,
         #"^\d{1,3}\s*[.)]\s*.{0,80}$"#,
         #"^\*\s*\*\s*\*$"#,
         #"^#{1,3}\s+.{1,80}$"#              // Markdown headings

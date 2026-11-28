@@ -366,3 +366,39 @@ struct PDFConversionQualityTests {
         #expect(chapters[1].title == "Chapter 2")
     }
 }
+
+/// T-579e round 2: a page number printed on its own line at the bottom of a page, right under the last line of a
+/// paragraph, is page chrome, not a verse line kept inside that paragraph.
+struct PDFPageNumberLineTests {
+    @Test func aBottomPageNumberUnderAParagraphIsNotKeptAsAVerseLine() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pdf-pagenum-\(UUID().uuidString)").appendingPathExtension("pdf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        var box = CGRect(x: 0, y: 0, width: 612, height: 792)
+        let context = try #require(CGContext(url as CFURL, mediaBox: &box, [:] as CFDictionary))
+        let font = CTFontCreateWithName("Helvetica" as CFString, 12, nil)
+        func draw(_ text: String, x: CGFloat = 72, y: CGFloat) {
+            let line = CTLineCreateWithAttributedString(
+                NSAttributedString(string: text, attributes: [kCTFontAttributeName as NSAttributedString.Key: font]))
+            context.textPosition = CGPoint(x: x, y: y)
+            CTLineDraw(line, context)
+        }
+        for page in 1...2 {
+            context.beginPage(mediaBox: &box)
+            var y: CGFloat = 700
+            for _ in 0..<4 {
+                draw("The lamps along the river road were lit one by one as the carriage passed beneath them,", y: y)
+                y -= 14
+            }
+            draw("and nobody spoke until the bridge.", y: y)
+            draw("\(page)", x: 300, y: 50)   // the page number, alone, at the bottom margin
+            context.endPage()
+        }
+        context.closePDF()
+
+        let pages = try #require(KudosMuPDF.paragraphsPerPage(forPDFAtPath: url.path))
+        let text = pages.flatMap { $0 }.joined(separator: "\n")
+        #expect(!text.contains("\n1") && !text.contains("\n2"))
+        #expect(text.contains("nobody spoke until the bridge."))
+    }
+}
