@@ -172,15 +172,17 @@ struct PDFStyledTextTests {
     @Test func paragraphJoinedAcrossPageBreakKeepsBothHalvesStyling() throws {
         let url = try makeStyledPDF(pages: [
             [
-                [regular("The evening watch had already changed twice since dusk, and")],
-                [regular("the courtyard lay silent beneath a thin crust of fresh snow.")],
+                // Prose lines fill the measure, as they do in real PDFs: since T-579e a short line followed by another is
+                // a deliberate (verse) line break, so a hand-broken short line here would test the verse rule instead.
+                [regular("The evening watch had already changed twice since dusk, and the long courtyard below the")],
+                [regular("old walls lay silent beneath a thin crust of fresh snow that nobody had yet disturbed.")],
                 [],
-                [regular("She hurried down the corridor thinking "), italic("only of escape")],
-                [regular("while the distant alarm bells")]
+                [regular("She hurried down the corridor past the shuttered windows thinking "), italic("only of escape")],
+                [regular("while the distant alarm bells somewhere far below the outer walls of the old citadel")]
             ],
             [
-                [regular("began to ring "), bold("louder and louder")],
-                [regular("across the dark valley below the citadel.")],
+                [regular("began to ring "), bold("louder and louder"), regular(" as the wind carried their sound up through")],
+                [regular("the narrow passes and across the dark valley below the citadel.")],
                 [],
                 [regular("Nobody spoke again until the heavy gates finally groaned open.")]
             ]
@@ -189,8 +191,10 @@ struct PDFStyledTextTests {
 
         let body = bodies(try PDFWorkConverter.convert(fileAt: url, fallbackTitle: "Test"))
         #expect(body.contains(
-            "<p>She hurried down the corridor thinking <em>only of escape</em> while the distant alarm bells "
-                + "began to ring <strong>louder and louder</strong> across the dark valley below the citadel.</p>"
+            "<p>She hurried down the corridor past the shuttered windows thinking <em>only of escape</em> while the "
+                + "distant alarm bells somewhere far below the outer walls of the old citadel began to ring "
+                + "<strong>louder and louder</strong> as the wind carried their sound up through the narrow passes and "
+                + "across the dark valley below the citadel.</p>"
         ))
         #expect(body.contains("<p>Nobody spoke again until the heavy gates finally groaned open.</p>"))
     }

@@ -136,7 +136,7 @@ nonisolated enum PDFParagraphRepair {
 
     /// Core symbols that mark a scene break on a short symbol-only line (or paired
     /// with an `o0o`/`xXx` ornament).
-    private static let separatorSymbols: Set<Character> = Set("*~#•·=_-–—❦✦◆◇○●+§⁂")
+    private static let separatorSymbols: Set<Character> = Set("*~#•·=_-–—❦❧✦✧★☆◆◇❖○●+§⁂")
     private static let ornamentCharacters: Set<Character> = Set("oO0xX")
     private static let ornamentLetters: Set<Character> = Set("oOxX")
 
@@ -179,11 +179,12 @@ nonisolated enum PDFParagraphRepair {
     }
 
     static func withoutRunningHeadersAndFooters(_ pages: [[PDFStyledBlock]]) -> [[PDFStyledBlock]] {
-        guard pages.count >= 4 else { return pages }
+        guard !pages.isEmpty else { return pages }
 
-        // Strip bare page numbers at the edges first so a running footer sitting
-        // directly above a page number still sits at the page edge when frequencies
-        // are counted. A year or list number in the body is not a page number.
+        // Strip bare page numbers at the edges at any document length first so a
+        // running footer sitting directly above a page number still sits at the page
+        // edge when frequencies are counted. A year or list number in the body is not
+        // a page number.
         let withoutPageNumbers: [[PDFStyledBlock]] = pages.map { page in
             guard let edges = edgeIndices(of: page) else { return page }
             return page.enumerated().compactMap { index, block -> PDFStyledBlock? in
@@ -194,10 +195,14 @@ nonisolated enum PDFParagraphRepair {
             }
         }
 
+        guard pages.count >= 2 else { return withoutPageNumbers }
+
         // One pass per page: a line that is both the header and the footer counts once.
         var edgeCounts: [String: Int] = [:]
+        var nonEmptyPageCount = 0
         for page in withoutPageNumbers {
             guard let edges = edgeIndices(of: page) else { continue }
+            nonEmptyPageCount += 1
             let firstText = page[edges.first].text.trimmingCharacters(in: .whitespacesAndNewlines)
             let lastText = page[edges.last].text.trimmingCharacters(in: .whitespacesAndNewlines)
             var candidates: Set<String> = []
@@ -208,15 +213,25 @@ nonisolated enum PDFParagraphRepair {
             }
         }
 
-        // Repeating on a third of the pages is a header or footer, not a coincidence.
-        let threshold = max(3, pages.count / 3)
+        guard nonEmptyPageCount >= 2 else { return withoutPageNumbers }
+
+        // On 2–3 page PDFs, require the edge line on every non-empty page; at 4+
+        // pages, repeating on a third of the pages (at least 3) is enough.
+        let threshold = pages.count >= 4 ? max(3, pages.count / 3) : nonEmptyPageCount
         let repeated = Set(edgeCounts.filter { $0.value >= threshold }.keys)
         guard !repeated.isEmpty else { return withoutPageNumbers }
 
+        return removingRepeatedEdgeBlocks(repeated, from: withoutPageNumbers)
+    }
+
+    private static func removingRepeatedEdgeBlocks(
+        _ repeated: Set<String>,
+        from pages: [[PDFStyledBlock]]
+    ) -> [[PDFStyledBlock]] {
         var keptHeading: Set<String> = []
         var cleaned: [[PDFStyledBlock]] = []
-        cleaned.reserveCapacity(withoutPageNumbers.count)
-        for page in withoutPageNumbers {
+        cleaned.reserveCapacity(pages.count)
+        for page in pages {
             guard let edges = edgeIndices(of: page) else {
                 cleaned.append(page)
                 continue
@@ -288,10 +303,14 @@ nonisolated enum PDFParagraphRepair {
 
     // MARK: - Classification
 
-    /// Whether `text` is a scene-break divider (`* * *`, `~~~`, `o0o`, `❦`, `-x-x-x-`, …).
+    /// Whether `text` is a scene-break divider (`* * *`, `~~~`, `o0o`, `❦`, `-x-x-x-`, `Line Break`, …).
     static func isSeparator(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed.count <= maxSeparatorLength else { return false }
+        guard !trimmed.isEmpty, trimmed.count <= maxSeparatorLength, !trimmed.contains("\n") else {
+            return false
+        }
+        let collapsed = trimmed.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        if collapsed.lowercased() == "line break" { return true }
         return isSymbolSeparator(trimmed) || isOrnamentSeparator(trimmed)
     }
 
@@ -301,6 +320,8 @@ nonisolated enum PDFParagraphRepair {
         let rhs = second.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !lhs.isEmpty, !rhs.isEmpty else { return false }
 
+        // Verse/lyrics blocks carry deliberate internal line breaks and never reflow across pages.
+        if lhs.contains("\n") || rhs.contains("\n") { return false }
         if isSeparator(lhs) || isSeparator(rhs) { return false }
         if endsWithTerminalPunctuation(lhs) { return false }
 
@@ -353,7 +374,14 @@ nonisolated enum PDFParagraphRepair {
     }
 
     private static func isBarePageNumber(_ trimmed: String) -> Bool {
-        trimmed.range(of: #"^[\-–—\s]*\d{1,4}[.\-–—\s]*$"#, options: .regularExpression) != nil
+        guard trimmed.count <= 24, !trimmed.contains("\n") else { return false }
+        if trimmed.range(of: #"^[\-–—\s]*\d{1,4}[.\-–—\s]*$"#, options: .regularExpression) != nil {
+            return true
+        }
+        return trimmed.range(
+            of: #"^(?:page\s+)?\d{1,4}\s*(?:/|of)\s*\d{1,4}$|^page\s+\d{1,4}$"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
     }
 
     /// A repeated edge line is a header or footer. A sentence that happens to end
@@ -446,7 +474,14 @@ nonisolated enum PDFParagraphRepair {
         return coreLast == "," || coreLast == ";"
     }
 
-    private static func isExplicitChapterHeading(_ text: String) -> Bool {
+    private static let spelledPartNumbers = [
+        "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+        "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
+        "eighteen", "nineteen", "twenty"
+    ].joined(separator: "|")
+
+    static func isExplicitChapterHeading(_ text: String) -> Bool {
+        guard !text.contains("\n") else { return false }
         if isStandaloneHeading(text) { return true }
         if PlainTextWorkConverter.isChapterHeading(text) { return true }
         let stripped = text
@@ -455,10 +490,8 @@ nonisolated enum PDFParagraphRepair {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !stripped.isEmpty, stripped.count <= 100 else { return false }
         if isStandaloneHeading(stripped) || PlainTextWorkConverter.isChapterHeading(stripped) { return true }
-        return stripped.range(
-            of: #"^part\s+(one|two|three|four|five|six|seven|eight|nine|ten)\s*([:.\-–—]\s*.{0,80})?$"#,
-            options: [.regularExpression, .caseInsensitive]
-        ) != nil
+        let pattern = #"^part\s+(\#(spelledPartNumbers))\s*([:.\-–—]\s*.{0,80})?$"#
+        return stripped.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     private static func isStandaloneHeading(_ text: String) -> Bool {

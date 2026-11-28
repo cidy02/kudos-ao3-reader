@@ -353,20 +353,19 @@ nonisolated enum PDFWorkConverter {
     /// Uses the PDF's own outline when it has one — the only structural signal a
     /// PDF ever offers, and far better than guessing from the prose. calibre and
     /// Word both write outlines, so this is the common case for a converted fic.
-    private static func outlineChapters(
+    static func outlineChapters(
         of document: PDFDocument,
         pageBlocks: [[PDFStyledBlock]]
     ) -> [EPUBBuilder.Chapter]? {
         guard let root = document.outlineRoot, root.numberOfChildren > 1 else { return nil }
 
-        var marks: [(title: String, page: Int)] = []
+        var marks: [(rawLabel: String?, page: Int)] = []
         for index in 0..<root.numberOfChildren {
             guard let child = root.child(at: index),
                   let page = child.destination?.page ?? child.action.flatMap(destinationPage),
                   let pageIndex = document.index(for: page) as Int?
             else { continue }
-            let title = (child.label ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            marks.append((title.isEmpty ? "Chapter \(marks.count + 1)" : title, pageIndex))
+            marks.append((child.label, pageIndex))
         }
         guard marks.count > 1 else { return nil }
 
@@ -381,12 +380,13 @@ nonisolated enum PDFWorkConverter {
             let leading = pageBlocks[0..<min(first.page, pageBlocks.count)]
                 .flatMap(\.self)
                 .filter { !$0.text.isEmpty }
-            let body = HTMLWorkSanitizer.styledParagraphs(from: leading)
+            let body = replacingInternalNewlinesWithBreaks(HTMLWorkSanitizer.styledParagraphs(from: leading))
             if !body.isEmpty {
                 chapters.append(EPUBBuilder.Chapter(title: prefaceTitle, bodyXHTML: body))
             }
         }
 
+        var chapterNumber = 0
         for (offset, mark) in marks.enumerated() {
             let end = offset + 1 < marks.count ? marks[offset + 1].page : pageBlocks.count
             guard mark.page < end, mark.page < pageBlocks.count else { continue }
@@ -394,11 +394,168 @@ nonisolated enum PDFWorkConverter {
             let blocks = pageBlocks[mark.page..<min(end, pageBlocks.count)]
                 .flatMap(\.self)
                 .filter { !$0.text.isEmpty }
-            let body = HTMLWorkSanitizer.styledParagraphs(from: blocks)
+            let body = replacingInternalNewlinesWithBreaks(HTMLWorkSanitizer.styledParagraphs(from: blocks))
             guard !body.isEmpty else { continue }
-            chapters.append(EPUBBuilder.Chapter(title: mark.title, bodyXHTML: body))
+            chapterNumber += 1
+            let title = resolvedOutlineTitle(
+                rawLabel: mark.rawLabel,
+                blocks: blocks,
+                chapterNumber: chapterNumber
+            )
+            chapters.append(EPUBBuilder.Chapter(title: title, bodyXHTML: body))
         }
         return chapters.isEmpty ? nil : chapters
+    }
+
+    private static let maxOutlineTitleLength = 100
+
+    /// Validates a PDF outline entry's label against the chapter's extracted blocks.
+    ///
+    /// Exporters like calibre copy up to 1,000 characters of the chapter's opening
+    /// text into the outline when a chapter has no `<h1>`/`<h2>`. A label longer than
+    /// 100 characters, empty, or matching the chapter's opening prose is replaced by
+    /// the chapter's heading line, or `"Chapter N"` if none looks like a heading.
+    static func resolvedOutlineTitle(
+        rawLabel: String?,
+        blocks: [PDFStyledBlock],
+        chapterNumber: Int
+    ) -> String {
+        let label = normalizedSingleLine(rawLabel ?? "")
+        if !label.isEmpty,
+           label.count <= maxOutlineTitleLength,
+           !isOutlineLabelOpeningProse(label, in: blocks) {
+            return label
+        }
+        if let heading = chapterHeadingLine(in: blocks, outlineLabel: label) {
+            return heading
+        }
+        return "Chapter \(chapterNumber)"
+    }
+
+    /// Converts literal newlines carried inside `<p>...</p>` blocks (verse/lyrics line
+    /// breaks preserved by `KudosMuPDF`) into XHTML `<br/>` elements while leaving the
+    /// top-level newlines between block elements intact.
+    static func replacingInternalNewlinesWithBreaks(_ xhtml: String) -> String {
+        guard xhtml.contains("\n") else { return xhtml }
+        var output = ""
+        output.reserveCapacity(xhtml.count)
+        var cursor = xhtml.startIndex
+        while let open = xhtml.range(of: "<p>", range: cursor..<xhtml.endIndex),
+              let close = xhtml.range(of: "</p>", range: open.upperBound..<xhtml.endIndex) {
+            output += xhtml[cursor..<open.upperBound]
+            let inner = xhtml[open.upperBound..<close.lowerBound]
+            output += inner.replacingOccurrences(of: "\n", with: "<br/>")
+            output += "</p>"
+            cursor = close.upperBound
+        }
+        output += xhtml[cursor..<xhtml.endIndex]
+        return output
+    }
+
+    private static func normalizedSingleLine(_ text: String) -> String {
+        text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    private static func isOutlineLabelOpeningProse(_ label: String, in blocks: [PDFStyledBlock]) -> Bool {
+        let opening = blocks.prefix(4).map { normalizedSingleLine($0.text) }.filter { !$0.isEmpty }
+        guard let first = opening.first else { return false }
+
+        // Multi-block concatenation (e.g. heading + scene break/note/opening prose).
+        if opening.count >= 2, label.hasPrefix(first + " ") {
+            let tail = String(label.dropFirst(first.count + 1))
+            let second = opening[1]
+            let secondMatches = second.hasPrefix(tail) || tail.hasPrefix(second)
+            let thirdMatches = opening.count >= 3 && (opening[2].hasPrefix(tail) || tail.hasPrefix(opening[2]))
+            if secondMatches || thirdMatches {
+                let secondIsProseOrApparatus = PDFParagraphRepair.isSeparator(second)
+                    || looksLikeProseParagraph(second)
+                    || AuthorNoteDetector.noteIndices(in: [second]).contains(0)
+                    || thirdMatches
+                if secondIsProseOrApparatus {
+                    return true
+                }
+            }
+        }
+
+        // Truncated excerpt of a long opening paragraph (`"The rain had stopped…"`).
+        let strippedStem = label
+            .replacingOccurrences(of: #"(?:\.\.\.|…)+\s*$"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        if first.count > maxOutlineTitleLength,
+           strippedStem.count >= 12,
+           first.hasPrefix(strippedStem) {
+            return true
+        }
+
+        // Direct match (or long prefix) of an opening prose paragraph or author's note.
+        // A short first block equal to the label is the chapter's own heading, even when it is quoted or ends in a full
+        // stop (`"You Can't Go Home Again"`, `Ten Years Later.`): only a long one is opening prose (Sonnet's review).
+        if !PDFParagraphRepair.isExplicitChapterHeading(first),
+           label == first || (strippedStem.count >= 20 && first.hasPrefix(strippedStem)),
+           first.count > 60 && looksLikeProseParagraph(first) || AuthorNoteDetector.noteIndices(in: [first]).contains(0) {
+            return true
+        }
+
+        return false
+    }
+
+    private static func looksLikeProseParagraph(_ text: String) -> Bool {
+        if text.count > maxOutlineTitleLength || text.contains("\n") { return true }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let openingQuotes = CharacterSet(charactersIn: "\"“'‘«‹")
+        let closingQuotes = CharacterSet(charactersIn: "\"”'’»›")
+        let words = trimmed.split(whereSeparator: \.isWhitespace)
+        if let first = trimmed.unicodeScalars.first, openingQuotes.contains(first), words.count >= 3 {
+            return true
+        }
+        if let last = trimmed.unicodeScalars.last, closingQuotes.contains(last), words.count >= 3 {
+            return true
+        }
+        if trimmed.hasSuffix(".") || trimmed.hasSuffix("…") {
+            return words.count >= 4
+        }
+        let endsExclamatory = trimmed.hasSuffix("!") || trimmed.hasSuffix("?")
+        if endsExclamatory, words.count >= 8 {
+            return true
+        }
+        return false
+    }
+
+    private static func chapterHeadingLine(in blocks: [PDFStyledBlock], outlineLabel: String) -> String? {
+        guard let firstBlock = blocks.first else { return nil }
+        let rawFirst = firstBlock.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rawFirst.isEmpty,
+              !rawFirst.contains("\n"),
+              rawFirst.count <= maxOutlineTitleLength,
+              !PDFParagraphRepair.isSeparator(rawFirst),
+              !AuthorNoteDetector.noteIndices(in: [rawFirst]).contains(0)
+        else { return nil }
+
+        let candidate = normalizedSingleLine(rawFirst)
+        if PDFParagraphRepair.isExplicitChapterHeading(candidate) {
+            return candidate
+        }
+        if looksLikeProseParagraph(candidate) {
+            return nil
+        }
+        // Reject sentence/salutation fragments like "Cold.", "Dear Maren,", "Someone wrote:".
+        if let last = candidate.last, ".…,;:".contains(last) {
+            return nil
+        }
+        let fullyBold = isFullyStyled(firstBlock.boldRanges, in: firstBlock.text)
+        let outlineStartsWithHeading = !outlineLabel.isEmpty && outlineLabel.hasPrefix(candidate + " ")
+        if fullyBold || outlineStartsWithHeading {
+            return candidate
+        }
+        return nil
+    }
+
+    private static func isFullyStyled(_ ranges: [NSRange], in text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !ranges.isEmpty else { return false }
+        let covered = ranges.reduce(0) { $0 + $1.length }
+        return covered >= trimmed.utf16.count
     }
 
     private static func destinationPage(_ action: PDFAction) -> PDFPage? {
@@ -433,7 +590,10 @@ nonisolated enum PDFWorkConverter {
         let marker = "<p>\(sceneBreakPlaceholder)</p>"
         let restored = "<p>\(separator)</p>"
         return result.chapters.map {
-            .init(title: $0.title, bodyXHTML: $0.bodyXHTML.replacingOccurrences(of: marker, with: restored))
+            let body = replacingInternalNewlinesWithBreaks(
+                $0.bodyXHTML.replacingOccurrences(of: marker, with: restored)
+            )
+            return .init(title: $0.title, bodyXHTML: body)
         }
     }
 

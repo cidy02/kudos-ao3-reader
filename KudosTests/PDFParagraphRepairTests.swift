@@ -433,4 +433,92 @@ struct PDFParagraphRepairTests {
         #expect(repaired.count == 1_000)
         #expect(repaired == pages)
     }
+
+    // MARK: - Short-document chrome, Line Break separator, verse line breaks
+
+    @Test func singlePageDropsBareEdgePageNumberAndKeepsMidPageNumber() {
+        let single = [["The harbor was quiet before dawn.", "1"]]
+        #expect(PDFParagraphRepair.repair(single) == [["The harbor was quiet before dawn."]])
+
+        let dashed = [["- 1 -", "The harbor was quiet before dawn."]]
+        #expect(PDFParagraphRepair.repair(dashed) == [["The harbor was quiet before dawn."]])
+
+        let midPage = [["Opening line of the story.", "1984", "Closing line of the story.", "Page 1 of 1"]]
+        #expect(PDFParagraphRepair.repair(midPage) == [
+            ["Opening line of the story.", "1984", "Closing line of the story."]
+        ])
+    }
+
+    @Test func twoAndThreePageDocumentsDropRepeatedEdgeChromeAndPageNumbers() {
+        let threePages = [
+            ["The Night Notebook", "Chapter 1: Salt", "Page one prose.", "1"],
+            ["The Night Notebook", "Page two prose.", "2 / 3"],
+            ["The Night Notebook", "Page three prose.", "Page 3 of 3"]
+        ]
+        #expect(PDFParagraphRepair.repair(threePages) == [
+            ["Chapter 1: Salt", "Page one prose."],
+            ["Page two prose."],
+            ["Page three prose."]
+        ])
+
+        // An edge line appearing on only 2 of 3 pages is NOT dropped on a 3-page PDF.
+        let twoOfThree = [
+            ["Dear Maren,", "First page prose.", "1"],
+            ["Dear Maren,", "Second page prose.", "2"],
+            ["Yours, Lina", "Third page prose.", "3"]
+        ]
+        #expect(PDFParagraphRepair.repair(twoOfThree) == [
+            ["Dear Maren,", "First page prose."],
+            ["Dear Maren,", "Second page prose."],
+            ["Yours, Lina", "Third page prose."]
+        ])
+
+        // On a 2-page PDF, an edge line on both pages goes, while a repeated chapter heading keeps page 1's copy.
+        let twoPages = [
+            ["The Night Notebook", "Chapter 1", "First page prose.", "1"],
+            ["The Night Notebook", "Second page prose.", "2"]
+        ]
+        #expect(PDFParagraphRepair.repair(twoPages) == [
+            ["Chapter 1", "First page prose."],
+            ["Second page prose."]
+        ])
+
+        let twoPageHeadingHeader = [
+            ["Chapter 1", "First page prose."],
+            ["Chapter 1", "Second page prose."]
+        ]
+        #expect(PDFParagraphRepair.repair(twoPageHeadingHeader) == [
+            ["Chapter 1", "First page prose."],
+            ["Second page prose."]
+        ])
+    }
+
+    @Test func lineBreakSeparatorNormalizesAndVerseNeverJoinsAcrossPages() {
+        #expect(PDFParagraphRepair.isSeparator("Line Break"))
+        #expect(PDFParagraphRepair.isSeparator("  line   break  "))
+        #expect(!PDFParagraphRepair.isSeparator("She added a line break."))
+        #expect(!PDFParagraphRepair.isSeparator("Line Break\nSecond line"))
+
+        let pages = [
+            ["Scene one ended quietly.", "Line Break"],
+            ["Scene two began at dusk.", "Line Break"],
+            ["Scene three ended.", "Line Break"],
+            ["Scene four.", "Line Break"]
+        ]
+        #expect(PDFParagraphRepair.repair(pages) == [
+            ["Scene one ended quietly.", "* * *"],
+            ["Scene two began at dusk.", "* * *"],
+            ["Scene three ended.", "* * *"],
+            ["Scene four.", "* * *"]
+        ])
+
+        #expect(!PDFParagraphRepair.shouldJoin(
+            "The harbor keeps its own books\nin salt and in nails",
+            with: "and in the names of boats"
+        ))
+        #expect(!PDFParagraphRepair.shouldJoin(
+            "She read aloud",
+            with: "Salt on the lintel\nsalt on the tongue"
+        ))
+    }
 }

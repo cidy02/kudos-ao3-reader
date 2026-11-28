@@ -34,11 +34,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// One entry per page, each holding that page's paragraphs in reading order.
 ///
-/// A paragraph is one MuPDF structured-text *block*, its lines joined with a single
-/// space. Verified on a 171-page reference PDF: the assembled text is
-/// character-identical to MuPDF's own reading-order stream, and its non-whitespace
-/// character counts match PDFKit's exactly (493,826, including 4,395 commas) while
-/// being correctly ordered and grouped where PDFKit is not.
+/// A paragraph is one MuPDF structured-text *block*, its wrapped prose lines joined with
+/// a single space and deliberate short lines (verse/lyrics) kept as `\n`. Verified on a
+/// 171-page reference PDF: the assembled text is character-identical to MuPDF's own
+/// reading-order stream, and its non-whitespace character counts match PDFKit's exactly
+/// (493,826, including 4,395 commas) while being correctly ordered and grouped where
+/// PDFKit is not.
 ///
 /// Returns nil when the document cannot be opened, so the caller can fall back.
 + (nullable NSArray<NSArray<NSString *> *> *)paragraphsPerPageForPDFAtPath:(NSString *)path
@@ -47,8 +48,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// One entry per page, each holding that page's paragraph blocks with UTF-16
 /// italic and bold runs.
 ///
-/// Follows the same block, line-join, and drawn scene-break rules as
-/// `paragraphsPerPage(forPDFAtPath:)`; scene-break `* * *` blocks carry no styling.
+/// Follows the same block, line-join, verse line-break, drawn-rule, and vertical-gap
+/// scene-break rules as `paragraphsPerPage(forPDFAtPath:)`; scene-break `* * *` blocks
+/// carry no styling.
 /// Returns nil when the document cannot be opened, so the caller can fall back.
 + (nullable NSArray<NSArray<KudosPDFBlock *> *> *)styledParagraphsPerPageForPDFAtPath:(NSString *)path
     NS_SWIFT_NAME(styledParagraphsPerPage(forPDFAtPath:));
