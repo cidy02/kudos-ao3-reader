@@ -200,11 +200,17 @@ enum PreservedWorkService {
 
     @discardableResult
     static func restore(_ queue: ReadingQueue, in context: ModelContext) -> Bool {
+        restore(queue, in: context, save: true)
+    }
+
+    @discardableResult
+    static func restore(_ queue: ReadingQueue, in context: ModelContext, save: Bool) -> Bool {
         queue.isPendingDeletion = false
         queue.deletedAt = nil
         queue.permanentDeletionScheduledAt = nil
         queue.markModified()
         retractTombstone(recordID: queue.id, type: .readingQueue, in: context)
+        guard save else { return true }
         return context.saveBestEffort(reason: "Saving restored queue failed")
     }
 

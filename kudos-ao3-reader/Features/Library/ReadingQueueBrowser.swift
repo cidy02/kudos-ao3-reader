@@ -1978,9 +1978,7 @@ extension ReadingQueueBrowserView {
 
     private func bulkRemove() {
         guard let queue = selectedQueue else { return }
-        for work in selectedWorks {
-            ReadingQueueService.removeFromQueue(work, from: queue, in: context)
-        }
+        ReadingQueueService.removeFromQueue(selectedWorks, from: queue, in: context)
     }
 }
 

@@ -3401,8 +3401,9 @@ enum KudosBackupService {
         // calls that copy "insurance"; leaving it out of backups meant it did
         // not survive the one event it insures against.
         var originalFiles: [String: Data] = [:]
+        let originals = works.isEmpty ? [:] : Storage.existingOriginalDocumentURLs()
         for work in works {
-            guard let original = Storage.existingOriginalDocumentURL(for: work.id) else { continue }
+            guard let original = originals[work.id] else { continue }
             if let data = try? Data(contentsOf: original, options: .mappedIfSafe) {
                 originalFiles[original.lastPathComponent] = data
             }

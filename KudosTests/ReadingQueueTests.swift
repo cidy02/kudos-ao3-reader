@@ -180,6 +180,164 @@ struct ReadingQueueTests {
         #expect(AddLibraryWorksSheet.confirmationTitle(count: 3) == "Add 3")
     }
 
+    @Test func batchedAppendMatchesSingleAddsAndSavesOnce() throws {
+        let context = try makeContext()
+        let sequential = ReadingQueueService.createQueue(named: "Sequential", in: context)
+        let batched = ReadingQueueService.createQueue(named: "Batched", in: context)
+        let existing = SavedWork(title: "Existing", author: "Writer")
+        let pending = SavedWork(title: "Pending", author: "Writer")
+        let first = SavedWork(title: "First new", author: "Writer")
+        let second = SavedWork(title: "Second new", author: "Writer")
+        for work in [existing, pending, first, second] { context.insert(work) }
+        for queue in [sequential, batched] {
+            ReadingQueueService.add(existing, to: queue, in: context).sortOrderInQueue = 4
+            let hidden = ReadingQueueService.add(pending, to: queue, in: context)
+            hidden.sortOrderInQueue = 11
+            hidden.isPendingDeletion = true
+        }
+
+        let inputs = [second, existing, first, pending, second]
+        let origin = ReadingQueueMembershipOrigin(kind: .manual, label: "Picker")
+        for work in inputs {
+            ReadingQueueService.add(work, to: sequential, state: .new, origin: origin, in: context)
+        }
+        try context.save()
+        context.autosaveEnabled = true
+        let budget = SaveBestEffortTesting.SaveBudget(1)
+        SaveBestEffortTesting.$budget.withValue(budget) {
+            ReadingQueueService.append(inputs, to: batched, origin: origin, in: context)
+        }
+        #expect(budget.remaining == 0)
+        #expect(!context.hasChanges)
+
+        let stored = ModelContext(context.container)
+        let queues = try stored.fetch(FetchDescriptor<ReadingQueue>())
+        let expected = try #require(queues.first { $0.id == sequential.id })
+        let actual = try #require(queues.first { $0.id == batched.id })
+        let expectedRows = expected.memberships.sorted { $0.sortOrderInQueue < $1.sortOrderInQueue }
+        let actualRows = actual.memberships.sorted { $0.sortOrderInQueue < $1.sortOrderInQueue }
+        #expect(actualRows.map { $0.work?.id } == expectedRows.map { $0.work?.id })
+        #expect(actualRows.map(\.sortOrderInQueue) == expectedRows.map(\.sortOrderInQueue))
+        #expect(actualRows.map(\.sortOrderInQueue) == [4, 11, 12, 13])
+        #expect(actualRows.map(\.state) == expectedRows.map(\.state))
+        #expect(actualRows.map(\.stateWasRecorded) == expectedRows.map(\.stateWasRecorded))
+        #expect(actualRows.map(\.origin) == expectedRows.map(\.origin))
+        #expect(actualRows.map(\.isPendingDeletion) == expectedRows.map(\.isPendingDeletion))
+        let works = try stored.fetch(FetchDescriptor<SavedWork>())
+        #expect(works.count == 4)
+        for work in works {
+            #expect(work.queueMemberships.count == 2)
+            #expect(work.queueMemberships.contains { $0.queue?.id == actual.id })
+        }
+    }
+
+    /// `add` sets `isQueuedForLater`; the batch relies on `normalize` seeing the inverse it assigns in one go.
+    @Test func batchedAppendMarksAWorkQueuedOnlyByTheBatch() throws {
+        let context = try makeContext()
+        let queue = ReadingQueueService.createQueue(named: "Batched", in: context)
+        let work = SavedWork(title: "Only here", author: "Writer")
+        context.insert(work)
+        try context.save()
+        #expect(!work.isQueuedForLater)
+        ReadingQueueService.append([work], to: queue, in: context)
+        #expect(work.isQueuedForLater)
+        let stored = ModelContext(context.container)
+        let saved = try #require(try stored.fetch(FetchDescriptor<SavedWork>()).first { $0.id == work.id })
+        #expect(saved.isQueuedForLater)
+        #expect(saved.queueMemberships.contains { $0.queue?.id == queue.id })
+    }
+
+    @Test func batchedRemovalMatchesSingleRemovalsAndSavesOnce() throws {
+        let context = try makeContext()
+        let sequential = ReadingQueueService.createQueue(named: "Sequential", in: context)
+        let batched = ReadingQueueService.createQueue(named: "Batched", in: context)
+        let other = ReadingQueueService.createQueue(named: "Other", in: context)
+        let exclusive = SavedWork(title: "Queue only", author: "Writer")
+        exclusive.isSaved = false
+        let shared = SavedWork(title: "Shared", author: "Writer")
+        let retained = SavedWork(title: "Retained", author: "Writer")
+        for work in [exclusive, shared, retained] { context.insert(work) }
+        var removedIDs = Set<UUID>()
+        for queue in [sequential, batched] {
+            removedIDs.insert(ReadingQueueService.add(exclusive, to: queue, in: context).id)
+            removedIDs.insert(ReadingQueueService.add(shared, to: queue, in: context).id)
+            ReadingQueueService.add(retained, to: queue, state: .new, in: context).sortOrderInQueue = 9
+        }
+        ReadingQueueService.add(shared, to: other, in: context)
+        let inputs = [exclusive, shared, exclusive]
+        for work in inputs { ReadingQueueService.removeFromQueue(work, from: sequential, in: context) }
+        try context.save()
+        context.autosaveEnabled = true
+        let budget = SaveBestEffortTesting.SaveBudget(1)
+        SaveBestEffortTesting.$budget.withValue(budget) {
+            ReadingQueueService.removeFromQueue(inputs, from: batched, in: context)
+        }
+        #expect(budget.remaining == 0)
+        #expect(!context.hasChanges)
+
+        let stored = ModelContext(context.container)
+        let rows = try stored.fetch(FetchDescriptor<ReadingQueueMembership>())
+        let expected = try #require(rows.first { $0.queue?.id == sequential.id })
+        let actual = try #require(rows.first { $0.queue?.id == batched.id })
+        #expect(rows.count == 3)
+        #expect(actual.work?.id == expected.work?.id && actual.work?.id == retained.id)
+        #expect(actual.sortOrderInQueue == expected.sortOrderInQueue && actual.sortOrderInQueue == 9)
+        #expect(actual.state == expected.state)
+        let tombstones = try stored.fetch(FetchDescriptor<SyncTombstone>())
+        #expect(tombstones.count == removedIDs.count)
+        #expect(Set(tombstones.filter { $0.recordType == .readingQueueMembership }.map(\.recordID)) == removedIDs)
+        let works = try stored.fetch(FetchDescriptor<SavedWork>())
+        let removed = try #require(works.first { $0.id == exclusive.id })
+        let keptInOtherQueue = try #require(works.first { $0.id == shared.id })
+        #expect(removed.queueMemberships.isEmpty && !removed.isQueuedForLater && !removed.isPendingDeletion)
+        #expect(keptInOtherQueue.queueMemberships.map { $0.queue?.id } == [other.id])
+        #expect(keptInOtherQueue.isQueuedForLater)
+    }
+
+    @Test func savedForLaterMergeKeepsFirstMembershipAndSourceRows() throws {
+        let context = try makeContext()
+        let primary = ReadingQueue(name: "Primary", kind: .savedForLater, sortOrder: 0)
+        let first = ReadingQueue(name: "First duplicate", kind: .savedForLater, sortOrder: 1)
+        let second = ReadingQueue(name: "Second duplicate", kind: .savedForLater, sortOrder: 2)
+        let shared = SavedWork(title: "Shared", author: "Writer")
+        let transferred = SavedWork(title: "Transferred", author: "Writer")
+        for queue in [primary, first, second] { context.insert(queue) }
+        for work in [shared, transferred] { context.insert(work) }
+        let kept = ReadingQueueService.add(shared, to: primary, in: context)
+        ReadingQueueService.add(shared, to: first, state: .new, in: context)
+        let origin = ReadingQueueMembershipOrigin(kind: .manual, label: "Original queue")
+        let moved = ReadingQueueService.add(transferred, to: first, state: .new, origin: origin, in: context)
+        moved.sortOrderInQueue = 17
+        moved.note = "Keep this note"
+        ReadingQueueService.add(transferred, to: second, in: context)
+
+        let search = SavedSearch(name: "Search", filters: AO3SearchFilters())
+        context.insert(search)
+        let keptSource = QueueSavedSearchLink(queue: first, search: search)
+        context.insert(keptSource)
+        context.insert(QueueSavedSearchLink(queue: second, search: search))
+        let expectedIDs = Set([kept.id, moved.id])
+        let movedID = moved.id
+        let keptSourceID = keptSource.id
+        try context.save()
+
+        let merged = ReadingQueueService.ensureSavedForLaterQueue(in: context)
+        #expect(merged.id == primary.id)
+        try context.save()
+        let stored = ModelContext(context.container)
+        let queues = try stored.fetch(FetchDescriptor<ReadingQueue>())
+        let loaded = try #require(queues.first)
+        #expect(queues.count == 1 && loaded.id == primary.id)
+        #expect(Set(loaded.memberships.map(\.id)) == expectedIDs)
+        #expect(try stored.fetchCount(FetchDescriptor<ReadingQueueMembership>()) == 2)
+        let member = try #require(loaded.memberships.first { $0.id == movedID })
+        #expect(member.work?.id == transferred.id && member.queue?.id == primary.id)
+        #expect(member.sortOrderInQueue == 17 && member.state == .new)
+        #expect(member.origin == origin && member.note == "Keep this note")
+        #expect(loaded.searchLinks.map(\.id) == [keptSourceID])
+        #expect(try stored.fetchCount(FetchDescriptor<QueueSavedSearchLink>()) == 1)
+    }
+
     /// The picker never offers a work the queue already has, nor a queue-only
     /// preservation record that isn't in the Library.
     @Test func appendCandidatesSkipMembersAndQueueOnlyWorks() throws {

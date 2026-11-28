@@ -105,7 +105,7 @@ enum ReadingQueueService {
         let savedQueues = queues.filter { $0.kind == .savedForLater }
         if let primary = savedQueues.first {
             if primary.isPendingDeletion {
-                PreservedWorkService.restore(primary, in: context)
+                PreservedWorkService.restore(primary, in: context, save: false)
             }
             primary.name = savedForLaterName
             primary.kind = .savedForLater
@@ -115,23 +115,7 @@ enum ReadingQueueService {
                 primary.memberships.map(\.lastModifiedAt).max() ?? primary.dateCreated
             )
 
-            for duplicate in savedQueues.dropFirst() {
-                for membership in duplicate.memberships {
-                    if let work = membership.work,
-                       !primary.memberships.contains(where: { $0.work?.id == work.id }) {
-                        membership.queue = primary
-                        primary.memberships.append(membership)
-                        primary.markMembershipChanged(max(membership.lastModifiedAt, Date()))
-                    }
-                }
-                // Its sources would cascade away with it.
-                for link in duplicate.searchLinks
-                where !primary.searchLinks.contains(where: { $0.dedupKey == link.dedupKey }) {
-                    link.queue = primary
-                    primary.searchLinks.append(link)
-                }
-                context.delete(duplicate)
-            }
+            mergeSavedForLaterDuplicates(savedQueues.dropFirst(), into: primary, in: context)
             context.saveBestEffort(reason: "Saving merged Saved for Later queue failed")
             return primary
         }
@@ -262,9 +246,8 @@ enum ReadingQueueService {
         in context: ModelContext
     ) -> ReadingQueue {
         let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Membership `add` saves as it goes. Hold the commit until the queue
-        // and every seeded membership are in, so a failed Create cannot leave a
-        // committed prefix that a retry would duplicate.
+        // Hold the commit until the queue and every seeded membership are in,
+        // so a failed Create cannot leave a prefix that a retry would duplicate.
         let previousAutosave = context.autosaveEnabled
         context.autosaveEnabled = false
         defer { context.autosaveEnabled = previousAutosave }
@@ -618,16 +601,12 @@ enum ReadingQueueService {
     /// relationship array's unordered fetch, and copied works sitting in
     /// Recently Deleted that the queue screen hides.
     private static func seedFromSavedForLater(into queue: ReadingQueue, in context: ModelContext) {
-        for sourceMembership in orderedMemberships(in: ensureSavedForLaterQueue(in: context)) {
-            guard let work = sourceMembership.work else { continue }
-            _ = add(
-                work,
-                to: queue,
-                state: sourceMembership.state,
-                origin: sourceMembership.origin,
-                in: context
-            )
+        let memberships = orderedMemberships(in: ensureSavedForLaterQueue(in: context))
+        let additions = memberships.compactMap { membership -> MembershipAddition? in
+            guard let work = membership.work else { return nil }
+            return MembershipAddition(work: work, state: membership.state, origin: membership.origin)
         }
+        appendMemberships(additions, to: queue, in: context)
     }
 
     static func normalizeAllQueuedWorks(in context: ModelContext) {
@@ -706,9 +685,7 @@ enum ReadingQueueService {
         if queue.kind == .smart {
             return refusedSmartMembership(work, queue: queue, state: state, origin: origin, in: context)
         }
-        if work.knownChapterCount == 0, work.postedChapterCount > 0 {
-            work.knownChapterCount = work.postedChapterCount
-        }
+        backfillKnownChapterCount(for: work)
         if let existing = work.queueMemberships.first(where: { $0.queue?.id == queue.id }) {
             normalize(work)
             return existing
@@ -732,6 +709,12 @@ enum ReadingQueueService {
         normalize(work)
         context.saveBestEffort(reason: "Saving queue membership failed")
         return membership
+    }
+
+    static func backfillKnownChapterCount(for work: SavedWork) {
+        if work.knownChapterCount == 0, work.postedChapterCount > 0 {
+            work.knownChapterCount = work.postedChapterCount
+        }
     }
 
     /// A smart queue has no memberships. Returning a detached value with nil
@@ -786,26 +769,6 @@ enum ReadingQueueService {
         sortIntoLine([membership], in: queue, context: context)
     }
 
-    static func move(
-        _ works: [SavedWork],
-        from source: ReadingQueue,
-        to destination: ReadingQueue,
-        state: ReadingQueueMembershipState? = nil,
-        origin: ReadingQueueMembershipOrigin? = nil,
-        in context: ModelContext
-    ) {
-        guard source.id != destination.id else { return }
-        // Moving onto or off a smart queue cannot write or remove memberships.
-        guard source.kind != .smart, destination.kind != .smart else { return }
-        for work in works {
-            let sourceMembership = work.queueMemberships.first { $0.queue?.id == source.id }
-            let resolvedState = state ?? sourceMembership?.state ?? .inLine
-            let resolvedOrigin = origin ?? sourceMembership?.origin
-            add(work, to: destination, state: resolvedState, origin: resolvedOrigin, in: context)
-            removeFromQueueAndDeleteIfQueueOnly(work, from: source, in: context)
-        }
-    }
-
     /// 1h's library picker offers these: real Library works (queue-only
     /// preservation records excluded, as `CollectionWorkPicker.candidates` does)
     /// not already in `queue`.
@@ -814,23 +777,6 @@ enum ReadingQueueService {
         return works.filter { work in
             !work.isQueueOnlyWork
                 && !work.queueMemberships.contains { $0.queue?.id == queue.id }
-        }
-    }
-
-    /// 1h's "Add N": each work goes on the end of `queue`, in the order given,
-    /// through `add` — which skips a work already in the queue. `add`, not
-    /// `addAndPreserve`: picking from the Library is a membership change and
-    /// must not fetch from AO3. A work whose copy is missing is left `.queued`
-    /// for the queue's own offline rules to handle.
-    static func append(
-        _ works: [SavedWork],
-        to queue: ReadingQueue,
-        state: ReadingQueueMembershipState = .new,
-        origin: ReadingQueueMembershipOrigin? = nil,
-        in context: ModelContext
-    ) {
-        for work in works {
-            _ = add(work, to: queue, state: state, origin: origin, in: context)
         }
     }
 

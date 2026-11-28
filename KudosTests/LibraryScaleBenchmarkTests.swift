@@ -139,9 +139,7 @@ extension PersistenceGateSuites {
             try context.save()
 
             let removeStarted = ContinuousClock.now
-            for work in works {
-                ReadingQueueService.removeFromQueue(work, from: largeQueue, in: context)
-            }
+            ReadingQueueService.removeFromQueue(works, from: largeQueue, in: context)
             let removeSeconds = benchmarkSeconds(since: removeStarted)
             try #require(largeQueue.memberships.count == 5_000 && !context.hasChanges)
             try report.record("queue_remove", for: fixture, seconds: removeSeconds, counts: [

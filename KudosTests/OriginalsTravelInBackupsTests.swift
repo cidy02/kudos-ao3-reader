@@ -58,6 +58,53 @@ struct OriginalsTravelInBackupsTests {
         }
     }
 
+    @Test func exportPlanMatchesPerWorkOriginalLookup() throws {
+        let first = SavedWork(title: "PDF", author: "Writer")
+        let second = SavedWork(title: "Legacy name", author: "Writer")
+        let sidecarOnly = SavedWork(title: "Sidecar only", author: "Writer")
+        let missing = SavedWork(title: "Missing", author: "Writer")
+        first.hasEPUB = false
+        second.hasEPUB = true
+        sidecarOnly.hasEPUB = false
+        missing.hasEPUB = false
+
+        let firstOriginal = Storage.originalDocumentURL(for: first.id, fileExtension: "pdf")
+        let alternate = Storage.originalDocumentURL(for: first.id, fileExtension: "html")
+        let legacyName = Storage.originalsDirectory.appendingPathComponent("\(second.id.uuidString)-legacy.txt")
+        let firstRecord = WorkConversionRecord.url(for: first.id)
+        let orphanRecord = WorkConversionRecord.url(for: sidecarOnly.id)
+        let paths = [firstOriginal, alternate, legacyName, firstRecord, orphanRecord]
+        defer {
+            for url in paths { try? FileManager.default.removeItem(at: url) }
+        }
+        for url in [firstOriginal, alternate, legacyName] {
+            try Self.originalBytes.write(to: url)
+        }
+        let record = WorkConversionRecord(format: "pdf", originalFileName: "thesis.pdf")
+        let recordBytes = try JSONEncoder().encode(record)
+        try recordBytes.write(to: firstRecord)
+        try recordBytes.write(to: orphanRecord)
+
+        let orderedWorks = [first, second, sidecarOnly, missing].sorted { $0.id.uuidString < $1.id.uuidString }
+        var expectedOriginals: [URL] = []
+        for work in orderedWorks {
+            guard let original = Storage.existingOriginalDocumentURL(for: work.id) else { continue }
+            expectedOriginals.append(original)
+            let sidecar = WorkConversionRecord.url(for: work.id)
+            if FileManager.default.fileExists(atPath: sidecar.path) { expectedOriginals.append(sidecar) }
+        }
+        #expect(expectedOriginals.count == 3)
+
+        let plan = try KudosBackupService.makeExportPlan(
+            works: Array(orderedWorks.reversed()) + [first],
+            bookmarks: [], fonts: [], readingQueues: [], defaults: try testDefaults()
+        )
+        let expectedNames = ["Works/\(second.id.uuidString).epub"]
+            + expectedOriginals.map { "Originals/\($0.lastPathComponent)" }
+        #expect(plan.assets.map(\.entryName) == expectedNames)
+        #expect(plan.assets.map(\.fileURL) == [second.fileURL] + expectedOriginals)
+    }
+
     @Test func anOriginalSurvivesAZipRoundTrip() throws {
         let source = try makeContext()
         let work = try workWithOriginal(in: source)
