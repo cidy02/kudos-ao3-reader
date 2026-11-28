@@ -10,6 +10,7 @@ import SwiftData
 @MainActor
 enum PreservedWorkService {
     static let recoveryWindow: TimeInterval = 90 * 24 * 60 * 60
+    static let deletionChunkSize = 500
     /// The window in the words every ask uses, so they follow the constant.
     static var recoveryWindowText: String { "\(Int(recoveryWindow / 86_400)) days" }
 
@@ -248,11 +249,16 @@ enum PreservedWorkService {
     /// recovery window. Used by both `RecentlyDeletedView`'s explicit action and
     /// `sweepExpired` once the window naturally lapses.
     static func hardDelete(_ collection: WorkCollection, in context: ModelContext) {
+        _ = deleteInChunks([collection], in: context) { chunk in
+            for collection in chunk { stageDeletion(of: collection, in: context) }
+        }
+    }
+
+    private static func stageDeletion(of collection: WorkCollection, in context: ModelContext) {
         // A later tombstone than the move to Recently Deleted, so an archive's Recently
         // Deleted copy is not restored (T-541, fifth review).
         SyncTombstones.recordDeletion(of: collection, in: context, permanently: true)
         context.delete(collection)
-        context.saveBestEffort(reason: "Saving permanently-deleted collection failed")
     }
 
     /// Permanently deletes a reading queue right away. Tombstones each membership
@@ -261,16 +267,29 @@ enum PreservedWorkService {
     /// `ReadingQueueService.removeFromQueue` does for a single removal, needed here
     /// since the queue's memberships were left untouched at soft-delete time.
     static func hardDelete(_ queue: ReadingQueue, in context: ModelContext) {
-        for membership in queue.memberships {
-            SyncTombstones.recordDeletion(of: membership, in: context)
-            if let work = membership.work {
-                work.queueMemberships.removeAll { $0.id == membership.id }
-                work.isQueuedForLater = !work.queueMemberships.isEmpty
+        _ = deleteInChunks([queue], in: context) { stageQueueDeletions($0, in: context) }
+    }
+
+    private static func stageQueueDeletions(_ queues: ArraySlice<ReadingQueue>, in context: ModelContext) {
+        var works: [ObjectIdentifier: SavedWork] = [:]
+        var removedByWork: [ObjectIdentifier: Set<UUID>] = [:]
+        for queue in queues {
+            for membership in queue.memberships {
+                SyncTombstones.recordDeletion(of: membership, in: context)
+                if let work = membership.work {
+                    let key = ObjectIdentifier(work)
+                    works[key] = work
+                    removedByWork[key, default: []].insert(membership.id)
+                }
             }
+            SyncTombstones.recordDeletion(of: queue, in: context, permanently: true)
         }
-        SyncTombstones.recordDeletion(of: queue, in: context, permanently: true)
-        context.delete(queue)
-        context.saveBestEffort(reason: "Saving permanently-deleted queue failed")
+        for (key, work) in works {
+            guard let removed = removedByWork[key] else { continue }
+            work.queueMemberships.removeAll { removed.contains($0.id) }
+            work.isQueuedForLater = !work.queueMemberships.isEmpty
+        }
+        for queue in queues { context.delete(queue) }
     }
 
     /// Recently Deleted's Delete Permanently, per item. Its confirmation can
@@ -314,8 +333,8 @@ enum PreservedWorkService {
     }
 
     /// Permanently deletes every pending record, whatever is left of its window,
-    /// through the same per-kind `hardDelete`s the per-item action and the sweep
-    /// use. The Recently Deleted UI no longer offers Delete All (T-469); Select →
+    /// using the same deletion rules as the per-item action and the sweep.
+    /// The Recently Deleted UI no longer offers Delete All (T-469); Select →
     /// Select All → Delete Permanently is the path, and still goes through each
     /// entry's own `deletePermanently`.
     @discardableResult
@@ -327,26 +346,49 @@ enum PreservedWorkService {
     /// The shared pass: permanently deletes each pending work, collection and
     /// queue whose scheduled deletion date `isDue` accepts.
     private static func hardDeletePending(in context: ModelContext, isDue: (Date?) -> Bool) -> Int {
+        let works = ((try? context.fetch(FetchDescriptor<SavedWork>(
+            predicate: #Predicate { $0.isPendingDeletion }
+        ))) ?? []).filter { isDue($0.permanentDeletionScheduledAt) }
+        let collections = ((try? context.fetch(FetchDescriptor<WorkCollection>(
+            predicate: #Predicate { $0.isPendingDeletion }
+        ))) ?? []).filter { isDue($0.permanentDeletionScheduledAt) }
+        let queues = ((try? context.fetch(FetchDescriptor<ReadingQueue>(
+            predicate: #Predicate { $0.isPendingDeletion }
+        ))) ?? []).filter { isDue($0.permanentDeletionScheduledAt) }
+        let deletedWorks = WorkLifecycle.hardDelete(works, in: context)
+        guard deletedWorks == works.count else { return deletedWorks }
+        let deletedCollections = deleteInChunks(collections, in: context) { chunk in
+            for collection in chunk { stageDeletion(of: collection, in: context) }
+        }
+        guard deletedCollections == collections.count else { return deletedWorks + deletedCollections }
+        let deletedQueues = deleteInChunks(queues, in: context) { stageQueueDeletions($0, in: context) }
+        return deletedWorks + deletedCollections + deletedQueues
+    }
+
+    private static func deleteInChunks<Record>(
+        _ records: [Record], in context: ModelContext, stage: (ArraySlice<Record>) -> Void
+    ) -> Int {
+        guard !records.isEmpty, prepareDeletion(in: context) else { return 0 }
         var count = 0
-        if let works = try? context.fetch(FetchDescriptor<SavedWork>()) {
-            for work in works where work.isPendingDeletion && isDue(work.permanentDeletionScheduledAt) {
-                deletePermanently(work, in: context)
-                count += 1
-            }
-        }
-        if let collections = try? context.fetch(FetchDescriptor<WorkCollection>()) {
-            for collection in collections
-            where collection.isPendingDeletion && isDue(collection.permanentDeletionScheduledAt) {
-                deletePermanently(collection, in: context)
-                count += 1
-            }
-        }
-        if let queues = try? context.fetch(FetchDescriptor<ReadingQueue>()) {
-            for queue in queues where queue.isPendingDeletion && isDue(queue.permanentDeletionScheduledAt) {
-                deletePermanently(queue, in: context)
-                count += 1
-            }
+        for start in stride(from: 0, to: records.count, by: deletionChunkSize) {
+            let chunk = records[start..<min(start + deletionChunkSize, records.count)]
+            stage(chunk)
+            guard commitDeletion(in: context) else { break }
+            count += chunk.count
         }
         return count
+    }
+
+    /// Keep earlier edits outside the rollback boundary for a deletion chunk.
+    static func prepareDeletion(in context: ModelContext) -> Bool {
+        !context.hasChanges || context.commitNow(reason: "Saving edits before permanent deletion failed")
+    }
+
+    static func commitDeletion(in context: ModelContext) -> Bool {
+        guard context.commitNow(reason: "Saving permanent deletion failed") else {
+            context.rollback()
+            return false
+        }
+        return true
     }
 }

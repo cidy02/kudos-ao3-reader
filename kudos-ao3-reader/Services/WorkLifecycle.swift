@@ -58,18 +58,25 @@ enum WorkLifecycle {
     @discardableResult
     static func sweepHeldCopies(in context: ModelContext, now: Date = Date(), everything: Bool = false) -> Int {
         let held = (try? context.fetch(FetchDescriptor<SavedWork>(predicate: #Predicate { $0.freedAt != nil }))) ?? []
+        guard !held.isEmpty, PreservedWorkService.prepareDeletion(in: context) else { return 0 }
         var freed = 0
-        for work in held {
-            guard work.isFinished, !work.isProtected, !work.isPendingDeletion, work.hasEPUB else {
-                work.freedAt = nil
-                continue
+        let chunkSize = PreservedWorkService.deletionChunkSize
+        for start in stride(from: 0, to: held.count, by: chunkSize) {
+            var files: [WorkDeletionFiles] = []
+            for work in held[start..<min(start + chunkSize, held.count)] {
+                guard work.isFinished, !work.isProtected, !work.isPendingDeletion, work.hasEPUB else {
+                    work.freedAt = nil
+                    continue
+                }
+                if everything || (work.freedAt.map { now.timeIntervalSince($0) >= freedCopyWindow } ?? false) {
+                    files.append(WorkDeletionFiles(id: work.id, epub: work.fileURL))
+                    clearEPUBState(work)
+                }
             }
-            if everything || (work.freedAt.map { now.timeIntervalSince($0) >= freedCopyWindow } ?? false) {
-                freeEPUB(work)
-                freed += 1
-            }
+            guard !context.hasChanges || PreservedWorkService.commitDeletion(in: context) else { break }
+            for file in files { file.removeEPUB() }
+            freed += files.count
         }
-        if !held.isEmpty { context.saveBestEffort(reason: "Sweeping held copies failed") }
         return freed
     }
 
@@ -196,8 +203,12 @@ enum WorkLifecycle {
     /// as history. Does not save the context — callers do.
     @MainActor
     static func freeEPUB(_ work: SavedWork) {
-        try? FileManager.default.removeItem(at: work.fileURL)
-        try? FileManager.default.removeItem(at: Storage.readerDirectory(for: work.id))
+        WorkDeletionFiles(id: work.id, epub: work.fileURL).removeEPUB()
+        clearEPUBState(work)
+    }
+
+    @MainActor
+    private static func clearEPUBState(_ work: SavedWork) {
         work.hasEPUB = false
         work.freedAt = nil
         // A promised remote copy is a promise about bytes this device wanted.
@@ -218,43 +229,116 @@ enum WorkLifecycle {
     /// instead, so a work is always recoverable first.
     @MainActor
     static func hardDelete(_ work: SavedWork, in context: ModelContext) {
+        _ = hardDelete([work], in: context)
+    }
+
+    @MainActor
+    static func hardDelete(_ works: [SavedWork], in context: ModelContext) -> Int {
+        guard !works.isEmpty else { return 0 }
+        var repeatedIDs = Set<UUID>()
+        let workIDs = works.reduce(into: Set<UUID>()) { ids, work in
+            if !ids.insert(work.id).inserted { repeatedIDs.insert(work.id) }
+        }
+        // Annotations are not cascaded. Index them once for the whole sweep and
+        // stop if the fetch fails: deleting the book would orphan its notes.
+        var annotationsByWork: [UUID: [ReadingAnnotation]] = [:]
+        let annotationEntity = Schema.entityName(for: ReadingAnnotation.self)
+        if context.container.schema.entitiesByName[annotationEntity] != nil {
+            guard let annotations = try? context.fetch(FetchDescriptor<ReadingAnnotation>()) else { return 0 }
+            for annotation in annotations {
+                guard let id = annotation.work?.id, workIDs.contains(id) else { continue }
+                annotationsByWork[id, default: []].append(annotation)
+            }
+        }
+        let originals = Storage.existingOriginalDocumentURLs()
+        guard PreservedWorkService.prepareDeletion(in: context) else { return 0 }
+
+        var deleted = 0
+        for start in stride(from: 0, to: works.count, by: PreservedWorkService.deletionChunkSize) {
+            let chunk = works[start..<min(start + PreservedWorkService.deletionChunkSize, works.count)]
+            let files = chunk.map { WorkDeletionFiles(id: $0.id, epub: $0.fileURL) }
+            // Let the reader release its file before staging any changes that
+            // its notification handler could incidentally save.
+            #if os(iOS)
+            for file in files {
+                NotificationCenter.default.post(name: .kudosWorkEPUBWillChange, object: file.id)
+            }
+            #endif
+            var memberships: [ReadingQueueMembership] = []
+            for work in chunk {
+                memberships.append(contentsOf: stageDeletion(
+                    of: work, annotations: annotationsByWork.removeValue(forKey: work.id) ?? [], in: context
+                ))
+            }
+            if chunk.count > 1 {
+                detachDeletedWorks(chunk, memberships: memberships)
+                // The stage captured these before removing their queue inverses.
+                for membership in memberships { context.delete(membership) }
+            }
+            for work in chunk { context.delete(work) }
+            guard PreservedWorkService.commitDeletion(in: context) else { break }
+            for file in files {
+                let original = repeatedIDs.contains(file.id)
+                    ? Storage.existingOriginalDocumentURL(for: file.id) : originals[file.id]
+                file.remove(original: original)
+            }
+            deleted += chunk.count
+        }
+        return deleted
+    }
+
+    @MainActor
+    private static func stageDeletion(
+        of work: SavedWork, annotations: [ReadingAnnotation], in context: ModelContext
+    ) -> [ReadingQueueMembership] {
         SyncTombstones.recordDeletion(of: work, in: context, permanently: true)
-        // The cascade delete rule on SavedWork.queueMemberships removes these rows as a
-        // side effect of context.delete(work) below — tombstone them explicitly first so
-        // a future cloud merge doesn't resurrect a queue membership for a deleted work.
-        for membership in work.queueMemberships {
+        // SavedWork cascades its queue memberships. They need their own
+        // tombstones before the cascade so older backups cannot revive them.
+        let memberships = work.queueMemberships
+        for membership in memberships {
             SyncTombstones.recordDeletion(of: membership, in: context)
         }
-        // ReadingAnnotation.work has no @Relationship cascade rule (it's a plain
-        // optional, unlike queueMemberships above), so SwiftData's default
-        // .nullify would otherwise leave these rows behind forever — orphaned,
-        // untombstoned, and invisible to every list (they all filter by
-        // work?.id). Fetch and delete them explicitly, tombstoning each first so
-        // a future restore from an older archive can't resurrect a mark whose
-        // book no longer exists.
-        let workID = work.id
-        let orphanedAnnotations = (try? context.fetch(FetchDescriptor<ReadingAnnotation>()))?
-            .filter { $0.work?.id == workID } ?? []
-        for annotation in orphanedAnnotations {
+        for annotation in annotations {
             SyncTombstones.recordDeletion(of: annotation, in: context)
             context.delete(annotation)
         }
-        #if os(iOS)
-        NotificationCenter.default.post(name: .kudosWorkEPUBWillChange, object: work.id)
-        #endif
-        try? FileManager.default.removeItem(at: work.fileURL)
-        try? FileManager.default.removeItem(at: Storage.readerDirectory(for: work.id))
-        // A converted import keeps the original file it came from. Only permanent
-        // deletion removes it — deliberately *not* `freeEPUB`, which exists to
-        // reclaim space for works that can be re-downloaded from AO3, and the
-        // original of a community copy is the one artifact that cannot.
-        if let original = Storage.existingOriginalDocumentURL(for: work.id) {
-            try? FileManager.default.removeItem(at: original)
+        return memberships
+    }
+
+    /// Update each surviving inverse once per chunk. Shelf clocks and reading order stay the same.
+    @MainActor
+    private static func detachDeletedWorks(_ works: ArraySlice<SavedWork>, memberships: [ReadingQueueMembership]) {
+        let workIDs = Set(works.map(ObjectIdentifier.init))
+        let membershipIDs = Set(memberships.map(ObjectIdentifier.init))
+        var collections: [ObjectIdentifier: WorkCollection] = [:]
+        var queues: [ObjectIdentifier: ReadingQueue] = [:]
+        for work in works {
+            for collection in work.collections { collections[ObjectIdentifier(collection)] = collection }
         }
-        // Its conversion record goes with it, or the Originals directory accumulates
-        // sidecars pointing at files that no longer exist.
-        WorkConversionRecord.delete(for: work.id)
-        context.delete(work)
-        context.saveBestEffort(reason: "Saving work deletion failed")
+        for membership in memberships {
+            if let queue = membership.queue { queues[ObjectIdentifier(queue)] = queue }
+        }
+        for collection in collections.values {
+            collection.works.removeAll { workIDs.contains(ObjectIdentifier($0)) }
+        }
+        for queue in queues.values {
+            queue.memberships.removeAll { membershipIDs.contains(ObjectIdentifier($0)) }
+        }
+    }
+
+    private struct WorkDeletionFiles {
+        let id: UUID
+        let epub: URL
+
+        func removeEPUB() {
+            try? FileManager.default.removeItem(at: epub)
+            try? FileManager.default.removeItem(at: Storage.readerDirectory(for: id))
+        }
+
+        func remove(original: URL?) {
+            removeEPUB()
+            if let original { try? FileManager.default.removeItem(at: original) }
+            WorkConversionRecord.delete(for: id)
+        }
     }
 }

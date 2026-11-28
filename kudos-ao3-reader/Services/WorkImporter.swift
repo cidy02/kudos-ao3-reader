@@ -24,6 +24,28 @@ func importEPUB(
     canImport: (@MainActor () -> Bool)? = nil,
     into context: ModelContext
 ) async throws -> SavedWork {
+    try await importEPUB(
+        tempURL, source: source, isComplete: isComplete, seriesURL: seriesURL,
+        knownChapterCount: knownChapterCount, importSource: importSource, statsAtSave: statsAtSave,
+        verifyAvailability: verifyAvailability, canImport: canImport, using: nil, into: context
+    )
+}
+
+@MainActor
+@discardableResult
+func importEPUB(
+    _ tempURL: URL,
+    source: URL?,
+    isComplete: Bool = false,
+    seriesURL: String = "",
+    knownChapterCount: Int = 0,
+    importSource: WorkImportSource? = nil,
+    statsAtSave: WorkStatsAtSave? = nil,
+    verifyAvailability: Bool = true,
+    canImport: (@MainActor () -> Bool)? = nil,
+    using batch: WorkIdentityBatch?,
+    into context: ModelContext
+) async throws -> SavedWork {
     let downloadedAt = Date()
     // Reading the EPUB's metadata pulls the whole file into memory and unzips it, so
     // run that off the main actor; everything below (SwiftData + the file move) stays
@@ -51,7 +73,11 @@ func importEPUB(
     // land here together. Re-check now and merge into any existing record instead of
     // inserting a duplicate; a match sitting in Recently Deleted is revived first
     // (with all its reading progress) rather than left scheduled for permanent deletion.
-    if let source, let existing = existingWork(forSource: source, in: context) {
+    let match = source.flatMap { source in
+        if let batch { return batch.existingWork(forSource: source) }
+        return existingWork(forSource: source, in: context)
+    }
+    if let existing = match {
         let revived = existing.isPendingDeletion
         if revived {
             PreservedWorkService.restore(existing, in: context)
@@ -85,7 +111,8 @@ func importEPUB(
         existing.markModified()
         existing.ensureCoverPinnedOrRefreshed()
         WorkSearchIndex.reindex(existing)
-        try? context.save()
+        batch?.record(existing)
+        do { try context.save() } catch { batch?.invalidate() }
         if revived {
             Log.library.info("Import revived “\(existing.title)” from Recently Deleted")
         } else {
@@ -151,7 +178,8 @@ func importEPUB(
     context.insert(work)
     work.pinCover(salt: 0, automatic: true)
     WorkSearchIndex.reindex(work)
-    try? context.save()
+    batch?.record(work)
+    do { try context.save() } catch { batch?.invalidate() }
     Log.library.info("Imported work “\(title)”")
 
     // Refresh the work's tags from AO3's live page in the background; the EPUB
