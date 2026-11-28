@@ -37,7 +37,7 @@ enum LoadedWorksRank: String, CaseIterable, Identifiable {
         case .kudosPerHitAdjusted: "Against loaded works of similar length and age"
         case .savesPerKudos: "Public bookmarks ÷ kudos"
         case .commentsPerKudos: "Comments, replies included, ÷ kudos"
-        case .momentum: "Kudos growth since you last saw each work"
+        case .momentum: "Kudos gained since you last saw each work"
         case .kudosPerThousandWords: "Kudos ÷ max(words, 1,000) × 1,000; favours short works"
         }
     }
@@ -462,6 +462,8 @@ enum LoadedWorksRanker {
 struct SearchRankingSession {
     var settings = LoadedWorksRanking()
     private var sightings = KudosSightings()
+
+    var previousKudos: [Int: Int] { sightings.previousKudos }
 
     /// `works` in the order `settings` asks for — AO3's own while ranking is off.
     func ranked(_ works: [AO3WorkSummary]) -> [RankedWork] {

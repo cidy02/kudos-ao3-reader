@@ -101,7 +101,7 @@ struct ReaderFanMenu: View {
                         Label("Find", systemImage: find.systemImage)
                     }
                     .disabled(!find.isEnabled)
-                    .accessibilityLabel(find.title)
+                    .accessibilityLabel("Find")
                 }
 
                 if let comments = resolved.comments {
@@ -174,9 +174,9 @@ struct ReaderFanMenu: View {
         }
         .buttonStyle(.plain)
         .glassEffect(groupButtonSize == nil ? .regular : .identity, in: Circle())
-        .accessibilityLabel("More actions")
+        .accessibilityLabel("More")
         .accessibilityShowsLargeContentViewer {
-            Label("More actions", systemImage: "ellipsis")
+            Label("More", systemImage: "ellipsis")
         }
         .tint(Color.primary)
         // The rail's menu opens upward from low on the screen; keep the board's
@@ -186,7 +186,7 @@ struct ReaderFanMenu: View {
 
     private func rowTitle(for action: ReaderFanRoundAction) -> String {
         switch action.id {
-        case "kudos": return "Kudos"
+        case "kudos": return ReaderEndCopy.kudosButtonTitle(given: action.isEmphasized)
         case "original": return "Original File"
         case "rotationLock": return "Rotation Lock"
         case "bookmark": return "Bookmark"

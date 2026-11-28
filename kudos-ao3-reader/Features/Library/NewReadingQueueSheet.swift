@@ -116,129 +116,10 @@ struct NewReadingQueueSheet: View {
                 }
                 if showsSmartEditor {
                     smartEditorContent
+                } else if isEditing {
+                    editListQueueContent
                 } else {
-                if isEditing {
-                    Section {
-                        groupLabel("Queue")
-                        coverPreview.pageBodyRow(top: 8, gutter: gutter)
-                    }
-                } else {
-                    Section {
-                        groupLabel("Preview")
-                        coverPreview.pageBodyRow(top: 8, gutter: gutter)
-                    }
-                }
-
-                Section {
-                    groupLabel("Name")
-                    namePanel().pageBodyRow(top: 8, gutter: gutter)
-                }
-
-                Section {
-                    groupLabel("Colour")
-                    // 1j draws the swatches bare on the sheet, not on a card —
-                    // they are their own shapes and a panel behind them would
-                    // add an edge the board does not have.
-                    SubjectHueSwatchRow(selection: $hue, pickedHex: $options.colorHex)
-                        .pageBodyRow(top: 10, gutter: gutter)
-                    footnote(hue == nil
-                        ? "Kudos picks a colour from the queue name. Renaming it may change the colour."
-                        : "Your chosen colour stays the same if you rename the queue.")
-                }
-
-                Section {
-                    groupLabel("Tags")
-                    tagsPanel.pageBodyRow(top: 10, gutter: gutter)
-                    footnote("A tag you use here is the same tag on your works.")
-                }
-
-                Section {
-                    groupLabel("Offline")
-                    offlinePanel.pageBodyRow(top: 8, gutter: gutter)
-                    footnote(Self.offlineFootnote)
-                }
-
-                if isEditing {
-                    Section {
-                        groupLabel("Sources")
-                        ForEach(savedSearches.filter { options.searchIDs.contains($0.id) }) { search in
-                            HStack(spacing: 10) {
-                                Image(systemName: QueueSourceKind.savedSearch.symbolName)
-                                    .foregroundStyle(.secondaryInk)
-                                    .frame(width: 20)
-                                    .accessibilityHidden(true)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(search.name)
-                                        .foregroundStyle(.primary)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                    Text("Saved search")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondaryInk)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                Button("Remove \(search.name)", systemImage: "minus.circle") {
-                                    options.searchIDs.removeAll { $0 == search.id }
-                                }
-                                .labelStyle(.iconOnly)
-                                .buttonStyle(.borderless)
-                                .minimumHitTarget()
-                                .foregroundStyle(.accentInk)
-                                .accessibilityLabel("Remove saved search \(search.name) from queue")
-                            }
-                            .pageBodyRow(top: 8, gutter: gutter)
-                        }
-                        ForEach(options.sources) { source in
-                            HStack(spacing: 10) {
-                                Image(systemName: source.kind.symbolName)
-                                    .foregroundStyle(.secondaryInk)
-                                    .frame(width: 20)
-                                    .accessibilityHidden(true)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(source.displayName)
-                                        .foregroundStyle(.primary)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                    Text(source.subtitle ?? source.kind.kindLabel)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondaryInk)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                Button("Remove \(source.displayName)", systemImage: "minus.circle") {
-                                    options.sources.removeAll { $0.dedupKey == source.dedupKey }
-                                }
-                                .labelStyle(.iconOnly)
-                                .buttonStyle(.borderless)
-                                .minimumHitTarget()
-                                .foregroundStyle(.accentInk)
-                                .accessibilityLabel(
-                                    "Remove \(source.kind.kindLabel.lowercased()) \(source.displayName) from queue"
-                                )
-                            }
-                            .pageBodyRow(top: 8, gutter: gutter)
-                        }
-                        Button("Add a Source…") { showingSourcePicker = true }
-                            .foregroundStyle(.accentInk)
-                            .accessibilityLabel("Add a source to this queue")
-                            .pageBodyRow(top: 8, gutter: gutter)
-                        footnote(
-                            "Kudos checks a source when you open this queue. "
-                                + "Nothing is fetched in the background."
-                        )
-                    }
-                }
-
-                if !isEditing {
-                    Section {
-                        groupLabel("Start From")
-                        seedPanel.pageBodyRow(top: 8, gutter: gutter)
-                    }
-
-                    Section {
-                        groupLabel("Add Works")
-                        addWorksRow.pageBodyRow(top: 8, gutter: gutter)
-                        footnote("Chosen from your library. They are added when you create the queue.")
-                    }
-                }
+                    createListQueueContent
                 }
             }
             .cardList()
@@ -379,18 +260,24 @@ struct NewReadingQueueSheet: View {
         )
     }
 
+    private var coverWorks: [SavedWork] {
+        if let editingQueue {
+            return ReadingQueueService.orderedMemberships(in: editingQueue).compactMap(\.work)
+        }
+        return seedWorks
+    }
+
     private var coverPreview: some View {
-        let coverWorks = editingQueue?.memberships.compactMap(\.work)
-            .filter { !$0.isPendingDeletion } ?? seedWorks
-        let backs = coverWorks
+        let works = coverWorks
+        let backs = works
             .filter { !gate.isConcealed($0, enabled: hideMature) }
             .prefix(CoverStackLayout.maxBacks)
-        let footer = ReadingQueueFacts.cardFooter(states: coverWorks.map(\.readingState))
+        let subtitle = ReadingQueueFacts.previewSubtitle(for: works)
         let identity = Self.coverIdentity(for: editingQueue, options: options)
         return VStack(spacing: 8) {
             StackedWorkCover(
                 kind: .queue,
-                size: CGSize(width: 88, height: 120),
+                size: CGSize(width: 76, height: 76),
                 backs: Array(backs)
             ) { layout in
                 Self.previewCoverFace(
@@ -402,19 +289,23 @@ struct NewReadingQueueSheet: View {
                     height: layout.front.height
                 )
             }
-            Text(previewName)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-            Text(footer)
-                .font(.caption)
-                .foregroundStyle(.secondaryInk)
-                .lineLimit(2)
+            VStack(spacing: 1) {
+                Text(previewName)
+                    .font(.title2.bold())
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                Text(subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .lineLimit(2)
+            }
         }
         .frame(maxWidth: .infinity)
+        .padding(.top, 2)
+        .padding(.bottom, 4)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Queue cover, \(previewName), \(footer)")
+        .accessibilityLabel("Preview, \(previewName), \(subtitle)")
     }
 
     private var addWorksRow: some View {
@@ -433,10 +324,13 @@ struct NewReadingQueueSheet: View {
                     .foregroundStyle(theme.effectiveTint)
                     .accessibilityHidden(true)
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .queueFormCard(theme: theme.appTheme)
         .accessibilityLabel("Add works")
         .accessibilityValue(options.seedWorkIDs.isEmpty
             ? "None selected"
@@ -447,33 +341,6 @@ struct NewReadingQueueSheet: View {
     /// Every existing tag, then any new names typed here that are not one yet.
     private var tagChoices: [String] {
         allTags.map(\.name) + options.tagNames.filter { !allTags.map(\.name).contains($0) }
-    }
-
-    private var tagsPanel: some View {
-        FlowLayout(spacing: 7, rowSpacing: 7) {
-            ForEach(tagChoices, id: \.self) { tagName in
-                let isOn = options.tagNames.contains(tagName)
-                Button {
-                    if isOn {
-                        options.tagNames.removeAll { $0 == tagName }
-                    } else {
-                        options.tagNames.append(tagName)
-                    }
-                } label: {
-                    SubjectChip(text: tagName, style: isOn ? .tinted : .neutral, palette: theme.scopePalette)
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
-            }
-            Button {
-                newTagName = ""
-                showingNewTag = true
-            } label: {
-                SubjectChip(text: "+ New Tag", style: .dashed)
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// A name matching an existing tag or one already picked, ignoring case,
@@ -495,8 +362,12 @@ struct NewReadingQueueSheet: View {
         return isEditing ? "Edit Queue" : "New Queue"
     }
 
+    static func confirmButtonTitle(isEditing: Bool, isSmart: Bool) -> String {
+        isSmart || isEditing ? "Save" : "Add"
+    }
+
     private var confirmTitle: String {
-        showsSmartEditor || isEditing ? "Save" : "Create"
+        Self.confirmButtonTitle(isEditing: isEditing, isSmart: showsSmartEditor)
     }
 
     private var submittedOptions: NewQueueOptions {
@@ -551,7 +422,7 @@ struct NewReadingQueueSheet: View {
             }
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Kind")
-            .subjectPanel()
+            .queueFormCard(theme: theme.appTheme)
             .pageBodyRow(top: 8, gutter: gutter)
         }
     }
@@ -560,23 +431,21 @@ struct NewReadingQueueSheet: View {
     private var smartEditorContent: some View {
         Section {
             groupLabel("Name")
-            namePanel(placeholder: "Short and finished").pageBodyRow(top: 8, gutter: gutter)
+            namePanel(placeholder: "Short and finished").pageBodyRow(top: 6, gutter: gutter)
         }
         if rulesUnreadable {
             Section {
                 Text("These rules were saved by a newer version of Kudos and can't be edited here.")
                     .font(.system(size: footnoteSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .pageBodyRow(top: 8, gutter: gutter)
+                footnote(Self.smartFootnote)
             }
         } else {
             smartMatchSection
             smartOrderSection
             smartPreviewSection
-        }
-        Section {
-            footnote(Self.smartFootnote)
         }
     }
 
@@ -614,14 +483,15 @@ struct NewReadingQueueSheet: View {
                 } label: {
                     Text("Add Rule…")
                         .font(.system(size: seedTitleSize))
+                        .foregroundStyle(.accentInk)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
                 }
                 .accessibilityLabel("Add Rule")
             }
-            .subjectPanel()
-            .pageBodyRow(top: 8, gutter: gutter)
+            .queueFormCard(theme: theme.appTheme)
+            .pageBodyRow(top: 6, gutter: gutter)
         }
     }
 
@@ -663,14 +533,14 @@ struct NewReadingQueueSheet: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Limit, \(smartDocument.limitTitle)")
             }
-            .subjectPanel()
-            .pageBodyRow(top: 8, gutter: gutter)
+            .queueFormCard(theme: theme.appTheme)
+            .pageBodyRow(top: 6, gutter: gutter)
         }
     }
 
     private var smartPreviewSection: some View {
         let matched = smartPreviewWorks
-        let copy = smartPreviewCopy(matched)
+        let copy = Self.smartPreviewCopy(for: matched)
         return Section {
             groupLabel("Preview")
             VStack(alignment: .leading, spacing: 4) {
@@ -679,15 +549,16 @@ struct NewReadingQueueSheet: View {
                     .accessibilityLabel("Matches now, \(copy.count)")
                 if !copy.detail.isEmpty {
                     Text(copy.detail)
-                        .font(.system(size: footnoteSize))
+                        .font(.footnote)
                         .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 14)
                         .padding(.bottom, 10)
                 }
             }
-            .subjectPanel()
-            .pageBodyRow(top: 8, gutter: gutter)
+            .queueFormCard(theme: theme.appTheme)
+            .pageBodyRow(top: 6, gutter: gutter)
+            footnote(Self.smartFootnote)
         }
     }
 
@@ -727,25 +598,42 @@ struct NewReadingQueueSheet: View {
         return ordered.compactMap { byID[$0.id] }
     }
 
-    private func smartPreviewCopy(_ works: [SavedWork]) -> (count: String, detail: String) {
+    /// Preview copy for Smart Queue (`Queue-Smart.dc.html`): `"12 works"` and
+    /// `"About 3 h 10 min · 9 offline"`.
+    static func smartPreviewCopy(
+        for works: [SavedWork],
+        fileExists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
+    ) -> (count: String, detail: String) {
         let count = works.count == 1 ? "1 work" : "\(works.count.formatted()) works"
         guard !works.isEmpty else { return (count, "") }
-        let facts = ReadingQueueFacts.planFacts(for: works)
+        let facts = ReadingQueueFacts.planFacts(for: works, fileExists: fileExists)
         let parts = facts.split(separator: " · ").map(String.init)
-        return (count, parts.dropFirst().joined(separator: " · "))
+        let detail = ReadingQueueFacts.capitalizedSentenceStart(parts.dropFirst().joined(separator: " · "))
+        return (count, detail)
     }
 
     static let smartFootnote = "A smart queue updates itself as your library changes. "
         + "A work leaves when it stops matching, for example when you finish it."
 
-    private func groupLabel(_ text: String) -> some View {
-        SubjectFieldLabel(text: text, style: .formGroup)
-            .pageBodyRow(top: 18, gutter: gutter)
+    private func groupLabel(_ text: String, trailing: String? = nil) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(.secondaryInk)
+            if let trailing, !trailing.isEmpty {
+                Spacer(minLength: 8)
+                Text(trailing)
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .pageBodyRow(top: 14, gutter: gutter)
     }
 
-    /// 1j draws the field alone under its label, full width — not a labelled row,
-    /// which would say "Name" twice.
-    private func namePanel(placeholder: String = "Case fic pile") -> some View {
+    /// Name field alone under its header (Edit Queue and Smart Queue).
+    private func namePanel(placeholder: String = "Autumn Rereads") -> some View {
         TextField(placeholder, text: $name)
             // The title doubles as the accessibility label, so without this
             // VoiceOver reads the example placeholder as if it were the name.
@@ -755,32 +643,38 @@ struct NewReadingQueueSheet: View {
             .textInputAutocapitalization(.words)
             #endif
             // Return creates too, so it reports a failed save the same way; an empty name
-            // does nothing, as the disabled Create.
+            // does nothing, as the disabled confirm button.
             .onSubmit {
                 guard !trimmedName.isEmpty else { return }
                 colorWellSession.flush()
                 if !onCreate(submittedOptions) { saveFailed = true }
             }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 11)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .subjectPanel()
+            .queueFormCard(theme: theme.appTheme)
     }
 
     private var offlinePanel: some View {
-        SubjectFormRow(label: "Keep Works Offline", arrangement: .control) {
+        SubjectFormRow(label: "Keep works offline", arrangement: .control) {
             // Titled even though the title is hidden: `labelsHidden` hides it
             // from the eye, not from VoiceOver, and an empty title left the
             // switch announcing only "switch button, off".
-            Toggle("Keep Works Offline", isOn: $options.keepsWorksOffline).labelsHidden().accentFill()
+            Toggle("Keep works offline", isOn: $options.keepsWorksOffline).labelsHidden().accentFill()
         }
-        .subjectPanel()
+        .queueFormCard(theme: theme.appTheme)
     }
 
-    /// 1j's copy for this group, and what the toggle does since T-276
-    /// (`KeepOffline`, `SavedWork.isKeptOffline`).
-    static let offlineFootnote = "When this is on, every work you add is downloaded for offline reading. "
-        + "When it is off, the queue keeps only your list and uses no extra storage."
+    /// Board `Queues.dc.html` copy for Keep works offline when the toggle is on
+    /// (`KeepOffline`, `SavedWork.isKeptOffline`). The off sentence is the other
+    /// state: the board draws the switch on, so its line is not true when it is off.
+    static let offlineFootnote = "Kudos downloads each work you add and keeps it while it's in this queue."
+
+    static let offlineOffFootnote = "When this is off, the queue keeps only your list and uses no extra storage."
+
+    static func offlineFootnote(keepsWorksOffline: Bool) -> String {
+        keepsWorksOffline ? offlineFootnote : offlineOffFootnote
+    }
 
     private var seedPanel: some View {
         VStack(spacing: 0) {
@@ -788,7 +682,7 @@ struct NewReadingQueueSheet: View {
             SubjectRowSeparator(inset: 43)
             seedRow(.savedForLater)
         }
-        .subjectPanel()
+        .queueFormCard(theme: theme.appTheme)
     }
 
     @ViewBuilder
@@ -860,12 +754,421 @@ struct NewReadingQueueSheet: View {
 
     private func footnote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: footnoteSize))
-            .foregroundStyle(.secondary.opacity(0.7))
+            .font(.footnote)
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .pageBodyRow(top: 6, gutter: gutter)
+    }
+}
+
+/// Create and Edit list-queue sections (`Queues.dc.html`, `Queue-Edit.dc.html`), split
+/// into an extension to keep `NewReadingQueueSheet`'s main body concise.
+extension NewReadingQueueSheet {
+    @ViewBuilder
+    private var createListQueueContent: some View {
+        Section {
+            coverPreview.pageBodyRow(top: 8, gutter: gutter)
+        }
+
+        Section {
+            VStack(spacing: 0) {
+                nameInlineRow
+                SubjectRowSeparator(inset: 16)
+                colourInlineRow
+                SubjectRowSeparator(inset: 16)
+                tagsInlineRow
+            }
+            .queueFormCard(theme: theme.appTheme)
+            .pageBodyRow(top: 14, gutter: gutter)
+        }
+
+        Section {
+            offlinePanel.pageBodyRow(top: 14, gutter: gutter)
+            footnote(Self.offlineFootnote(keepsWorksOffline: options.keepsWorksOffline))
+        }
+
+        Section {
+            groupLabel("Start from")
+            seedPanel.pageBodyRow(top: 6, gutter: gutter)
+        }
+
+        Section {
+            groupLabel(
+                "Add works",
+                trailing: options.seedWorkIDs.isEmpty ? nil : "\(options.seedWorkIDs.count) selected"
+            )
+            addWorksRow.pageBodyRow(top: 6, gutter: gutter)
+            footnote("Chosen from your library. They are added when you create the queue.")
+        }
+    }
+
+    @ViewBuilder
+    private var editListQueueContent: some View {
+        let works = coverWorks
+        let offlineWorks = works.filter {
+            $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path)
+        }
+        let offlineBytes = offlineWorks.reduce(Int64(0)) { $0 + queueWorkFileSize($1.fileURL) }
+
+        Section {
+            QueueContextCard(
+                name: previewName,
+                identity: Self.coverIdentity(for: editingQueue, options: options),
+                hue: hue,
+                pickedHex: options.colorHex,
+                works: works,
+                offlineCount: offlineWorks.count,
+                isUserQueue: editingQueue?.isUserQueue ?? true
+            )
             .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .queueFormCard(theme: theme.appTheme)
             .pageBodyRow(top: 8, gutter: gutter)
+        }
+
+        Section {
+            groupLabel("Name")
+            namePanel(placeholder: "Summer Reading").pageBodyRow(top: 6, gutter: gutter)
+        }
+
+        Section {
+            VStack(spacing: 0) {
+                colourInlineRow
+                SubjectRowSeparator(inset: 16)
+                tagsInlineRow
+            }
+            .queueFormCard(theme: theme.appTheme)
+            .pageBodyRow(top: 14, gutter: gutter)
+        }
+
+        editSourcesSection
+
+        Section {
+            groupLabel("Offline")
+            editOfflinePanel(
+                offlineCount: offlineWorks.count,
+                totalCount: works.count,
+                byteCount: offlineBytes
+            )
+            .pageBodyRow(top: 6, gutter: gutter)
+            footnote(Self.offlineFootnote(keepsWorksOffline: options.keepsWorksOffline))
+        }
+    }
+
+    private var nameInlineRow: some View {
+        let field = TextField("Autumn Rereads", text: $name)
+            .accessibilityLabel("Name")
+            .font(.system(size: nameFieldSize))
+            #if os(iOS)
+            .textInputAutocapitalization(.words)
+            #endif
+            .onSubmit {
+                guard !trimmedName.isEmpty else { return }
+                colorWellSession.flush()
+                if !onCreate(submittedOptions) { saveFailed = true }
+            }
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Name")
+                        .font(.callout)
+                        .foregroundStyle(.primary)
+                        .accessibilityHidden(true)
+                    field
+                }
+            } else {
+                HStack(alignment: .center, spacing: 12) {
+                    Text("Name")
+                        .font(.callout)
+                        .foregroundStyle(.primary)
+                        .frame(minWidth: 70, alignment: .leading)
+                        .accessibilityHidden(true)
+                    field
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
+    }
+
+    private var colourInlineRow: some View {
+        let swatches = SubjectHueSwatchRow(selection: $hue, pickedHex: $options.colorHex)
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Colour")
+                        .font(.callout)
+                        .foregroundStyle(.primary)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        swatches
+                    }
+                }
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .center, spacing: 12) {
+                        Text("Colour")
+                            .font(.callout)
+                            .foregroundStyle(.primary)
+                            .frame(minWidth: 70, alignment: .leading)
+                        swatches
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Colour")
+                            .font(.callout)
+                            .foregroundStyle(.primary)
+                        swatches
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 50, alignment: .leading)
+    }
+
+    private var tagsInlineRow: some View {
+        let content = FlowLayout(spacing: 8, rowSpacing: 6) {
+            ForEach(options.tagNames, id: \.self) { tagName in
+                Button {
+                    options.tagNames.removeAll { $0 == tagName }
+                } label: {
+                    Text(tagName)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 5)
+                        .frame(minHeight: 30)
+                        .background(
+                            theme.appTheme.glassFill(0.10),
+                            in: SubjectMetrics.controlShape(dynamicTypeSize)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remove tag \(tagName)")
+            }
+            addTagControl
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Tags")
+                        .font(.callout)
+                        .foregroundStyle(.primary)
+                    content
+                }
+            } else {
+                HStack(alignment: .center, spacing: 12) {
+                    Text("Tags")
+                        .font(.callout)
+                        .foregroundStyle(.primary)
+                        .frame(minWidth: 70, alignment: .leading)
+                    content
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var addTagControl: some View {
+        if tagChoices.isEmpty {
+            Button {
+                newTagName = ""
+                showingNewTag = true
+            } label: {
+                Text("Add…")
+                    .font(.subheadline)
+                    .foregroundStyle(.accentInk)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+            .minimumHitTarget()
+            .accessibilityLabel("Add tag")
+        } else {
+            Menu {
+                ForEach(tagChoices, id: \.self) { tagName in
+                    let isOn = options.tagNames.contains(tagName)
+                    Button {
+                        if isOn {
+                            options.tagNames.removeAll { $0 == tagName }
+                        } else {
+                            options.tagNames.append(tagName)
+                        }
+                    } label: {
+                        if isOn {
+                            Label(tagName, systemImage: "checkmark")
+                        } else {
+                            Text(tagName)
+                        }
+                    }
+                }
+                Divider()
+                Button {
+                    newTagName = ""
+                    showingNewTag = true
+                } label: {
+                    Label("New Tag…", systemImage: "plus")
+                }
+            } label: {
+                Text("Add…")
+                    .font(.subheadline)
+                    .foregroundStyle(.accentInk)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+            }
+            .minimumHitTarget()
+            .accessibilityLabel("Add tag")
+        }
+    }
+
+    private var editSourcesSection: some View {
+        let linkedSearches = savedSearches.filter { options.searchIDs.contains($0.id) }
+        return Section {
+            groupLabel("Find More")
+            VStack(spacing: 0) {
+                ForEach(Array(linkedSearches.enumerated()), id: \.element.id) { index, search in
+                    if index > 0 { SubjectRowSeparator(inset: 52) }
+                    HStack(spacing: 12) {
+                        QueueSourceIconTile(symbolName: QueueSourceKind.savedSearch.symbolName)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(search.name)
+                                .foregroundStyle(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text("Saved search")
+                                .font(.caption)
+                                .foregroundStyle(.secondaryInk)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Button("Remove \(search.name)", systemImage: "minus.circle") {
+                            options.searchIDs.removeAll { $0 == search.id }
+                        }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.borderless)
+                        .minimumHitTarget()
+                        .foregroundStyle(.accentInk)
+                        .accessibilityLabel("Remove saved search \(search.name) from queue")
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                }
+                ForEach(Array(options.sources.enumerated()), id: \.element.id) { index, source in
+                    if index > 0 || !linkedSearches.isEmpty { SubjectRowSeparator(inset: 52) }
+                    HStack(spacing: 12) {
+                        QueueSourceIconTile(symbolName: source.kind.symbolName)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(source.displayName)
+                                .foregroundStyle(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(source.subtitle ?? source.kind.kindLabel)
+                                .font(.caption)
+                                .foregroundStyle(.secondaryInk)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Button("Remove \(source.displayName)", systemImage: "minus.circle") {
+                            options.sources.removeAll { $0.dedupKey == source.dedupKey }
+                        }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.borderless)
+                        .minimumHitTarget()
+                        .foregroundStyle(.accentInk)
+                        .accessibilityLabel(
+                            "Remove \(source.kind.kindLabel.lowercased()) \(source.displayName) from queue"
+                        )
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                }
+                if !linkedSearches.isEmpty || !options.sources.isEmpty {
+                    SubjectRowSeparator(inset: 14)
+                }
+                Button {
+                    showingSourcePicker = true
+                } label: {
+                    Text("Add a Source…")
+                        .font(.system(size: seedTitleSize))
+                        .foregroundStyle(.accentInk)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add a source to this queue")
+            }
+            .queueFormCard(theme: theme.appTheme)
+            .pageBodyRow(top: 6, gutter: gutter)
+            footnote(
+                "Kudos checks a source when you open this queue. "
+                    + "Nothing is fetched in the background."
+            )
+        }
+    }
+
+    private func editOfflinePanel(offlineCount: Int, totalCount: Int, byteCount: Int64) -> some View {
+        let subtitle = ReadingQueueFacts.offlineDownloadSubtitle(
+            offlineCount: offlineCount,
+            totalCount: totalCount,
+            byteCount: byteCount
+        )
+        let labelStack = VStack(alignment: .leading, spacing: 2) {
+            Text("Keep works offline")
+                .font(.body)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityHidden(true)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityHidden(true)
+            }
+        }
+        let toggle = Toggle("Keep works offline", isOn: $options.keepsWorksOffline)
+            .labelsHidden()
+            .accentFill()
+            // Hint, not value: a toggle's value is On or Off, and replacing it
+            // would hide which way the switch sits.
+            .accessibilityHint(subtitle ?? "")
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .center, spacing: 12) {
+                        QueueSourceIconTile(symbolName: "arrow.down", fill: .indigo)
+                        labelStack
+                    }
+                    toggle
+                }
+            } else {
+                HStack(alignment: .center, spacing: 12) {
+                    QueueSourceIconTile(symbolName: "arrow.down", fill: .indigo)
+                    labelStack
+                    Spacer(minLength: 8)
+                    toggle
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .queueFormCard(theme: theme.appTheme)
+    }
+}
+
+private extension View {
+    func queueFormCard(theme: ReaderTheme) -> some View {
+        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+        return background(shape.fill(theme.cardSurface))
+            .overlay(shape.strokeBorder(theme.cardBorder, lineWidth: 0.5))
     }
 }
 

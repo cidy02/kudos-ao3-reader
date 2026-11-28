@@ -253,8 +253,8 @@ struct ReadingQueueSettingsView: View {
             }
             if queue.kind != .smart {
                 SubjectRowSeparator()
-                SubjectFormRow(label: "Keep Works Offline", arrangement: .control) {
-                    Toggle("Keep Works Offline", isOn: Binding(
+                SubjectFormRow(label: "Keep works offline", arrangement: .control) {
+                    Toggle("Keep works offline", isOn: Binding(
                         // nil is "never asked", and a never-asked queue keeps its
                         // works downloaded as queues always did (`KeepOffline`).
                         get: { KeepOffline.queueKeeps(queue.keepsWorksOffline) },

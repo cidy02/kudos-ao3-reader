@@ -275,8 +275,10 @@ struct AddQueueSourceSheet: View {
         var seen = Set<String>()
         var result: [QueueSourceDraft] = []
         for entry in savedSeries where entry.ao3SeriesID > 0 {
-            let count = entry.snapshot.effectivePartCount
-            let subtitle = count > 0 ? "Series · \(count) \(count == 1 ? "work" : "works")" : "Series"
+            let subtitle = ReadingQueueFacts.seriesSourceSubtitle(
+                partCount: entry.snapshot.effectivePartCount,
+                isComplete: entry.snapshot.isComplete
+            )
             if let draft = QueueSourceDraft.series(
                 id: entry.ao3SeriesID,
                 title: entry.title,

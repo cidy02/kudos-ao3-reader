@@ -55,6 +55,7 @@ struct AccountView: View {
     @State private var startWritingDocument: StudioLocalDocumentTarget?
     @State private var isStartingWriting = false
     @State private var startWritingError: String?
+    @State private var folderSyncStatus = FolderSyncService.snapshot()
 
     enum Route: Hashable {
         case myCollections
@@ -263,6 +264,7 @@ struct AccountView: View {
                     Text(inboxModel.actionError ?? "AO3 couldn't update your Inbox.")
                 }
                 .task(id: activationKey) { activateVisibleContent() }
+                .onAppear { folderSyncStatus = FolderSyncService.snapshot() }
                 .onChange(of: router.pendingAccountRoute, initial: true) { _, route in
                     guard let route else { return }
                     openAccountRoute(route)
@@ -485,7 +487,9 @@ struct AccountView: View {
                         blockAction: nil,
                         onSubscription: {},
                         onModeration: { _ in },
-                        onSelectScope: { model.selectScope($0, auth: auth) }
+                        onSelectScope: { model.selectScope($0, auth: auth) },
+                        avatarSize: 64,
+                        topSpacing: 4
                     )
                     accountProfileActions(model)
                 } else {
@@ -508,8 +512,8 @@ struct AccountView: View {
                     onLogin: { showingLogin = true }
                 )
                 .padding(16)
-                .subjectPanel()
-                .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+                .accountSheetPanel()
+                .pageBodyRow(top: 4, gutter: SubjectMetrics.accountGutter)
             }
         }
 
@@ -553,78 +557,47 @@ struct AccountView: View {
     }
 
     private func accountProfileActions(_ model: AO3AuthorProfileModel) -> some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(spacing: 8))
-            : AnyLayout(HStackLayout(spacing: 8))
-        return Section {
-            layout {
-                // Board 35 gives this one more room (1.4 : 1 : 1); sized to its
-                // label it no longer wraps "View / Profile" onto two lines.
-                Button(action: openOwnProfile) {
-                    Label("View Profile", systemImage: "person")
-                        // Pressed for room, the adaptive label style drops the
-                        // title and leaves a bare icon; this button needs both.
-                        .labelStyle(.titleAndIcon)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
-                        .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
-                }
-                .buttonStyle(.kudos(variant: .primary, dense: true))
-
-                ShareLink(item: model.route.dashboardURL) {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                        .labelStyle(.titleAndIcon)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
-                .tint(.primary)
-
-                Button {
-                    if let url = profileEditURL { router.open(url) }
-                } label: {
-                    Label("Edit", systemImage: "pencil")
-                        .labelStyle(.titleAndIcon)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
-                .tint(.primary)
-                .disabled(profileEditURL == nil)
-            }
-            // Board 35: 15 pt semibold labels, so the three fit one row.
-            .font(.subheadline.weight(.semibold))
-            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+        Section {
+            AccountSheetProfileActions(
+                dashboardURL: model.route.dashboardURL,
+                profileEditURL: profileEditURL,
+                onViewProfile: openOwnProfile,
+                onEditProfile: { router.open($0) }
+            )
+            .pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
         }
     }
 
     @ViewBuilder
     private var accountProfileCountStrip: some View {
         if let model = profileModel, let header = model.header {
-            AuthorProfileCountStrip(items: [
-                .init(
-                    title: "Works",
-                    count: header.listCount(for: .works, route: model.route),
-                    action: { path.append(Route.myWorks) }
-                ),
-                .init(
-                    title: "Series",
-                    count: header.listCount(for: .series, route: model.route),
-                    action: { path.append(Route.mySeries) }
-                ),
-                .init(
-                    title: "Bookmarks",
-                    count: header.listCount(for: .bookmarks, route: model.route),
-                    action: { path.append(AO3AccountWorksList.Kind.bookmarks) }
-                ),
-                .init(
-                    title: "Subscriptions",
-                    countText: cachedCount(.subscriptions),
-                    action: { path.append(Route.subscriptions) }
-                )
-            ])
+            AuthorProfileCountStrip(
+                items: [
+                    .init(
+                        title: "Works",
+                        count: header.listCount(for: .works, route: model.route),
+                        action: { path.append(Route.myWorks) }
+                    ),
+                    .init(
+                        title: "Series",
+                        count: header.listCount(for: .series, route: model.route),
+                        action: { path.append(Route.mySeries) }
+                    ),
+                    .init(
+                        title: "Bookmarks",
+                        count: header.listCount(for: .bookmarks, route: model.route),
+                        action: { path.append(AO3AccountWorksList.Kind.bookmarks) }
+                    ),
+                    .init(
+                        title: "Subscriptions",
+                        countText: cachedCount(.subscriptions),
+                        action: { path.append(Route.subscriptions) }
+                    )
+                ],
+                usesCardSurface: true,
+                topSpacing: 14,
+                stripAccessibilityLabel: AccountSheetCopy.accountCountsAccessibilityLabel
+            )
         }
     }
 
@@ -633,42 +606,50 @@ struct AccountView: View {
             if let work = profileModel?.latestWork {
                 if !gate.isHidden(work, enabled: hideMature, mode: matureMode) {
                     SectionRuleHeader(title: "Your Latest")
-                        .pageBodyRow(top: 18, gutter: 0)
+                        .pageBodyRow(top: 22, gutter: 0)
                     SensitiveRemoteWorkCard(work: work) {
-                        AuthorProfileLatestCard(work: work, discSymbol: "chevron.right")
+                        AuthorProfileLatestCard(work: work, discSymbol: "chevron.right", style: .account)
                     }
-                    .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
                 }
             } else {
                 SectionRuleHeader(title: "Your Latest")
-                    .pageBodyRow(top: 18, gutter: 0)
+                    .pageBodyRow(top: 22, gutter: 0)
                 Text(profileModel?.header?.recentWorks == nil
                     ? "Couldn't read your latest work. Open Works to try again."
                     : "No recent works visible on AO3.")
                     .font(.subheadline)
                     .foregroundStyle(.secondaryInk)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
-                    .subjectPanel()
-                    .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+                    .accountSheetPanel()
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
             }
         }
     }
 
     private var accountInboxSection: some View {
-        Section {
+        let unread = inboxModel.unreadCount.flatMap { $0 > 0 ? $0 : nil }
+        return Section {
             VStack(spacing: 0) {
-                panelNavRow(
-                    title: "Inbox",
-                    systemImage: "tray",
-                    count: inboxModel.unreadCount.flatMap { $0 > 0 ? String($0) : nil },
-                    hasAccentBadge: true,
-                    value: Route.inbox
-                )
-                SubjectRowSeparator()
+                Button {
+                    path.append(Route.inbox)
+                } label: {
+                    AccountSheetRow(
+                        title: "Inbox",
+                        systemImage: "tray",
+                        tileColor: theme.effectiveTint,
+                        titleWeight: .semibold,
+                        badge: unread.map { String($0) },
+                        badgeAccessibilityText: AccountSheetCopy.inboxUnreadAccessibilityValue(unread)
+                    )
+                }
+                .buttonStyle(.plain)
+                SubjectRowSeparator(inset: 16)
                 accountInboxPreview
             }
-            .subjectPanel()
-            .pageBodyRow(top: 18, gutter: SubjectMetrics.accountGutter)
+            .accountSheetPanel()
+            .pageBodyRow(top: 22, gutter: SubjectMetrics.accountGutter)
         }
     }
 
@@ -678,7 +659,7 @@ struct AccountView: View {
         case .idle, .loading:
             ProgressView("Loading recent messages…")
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
+                .padding(16)
                 .accentFill()
         case .loaded, .paginationFailed:
             let items = Array(inboxModel.items.prefix(2))
@@ -687,10 +668,10 @@ struct AccountView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondaryInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
+                    .padding(16)
             } else {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                    if index > 0 { SubjectRowSeparator() }
+                    if index > 0 { SubjectRowSeparator(inset: 16) }
                     AccountInboxPreviewRow(item: item) { openInboxItem(item) }
                 }
             }
@@ -703,7 +684,7 @@ struct AccountView: View {
                     .foregroundStyle(.accentInk)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
+            .padding(16)
         }
     }
 
@@ -711,46 +692,47 @@ struct AccountView: View {
         Section {
             VStack(spacing: 0) {
                 if Self.showsStartWritingRow(isSignedIn: auth.isLoggedIn, showsWritingTab: router.showsWritingTab) {
-                    panelNavRow(
+                    sheetNavRow(
                         title: "Start Writing",
                         systemImage: "square.and.pencil",
+                        tileColor: theme.effectiveTint,
                         value: Route.startWriting
                     )
-                    SubjectRowSeparator()
+                    SubjectRowSeparator(inset: AccountSheetRow.separatorInset)
                 }
-                panelNavRow(
-                    title: "Inbox",
-                    systemImage: "tray",
-                    count: inboxModel.unreadCount.flatMap { $0 > 0 ? String($0) : nil },
-                    hasAccentBadge: true,
-                    value: Route.inbox
-                )
-                SubjectRowSeparator()
-                panelNavRow(
+                sheetNavRow(
                     title: "AO3 Preferences",
                     systemImage: "slider.horizontal.3",
+                    tileColor: .gray,
                     value: Route.preferences
                 )
-                SubjectRowSeparator()
-                panelNavRow(
+                SubjectRowSeparator(inset: AccountSheetRow.separatorInset)
+                sheetNavRow(
                     title: "My Dashboard",
                     systemImage: "square.grid.2x2",
+                    tileColor: .indigo,
                     value: Route.dashboard
                 )
-                SubjectRowSeparator()
-                panelNavRow(
+                SubjectRowSeparator(inset: AccountSheetRow.separatorInset)
+                sheetNavRow(
                     title: "More on AO3",
                     systemImage: "ellipsis.circle",
+                    tileColor: .gray,
                     value: Route.moreOnAO3
                 )
-                SubjectRowSeparator()
-                panelActionRow(title: "Open AO3", systemImage: "safari", action: openAO3FromAccount)
+                SubjectRowSeparator(inset: AccountSheetRow.separatorInset)
+                sheetActionRow(
+                    title: AccountSheetCopy.openAO3Title,
+                    systemImage: "globe",
+                    tileColor: .blue,
+                    action: openAO3FromAccount
+                )
             }
-            .subjectPanel()
-            .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+            .accountSheetPanel()
+            .pageBodyRow(top: 6, gutter: SubjectMetrics.accountGutter)
         } header: {
-            SectionRuleHeader(title: "AO3")
-                .pageBodyRow(top: 18, gutter: 0)
+            AccountSheetGroupHeader(title: AccountSheetCopy.onAO3SectionTitle)
+                .pageBodyRow(top: 22, gutter: 0)
         }
     }
 
@@ -759,39 +741,52 @@ struct AccountView: View {
             VStack(spacing: 0) {
                 if richEditorEnabled {
                     // Account-free writing: the Rich Text beta saves works on this device (WritingDocumentStore).
-                    panelNavRow(title: "Drafts on This Device", systemImage: "doc.richtext", value: Route.localDrafts)
-                    SubjectRowSeparator()
+                    sheetNavRow(
+                        title: "Drafts on This Device",
+                        systemImage: "doc.richtext",
+                        tileColor: theme.effectiveTint,
+                        value: Route.localDrafts
+                    )
+                    SubjectRowSeparator(inset: AccountSheetRow.separatorInset)
                 }
-                panelNavRow(title: "Settings", systemImage: "gearshape", value: Route.settings)
-                SubjectRowSeparator()
-                panelNavRow(
+                sheetNavRow(
+                    title: "Settings",
+                    systemImage: "gearshape",
+                    tileColor: .gray,
+                    value: Route.settings
+                )
+                SubjectRowSeparator(inset: AccountSheetRow.separatorInset)
+                sheetNavRow(
                     title: "Backup & Sync",
-                    systemImage: "arrow.triangle.2.circlepath.icloud",
+                    systemImage: "arrow.triangle.2.circlepath",
+                    tileColor: .green,
+                    detail: AccountSheetCopy.backupSyncDetail(folderSyncStatus),
                     value: Route.backupAndSync
                 )
-                SubjectRowSeparator()
-                panelNavRow(title: "About", systemImage: "info.circle", value: SettingsRoute.about)
+                SubjectRowSeparator(inset: AccountSheetRow.separatorInset)
+                sheetNavRow(
+                    title: AccountSheetCopy.aboutKudosTitle,
+                    systemImage: "info.circle",
+                    tileColor: .blue,
+                    detail: Changelog.currentVersion,
+                    value: SettingsRoute.about
+                )
             }
-            .subjectPanel()
-            .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+            .accountSheetPanel()
+            .pageBodyRow(top: 6, gutter: SubjectMetrics.accountGutter)
         } header: {
-            SectionRuleHeader(title: "Kudos")
-                .pageBodyRow(top: 18, gutter: 0)
+            AccountSheetGroupHeader(title: AccountSheetCopy.kudosSectionTitle)
+                .pageBodyRow(top: 22, gutter: 0)
         }
     }
 
     private var accountLogOutSection: some View {
         Section {
-            Button(role: .destructive) {
-                confirmingLogOut = true
-            } label: {
-                Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .accountControlCardRow()
-            .logOutConfirmation(isPresented: $confirmingLogOut) {
+            AccountSheetLogOutCard(confirmingLogOut: $confirmingLogOut) {
                 Task { await auth.logout() }
             }
+            .pageBodyRow(top: 22, gutter: SubjectMetrics.accountGutter)
+            .padding(.bottom, 16)
         }
     }
 
@@ -1124,6 +1119,42 @@ struct AccountView: View {
         }
         .buttonStyle(.plain)
         .disabled(opensExternally && auth.username == nil)
+    }
+
+    private func sheetNavRow(
+        title: String,
+        systemImage: String,
+        tileColor: Color,
+        detail: String? = nil,
+        value: some Hashable
+    ) -> some View {
+        Button {
+            path.append(value)
+        } label: {
+            AccountSheetRow(
+                title: title,
+                systemImage: systemImage,
+                tileColor: tileColor,
+                detail: detail
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func sheetActionRow(
+        title: String,
+        systemImage: String,
+        tileColor: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            AccountSheetRow(
+                title: title,
+                systemImage: systemImage,
+                tileColor: tileColor
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     /// A row *inside* a `subjectPanel`, as 1m's Account group draws them — the

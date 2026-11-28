@@ -127,7 +127,7 @@ nonisolated enum ReaderChapterEndStylesheet {
           display: flex !important;
           align-items: center !important;
           gap: 0.75rem !important;
-          padding: 0 0.75rem !important;
+          padding: 0 0.875rem !important;
           margin: 0 0 0.875rem 0 !important;
           break-inside: avoid !important;
           -webkit-column-break-inside: avoid !important;
@@ -142,8 +142,8 @@ nonisolated enum ReaderChapterEndStylesheet {
           opacity: 0.22 !important;
         }
         #\(sectionID) .kudos-ce-heading {
-          font-size: 0.72rem !important;
-          line-height: 1.35 !important;
+          font-size: 0.75rem !important;
+          line-height: 1.33 !important;
           font-weight: 600 !important;
           letter-spacing: 0.05em !important;
           text-transform: uppercase !important;
@@ -168,8 +168,8 @@ nonisolated enum ReaderChapterEndStylesheet {
         }
         #\(sectionID) .kudos-ce-note-heading {
           display: block !important;
-          font-size: 0.8rem !important;
-          line-height: 1.35 !important;
+          font-size: 0.8125rem !important;
+          line-height: 1.385 !important;
           font-weight: 600 !important;
           color: currentColor !important;
           opacity: 0.65 !important;
@@ -192,8 +192,8 @@ nonisolated enum ReaderChapterEndStylesheet {
           -webkit-box-orient: vertical !important;
           overflow: hidden !important;
           margin: 0 !important;
-          font-size: 0.9rem !important;
-          line-height: 1.42 !important;
+          font-size: 0.9375rem !important;
+          line-height: 1.4 !important;
           text-align: left !important;
           color: currentColor !important;
           overflow-wrap: break-word !important;
@@ -209,7 +209,7 @@ nonisolated enum ReaderChapterEndStylesheet {
           min-height: 2rem !important;
           margin: 0.25rem 0 0 0 !important;
           padding: 0.25rem 0 !important;
-          font-size: 0.9rem !important;
+          font-size: 0.9375rem !important;
           line-height: 1.35 !important;
           font-weight: 600 !important;
           color: var(--kudos-ce-accent-ink) !important;
@@ -282,14 +282,14 @@ nonisolated enum ReaderChapterEndStylesheet {
           text-align: left !important;
         }
         #\(sectionID) .kudos-ce-next-title {
-          font-size: 1rem !important;
-          line-height: 1.3 !important;
+          font-size: 1.0625rem !important;
+          line-height: 1.29 !important;
           font-weight: 600 !important;
           overflow-wrap: break-word !important;
         }
         #\(sectionID) .kudos-ce-next-time {
-          font-size: 0.8rem !important;
-          line-height: 1.25 !important;
+          font-size: 0.8125rem !important;
+          line-height: 1.23 !important;
           opacity: 0.86 !important;
         }
 
@@ -327,7 +327,7 @@ nonisolated enum ReaderChapterEndStylesheet {
           border-radius: 1.375rem !important;
           background-color: var(--kudos-ce-pill) !important;
           color: var(--USER__textColor, currentColor) !important;
-          font-size: 0.94rem !important;
+          font-size: 1rem !important;
           line-height: 1.25 !important;
           font-weight: 600 !important;
           text-align: center !important;
@@ -362,8 +362,8 @@ nonisolated enum ReaderChapterEndStylesheet {
         #\(sectionID) .kudos-ce-footer {
           margin: 0 !important;
           text-align: center !important;
-          font-size: 0.8rem !important;
-          line-height: 1.4 !important;
+          font-size: 0.8125rem !important;
+          line-height: 1.385 !important;
           color: currentColor !important;
           opacity: 0.65 !important;
           break-inside: avoid !important;

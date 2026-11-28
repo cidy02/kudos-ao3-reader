@@ -16,6 +16,9 @@ struct ReaderSpeechSettingsSheet: View {
     /// The reader can phonemise the open chapter; global Settings cannot.
     var onScanChapter: (() async -> Result<KokoroCastPreflight.ScanResult, Error>)?
 
+    /// The open work's metadata for the Pronunciations banner. Nil from global Settings.
+    var workContext: ReaderPronunciationCopy.WorkContext?
+
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -23,7 +26,8 @@ struct ReaderSpeechSettingsSheet: View {
             Form {
                 ReaderSpeechSettingsSection(
                     characterTags: characterTags,
-                    onScanChapter: onScanChapter
+                    onScanChapter: onScanChapter,
+                    workContext: workContext
                 )
                 // On the sections, not the Form: a row background doesn't
                 // reach rows from the container (see `SettingsView`).

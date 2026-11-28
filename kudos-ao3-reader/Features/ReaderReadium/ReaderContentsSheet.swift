@@ -162,7 +162,7 @@ struct ReaderContentsSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("", selection: $segment) {
+            Picker("Contents sections", selection: $segment) {
                 ForEach(ReaderContentsSegment.allCases) { segment in
                     Text(ReaderContentsLabels.segmentTitle(segment, count: count(for: segment)))
                         .tag(segment)
@@ -171,16 +171,17 @@ struct ReaderContentsSheet: View {
             .pickerStyle(.segmented)
             .accentFill()
             .labelsHidden()
+            .accessibilityLabel("Contents sections")
             .padding(.horizontal, 16)
-            .padding(.bottom, 8)
+            .padding(.bottom, 12)
 
             if let progressLabel {
                 Text(progressLabel)
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(.secondaryInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 12)
             }
 
             switch segment {
@@ -232,7 +233,7 @@ struct ReaderContentsSheet: View {
                     chapterRowContent(section: section, presentation: presentation)
                 }
                 .buttonStyle(.plain)
-                .listRowBackground(presentation.isCurrent ? theme.effectiveTint.opacity(0.08) : nil)
+                .listRowBackground(chapterRowBackground(isCurrent: presentation.isCurrent))
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     // Full swipe takes the first action — Go, matching the tap.
                     // Go only needs the spine index, so it always works.
@@ -269,8 +270,21 @@ struct ReaderContentsSheet: View {
                 }
             }
         }
-        .listStyle(.plain)
+        .listStyle(.insetGrouped)
+        .contentMargins(.top, 0, for: .scrollContent)
         .scrollContentBackground(.hidden)
+    }
+
+    @ViewBuilder
+    private func chapterRowBackground(isCurrent: Bool) -> some View {
+        if isCurrent {
+            ZStack {
+                theme.appTheme.cardSurface
+                theme.effectiveTint.opacity(0.08)
+            }
+        } else {
+            theme.appTheme.cardSurface
+        }
     }
 
     @ViewBuilder
@@ -324,7 +338,7 @@ struct ReaderContentsSheet: View {
                         .monospacedDigit()
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .accessibilityElement(children: .ignore)
@@ -358,8 +372,10 @@ struct ReaderContentsSheet: View {
                         }
                     }
                 }
+                .appThemedRows()
             }
-            .listStyle(.plain)
+            .listStyle(.insetGrouped)
+            .contentMargins(.top, 0, for: .scrollContent)
             .scrollContentBackground(.hidden)
         }
     }
