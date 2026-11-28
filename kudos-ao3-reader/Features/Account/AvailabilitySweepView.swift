@@ -28,10 +28,11 @@ struct AvailabilitySweepView: View {
     var body: some View {
         NavigationStack {
             List {
-                explanationSection
                 if isRunning {
                     progressSection
-                } else if let summary {
+                }
+                explanationSection
+                if !isRunning, let summary {
                     resultSection(summary)
                 }
                 if !unavailableWorks.isEmpty {
@@ -43,7 +44,7 @@ struct AvailabilitySweepView: View {
             .environment(\.defaultMinListRowHeight, 0)
             // A large title can't wrap: "Check Avail…" at the largest text. There, the
             // inline two-line title instead.
-            .wrappingInlineTitle("Check Availability", isActive: dynamicTypeSize.isAccessibilitySize)
+            .wrappingInlineTitle("What’s still on AO3", isActive: dynamicTypeSize.isAccessibilitySize)
             .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
             .toolbar {
                 // Stop interrupts on the leading edge; Done closes from the
@@ -88,20 +89,26 @@ struct AvailabilitySweepView: View {
                 } else {
                     NavigationLink(value: work) {
                         VStack(alignment: .leading, spacing: 2) {
+                            if let fandom = work.workFandoms.first {
+                                Text(fandom)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(theme.accentInk)
+                            }
                             Text(work.title)
-                                .font(.subheadline)
-                                .lineLimit(1)
-                            Text(work.author)
-                                .font(.caption)
+                                .font(.subheadline.weight(.semibold))
+                            Text(WorkReaderPreparation.hasReadableEPUB(for: work)
+                                 ? "Deleted or made private · your copy is safe"
+                                 : "Deleted or made private")
+                                .font(.footnote)
                                 .foregroundStyle(.secondaryInk)
-                                .lineLimit(1)
                         }
+                        .fixedSize(horizontal: false, vertical: true)
                     }
                     .cardRow()
                 }
             }
         } header: {
-            Text("No longer on AO3 (\(unavailableWorks.count.formatted()))")
+            SectionRuleHeader(title: "Gone from AO3", count: unavailableWorks.count)
         }
     }
 
@@ -141,10 +148,15 @@ struct AvailabilitySweepView: View {
     private var progressSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                ProgressView(value: Double(completed), total: Double(max(total, 1))).accentFill()
-                Text("Checked \(completed.formatted()) of \(total.formatted())")
-                    .font(.caption)
+                Label("Checking…", systemImage: "clock")
+                    .font(.subheadline.weight(.semibold))
+                Text(BrowseBoardCopy.availabilityProgress(completed: completed, total: total))
+                    .font(.footnote)
                     .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                ProgressView(value: Double(completed), total: Double(max(total, 1)))
+                    .accentFill()
+                    .accessibilityLabel("\(completed.formatted()) of \(total.formatted()) checked")
             }
             .cardRow()
         }

@@ -64,29 +64,6 @@ struct WorkBulkActionBar: View {
                 }
             }
             #endif
-            if let download = WorkDownload.bulkAction(for: selectedWorks) {
-                Button {
-                    Task {
-                        await WorkDownload.performBulk(download, on: selectedWorks, in: context, queue: downloadQueue)
-                    }
-                } label: {
-                    let label = WorkDownload.bulkLabel(download)
-                    Label(label.title, systemImage: label.systemImage)
-                }
-            }
-            Button {
-                bulkFavorite()
-            } label: {
-                Label(allFavorited ? "Favorited" : "Favorite", systemImage: allFavorited ? "star.fill" : "star")
-            }
-            Button {
-                bulkToggleSavedForLater()
-            } label: {
-                Label(
-                    WorkActionLabels.savedForLater(isQueued: allSavedForLater).title,
-                    systemImage: WorkActionLabels.savedForLater(isQueued: allSavedForLater).systemImage
-                )
-            }
             Button {
                 showingAddToQueue = true
             } label: {
@@ -96,6 +73,12 @@ struct WorkBulkActionBar: View {
                 showingAddToCollection = true
             } label: {
                 Label("Add to Collection", systemImage: "square.stack")
+            }
+            Button {
+                bulkToggleSavedForLater()
+            } label: {
+                let label = WorkActionLabels.savedForLater(isQueued: allSavedForLater)
+                Label(label.title, systemImage: label.systemImage)
             }
             // 1af lists Tag among the four actions that must accept a set.
             // Tagging one work already existed in Work Detail; this is the same
@@ -110,6 +93,21 @@ struct WorkBulkActionBar: View {
             } label: {
                 let labels = WorkActionLabels.finished(isFinished: allFinished)
                 Label(labels.title, systemImage: labels.systemImage)
+            }
+            if let download = WorkDownload.bulkAction(for: selectedWorks) {
+                Button {
+                    Task {
+                        await WorkDownload.performBulk(download, on: selectedWorks, in: context, queue: downloadQueue)
+                    }
+                } label: {
+                    let label = WorkDownload.bulkLabel(download)
+                    Label(download == .download ? "Download All" : label.title, systemImage: label.systemImage)
+                }
+            }
+            Button {
+                bulkFavorite()
+            } label: {
+                Label(allFavorited ? "Favorited" : "Favorite", systemImage: allFavorited ? "star.fill" : "star")
             }
         } label: {
             Text("Actions")

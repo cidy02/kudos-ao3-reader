@@ -118,16 +118,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     // as trailing closures) with an explicit `some View` return type — that chain is
     // already a long compound expression, and inlining these left the compiler
     // unable to type-check it in reasonable time (a hard build failure), not just slow.
-    private var collectionsGridDestination: some View {
-        LibraryEntityGridView(
-            title: "Collections",
-            items: collections,
-            destination: { $0 },
-            onNew: {
-                showingNewCollection = true
-            },
-            card: { CollectionCard(collection: $0).collectionCardMenu($0) }
-        )
+    private var collectionsIndexDestination: some View {
+        LibraryCollectionIndexView(collections: collections) {
+            showingNewCollection = true
+        }
     }
 
     var body: some View {
@@ -183,7 +177,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     }
                 }
                 #endif
-                .navigationDestination(for: AllCollectionsDestination.self) { _ in collectionsGridDestination }
+                .navigationDestination(for: AllCollectionsDestination.self) { _ in collectionsIndexDestination }
                 .navigationDestination(for: AllReadingQueuesDestination.self, destination: queuesDestination)
                 .navigationDestination(for: LibraryCatalogueDestination.self, destination: catalogueDestination)
                 .toolbar { toolbarContent }

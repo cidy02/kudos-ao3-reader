@@ -10,6 +10,12 @@ struct LibraryEditShelvesSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    private var allWorksLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -46,7 +52,7 @@ struct LibraryEditShelvesSheet: View {
                 .appThemedRows()
 
                 Section {
-                    HStack(alignment: .center, spacing: 12) {
+                    allWorksLayout {
                         LibraryShelfGlyph.allWorks()
                         VStack(alignment: .leading, spacing: 2) {
                             Text("All Works")
@@ -56,8 +62,8 @@ struct LibraryEditShelvesSheet: View {
                                 .foregroundStyle(.secondaryInk)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        Spacer(minLength: 8)
-                        Text(allWorksCount.compactCount)
+                        if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
+                        Text(allWorksCount.formatted())
                             .font(.body.monospacedDigit())
                             .foregroundStyle(.secondaryInk)
                     }
@@ -198,7 +204,7 @@ struct LibraryEditShelvesSheet: View {
     }
 
     private func countLabel(_ count: Int) -> some View {
-        Text(count.compactCount)
+        Text(count.formatted())
             .font(.body.monospacedDigit())
             .foregroundStyle(.secondaryInk)
             .accessibilityLabel("\(count)")

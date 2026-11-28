@@ -65,7 +65,10 @@ struct FandomFamilyBlock: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 10) {
+        let layout = stacks
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 10))
+        return layout {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(CoverArt.workGradient(fandoms: [family.parsedTitle], title: ""))
                 .frame(width: 28, height: 40)
@@ -86,7 +89,7 @@ struct FandomFamilyBlock: View {
                         Image(systemName: "star.fill")
                             .font(.system(size: starSize))
                             .foregroundStyle(Color.subjectFavoriteGold)
-                            .accessibilityLabel("Favorite")
+                            .accessibilityLabel("Favourite")
                     }
                 }
 
@@ -158,7 +161,7 @@ struct FandomFamilyBlock: View {
                     Image(systemName: "star.fill")
                         .font(.system(size: starSize))
                         .foregroundStyle(Color.subjectFavoriteGold)
-                        .accessibilityLabel("Favorite")
+                        .accessibilityLabel("Favourite")
                 }
 
                 Text(member.qualifierDisplay)

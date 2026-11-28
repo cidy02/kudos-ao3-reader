@@ -424,14 +424,16 @@ extension View {
         workID: Int?,
         auth: AO3AuthService,
         readerSections: [ReaderSection] = [],
-        onOpenReaderChapter: ((Int) -> Void)? = nil
+        onOpenReaderChapter: ((Int) -> Void)? = nil,
+        bookmarkContext: BrowseBoardWorkContext? = nil
     ) -> some View {
         modifier(AO3WorkActionsModifier(
             actions: actions,
             workID: workID,
             auth: auth,
             readerSections: readerSections,
-            onOpenReaderChapter: onOpenReaderChapter
+            onOpenReaderChapter: onOpenReaderChapter,
+            bookmarkContext: bookmarkContext
         ))
     }
 }
@@ -442,12 +444,13 @@ private struct AO3WorkActionsModifier: ViewModifier {
     let auth: AO3AuthService
     var readerSections: [ReaderSection]
     var onOpenReaderChapter: ((Int) -> Void)?
+    let bookmarkContext: BrowseBoardWorkContext?
 
     func body(content: Content) -> some View {
         content
             .sheet(isPresented: bookmarkPresented) {
                 if let workID {
-                    AO3BookmarkComposer(actions: actions, workID: workID, auth: auth)
+                    AO3BookmarkComposer(actions: actions, workID: workID, auth: auth, workContext: bookmarkContext)
                     #if os(iOS)
                         .modifier(ScopeSurfaceAccent())
                     #endif
@@ -505,16 +508,22 @@ private struct AO3BookmarkComposer: View {
     @Bindable var actions: AO3WorkActionsModel
     let workID: Int
     let auth: AO3AuthService
+    let workContext: BrowseBoardWorkContext?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(ThemeManager.self) private var themeManager
 
     var body: some View {
         NavigationStack {
             Form {
                 Group {
+                    if let workContext {
+                        Section { workContext }
+                    }
                     Section("Notes") {
                         TextEditor(text: $actions.bookmarkInput.notes)
+                            .accessibilityLabel("Notes")
                             .frame(minHeight: 90)
                             .disabled(actions.isWorking)
                     }
@@ -522,13 +531,19 @@ private struct AO3BookmarkComposer: View {
                         TextField("Comma-separated tags", text: $actions.bookmarkInput.tags)
                             .disabled(actions.isWorking)
                     } header: {
-                        Text("Tags")
+                        Text("Your tags").textCase(nil)
                     } footer: {
                         Text("Separate your bookmark tags with commas.")
                     }
                     Section {
-                        toggle("Private", isOn: $actions.bookmarkInput.isPrivate)
-                        toggle("Recommend", isOn: $actions.bookmarkInput.isRec)
+                        toggle("Private", symbol: "lock", color: .secondary, isOn: $actions.bookmarkInput.isPrivate)
+                        toggle(
+                            "Rec",
+                            symbol: "star",
+                            color: themeManager.appTheme.subjectPalette(hue: 0.12).accent,
+                            detail: "Shows as a recommendation on your AO3 bookmarks",
+                            isOn: $actions.bookmarkInput.isRec
+                        )
                     }
                     if let error = actions.bookmarkError {
                         Section {
@@ -547,7 +562,7 @@ private struct AO3BookmarkComposer: View {
             }
             .formStyle(.grouped)
             .appThemedScroll()
-            .wrappingInlineTitle(actions.bookmarkIsUpdate ? "Edit Bookmark on AO3" : "Bookmark on AO3")
+            .wrappingInlineTitle(actions.bookmarkIsUpdate ? "Edit Bookmark" : "Bookmark on AO3")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }.disabled(actions.isWorking)
@@ -567,17 +582,39 @@ private struct AO3BookmarkComposer: View {
         }
     }
 
-    /// The label over its switch at the accessibility sizes: beside it,
-    /// "Recommend" broke as "Recom- / mend". VoiceOver reads the toggle's own label.
+    /// At accessibility sizes the label has its own line, clear of the switch.
     @ViewBuilder
-    private func toggle(_ title: String, isOn: Binding<Bool>) -> some View {
+    private func toggle(
+        _ title: String,
+        symbol: String,
+        color: Color,
+        detail: String? = nil,
+        isOn: Binding<Bool>
+    ) -> some View {
+        let row = HStack(alignment: .top, spacing: 10) {
+            SettingsIconTile(color: color, systemImage: symbol)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                if let detail {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+
         if dynamicTypeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 8) {
-                Text(title).accessibilityHidden(true)
+                row.accessibilityHidden(true)
                 Toggle(title, isOn: isOn).labelsHidden().accentFill()
+                    .accessibilityHint(detail ?? "")
             }
         } else {
-            Toggle(title, isOn: isOn).accentFill()
+            Toggle(isOn: isOn) { row }
+                .accentFill()
+                .accessibilityLabel(title)
+                .accessibilityHint(detail ?? "")
         }
     }
 }

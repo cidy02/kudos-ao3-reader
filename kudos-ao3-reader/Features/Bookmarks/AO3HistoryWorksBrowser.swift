@@ -102,7 +102,7 @@ struct AO3HistoryWorksBrowser: View {
     }
 
     private var header: some View {
-        SubjectPageFact(subtitle, gutter: SubjectMetrics.accountGutter)
+        SubjectPageFact(BrowseBoardCopy.historyHeader(pageFacts: subtitle), gutter: SubjectMetrics.accountGutter)
     }
 
     private var paginationBar: some View {
@@ -206,12 +206,13 @@ struct AO3HistoryFilterRail: View {
                         selection = option
                     } label: {
                         SubjectChip(
-                            text: option.title,
+                            text: option == .everything ? "All" : option.title,
                             style: .pill(isSelected: selection == option),
                             palette: palette
                         )
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(selection == option ? .isSelected : [])
                     .minimumHitTarget(28)
                 }
                 Button {

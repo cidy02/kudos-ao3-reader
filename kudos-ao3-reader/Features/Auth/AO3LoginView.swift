@@ -30,6 +30,7 @@ struct AO3InvitationRequestLink: View {
 struct AO3LoginView: View {
     var contextMessage: String? = nil
     var contextURL: URL? = nil
+    var contextDetail: String? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
@@ -145,6 +146,12 @@ struct AO3LoginView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Label(contextMessage, systemImage: "lock")
                             .font(.subheadline.weight(.semibold))
+                        if let contextDetail {
+                            Text(contextDetail)
+                                .font(.footnote)
+                                .foregroundStyle(.secondaryInk)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         if let contextURL {
                             Text(contextURL.absoluteString)
                                 .font(.caption)
@@ -153,7 +160,10 @@ struct AO3LoginView: View {
                     }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(14)
-                        .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 16))
+                        .background(
+                            themeManager.appTheme.glassFill(),
+                            in: RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius)
+                        )
                 }
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "lock")

@@ -418,23 +418,20 @@ struct AddToQueueView: View {
         NavigationStack {
             Form {
                 Section {
-                    HStack {
-                        TextField("New queue", text: $newName)
-                            .onSubmit(create)
-                        Button("Add", action: create)
-                            .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                }
-                .appThemedRows()
-
-                Section {
                     ForEach(sortedQueues) { queue in
                         Button {
                             toggle(queue)
                         } label: {
                             HStack {
-                                Label(queue.displayName, systemImage: queueSymbol(queue))
-                                    .foregroundStyle(.primary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Label(queue.displayName, systemImage: queueSymbol(queue))
+                                        .foregroundStyle(.primary)
+                                    Text(queueDetail(queue))
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondaryInk)
+                                }
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityElement(children: .combine)
                                 Spacer()
                                 if workingQueueIDs.contains(queue.id) {
                                     ProgressView().accentFill()
@@ -453,6 +450,16 @@ struct AddToQueueView: View {
                     Text("Queues")
                 } footer: {
                     Text("A queue with Keep works offline turned on keeps its works downloaded for you.")
+                }
+                .appThemedRows()
+
+                Section {
+                    HStack {
+                        TextField("New Queue…", text: $newName)
+                            .onSubmit(create)
+                        Button("Add", action: create)
+                            .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
                 }
                 .appThemedRows()
 
@@ -554,6 +561,19 @@ struct AddToQueueView: View {
 
     private func isMember(_ queue: ReadingQueue) -> Bool {
         works.allSatisfy { work in work.queueMemberships.contains { $0.queue?.id == queue.id } }
+    }
+
+    private func queueDetail(_ queue: ReadingQueue) -> String {
+        let activeWorks = queue.memberships.compactMap { membership -> SavedWork? in
+            guard !membership.isPendingDeletion, let work = membership.work, !work.isPendingDeletion else {
+                return nil
+            }
+            return work
+        }
+        let totalWords = activeWorks.allSatisfy { $0.wordCount > 0 }
+            ? activeWorks.reduce(0) { $0 + $1.wordCount }
+            : 0
+        return ReadingQueueFacts.rowDetail(workCount: activeWorks.count, totalWordCount: totalWords, offlineCount: 0)
     }
 
     private func queueSymbol(_ queue: ReadingQueue) -> String {

@@ -254,7 +254,8 @@ struct FandomWorksView: View {
                                     ? (followedTag != nil ? "Following" : "Follow")
                                     : nil,
                                 isFollowingTag: followedTag != nil,
-                                onFollowTag: canFollowTag ? { showingFollowSheet = true } : nil
+                                onFollowTag: canFollowTag ? { showingFollowSheet = true } : nil,
+                                selectionFact: selectionFact
                             )
                             .pageBodyRow(top: 8, gutter: 0)
                         }
@@ -439,6 +440,18 @@ struct FandomWorksView: View {
                     )
                 }
             }
+    }
+
+    private var selectionFact: String? {
+        guard bulkSelection.isSelecting else { return nil }
+        let applied = loadedFilters ?? filters
+        let filterNames = applied.summaryLabels(includesSort: false).filter { label in
+            label.symbol != AO3TagSearch.Field.fandom.symbol || !includedFandoms.contains(label.text)
+        }.map(\.text)
+        let sort = showsRankedResults || ranking.settings.isActive ? nil : applied.sort.title.lowercased()
+        return BrowseBoardCopy.selectionFact(
+            selectedCount: bulkSelection.selected(in: results).count, sort: sort, filters: filterNames
+        )
     }
 
     private func retryFailedPage() {

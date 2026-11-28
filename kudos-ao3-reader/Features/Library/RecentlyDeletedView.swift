@@ -67,8 +67,8 @@ struct RecentlyDeletedView: View {
                 ContentUnavailableView {
                     Label("Recently Deleted", systemImage: "trash")
                 } description: {
-                    Text("Items you delete stay here for \(Self.windowDays) days. Copies of works "
-                        + "you finish without keeping them stay for \(Self.heldWindowDays) days.")
+                    Text(BrowseBoardCopy.deletedRecovery(days: Self.windowDays)
+                        + " Copies of works you finish without keeping them stay for \(Self.heldWindowDays) days.")
                 }
             } else {
                 list(entries)
@@ -143,7 +143,9 @@ struct RecentlyDeletedView: View {
             style: .alert,
             title: Self.bulkDeleteTitle(count: pendingBulkDelete.count),
             confirmLabel: "Delete Permanently",
-            message: { Self.bulkPermanentMessage(ids: $0, in: entries) },
+            message: { ids in
+                Self.bulkPermanentMessage(ids: ids, in: entries)
+            },
             perform: { ids in
                 Self.deletePermanently(ids, in: entries)
                 permanentDeleteCount += 1
@@ -287,7 +289,10 @@ struct RecentlyDeletedView: View {
         return List {
             Section {
                 header(count: entries.count).pageBodyRow(top: 12, gutter: 0)
-                reassurance(irreplaceableCount: Self.irreplaceableCount(in: entries))
+                reassurance(
+                    hasDeletedItems: !deleted.isEmpty,
+                    irreplaceableCount: Self.irreplaceableCount(in: entries)
+                )
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
             }
 
@@ -371,19 +376,14 @@ struct RecentlyDeletedView: View {
         )
     }
 
-    /// The sentence readers come here for. Kept verbatim from the spec, because the
-    /// worry it answers — "have I deleted this off AO3?" — is exactly what makes the
-    /// screen frightening without it. When some of these cannot be fetched again,
-    /// a second line names how many.
-    private func reassurance(irreplaceableCount: Int) -> some View {
+    private func reassurance(hasDeletedItems: Bool, irreplaceableCount: Int) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Deleting an item here removes only the copy in Kudos, including its download, your progress, "
-                + "and your notes. The work stays on AO3.")
-            if irreplaceableCount > 0 {
-                Text(irreplaceableCount == 1
-                     ? "1 of these can't be downloaded again once it's gone."
-                     : "\(irreplaceableCount) of these can't be downloaded again once they're gone.")
-                    .fontWeight(.medium)
+            if hasDeletedItems {
+                Text(BrowseBoardCopy.deletedRecovery(days: Self.windowDays))
+            }
+            Text("Deleting here removes the copy in Kudos and leaves AO3 unchanged.")
+            if let warning = BrowseBoardCopy.irreplaceableCount(irreplaceableCount) {
+                Text(warning).fontWeight(.medium)
             }
         }
         .font(.system(size: reassuranceSize))
@@ -656,10 +656,11 @@ extension RecentlyDeletedEntry {
     /// The facts below the author/fandom line. The last is the state the record was
     /// in when it was deleted, which tells a reader what restoring gets them back.
     private static func workDetail(_ work: SavedWork) -> String {
-        var parts: [String] = []
-        if work.wordCount > 0 { parts.append("\(work.wordCount.formatted()) words") }
-        parts.append(stateWord(work.readingState))
-        return parts.joined(separator: " · ")
+        BrowseBoardCopy.deletedWorkDetail(
+            words: work.wordCount,
+            chapters: work.chapters,
+            readingState: stateWord(work.readingState)
+        )
     }
 
     private static func stateWord(_ state: SavedWork.ReadingState) -> String {

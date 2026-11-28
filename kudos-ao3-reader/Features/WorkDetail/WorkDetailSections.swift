@@ -146,7 +146,7 @@ extension WorkDetailView {
             WorkProvenanceSections(work: work)
         } else {
             Section {
-                Text("This work isn't in your Library yet.")
+                Text(BrowseBoardCopy.unsavedCopy)
                     .font(.subheadline)
                     .foregroundStyle(.secondaryInk)
                     .myCopyRow()
@@ -520,18 +520,36 @@ struct DownloadedDateEditor: View {
     @Environment(\.modelContext) private var context
     let work: SavedWork
     @State private var date: Date
+    private let importFormat: String?
 
     init(work: SavedWork) {
         self.work = work
         _date = State(initialValue: work.downloadedAt ?? work.dateAdded)
+        importFormat = work.origin.supportsLiveLookup ? nil : WorkRedownloadability.importFormatDisplayName(for: work.id)
     }
 
     var body: some View {
         NavigationStack {
             Form {
-                DatePicker("Downloaded", selection: $date, in: ...Date(), displayedComponents: .date).accentFill()
-                    .appThemedRows()
+                Section {
+                    BrowseBoardWorkContext(
+                        title: work.title,
+                        kicker: work.origin.supportsLiveLookup ? work.workFandoms.first : importedKicker,
+                        fandoms: work.workFandoms,
+                        metadata: downloadedMetadata
+                    )
+                }
+                .appThemedRows()
+
+                Section {
+                    DatePicker(selection: $date, in: ...Date(), displayedComponents: .date) {
+                        Label("Date", systemImage: "calendar")
+                    }
+                    .accentFill()
+                }
+                .appThemedRows()
             }
+            .formStyle(.grouped)
             .appThemedScroll()
             .navigationTitle("Downloaded")
             #if os(iOS)
@@ -552,6 +570,24 @@ struct DownloadedDateEditor: View {
                 }
             }
         }
+    }
+
+    private var importedKicker: String {
+        guard let format = importFormat else {
+            return "Imported"
+        }
+        return "Imported · \(format)"
+    }
+
+    private var downloadedMetadata: String {
+        var parts: [String] = []
+        if !work.origin.supportsLiveLookup && work.origin != .importedFile {
+            parts.append("From \(work.origin.displayName)")
+        }
+        if let fandom = work.workFandoms.first, !work.origin.supportsLiveLookup {
+            parts.append(fandom)
+        }
+        return parts.joined(separator: " · ")
     }
 }
 
