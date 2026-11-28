@@ -132,6 +132,7 @@ struct SearchResultsHero: View {
     var followTagLabel: String?
     var isFollowingTag: Bool = false
     var onFollowTag: (() -> Void)?
+    var selectionFact: String?
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.accentFill) private var accentFill
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -209,6 +210,12 @@ struct SearchResultsHero: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
 
+                    if let selectionFact {
+                        Text(selectionFact)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondaryInk)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Text(countFact)
                         .font(.subheadline)
                         .foregroundStyle(.secondaryInk)

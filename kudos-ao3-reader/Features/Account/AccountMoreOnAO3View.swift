@@ -19,9 +19,9 @@ enum AO3ArchivePage: String, CaseIterable, Identifiable, Sendable {
         case .support: "Support and feedback"
         case .reportAbuse: "Report abuse"
         case .termsOfService: "Terms of Service"
-        case .contentPolicy: "Content policy"
+        case .contentPolicy: "Content Policy"
         case .privacyPolicy: "Privacy policy"
-        case .faqs: "FAQs"
+        case .faqs: "FAQ"
         case .donate: "Donate to the OTW"
         }
     }
@@ -86,8 +86,21 @@ struct AccountMoreOnAO3View: View {
     var body: some View {
         List {
             Section {
-                SectionRuleHeader(title: "Post and Manage")
+                SectionRuleHeader(title: "Your account")
                     .pageBodyRow(top: 14, gutter: selfGuttered)
+                yourAccountPanel.pageBodyRow(top: 8, gutter: gutter)
+            }
+
+            Section {
+                SectionRuleHeader(title: "AO3")
+                    .pageBodyRow(top: 18, gutter: selfGuttered)
+                archivePanel.pageBodyRow(top: 8, gutter: gutter)
+                archiveFootnote.pageBodyRow(top: 8, gutter: gutter)
+            }
+
+            Section {
+                SectionRuleHeader(title: "Post and Manage")
+                    .pageBodyRow(top: 18, gutter: selfGuttered)
                 postAndManagePanel.pageBodyRow(top: 8, gutter: gutter)
                 creatorToolsFootnote.pageBodyRow(top: 8, gutter: gutter)
             }
@@ -97,22 +110,9 @@ struct AccountMoreOnAO3View: View {
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 challengesPanel.pageBodyRow(top: 8, gutter: gutter)
             }
-
-            Section {
-                SectionRuleHeader(title: "Your Account")
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
-                yourAccountPanel.pageBodyRow(top: 8, gutter: gutter)
-            }
-
-            Section {
-                SectionRuleHeader(title: "The Archive")
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
-                archivePanel.pageBodyRow(top: 8, gutter: gutter)
-                archiveFootnote.pageBodyRow(top: 8, gutter: gutter)
-            }
         }
         .cardList()
-        .subjectScreenWash(title: "More on AO3", palette: accountPalette)
+        .subjectScreenWash(title: "Open AO3", palette: accountPalette)
         .navigationDestination(isPresented: $showingRequests) {
             WritingRequestsView()
         }
@@ -131,21 +131,7 @@ struct AccountMoreOnAO3View: View {
 
     // MARK: - Panels
 
-    /// 1aa's first group, in the drawn row order. Drafts is not on the artboard;
-    /// it stays at the end because this screen already offered it.
-    ///
-    /// No count badges. The figures drawn beside bulk edit, collection items,
-    /// and related works are not in `AO3AccountListCountsCache`, and this screen
-    /// does not fetch AO3 to fill them.
-    ///
-    /// Paths checked against otwarchive master on 2026-09-21. Import is
-    /// `GET /works/new?import=true` (`WorksController#new` renders the import
-    /// form when `params[:import]` is set). `/works/new/import` is not a route,
-    /// and `POST /works/import` only submits that form. Bulk edit is
-    /// `GET /users/:id/works/show_multiple` ("Edit Multiple Works");
-    /// `edit_multiple` is POST-only and is not a page you can open. Collection
-    /// items is `GET /users/:id/collection_items`, the "Manage Collection Items"
-    /// link on the user's own collections index.
+    /// Additional creator destinations already available from Account.
     private var postAndManagePanel: some View {
         VStack(spacing: 0) {
             AccountExternalNavCard(
@@ -154,13 +140,6 @@ struct AccountMoreOnAO3View: View {
                 sitePath: "/works/new",
                 isFormRow: true
             )
-            SubjectRowSeparator()
-            nativeUserRow(
-                title: "Import work",
-                systemImage: "square.and.arrow.down"
-            ) {
-                showingImport = true
-            }
             SubjectRowSeparator()
             AccountExternalNavCard(
                 title: "Edit works in bulk",
@@ -193,28 +172,48 @@ struct AccountMoreOnAO3View: View {
         .subjectPanel()
     }
 
-    /// 1aa's third group, drawn order, then destinations this screen already had
-    /// that the artboard does not name (Pseuds, Co-Creator Requests, Statistics).
-    ///
-    /// Invitations is `GET /users/:id/invitations` ("Invite a friend"). The
-    /// "N left" figure on the artboard is that page's unsent-invite count, and
-    /// nothing caches it. Fannish next of kin is absent on purpose: otwarchive
-    /// has no user route for it (only an admin `update_next_of_kin`), profile
-    /// edit does not carry the field, and AO3 tells people to contact Support,
-    /// which is already the first row of The archive.
+    /// Existing account destinations, with the board’s rows first.
     private var yourAccountPanel: some View {
         VStack(spacing: 0) {
             AccountExternalNavCard(
-                title: "Profile",
-                systemImage: "person.text.rectangle",
-                pathSuffix: "profile",
+                title: "Gifts",
+                systemImage: "gift",
+                pathSuffix: "gifts",
                 isFormRow: true
             )
+            SubjectRowSeparator()
+            AccountExternalNavCard(
+                title: "Claims",
+                systemImage: "flag",
+                pathSuffix: "claims",
+                isFormRow: true
+            )
+            SubjectRowSeparator()
+            nativeUserRow(
+                title: "Co-creator requests",
+                systemImage: "person.badge.plus"
+            ) {
+                showingRequests = true
+            }
             SubjectRowSeparator()
             AccountExternalNavCard(
                 title: "Invitations",
                 systemImage: "envelope",
                 pathSuffix: AO3MoreOnAO3Route.invitations,
+                isFormRow: true
+            )
+            SubjectRowSeparator()
+            nativeUserRow(
+                title: "Import works",
+                systemImage: "square.and.arrow.down"
+            ) {
+                showingImport = true
+            }
+            SubjectRowSeparator()
+            AccountExternalNavCard(
+                title: "Profile",
+                systemImage: "person.text.rectangle",
+                pathSuffix: "profile",
                 isFormRow: true
             )
             SubjectRowSeparator()
@@ -231,13 +230,6 @@ struct AccountMoreOnAO3View: View {
                 pathSuffix: "pseuds",
                 isFormRow: true
             )
-            SubjectRowSeparator()
-            nativeUserRow(
-                title: "Co-Creator Requests",
-                systemImage: "person.badge.plus"
-            ) {
-                showingRequests = true
-            }
             SubjectRowSeparator()
             AccountExternalNavCard(
                 title: "Statistics",
@@ -271,27 +263,16 @@ struct AccountMoreOnAO3View: View {
                 pathSuffix: "assignments",
                 isFormRow: true
             )
-            SubjectRowSeparator()
-            AccountExternalNavCard(
-                title: "Claims",
-                systemImage: "flag",
-                pathSuffix: "claims",
-                isFormRow: true
-            )
-            SubjectRowSeparator()
-            AccountExternalNavCard(
-                title: "Gifts given and received",
-                systemImage: "gift",
-                pathSuffix: "gifts",
-                isFormRow: true
-            )
         }
         .subjectPanel()
     }
 
     private var archivePanel: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(AO3ArchivePage.allCases.enumerated()), id: \.element.id) { index, page in
+        let pages: [AO3ArchivePage] = [
+            .faqs, .termsOfService, .contentPolicy, .donate, .support, .reportAbuse, .privacyPolicy
+        ]
+        return VStack(spacing: 0) {
+            ForEach(Array(pages.enumerated()), id: \.element.id) { index, page in
                 if index > 0 {
                     SubjectRowSeparator()
                 }
@@ -307,9 +288,7 @@ struct AccountMoreOnAO3View: View {
     }
 
     private var archiveFootnote: some View {
-        footnote(
-            "These public AO3 pages open in Browse. You don't need to sign in to view them."
-        )
+        footnote("These open AO3 in the in-app browser.")
     }
 
     private func footnote(_ text: String) -> some View {

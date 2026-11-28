@@ -824,11 +824,16 @@ struct AddToCollectionView: View {
                                 toggle(collection)
                             } label: {
                                 HStack {
-                                    Text(collection.name).foregroundStyle(.primary)
-                                    Spacer()
-                                    Text("\(collection.works.count(where: { !$0.isPendingDeletion }))")
-                                        .font(.caption)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(collection.name).foregroundStyle(.primary)
+                                        Text(BrowseBoardCopy.workCount(
+                                            collection.works.count(where: { !$0.isPendingDeletion })
+                                        ))
+                                        .font(.footnote)
                                         .foregroundStyle(.secondaryInk)
+                                    }
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    Spacer(minLength: 8)
                                     if isMember(collection) {
                                         Image(systemName: "checkmark")
                                             .foregroundStyle(.tint)

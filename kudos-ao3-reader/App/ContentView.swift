@@ -118,8 +118,11 @@ struct ContentView: View {
                 )
             }) {
                 if let link = router.pendingLoginWorkLink {
-                    AO3LoginView(contextMessage: "Restricted work",
-                                 contextURL: AO3Client.workURL(workID: link.id))
+                    AO3LoginView(
+                        contextMessage: "Restricted work",
+                        contextURL: AO3Client.workURL(workID: link.id),
+                        contextDetail: BrowseBoardCopy.restrictedWorkMessage
+                    )
                 }
             }
             #if DEBUG

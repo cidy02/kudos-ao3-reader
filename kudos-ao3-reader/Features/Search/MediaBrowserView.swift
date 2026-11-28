@@ -183,7 +183,7 @@ struct MediaBrowserView: View {
         }
         return ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 18) {
                     if let ordered, let viewportWidth {
                         DashboardRegionRow(panes: [ordered.leading], width: viewportWidth) {
                             jumpBackInSection(foldPaneWidth: ordered.leading.width)
@@ -206,7 +206,7 @@ struct MediaBrowserView: View {
                             .duoScrollAnchor("categories")
 
                         let columns = dynamicTypeSize.isAccessibilitySize ? 1 : 2
-                        MasonryLayout(columns: columns, spacing: 10, rowSpacing: 8, columnSpans: spans) {
+                        MasonryLayout(columns: columns, spacing: 10, rowSpacing: 10, columnSpans: spans) {
                             ForEach(categories) { category in
                                 categoryCardView(category)
                                     .duoScrollAnchor("category:\(category.id)")
@@ -251,10 +251,14 @@ struct MediaBrowserView: View {
     private func categoryCardView(_ category: AO3MediaCategory) -> some View {
         let stats = statsByCategory[category.id]
         let chips = stats?.clusterFandoms ?? []
+        let stacks = dynamicTypeSize.isAccessibilitySize
+        let headerLayout = stacks
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 4))
 
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 10) {
             NavigationLink(value: category) {
-                HStack(alignment: .top) {
+                headerLayout {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(wrapSafeName(category.name))
                             .font(.system(size: categoryNameSize, weight: .bold))
@@ -263,25 +267,22 @@ struct MediaBrowserView: View {
                             .fixedSize(horizontal: false, vertical: true)
 
                         if let fandomCount = stats?.familyCount ?? stats?.fandomCount {
-                            let fandomText = "\(compact(fandomCount)) fandoms"
-                            let worksText: String = {
-                                if let works = stats?.workCount {
-                                    let figure = compact(works)
-                                    return (stats?.isApproximateWorkCount == true) ? "· ~\(figure) works" : "· \(figure) works"
-                                }
-                                return ""
-                            }()
-                            Text("\(fandomText) \(worksText)")
+                            Text(BrowseBoardCopy.categoryStats(
+                                fandomCount: fandomCount,
+                                workCount: stats?.workCount,
+                                approximate: stats?.isApproximateWorkCount == true
+                            ))
                                 .font(.system(size: categoryStatSize))
                                 .foregroundStyle(Color.white.opacity(0.8))
-                                .lineLimit(2)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                            .fixedSize(horizontal: false, vertical: true)
                         } else {
                             SkeletonBlock(height: 12, width: 80, cornerRadius: 3)
                                 .opacity(0.4)
                         }
                     }
 
-                    Spacer(minLength: 4)
+                    if !stacks { Spacer(minLength: 4) }
 
                     if let saved = stats?.savedCount, saved > 0 {
                         HStack(spacing: 3) {
@@ -304,7 +305,7 @@ struct MediaBrowserView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(categoryHeaderAccessibilityLabel(category, stats: stats))
 
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 ForEach(chips) { chip in
                     Button {
                         onSelectFandom(chip.names, chip.title)
@@ -317,9 +318,9 @@ struct MediaBrowserView: View {
                             chipTitleSize: chipTitleSize,
                             chipCountSize: chipCountSize
                         )
-                        .padding(.horizontal, 9)
+                        .padding(.horizontal, 10)
                         .padding(.vertical, 3)
-                        .frame(minHeight: 26)
+                        .frame(minHeight: 30)
                         .background(Color.white.opacity(0.18), in: Capsule())
                     }
                     .buttonStyle(.plain)
@@ -334,7 +335,7 @@ struct MediaBrowserView: View {
                 NavigationLink(value: category) {
                     HStack(spacing: 4) {
                         if let count = stats?.familyCount ?? stats?.fandomCount {
-                            Text("\(compact(count)) fandoms")
+                            Text(BrowseBoardCopy.fandomCount(count))
                                 .font(.system(size: moreLinkSize, weight: .semibold))
                         } else {
                             Text("All fandoms")
@@ -345,19 +346,21 @@ struct MediaBrowserView: View {
                             .accessibilityHidden(true)
                     }
                     .foregroundStyle(Color.white)
-                    .frame(minHeight: 22)
+                    .frame(minHeight: 24)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 2)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("All \(stats?.familyCount ?? stats?.fandomCount ?? 0) fandoms in \(category.name)")
+                .accessibilityLabel(BrowseBoardCopy.allFandomsLabel(
+                    category: category.name, count: stats?.familyCount ?? stats?.fandomCount
+                ))
             }
         }
-        .padding(10)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(CoverArt.workGradient(for: CoverArt.mediaCategoryArt(for: category.name)))
         )
         .overlay(alignment: .topTrailing) {
@@ -368,7 +371,7 @@ struct MediaBrowserView: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
-        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .workCardZoomSource(BrowseZoomKey.category(category.id), in: zoomNamespace)
     }
 
@@ -1166,7 +1169,7 @@ extension MediaBrowserView {
     private func jumpBackInSection(foldPaneWidth: CGFloat? = nil) -> some View {
         let recent = jumpBackInEntries
         if !recent.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Jump Back In")
                     .font(.title3.weight(.bold))
                     .foregroundStyle(.primary)
@@ -1238,7 +1241,7 @@ extension MediaBrowserView {
                                 Image(systemName: "star.fill")
                                     .font(.system(size: 9))
                                     .foregroundStyle(Color.subjectFavoriteGold)
-                                Text("favorite")
+                                Text("favourite")
                             } else if let visited = entry.lastVisitedAt, Calendar.current.isDateInToday(visited) {
                                 Text("· visited today")
                             } else if let count = entry.workCount, count > 0 {
@@ -1271,7 +1274,7 @@ extension MediaBrowserView {
             return base
                 + Text(" · ")
                 + Text(Image(systemName: "star.fill")).foregroundStyle(Color.subjectFavoriteGold)
-                + Text(" favorite")
+                + Text(" favourite")
         } else if let visited = entry.lastVisitedAt, Calendar.current.isDateInToday(visited) {
             return base + Text(" · visited today")
         } else if let count = entry.workCount, count > 0 {
@@ -1283,7 +1286,7 @@ extension MediaBrowserView {
     private func jumpBackInAccessibilityLabel(_ entry: JumpBackInEntry) -> String {
         var parts = [entry.fandom, entry.category.name]
         if entry.isFavorite {
-            parts.append("favorite")
+            parts.append("favourite")
         } else if let visited = entry.lastVisitedAt, Calendar.current.isDateInToday(visited) {
             parts.append("visited today")
         } else if let count = entry.workCount, count > 0 {

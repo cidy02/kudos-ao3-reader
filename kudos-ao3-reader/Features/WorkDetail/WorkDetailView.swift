@@ -332,12 +332,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
         .deleteConfirmation(
             for: $pendingDelete,
-            title: "Delete this work?",
+            title: pendingDelete.map { BrowseBoardCopy.deleteWorkTitle($0.title) } ?? "Delete this work?",
             confirmLabel: "Delete",
             message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
             perform: deleteFromLibrary
         )
-        .ao3WorkActions(workActions, workID: ao3WorkID, auth: auth)
+        .ao3WorkActions(workActions, workID: ao3WorkID, auth: auth, bookmarkContext: bookmarkContext)
         .sensoryFeedback(.selection, trigger: localWork?.isFavorite ?? false)
         .toolbar { detailToolbar }
         .screenTint(workPalette)
@@ -632,6 +632,15 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         .padding(.horizontal, SubjectMetrics.gutter)
         .padding(.top, 21)
         .padding(.bottom, 14)
+    }
+
+    private var bookmarkContext: BrowseBoardWorkContext {
+        BrowseBoardWorkContext(
+            title: displayTitle,
+            kicker: displayFandoms.first,
+            fandoms: displayFandoms,
+            metadata: BrowseBoardCopy.bookmarkMeta(author: displayAuthor, words: displayWords, chapters: displayChapters)
+        )
     }
 
     // MARK: - Toolbar (favorite + more)
