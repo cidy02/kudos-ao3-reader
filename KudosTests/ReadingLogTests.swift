@@ -685,6 +685,34 @@ struct ReadingLogTests {
         #expect(home.finishedCount == 3)
     }
 
+    /// A streak longer than several lookback windows (7, 14, 28 … days) still counts every day, and stops at the gap.
+    @Test func boundedStreakCrossesManyLookbackWindows() throws {
+        let context = try context()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "America/Los_Angeles"))
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 8, hour: 12)))
+        let work = SavedWork(title: "Daily", author: "A")
+        context.insert(work)
+        for back in 0..<40 {
+            let start = try #require(calendar.date(byAdding: .day, value: -back, to: now))
+            context.insert(ReadingSession(
+                workID: work.id, startedAt: start, endedAt: start.addingTimeInterval(300), durationSeconds: 300,
+                startProgress: nil, endingProgress: 0, wordCount: 0, chapterCountAtVisit: 0, didFinish: false
+            ))
+        }
+        // A day off, then older reading that must not join the streak.
+        let older = try #require(calendar.date(byAdding: .day, value: -45, to: now))
+        context.insert(ReadingSession(
+            workID: work.id, startedAt: older, endedAt: older.addingTimeInterval(300), durationSeconds: 300,
+            startProgress: nil, endingProgress: 0, wordCount: 0, chapterCountAtVisit: 0, didFinish: false
+        ))
+        try context.save()
+        let bounded = try ReadingLogService.streak(through: now, isToday: true, calendar: calendar, in: context)
+        let facts = ReadingLogService.facts(from: try context.fetch(FetchDescriptor<ReadingSession>()), works: [work])
+        #expect(bounded == 40)
+        #expect(bounded == ReadingHistoryTimeline.streak(through: now, isToday: true, facts: facts, calendar: calendar))
+    }
+
     @Test func homeStatsMatchFullLogAfterSessionSaves() throws {
         let context = try context()
         var calendar = Calendar(identifier: .gregorian)

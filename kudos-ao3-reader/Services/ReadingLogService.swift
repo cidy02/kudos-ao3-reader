@@ -689,8 +689,9 @@ enum ReadingLogService {
         return logged
     }
 
-    /// Only walks back through occupied days and the first gap. A week per fetch
-    /// avoids materializing the log when a streak reaches into earlier periods.
+    /// Only walks back through occupied days and the first gap. Windows double (7, 14, 28 … days) so a long streak
+    /// costs log(days) fetches: without an index on `startedAt` each fetch scans the table, and a week per fetch made
+    /// a years-long streak at 50k works take minutes (T-568 benchmark, `home_weekly_stats_bounded`).
     static func streak(
         through lastDay: Date,
         isToday: Bool,
@@ -701,10 +702,12 @@ enum ReadingLogService {
         if visibleWorkIDs?.isEmpty == true { return 0 }
         var window: DateInterval?
         var readingDays: Set<Date> = []
+        var span = 7
         return try ReadingHistoryTimeline.streak(through: lastDay, isToday: isToday, calendar: calendar) { day in
             if window.map({ $0.start <= day && day < $0.end }) != true {
                 guard let end = calendar.dateInterval(of: .day, for: day)?.end else { return false }
-                let first = calendar.date(byAdding: .day, value: -6, to: day) ?? day
+                let first = calendar.date(byAdding: .day, value: -(span - 1), to: day) ?? day
+                span *= 2
                 let interval = DateInterval(start: calendar.startOfDay(for: first), end: end)
                 let rows = try sessions(startingIn: interval, in: context)
                 readingDays = Set(rows.lazy.filter { visibleWorkIDs?.contains($0.workID) ?? true }
