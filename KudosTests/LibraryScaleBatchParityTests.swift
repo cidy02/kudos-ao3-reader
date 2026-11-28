@@ -167,7 +167,7 @@ extension PersistenceGateSuites {
             }
             #expect(try context.fetchCount(FetchDescriptor<SavedWork>()) == 4)
             #expect(Set(imported.map(\.id)).count == 4)
-            #expect(imported.allSatisfy(\.hasEPUB))
+            #expect(imported.allSatisfy { $0.hasEPUB })
             return imported.map(\.title)
         }
 
