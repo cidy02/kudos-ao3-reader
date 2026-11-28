@@ -488,9 +488,11 @@ nonisolated enum PDFWorkConverter {
         }
 
         // Direct match (or long prefix) of an opening prose paragraph or author's note.
+        // A short first block equal to the label is the chapter's own heading, even when it is quoted or ends in a full
+        // stop (`"You Can't Go Home Again"`, `Ten Years Later.`): only a long one is opening prose (Sonnet's review).
         if !PDFParagraphRepair.isExplicitChapterHeading(first),
            label == first || (strippedStem.count >= 20 && first.hasPrefix(strippedStem)),
-           looksLikeProseParagraph(first) || AuthorNoteDetector.noteIndices(in: [first]).contains(0) {
+           first.count > 60 && looksLikeProseParagraph(first) || AuthorNoteDetector.noteIndices(in: [first]).contains(0) {
             return true
         }
 

@@ -448,9 +448,10 @@ static float KudosPageLineMeasure(fz_stext_page *page) {
     return (p90 >= pageWidth * 0.45f) ? p90 : MAX(p90, pageWidth * 0.65f);
 }
 
-/// Keeps a deliberate line break (`\n`) when a non-final line ends well short of the
-/// typical line width (calibre's ~0.45–0.60 unwrap factor) and the next line's first
-/// word would still have fit on it.
+/// The page's top and bottom margin bands, shared by the header/footer and page-number rules so they agree.
+static const float KudosTopMarginBand = 0.065f;
+static const float KudosBottomMarginBand = 0.08f;
+
 /// A line that is only a page number (digits, optionally with dashes, dots or spaces: `12`, `- 12 -`, `12.`) in the
 /// page's top or bottom margin. It is page chrome: dropped here rather than kept as a short verse line inside the
 /// block, where the converter's page-number filter (which looks at whole blocks) could not see it (T-579e round 2).
@@ -459,8 +460,8 @@ static BOOL KudosIsMarginPageNumberLine(fz_stext_line *line, fz_stext_page *page
     if (pageHeight <= 0.0f) {
         return NO;
     }
-    BOOL inTop = line->bbox.y1 < page->mediabox.y0 + pageHeight * 0.10f;
-    BOOL inBottom = line->bbox.y0 > page->mediabox.y1 - pageHeight * 0.12f;
+    BOOL inTop = line->bbox.y1 < page->mediabox.y0 + pageHeight * KudosTopMarginBand;
+    BOOL inBottom = line->bbox.y0 > page->mediabox.y1 - pageHeight * KudosBottomMarginBand;
     if (!inTop && !inBottom) {
         return NO;
     }
@@ -479,6 +480,9 @@ static BOOL KudosIsMarginPageNumberLine(fz_stext_line *line, fz_stext_page *page
     return digits >= 1 && digits <= 4 && others <= 6;
 }
 
+/// Keeps a deliberate line break (`\n`) when a non-final line ends well short of the
+/// typical line width (calibre's ~0.45–0.60 unwrap factor) and the next line's first
+/// word would still have fit on it.
 static BOOL KudosShouldKeepLineBreak(fz_stext_line *prevLine, fz_stext_line *nextLine, float measure) {
     if (prevLine == NULL || nextLine == NULL || measure < 1.0f) {
         return NO;
@@ -622,12 +626,12 @@ static NSArray<NSNumber *> *KudosSceneBreakRules(fz_stext_page *page) {
 
 static BOOL KudosIsInTopMargin(fz_stext_block *block, fz_stext_page *page) {
     float pageHeight = page->mediabox.y1 - page->mediabox.y0;
-    return pageHeight > 0.0f && block->bbox.y1 < page->mediabox.y0 + pageHeight * 0.065f;
+    return pageHeight > 0.0f && block->bbox.y1 < page->mediabox.y0 + pageHeight * KudosTopMarginBand;
 }
 
 static BOOL KudosIsInBottomMargin(fz_stext_block *block, fz_stext_page *page) {
     float pageHeight = page->mediabox.y1 - page->mediabox.y0;
-    return pageHeight > 0.0f && block->bbox.y0 > page->mediabox.y1 - pageHeight * 0.08f;
+    return pageHeight > 0.0f && block->bbox.y0 > page->mediabox.y1 - pageHeight * KudosBottomMarginBand;
 }
 
 static BOOL KudosHasDrawnInVerticalBand(fz_stext_page *page, float y0, float y1) {
@@ -797,10 +801,12 @@ static BOOL KudosHasTextInVerticalBand(fz_stext_page *page,
                     NSMutableArray<NSValue *> *italicRaw = [NSMutableArray array];
                     NSMutableArray<NSValue *> *boldRaw = [NSMutableArray array];
                     fz_stext_line *prevLine = NULL;
+                    BOOL keptLine = NO;
                     for (fz_stext_line *line = block->u.t.first_line; line != NULL; line = line->next) {
                         if (KudosIsLineWhitespaceOnly(line) || KudosIsMarginPageNumberLine(line, stext)) {
                             continue;
                         }
+                        keptLine = YES;
                         if (nextRule < rules.count && rules[nextRule].floatValue < line->bbox.y0) {
                             if (text.length > 0) {
                                 [entries addObject:KudosMakePDFBlock(text, italicRaw, boldRaw)];
@@ -827,7 +833,10 @@ static BOOL KudosHasTextInVerticalBand(fz_stext_page *page,
                     if (block == lastBodyBlock) {
                         lastBodyEndEntryIndex = entries.count;
                     }
-                    prevTextBlock = block;
+                    // A block whose only lines were margin page numbers yields nothing, so the gap to it is no scene break.
+                    if (keptLine) {
+                        prevTextBlock = block;
+                    }
                 }
                 while (nextRule < rules.count) {
                     [entries addObject:KudosSceneBreakBlock()];
