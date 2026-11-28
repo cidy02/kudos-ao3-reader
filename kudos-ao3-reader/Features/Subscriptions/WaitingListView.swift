@@ -712,8 +712,10 @@ enum WaitingRowBoardCopy {
         switch update.change {
         case .newChapter:
             guard let chapter else { return "A new chapter was posted" }
+            // `update.words` is the whole work's count (the crate's `chapter_words` is the
+            // chapter's, and isn't carried), so it must not read as the chapter's length.
             if let words = update.words, words > 0 {
-                return "Chapter \(chapter) · \(words.formatted()) words"
+                return "Chapter \(chapter) · \(words.formatted()) words total"
             }
             return "Chapter \(chapter) posted"
         case .newWork:

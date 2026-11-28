@@ -77,6 +77,15 @@ struct SubscriptionsBoardCopyTests {
         #expect(WaitingRowBoardCopy.sourceLine(for: unknownUpdate) == "From a subscription")
     }
 
+    /// The preface's word count is the whole work's, not the new chapter's, so the
+    /// chapter line must say "total" rather than imply the chapter is that long.
+    @Test func waitingChapterLineLabelsWordCountAsTheWorkTotal() {
+        let update = makeUpdate(source: .work, chapterNumber: 9, words: 34_920)
+        let line = WaitingRowBoardCopy.whatChanged(for: update, chapter: 9)
+        #expect(line.contains(UInt64(34_920).formatted()))
+        #expect(line.hasSuffix("total"))
+    }
+
     @Test func waitingWhatChangedIncludesKnownChapterWordsAndPreservesHonesty() {
         let chapterWithWords = makeUpdate(
             source: .work,
@@ -86,7 +95,7 @@ struct SubscriptionsBoardCopyTests {
         let expectedWords = UInt64(5_020).formatted()
         #expect(
             WaitingRowBoardCopy.whatChanged(for: chapterWithWords, chapter: 9)
-                == "Chapter 9 · \(expectedWords) words"
+                == "Chapter 9 · \(expectedWords) words total"
         )
 
         let chapterWithoutWords = makeUpdate(source: .work, chapterNumber: 9, words: nil)
