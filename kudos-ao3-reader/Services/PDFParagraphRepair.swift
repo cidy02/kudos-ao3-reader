@@ -5,17 +5,29 @@ nonisolated struct PDFStyledBlock: Equatable, Sendable {
     var text: String
     var italicRanges: [NSRange]
     var boldRanges: [NSRange]
+    var isCentered: Bool
+    var isLargerThanBody: Bool
 
-    init(text: String, italicRanges: [NSRange] = [], boldRanges: [NSRange] = []) {
+    init(
+        text: String,
+        italicRanges: [NSRange] = [],
+        boldRanges: [NSRange] = [],
+        isCentered: Bool = false,
+        isLargerThanBody: Bool = false
+    ) {
         self.text = text
         self.italicRanges = italicRanges
         self.boldRanges = boldRanges
+        self.isCentered = isCentered
+        self.isLargerThanBody = isLargerThanBody
     }
 
     init(_ block: KudosPDFBlock) {
         self.text = block.text
         self.italicRanges = block.italicRanges.map(\.rangeValue)
         self.boldRanges = block.boldRanges.map(\.rangeValue)
+        self.isCentered = block.isCentered
+        self.isLargerThanBody = block.isLargerThanBody
     }
 
     /// Trims leading and trailing whitespace/newlines while keeping all style ranges
@@ -44,7 +56,9 @@ nonisolated struct PDFStyledBlock: Equatable, Sendable {
         return PDFStyledBlock(
             text: trimmedText,
             italicRanges: Self.shiftedAndClamped(italicRanges, by: -leadingUTF16, limit: keptLength),
-            boldRanges: Self.shiftedAndClamped(boldRanges, by: -leadingUTF16, limit: keptLength)
+            boldRanges: Self.shiftedAndClamped(boldRanges, by: -leadingUTF16, limit: keptLength),
+            isCentered: isCentered,
+            isLargerThanBody: isLargerThanBody
         )
     }
 
@@ -197,38 +211,46 @@ nonisolated enum PDFParagraphRepair {
 
         guard pages.count >= 2 else { return withoutPageNumbers }
 
-        // One pass per page: a line that is both the header and the footer counts once.
-        var edgeCounts: [String: Int] = [:]
-        var nonEmptyPageCount = 0
-        for page in withoutPageNumbers {
-            guard let edges = edgeIndices(of: page) else { continue }
-            nonEmptyPageCount += 1
-            let firstText = page[edges.first].text.trimmingCharacters(in: .whitespacesAndNewlines)
-            let lastText = page[edges.last].text.trimmingCharacters(in: .whitespacesAndNewlines)
-            var candidates: Set<String> = []
-            if isRepeatedEdgeCandidate(firstText) { candidates.insert(firstText) }
-            if isRepeatedEdgeCandidate(lastText) { candidates.insert(lastText) }
-            for candidate in candidates {
-                edgeCounts[candidate, default: 0] += 1
+        // Peel repeated edge chrome up to two passes so stacked headers/footers (e.g. a
+        // browser print header emitted immediately above a footer at the end of each page)
+        // both come off while repeated story sentences ending in terminal punctuation stay.
+        var current = withoutPageNumbers
+        var keptHeading: Set<String> = []
+        for _ in 0..<2 {
+            // One pass per page: a line that is both the header and the footer counts once.
+            var edgeCounts: [String: Int] = [:]
+            var nonEmptyPageCount = 0
+            for page in current {
+                guard let edges = edgeIndices(of: page) else { continue }
+                nonEmptyPageCount += 1
+                let firstText = page[edges.first].text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let lastText = page[edges.last].text.trimmingCharacters(in: .whitespacesAndNewlines)
+                var candidates: Set<String> = []
+                if isRepeatedEdgeCandidate(firstText) { candidates.insert(firstText) }
+                if isRepeatedEdgeCandidate(lastText) { candidates.insert(lastText) }
+                for candidate in candidates {
+                    edgeCounts[candidate, default: 0] += 1
+                }
             }
+
+            guard nonEmptyPageCount >= 2 else { break }
+
+            // On 2–3 page PDFs, require the edge line on every non-empty page; at 4+
+            // pages, repeating on a third of the pages (at least 3) is enough.
+            let threshold = pages.count >= 4 ? max(3, pages.count / 3) : nonEmptyPageCount
+            let repeated = Set(edgeCounts.filter { $0.value >= threshold }.keys)
+            guard !repeated.isEmpty else { break }
+
+            current = removingRepeatedEdgeBlocks(repeated, from: current, keptHeading: &keptHeading)
         }
-
-        guard nonEmptyPageCount >= 2 else { return withoutPageNumbers }
-
-        // On 2–3 page PDFs, require the edge line on every non-empty page; at 4+
-        // pages, repeating on a third of the pages (at least 3) is enough.
-        let threshold = pages.count >= 4 ? max(3, pages.count / 3) : nonEmptyPageCount
-        let repeated = Set(edgeCounts.filter { $0.value >= threshold }.keys)
-        guard !repeated.isEmpty else { return withoutPageNumbers }
-
-        return removingRepeatedEdgeBlocks(repeated, from: withoutPageNumbers)
+        return current
     }
 
     private static func removingRepeatedEdgeBlocks(
         _ repeated: Set<String>,
-        from pages: [[PDFStyledBlock]]
+        from pages: [[PDFStyledBlock]],
+        keptHeading: inout Set<String>
     ) -> [[PDFStyledBlock]] {
-        var keptHeading: Set<String> = []
         var cleaned: [[PDFStyledBlock]] = []
         cleaned.reserveCapacity(pages.count)
         for page in pages {
@@ -474,12 +496,6 @@ nonisolated enum PDFParagraphRepair {
         return coreLast == "," || coreLast == ";"
     }
 
-    private static let spelledPartNumbers = [
-        "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-        "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
-        "eighteen", "nineteen", "twenty"
-    ].joined(separator: "|")
-
     static func isExplicitChapterHeading(_ text: String) -> Bool {
         guard !text.contains("\n") else { return false }
         if isStandaloneHeading(text) { return true }
@@ -489,17 +505,17 @@ nonisolated enum PDFParagraphRepair {
             .replacingOccurrences(of: "_", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !stripped.isEmpty, stripped.count <= 100 else { return false }
-        if isStandaloneHeading(stripped) || PlainTextWorkConverter.isChapterHeading(stripped) { return true }
-        let pattern = #"^part\s+(\#(spelledPartNumbers))\s*([:.\-–—]\s*.{0,80})?$"#
-        return stripped.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+        return isStandaloneHeading(stripped) || PlainTextWorkConverter.isChapterHeading(stripped)
     }
 
     private static func isStandaloneHeading(_ text: String) -> Bool {
         guard text.count <= 100 else { return false }
         let lowered = text.lowercased()
         if standaloneHeadings.contains(lowered) { return true }
-        guard let colon = lowered.firstIndex(of: ":") else { return false }
-        let word = lowered[..<colon].trimmingCharacters(in: .whitespaces)
-        return standaloneHeadings.contains(word)
+        guard let colon = text.firstIndex(of: ":") else { return false }
+        let word = text[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
+        guard standaloneHeadings.contains(word) else { return false }
+        let subtitle = text[text.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+        return !PlainTextWorkConverter.hasMultipleSentences(subtitle)
     }
 }
